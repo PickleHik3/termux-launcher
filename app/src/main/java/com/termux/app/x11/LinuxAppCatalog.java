@@ -116,7 +116,7 @@ public final class LinuxAppCatalog {
     @NonNull
     public static List<Root> roots() {
         List<Root> roots = new ArrayList<>(rootsOf(ProotDistro.Container.PREFIX));
-        for (ProotDistro.Container container : ProotDistro.containers(ProotDistro.containersDir())) {
+        for (ProotDistro.Container container : ProotDistro.installed()) {
             roots.addAll(rootsOf(container));
         }
         return roots;

@@ -24,9 +24,9 @@ import java.util.concurrent.Executors;
 
 /**
  * The app icon a Display-place window chip wears: the window's {@code WM_CLASS} traced back to an
- * installed app's desktop file, its PNG loaded from the prefix or from its container, and the
- * artwork reduced to a
- * single-colour silhouette small enough to sit behind a chip's label.
+ * installed app's desktop file, its PNG loaded from the prefix or from the distro container the
+ * app lives in, and the artwork reduced to a single-colour silhouette small enough to sit behind a
+ * chip's label.
  *
  * <p>A window says which app drew it through the class part of its {@code WM_CLASS}; a desktop
  * file says which class its app will set through {@code StartupWMClass}, and where it does not,
@@ -135,6 +135,11 @@ public final class X11WindowIconResolver {
      * desktop-file name, {@code StartupWMClass}, the {@code Exec} basename, the last segment of a
      * reverse-DNS desktop-file name — and every app is tested against a key before the next key is
      * tried, so an exact name match always beats another app's looser one.
+     *
+     * <p>The keys are the desktop file's own, not the container-qualified id: a window says
+     * {@code firefox} whichever distro drew it. Where two containers both have that app, the first
+     * in the list wins — the prefix, then containers by name — and the two icons are usually the
+     * same artwork anyway.
      */
     @Nullable
     public static LinuxAppCatalog.LinuxApp match(

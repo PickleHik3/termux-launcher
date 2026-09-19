@@ -128,10 +128,20 @@ public final class ProotDistro {
     }
 
     /**
+     * Every container the running prefix can actually log into. Nothing is listed where
+     * {@code proot-distro} is not installed, so on a device without it the whole feature is
+     * silent rather than offering tiles that cannot start.
+     */
+    @NonNull
+    public static List<Container> installed() {
+        File tool = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH, "proot-distro");
+        return tool.isFile() ? containers(containersDir()) : Collections.<Container>emptyList();
+    }
+
+    /**
      * Every installed container under {@code containersDir}, by name. "Installed" is what
      * {@code proot-distro} itself means by it: the container's {@code rootfs} directory exists.
-     * Nothing is listed when {@code proot-distro} was never used, so the whole feature is silent
-     * on a device without it.
+     * A half-downloaded one, or a name the launcher would not put on a command line, is skipped.
      */
     @NonNull
     public static List<Container> containers(@NonNull File containersDir) {
