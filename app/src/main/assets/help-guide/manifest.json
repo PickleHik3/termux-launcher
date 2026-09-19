@@ -2235,26 +2235,26 @@
       "video": "distro_apps.mp4",
       "poster": "distro_apps.jpg",
       "width": 1080,
-      "height": 880,
-      "duration": 6.7,
-      "bytes": 881575,
+      "height": 1020,
+      "duration": 8.4,
+      "bytes": 1008694,
       "bands": [
+        [
+          0,
+          115,
+          1080,
+          400
+        ],
         [
           0,
           1080,
           1080,
           620
-        ],
-        [
-          0,
-          115,
-          1080,
-          260
         ]
       ],
       "gestures": [
         {
-          "t": 3.5,
+          "t": 2.7,
           "kind": "tap",
           "points": [
             678,
