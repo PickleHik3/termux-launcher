@@ -147,9 +147,32 @@ public class X11LinuxAppRunnerSandboxRetryTest {
         runner.runAndWatch(app, "exec typora\n", false, DISPLAY, ENV);
         idle();
 
-        assertTrue("nothing to remember or forget from a task that never ran",
-            host.notices.isEmpty());
-        assertFalse(runner.shouldStartWithNoSandbox(app));
+        assertEquals("no retry from a task that never ran", 1, host.scripts.size());
+        assertFalse("nothing to remember or forget from a task that never ran",
+            runner.shouldStartWithNoSandbox(app));
+    }
+
+    @Test public void aTaskThatNeverStartsStillTellsTheUserOnce() {
+        // The silent case: the host had no shell to run the app in, so no exit code was ever
+        // coming and no watch was armed. A tap that opens no app must still say so, exactly once.
+        LinuxAppCatalog.LinuxApp app = app("typora");
+        host.startSucceeds = false;
+        runner.runAndWatch(app, "exec typora\n", false, DISPLAY, ENV);
+        idle();
+
+        assertEquals(Collections.singletonList(
+            context.getString(com.termux.R.string.termux_x11_app_launch_failed)), host.notices);
+    }
+
+    @Test public void aLateExitFromATaskThatNeverStartedDoesNotTellTheUserTwice() {
+        LinuxAppCatalog.LinuxApp app = app("typora");
+        host.startSucceeds = false;
+        runner.runAndWatch(app, "exec typora\n", false, DISPLAY, ENV);
+        host.listeners.get(0).onExit(1);
+        idle();
+
+        assertEquals("said once", 1, host.notices.size());
+        assertEquals("no retry", 1, host.scripts.size());
     }
 
     private void idle() {

@@ -96,6 +96,38 @@ public class ProotDistroTest {
         assertEquals("/home/amal", user.home);
     }
 
+    @Test public void prootDistrosOwnAndroidUidAccountIsNotWhoWeLogInAs() {
+        // proot-distro writes one of these into every container so files show an owner; its uid is
+        // the launcher's Android uid, which on a phone sorts below the user the person made, and
+        // its shell refuses the login outright. Picking it is why a container app never opened.
+        ProotDistro.User user = ProotDistro.parsePasswd(
+            "root:x:0:0:root:/root:/bin/bash\n"
+            + "aid_u0_a330:x:10330:10330:Termux:/:/sbin/nologin\n"
+            + "amalv:x:10331:10331::/home/amalv:/bin/bash\n");
+
+        assertEquals("amalv", user.name);
+        assertEquals("/home/amalv", user.home);
+    }
+
+    @Test public void anAccountThatCannotBeLoggedIntoIsSkippedWhateverItsShellIsCalled() {
+        ProotDistro.User user = ProotDistro.parsePasswd(
+            "root:x:0:0:root:/root:/bin/bash\n"
+            + "locked:x:1000:1000::/home/locked:/bin/false\n"
+            + "barred:x:1001:1001::/home/barred:/usr/sbin/nologin\n"
+            + "amal:x:1002:1002::/home/amal:/bin/bash\n");
+
+        assertEquals("amal", user.name);
+    }
+
+    @Test public void aContainerWhoseOnlyOrdinaryAccountsRefuseLoginsIsRoot() {
+        ProotDistro.User user = ProotDistro.parsePasswd(
+            "root:x:0:0:root:/root:/bin/bash\n"
+            + "aid_u0_a330:x:10330:10330:Termux:/:/sbin/nologin\n");
+
+        assertEquals("root", user.name);
+        assertEquals("/root", user.home);
+    }
+
     @Test public void aContainerWithNoOrdinaryUserIsRoot() {
         ProotDistro.User user = ProotDistro.parsePasswd(
             "root:x:0:0:root:/root:/bin/bash\n"
