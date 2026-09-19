@@ -293,6 +293,10 @@
     <string name="settings_x11_category_apps">Apps</string>
     <string name="settings_x11_drawer_apps_title">Linux apps in the drawer</string>
     <string name="settings_x11_drawer_apps_summary">List installed Linux apps beside your Android apps; tapping one opens it on the display.</string>
+    <string name="settings_x11_hidden_apps_title">Hidden apps</string>
+    <string name="settings_x11_hidden_apps_summary">Choose which apps to leave out of the app drawer.</string>
+    <string name="settings_x11_hidden_apps_loading">Loading your apps…</string>
+    <string name="settings_x11_hidden_apps_empty">No apps to show yet.</string>
     <string name="settings_x11_runtime_badge_title">Display badge</string>
     <string name="settings_x11_runtime_badge_summary">The mark on the Display place\'s badge in the status bar.</string>
     <string name="settings_x11_window_manager_title">Window manager</string>

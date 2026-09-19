@@ -86,6 +86,11 @@
             app:title="@string/settings_x11_drawer_apps_title"
             app:summary="@string/settings_x11_drawer_apps_summary"
             android:defaultValue="true" />
+        <Preference
+            app:key="x11_hidden_apps"
+            app:title="@string/settings_x11_hidden_apps_title"
+            app:summary="@string/settings_x11_hidden_apps_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.HiddenAppsPreferencesFragment" />
         <EditTextPreference
             app:key="x11_window_manager"
             app:title="@string/settings_x11_window_manager_title"
