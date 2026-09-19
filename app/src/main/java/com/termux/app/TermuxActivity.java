@@ -14995,6 +14995,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this).refreshAsync(null, null);
     }
 
+    /**
+     * A Linux app opens inside the launcher, so nothing puts the drawer away the way starting an
+     * Android app does — that one is closed by {@code onStop} on the way out. Tapping a Linux tile
+     * never leaves the launcher, so the drawer would stay over the place the app just opened on.
+     * Guarded on the open check rather than reached through the lazy accessor, so a launch from
+     * launcherctl does not build a drawer nobody pulled down.
+     */
+    private void closeAppDrawerForLinuxLaunch() {
+        if (isAppDrawerOpen()) mAppDrawerController.close(false);
+    }
+
     /** Linux apps tapped in the drawer run on the display; this is what runs them. */
     private void installLinuxAppRunner() {
         if (!com.termux.BuildConfig.X11_SERVER) return;
@@ -15019,6 +15030,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return true;
                 }
                 @Override public void showDisplayPlace() {
+                    closeAppDrawerForLinuxLaunch();
                     if (mPaneWallController != null) {
                         // A Linux app can now be launched (via launcherctl) while this Activity is
                         // stopped. Animating a wall transition nobody can see would just spend real
@@ -15058,6 +15070,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // A terminal app is a pane, not the display: no showDisplayPlace, no
                 // X11LinuxAppRunner. Bring the terminal into view first, the way the display's
                 // own runner brings the Display place into view before running an app on it.
+                closeAppDrawerForLinuxLaunch();
                 if (mPaneWallController != null) {
                     mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
                 }
