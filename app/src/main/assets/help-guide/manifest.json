@@ -1,5 +1,5 @@
 {
-  "source": "Waydroid, Android 13 (LineageOS 20), 600x1300 @180dpi, Termux Launcher 0.2.37 dev f2b7a2a8, recorded 2026-09-18. Seven clips (places, status, stats, mouse_mode, dock, az, organize_apps) re-taken 2026-09-19 on pong (Nothing A065, 1080x2412 @420 dpi, scaled to 600 px wide; the frame there is 600x1340).",
+  "source": "Waydroid, Android 13 (LineageOS 20), 600x1300 @180dpi, Termux Launcher 0.2.37 dev f2b7a2a8, recorded 2026-09-18. Eleven clips (places, status, stats, mouse_mode, dock, az, organize_apps, scale, touchpad, start, start_stop) re-taken 2026-09-19 on pong (Nothing A065, 1080x2412 @420 dpi, scaled to 600 px wide; the frame there is 600x1340).",
   "frame": "Clips are cropped strips of the 600px-wide phone frame; multi-band clips stack two or three horizontal bands top to bottom (see bands: [x,y,w,h] in frame coordinates). Gesture markers are burnt in.",
   "encoding": "H.264 yuv420p 30fps, no audio, faststart; JPEG poster per clip.",
   "coverage": {
@@ -292,15 +292,15 @@
         "start",
         "start_stop"
       ],
-      "alt": "Tap Start display; separately, corner tab > Power > Stop.",
-      "note": "Tap Start display; separately, corner tab > Power > Stop."
+      "alt": "Tap Start display",
+      "note": "Tap Start display; separately, hold the pane corner, tap Power, confirm Stop."
     },
     {
       "topic": "display_apps",
       "status": "blocked",
       "clips": [],
-      "alt": "No app chip appeared in the status bar for xterm on this setup, so there was nothing to tap.",
-      "note": "No app chip appeared in the status bar for xterm on this setup, so there was nothing to tap."
+      "alt": "Only apps started by the launcher get a closable chip",
+      "note": "Only apps started by the launcher get a closable chip; starting one from the drawer with injected taps never fired, so the chip and its \u00d7 could not be recorded."
     },
     {
       "topic": "scale",
@@ -308,8 +308,8 @@
       "clips": [
         "scale"
       ],
-      "alt": "Corner tab out, drag the scale rail thumb down and back.",
-      "note": "Corner tab out, drag the scale rail thumb down and back."
+      "alt": "Hold the pane corner: the scale rail appears",
+      "note": "Hold the pane corner: the scale rail appears; drag its thumb down and back, the badge follows."
     },
     {
       "topic": "touchpad",
@@ -317,8 +317,8 @@
       "clips": [
         "touchpad"
       ],
-      "alt": "Mouse on, one-finger move and tap, Mouse off.",
-      "note": "Mouse on, one-finger move and tap, Mouse off. Two- and three-finger gestures not shown."
+      "alt": "Tap Mouse: the touchpad appears",
+      "note": "Tap Mouse: the touchpad appears; one finger moves the pointer and taps; Mouse again hides it. Two- and three-finger gestures not shown."
     },
     {
       "topic": "display_keys",
@@ -1523,61 +1523,62 @@
       "video": "scale.mp4",
       "poster": "scale.jpg",
       "width": 600,
-      "height": 520,
-      "duration": 14.77,
-      "bytes": 35907,
+      "height": 560,
+      "duration": 13.86,
+      "bytes": 61407,
       "bands": [
         [
           0,
-          40,
+          168,
           600,
-          520
+          560
         ]
       ],
       "gestures": [
         {
-          "t": 0.89,
+          "t": 1.6,
           "kind": "swipe",
           "points": [
-            33,
-            63,
-            33,
-            63
+            9,
+            219,
+            9,
+            219
           ],
-          "duration": 0.65
+          "duration": 0.8
         },
         {
-          "t": 4.42,
+          "t": 4.72,
           "kind": "swipe",
           "points": [
-            25,
-            310,
-            25,
-            480
+            30,
+            536,
+            30,
+            667
           ],
-          "duration": 0.72
+          "duration": 0.9
         },
         {
-          "t": 8.29,
+          "t": 8.15,
           "kind": "swipe",
           "points": [
-            25,
-            480,
-            25,
-            310
+            30,
+            667,
+            30,
+            536
           ],
-          "duration": 0.72
+          "duration": 0.9
         },
         {
-          "t": 11.74,
+          "t": 11.56,
           "kind": "tap",
           "points": [
-            560,
-            900
+            300,
+            667
           ],
           "duration": 0.65
         }
-      ]
+      ],
+      "source": "pong"
     },
     "settings": {
       "id": "settings",
@@ -1722,76 +1723,78 @@
       "video": "start.mp4",
       "poster": "start.jpg",
       "width": 600,
-      "height": 860,
-      "duration": 10.0,
-      "bytes": 36189,
+      "height": 700,
+      "duration": 7.82,
+      "bytes": 71159,
       "bands": [
         [
           0,
-          40,
+          168,
           600,
-          860
+          700
         ]
       ],
       "gestures": [
         {
-          "t": 0.89,
+          "t": 1.6,
           "kind": "tap",
           "points": [
             300,
-            594
+            697
           ],
           "duration": 0.65
         }
-      ]
+      ],
+      "source": "pong"
     },
     "start_stop": {
       "id": "start_stop",
       "video": "start_stop.mp4",
       "poster": "start_stop.jpg",
       "width": 600,
-      "height": 780,
-      "duration": 12.4,
-      "bytes": 126604,
+      "height": 700,
+      "duration": 12.19,
+      "bytes": 155463,
       "bands": [
         [
           0,
-          40,
+          168,
           600,
-          780
+          700
         ]
       ],
       "gestures": [
         {
-          "t": 0.89,
+          "t": 1.6,
           "kind": "swipe",
           "points": [
-            33,
-            63,
-            33,
-            63
+            9,
+            219,
+            9,
+            219
+          ],
+          "duration": 0.8
+        },
+        {
+          "t": 4.73,
+          "kind": "tap",
+          "points": [
+            42,
+            242
           ],
           "duration": 0.65
         },
         {
-          "t": 4.32,
+          "t": 7.51,
           "kind": "tap",
           "points": [
-            35,
-            62
-          ],
-          "duration": 0.65
-        },
-        {
-          "t": 7.41,
-          "kind": "tap",
-          "points": [
-            442,
-            712
+            468,
+            790
           ],
           "duration": 0.65
         }
-      ]
+      ],
+      "source": "pong"
     },
     "stats": {
       "id": "stats",
@@ -1920,30 +1923,30 @@
       "video": "touchpad.mp4",
       "poster": "touchpad.jpg",
       "width": 600,
-      "height": 670,
-      "duration": 12.93,
-      "bytes": 71183,
+      "height": 1020,
+      "duration": 11.47,
+      "bytes": 150728,
       "bands": [
         [
           0,
-          40,
+          168,
           600,
-          360
+          620
         ],
         [
           0,
-          940,
+          906,
           600,
-          310
+          400
         ]
       ],
       "gestures": [
         {
-          "t": 0.89,
+          "t": 1.6,
           "kind": "tap",
           "points": [
-            129,
-            1225
+            128,
+            1278
           ],
           "duration": 0.65
         },
@@ -1951,32 +1954,33 @@
           "t": 3.95,
           "kind": "swipe",
           "points": [
-            200,
-            1050,
-            400,
-            1150
+            167,
+            1083,
+            361,
+            1167
           ],
-          "duration": 0.6
+          "duration": 0.8
         },
         {
-          "t": 7.12,
+          "t": 6.82,
           "kind": "tap",
           "points": [
-            300,
-            1100
+            267,
+            1111
           ],
           "duration": 0.65
         },
         {
-          "t": 9.88,
+          "t": 9.15,
           "kind": "tap",
           "points": [
-            129,
-            972
+            128,
+            933
           ],
           "duration": 0.65
         }
-      ]
+      ],
+      "source": "pong"
     },
     "widget": {
       "id": "widget",
