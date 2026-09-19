@@ -255,7 +255,7 @@ public final class HelpPanelView extends FrameLayout {
 
     private String headerTitle(HelpNavigation.Frame frame) {
         if (frame.screen == HelpNavigation.Screen.TOPIC) {
-            HelpTopics.Entry entry = HelpTopics.entry(place, frame.id);
+            HelpTopics.Entry entry = HelpTopics.entry(frame.id);
             if (entry != null) return text.get(entry.titleRes);
         }
         if (frame.screen == HelpNavigation.Screen.GLOSSARY) return string(R.string.help_home_glossary);
@@ -436,7 +436,9 @@ public final class HelpPanelView extends FrameLayout {
     // ---- one topic ---------------------------------------------------------------------------
 
     private void topicPage(HelpNavigation.Frame frame) {
-        HelpTopics.Entry entry = HelpTopics.entry(place, frame.id);
+        // By id alone: a topic reads on every place. Whether its control is on this one is the
+        // "Not visible on this screen" note's business further down, not a reason to refuse.
+        HelpTopics.Entry entry = HelpTopics.entry(frame.id);
         if (entry == null) {
             body.addView(style.body(string(R.string.help_topic_unavailable)));
             return;
