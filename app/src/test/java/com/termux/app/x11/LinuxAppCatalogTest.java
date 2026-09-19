@@ -147,7 +147,9 @@ public class LinuxAppCatalogTest {
         assertEquals(new File(big, "firefox.png"), LinuxAppIcons.find("firefox", prefix));
         assertEquals(new File(pixmaps, "feh.png"), LinuxAppIcons.find("feh", prefix));
         assertEquals(new File(pixmaps, "feh.png"), LinuxAppIcons.find("feh.png", prefix));
-        assertNull("svg is not rendered", LinuxAppIcons.find("vector", prefix));
+        // SVG is found too now (LinuxAppIcons D6) — a PNG at the same size still wins, but this
+        // app has none at 128x128, so its SVG there is picked up rather than skipped.
+        assertEquals(new File(big, "vector.svg"), LinuxAppIcons.find("vector", prefix));
         assertNull(LinuxAppIcons.find("", prefix));
         assertEquals(new File(big, "firefox.png"),
             LinuxAppIcons.find(new File(big, "firefox.png").getPath(), prefix));

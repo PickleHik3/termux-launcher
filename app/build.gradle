@@ -167,6 +167,8 @@ dependencies {
     implementation 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
     // Renders the bundled Meteocons weather animations (app/src/main/assets/weather).
     implementation "com.airbnb.android:lottie:6.7.1"
+    // Renders hicolor/scalable SVG icons a Linux app ships when it has no PNG (LinuxAppIcons).
+    implementation "com.caverock:androidsvg-aar:1.4"
     implementation "com.google.ai.edge.litertlm:litertlm-android:${project.ext.litertLmVersion}"
     implementation "com.google.ai.edge.litert:litert:1.4.2"
     implementation project(":terminal-view")
