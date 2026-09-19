@@ -176,6 +176,10 @@ public final class PinnedAppsEditor {
         orderedBg.setColor(withAlpha(colorPanel, 0xAA));
         orderedBg.setStroke(dp(1), withAlpha(colorOutline, 0x44));
         orderedRecycler.setBackground(orderedBg);
+        // The list scrolls on its own, like the apps list below it. As a nested-scrolling child it
+        // handed the movement it could not use, a pull down at its top, up to the bottom sheet,
+        // which read that as a pull to dismiss and closed the editor mid-scroll.
+        orderedRecycler.setNestedScrollingEnabled(false);
         orderedRecycler.setOnTouchListener((v, e) -> {
             v.getParent().requestDisallowInterceptTouchEvent(true);
             return false;
