@@ -89,3 +89,4 @@ WhatsApp Video*
 # Reference-only handoff bundles (not part of app source)
 .artifacts/
 .gradle-codex-*/
+!app/src/main/assets/help-guide/*.mp4
