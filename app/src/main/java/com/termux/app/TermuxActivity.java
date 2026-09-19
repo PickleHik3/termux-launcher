@@ -17972,6 +17972,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.TERMINAL);
         }
 
+        @Override public void openSettings() {
+            TermuxActivity.this.openSettings();
+        }
+
         @Override @Nullable public TerminalSession createNamedShell(@NonNull String name,
                                                                     @Nullable String cwd) {
             return createShellForCwd(cwd, name);

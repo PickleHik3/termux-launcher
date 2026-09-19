@@ -185,6 +185,8 @@ public class TerminalPaneController {
         default void openSurfaceEditor() {}
         /** The lone pane's corner asked for the Layout editor. */
         default void openLayoutEditor() {}
+        /** The launcher's settings, asked for from the pane corner's tab. */
+        default void openSettings() {}
         /** Default working directory when a cwd can't be derived. */
         String defaultCwd();
         /** Spawn a new shell carrying a session name; defaults to an unnamed shell. */
@@ -3173,6 +3175,7 @@ public class TerminalPaneController {
         private static final int ACTION_HELP = 4;
         /** Open the Layout editor on this place. */
         private static final int ACTION_LAYOUT_EDITOR = 5;
+        private static final int ACTION_SETTINGS = 6;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
@@ -3286,6 +3289,9 @@ public class TerminalPaneController {
                 actions.add(PaneControlsView.Action.drawn(ACTION_CLOSE, this::drawCloseMark,
                     PaneControlsView.TINT_ERROR));
             }
+            // The launcher's settings, one tap from the tab on every place, as the display's tab
+            // already offers them.
+            actions.add(PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS));
             actions.add(PaneControlsView.Action.label(ACTION_HELP,
                 CornerTabGlyphs.help(getContext())));
             mControls.setActions(actions);
@@ -3532,6 +3538,9 @@ public class TerminalPaneController {
             } else if (action == ACTION_CLOSE) {
                 dismissControls();
                 leaf.session.finishIfRunning();
+            } else if (action == ACTION_SETTINGS) {
+                dismissControls();
+                mHost.openSettings();
             } else if (action == ACTION_SURFACE_EDITOR) {
                 dismissControls();
                 mHost.openSurfaceEditor();

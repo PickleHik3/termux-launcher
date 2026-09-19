@@ -169,49 +169,63 @@ public final class PinnedNotificationsView extends View {
         mRect.inset(dp(.5f), dp(.5f));
         canvas.drawRoundRect(mRect, dp(8f), dp(8f), mFillPaint);
         mFillPaint.setStyle(Paint.Style.FILL);
-
         float paddingStart = dp(6f);
         float paddingTop = dp(5f);
         float icon = dp(18f);
-        float iconTop = top + paddingTop;
-        drawAppIcon(canvas, item.packageName, paddingStart, iconTop, icon, dp(5f));
-
         float dismiss = dp(20f);
         Rect dismissRect = new Rect(Math.round(getWidth() - dp(5f) - dismiss),
             Math.round(top + (height - dismiss) / 2f),
             Math.round(getWidth() - dp(5f)), Math.round(top + (height + dismiss) / 2f));
         drawDismiss(canvas, dismissRect, index, dp(10f));
-
         float textLeft = paddingStart + icon + dp(6f);
         float textWidth = dismissRect.left - dp(4f) - textLeft;
-        if (textWidth <= dp(16f)) return;
-
+        if (textWidth <= dp(16f)) {
+            drawAppIcon(canvas, item.packageName, paddingStart, top + (height - icon) / 2f, icon, dp(5f));
+            return;
+        }
+        // Measure the text block first, then seat icon and text together in the middle of the
+        // card: a card taller than its two lines used to hang them from the top edge and leave
+        // an empty band beneath.
+        mTextPaint.setTypeface(mediumTypeface());
+        mTextPaint.setTextSize(sp(10f));
+        float titleHeight = mTextPaint.descent() - mTextPaint.ascent();
+        float titleAscent = mTextPaint.ascent();
+        CharSequence title = TextUtils.ellipsize(item.title(), mTextPaint, textWidth,
+            TextUtils.TruncateAt.END);
+        mTextPaint.setTypeface(Typeface.DEFAULT);
+        mTextPaint.setTextSize(sp(9f));
+        float bodyGap = dp(2f);
+        float bodyRoom = height - 2f * paddingTop - titleHeight - bodyGap;
+        StaticLayout layout = null;
+        if (bodyRoom >= -mTextPaint.ascent()) {
+            int maxLines = singleLineBody ? 1 : 2;
+            layout = StaticLayout.Builder
+                .obtain(item.body, 0, item.body.length(), mTextPaint, Math.round(textWidth))
+                .setAlignment(Layout.Alignment.ALIGN_NORMAL)
+                .setMaxLines(maxLines)
+                .setEllipsize(TextUtils.TruncateAt.END)
+                .setIncludePad(false)
+                .build();
+            if (layout.getHeight() > bodyRoom) layout = null;
+        }
+        float block = titleHeight + (layout == null ? 0f : bodyGap + layout.getHeight());
+        float blockTop = top + Math.max(paddingTop, (height - Math.max(block, icon)) / 2f);
+        float iconTop = block >= icon ? blockTop : top + (height - icon) / 2f;
+        drawAppIcon(canvas, item.packageName, paddingStart, iconTop, icon, dp(5f));
+        float textTop = block >= icon ? blockTop : top + (height - block) / 2f;
         mTextPaint.setTypeface(mediumTypeface());
         mTextPaint.setTextSize(sp(10f));
         mTextPaint.setColor(mOnSurface);
         mTextPaint.setAlpha(255);
-        float titleBaseline = iconTop - mTextPaint.ascent();
-        CharSequence title = TextUtils.ellipsize(item.title(), mTextPaint, textWidth,
-            TextUtils.TruncateAt.END);
+        float titleBaseline = textTop - titleAscent;
         canvas.drawText(title, 0, title.length(), textLeft, titleBaseline, mTextPaint);
-
+        if (layout == null) return;
         mTextPaint.setTypeface(Typeface.DEFAULT);
         mTextPaint.setTextSize(sp(9f));
         mTextPaint.setColor(mOnSurfaceVariant);
         mTextPaint.setAlpha(230);
-        float bodyTop = titleBaseline + mTextPaint.descent() + dp(2f);
-        float bodyAvailable = top + height - dp(4f) - bodyTop;
-        int maxLines = singleLineBody ? 1 : 2;
-        if (bodyAvailable < -mTextPaint.ascent()) return;
-        StaticLayout layout = StaticLayout.Builder
-            .obtain(item.body, 0, item.body.length(), mTextPaint, Math.round(textWidth))
-            .setAlignment(Layout.Alignment.ALIGN_NORMAL)
-            .setMaxLines(maxLines)
-            .setEllipsize(TextUtils.TruncateAt.END)
-            .setIncludePad(false)
-            .build();
         canvas.save();
-        canvas.translate(textLeft, bodyTop);
+        canvas.translate(textLeft, textTop + titleHeight + bodyGap);
         layout.draw(canvas);
         canvas.restore();
     }

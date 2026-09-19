@@ -87,10 +87,6 @@
             app:entryValues="@array/app_launcher_az_lock_method_values"
             app:useSimpleSummaryProvider="true" />
         <Preference
-            app:key="app_launcher_replay_tour"
-            app:title="@string/tour_replay_title"
-            app:summary="@string/tour_replay_summary" />
-        <Preference
             app:key="app_launcher_help"
             app:title="@string/help_settings_title"
             app:summary="@string/help_settings_summary" />

@@ -65,6 +65,7 @@ public class TerminalPaneCornerTabTapTest {
         @Override public void showHelpOverlay() { log.add("help"); }
         @Override public void openSurfaceEditor() { log.add("appearance"); }
         @Override public void openLayoutEditor() { log.add("layout"); }
+        @Override public void openSettings() { log.add("settings"); }
     }
 
     // ---------------------------------------------------------------- the four actions
@@ -77,7 +78,7 @@ public class TerminalPaneCornerTabTapTest {
     public void aLonePanesTabOffersBothEditorsAndHelp() {
         Fixture fixture = fixture();
         fixture.showTab();
-        assertEquals("three buttons on a lone pane", 3, fixture.slots().length);
+        assertEquals("four buttons on a lone pane", 4, fixture.slots().length);
 
         fixture.tapSlot(0);
         assertEquals(Arrays.asList("appearance"), fixture.host.log);
@@ -88,12 +89,16 @@ public class TerminalPaneCornerTabTapTest {
 
         fixture.showTab();
         fixture.tapSlot(2);
-        assertEquals(Arrays.asList("appearance", "layout", "help"), fixture.host.log);
+        assertEquals(Arrays.asList("appearance", "layout", "settings"), fixture.host.log);
+
+        fixture.showTab();
+        fixture.tapSlot(3);
+        assertEquals(Arrays.asList("appearance", "layout", "settings", "help"), fixture.host.log);
     }
 
     /**
-     * Split, the same corner carries the four it always did — the move grip, maximise, close and
-     * help — in that order, and each slot hands its own action over.
+     * Split, the same corner carries the move grip, maximise, close, the settings cog and
+     * help, in that order, and each slot hands its own action over.
      */
     @Test
     public void aSplitPanesTabCarriesMoveMaximiseCloseAndHelp() {
@@ -102,8 +107,8 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         fixture.showTab();
 
-        assertEquals("four buttons in a split", 4, fixture.slots().length);
-        assertEquals(Arrays.asList(0, 1, 2, 4), fixture.idsAtEverySlot());
+        assertEquals("five buttons in a split", 5, fixture.slots().length);
+        assertEquals(Arrays.asList(0, 1, 2, 6, 4), fixture.idsAtEverySlot());
     }
 
     /** Maximised there is no neighbour to move onto, so that slot goes and the rest shuffle up. */
@@ -119,8 +124,8 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         assertNotNull("the pane is maximized",
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
-        assertEquals("three buttons maximized", 3, fixture.slots().length);
-        assertEquals(Arrays.asList(1, 2, 4), fixture.idsAtEverySlot());
+        assertEquals("four buttons maximized", 4, fixture.slots().length);
+        assertEquals(Arrays.asList(1, 2, 6, 4), fixture.idsAtEverySlot());
     }
 
     // ---------------------------------------------------------------- a fifth button
@@ -136,6 +141,13 @@ public class TerminalPaneCornerTabTapTest {
         assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
         fixture.layout();
         fixture.showTab();
+        // Four actions are the baseline the fifth is measured against; the split's own tab already
+        // carries five since the settings cog joined it.
+        fixture.controls.setActions(
+            PaneControlsView.Action.glyph(10, ""),
+            PaneControlsView.Action.glyph(11, ""),
+            PaneControlsView.Action.glyph(12, com.termux.app.chrome.CornerTabGlyphs.APPEARANCE),
+            PaneControlsView.Action.glyph(13, ""));
         RectF paneTab = new RectF();
         fixture.controls.tabBounds(paneTab);
         float fourWide = paneTab.width();

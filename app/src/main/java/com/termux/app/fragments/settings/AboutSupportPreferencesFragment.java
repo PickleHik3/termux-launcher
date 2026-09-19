@@ -1,6 +1,7 @@
 package com.termux.app.fragments.settings;
 
 import android.content.Context;
+import android.content.Intent;
 import android.os.Bundle;
 
 import androidx.annotation.Keep;
@@ -8,6 +9,7 @@ import androidx.annotation.NonNull;
 import androidx.preference.Preference;
 
 import com.termux.R;
+import com.termux.app.TermuxActivity;
 import com.termux.app.models.UserAction;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.android.AndroidUtils;
@@ -33,6 +35,7 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
         url("report_issue", "https://github.com/PickleHik3/termux-launcher/issues");
         url("source_code", "https://github.com/PickleHik3/termux-launcher");
         configureAbout(context);
+        configureTourReplay(context);
         configureLicenses(context);
         configureDonate(context);
     }
@@ -44,6 +47,20 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
 
     private void url(String key, String target) { click(key, preference -> { ShareUtils.openUrl(requireContext(), target); return true; }); }
     private void click(String key, Preference.OnPreferenceClickListener listener) { Preference row = findPreference(key); if (row != null) row.setOnPreferenceClickListener(listener); }
+
+    /**
+     * Hands the home screen back to the user on card one of the tour. The run itself is what
+     * forgets that it was ever finished, so there is nothing to clear here first.
+     */
+    private void configureTourReplay(@NonNull Context context) {
+        click("replay_tour", preference -> {
+            startActivity(new Intent(context, TermuxActivity.class)
+                .putExtra(TermuxActivity.EXTRA_SHOW_ONBOARDING, true));
+            // Settings gets out of the way: the run is on the home screen behind it.
+            if (getActivity() != null) getActivity().finish();
+            return true;
+        });
+    }
 
     private void configureAbout(@NonNull Context context) {
         click("about", preference -> {
