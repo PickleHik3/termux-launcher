@@ -539,7 +539,22 @@ public final class TerminalClockWidget extends View {
      * shrunk) to match it, so the column is exactly as wide as the seconds on every face.
      */
     private float stackedMetaWidth(float secondsDp, Typeface secondsFace) {
-        return spacedTextWidth(mSnapshot.ss, secondsFace, secondsDp, 0f);
+        // Measured on the widest digit pair the face can show, not on this second's digits: a
+        // proportional face makes "11" narrower than "44", and a column that breathed with the
+        // seconds shoved the minute cards sideways once a second.
+        return widestDigitsWidth(2, secondsFace, secondsDp);
+    }
+
+    /** Width of {@code count} copies of the face's widest digit at this size. */
+    private float widestDigitsWidth(int count, Typeface typeface, float textDp) {
+        mPaint.setTypeface(typeface);
+        mPaint.setLetterSpacing(0f);
+        mPaint.setTextSize(dp(textDp));
+        float widest = 0f;
+        for (char digit = '0'; digit <= '9'; digit++) {
+            widest = Math.max(widest, mPaint.measureText(String.valueOf(digit)));
+        }
+        return widest * count;
     }
 
     private float fullFlipMetaWidth() {
