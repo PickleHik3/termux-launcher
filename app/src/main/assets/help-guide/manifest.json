@@ -4,10 +4,10 @@
   "encoding": "H.264 yuv420p 30fps, no audio, faststart; JPEG poster per clip.",
   "coverage": {
     "covered": 34,
-    "partial": 2,
+    "partial": 3,
     "blocked": 3,
     "shared": 4,
-    "total": 43
+    "total": 44
   },
   "topics": [
     {
@@ -391,6 +391,15 @@
       ],
       "alt": "Settings, then About & support.",
       "note": "Settings, then About & support."
+    },
+    {
+      "topic": "hold_terminal",
+      "status": "partial",
+      "clips": [
+        "hold_terminal"
+      ],
+      "alt": "Hold on the terminal text, then hold longer for Copy, Paste and More.",
+      "note": "Hold on the text: the finger disk holds and drags (the mouse stage leaves no trace on screen), then a longer hold brings Copy, Paste and More with the selection handles."
     }
   ],
   "clips": {
@@ -2158,6 +2167,57 @@
         }
       ],
       "source": "pong native 1080"
+    },
+    "hold_terminal": {
+      "id": "hold_terminal",
+      "video": "hold_terminal.mp4",
+      "poster": "hold_terminal.jpg",
+      "width": 1080,
+      "height": 1116,
+      "duration": 12.05,
+      "bytes": 1706854,
+      "bands": [
+        [
+          0,
+          302,
+          1080,
+          1116
+        ]
+      ],
+      "source": "pong native 1080",
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "tap",
+          "points": [
+            540,
+            860
+          ],
+          "duration": 0.75
+        },
+        {
+          "t": 2.35,
+          "kind": "swipe",
+          "points": [
+            540,
+            860,
+            540,
+            1280
+          ],
+          "duration": 1.1
+        },
+        {
+          "t": 4.1,
+          "kind": "swipe",
+          "points": [
+            540,
+            900,
+            540,
+            900
+          ],
+          "duration": 1.9
+        }
+      ]
     }
   }
 }

@@ -305,6 +305,11 @@ public final class HelpTopics {
             .related("keys", "touchpad").terms("mouse_mode", "extra_keys")
             .aliases(R.string.help_topic_mouse_aliases)
             .doc("Launcher_Usage.md#touch-works-like-a-mouse"));
+        b.add(topic("hold_terminal", Group.TERMINAL, R.string.help_topic_hold_title,
+                R.string.help_topic_hold_summary, R.string.help_topic_hold_action)
+            .related("copy_paste", "mouse_mode")
+            .aliases(R.string.help_topic_hold_aliases)
+            .doc("Launcher_Usage.md#touch-works-like-a-mouse"));
         b.add(topic("text_size", Group.TERMINAL, R.string.help_topic_size_title,
                 R.string.help_topic_size_summary, R.string.help_topic_size_action)
             .wayBack(R.string.help_topic_size_back)

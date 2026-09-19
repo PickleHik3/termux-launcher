@@ -2046,6 +2046,10 @@
     <string name="help_topic_mouse_action">Tap Mouse on the extra keys row to turn mouse mode on.</string>
     <string name="help_topic_mouse_back">Tap Mouse again to go back to scrolling.</string>
     <string name="help_topic_mouse_aliases">mouse, mouse mode, touch, pointer, click, tap</string>
+    <string name="help_topic_hold_title">Holding on the terminal</string>
+    <string name="help_topic_hold_summary">A short hold makes your finger the mouse; a longer hold opens the text menu.</string>
+    <string name="help_topic_hold_action">Hold on the text: after the first buzz, drag to steer a program that uses the mouse, or keep holding for Copy, Paste and More.</string>
+    <string name="help_topic_hold_aliases">long press, hold, press and hold, select text, selection, copy, paste, menu, mouse drag</string>
     <string name="help_topic_size_title">Text size</string>
     <string name="help_topic_size_summary">Each pane can show larger or smaller terminal text.</string>
     <string name="help_topic_size_action">Pinch inside the pane to change its text size.</string>
