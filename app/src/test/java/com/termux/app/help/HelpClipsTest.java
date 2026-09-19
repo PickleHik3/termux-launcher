@@ -40,7 +40,18 @@ public class HelpClipsTest {
     @Test public void topicThatCouldNotBeRecordedGetsNothing() {
         assertNull(clips().forTopic("setup"));
         assertNull(clips().forTopic("move_panes"));
-        assertNull(clips().forTopic("display_apps"));
+    }
+
+    @Test public void topicRecordedInALaterRunGetsIt() {
+        // display_apps shipped with no clip until the 2026-09-19 phone takes; this pins the
+        // recording, not just its absence.
+        HelpClips.Clip clip = clips().forTopic("display_apps");
+        assertNotNull(clip);
+        assertEquals("display_apps", clip.id);
+        assertEquals("help-guide/display_apps.mp4", clip.assetPath);
+        assertTrue("the manifest says how wide the strip is", clip.width > 0);
+        assertTrue("the manifest says how tall the strip is", clip.height > 0);
+        assertFalse("every clip describes its gesture in a sentence", clip.alt.isEmpty());
     }
 
     @Test public void topicBorrowingAnotherTopicsClipGetsThatClip() {
