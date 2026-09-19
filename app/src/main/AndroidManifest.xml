@@ -191,7 +191,6 @@
             android:name=".app.help.HelpActivity"
             android:exported="false"
             android:label="@string/help_centre_title"
-            android:parentActivityName=".app.TermuxActivity"
             android:resizeableActivity="true"
             android:theme="@style/Theme.TermuxApp.DayNight.NoActionBar"
             tools:targetApi="o" />

@@ -27,10 +27,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The help centre the reader reads: one solid panel over a scrim, with a pinned header and a
- * scrolling body. Help home, search, the glossary and one topic are the four pages; which of them
- * is showing, what was typed and where the body is scrolled to are all {@link HelpNavigation}'s,
- * and this draws that frame and reports what was tapped.
+ * The help centre the reader reads: a pinned header over a scrolling body. Help home, search, the
+ * glossary and one topic are the four pages; which of them is showing, what was typed and where
+ * the body is scrolled to are all {@link HelpNavigation}'s, and this draws that frame and reports
+ * what was tapped. {@link Chrome} says whether the pages are framed as a sheet over the launcher
+ * or as the content of {@link HelpActivity}.
  *
  * <p>The panel is a document: it may cover launcher controls, a tap outside it changes nothing,
  * and nothing typed into it reaches the terminal underneath. The only thing it measures for itself

@@ -113,6 +113,20 @@ public final class HelpActivity extends AppCompatActivity {
         else navigation.open(place);
     }
 
+    @Override protected void onStart() {
+        super.onStart();
+        // A clip decodes only while its page is on screen.
+        if (panel != null && !panel.isShowing()) {
+            panel.show();
+            render();
+        }
+    }
+
+    @Override protected void onStop() {
+        if (panel != null) panel.hide();
+        super.onStop();
+    }
+
     @Override protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
         outState.putBundle(STATE_NAVIGATION, navigation.saveState());
