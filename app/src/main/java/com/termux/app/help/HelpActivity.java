@@ -7,7 +7,6 @@ import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.View;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -167,7 +166,9 @@ public final class HelpActivity extends AppCompatActivity {
 
     private void render() {
         panel.render(navigation, true);
-        if (toolbar != null) toolbar.setTitle(panel.pageTitle());
+        // Through the activity's own title: the support action bar owns the toolbar's, and sets
+        // it from here after onCreate has run.
+        setTitle(panel.pageTitle());
     }
 
     /**
@@ -282,12 +283,13 @@ public final class HelpActivity extends AppCompatActivity {
 
     @VisibleForTesting
     String title() {
-        CharSequence title = toolbar == null ? null : toolbar.getTitle();
+        CharSequence title = getTitle();
         return title == null ? "" : title.toString();
     }
 
+    /** The Search action as the toolbar holds it, for a test that wants to press it. */
     @VisibleForTesting
-    View toolbarSearch() {
-        return toolbar == null ? null : toolbar.findViewById(MENU_SEARCH);
+    @Nullable MenuItem searchMenuItem() {
+        return toolbar == null ? null : toolbar.getMenu().findItem(MENU_SEARCH);
     }
 }
