@@ -24,6 +24,16 @@ public class X11LinuxAppRunnerTest {
             + "export TU_DEBUG=noconform\ncd \"$HOME\"\nexec firefox --new-window\n", script);
     }
 
+    @Test public void theNoSandboxOverloadAppendsTheFlagToTheAppsOwnCommand() {
+        // D7's retry: the app's exec line, not the whole script, gets the extra flag.
+        String script = X11LinuxAppRunner.script(app("firefox --new-window"), ":1",
+            Collections.emptyList(), true);
+        assertTrue(script.endsWith("exec firefox --new-window --no-sandbox\n"));
+        // The plain overload is unaffected — same output as before the flag existed.
+        assertEquals(X11LinuxAppRunner.script(app("firefox --new-window"), ":1", Collections.emptyList()),
+            X11LinuxAppRunner.script(app("firefox --new-window"), ":1", Collections.emptyList(), false));
+    }
+
     @Test public void everyAppIsRunWithTouchThroughXInput2() {
         // Without it Firefox takes the server's pointer emulation and a finger cannot scroll.
         assertTrue(X11LinuxAppRunner.TOUCH_ENV.contains("MOZ_USE_XINPUT2=1"));

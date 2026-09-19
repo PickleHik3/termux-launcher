@@ -56,6 +56,9 @@ import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.IntConsumer;
 
 /**
  * A service holding a list of {@link TermuxSession} in {@link TermuxShellManager#mTermuxSessions} and background {@link AppShell}
@@ -578,6 +581,20 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     }
 
     /**
+     * Callers that want a {@link AppShell}'s exit code without racing its worker thread's write to
+     * {@link ExecutionCommand#resultData}: {@link #onAppShellExited} already reads it safely, since
+     * {@code mHandler.post} carrying it here is a real happens-before edge the writing thread
+     * crosses; a listener registered here is called from inside that same posted block, on this
+     * same main thread, instead of polling the raw field from an unrelated timer.
+     */
+    private final Map<AppShell, IntConsumer> mAppShellExitListeners = new ConcurrentHashMap<>();
+
+    /** Registers {@code onExit} to be told {@code shell}'s exit code; see {@link #mAppShellExitListeners}. */
+    public void notifyOnAppShellExit(@NonNull AppShell shell, @NonNull IntConsumer onExit) {
+        mAppShellExitListeners.put(shell, onExit);
+    }
+
+    /**
      * Callback received when a TermuxTask finishes.
      */
     @Override
@@ -590,6 +607,9 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
                 if (executionCommand != null && executionCommand.isPluginExecutionCommand)
                     TermuxPluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
                 mShellManager.mTermuxTasks.remove(termuxTask);
+                IntConsumer exitListener = mAppShellExitListeners.remove(termuxTask);
+                if (exitListener != null && executionCommand != null && executionCommand.resultData.exitCode != null)
+                    exitListener.accept(executionCommand.resultData.exitCode);
             }
             updateNotification();
         });
