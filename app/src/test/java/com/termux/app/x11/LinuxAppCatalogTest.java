@@ -1,6 +1,7 @@
 package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -86,7 +87,14 @@ public class LinuxAppCatalogTest {
         assertEquals("", LinuxAppCatalog.find(apps, "firefox").startupWmClass);
     }
 
-    @Test public void hiddenTerminalAndNonApplicationEntriesAreSkipped() throws IOException {
+    /**
+     * Was {@code hiddenTerminalAndNonApplicationEntriesAreSkipped}: a {@code Terminal=true} entry
+     * used to be dropped along with {@code NoDisplay}/{@code Hidden}. D5 reverses that — it is
+     * shown and carries {@link LinuxAppCatalog.LinuxApp#terminal} instead — so this now asserts
+     * htop survives while the two "not in a menu" markers still drop their entries.
+     */
+    @Test public void hiddenAndNonApplicationEntriesAreSkippedButATerminalOneIsShownAndFlagged()
+            throws IOException {
         File dir = temp.newFolder("applications");
         write(dir, "hidden.desktop", "[Desktop Entry]\nType=Application\nName=H\nExec=h\nNoDisplay=true\n");
         write(dir, "gone.desktop", "[Desktop Entry]\nType=Application\nName=G\nExec=g\nHidden=true\n");
@@ -98,8 +106,13 @@ public class LinuxAppCatalogTest {
 
         List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(host(dir));
 
-        assertEquals(1, apps.size());
-        assertEquals("shown", apps.get(0).id);
+        assertEquals(2, apps.size());
+        LinuxAppCatalog.LinuxApp htop = LinuxAppCatalog.find(apps, "htop");
+        assertNotNull(htop);
+        assertTrue("Terminal=true is carried, not dropped", htop.terminal);
+        assertNotNull(LinuxAppCatalog.find(apps, "shown"));
+        assertFalse("a normal entry is not flagged terminal",
+            LinuxAppCatalog.find(apps, "shown").terminal);
     }
 
     @Test public void tryExecNamingAMissingBinaryHidesTheEntry() throws IOException {
@@ -247,6 +260,26 @@ public class LinuxAppCatalogTest {
         // What a later phase appends goes to the app, inside the wrapper.
         assertTrue(app.commandWith("--no-sandbox")
             .endsWith("-- /bin/sh -c 'greet --title '\\''My App'\\'' --no-sandbox'"));
+    }
+
+    /**
+     * D5: a {@code Terminal=true} entry inside a container still builds the same
+     * {@code proot-distro login} wrapper as any other container app — it is the tap routing that
+     * changes (a pane, not the display), never the command a terminal app would run.
+     */
+    @Test public void aContainerTerminalAppKeepsTheOrdinaryLoginWrappedCommand() throws IOException {
+        File containers = temp.newFolder("containers");
+        ProotDistro.Container debian = container(containers, "debian", PASSWD_WITH_USER);
+        write(debian.root, "usr/share/applications/htop.desktop",
+            "[Desktop Entry]\nType=Application\nName=htop\nExec=htop\nTerminal=true\n");
+
+        LinuxAppCatalog.LinuxApp app = LinuxAppCatalog.scan(LinuxAppCatalog.rootsOf(debian)).get(0);
+
+        assertTrue(app.terminal);
+        assertEquals("distro:debian:htop", app.id);
+        assertEquals("proot-distro login debian -u amal --shared-x11"
+            + " -e DISPLAY=${DISPLAY:-:0} -e MOZ_USE_XINPUT2=1"
+            + " -- /bin/sh -c 'htop'", app.command());
     }
 
     @Test public void aPrefixAppStillRunsItsOwnCommandUnwrapped() throws IOException {

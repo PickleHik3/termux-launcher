@@ -533,6 +533,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.x11.X11LinuxAppRunner mLinuxApps;
     /** What this instance installed in {@code LauncherAppLauncher}; taken out again on destroy. */
     @Nullable private com.termux.app.launcher.LauncherAppLauncher.LinuxAppRunner mLinuxAppRunnerHook;
+    /** Same, for {@code Terminal=true} Linux apps (D5) — taken out again on destroy. */
+    @Nullable private com.termux.app.launcher.LauncherAppLauncher.TerminalAppRunner mTerminalAppRunnerHook;
     /** The apps open on the display, shown as the window chips while the Display place is up. */
     @Nullable private com.termux.app.x11.X11WindowList mX11Windows;
     @NonNull private java.util.List<com.termux.app.x11.X11WindowList.Window> mDisplayWindows =
@@ -6515,6 +6517,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mLinuxAppRunnerHook != null) {
             com.termux.app.launcher.LauncherAppLauncher.clearLinuxAppRunner(mLinuxAppRunnerHook);
             mLinuxAppRunnerHook = null;
+        }
+        if (mTerminalAppRunnerHook != null) {
+            com.termux.app.launcher.LauncherAppLauncher.clearTerminalAppRunner(mTerminalAppRunnerHook);
+            mTerminalAppRunnerHook = null;
         }
         clearAccessoryRenderEffectBackdrop();
         removeDecorNavBarSurfaceOverlay();
@@ -15005,10 +15011,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         mLinuxAppRunnerHook = entry -> {
             if (mLinuxApps == null) return false;
-            java.util.List<com.termux.app.x11.LinuxAppCatalog.LinuxApp> apps =
-                com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots());
-            com.termux.app.x11.LinuxAppCatalog.LinuxApp app = com.termux.app.x11.LinuxAppCatalog.find(
-                apps, com.termux.app.x11.X11Apps.desktopId(entry.appRef));
+            com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxApp(entry.appRef);
             if (app == null) {
                 showToast(getString(R.string.termux_x11_app_gone), true);
                 refreshLinuxApps(true);
@@ -15018,6 +15021,40 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return true;
         };
         com.termux.app.launcher.LauncherAppLauncher.setLinuxAppRunner(mLinuxAppRunnerHook);
+        mTerminalAppRunnerHook = new com.termux.app.launcher.LauncherAppLauncher.TerminalAppRunner() {
+            @Override public boolean handles(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+                com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxApp(entry.appRef);
+                return app != null && app.terminal;
+            }
+            @Override public boolean run(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+                com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxApp(entry.appRef);
+                if (app == null) {
+                    showToast(getString(R.string.termux_x11_app_gone), true);
+                    refreshLinuxApps(true);
+                    return false;
+                }
+                // A terminal app is a pane, not the display: no showDisplayPlace, no
+                // X11LinuxAppRunner. Bring the terminal into view first, the way the display's
+                // own runner brings the Display place into view before running an app on it.
+                if (mPaneWallController != null) {
+                    mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
+                }
+                return com.termux.app.x11.LinuxTerminalAppRunner.run(app);
+            }
+        };
+        com.termux.app.launcher.LauncherAppLauncher.setTerminalAppRunner(mTerminalAppRunnerHook);
+    }
+
+    /**
+     * The Linux app an entry's id names, re-read from the live catalogue (nothing is cached or
+     * watched, so an app installed a moment ago is simply there). Null once the app is gone.
+     */
+    @Nullable
+    private com.termux.app.x11.LinuxAppCatalog.LinuxApp resolveLinuxApp(
+            @NonNull com.termux.app.launcher.model.AppRef ref) {
+        java.util.List<com.termux.app.x11.LinuxAppCatalog.LinuxApp> apps =
+            com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots());
+        return com.termux.app.x11.LinuxAppCatalog.find(apps, com.termux.app.x11.X11Apps.desktopId(ref));
     }
 
     /** The page's own "Turn on": the setting flips and the display comes alive in place. */

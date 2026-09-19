@@ -17,9 +17,11 @@ import java.util.Locale;
 /**
  * The Linux apps installed in the prefix and in every {@code proot-distro} container, read from
  * their {@code .desktop} files the way any desktop's menu reads them. The launcher lists these in
- * its app drawer beside Android apps; a tap runs the app on the display.
+ * its app drawer beside Android apps; a tap runs the app on the display, or in a terminal pane for
+ * one marked {@code Terminal=true} ({@link LinuxApp#terminal}).
  *
- * <p>Pure file reading, so it is tested against fixture files. Nothing here touches the display.
+ * <p>Pure file reading, so it is tested against fixture files. Nothing here touches the display
+ * or a pane.
  */
 public final class LinuxAppCatalog {
 
@@ -62,20 +64,34 @@ public final class LinuxAppCatalog {
          * is how a window on the display is traced back to the app that opened it.
          */
         @NonNull public final String startupWmClass;
+        /**
+         * {@code Terminal=true} (D5): a command-line program with a menu entry rather than a
+         * window of its own — {@code htop}, {@code ranger}, a distro's package-manager front end.
+         * Shown in the drawer like any other entry, but a tap opens it in a terminal pane instead
+         * of on the display; see {@link com.termux.app.x11.LinuxTerminalAppRunner}.
+         */
+        public final boolean terminal;
 
         LinuxApp(@NonNull String desktopFile, @NonNull String name, @NonNull String exec,
                  @NonNull String icon, @NonNull String comment) {
-            this(desktopFile, name, exec, icon, comment, "");
+            this(desktopFile, name, exec, icon, comment, "", false);
         }
 
         LinuxApp(@NonNull String desktopFile, @NonNull String name, @NonNull String exec,
                  @NonNull String icon, @NonNull String comment, @NonNull String startupWmClass) {
-            this(ProotDistro.Container.PREFIX, desktopFile, name, exec, icon, comment, startupWmClass);
+            this(desktopFile, name, exec, icon, comment, startupWmClass, false);
+        }
+
+        LinuxApp(@NonNull String desktopFile, @NonNull String name, @NonNull String exec,
+                 @NonNull String icon, @NonNull String comment, @NonNull String startupWmClass,
+                 boolean terminal) {
+            this(ProotDistro.Container.PREFIX, desktopFile, name, exec, icon, comment,
+                startupWmClass, terminal);
         }
 
         LinuxApp(@NonNull ProotDistro.Container container, @NonNull String desktopFile,
                  @NonNull String name, @NonNull String exec, @NonNull String icon,
-                 @NonNull String comment, @NonNull String startupWmClass) {
+                 @NonNull String comment, @NonNull String startupWmClass, boolean terminal) {
             this.container = container;
             this.desktopFile = desktopFile;
             this.id = X11Apps.qualify(container.name, desktopFile);
@@ -84,6 +100,7 @@ public final class LinuxAppCatalog {
             this.icon = icon;
             this.comment = comment;
             this.startupWmClass = startupWmClass;
+            this.terminal = terminal;
         }
 
         /**
@@ -186,9 +203,10 @@ public final class LinuxAppCatalog {
     }
 
     /**
-     * Read one desktop file. Null when it is not an application, asks not to be shown, wants a
-     * terminal (a command-line tool with a menu entry, not a window), or names a binary that is
-     * not installed.
+     * Read one desktop file. Null when it is not an application, asks not to be shown ({@code
+     * NoDisplay}/{@code Hidden} — the author saying "not in a menu"), or names a binary that is
+     * not installed. {@code Terminal=true} (D5) is kept and carried on {@link LinuxApp#terminal}
+     * rather than dropped: it is a real menu entry that wants a terminal pane instead of a window.
      */
     @Nullable
     static LinuxApp parse(@NonNull ProotDistro.Container container, @NonNull String desktopFile,
@@ -228,10 +246,10 @@ public final class LinuxAppCatalog {
             return null;
         }
         if (!"Application".equals(type) || name.isEmpty() || exec.isEmpty()) return null;
-        if (noDisplay || hidden || terminal) return null;
+        if (noDisplay || hidden) return null;
         if (!tryExec.isEmpty() && !executableExists(container, tryExec, file)) return null;
         return new LinuxApp(container, desktopFile, name, stripFieldCodes(exec), icon, comment,
-            startupWmClass);
+            startupWmClass, terminal);
     }
 
     private static boolean executableExists(@NonNull ProotDistro.Container container,

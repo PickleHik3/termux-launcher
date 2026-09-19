@@ -33,6 +33,17 @@ public final class LauncherAppLauncher {
     }
 
     /**
+     * Runs a Linux app entry that wants a terminal rather than the display (D5,
+     * {@code Terminal=true}). {@link #handles} decides ahead of {@link #run} so the launcher can
+     * fall back to {@link LinuxAppRunner} for every entry this one does not claim, without either
+     * runner needing to know about the other.
+     */
+    public interface TerminalAppRunner {
+        boolean handles(@NonNull LauncherAppEntry entry);
+        boolean run(@NonNull LauncherAppEntry entry);
+    }
+
+    /**
      * Process-wide, because the drawer and the launcherctl API both arrive here. Two instances of
      * the owning activity can be alive at once - a home relaunch out of a plain task, an adb
      * start - and the first one's onDestroy runs after the second one's onCreate, so an instance
@@ -40,6 +51,8 @@ public final class LauncherAppLauncher {
      * null on the way out left every Linux app in the drawer dead until the launcher restarted.
      */
     @Nullable private static volatile LinuxAppRunner linuxAppRunner;
+    /** Same lifecycle rules as {@link #linuxAppRunner}, for {@link TerminalAppRunner}. */
+    @Nullable private static volatile TerminalAppRunner terminalAppRunner;
 
     public static void setLinuxAppRunner(@NonNull LinuxAppRunner runner) {
         linuxAppRunner = runner;
@@ -55,12 +68,31 @@ public final class LauncherAppLauncher {
         return linuxAppRunner;
     }
 
+    public static void setTerminalAppRunner(@NonNull TerminalAppRunner runner) {
+        terminalAppRunner = runner;
+    }
+
+    /** Take {@code runner} out, if it is still the one installed; another instance's stays. */
+    public static void clearTerminalAppRunner(@NonNull TerminalAppRunner runner) {
+        if (terminalAppRunner == runner) terminalAppRunner = null;
+    }
+
+    @Nullable
+    static TerminalAppRunner terminalAppRunner() {
+        return terminalAppRunner;
+    }
+
     public static boolean launchEntry(@NonNull Context context, @NonNull LauncherAppEntry entry) {
         if (entry.appRef.packageName.startsWith("injected.test")) {
             return false;
         }
         if (com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef)) {
-            // Not an Android component: the display's runner takes it, or nothing does.
+            // Not an Android component: a Terminal=true entry (D5) gets a pane; every other Linux
+            // app still goes to the display's runner, or nothing does.
+            TerminalAppRunner terminal = terminalAppRunner;
+            if (terminal != null && terminal.handles(entry)) {
+                return terminal.run(entry);
+            }
             LinuxAppRunner runner = linuxAppRunner;
             return runner != null && runner.run(entry);
         }
