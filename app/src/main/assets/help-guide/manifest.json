@@ -3,11 +3,11 @@
   "frame": "Clips are cropped strips of the 600px-wide phone frame; multi-band clips stack two or three horizontal bands top to bottom (see bands: [x,y,w,h] in frame coordinates). Gesture markers are burnt in.",
   "encoding": "H.264 yuv420p 30fps, no audio, faststart; JPEG poster per clip.",
   "coverage": {
-    "covered": 34,
+    "covered": 36,
     "partial": 3,
-    "blocked": 3,
+    "blocked": 2,
     "shared": 4,
-    "total": 44
+    "total": 45
   },
   "topics": [
     {
@@ -297,10 +297,12 @@
     },
     {
       "topic": "display_apps",
-      "status": "blocked",
-      "clips": [],
-      "alt": "Only apps started by the launcher get a closable chip",
-      "note": "Only apps started by the launcher get a closable chip; starting one from the drawer with injected taps never fired, so the chip and its \u00d7 could not be recorded."
+      "status": "covered",
+      "clips": [
+        "display_apps"
+      ],
+      "alt": "Tap a chip to bring that app forward; tap its X to close it.",
+      "note": "Tap a chip to bring that app forward; tap its X to close it."
     },
     {
       "topic": "scale",
@@ -400,6 +402,15 @@
       ],
       "alt": "Hold on the terminal text, then hold longer for Copy, Paste and More.",
       "note": "Hold on the text: the finger disk holds and drags (the mouse stage leaves no trace on screen), then a longer hold brings Copy, Paste and More with the selection handles."
+    },
+    {
+      "topic": "distro_apps",
+      "status": "covered",
+      "clips": [
+        "distro_apps"
+      ],
+      "alt": "Scroll the app drawer to Linux Apps and tap a tile; it opens on the display beside the apps already open.",
+      "note": "Scroll the app drawer to Linux Apps and tap a tile; it opens on the display beside the apps already open."
     }
   ],
   "clips": {
@@ -2218,6 +2229,94 @@
           "duration": 1.9
         }
       ]
+    },
+    "distro_apps": {
+      "id": "distro_apps",
+      "video": "distro_apps.mp4",
+      "poster": "distro_apps.jpg",
+      "width": 1080,
+      "height": 1020,
+      "duration": 8.4,
+      "bytes": 1008694,
+      "bands": [
+        [
+          0,
+          115,
+          1080,
+          400
+        ],
+        [
+          0,
+          1080,
+          1080,
+          620
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 2.7,
+          "kind": "tap",
+          "points": [
+            678,
+            1558
+          ],
+          "duration": 0.6
+        }
+      ],
+      "source": "pong native 1080"
+    },
+    "display_apps": {
+      "id": "display_apps",
+      "video": "display_apps.mp4",
+      "poster": "display_apps.jpg",
+      "width": 1080,
+      "height": 520,
+      "duration": 6.9,
+      "bytes": 182423,
+      "bands": [
+        [
+          0,
+          115,
+          1080,
+          270
+        ],
+        [
+          0,
+          385,
+          1080,
+          250
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.15,
+          "kind": "tap",
+          "points": [
+            120,
+            350
+          ],
+          "duration": 0.5
+        },
+        {
+          "t": 3.25,
+          "kind": "tap",
+          "points": [
+            300,
+            350
+          ],
+          "duration": 0.5
+        },
+        {
+          "t": 6.4,
+          "kind": "tap",
+          "points": [
+            508,
+            350
+          ],
+          "duration": 0.5
+        }
+      ],
+      "source": "pong native 1080"
     }
   }
 }
