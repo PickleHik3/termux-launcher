@@ -275,7 +275,7 @@
     <string name="distro_setup_start">Set up</string>
     <string name="distro_setup_not_now">Not now</string>
     <string name="distro_setup_already_done">Your Linux apps are already set up.</string>
-    <string name="distro_setup_cannot_start">The setup could not start. Close a terminal you are not using and try again.</string>
+    <string name="distro_setup_cannot_start">The setup needs a terminal to work in. Close one you are not using, or turn split panes back on, and try again.</string>
     <string name="distro_setup_pane_title">Setting up Linux apps</string>
     <string name="distro_setup_running">Setting up Linux apps. You can leave this and come back.</string>
     <string name="distro_setup_step_distro">Getting Linux. This is the long part.</string>
