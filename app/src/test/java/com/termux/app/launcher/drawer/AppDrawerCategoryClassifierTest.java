@@ -10,6 +10,7 @@ import android.os.Build;
 import com.termux.app.launcher.drawer.AppDrawerCategoryAssignment.Source;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.x11.X11Apps;
 
 import org.junit.Test;
 
@@ -44,6 +45,38 @@ public class AppDrawerCategoryClassifierTest {
         AppDrawerCategoryAssignment forced = classifier.assign(entry, 28, NO_ROLES);
         assertEquals(AppDrawerCategory.FINANCE, forced.category);
         assertEquals(Source.CURATED_FORCE, forced.source);
+    }
+
+    @Test public void linuxAppGoesToLinuxAppsEvenWhenItsNameScoresElsewhere() {
+        AppDrawerCategoryClassifier classifier = new AppDrawerCategoryClassifier(
+            AppDrawerCuratedCategoryMap.empty());
+        // "Bank" alone is exactly the label the heuristic test below sends to FINANCE; a Linux
+        // app must never fall through to the keyword scoring that scatters prefix apps today.
+        LauncherAppEntry entry = linuxApp("bank.desktop", "Bank");
+        AppDrawerCategoryAssignment assignment = classifier.assign(entry, 28, NO_ROLES);
+        assertEquals(AppDrawerCategory.LINUX_APPS, assignment.category);
+        assertEquals(Source.LINUX_APP, assignment.source);
+    }
+
+    @Test public void userOverrideBeatsTheLinuxAppsRule() {
+        Map<String, AppDrawerCategory> overrides =
+            Collections.singletonMap(X11Apps.PACKAGE, AppDrawerCategory.PRODUCTIVITY);
+        AppDrawerCategoryClassifier classifier = new AppDrawerCategoryClassifier(
+            AppDrawerCuratedCategoryMap.empty(), overrides::get);
+        LauncherAppEntry entry = linuxApp("typora.desktop", "Typora");
+        AppDrawerCategoryAssignment assignment = classifier.assign(entry, 28, NO_ROLES);
+        assertEquals(AppDrawerCategory.PRODUCTIVITY, assignment.category);
+        assertEquals(Source.USER, assignment.source);
+    }
+
+    @Test public void androidAppCategoryIsUnchangedByTheLinuxAppsRule() {
+        AppDrawerCategoryClassifier classifier = new AppDrawerCategoryClassifier(
+            AppDrawerCuratedCategoryMap.empty());
+        LauncherAppEntry entry = app("com.example.bank", "Bank",
+            ApplicationInfo.CATEGORY_UNDEFINED, 0);
+        AppDrawerCategoryAssignment assignment = classifier.assign(entry, 28, NO_ROLES);
+        assertEquals(AppDrawerCategory.FINANCE, assignment.category);
+        assertEquals(Source.HEURISTIC, assignment.source);
     }
 
     @Test public void platformBeatsFillWhileFillBeatsRoleAndHeuristic() throws Exception {
@@ -276,6 +309,11 @@ public class AppDrawerCategoryClassifierTest {
     private static LauncherAppEntry app(String pkg, String label, int category, long installed) {
         return new LauncherAppEntry(new AppRef(pkg, "Main"), label, null, false,
             category, installed);
+    }
+
+    private static LauncherAppEntry linuxApp(String desktopId, String label) {
+        return new LauncherAppEntry(X11Apps.ref(desktopId), label, null, false,
+            ApplicationInfo.CATEGORY_UNDEFINED, 0);
     }
 
     private static List<AppDrawerCategory> categories(List<AppDrawerCategoryBucket> buckets) {
