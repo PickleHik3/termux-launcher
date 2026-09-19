@@ -106,6 +106,22 @@ public class HelpClipPlacementTest {
         assertNull(clipOnPage());
     }
 
+    @Test public void aPhoneWithAnimationsOffGetsAStillToTap() {
+        android.provider.Settings.Global.putFloat(activity.getContentResolver(),
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
+        openTopic("places");
+        HelpClipView card = clipOnPage();
+        assertNotNull(card);
+        assertTrue("animations off: hold the first frame", card.isStill());
+        assertTrue("and let a tap run the gesture once", card.isClickable());
+    }
+
+    @Test public void aPhoneWithAnimationsOnPlaysWithoutBeingAsked() {
+        openTopic("places");
+        assertFalse(clipOnPage().isStill());
+        assertFalse(clipOnPage().isClickable());
+    }
+
     @Test public void theCardIsAsTallAsTheRecordingsShape() {
         openTopic("places");
         HelpClipView card = clipOnPage();
