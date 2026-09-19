@@ -2189,6 +2189,14 @@
     <string name="help_topic_display_apps_aliases">desktop app, open app, switch app, chip, linux app</string>
     <string name="help_topic_scale_aliases">scale, size, resolution, zoom, display size</string>
     <string name="help_topic_touchpad_aliases">touchpad, trackpad, pointer, cursor, mouse, right-click</string>
+    <string name="help_topic_distro_apps_title">Linux apps in the drawer</string>
+    <string name="help_topic_distro_apps_summary">Apps you install in Linux sit in the app drawer beside your Android ones.</string>
+    <string name="help_topic_distro_apps_action">Open the app drawer and look under Linux Apps.</string>
+    <string name="help_topic_distro_apps_step1">Settings, under Display, can set Linux up for you, with a few apps to start with.</string>
+    <string name="help_topic_distro_apps_step2">Anything you install afterwards is there when you come back to the launcher.</string>
+    <string name="help_topic_distro_apps_step3">A tap opens the app on the display, full size.</string>
+    <string name="help_topic_distro_apps_back">Hide one you never open in Settings, under Display.</string>
+    <string name="help_topic_distro_apps_aliases">linux app, distro, debian, ubuntu, container, proot, drawer app, desktop app, install app</string>
     <string name="help_topic_display_keys_title">Keys and the display</string>
     <string name="help_topic_display_keys_summary">While a desktop app has focus, your typing goes to Linux.</string>
     <string name="help_topic_display_keys_action">Tap Terminal on the extra keys row to come back to the launcher.</string>
