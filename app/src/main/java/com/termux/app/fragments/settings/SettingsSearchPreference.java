@@ -59,8 +59,19 @@ public final class SettingsSearchPreference extends Preference {
             input.setText(mQuery);
             input.setSelection(input.length());
         }
-        input.setOnClickListener(view -> mUserFocused = true);
-        if (!mUserFocused) {
+        // Every keystroke filters the list, and the list binds this row again. The first bind
+        // keeps the IME shut by parking focus on the row; a bind while the reader is typing must
+        // do the opposite and hand the field its focus and caret back, or the keyboard drops
+        // mid-word. A tap into the field does not always arrive as a click, so focus itself is
+        // what marks the reader's interest.
+        input.setOnFocusChangeListener((view, hasFocus) -> {
+            if (hasFocus) mUserFocused = true;
+        });
+        if (mUserFocused || !mQuery.isEmpty()) {
+            mUserFocused = true;
+            if (!input.hasFocus()) input.requestFocus();
+            input.setSelection(input.length());
+        } else {
             input.clearFocus();
             holder.itemView.setFocusableInTouchMode(true);
             holder.itemView.requestFocus();
