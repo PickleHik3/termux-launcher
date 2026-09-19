@@ -15039,7 +15039,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPaneWallController != null) {
                     mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL, isVisible());
                 }
-                return com.termux.app.x11.LinuxTerminalAppRunner.run(app);
+                return com.termux.app.x11.LinuxTerminalAppRunner.run(app, this::isLinuxTerminalPaneIdle);
+            }
+
+            /**
+             * Whatever the window bar's own foreground resolver already has cached for this pid —
+             * never a fresh privileged read requested by this tap. Null (unknown, the common case
+             * when the terminal place has not been on screen recently, or no privileged backend is
+             * set up at all) makes {@link com.termux.app.x11.LinuxTerminalAppRunner} re-run the
+             * command rather than assume it is still going.
+             */
+            @Nullable private Boolean isLinuxTerminalPaneIdle(int shellPid) {
+                if (mWindowForegroundResolver == null) return null;
+                com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                    mWindowForegroundResolver.get(shellPid);
+                return info == null ? null : info.idle;
             }
         };
         com.termux.app.launcher.LauncherAppLauncher.setTerminalAppRunner(mTerminalAppRunnerHook);

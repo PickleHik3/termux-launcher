@@ -1,6 +1,7 @@
 package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -20,7 +21,8 @@ import java.util.List;
 
 /**
  * The pure pieces of D5's terminal-pane routing: the tag and pane.open arguments built for a
- * {@code Terminal=true} app, and picking a still-running pane back out of a pane.list result.
+ * {@code Terminal=true} app, picking an already-open pane back out of a pane.list result, and the
+ * focus-vs-rerun rule that reads {@link LinuxTerminalAppRunner.ForegroundState}.
  * {@link LinuxTerminalAppRunner#run} itself needs a live {@code TerminalActionDispatcher} host
  * and is exercised through the device gate instead (per the phase's SPEC), not here.
  */
@@ -58,27 +60,52 @@ public class LinuxTerminalAppRunnerTest {
         assertTrue(arguments.getBoolean("focus"));
     }
 
-    @Test public void findRunningPaneIdMatchesTheTaggedRunningPaneOnly() throws JSONException {
+    @Test public void findExistingPaneMatchesTheTaggedLivePaneOnlyAndCarriesItsPid() throws JSONException {
         JSONObject list = new JSONObject()
             .put("windows", new JSONArray()
                 .put(new JSONObject().put("panes", new JSONArray()
                     // Not tagged: the user's own shell.
-                    .put(new JSONObject().put("id", "p0").put("running", true))
+                    .put(new JSONObject().put("id", "p0").put("pid", 100).put("running", true))
                     // Tagged for a different app.
-                    .put(new JSONObject().put("id", "p1").put("running", true)
+                    .put(new JSONObject().put("id", "p1").put("pid", 101).put("running", true)
                         .put("agent", new JSONObject().put("tag", "linux-terminal-app:other")))
                     // Tagged for this app, but its shell already exited.
-                    .put(new JSONObject().put("id", "p2").put("running", false)
+                    .put(new JSONObject().put("id", "p2").put("pid", 102).put("running", false)
                         .put("agent", new JSONObject().put("tag", "linux-terminal-app:htop")))
                     // The one that should match.
-                    .put(new JSONObject().put("id", "p3").put("running", true)
+                    .put(new JSONObject().put("id", "p3").put("pid", 103).put("running", true)
                         .put("agent", new JSONObject().put("tag", "linux-terminal-app:htop"))))));
 
-        assertEquals("p3", LinuxTerminalAppRunner.findRunningPaneId(list, "linux-terminal-app:htop"));
-        assertNull(LinuxTerminalAppRunner.findRunningPaneId(list, "linux-terminal-app:nothing-open"));
+        LinuxTerminalAppRunner.ExistingPane found =
+            LinuxTerminalAppRunner.findExistingPane(list, "linux-terminal-app:htop");
+        assertEquals("p3", found.id);
+        assertEquals(103, found.pid);
+        assertNull(LinuxTerminalAppRunner.findExistingPane(list, "linux-terminal-app:nothing-open"));
     }
 
-    @Test public void findRunningPaneIdIsNullWithNoWindows() throws JSONException {
-        assertNull(LinuxTerminalAppRunner.findRunningPaneId(new JSONObject(), "any-tag"));
+    @Test public void findExistingPaneIsNullWithNoWindows() throws JSONException {
+        assertNull(LinuxTerminalAppRunner.findExistingPane(new JSONObject(), "any-tag"));
+    }
+
+    // --- the idle-shell fix: focus only when confirmed still running, otherwise re-run ---------
+
+    @Test public void aConfirmedRunningPaneIsFocusedNotRerun() {
+        assertTrue("idle=false (something other than the shell owns the foreground) means focus",
+            LinuxTerminalAppRunner.shouldFocusRatherThanRerun(Boolean.FALSE));
+    }
+
+    @Test public void aConfirmedIdlePaneIsReRunNotFocused() {
+        // This is the bug the coordinator caught: the app already exited and the pane is sitting
+        // at a bare prompt (idle=true) — focusing it silently "does nothing" from the user's side.
+        assertFalse("idle=true (only the shell is in the foreground) means re-run",
+            LinuxTerminalAppRunner.shouldFocusRatherThanRerun(Boolean.TRUE));
+    }
+
+    @Test public void anUnknownReadingIsTreatedAsReRunNeverAsConfirmedRunning() {
+        // No privileged backend, or the terminal place has not been on screen recently: unknown
+        // must never be upgraded to "running", or the same bug comes back for every install
+        // without Shizuku/su configured.
+        assertFalse("unknown is not confirmed running",
+            LinuxTerminalAppRunner.shouldFocusRatherThanRerun(null));
     }
 }
