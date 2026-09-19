@@ -1,5 +1,9 @@
 package com.termux.app.help;
 
+import android.os.Bundle;
+
+import androidx.annotation.Nullable;
+
 import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
@@ -198,6 +202,85 @@ public final class HelpNavigation {
 
     /** The stack, oldest first, for a test or a state dump. */
     public List<Frame> frames() { return Collections.unmodifiableList(new ArrayList<>(stack)); }
+
+    // ---- saving and restoring -----------------------------------------------------------------
+
+    private static final String KEY_PLACE = "place";
+    private static final String KEY_QUERY = "query";
+    private static final String KEY_FRAMES = "frames";
+    private static final String KEY_SCREEN = "screen";
+    private static final String KEY_ID = "id";
+    private static final String KEY_SCROLL = "scroll";
+    private static final String KEY_TERM = "term";
+
+    /**
+     * The whole stack as a bundle, so the page the reader was on survives leaving the screen and
+     * coming back to it. Text entry and a held practice frame are not saved: both belong to the
+     * visit, not to the page.
+     */
+    public Bundle saveState() {
+        Bundle out = new Bundle();
+        out.putString(KEY_PLACE, place.name());
+        out.putString(KEY_QUERY, query);
+        ArrayList<Bundle> frames = new ArrayList<>();
+        for (Frame frame : stack) {
+            // The explorer is the launcher's view, not a page; a saved stack never holds one.
+            if (frame.screen == Screen.EXPLORE) continue;
+            Bundle saved = new Bundle();
+            saved.putString(KEY_SCREEN, frame.screen.name());
+            saved.putString(KEY_ID, frame.id);
+            saved.putString(KEY_QUERY, frame.query);
+            saved.putInt(KEY_SCROLL, frame.scroll);
+            saved.putString(KEY_TERM, frame.openTermId);
+            frames.add(saved);
+        }
+        out.putParcelableArrayList(KEY_FRAMES, frames);
+        return out;
+    }
+
+    /**
+     * Put a saved stack back. An empty or unreadable bundle leaves help on its home page rather
+     * than on nothing.
+     *
+     * @return true when a stack was restored from the bundle.
+     */
+    public boolean restoreState(@Nullable Bundle state) {
+        if (state == null) return false;
+        PaneWallPage saved = place(state.getString(KEY_PLACE));
+        reset(saved);
+        query = state.getString(KEY_QUERY, "");
+        ArrayList<Bundle> frames = state.getParcelableArrayList(KEY_FRAMES);
+        if (frames != null) {
+            for (Bundle frame : frames) {
+                if (frame == null) continue;
+                Screen screen = screen(frame.getString(KEY_SCREEN));
+                if (screen == null || screen == Screen.EXPLORE) continue;
+                Frame restored = new Frame(screen, frame.getString(KEY_ID));
+                restored.query = frame.getString(KEY_QUERY, "");
+                restored.scroll = frame.getInt(KEY_SCROLL);
+                restored.openTermId = frame.getString(KEY_TERM);
+                stack.add(restored);
+            }
+        }
+        if (stack.isEmpty()) {
+            stack.add(new Frame(Screen.HOME, null));
+            return false;
+        }
+        return true;
+    }
+
+    private static PaneWallPage place(@Nullable String name) {
+        if (name == null) return PaneWallPage.TERMINAL;
+        for (PaneWallPage page : PaneWallPage.values()) if (page.name().equals(name)) return page;
+        return PaneWallPage.TERMINAL;
+    }
+
+    @Nullable
+    private static Screen screen(@Nullable String name) {
+        if (name == null) return null;
+        for (Screen screen : Screen.values()) if (screen.name().equals(name)) return screen;
+        return null;
+    }
 
     private Frame top() {
         if (stack.isEmpty()) stack.add(new Frame(Screen.HOME, null));

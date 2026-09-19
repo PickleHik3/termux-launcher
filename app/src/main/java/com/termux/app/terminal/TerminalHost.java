@@ -475,6 +475,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** Opens help for the place the wall is resting on — the same help the corner tabs open. */
     void showHelpOverlay();
 
+    /**
+     * Opens the help centre on its own screen, the way Settings does. A host that has no such
+     * screen falls back to the overlay.
+     */
+    default void openHelpScreen() { showHelpOverlay(); }
+
     void openLookAndFeel();
 
     void openAppsBar();

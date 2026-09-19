@@ -258,7 +258,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Forces the first-launch experience for screenshots, product demos, and UI verification. */
     public static final String EXTRA_SHOW_ONBOARDING =
         "com.termux.app.extra.SHOW_ONBOARDING";
-    /** Opens help for the place the wall is on, from Settings. */
+    /** An alias for the help screen, for anything that still asks for help by intent. */
     public static final String EXTRA_SHOW_HELP =
         "com.termux.app.extra.SHOW_HELP";
 
@@ -303,6 +303,65 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHelpController.show(currentWallPlace());
     }
 
+    /**
+     * The help centre, on its own screen: Settings, the palette, the overview's Guide button and
+     * the {@link #EXTRA_SHOW_HELP} alias all land here. A topic id opens that page; null opens
+     * wherever the reader left off, which is what the overlay hands back.
+     */
+    private void openHelpScreen(@Nullable com.termux.app.wall.PaneWallPage place,
+                                @Nullable String topicId) {
+        android.content.Intent intent = com.termux.app.help.HelpActivity.intent(this,
+            place == null ? currentWallPlace() : place, topicId,
+            topicId == null ? mHelpScreenNavigation : null);
+        mHelpScreenNavigation = null;
+        if (mHelpScreenLauncher != null) mHelpScreenLauncher.launch(intent);
+        else startActivity(intent);
+    }
+
+    /**
+     * What the help screen asked for. The overlay it names runs over the live launcher exactly as
+     * it did from the sheet, and the page stack comes with it so that closing the overlay puts
+     * the reader back where they were reading.
+     */
+    private void onHelpScreenResult(@Nullable android.content.Intent data) {
+        mHelpScreenNavigation = data == null ? null
+            : data.getBundleExtra(com.termux.app.help.HelpActivity.EXTRA_NAVIGATION);
+        String action = data == null ? null
+            : data.getStringExtra(com.termux.app.help.HelpActivity.EXTRA_ACTION);
+        if (action == null) return;
+        final String topicId = data.getStringExtra(com.termux.app.help.HelpActivity.EXTRA_TOPIC);
+        final String lessonId = data.getStringExtra(com.termux.app.help.HelpActivity.EXTRA_LESSON);
+        View root = findViewById(android.R.id.content);
+        if (root != null) root.post(() -> runHelpScreenAction(action, topicId, lessonId));
+        else runHelpScreenAction(action, topicId, lessonId);
+    }
+
+    private void runHelpScreenAction(@NonNull String action, @Nullable String topicId,
+                                     @Nullable String lessonId) {
+        ViewGroup content = findViewById(android.R.id.content);
+        if (content == null) return;
+        if (mPaneController != null) mPaneController.dismissControlsForHelp();
+        ensureHelpController(content);
+        mHelpController.setPracticeAvailable(mFirstBootTour == null || mFirstBootTour.canStartPractice());
+        com.termux.app.wall.PaneWallPage place = currentWallPlace();
+        switch (action) {
+            case com.termux.app.help.HelpActivity.ACTION_EXPLORE:
+                mHelpController.exploreFromHelpScreen(place, null, false);
+                break;
+            case com.termux.app.help.HelpActivity.ACTION_SHOW_ON_SCREEN:
+                mHelpController.exploreFromHelpScreen(place, topicId, false);
+                break;
+            case com.termux.app.help.HelpActivity.ACTION_SHOW_GESTURE:
+                mHelpController.exploreFromHelpScreen(place, topicId, true);
+                break;
+            case com.termux.app.help.HelpActivity.ACTION_PRACTICE:
+                mHelpController.practiseFromHelpScreen(place, topicId, lessonId);
+                break;
+            default:
+                break;
+        }
+    }
+
     /** Help's one controller: the reading panel, the explorer, Back, the keyboard and practice. */
     private void ensureHelpController(@NonNull ViewGroup content) {
         if (mHelpController != null) return;
@@ -340,6 +399,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     endTerminalToolbarExternalTextInput();
                 }
 
+                @Override public void openHelpScreen(com.termux.app.wall.PaneWallPage place,
+                                                     @Nullable String topicId) {
+                    TermuxActivity.this.openHelpScreen(place, topicId);
+                }
+
                 @Override public void onHelpVisibilityChanged(boolean showing) {
                     // The one path every dismissal takes, so the run hears about help going away
                     // however it went: the Close button, Back, a place change, or onPause.
@@ -358,13 +422,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
     }
 
-    /** Settings, and anything else that asks for help by intent rather than by a corner tab. */
+    /**
+     * An alias for the help screen, kept for anything that still asks for help by intent. The
+     * reading side is an activity now, so this opens it rather than a sheet over the launcher.
+     */
     private void handleShowHelpIntent(@Nullable Intent intent) {
         if (intent == null || !intent.getBooleanExtra(EXTRA_SHOW_HELP, false)) return;
         intent.removeExtra(EXTRA_SHOW_HELP);
         View root = findViewById(android.R.id.content);
-        if (root != null) root.post(this::showHelpOverlay);
-        else showHelpOverlay();
+        if (root != null) root.post(() -> openHelpScreen(null, null));
+        else openHelpScreen(null, null);
     }
 
     /** The phone's home-app setting, from the run's last question. */
@@ -957,6 +1024,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private View.OnLayoutChangeListener mAccessoryLayoutChangeListener;
     @Nullable private ActivityResultLauncher<PickVisualMediaRequest> mWallpaperPickerLauncher;
     @Nullable private ActivityResultLauncher<CropImageContractOptions> mWallpaperCropLauncher;
+    /** The help screen, launched for its result: what the reader asked the launcher to do. */
+    @Nullable private ActivityResultLauncher<android.content.Intent> mHelpScreenLauncher;
+    /** The page the reader was on when they asked, so closing the overlay lands them back on it. */
+    @Nullable private Bundle mHelpScreenNavigation;
     private final int[] mTmpParentLocation = new int[2];
     private final int[] mTmpViewLocation = new int[2];
     private long mLastAccessoryGeometryApplyUptimeMs;
@@ -1235,6 +1306,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Must be done every time activity is created in order to registerForActivityResult,
         // Even if the logic of launching is based on user input.
         registerWallpaperActivityResultLaunchers();
+        registerHelpScreenLauncher();
         mLastLaunchWasLauncherEntry = isLauncherHomeIntent(getIntent());
         setTermuxTerminalViewAndClients();
         createWidgetPaneController();
@@ -11093,6 +11165,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /**
+     * Help reads on its own screen and hands the launcher back the one thing it cannot do itself:
+     * explore this screen, point at a control, or start a lesson.
+     */
+    private void registerHelpScreenLauncher() {
+        mHelpScreenLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> onHelpScreenResult(result == null ? null : result.getData()));
+    }
+
     private void registerWallpaperActivityResultLaunchers() {
         mWallpaperPickerLauncher = registerForActivityResult(
             new ActivityResultContracts.PickVisualMedia(),
@@ -18487,6 +18569,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void showHelpOverlay() {
             TermuxActivity.this.showHelpOverlay();
+        }
+
+        @Override public void openHelpScreen() {
+            TermuxActivity.this.openHelpScreen(null, null);
         }
 
         @Override public void openLookAndFeel() {

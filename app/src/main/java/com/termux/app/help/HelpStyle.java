@@ -73,6 +73,14 @@ final class HelpStyle {
         return shape;
     }
 
+    /**
+     * The opaque page fill, for help read on a screen of its own: the same surface the sheet's
+     * card uses, with nothing showing through it and no card edge around it.
+     */
+    int pageColor() {
+        return ColorUtils.setAlphaComponent(dress.fillColor, 255);
+    }
+
     int textColor() {
         return dress.textColor;
     }

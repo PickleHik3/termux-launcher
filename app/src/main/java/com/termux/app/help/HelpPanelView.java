@@ -22,11 +22,9 @@ import com.termux.R;
 import com.termux.app.tour.TourGesture;
 import com.termux.app.wall.PaneWallPage;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * The help centre the reader reads: one solid panel over a scrim, with a pinned header and a
@@ -40,6 +38,14 @@ import java.util.Set;
  * one — and the keyboard's inset, which shortens the body rather than the header.
  */
 public final class HelpPanelView extends FrameLayout {
+
+    /**
+     * How the pages are framed. As a {@link #SHEET} they are a document over the live launcher:
+     * a scrim, a lifted card, and the page's own header carrying Back, the title and Close. On a
+     * {@link #SCREEN} the activity owns the chrome — a toolbar above the pages — so the header is
+     * not drawn and the surface fills the window.
+     */
+    public enum Chrome { SHEET, SCREEN }
 
     /** Everything the reader can ask for from a page. The controller answers all of it. */
     public interface Listener {
@@ -92,7 +98,7 @@ public final class HelpPanelView extends FrameLayout {
     /** The stack the last render drew, so the page can redraw itself when only it changed. */
     private HelpNavigation navigation;
     private PaneWallPage place = PaneWallPage.TERMINAL;
-    private Set<String> measured = Collections.emptySet();
+    private Chrome chrome = Chrome.SHEET;
     private boolean practiceAvailable;
     /** Help home's practice list, open where it stands; not a page, so not a navigation frame. */
     private boolean practiceListOpen;
@@ -152,6 +158,25 @@ public final class HelpPanelView extends FrameLayout {
         this.listener = listener;
     }
 
+    /**
+     * Sheet or screen. On a screen the pages carry no header and no scrim, the surface is opaque
+     * and the window's own insets are the activity's business, not the panel's.
+     */
+    public void setChrome(Chrome chrome) {
+        this.chrome = chrome == null ? Chrome.SHEET : chrome;
+        boolean sheet = this.chrome == Chrome.SHEET;
+        setElevation(sheet ? style.dp(56) : 0f);
+        setTranslationZ(sheet ? style.dp(56) : 0f);
+        header.setVisibility(sheet ? VISIBLE : GONE);
+        panelWidth = -1;
+        if (navigation != null) render(navigation, practiceAvailable);
+        else requestLayout();
+    }
+
+    public Chrome chrome() {
+        return chrome;
+    }
+
     public void show() {
         setVisibility(VISIBLE);
         bringToFront();
@@ -172,23 +197,17 @@ public final class HelpPanelView extends FrameLayout {
 
     // ---- rendering ---------------------------------------------------------------------------
 
-    /**
-     * Draw the frame on top of the navigation stack.
-     *
-     * @param measuredTargetIds the target ids measured on this pass; a topic whose control is not
-     *                          among them still reads, with the line that says where it went.
-     */
-    public void render(HelpNavigation navigation, @Nullable Set<String> measuredTargetIds,
-                       boolean practiceAvailable) {
+    /** Draw the frame on top of the navigation stack. */
+    public void render(HelpNavigation navigation, boolean practiceAvailable) {
         this.navigation = navigation;
         this.place = navigation.place();
-        this.measured = measuredTargetIds == null ? Collections.<String>emptySet() : measuredTargetIds;
         this.practiceAvailable = practiceAvailable;
         // Re-read every pass: the dress and the accent move with the theme and the place.
         style = HelpStyle.of(getContext(), place);
         text = HelpSearch.text(getContext());
-        setBackgroundColor(style.scrimColor());
-        panel.setBackground(style.panelBackground());
+        boolean sheet = chrome == Chrome.SHEET;
+        setBackgroundColor(sheet ? style.scrimColor() : style.pageColor());
+        panel.setBackground(sheet ? style.panelBackground() : null);
         named.clear();
         clearClip();
         header.removeAllViews();
@@ -197,7 +216,7 @@ public final class HelpPanelView extends FrameLayout {
         detach(list);
 
         HelpNavigation.Frame frame = navigation.frame();
-        buildHeader(frame);
+        if (sheet) buildHeader(frame);
         switch (frame.screen) {
             case SEARCH:
                 searchPage(navigation);
@@ -253,6 +272,12 @@ public final class HelpPanelView extends FrameLayout {
             style.beside(style.dp(4)));
     }
 
+    /** The title of the page showing now — the sheet's own header, or the screen's toolbar. */
+    public String pageTitle() {
+        return navigation == null ? string(R.string.help_centre_title)
+            : headerTitle(navigation.frame());
+    }
+
     private String headerTitle(HelpNavigation.Frame frame) {
         if (frame.screen == HelpNavigation.Screen.TOPIC) {
             HelpTopics.Entry entry = HelpTopics.entry(frame.id);
@@ -269,10 +294,8 @@ public final class HelpPanelView extends FrameLayout {
             style.fieldButton(string(R.string.help_search_field_hint),
                 () -> { if (listener != null) listener.onSearch(); })), style.stacked(style.dp(6)));
 
-        List<HelpTopics.Entry> here = HelpTopics.onScreen(place, measured);
-        body.addView(style.sectionLabel(
-            getContext().getString(R.string.help_home_on_this_screen, placeName())));
-        for (HelpTopics.Entry entry : here) body.addView(topicRow(entry, null), style.stacked(style.dp(6)));
+        // No "On this screen" section: the guide is read away from the launcher, where nothing
+        // has been measured, and every topic reads on every place.
         body.addView(add(string(R.string.help_home_explore),
             style.button(string(R.string.help_home_explore), true,
                 () -> { if (listener != null) listener.onExplore(); })), style.stacked(style.dp(10)));
@@ -297,7 +320,7 @@ public final class HelpPanelView extends FrameLayout {
         body.addView(add(string(R.string.help_home_practice),
             style.link(string(R.string.help_home_practice), () -> {
                 practiceListOpen = !practiceListOpen;
-                if (navigation != null) render(navigation, measured, practiceAvailable);
+                if (navigation != null) render(navigation, practiceAvailable);
             })));
         if (practiceListOpen) practiceList();
         body.addView(add(string(R.string.help_docs_link),
@@ -355,7 +378,8 @@ public final class HelpPanelView extends FrameLayout {
     private void results(String query) {
         if (query == null || query.trim().isEmpty()) {
             list.addView(style.sectionLabel(string(R.string.help_search_suggested)));
-            for (HelpTopics.Entry entry : HelpTopics.onScreen(place, measured))
+            // Nothing is measured here, so the suggestion is where the guide itself starts.
+            for (HelpTopics.Entry entry : HelpTopics.inGroup(HelpTopics.Group.FIND_YOUR_WAY))
                 list.addView(topicRow(entry, null), style.stacked(style.dp(6)));
             return;
         }
@@ -436,8 +460,8 @@ public final class HelpPanelView extends FrameLayout {
     // ---- one topic ---------------------------------------------------------------------------
 
     private void topicPage(HelpNavigation.Frame frame) {
-        // By id alone: a topic reads on every place. Whether its control is on this one is the
-        // "Not visible on this screen" note's business further down, not a reason to refuse.
+        // By id alone: a topic reads on every place, and the page says nothing about whether its
+        // control happens to be on the screen the reader came from.
         HelpTopics.Entry entry = HelpTopics.entry(frame.id);
         if (entry == null) {
             body.addView(style.body(string(R.string.help_topic_unavailable)));
@@ -455,27 +479,14 @@ public final class HelpPanelView extends FrameLayout {
         }
         if (entry.wayBackRes != 0) body.addView(style.body(text.get(entry.wayBackRes)));
 
-        boolean hidden = entry.targetId != null && !measured.contains(entry.targetId);
-        if (hidden) {
-            body.addView(add(string(R.string.help_topic_not_visible),
-                style.note(string(R.string.help_topic_not_visible))), style.stacked(style.dp(10)));
-            if (entry.revealRes != 0) body.addView(style.body(text.get(entry.revealRes)));
-            else {
-                // No way to un-hide it, so the route onward is the topic next to it.
-                String onward = HelpTopics.relatedIdOn(place, entry.id);
-                HelpTopics.Entry next = onward == null ? null : HelpTopics.entry(onward);
-                if (next != null) body.addView(topicRow(next, null), style.stacked(style.dp(6)));
-            }
-        }
-
         LinearLayout actions = style.row();
         final String id = entry.id;
-        if (!hidden && entry.targetId != null) {
+        if (entry.targetId != null) {
             actions.addView(add(string(R.string.help_show_on_screen),
                 style.button(string(R.string.help_show_on_screen), true,
                     () -> { if (listener != null) listener.onShowOnScreen(id); })));
         }
-        if (!hidden && entry.gesture != null && entry.gesture != TourGesture.NONE) {
+        if (entry.gesture != null && entry.gesture != TourGesture.NONE) {
             actions.addView(add(string(R.string.help_show_gesture),
                 style.button(string(R.string.help_show_gesture), true,
                     () -> { if (listener != null) listener.onShowGesture(id); })),
@@ -592,13 +603,6 @@ public final class HelpPanelView extends FrameLayout {
         return res == 0 ? "" : getContext().getString(res);
     }
 
-    private String placeName() {
-        int res = place == PaneWallPage.WIDGETS ? R.string.help_place_home
-            : place == PaneWallPage.DISPLAY ? R.string.help_place_display
-            : R.string.help_place_terminal;
-        return getContext().getString(res);
-    }
-
     private static int lessonTitle(String lessonId) {
         switch (lessonId) {
             case HelpTopics.LESSON_FIND_HELP: return R.string.help_lesson_find_help_title;
@@ -652,6 +656,22 @@ public final class HelpPanelView extends FrameLayout {
     }
 
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
+        if (chrome == Chrome.SCREEN) {
+            // The activity's window already holds the system bars off the content, and its
+            // toolbar sits above these pages: the column is centred and bounded, nothing more.
+            int room = MeasureSpec.getSize(widthSpec);
+            int screenWidth = Math.min(Math.max(style.dp(160), room), style.dp(HelpStyle.MAX_WIDTH_DP));
+            LayoutParams screenParams = (LayoutParams) panel.getLayoutParams();
+            if (panelWidth != screenWidth || screenParams.topMargin != 0) {
+                panelWidth = screenWidth;
+                screenParams.width = screenWidth;
+                screenParams.topMargin = 0;
+                screenParams.bottomMargin = 0;
+                panel.setLayoutParams(screenParams);
+            }
+            super.onMeasure(widthSpec, heightSpec);
+            return;
+        }
         readWindowInsets();
         int available = MeasureSpec.getSize(widthSpec) - insets.left - insets.right;
         boolean wide = MeasureSpec.getSize(widthSpec) > MeasureSpec.getSize(heightSpec);
@@ -675,9 +695,9 @@ public final class HelpPanelView extends FrameLayout {
         super.onDetachedFromWindow();
     }
 
-    /** A tap outside the panel changes nothing: help is a document, not a menu. */
+    /** A tap outside the panel changes nothing: the sheet is a document, not a menu. */
     @Override public boolean onTouchEvent(MotionEvent event) {
-        return true;
+        return chrome == Chrome.SHEET;
     }
 
     /**
@@ -686,6 +706,9 @@ public final class HelpPanelView extends FrameLayout {
      */
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
         if (super.dispatchKeyEvent(event)) return true;
+        // On a screen of its own there is nothing underneath to protect: Back, Escape and every
+        // other key are the activity's to route.
+        if (chrome == Chrome.SCREEN) return false;
         int code = event.getKeyCode();
         if (code == KeyEvent.KEYCODE_BACK) return false;
         if (code == KeyEvent.KEYCODE_ESCAPE) {

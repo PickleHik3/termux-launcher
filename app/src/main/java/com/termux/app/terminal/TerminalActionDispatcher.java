@@ -883,7 +883,8 @@ public final class TerminalActionDispatcher {
                     host.openSettings();
                     return ok();
                 case TOOL_APP_OPEN_HELP:
-                    host.showHelpOverlay();
+                    // The whole guide, on its own screen — the same thing Settings opens.
+                    host.openHelpScreen();
                     return ok();
                 case TOOL_APP_OPEN_LOOK_AND_FEEL:
                     host.openLookAndFeel();

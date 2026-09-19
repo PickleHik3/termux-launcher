@@ -239,14 +239,12 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         });
     }
 
-    /** Help, for a user who has not found the corner tabs yet: the launcher comes forward on it. */
+    /** Help, for a user who has not found the corner tabs yet: its own screen, over Settings. */
     private void configureHelp(@NonNull Context context) {
         setClickListener(KEY_HELP, preference -> {
-            Intent intent = new Intent(context, TermuxActivity.class)
-                .putExtra(TermuxActivity.EXTRA_SHOW_HELP, true);
-            startActivity(intent);
-            // Settings gets out of the way: help is on the home screen behind it.
-            if (getActivity() != null) getActivity().finish();
+            // An ordinary screen on top of this one: Back comes back to Settings, so nothing
+            // has to bounce through the home screen to read the guide.
+            startActivity(com.termux.app.help.HelpActivity.intent(context, null, null, null));
             return true;
         });
     }

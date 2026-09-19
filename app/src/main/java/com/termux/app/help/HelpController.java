@@ -33,6 +33,11 @@ public final class HelpController {
         void endHelpTextInput();
         /** Help came up or went away: the run's probe, and the focus the terminal wants back. */
         void onHelpVisibilityChanged(boolean showing);
+        /**
+         * Reading happens on {@link HelpActivity}, not over the launcher: open it. A topic id
+         * lands on that page; null lands the reader back where they left off.
+         */
+        void openHelpScreen(PaneWallPage place, @Nullable String topicId);
     }
 
     /** Where "Try it" sends the reader; help is already down by the time this is called. */
@@ -91,6 +96,11 @@ public final class HelpController {
     private boolean watchingLayout;
     /** Whether the overlay is up as the overview rather than as "Explore this screen". */
     private boolean overviewShowing;
+    /**
+     * Whether the overlay is running on behalf of the help screen. It was the reader's page that
+     * sent them here, so closing the overlay takes them back to that page, not to the sheet.
+     */
+    private boolean fromHelpScreen;
     /** A remeasurement mid-render would ask for another one; one pass at a time. */
     private boolean rendering;
 
@@ -140,6 +150,7 @@ public final class HelpController {
     public void show(@Nullable PaneWallPage place) {
         ensureViews();
         closeExplorer();
+        fromHelpScreen = false;
         navigation.open(place == null ? PaneWallPage.TERMINAL : place);
         remeasure();
         endTextEntry();
@@ -172,6 +183,7 @@ public final class HelpController {
         if (!isShowing()) return false;
         endTextEntry();
         overviewShowing = false;
+        fromHelpScreen = false;
         if (explorer != null) explorer.dismiss();
         panel.hide();
         unwatchLayout();
@@ -224,6 +236,10 @@ public final class HelpController {
         if (!navigation.isPracticing()) return;
         HelpNavigation.Frame frame = navigation.practiceEnd();
         if (frame == null) return;
+        if (fromHelpScreen) {
+            handBack(frame.screen == HelpNavigation.Screen.TOPIC ? frame.id : null);
+            return;
+        }
         ensureViews();
         remeasure();
         panel.show();
@@ -235,6 +251,46 @@ public final class HelpController {
     @VisibleForTesting
     boolean isPracticing() {
         return navigation.isPracticing();
+    }
+
+    // ---- what the help screen hands back -----------------------------------------------------
+
+    /**
+     * "Explore this screen", "Show on screen" or "Show the gesture", asked for on the help screen:
+     * the overlay runs over the live launcher as it always has, and closing it returns the reader
+     * to the page they asked from.
+     *
+     * @param topicId the control to select, or null to explore the whole screen.
+     * @param gesture whether the topic's gesture plays as well.
+     */
+    public void exploreFromHelpScreen(@Nullable PaneWallPage place, @Nullable String topicId,
+                                      boolean gesture) {
+        ensureViews();
+        closeExplorer();
+        navigation.open(place == null ? PaneWallPage.TERMINAL : place);
+        fromHelpScreen = true;
+        remeasure();
+        endTextEntry();
+        panel.hide();
+        enterExplore(topicId, gesture);
+        host.onHelpVisibilityChanged(true);
+    }
+
+    /**
+     * "Try it", asked for on the help screen: the lesson runs on the launcher, and the frame the
+     * reader was on is held so {@link #onPracticeEnded()} can take them back to it.
+     */
+    public void practiseFromHelpScreen(@Nullable PaneWallPage place, @Nullable String topicId,
+                                       String lessonId) {
+        if (lessonId == null) return;
+        ensureViews();
+        closeExplorer();
+        navigation.open(place == null ? PaneWallPage.TERMINAL : place);
+        if (topicId != null) navigation.topic(resolve(topicId));
+        navigation.practiceStart();
+        fromHelpScreen = true;
+        panel.hide();
+        if (practiceListener != null) practiceListener.onPracticeRequested(lessonId);
     }
 
     // ---- what the panel asks for -------------------------------------------------------------
@@ -322,7 +378,12 @@ public final class HelpController {
 
         @Override public void onBackToHelp() { backToHelp(); }
 
-        @Override public void onCloseHelp() { dismiss(); }
+        @Override public void onCloseHelp() {
+            // The reader came here from a page of the guide: × on the overlay is done with the
+            // launcher, not done with help, so it takes them back to that page.
+            if (fromHelpScreen) handBack(null);
+            else dismiss();
+        }
 
         @Override public void onTargetGone(String topicId) { readInstead(topicId); }
 
@@ -340,22 +401,43 @@ public final class HelpController {
         else explorer.explore(navigation.place(), id);
     }
 
-    /** The Guide button on the overview: the reading sheet, at this place's home page. */
+    /** The Guide button on the overview: the whole guide, on its own screen. */
     private void openGuide() {
-        leaveExplore();
-        navigation.open(navigation.place());
-        backToPanel();
+        handBack(null);
+    }
+
+    /**
+     * Help's overlays go down and the reading screen comes up. A topic id lands the reader on that
+     * page; null lands them wherever they were reading when they asked for the launcher.
+     */
+    private void handBack(@Nullable String topicId) {
+        PaneWallPage place = navigation.place();
+        fromHelpScreen = false;
+        // Dismissed before the stack is tidied: dismiss() is the one path that tells the host
+        // help has gone away, and it only speaks while something is still up.
+        dismiss();
+        while (navigation.screen() == HelpNavigation.Screen.EXPLORE && navigation.depth() > 1)
+            navigation.back();
+        host.openHelpScreen(place, topicId);
     }
 
     /** The explorer could not seat a card, or the reader asked to read: the topic page instead. */
     private void readInstead(@Nullable String topicId) {
-        leaveExplore();
         String id = topicId == null ? null : resolve(topicId);
+        if (fromHelpScreen) {
+            handBack(id);
+            return;
+        }
+        leaveExplore();
         if (id != null) navigation.topic(id);
         backToPanel();
     }
 
     private void backToHelp() {
+        if (fromHelpScreen) {
+            handBack(null);
+            return;
+        }
         leaveExplore();
         navigation.home();
         backToPanel();
@@ -398,7 +480,7 @@ public final class HelpController {
         if (panel == null) return;
         rendering = true;
         try {
-            panel.render(navigation, measured, practiceAvailable);
+            panel.render(navigation, practiceAvailable);
         } finally {
             rendering = false;
         }

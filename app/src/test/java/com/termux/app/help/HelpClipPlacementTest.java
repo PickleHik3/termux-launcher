@@ -45,7 +45,7 @@ public class HelpClipPlacementTest {
         HelpNavigation navigation = new HelpNavigation();
         navigation.openTopic(PaneWallPage.TERMINAL, topicId);
         panel.show();
-        panel.render(navigation, null, false);
+        panel.render(navigation, false);
     }
 
     private HelpClipView clipOnPage() {
@@ -100,7 +100,7 @@ public class HelpClipPlacementTest {
         HelpClipView first = clipOnPage();
         HelpNavigation navigation = new HelpNavigation();
         navigation.open(PaneWallPage.TERMINAL);
-        panel.render(navigation, null, false);
+        panel.render(navigation, false);
         assertNull(panel.clip());
         assertFalse(first.isPlayerOpen());
         assertNull(clipOnPage());

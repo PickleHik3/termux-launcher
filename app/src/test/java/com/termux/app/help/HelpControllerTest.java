@@ -78,6 +78,8 @@ public class HelpControllerTest {
     private final List<String> input = new ArrayList<>();
     private final List<Boolean> visibility = new ArrayList<>();
     private final List<String> practised = new ArrayList<>();
+    /** Every hand-off to the help screen, as "PLACE:topic". */
+    private final List<String> screens = new ArrayList<>();
     private final List<KeyEvent> reachedTerminal = new ArrayList<>();
 
     @Before public void setUp() {
@@ -106,6 +108,9 @@ public class HelpControllerTest {
             @Override public void beginHelpTextInput(EditText field) { input.add("begin"); }
             @Override public void endHelpTextInput() { input.add("end"); }
             @Override public void onHelpVisibilityChanged(boolean showing) { visibility.add(showing); }
+            @Override public void openHelpScreen(PaneWallPage place, String topicId) {
+                screens.add(place.name() + ":" + topicId);
+            }
         }, explorer);
         controller.setPracticeListener(practised::add);
         layout();
@@ -132,10 +137,18 @@ public class HelpControllerTest {
         return activity.getString(res);
     }
 
-    /** Help opens on the overview; the reading sheet is one button behind it. */
+    private String getString(int res, Object... args) {
+        return activity.getString(res, args);
+    }
+
+    /**
+     * The reading sheet, at its home page. The overview's Guide button opens the help screen now,
+     * so the way to the sheet that is left is a Learn-more topic and its way into help home.
+     */
     private void showGuide(PaneWallPage place) {
-        controller.show(place);
-        explorer.listener.onOpenGuide();
+        controller.showTopic(place, firstTerminalTopic().id);
+        tap(string(R.string.help_home_action));
+        assertEquals(HelpNavigation.Screen.HOME, controller.navigation().screen());
     }
 
     /** Whether the Terminal place can show this topic at all; a page has to resolve its entry. */
@@ -207,23 +220,30 @@ public class HelpControllerTest {
         assertEquals(entry.id, controller.navigation().id());
     }
 
-    @Test public void theGuideButtonOpensHelpHomeWithThisScreensTopics() {
-        showGuide(PaneWallPage.TERMINAL);
+    /** The overview's Guide button leaves the launcher alone: the whole guide is its own screen. */
+    @Test public void theGuideButtonOpensTheHelpScreen() {
+        controller.show(PaneWallPage.TERMINAL);
+        explorer.listener.onOpenGuide();
+        assertEquals("[TERMINAL:null]", screens.toString());
         assertFalse("the overview went away with it", explorer.isShowing());
+        assertFalse("nothing is drawn over the launcher", panel().isShowing());
+        assertFalse(controller.isShowing());
+        assertEquals("[true, false]", visibility.toString());
+    }
+
+    /** Help home browses the guide, and says nothing about what is on the screen behind it. */
+    @Test public void helpHomeBrowsesTheWholeGuideWithNoOnThisScreenSection() {
+        showGuide(PaneWallPage.TERMINAL);
         assertTrue(panel().isShowing());
-        assertTrue(controller.isShowing());
-        assertEquals(HelpNavigation.Screen.HOME, controller.navigation().screen());
         assertEquals(PaneWallPage.TERMINAL, controller.navigation().place());
         String page = panel().pageText();
-        assertTrue(page.contains(string(R.string.help_place_terminal)));
         assertTrue(page.contains(string(R.string.help_home_browse)));
-        // Three to five topics for this screen, each one a row the reader can open.
-        List<HelpTopics.Entry> here = HelpTopics.onScreen(PaneWallPage.TERMINAL,
-            controller.measuredTargetIds());
-        assertTrue(here.size() >= 3 && here.size() <= 5);
-        for (HelpTopics.Entry entry : here)
+        assertFalse("help home still has an On this screen section",
+            page.contains(getString(R.string.help_home_on_this_screen,
+                string(R.string.help_place_terminal))));
+        // Every group's topics are rows the reader can open, whatever place help was opened from.
+        for (HelpTopics.Entry entry : HelpTopics.inGroup(HelpTopics.Group.FIND_YOUR_WAY))
             assertNotNull(panel().named(string(entry.titleRes)));
-        assertEquals("[true]", visibility.toString());
     }
 
     @Test public void everyEntryPointOpensHomeAndCloseEndsIt() {
@@ -251,8 +271,7 @@ public class HelpControllerTest {
 
     @Test public void aTopicRowOpensThatTopic() {
         showGuide(PaneWallPage.TERMINAL);
-        HelpTopics.Entry entry = HelpTopics.onScreen(PaneWallPage.TERMINAL,
-            controller.measuredTargetIds()).get(0);
+        HelpTopics.Entry entry = HelpTopics.inGroup(HelpTopics.Group.FIND_YOUR_WAY).get(0);
         tap(string(entry.titleRes));
         assertEquals(HelpNavigation.Screen.TOPIC, controller.navigation().screen());
         assertEquals(entry.id, controller.navigation().id());
@@ -368,8 +387,7 @@ public class HelpControllerTest {
 
     @Test public void aTopicReachedFromHomeKeepsItsBackControl() {
         showGuide(PaneWallPage.TERMINAL);
-        HelpTopics.Entry entry = HelpTopics.onScreen(PaneWallPage.TERMINAL,
-            controller.measuredTargetIds()).get(0);
+        HelpTopics.Entry entry = HelpTopics.inGroup(HelpTopics.Group.FIND_YOUR_WAY).get(0);
         tap(string(entry.titleRes));
         assertNotNull(panel().named(string(R.string.help_back_action)));
         assertNull(panel().named(string(R.string.help_home_action)));
@@ -456,19 +474,21 @@ public class HelpControllerTest {
         assertEquals(HelpNavigation.Screen.HOME, controller.navigation().screen());
     }
 
-    // ---- a hidden control -------------------------------------------------------------------
+    // ---- a control that is not on this screen ------------------------------------------------
 
-    @Test public void aHiddenTargetStillReadsAndSaysHowToBringItBack() {
+    /**
+     * The page is read away from the launcher, so it no longer guesses whether the control is on
+     * screen: a topic whose control was never measured reads in full, with no note about it, and
+     * still offers to show it.
+     */
+    @Test public void aTopicWhoseControlWasNeverMeasuredReadsWithNoNote() {
         showGuide(PaneWallPage.TERMINAL);
         HelpTopics.Entry entry = hiddenTopic();
         controller.showTopic(PaneWallPage.TERMINAL, entry.id);
         String page = panel().pageText();
         assertTrue(page.contains(string(entry.summaryRes)));
-        assertTrue(page.contains(string(R.string.help_topic_not_visible)));
-        assertTrue(page.contains(string(entry.revealRes)));
-        // Nothing offers to show a control that is not there.
-        assertNull(panel().named(string(R.string.help_show_on_screen)));
-        assertNull(panel().named(string(R.string.help_show_gesture)));
+        assertFalse(page.contains(string(R.string.help_topic_not_visible)));
+        assertNotNull(panel().named(string(R.string.help_show_on_screen)));
     }
 
     // ---- practice ----------------------------------------------------------------------------
