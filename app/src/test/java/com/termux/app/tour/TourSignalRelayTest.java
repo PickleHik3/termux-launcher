@@ -496,4 +496,37 @@ public class TourSignalRelayTest {
         relay.onLauncherResumed();
         assertTrue(signals.isEmpty());
     }
+
+    // The pinned-apps editor.
+
+    @Test
+    public void everyOpenOfThePinEditorIsTheUsersOwnHold() {
+        // A fresh editor every time, so there is no resting state to prime and no edge to find.
+        relay.onPinEditorOpened();
+        relay.onPinEditorOpened();
+        assertEquals(2, signals.size());
+        assertEquals(TourSignals.PIN_EDITOR_OPENED, signals.get(0));
+        assertEquals(TourSignals.PIN_EDITOR_OPENED, signals.get(1));
+    }
+
+    @Test
+    public void onlyAnEditorThatSavedAPinSaysSo() {
+        relay.onPinEditorOpened();
+        signals.clear();
+        relay.onPinEditorClosed(true, 3);
+        assertEquals(1, signals.size());
+        assertEquals(TourSignals.PINNED_APPS_SAVED, signals.get(0));
+    }
+
+    @Test
+    public void anEditorClosedWithAnEmptyDockOrWithoutSavingSaysNothing() {
+        relay.onPinEditorOpened();
+        signals.clear();
+        // Saved, and left nothing pinned: the lesson is a pinned app.
+        relay.onPinEditorClosed(true, 0);
+        // Opened and closed again, changing nothing.
+        relay.onPinEditorClosed(false, 4);
+        relay.onPinEditorClosed(false, 0);
+        assertTrue(signals.isEmpty());
+    }
 }

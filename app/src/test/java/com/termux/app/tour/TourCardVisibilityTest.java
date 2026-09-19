@@ -89,7 +89,7 @@ public class TourCardVisibilityTest {
     public void everyStageOfEveryCardIsHiddenWhileHelpIsUp() {
         Set<TourChrome> helpUp = EnumSet.of(TourChrome.HELP);
         for (TourStep step : TourRun.steps(PHONE))
-            for (int stage = 0; stage <= step.signalCount(); stage++)
+            for (int stage = 0; stage <= step.stageCount(); stage++)
                 assertEquals(step.id + ":" + stage + " while help is up",
                     TourCardVisibility.HIDDEN, TourCardVisibility.decide(step, stage, helpUp));
     }
@@ -157,6 +157,37 @@ public class TourCardVisibilityTest {
             TourCardVisibility.decide(closing, 0, EnumSet.of(TourChrome.HELP)));
         assertEquals(TourCardVisibility.NORMAL,
             TourCardVisibility.decide(closing, 0, NOTHING));
+    }
+
+    @Test
+    public void theCardThatAsksForTheSaveIsReadableOverThePinEditor() {
+        Set<TourChrome> editorUp = EnumSet.of(TourChrome.PIN_EDITOR);
+        TourStep pin = step(TourRun.PIN_APPS);
+        // The sheet is a window over the dock, so the stage that asks for the hold has nothing to
+        // say while it is up; the stage performed inside it is the only thing that says what to do.
+        assertEquals(TourCardVisibility.HIDDEN,
+            TourCardVisibility.decide(pin, 0, editorUp));
+        assertEquals(TourCardVisibility.COMPACT_TOP,
+            TourCardVisibility.decide(pin, 1, editorUp));
+        // Every other card waits for the sheet to go, as it does for any other surface.
+        assertEquals(TourCardVisibility.HIDDEN,
+            TourCardVisibility.decide(step(TourRun.KEYBOARD), 0, editorUp));
+        assertEquals(TourCardVisibility.HIDDEN,
+            TourCardVisibility.decide(pin, 1, EnumSet.of(TourChrome.HELP)));
+    }
+
+    @Test
+    public void thePinEditorIsFinishedWithBySavingRatherThanByClosing() {
+        assertNull(TourCardVisibility.chromeClosedBy(TourSignals.PINNED_APPS_SAVED));
+        assertEquals(TourChrome.PIN_EDITOR,
+            TourCardVisibility.chromeAskedAboutBy(TourSignals.PINNED_APPS_SAVED));
+        assertNull(TourCardVisibility.chromeAskedAboutBy(TourSignals.PIN_EDITOR_OPENED));
+        // The surfaces a card asks to close are still asked about the same way.
+        assertEquals(TourChrome.DRAWER,
+            TourCardVisibility.chromeAskedAboutBy(TourSignals.DRAWER_CLOSED));
+        assertEquals(TourChrome.PALETTE,
+            TourCardVisibility.chromeAskedAboutBy(TourSignals.PALETTE_CLOSED));
+        assertNull(TourCardVisibility.chromeAskedAboutBy(null));
     }
 
     @Test

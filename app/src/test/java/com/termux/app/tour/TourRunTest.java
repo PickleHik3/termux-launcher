@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The run as data: four lessons, a question and a closing card, each naming its own stages, copy,
+ * The run as data: five lessons, a question and a closing card, each naming its own stages, copy,
  * controls and clearing signals.
  *
  * <p>The rule the whole run is built on is asserted here rather than read: nothing in the basics
@@ -47,18 +47,18 @@ public class TourRunTest {
     }
 
     @Test
-    public void theRunIsTheFourLessonsTheHomeQuestionAndTheClosingCardInOrder() {
-        assertEquals(6, TourRun.steps(GUEST).size());
-        String[] order = {TourRun.FIND_HELP, TourRun.FIND_APPS, TourRun.KEYBOARD,
+    public void theRunIsTheFiveLessonsTheHomeQuestionAndTheClosingCardInOrder() {
+        assertEquals(7, TourRun.steps(GUEST).size());
+        String[] order = {TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEYBOARD,
             TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING};
         for (int i = 0; i < order.length; i++)
             assertEquals("card " + i, order[i], TourRun.steps(GUEST).get(i).id);
     }
 
     @Test
-    public void theFourLessonsAreTheFourLessonsAndNothingElseIs() {
-        assertEquals(Arrays.asList(TourRun.FIND_HELP, TourRun.FIND_APPS, TourRun.KEYBOARD,
-            TourRun.FIND_ACTION), TourRun.lessons());
+    public void theFiveLessonsAreTheFiveLessonsAndNothingElseIs() {
+        assertEquals(Arrays.asList(TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS,
+            TourRun.KEYBOARD, TourRun.FIND_ACTION), TourRun.lessons());
         for (TourStep step : TourRun.steps(GUEST))
             assertEquals("kind of " + step.id, TourRun.lessons().contains(step.id),
                 step.kind == TourStep.Kind.LESSON);
@@ -70,8 +70,9 @@ public class TourRunTest {
         for (TourStep step : TourRun.steps(GUEST)) {
             assertTrue("duplicate id " + step.id, ids.add(step.id));
             assertTrue("no copy for " + step.id, step.copyRes != 0);
-            for (int stage = 0; stage < step.signalCount(); stage++) {
-                assertNotNull("no signal for " + step.id + ":" + stage, step.signalAt(stage));
+            for (int stage = 0; stage < step.stageCount(); stage++) {
+                assertEquals("signal for " + step.id + ":" + stage,
+                    step.isShownOnlyStage(stage), step.signalAt(stage) == null);
                 assertNotNull("no gesture for " + step.id + ":" + stage, step.gestureAt(stage));
                 assertNotNull("no target for " + step.id + ":" + stage, step.targetIdAt(stage));
                 assertTrue("no copy for " + step.id + ":" + stage, step.copyResAt(stage) != 0);
@@ -113,6 +114,31 @@ public class TourRunTest {
     @Test
     public void findHelpIsTheFirstLessonBecauseItIsTheWayBackToEverythingElse() {
         assertEquals(0, indexOf(TourRun.FIND_HELP));
+    }
+
+    @Test
+    public void pinYourAppsIsSecondBecauseTheDockOfANewInstallIsEmpty() {
+        assertEquals(1, indexOf(TourRun.PIN_APPS));
+    }
+
+    @Test
+    public void pinYourAppsHoldsTheDockAndThenWaitsForASaveWithAPinInIt() {
+        TourStep pin = step(TourRun.PIN_APPS);
+        assertEquals(2, pin.signalCount());
+        assertEquals(2, pin.stageCount());
+        assertEquals(TourTargets.DOCK, pin.targetIdAt(0));
+        // The one hold in the run: the dock's own gesture, and the thing nobody guesses.
+        assertEquals(TourGesture.HOLD, pin.gestureAt(0));
+        assertEquals(TourSignals.PIN_EDITOR_OPENED, pin.signalAt(0));
+        // The sheet is a window over the dock, so the second stage points at nothing.
+        assertEquals(TourTargets.NONE, pin.targetIdAt(1));
+        assertEquals(TourGesture.TAP, pin.gestureAt(1));
+        assertEquals(TourSignals.PINNED_APPS_SAVED, pin.signalAt(1));
+        assertNotEquals(pin.copyResAt(0), pin.copyResAt(1));
+        // That second stage is the one card that may be read while the sheet is up.
+        assertNull(TourCardVisibility.chromeAskedAboutBy(pin.signalAt(0)));
+        assertEquals(TourChrome.PIN_EDITOR,
+            TourCardVisibility.chromeAskedAboutBy(pin.signalAt(1)));
     }
 
     @Test
@@ -185,6 +211,32 @@ public class TourRunTest {
     }
 
     @Test
+    public void theKeyboardLessonEndsOnTheTerminalsHoldWhichTheRunOnlyShows() {
+        TourStep keyboard = step(GUEST, TourRun.KEYBOARD);
+        assertTrue(keyboard.endsShown);
+        assertEquals(2, keyboard.signalCount());
+        assertEquals(3, keyboard.stageCount());
+        assertTrue(keyboard.isShownOnlyStage(2));
+        assertFalse(keyboard.isShownOnlyStage(1));
+        // Nothing to watch for: what the hold does needs a program that follows the mouse.
+        assertNull(keyboard.signalAt(2));
+        assertEquals(TourTargets.TERMINAL_PANE, keyboard.targetIdAt(2));
+        assertEquals(TourGesture.HOLD, keyboard.gestureAt(2));
+        // Its own sentence, and the same one whichever way round the lesson began.
+        assertNotEquals(keyboard.copyResAt(1), keyboard.copyResAt(2));
+        assertEquals(step(HOME, TourRun.KEYBOARD).copyResAt(2), keyboard.copyResAt(2));
+    }
+
+    @Test
+    public void itIsTheOnlyStageOfTheRunWithNoSignalBehindIt() {
+        for (TourStep step : TourRun.steps(GUEST)) {
+            if (step.kind != TourStep.Kind.LESSON) continue;
+            assertEquals("shown stage of " + step.id, TourRun.KEYBOARD.equals(step.id),
+                step.endsShown);
+        }
+    }
+
+    @Test
     public void everyLessonOffersBackSkipStepAndEndTour() {
         for (String id : TourRun.lessons())
             assertEquals("buttons of " + id, Arrays.asList(TourAction.BACK, TourAction.SKIP_STEP,
@@ -244,7 +296,7 @@ public class TourRunTest {
             steps.remove(0);
             throw new AssertionError("the run should not be editable");
         } catch (UnsupportedOperationException expected) {
-            assertEquals(6, TourRun.steps(GUEST).size());
+            assertEquals(7, TourRun.steps(GUEST).size());
         }
     }
 }

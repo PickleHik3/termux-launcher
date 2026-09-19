@@ -2245,6 +2245,8 @@
     <string name="help_practice_start">Start</string>
     <string name="help_lesson_find_help_title">Find help</string>
     <string name="help_lesson_find_help_summary">Open help from a pane corner.</string>
+    <string name="help_lesson_pin_apps_title">Pin your apps</string>
+    <string name="help_lesson_pin_apps_summary">Choose the apps that sit in the dock.</string>
     <string name="help_lesson_find_apps_title">Open an app</string>
     <string name="help_lesson_find_apps_summary">Open an app from the dock and come back.</string>
     <string name="help_lesson_keyboard_title">Show the keyboard</string>

@@ -13,8 +13,9 @@ import java.util.Set;
  * card sat on the open drawer, and the closing card sat on the open palette.
  *
  * <p>The rule: while any of that chrome is up the run gets out of the way, except for the one card
- * whose whole ask is to close that very surface — that one still has to be readable, so it shows
- * compact at the top of the screen, where the surface it is asking about is not. A card that falls
+ * whose whole ask is about that very surface — closing it, or, for the pinned-apps sheet, saving
+ * something in it. That one still has to be readable, so it shows compact at the top of the
+ * screen, where the surface it is asking about is not. A card that falls
  * due behind chrome is not lost: it is simply shown when the chrome goes.
  *
  * <p>What is deliberately not here any more: the A-Z card used to go off the screen entirely while
