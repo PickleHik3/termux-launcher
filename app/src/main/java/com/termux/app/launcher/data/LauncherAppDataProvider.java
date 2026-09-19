@@ -63,6 +63,7 @@ public final class LauncherAppDataProvider {
     private final Map<String, Long> cachedLastUpdateByPackage = new HashMap<>();
     private final List<Runnable> pendingRefreshCallbacks = new ArrayList<>();
     private final List<WeakReference<IconArtworkListener>> artworkListeners = new ArrayList<>();
+    private final LauncherHiddenAppsStore hiddenAppsStore;
     private boolean loaded;
     private boolean loading;
     private boolean refreshing;
@@ -72,6 +73,7 @@ public final class LauncherAppDataProvider {
         this.context = context.getApplicationContext();
         this.iconResolver = new LauncherIconResolver(this.context);
         this.iconPackRepository = new IconPackRepository(this.context);
+        this.hiddenAppsStore = new LauncherHiddenAppsStore(this.context);
         this.iconStore = new LauncherIconStore(
             this.context.getResources(),
             DockIconCache.memoryClassMb(this.context),
@@ -404,13 +406,38 @@ public final class LauncherAppDataProvider {
         refreshing = false;
     }
 
+    /**
+     * The one store behind {@link #getAllApps()}'s filtering — shared rather than re-created, so
+     * a settings screen that edits it and this always-live provider never disagree. See the
+     * store's own class comment.
+     */
+    @NonNull
+    public LauncherHiddenAppsStore hiddenApps() {
+        return hiddenAppsStore;
+    }
+
     @NonNull
     public synchronized List<LauncherAppEntry> getAllApps() {
-        return cachedApps;
+        return visibleOnly(cachedApps);
     }
 
     @NonNull
     public List<LauncherAppEntry> getAllAppsBlocking() {
+        return visibleOnly(ensureLoadedBlocking());
+    }
+
+    /**
+     * Every app the catalogue holds, hidden ones included — for the settings screen that lists
+     * every drawer app so a hidden one can be found again and un-hidden. Every other caller wants
+     * {@link #getAllAppsBlocking()} instead, which leaves hidden apps out.
+     */
+    @NonNull
+    public List<LauncherAppEntry> getAllAppsIncludingHiddenBlocking() {
+        return ensureLoadedBlocking();
+    }
+
+    @NonNull
+    private List<LauncherAppEntry> ensureLoadedBlocking() {
         synchronized (this) {
             if (loaded) {
                 return cachedApps;
@@ -422,6 +449,34 @@ public final class LauncherAppDataProvider {
             applySnapshotLocked(snapshot);
             return cachedApps;
         }
+    }
+
+    /**
+     * Drops hidden apps from a list the catalogue produced. Left out entirely: {@link #findByRef},
+     * {@link #findFirstByPackage} and {@link #findDefaultByPackage}, which a pin, a folder member
+     * or a terminal "open <package>" command still needs to resolve after the app it names is
+     * hidden — hiding removes an app from discovery, not from what already points at it.
+     */
+    @NonNull
+    private List<LauncherAppEntry> visibleOnly(@NonNull List<LauncherAppEntry> apps) {
+        if (apps.isEmpty() || hiddenAppsStore.isEmpty()) return apps;
+        return filterHidden(apps, hiddenAppsStore.hiddenStableIds());
+    }
+
+    /**
+     * The filter itself, kept pure and static so it is testable against a hand-built list —
+     * including a Linux app's container-qualified {@code AppRef} — without a package-manager
+     * scan. Matches by {@link AppRef#stableId()}, the same id pins, folders and rankings key on.
+     */
+    @NonNull
+    static List<LauncherAppEntry> filterHidden(@NonNull List<LauncherAppEntry> apps,
+                                               @NonNull Set<String> hiddenStableIds) {
+        if (apps.isEmpty() || hiddenStableIds.isEmpty()) return apps;
+        List<LauncherAppEntry> visible = new ArrayList<>(apps.size());
+        for (LauncherAppEntry entry : apps) {
+            if (!hiddenStableIds.contains(entry.appRef.stableId())) visible.add(entry);
+        }
+        return visible;
     }
 
     @Nullable
@@ -448,7 +503,7 @@ public final class LauncherAppDataProvider {
     @NonNull
     public synchronized List<LauncherAppEntry> getAppsForLetter(char letter) {
         List<LauncherAppEntry> bucket = letterBuckets.get(normalizeLetter(letter));
-        return bucket == null ? Collections.emptyList() : bucket;
+        return bucket == null ? Collections.emptyList() : visibleOnly(bucket);
     }
 
     private void dispatchRefreshCallbacksLocked() {
