@@ -253,7 +253,7 @@ public final class HelpPanelView extends FrameLayout {
                 () -> { if (listener != null) listener.onLink(SUPPORT); })));
     }
 
-    /** The four lessons, each with the sentence that says what it teaches, and Start. */
+    /** The five lessons, each with the sentence that says what it teaches, and Start. */
     private void practiceList() {
         for (String lessonId : HelpTopics.LESSON_IDS) {
             int titleRes = lessonTitle(lessonId);
@@ -528,6 +528,7 @@ public final class HelpPanelView extends FrameLayout {
     private static int lessonTitle(String lessonId) {
         switch (lessonId) {
             case HelpTopics.LESSON_FIND_HELP: return R.string.help_lesson_find_help_title;
+            case HelpTopics.LESSON_PIN_APPS: return R.string.help_lesson_pin_apps_title;
             case HelpTopics.LESSON_FIND_APPS: return R.string.help_lesson_find_apps_title;
             case HelpTopics.LESSON_KEYBOARD: return R.string.help_lesson_keyboard_title;
             case HelpTopics.LESSON_FIND_ACTION: return R.string.help_lesson_find_action_title;
@@ -538,6 +539,7 @@ public final class HelpPanelView extends FrameLayout {
     private static int lessonSummary(String lessonId) {
         switch (lessonId) {
             case HelpTopics.LESSON_FIND_HELP: return R.string.help_lesson_find_help_summary;
+            case HelpTopics.LESSON_PIN_APPS: return R.string.help_lesson_pin_apps_summary;
             case HelpTopics.LESSON_FIND_APPS: return R.string.help_lesson_find_apps_summary;
             case HelpTopics.LESSON_KEYBOARD: return R.string.help_lesson_keyboard_summary;
             case HelpTopics.LESSON_FIND_ACTION: return R.string.help_lesson_find_action_summary;

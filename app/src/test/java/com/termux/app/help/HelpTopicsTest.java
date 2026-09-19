@@ -199,12 +199,13 @@ public class HelpTopicsTest {
             assertTrue(entry.id, HelpTopics.LESSON_IDS.contains(entry.lessonId));
             used.add(entry.lessonId);
         }
-        assertEquals("every lesson is reachable from a topic", 4, used.size());
+        assertEquals("every lesson is reachable from a topic", 5, used.size());
     }
 
-    @Test public void theFourLessonsAreReachedFromTheTopicsThatTeachThem() {
+    @Test public void theFiveLessonsAreReachedFromTheTopicsThatTeachThem() {
         assertEquals(HelpTopics.LESSON_FIND_HELP, HelpTopics.entry("corners").lessonId);
         assertEquals(HelpTopics.LESSON_FIND_APPS, HelpTopics.entry("dock").lessonId);
+        assertEquals(HelpTopics.LESSON_PIN_APPS, HelpTopics.entry("organize_apps").lessonId);
         assertEquals(HelpTopics.LESSON_KEYBOARD, HelpTopics.entry("keyboard").lessonId);
         assertEquals(HelpTopics.LESSON_FIND_ACTION, HelpTopics.entry("palette").lessonId);
         assertNull(HelpTopics.entry("hierarchy").lessonId);

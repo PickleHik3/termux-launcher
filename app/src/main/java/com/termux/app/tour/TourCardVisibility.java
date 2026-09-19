@@ -13,8 +13,9 @@ import java.util.Set;
  * card sat on the open drawer, and the closing card sat on the open palette.
  *
  * <p>The rule: while any of that chrome is up the run gets out of the way, except for the one card
- * whose whole ask is to close that very surface — that one still has to be readable, so it shows
- * compact at the top of the screen, where the surface it is asking about is not. A card that falls
+ * whose whole ask is about that very surface — closing it, or, for the pinned-apps sheet, saving
+ * something in it. That one still has to be readable, so it shows compact at the top of the
+ * screen, where the surface it is asking about is not. A card that falls
  * due behind chrome is not lost: it is simply shown when the chrome goes.
  *
  * <p>What is deliberately not here any more: the A-Z card used to go off the screen entirely while
@@ -61,6 +62,21 @@ public final class TourCardVisibility {
     }
 
     /**
+     * The surface a card asking for {@code signalId} is asking the user to finish with, or null
+     * when the card is about nothing that is up. The one card that may be read over a surface:
+     * everything else waits for the surface to go.
+     */
+    @Nullable
+    public static TourChrome chromeAskedAboutBy(@Nullable String signalId) {
+        TourChrome closes = chromeClosedBy(signalId);
+        if (closes != null) return closes;
+        // The pin editor is finished with by saving rather than by closing, and the card that asks
+        // for that save is the only thing on screen that says what to do inside the sheet.
+        if (TourSignals.PINNED_APPS_SAVED.equals(signalId)) return TourChrome.PIN_EDITOR;
+        return null;
+    }
+
+    /**
      * @param topAnchored the card asks to rest at the top of the screen whatever else is going on
      * @param chromeUp the full-plane surfaces in front of the user right now
      * @param awaitedSignal what the card that is up is waiting for, or null when it waits for its
@@ -81,8 +97,8 @@ public final class TourCardVisibility {
                              boolean onTerminal) {
         if (chromeUp != null && chromeUp.contains(TourChrome.HELP)) return HIDDEN;
         if (chromeUp != null && !chromeUp.isEmpty()) {
-            TourChrome closes = chromeClosedBy(awaitedSignal);
-            return closes != null && chromeUp.contains(closes) ? COMPACT_TOP : HIDDEN;
+            TourChrome about = chromeAskedAboutBy(awaitedSignal);
+            return about != null && chromeUp.contains(about) ? COMPACT_TOP : HIDDEN;
         }
         if (taughtOnTerminal && !onTerminal) return AWAY;
         return topAnchored ? COMPACT_TOP : NORMAL;

@@ -13,6 +13,11 @@ import java.util.List;
  *
  * <p>The second line is the "then" half of such a step — it appears once the first signal has
  * landed, so the card never asks for two things at once.
+ *
+ * <p>A lesson may end with one stage that is only shown: {@link #endsShown} adds a last stage with
+ * no signal behind it, for the one thing the run says without waiting to see it done. The terminal's
+ * hold needs a program that follows the mouse before it shows anything at all, so the run shows the
+ * gesture and moves on when the user says they have read it.
  */
 public final class TourStep {
 
@@ -79,6 +84,12 @@ public final class TourStep {
     public final boolean topAnchored;
 
     /**
+     * Whether this lesson's last stage is only shown: it names a gesture and a control, waits for
+     * no signal at all, and is left by the user's own Done.
+     */
+    public final boolean endsShown;
+
+    /**
      * Whether this card's targets are a keyboard chord rather than one target per stage.
      *
      * <p>A chord card has a single signal — the thing the chord does — and three or four keys to
@@ -119,8 +130,15 @@ public final class TourStep {
      */
     public TourStep(String id, int[] copyLines, String[] targetIds, String[] signals,
                     TourGesture[] gestures, boolean topAnchored, boolean chordGlow) {
+        this(id, copyLines, targetIds, signals, gestures, topAnchored, chordGlow, false);
+    }
+
+    /** The same shape, for a lesson whose last stage is only shown. */
+    public TourStep(String id, int[] copyLines, String[] targetIds, String[] signals,
+                    TourGesture[] gestures, boolean topAnchored, boolean chordGlow,
+                    boolean endsShown) {
         this(id, signals.length == 0 ? Kind.CLOSING : Kind.LESSON, copyLines, targetIds, signals,
-            gestures, topAnchored, chordGlow, null);
+            gestures, topAnchored, chordGlow, null, endsShown);
     }
 
     /**
@@ -131,6 +149,18 @@ public final class TourStep {
     public TourStep(String id, Kind kind, int[] copyLines, String[] targetIds, String[] signals,
                     TourGesture[] gestures, boolean topAnchored, boolean chordGlow,
                     TourAction[] actions) {
+        this(id, kind, copyLines, targetIds, signals, gestures, topAnchored, chordGlow, actions,
+            false);
+    }
+
+    /** The whole shape, for a card that ends on a stage it only shows. */
+    public TourStep(String id, Kind kind, int[] copyLines, String[] targetIds, String[] signals,
+                    TourGesture[] gestures, boolean topAnchored, boolean chordGlow,
+                    TourAction[] actions, boolean endsShown) {
+        if (endsShown && signals.length == 0)
+            throw new IllegalArgumentException("step " + id + " shows a stage it never reaches");
+        if (endsShown && gestures.length <= signals.length)
+            throw new IllegalArgumentException("step " + id + " has no gesture for its shown stage");
         if (gestures.length < Math.max(1, signals.length))
             throw new IllegalArgumentException("step " + id + " has fewer gestures than signals");
         if (targetIds.length == 0)
@@ -147,6 +177,7 @@ public final class TourStep {
         this.gestures = gestures.clone();
         this.topAnchored = topAnchored;
         this.chordGlow = chordGlow;
+        this.endsShown = endsShown;
         if (kind == Kind.CHOICE && signals.length != 0)
             throw new IllegalArgumentException("choice " + id + " is cleared by a button, not a"
                 + " gesture");
@@ -187,6 +218,22 @@ public final class TourStep {
     /** How many signals clear this step; 0 for the closing card, which ends on its button. */
     public int signalCount() {
         return signals.length;
+    }
+
+    /**
+     * How many stages this card walks: one per signal, and one more when it ends on a stage that
+     * is only shown.
+     */
+    public int stageCount() {
+        return signals.length + (endsShown ? 1 : 0);
+    }
+
+    /**
+     * Whether {@code stage} is the one this card only shows. Nothing the launcher reports can
+     * clear it — {@link #signalAt} answers null there — so the card waits for the user's Done.
+     */
+    public boolean isShownOnlyStage(int stage) {
+        return endsShown && stage == signals.length;
     }
 
     /** The signal this step is waiting for at {@code stage}, or null when it waits for none. */

@@ -105,6 +105,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @Nullable private HomeHost mHomeHost;
     /** A run that was asked for while help was up, held until help goes away. */
     @Nullable private Runnable mStartWaitingForHelp;
+    /** Whether the pinned-apps sheet is in front of the user, which only it can say. */
+    private boolean mPinEditorUp;
     /** What the in-app keyboard has latched, for the chord cards' walking glow. */
     private boolean mCtrlLatched;
     private boolean mAltLatched;
@@ -405,6 +407,29 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mSignals.onKeyboardShownSettled(shown);
     }
 
+    /**
+     * The pinned-apps editor came up. The sheet is in front of the user before the signal is
+     * emitted, so the card the signal moves the run on to is placed knowing it is behind a sheet.
+     */
+    public void onPinEditorOpened() {
+        mPinEditorUp = true;
+        mSignals.onPinEditorOpened();
+        refreshCardVisibility();
+    }
+
+    /**
+     * The pinned-apps editor went away. Only a close that left something pinned clears the card;
+     * either way the sheet is gone, so the card comes back to where it belongs.
+     *
+     * @param saved whether the editor wrote the pinned list while it was open
+     * @param pinnedCount how many pins it left in the dock
+     */
+    public void onPinEditorClosed(boolean saved, int pinnedCount) {
+        mPinEditorUp = false;
+        mSignals.onPinEditorClosed(saved, pinnedCount);
+        refreshCardVisibility();
+    }
+
     /** An Android app was launched from the launcher, however the user found it. */
     public void onAppLaunched() {
         mSignals.onAppLaunched();
@@ -448,6 +473,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @NonNull
     private java.util.EnumSet<TourChrome> chromeUp() {
         java.util.EnumSet<TourChrome> up = java.util.EnumSet.noneOf(TourChrome.class);
+        // The pin editor is a window of its own rather than a plane of this one, so it is told
+        // rather than asked: nothing in the activity's view tree can be looked at to find it.
+        if (mPinEditorUp) up.add(TourChrome.PIN_EDITOR);
         ChromeProbe probe = mChromeProbe;
         if (probe == null) return up;
         if (probe.isAppDrawerUp()) up.add(TourChrome.DRAWER);
@@ -524,7 +552,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             case BACK: mController.back(); break;
             case SKIP_STEP: mController.skip(); break;
             case END_TOUR: mController.endTour(); break;
-            case DONE:
+            // Done is a practice hint's way out, and a shown stage's way on; the run knows which
+            // of the two the card that is up is.
+            case DONE: mController.done(); break;
             case END_PRACTICE: mController.endPractice(); break;
             case USE_AS_HOME: mController.choose(TourController.Choice.USE_AS_HOME); break;
             case KEEP_TRYING: mController.choose(TourController.Choice.KEEP_TRYING); break;

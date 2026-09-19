@@ -562,6 +562,8 @@ public final class SuggestionBarView extends GridLayout
         else notifyDrawerConfigChanged();
     });
     @Nullable private OverflowInteractionListener overflowInteractionListener;
+    /** Told when the pin editor opens and closes; the tour's, and null everywhere else. */
+    @Nullable private PinnedAppsEditor.Listener pinEditorListener;
     private final ExecutorService searchExecutor = newIdleFriendlyExecutor();
     private int searchGeneration = 0;
     private boolean hostVisible = true;
@@ -3994,6 +3996,11 @@ public final class SuggestionBarView extends GridLayout
         );
     }
 
+    /** Who is told that the pin editor came up and what it left behind: the first-run tour. */
+    public void setPinEditorListener(@Nullable PinnedAppsEditor.Listener listener) {
+        pinEditorListener = listener;
+    }
+
     /**
      * Opens the modern, reusable pin editor (also used from Settings → Default apps). On save it
      * re-reads pinned items from the repository and re-renders the dock.
@@ -4005,7 +4012,7 @@ public final class SuggestionBarView extends GridLayout
             }
             invalidateMostUsedCache();
             reloadWithInput("", lastTerminalView);
-        });
+        }, pinEditorListener);
     }
 
     private void showFolderContentsEditor(final int folderIndex, @NonNull final PinnedFolderItem folder) {

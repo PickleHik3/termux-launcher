@@ -32,7 +32,20 @@ public final class TourFingerPainter {
         TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, progress, scratchPoint);
         float radius = RADIUS_DP * density;
         int opaque = opaque(accent);
-        if (gesture != TourGesture.TAP) {
+        if (gesture == TourGesture.HOLD) {
+            // A press that stays down: the halo closes onto the finger and holds there, where a
+            // tap's ring would already have expanded away. It is what tells the two apart.
+            float press = TourFingerTrace.holdPress(progress);
+            paint.setStyle(Paint.Style.FILL);
+            paint.setColor(ColorUtils.setAlphaComponent(opaque, Math.round(38f * press)));
+            canvas.drawCircle(scratchPoint[0], scratchPoint[1], radius * (1f + (0.9f * press)),
+                paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(Math.max(1f, 1.5f * density));
+            paint.setColor(ColorUtils.setAlphaComponent(opaque, Math.round(120f * press)));
+            canvas.drawCircle(scratchPoint[0], scratchPoint[1], radius * (1f + (0.9f * press)),
+                paint);
+        } else if (gesture != TourGesture.TAP) {
             TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, 0f, scratchTrail);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeCap(Paint.Cap.ROUND);
@@ -64,11 +77,18 @@ public final class TourFingerPainter {
         float radius = RADIUS_DP * density;
         TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, 0f, scratchTrail);
         TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, 1f, scratchPoint);
-        if (gesture == TourGesture.TAP) {
+        if (gesture == TourGesture.TAP || gesture == TourGesture.HOLD) {
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(Math.max(1f, 1.5f * density));
             paint.setColor(ColorUtils.setAlphaComponent(opaque, 120));
             canvas.drawCircle(scratchPoint[0], scratchPoint[1], radius * 2f, paint);
+            // A second ring, drawn where the held halo rests, for the phone that plays no
+            // animations: the still picture of a hold has to say more than the still picture of a
+            // tap, and there is no direction to point in.
+            if (gesture == TourGesture.HOLD) {
+                paint.setColor(ColorUtils.setAlphaComponent(opaque, 72));
+                canvas.drawCircle(scratchPoint[0], scratchPoint[1], radius * 1.45f, paint);
+            }
             drawFinger(canvas, paint, scratchPoint[0], scratchPoint[1], radius, opaque, density);
             return;
         }

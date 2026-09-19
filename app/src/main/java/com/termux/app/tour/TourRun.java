@@ -7,10 +7,11 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The run, as data: four lessons, the home-screen question and the closing card.
+ * The run, as data: five lessons, the home-screen question and the closing card.
  *
- * <p>The lessons teach the four things a newcomer cannot look up without them — where help is, how
- * to reach their Android apps, how to get the keyboard out of the way, and how to find an action.
+ * <p>The lessons teach the five things a newcomer cannot look up without them — where help is, how
+ * to put their own apps in the dock, how to reach the rest of their Android apps, how to get the
+ * keyboard out of the way, and how to find an action.
  * Everything else is offered on the way out or lives in help, and nothing here opens a shell, a
  * window or a session: the user's first terminal is exactly as they left it.
  *
@@ -22,6 +23,8 @@ public final class TourRun {
 
     /** Find help: a pane corner, the ? behind it, and the way back out of help. */
     public static final String FIND_HELP = "find_help";
+    /** Pin your apps: the dock's hold, and an app chosen in the editor it raises. */
+    public static final String PIN_APPS = "pin_apps";
     /** Find Android apps: the dock's drawer, an app, and the way back to the launcher. */
     public static final String FIND_APPS = "find_apps";
     /** Control the keyboard: the keyboard button, both ways. */
@@ -33,9 +36,9 @@ public final class TourRun {
     /** The last card. */
     public static final String CLOSING = "closing";
 
-    /** The four lessons, in order; the two cards after them are not lessons. */
+    /** The five lessons, in order; the two cards after them are not lessons. */
     private static final List<String> LESSONS = Collections.unmodifiableList(
-        Arrays.asList(FIND_HELP, FIND_APPS, KEYBOARD, FIND_ACTION));
+        Arrays.asList(FIND_HELP, PIN_APPS, FIND_APPS, KEYBOARD, FIND_ACTION));
 
     /**
      * What the run has to know about the phone it is running on.
@@ -61,8 +64,8 @@ public final class TourRun {
     /** The run, in order, for the phone described by {@code context}. */
     public static List<TourStep> steps(RunContext context) {
         return Collections.unmodifiableList(Arrays.asList(
-            findHelp(), findApps(context), keyboard(context), findAction(), homeChoice(context),
-            closing()));
+            findHelp(), pinApps(), findApps(context), keyboard(context), findAction(),
+            homeChoice(context), closing()));
     }
 
     /** The lessons, in order: what practice and Back may name, and the migration maps to. */
@@ -87,7 +90,26 @@ public final class TourRun {
     }
 
     /**
-     * Lesson two. The drawer covers the dock it was pulled off and the launched app covers the
+     * Lesson two, and the earliest the run can teach it: the dock a new install shows is empty,
+     * and the one thing that fills it is a hold nobody guesses. The first stage is the only hold
+     * in the run; the second is performed inside the sheet the hold raises, which is a window of
+     * its own over the dock, so it points at nothing and asks for the save rather than for a tap
+     * it cannot see.
+     *
+     * <p>A sheet closed with an empty dock does not clear the card. The lesson is a pinned app, so
+     * its second sentence is written to be true whether the sheet is open or has been closed
+     * again: the way back into it is the hold the first stage just taught.
+     */
+    private static TourStep pinApps() {
+        return new TourStep(PIN_APPS,
+            new int[] {R.string.tour_card_pin_apps_hold, R.string.tour_card_pin_apps_choose},
+            new String[] {TourTargets.DOCK, TourTargets.NONE},
+            new String[] {TourSignals.PIN_EDITOR_OPENED, TourSignals.PINNED_APPS_SAVED},
+            new TourGesture[] {TourGesture.HOLD, TourGesture.TAP}, false, false);
+    }
+
+    /**
+     * Lesson three. The drawer covers the dock it was pulled off and the launched app covers the
      * launcher, so only the first stage has anything to point at. The last stage's sentence is the
      * one thing in the run that depends on a system setting: a phone whose home screen is another
      * launcher has no Home button that leads back here.
@@ -106,23 +128,35 @@ public final class TourRun {
     }
 
     /**
-     * Lesson three, both ways round the same button. Nothing is typed: the lesson is about getting
-     * the keyboard out of the way and back again, and a shell command is practice for another day.
+     * Lesson four, both ways round the same button, and then one thing the run only shows.
+     *
+     * <p>Nothing is typed: the lesson is about getting the keyboard out of the way and back again,
+     * and a shell command is practice for another day.
+     *
+     * <p>The last stage is the hold on the terminal, which is the only stage of the run with no
+     * signal behind it. What the hold does needs a program that follows the mouse before anything
+     * happens on screen, so there is nothing the launcher could watch for: the card shows the
+     * gesture and the user's Done is the way on.
      */
     private static TourStep keyboard(RunContext context) {
         int[] copy = context.keyboardShown
-            ? new int[] {R.string.tour_card_keyboard_hide, R.string.tour_card_keyboard_show_again}
-            : new int[] {R.string.tour_card_keyboard_show, R.string.tour_card_keyboard_hide_again};
+            ? new int[] {R.string.tour_card_keyboard_hide, R.string.tour_card_keyboard_show_again,
+                R.string.tour_card_keyboard_hold_terminal}
+            : new int[] {R.string.tour_card_keyboard_show, R.string.tour_card_keyboard_hide_again,
+                R.string.tour_card_keyboard_hold_terminal};
         String[] signals = context.keyboardShown
             ? new String[] {TourSignals.KEYBOARD_HIDDEN, TourSignals.KEYBOARD_SHOWN}
             : new String[] {TourSignals.KEYBOARD_SHOWN, TourSignals.KEYBOARD_HIDDEN};
         return new TourStep(KEYBOARD, copy,
-            new String[] {TourTargets.KEYBOARD_TOGGLE_KEY, TourTargets.KEYBOARD_TOGGLE_KEY},
-            signals, new TourGesture[] {TourGesture.TAP, TourGesture.TAP}, false, false);
+            new String[] {TourTargets.KEYBOARD_TOGGLE_KEY, TourTargets.KEYBOARD_TOGGLE_KEY,
+                TourTargets.TERMINAL_PANE},
+            signals,
+            new TourGesture[] {TourGesture.TAP, TourGesture.TAP, TourGesture.HOLD}, false, false,
+            true);
     }
 
     /**
-     * Lesson four. The palette is a full-plane surface, so its second stage points at nothing and
+     * Lesson five. The palette is a full-plane surface, so its second stage points at nothing and
      * is the card that asks for the way out of the surface it is drawn over. The user is asked to
      * find something rather than to run it: that actions are searchable is the whole lesson.
      */

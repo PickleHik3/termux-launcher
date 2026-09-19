@@ -11,6 +11,8 @@ public enum TourGesture {
     /** No trace at all — the closing card. */
     NONE,
     TAP,
+    /** A press that stays down before it lifts: the dock's hold. */
+    HOLD,
     SWIPE_LEFT,
     SWIPE_RIGHT,
     SWIPE_UP,

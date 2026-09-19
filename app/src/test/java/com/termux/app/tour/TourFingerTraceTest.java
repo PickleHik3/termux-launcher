@@ -135,4 +135,34 @@ public class TourFingerTraceTest {
         TourFingerTrace.pointAt(TourGesture.SWIPE_LEFT, 0f, 0f, 20f, 20f, DENSITY, 1f, narrow);
         assertTrue(narrow[0] < start);
     }
+
+    @Test
+    public void aHoldStaysOnTheMiddleOfTheControlThroughout() {
+        float centerX = (LEFT + RIGHT) / 2f;
+        float centerY = (TOP + BOTTOM) / 2f;
+        for (float progress : new float[] {0f, 0.3f, 0.7f, 1f}) {
+            at(TourGesture.HOLD, progress);
+            assertEquals("x at " + progress, centerX, point[0], 0.01f);
+            assertEquals("y at " + progress, centerY, point[1], 0.01f);
+        }
+    }
+
+    @Test
+    public void theHoldsPressLandsStaysDownAndThenLifts() {
+        assertEquals(0f, TourFingerTrace.holdPress(0f), 0.01f);
+        assertTrue("the press has to land quickly", TourFingerTrace.holdPress(0.22f) > 0.99f);
+        // The plateau is what tells a hold from a tap: a tap's ring has expanded away by here.
+        assertEquals(1f, TourFingerTrace.holdPress(0.5f), 0.001f);
+        assertEquals(1f, TourFingerTrace.holdPress(0.8f), 0.001f);
+        assertTrue("and then it lifts", TourFingerTrace.holdPress(0.95f) < 1f);
+        assertEquals(0f, TourFingerTrace.holdPress(1f), 0.01f);
+        // Out of range on either side is still a value the painter can use.
+        assertEquals(0f, TourFingerTrace.holdPress(-1f), 0.01f);
+        assertEquals(0f, TourFingerTrace.holdPress(2f), 0.01f);
+    }
+
+    @Test
+    public void aTapsRingDoesNotLingerTheWayAHoldsPressDoes() {
+        assertTrue(TourFingerTrace.tapPulse(0.5f) < TourFingerTrace.holdPress(0.5f));
+    }
 }

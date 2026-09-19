@@ -48,10 +48,14 @@ public class TourControllerTest {
         clock.advance(TourController.ARM_DELAY_MS);
     }
 
-    /** Does the gesture the card that is up is waiting for. */
+    /** Does the gesture the card that is up is waiting for, or its Done when it waits for none. */
     private void doTheGesture() {
         TourStep step = controller.currentStep();
         arm();
+        if (step.isShownOnlyStage(controller.currentStage())) {
+            controller.done();
+            return;
+        }
         controller.onSignal(step.signalAt(controller.currentStage()));
     }
 
@@ -118,7 +122,7 @@ public class TourControllerTest {
         assertFalse(controller.isPracticing());
         assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
         assertEquals(0, controller.currentStage());
-        assertEquals(2, prefs.stepIndex);
+        assertEquals(3, prefs.stepIndex);
         assertEquals(0, prefs.stage);
         // A normal run: everything after that lesson still follows.
         clearTheCard();
@@ -185,7 +189,7 @@ public class TourControllerTest {
         assertEquals(2, controller.currentStage());
         arm();
         controller.onSignal(TourSignals.HELP_CLOSED);
-        assertEquals(TourRun.FIND_APPS, controller.currentStep().id);
+        assertEquals(TourRun.PIN_APPS, controller.currentStep().id);
         assertEquals(0, controller.currentStage());
         assertEquals(1, prefs.stepIndex);
         assertFalse(prefs.skipped);
@@ -206,7 +210,7 @@ public class TourControllerTest {
     public void skipStepMovesToTheNextLessonAndIsRemembered() {
         controller.start();
         controller.skip();
-        assertEquals(TourRun.FIND_APPS, controller.currentStep().id);
+        assertEquals(TourRun.PIN_APPS, controller.currentStep().id);
         assertTrue(prefs.skipped);
         assertTrue(controller.wasSkipped());
     }
@@ -219,9 +223,11 @@ public class TourControllerTest {
         controller.back();
         assertEquals(TourRun.FIND_APPS, controller.currentStep().id);
         assertEquals(0, controller.currentStage());
-        assertEquals(1, prefs.stepIndex);
+        assertEquals(2, prefs.stepIndex);
         assertEquals(0, prefs.stage);
         // Back again, and again: the first lesson is where it stops.
+        controller.back();
+        assertEquals(TourRun.PIN_APPS, controller.currentStep().id);
         controller.back();
         assertEquals(TourRun.FIND_HELP, controller.currentStep().id);
         controller.back();
@@ -351,13 +357,17 @@ public class TourControllerTest {
         assertEquals(1, controller.currentStage());
         assertTrue(controller.isRunning());
         doTheGesture();
+        // The lesson's last stage is only shown, so practice too waits for the user's Done.
+        assertEquals(2, controller.currentStage());
+        assertTrue(controller.isRunning());
+        controller.done();
         assertFalse(controller.isRunning());
         assertFalse(controller.isPracticing());
         assertNull(controller.currentStep());
         assertEquals(Arrays.asList(Boolean.FALSE), listener.finished);
         // Not the next lesson: practice is one lesson and then the overlay comes down.
-        assertEquals(Arrays.asList(TourRun.KEYBOARD + ":0", TourRun.KEYBOARD + ":1"),
-            listener.shown);
+        assertEquals(Arrays.asList(TourRun.KEYBOARD + ":0", TourRun.KEYBOARD + ":1",
+            TourRun.KEYBOARD + ":2"), listener.shown);
         assertEquals(0, prefs.writes);
     }
 
@@ -406,12 +416,12 @@ public class TourControllerTest {
     public void practiceIsRefusedWhileARunIsUpAndLeavesItWhereItWas() {
         controller.start();
         clearTheCard();
-        assertEquals(TourRun.FIND_APPS, controller.currentStep().id);
+        assertEquals(TourRun.PIN_APPS, controller.currentStep().id);
         doTheGesture();
         int stage = controller.currentStage();
         assertFalse(controller.startPractice(TourRun.KEYBOARD));
         assertFalse(controller.isPracticing());
-        assertEquals(TourRun.FIND_APPS, controller.currentStep().id);
+        assertEquals(TourRun.PIN_APPS, controller.currentStep().id);
         assertEquals(stage, controller.currentStage());
     }
 
@@ -458,7 +468,7 @@ public class TourControllerTest {
 
         TourController restarted = newController();
         assertTrue(restarted.resumeIfInProgress());
-        assertEquals(TourRun.FIND_APPS, restarted.currentStep().id);
+        assertEquals(TourRun.PIN_APPS, restarted.currentStep().id);
         assertTrue(restarted.wasSkipped());
     }
 
@@ -485,19 +495,113 @@ public class TourControllerTest {
     }
 
     @Test
-    public void resumeClampsAStageThatWouldHaveNoSignalLeft() {
+    public void resumeClampsAStageThatWouldHaveNoStageLeft() {
         prefs.runVersion = TourController.RUN_VERSION;
         prefs.stepIndex = 2;
         prefs.stage = 9;
         assertTrue(controller.resumeIfInProgress());
+        assertEquals(TourRun.FIND_APPS, controller.currentStep().id);
+        assertEquals(2, controller.currentStage());
+    }
+
+    @Test
+    public void resumeComesBackOnTheStageALessonOnlyShows() {
+        // The stage is the last of the keyboard lesson, and a process death on it must not drop
+        // the user back onto a keyboard tap they have already made.
+        prefs.runVersion = TourController.RUN_VERSION;
+        prefs.stepIndex = 3;
+        prefs.stage = 2;
+        assertTrue(controller.resumeIfInProgress());
         assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
-        assertEquals(1, controller.currentStage());
+        assertEquals(2, controller.currentStage());
+        assertTrue(controller.currentStep().isShownOnlyStage(controller.currentStage()));
     }
 
     @Test
     public void resumeDoesNothingWhileARunIsAlreadyUp() {
         controller.start();
         assertFalse(controller.resumeIfInProgress());
+    }
+
+    // The pinning lesson, and the stage the run only shows.
+
+    @Test
+    public void thePinLessonWaitsForTheEditorAndThenForASaveThatLeftSomethingPinned() {
+        controller.startAt(TourRun.PIN_APPS);
+        arm();
+        controller.onSignal(TourSignals.PINNED_APPS_SAVED);
+        // Out of order: nothing has been opened yet.
+        assertEquals(0, controller.currentStage());
+        controller.onSignal(TourSignals.PIN_EDITOR_OPENED);
+        assertEquals(1, controller.currentStage());
+        arm();
+        controller.onSignal(TourSignals.PINNED_APPS_SAVED);
+        assertEquals(TourRun.FIND_APPS, controller.currentStep().id);
+    }
+
+    @Test
+    public void anEditorClosedWithAnEmptyDockLeavesTheCardWhereItIs() {
+        // The relay only speaks for a save that left a pin, so the card simply never hears one.
+        controller.startAt(TourRun.PIN_APPS);
+        arm();
+        controller.onSignal(TourSignals.PIN_EDITOR_OPENED);
+        assertEquals(1, controller.currentStage());
+        arm();
+        controller.onSignal(TourSignals.DRAWER_OPENED);
+        controller.onSignal(TourSignals.DRAWER_CLOSED);
+        assertEquals(TourRun.PIN_APPS, controller.currentStep().id);
+        assertEquals(1, controller.currentStage());
+    }
+
+    @Test
+    public void theStageTheRunOnlyShowsIsClearedByDoneAndByNothingElse() {
+        controller.startAt(TourRun.KEYBOARD);
+        doTheGesture();
+        doTheGesture();
+        TourStep keyboard = controller.currentStep();
+        assertEquals(2, controller.currentStage());
+        assertTrue(keyboard.isShownOnlyStage(2));
+        assertNull(keyboard.signalAt(2));
+        // Nothing the launcher reports can move it on.
+        arm();
+        for (String signal : new String[] {TourSignals.KEYBOARD_SHOWN, TourSignals.KEYBOARD_HIDDEN,
+                TourSignals.PALETTE_OPENED, TourSignals.PANE_CORNER_MENU})
+            controller.onSignal(signal);
+        assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
+        assertEquals(2, controller.currentStage());
+        assertEquals(2, prefs.stage);
+
+        assertTrue(controller.continueShownStage());
+        assertEquals(TourRun.FIND_ACTION, controller.currentStep().id);
+    }
+
+    @Test
+    public void thatStageOffersDoneInPlaceOfSkipStep() {
+        controller.startAt(TourRun.KEYBOARD);
+        assertEquals(Arrays.asList(TourAction.BACK, TourAction.SKIP_STEP, TourAction.END_TOUR),
+            controller.currentActions());
+        doTheGesture();
+        doTheGesture();
+        assertEquals(Arrays.asList(TourAction.BACK, TourAction.DONE, TourAction.END_TOUR),
+            controller.currentActions());
+    }
+
+    @Test
+    public void thereIsNothingToContinueOnAStageTheRunIsStillWaitingOn() {
+        controller.startAt(TourRun.KEYBOARD);
+        assertFalse(controller.continueShownStage());
+        assertEquals(0, controller.currentStage());
+        controller.done();
+        assertEquals(0, controller.currentStage());
+        assertTrue(controller.isRunning());
+    }
+
+    @Test
+    public void doneStillLeavesAPracticeHint() {
+        controller.startPractice(TourRun.FIND_ACTION);
+        controller.done();
+        assertFalse(controller.isRunning());
+        assertEquals(0, prefs.writes);
     }
 
     // The older run's progress.
@@ -528,7 +632,7 @@ public class TourControllerTest {
         // The lesson is entered at its first stage: the old stage counted other gestures.
         assertEquals(0, controller.currentStage());
         assertEquals(TourController.RUN_VERSION, prefs.runVersion);
-        assertEquals(1, prefs.stepIndex);
+        assertEquals(2, prefs.stepIndex);
         assertEquals(0, prefs.stage);
     }
 
@@ -577,6 +681,7 @@ public class TourControllerTest {
         controller.start();
         controller.skip();
         controller.skip();
+        controller.skip();
         assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
 
         TourController restarted = newController();
@@ -584,6 +689,54 @@ public class TourControllerTest {
         assertTrue(restarted.resumeIfInProgress());
         assertEquals(TourRun.KEYBOARD, restarted.currentStep().id);
         assertEquals(0, listener.resumeOrRestartAsked);
+    }
+
+    @Test
+    public void theRunBeforeThePinLessonKeepsItsCardAndItsStage() {
+        // Every card of that run is a card of this one, so the number moves and nothing else does.
+        assertEquals(TourRun.FIND_HELP, TourController.versionTwoCardFor(0));
+        assertEquals(TourRun.FIND_APPS, TourController.versionTwoCardFor(1));
+        assertEquals(TourRun.KEYBOARD, TourController.versionTwoCardFor(2));
+        assertEquals(TourRun.FIND_ACTION, TourController.versionTwoCardFor(3));
+        assertEquals(TourRun.HOME_CHOICE, TourController.versionTwoCardFor(4));
+        assertEquals(TourRun.CLOSING, TourController.versionTwoCardFor(5));
+        for (int outside : new int[] {-1, 6, 99})
+            assertNull("card " + outside, TourController.versionTwoCardFor(outside));
+    }
+
+    @Test
+    public void aRunInterruptedBeforeThePinLessonComesBackOnTheSameCard() {
+        prefs.runVersion = 2;
+        prefs.stepIndex = 2;
+        prefs.stage = 1;
+        assertTrue(controller.resumeIfInProgress());
+        assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
+        // The card did not change, so neither does the user's place inside it.
+        assertEquals(1, controller.currentStage());
+        assertEquals(3, prefs.stepIndex);
+        assertEquals(1, prefs.stage);
+        assertEquals(TourController.RUN_VERSION, prefs.runVersion);
+        assertEquals(0, listener.resumeOrRestartAsked);
+    }
+
+    @Test
+    public void suchARunIsNeverDroppedPastFindHelp() {
+        prefs.runVersion = 2;
+        prefs.stepIndex = 0;
+        prefs.stage = 2;
+        assertTrue(controller.resumeIfInProgress());
+        assertEquals(TourRun.FIND_HELP, controller.currentStep().id);
+        assertEquals(2, controller.currentStage());
+        assertEquals(0, prefs.stepIndex);
+    }
+
+    @Test
+    public void aCardThatRunNeverHadIsNotResumed() {
+        prefs.runVersion = 2;
+        prefs.stepIndex = 6;
+        assertFalse(controller.resumeIfInProgress());
+        assertFalse(controller.isRunning());
+        assertFalse(controller.isAwaitingResumeChoice());
     }
 
     // Permissions are none of the run's business.
