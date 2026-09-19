@@ -1,7 +1,6 @@
 package com.termux.app.help;
 
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.InputType;
@@ -33,8 +32,6 @@ final class HelpStyle {
 
     final TerminalDress dress;
     final int accent;
-    /** Whether the panel's own fill is a light surface, which is what the scrim follows. */
-    final boolean light;
 
     private final Context context;
     private final float density;
@@ -44,7 +41,6 @@ final class HelpStyle {
         this.dress = TerminalDress.stored(context);
         this.accent = StatusBarLensView.accentFor(context,
             place == null ? PaneWallPage.TERMINAL : place);
-        this.light = HelpPalette.lightSurface(dress.fillColor);
         this.density = context.getResources().getDisplayMetrics().density;
     }
 
@@ -56,27 +52,7 @@ final class HelpStyle {
         return Math.round(value * density);
     }
 
-    /** The wash behind the panel: enough to settle the launcher, not enough to hide it. */
-    int scrimColor() {
-        return ColorUtils.setAlphaComponent(light ? Color.WHITE : Color.BLACK, 132);
-    }
-
-    /**
-     * The panel's own surface. Opaque whatever the terminal's transparency is set to: reading must
-     * not depend on what is behind the words.
-     */
-    GradientDrawable panelBackground() {
-        GradientDrawable shape = new GradientDrawable();
-        shape.setColor(ColorUtils.setAlphaComponent(dress.fillColor, 255));
-        shape.setStroke(Math.max(1, Math.round(dress.strokeWidthPx)), dress.strokeColor);
-        shape.setCornerRadius(dress.cornerRadiusPx(0));
-        return shape;
-    }
-
-    /**
-     * The opaque page fill, for help read on a screen of its own: the same surface the sheet's
-     * card uses, with nothing showing through it and no card edge around it.
-     */
+    /** The opaque page fill help reads on: nothing showing through it and no card edge around it. */
     int pageColor() {
         return ColorUtils.setAlphaComponent(dress.fillColor, 255);
     }
@@ -87,19 +63,6 @@ final class HelpStyle {
 
     int dimTextColor() {
         return ColorUtils.setAlphaComponent(dress.textColor, 168);
-    }
-
-    /** The page title, and the topic title that replaces it. */
-    TextView title(String label) {
-        TextView view = new TextView(context);
-        view.setText(label);
-        view.setTextSize(16);
-        view.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        view.setTextColor(dress.textColor);
-        view.setSingleLine(true);
-        view.setEllipsize(TextUtils.TruncateAt.END);
-        view.setPadding(dp(4), 0, dp(4), 0);
-        return view;
     }
 
     /** A section heading: the shared heading over a group of groups. */
@@ -219,18 +182,6 @@ final class HelpStyle {
         view.setFocusable(enabled);
         view.setClickable(enabled);
         if (enabled && onClick != null) view.setOnClickListener(v -> onClick.run());
-        return view;
-    }
-
-    /** A header control: named for a reader, sized for a thumb, drawn as its own glyph. */
-    TextView headerButton(String glyph, String name, Runnable onClick) {
-        TextView view = button(glyph, true, onClick);
-        view.setContentDescription(name);
-        view.setTextColor(dress.textColor);
-        GradientDrawable shape = new GradientDrawable();
-        shape.setColor(ColorUtils.setAlphaComponent(dress.textColor, 22));
-        shape.setCornerRadius(dp(10));
-        view.setBackground(shape);
         return view;
     }
 

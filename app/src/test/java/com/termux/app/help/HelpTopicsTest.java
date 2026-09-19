@@ -15,7 +15,6 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -174,26 +173,6 @@ public class HelpTopicsTest {
         assertNull(HelpTopics.entry(PaneWallPage.TERMINAL, "nothing_by_this_name"));
     }
 
-    @Test public void onThisScreenIsThreeToFiveTopicsInCatalogueOrder() {
-        List<HelpTopics.Entry> shown = HelpTopics.onScreen(PaneWallPage.TERMINAL,
-            Arrays.asList("dock", "status", "keys", "space", "windows", "az", "stats"));
-        assertEquals(5, shown.size());
-        List<String> order = new ArrayList<>();
-        for (HelpTopics.Entry entry : shown) order.add(entry.id);
-        assertEquals(Arrays.asList("status", "stats", "dock", "az", "keys"), order);
-        // A bare screen is topped up rather than left with one line, and never pads past three.
-        assertEquals(3, HelpTopics.onScreen(PaneWallPage.WIDGETS,
-            Collections.singletonList("status")).size());
-        assertEquals(3, HelpTopics.onScreen(PaneWallPage.TERMINAL, null).size());
-        assertEquals(3, HelpTopics.onScreen(PaneWallPage.DISPLAY,
-            Collections.<String>emptyList()).size());
-        for (PaneWallPage place : PaneWallPage.values()) {
-            List<HelpTopics.Entry> all = HelpTopics.onScreen(place, targetsOf(place));
-            assertTrue(place.name(), all.size() >= 3 && all.size() <= 5);
-            assertEquals(all.size(), new HashSet<>(all).size());
-        }
-    }
-
     @Test public void aGestureIsOfferedOnlyWhereOneIsImplemented() {
         // HelpOverlayView.gestureFor knows four controls; every other topic offers no Show gesture.
         Set<String> withGesture = new HashSet<>();
@@ -244,21 +223,6 @@ public class HelpTopicsTest {
             }
             assertEquals(entry.id, new HashSet<>(entry.relatedIds).size(), entry.relatedIds.size());
         }
-    }
-
-    @Test public void aRelatedTopicOfferedInsteadOfAMissingControlIsOnThisPlace() {
-        for (PaneWallPage place : PaneWallPage.values()) {
-            for (HelpTopics.Entry entry : HelpTopics.forPlace(place)) {
-                String relatedId = HelpTopics.relatedIdOn(place, entry.id);
-                if (relatedId == null) continue;
-                assertNotEquals(entry.id, relatedId);
-                assertTrue(entry.id + " -> " + relatedId,
-                    HelpTopics.entry(relatedId).onPlace(place));
-            }
-        }
-        // The display's app chips point at Start display, which is the button that brings them back.
-        assertEquals("start", HelpTopics.relatedIdOn(PaneWallPage.DISPLAY, "windows"));
-        assertNull(HelpTopics.relatedIdOn(PaneWallPage.TERMINAL, "nothing_by_this_name"));
     }
 
     @Test public void aHiddenControlSaysHowToBringItBackAndTheRestDoNotPretendTo() {

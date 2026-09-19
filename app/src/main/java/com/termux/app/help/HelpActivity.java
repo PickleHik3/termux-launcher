@@ -113,7 +113,6 @@ public final class HelpActivity extends AppCompatActivity {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
         panel = new HelpPanelView(this);
-        panel.setChrome(HelpPanelView.Chrome.SCREEN);
         panel.setListener(listener);
         root.addView(panel, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));

@@ -380,7 +380,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /** Help's one controller: the reading panel, the explorer, Back, the keyboard and practice. */
+    /** Help's one controller: the corner overview, the explorer, Back and practice. */
     private void ensureHelpController(@NonNull ViewGroup content) {
         if (mHelpController != null) return;
         // Over the whole screen, not over the content alone: the dock, the A-Z row, the extra
@@ -407,16 +407,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             },
             new com.termux.app.help.HelpController.Host() {
-                @Override public void beginHelpTextInput(@NonNull EditText field) {
-                    // Help's search field borrows the configured keyboard the same way the
-                    // toolbar's does, so the system IME's insets are accepted.
-                    beginTerminalToolbarExternalTextInput(field);
-                }
-
-                @Override public void endHelpTextInput() {
-                    endTerminalToolbarExternalTextInput();
-                }
-
                 @Override public void openHelpScreen(com.termux.app.wall.PaneWallPage place,
                                                      @Nullable String topicId) {
                     TermuxActivity.this.openHelpScreen(place, topicId);
@@ -461,7 +451,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mHelpController != null && mHelpController.dismiss();
     }
 
-    /** Back inside help: a definition, then text entry, then a page, then help itself. */
+    /** Back inside help: the explorer first, then the overview or the reading screen. */
     private boolean onHelpBackPressed() {
         return mHelpController != null && mHelpController.onBackPressed();
     }
