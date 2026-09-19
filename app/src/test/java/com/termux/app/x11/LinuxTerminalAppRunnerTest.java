@@ -21,10 +21,12 @@ import java.util.List;
 
 /**
  * The pure pieces of D5's terminal-pane routing: the tag and pane.open arguments built for a
- * {@code Terminal=true} app, picking an already-open pane back out of a pane.list result, and the
- * focus-vs-rerun rule that reads {@link LinuxTerminalAppRunner.ForegroundState}.
- * {@link LinuxTerminalAppRunner#run} itself needs a live {@code TerminalActionDispatcher} host
- * and is exercised through the device gate instead (per the phase's SPEC), not here.
+ * {@code Terminal=true} app, picking an already-open pane back out of a pane.list result, the
+ * three-way focus/re-run/open-fresh rule ({@link LinuxTerminalAppRunner#actionFor}), and the
+ * unprivileged {@code /proc/<pid>/stat} read that feeds it ({@link LinuxTerminalAppRunner#readIsIdle}).
+ * {@link LinuxTerminalAppRunner#run(LinuxAppCatalog.LinuxApp)} itself needs a live
+ * {@code TerminalActionDispatcher} host and a real pane, and is covered by
+ * {@code com.termux.app.terminal.LinuxTerminalAppRunnerPaneTest} instead of here.
  */
 public class LinuxTerminalAppRunnerTest {
 
@@ -87,25 +89,65 @@ public class LinuxTerminalAppRunnerTest {
         assertNull(LinuxTerminalAppRunner.findExistingPane(new JSONObject(), "any-tag"));
     }
 
-    // --- the idle-shell fix: focus only when confirmed still running, otherwise re-run ---------
+    // --- the three-way reuse rule: focus / re-run / open fresh, never a wrong guess ------------
 
-    @Test public void aConfirmedRunningPaneIsFocusedNotRerun() {
-        assertTrue("idle=false (something other than the shell owns the foreground) means focus",
-            LinuxTerminalAppRunner.shouldFocusRatherThanRerun(Boolean.FALSE));
+    @Test public void aConfirmedRunningPaneIsFocusedNotTouched() {
+        assertEquals("idle=false (something other than the shell owns the foreground) means focus",
+            LinuxTerminalAppRunner.Action.FOCUS, LinuxTerminalAppRunner.actionFor(Boolean.FALSE));
     }
 
-    @Test public void aConfirmedIdlePaneIsReRunNotFocused() {
-        // This is the bug the coordinator caught: the app already exited and the pane is sitting
-        // at a bare prompt (idle=true) — focusing it silently "does nothing" from the user's side.
-        assertFalse("idle=true (only the shell is in the foreground) means re-run",
-            LinuxTerminalAppRunner.shouldFocusRatherThanRerun(Boolean.TRUE));
+    @Test public void aConfirmedIdlePaneIsReRunInPlace() {
+        // The first bug the coordinator caught: the app already exited and the pane is sitting at
+        // a bare prompt (idle=true) — focusing it silently "does nothing" from the user's side.
+        assertEquals("idle=true (only the shell is in the foreground) means re-run in place",
+            LinuxTerminalAppRunner.Action.RERUN_IN_PLACE, LinuxTerminalAppRunner.actionFor(Boolean.TRUE));
     }
 
-    @Test public void anUnknownReadingIsTreatedAsReRunNeverAsConfirmedRunning() {
-        // No privileged backend, or the terminal place has not been on screen recently: unknown
-        // must never be upgraded to "running", or the same bug comes back for every install
-        // without Shizuku/su configured.
-        assertFalse("unknown is not confirmed running",
-            LinuxTerminalAppRunner.shouldFocusRatherThanRerun(null));
+    @Test public void anUnknownReadingOpensAFreshPaneRatherThanGuessing() {
+        // The second, worse bug: with idle unknown (no privileged backend and no /proc reading —
+        // the common case for most installs before the procfs read was added), re-running in
+        // place would type the command's own keystrokes into whatever the pane turns out to be
+        // running, which is destructive when that is a live program rather than an idle shell.
+        // Unknown must open a fresh pane instead of ever choosing FOCUS or RERUN_IN_PLACE.
+        assertEquals("unknown means open fresh, never focus or re-run",
+            LinuxTerminalAppRunner.Action.OPEN_FRESH, LinuxTerminalAppRunner.actionFor(null));
+    }
+
+    // --- the procfs read: idle iff the shell's own pid is (or ties) its pane's tpgid -----------
+
+    private File statFile(String pid, String afterComm) throws IOException {
+        return write(temp.newFolder("proc-" + pid), "stat", pid + " (sh) " + afterComm + "\n");
+    }
+
+    @Test public void aShellThatIsItsOwnForegroundGroupReadsAsIdle() throws IOException {
+        // pid (comm) state ppid pgrp session tty_nr tpgid ...  -- tpgid (6th field after ")") ==
+        // pid itself: nothing else has taken over the pane's foreground.
+        File stat = statFile("500", "S 1 500 500 34816 500 0 0");
+        assertEquals(Boolean.TRUE, LinuxTerminalAppRunner.readIsIdle(stat, 500));
+    }
+
+    @Test public void aShellWhoseForegroundGroupIsSomethingElseReadsAsNotIdle() throws IOException {
+        // htop (or proot-distro, for a container app) took the foreground: tpgid (600) differs
+        // from the shell's own pid (500). No process name is read anywhere in this decision.
+        File stat = statFile("500", "S 1 500 500 34816 600 0 0");
+        assertEquals(Boolean.FALSE, LinuxTerminalAppRunner.readIsIdle(stat, 500));
+    }
+
+    @Test public void aDetachedTpgidReadsAsIdle() throws IOException {
+        // tpgid <= 0: no controlling terminal owns the foreground right now either way.
+        File stat = statFile("500", "S 1 500 500 34816 0 0 0");
+        assertEquals(Boolean.TRUE, LinuxTerminalAppRunner.readIsIdle(stat, 500));
+    }
+
+    @Test public void aCommContainingSpacesAndParenthesesDoesNotShiftTheFields() throws IOException {
+        File stat = write(temp.newFolder("proc-odd"), "stat",
+            "500 (my (odd) prog) S 1 500 500 34816 500 0 0\n");
+        assertEquals(Boolean.TRUE, LinuxTerminalAppRunner.readIsIdle(stat, 500));
+    }
+
+    @Test public void aMissingOrUnparsableStatFileIsUnknownNotAGuess() throws IOException {
+        assertNull(LinuxTerminalAppRunner.readIsIdle(new File(temp.getRoot(), "no-such-file"), 500));
+        assertNull(LinuxTerminalAppRunner.readIsIdle(statFile("501", "garbage"), 501));
+        assertNull(LinuxTerminalAppRunner.readIsIdle(statFile("502", "S 1 502"), 502));
     }
 }

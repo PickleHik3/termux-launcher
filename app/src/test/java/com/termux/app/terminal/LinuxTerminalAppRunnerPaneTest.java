@@ -1,6 +1,7 @@
 package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -34,10 +35,12 @@ import java.util.List;
 
 /**
  * D5's terminal-app runner against a real {@link TerminalActionDispatcher} and pane controller —
- * the fix for the idle-shell refocus bug: a tap that finds its tagged pane must not blindly focus
- * it. It may only do that when {@link LinuxTerminalAppRunner.ForegroundState} confirms the app is
- * still running there; an idle or unknown reading re-runs the command in the same pane instead of
- * opening a duplicate.
+ * the three-way reuse rule ({@code FOCUS}/{@code RERUN_IN_PLACE}/{@code OPEN_FRESH}) end to end.
+ * The case that matters most: a pane confirmed still running must never have anything written
+ * into it — that is the destructive bug the coordinator caught (a naive "not confirmed idle, so
+ * re-run" rule would type the app's own command, as keystrokes, into whatever the pane turns out
+ * to be running). {@link TerminalSession#getLastWriteUptimeMs()} is the observation point: it is
+ * nonzero only once {@link TerminalSession#write} has actually been called.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -68,47 +71,72 @@ public class LinuxTerminalAppRunnerPaneTest {
         return apps.get(0);
     }
 
-    @Test public void aSecondTapConfirmedStillRunningFocusesTheSamePaneRatherThanOpeningAnother()
-            throws IOException {
+    /**
+     * The case that matters most (the coordinator's own words): an existing pane confirmed still
+     * running must never be written into. Only focus reaches it.
+     */
+    @Test public void aConfirmedRunningPaneIsFocusedAndNeverWrittenInto() throws IOException {
         LinuxAppCatalog.LinuxApp app = terminalApp();
 
         assertTrue(LinuxTerminalAppRunner.run(app, pid -> null));
         assertEquals("the user's own shell plus the app's new pane",
             2, host.controller.shellsOf(host.window).size());
         String openedId = host.controller.getActiveSession().mHandle;
+        TerminalSession opened = host.findPaneById(openedId);
+        assertEquals("nothing written yet", 0L, opened.getLastWriteUptimeMs());
 
         assertTrue(LinuxTerminalAppRunner.run(app, pid -> Boolean.FALSE));
         assertEquals("confirmed running: no duplicate pane",
             2, host.controller.shellsOf(host.window).size());
         assertEquals("confirmed running: the existing pane is focused",
             openedId, host.controller.getActiveSession().mHandle);
+        assertEquals("confirmed running: its input is never touched",
+            0L, opened.getLastWriteUptimeMs());
     }
 
-    @Test public void anIdleOrUnknownReadingReusesThePaneInsteadOfFocusingItAsIsOrDuplicatingIt()
-            throws IOException {
+    /** Confirmed idle (the app already finished): safe to re-run in the same pane. */
+    @Test public void aConfirmedIdlePaneIsReRunInPlaceRatherThanDuplicated() throws IOException {
         LinuxAppCatalog.LinuxApp app = terminalApp();
 
         assertTrue(LinuxTerminalAppRunner.run(app, pid -> null));
         assertEquals(2, host.controller.shellsOf(host.window).size());
         String openedId = host.controller.getActiveSession().mHandle;
+        TerminalSession opened = host.findPaneById(openedId);
 
-        // This is the bug the coordinator caught: the app has already exited, so the pane's
-        // foreground is confirmed idle. The old behaviour just focused it, leaving the user
-        // staring at a bare prompt. The fix must re-run the command in that same pane — not open
-        // a fresh one (that would be a duplicate) and not silently focus the idle one as if the
-        // tap had done something.
+        // This is the first bug the coordinator caught: the app already exited and the pane is
+        // sitting at a bare prompt (idle=true). Focusing it alone would silently "do nothing"
+        // from the user's side, so the fix re-runs the command in that same pane instead — not a
+        // fresh one (that would be a duplicate for no reason, since this pane is provably safe).
         assertTrue(LinuxTerminalAppRunner.run(app, pid -> Boolean.TRUE));
         assertEquals("idle: the tagged pane is reused, not duplicated",
             2, host.controller.shellsOf(host.window).size());
         assertEquals("idle: the same pane is the one now focused",
             openedId, host.controller.getActiveSession().mHandle);
+        assertTrue("idle: the command was actually re-run (something was written)",
+            opened.getLastWriteUptimeMs() > 0L);
+    }
 
-        // Unknown (no privileged backend, or no cached reading yet) must behave the same way as
-        // idle, never as "confirmed running" — see LinuxTerminalAppRunner's class doc.
+    /**
+     * Unknown (no privileged backend and, before this fix, the common case for most installs):
+     * neither focus-only (the first bug) nor write-in-place (the second, destructive bug the
+     * coordinator caught) is safe, so a fresh pane is opened instead and the existing one is left
+     * completely alone.
+     */
+    @Test public void anUnknownReadingOpensAFreshPaneAndNeverTouchesTheExistingOne() throws IOException {
+        LinuxAppCatalog.LinuxApp app = terminalApp();
+
         assertTrue(LinuxTerminalAppRunner.run(app, pid -> null));
-        assertEquals("unknown: still reused, still no duplicate",
-            2, host.controller.shellsOf(host.window).size());
-        assertEquals(openedId, host.controller.getActiveSession().mHandle);
+        assertEquals(2, host.controller.shellsOf(host.window).size());
+        String openedId = host.controller.getActiveSession().mHandle;
+        TerminalSession opened = host.findPaneById(openedId);
+
+        assertTrue(LinuxTerminalAppRunner.run(app, pid -> null));
+        assertEquals("unknown: a fresh pane is opened rather than reused",
+            3, host.controller.shellsOf(host.window).size());
+        assertNotEquals("unknown: the fresh pane is not the existing one",
+            openedId, host.controller.getActiveSession().mHandle);
+        assertEquals("unknown: the existing pane's input is never touched",
+            0L, opened.getLastWriteUptimeMs());
     }
 
     /** A host whose pane surface is a real controller with one window and the user's own shell. */
@@ -132,7 +160,15 @@ public class LinuxTerminalAppRunnerPaneTest {
         }
 
         private static TerminalSession shell() {
-            return new TerminalSession("/bin/sh", "/", new String[0], new String[0], 2000, null);
+            TerminalSession session =
+                new TerminalSession("/bin/sh", "/", new String[0], new String[0], 2000, null);
+            // A real subprocess is forked underneath, and this test cannot control its timing —
+            // it may already have exited by the time a later assertion runs. Pin a stable fake
+            // pid so isRunning()/write() behave deterministically instead of racing a real
+            // process, the same technique TerminalActionDispatcherPaneTest uses in the opposite
+            // direction (forcing -1) to simulate a pane that has stopped running.
+            org.robolectric.util.ReflectionHelpers.setField(session, "mShellPid", 12345);
+            return session;
         }
 
         @Override @Nullable public TerminalSession currentSession() {
