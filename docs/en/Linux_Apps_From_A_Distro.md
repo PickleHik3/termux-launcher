@@ -1,193 +1,128 @@
 # Linux apps from a distro
 
-The launcher already lists the Linux apps installed in Termux itself: install `firefox` with
-`pkg`, and Firefox is in the app drawer the next time you return to the launcher, with its icon,
-and a tap opens it on the [Display](X11_Display.md).
+A Linux system installed inside Termux — Debian, Ubuntu, Arch — can hold ordinary desktop apps,
+and the launcher puts them in the app drawer for you. Install one inside the distro and it is
+there when you come back, with its own name and its own icon. There is no file to write and no
+command to run.
 
-Apps installed **inside a proot distro** — Debian, Arch, Ubuntu — are not listed, because the
-launcher only looks in Termux's own `$PREFIX`. This page shows how to put them in the drawer
-yourself. It is one small file per app, and everything in it was checked on a phone against a
-Debian 13 container and `proot-distro` 5.8.0.
+Everything here was checked on a phone, against a Debian 13 container and `proot-distro` 5.8.0.
 
-## Before you start
+## Set it up in one go
 
-1. The display is switched on and the keyboard layouts are installed — see
-   [Turn it on](X11_Display.md#turn-it-on).
-2. A distro is installed and the app is installed inside it:
+**Settings → Display → Apps → Set up Linux apps** does the whole thing: it installs a distro if
+you have none, makes you an ordinary account inside it, adds the fonts a fresh distro does not
+ship, adds its graphics support, and installs a couple of apps to start with. The work runs in a
+terminal pane you can watch, and you can leave it and come back.
 
-   ```sh
-   pkg install proot-distro
-   proot-distro install debian
-   proot-distro login debian
-   # inside the container:
-   apt update && apt install -y x11-apps
-   exit
-   ```
+The Display place offers the same setup by itself when it finds a distro that is not ready.
+Answer *Not now* and it stops asking about that distro.
 
-## Check it runs, first
+A first run downloads a few hundred megabytes and takes several minutes. If it stops partway,
+start it again — nothing is lost and it carries on from where it stopped.
 
-Before writing anything, prove the app reaches the display. In a Termux shell:
+The offer is for distros that install their packages with `apt` — Debian, Ubuntu and their
+relatives. An Arch or Alpine distro is left alone; its apps are still listed in the drawer, you
+just install them yourself.
+
+## Install an app, and it is in the drawer
+
+Anything with a window will do:
+
+```sh
+proot-distro login debian
+apt install -y mousepad
+exit
+```
+
+Go back to the launcher and open the app drawer. **Mousepad** is there under **Linux Apps**, with
+its icon. The drawer looks the distro over again every time you return to the launcher, so an app
+installed a minute ago is already waiting.
+
+The tile is called what the app calls itself — *Typora*, not *Typora (Debian)*. Distro apps can be
+pinned and searched like any other app.
+
+## Opening one
+
+A tap opens the app on the [Display](X11_Display.md), full size, and takes you to the Display
+place. The display starts itself if it was not running. An app whose menu entry asks for a
+terminal — a text editor, a file manager — opens in a terminal pane instead.
+
+Some apps need a small allowance before they will run inside a distro. The launcher works that out
+by itself the first time you open one, and remembers it; all you notice is a slightly slower first
+start.
+
+## Hiding the ones you do not want
+
+A distro installs menu entries for helpers and viewers you may never open by hand.
+**Settings → Display → Apps → Hidden Linux apps** lists the Linux apps it found; untick one and it
+leaves the drawer. It is one app at a time, not a whole distro, and it holds across restarts. The
+list holds Linux apps only — your Android apps are not in it.
+
+There is also a **Linux apps in the drawer** switch on the same page, if you would rather have
+none of them and start everything from a shell.
+
+Only distros installed by `proot-distro` **5.x** are read. An older installation keeps its distros
+in a different place and is not listed; upgrade `proot-distro` or reinstall the distro under it.
+
+## Running one from a shell
+
+If you start a distro yourself instead of tapping a tile, two things matter and only those two:
 
 ```sh
 termux-x11 :0 &
 proot-distro login debian --shared-x11 -e DISPLAY=:0 -- xeyes
 ```
 
-Swipe to the Display place and the eyes are there.
-
-Three things in that line matter, and only those three:
-
-- **`--shared-x11`** hands the container the display's socket directory. Without it the container
-  has no `/tmp/.X11-unix` at all and every app says *unable to open display*. `--shared-tmp` also
-  works — it shares the whole of Termux's temporary directory — but `--shared-x11` shares just the
-  one thing the app needs.
-- **`-e DISPLAY=:0`** puts `DISPLAY` inside the container. Exporting it in your Termux shell does
-  not carry it across; nothing of your shell's environment does.
+- **`--shared-x11`** lets the distro reach the display. Without it every app says *unable to open
+  display*.
+- **`-e DISPLAY=:0`** passes the display in. Exporting it in your Termux shell does not carry it
+  across; nothing of your shell's environment does.
 - **Nothing else.** You do not need `-ac` on the server, and you do not need `xauth` in the
-  container. The display accepts the connection because both sides are the same Android app.
+  distro. The display accepts the connection because both sides are the same Android app.
 
-Sound needs no setup either: `proot-distro` already sets `PULSE_SERVER=127.0.0.1` inside the
-container for you.
+Sound needs no setup either: `proot-distro` already sets `PULSE_SERVER=127.0.0.1` for you.
 
-## Put it in the drawer
+Apps built on Electron — Typora, VS Code, Obsidian — need `--no-sandbox` on the end of their
+command when you start them this way. From the drawer the launcher takes care of it.
 
-The launcher reads `.desktop` files from two directories, exactly the way a desktop menu does:
+## When something is off
 
-```
-$PREFIX/share/applications          # apt's own, leave it alone
-$PREFIX/local/share/applications    # yours
-```
+- **No Linux apps in the drawer at all.** Either nothing is installed yet — run **Set up Linux
+  apps** — or the **Linux apps in the drawer** switch is off. Check too that the distro was
+  installed by `proot-distro` 5.x.
+- **One app is missing.** Look in **Hidden Linux apps** first. Otherwise the app has no menu entry
+  of its own: command-line programs usually have none, and the launcher lists what the distro's own
+  menu lists. Write the entry yourself, below.
+- **An app opens and closes again, or nothing happens.** Most often a fresh distro missing fonts;
+  **Set up Linux apps** installs them. To see the app's own complaint, run it by hand:
+  `proot-distro login debian --shared-x11 -e DISPLAY=:0 -- <command>`.
+- **`Failed to connect to the bus`, over and over.** Harmless — apps that print it still open. One
+  that genuinely needs a session bus wants `dbus-run-session -- <command>` inside the distro.
+- **The display never comes up.** That is the display itself, not the app: see
+  [when something is off](X11_Display.md#when-something-is-off) on the display page.
+- **The tile is blank.** The app's icon is in a format the launcher cannot read. PNG and SVG icons
+  are used; anything else gets the default tile.
 
-Write one file per app in the second one. For `xeyes`:
+## Writing an entry yourself
+
+Only for an app the distro's menu does not know about — your own script, or a command you want a
+tile for. Everything else is found on its own, and an entry written by hand for an app that is
+already listed simply shows up twice.
+
+The launcher reads these files from `$PREFIX/local/share/applications`:
 
 ```sh
 mkdir -p $PREFIX/local/share/applications
 cat > $PREFIX/local/share/applications/debian-xeyes.desktop <<'EOF'
 [Desktop Entry]
 Type=Application
-Name=Eyes (Debian)
-Comment=A pair of eyes that follow the pointer
+Name=Eyes
 Exec=proot-distro login debian --shared-x11 -e DISPLAY=${DISPLAY:-:0} -- /bin/sh -c 'xeyes'
 Terminal=false
 EOF
 ```
 
-Return to the launcher and open the app drawer: **Eyes (Debian)** is there. A tap starts the
-display if it is not already running, opens the app on it full size, and takes you to the Display
-place. It can be pinned and searched like any other app.
-
-That is the whole mechanism. The rest of this page is how to fill the file in for a real app.
-
-### Name, comment and icon
-
-Every distro app ships its own `.desktop` file inside the container. Read it and copy from it
-rather than inventing the values. The container's files live under its rootfs:
-
-```sh
-# proot-distro 5.x and newer
-ls $PREFIX/var/lib/proot-distro/containers/debian/rootfs/usr/share/applications
-
-# older proot-distro
-ls $PREFIX/var/lib/proot-distro/installed-rootfs/debian/usr/share/applications
-```
-
-`Name` and `Comment` can be copied across as they are. Adding the distro to the name — *Typora
-(Debian)* — is worth it once you have the same app in two places.
-
-`Icon` is the one that needs changing. The container's file names a theme icon, like
-`Icon=typora`, and the launcher would look for that name in Termux's icons, not the container's.
-Point it at the file instead, with a full path:
-
-```sh
-find $PREFIX/var/lib/proot-distro/containers/debian/rootfs/usr/share/icons \
-     $PREFIX/var/lib/proot-distro/containers/debian/rootfs/usr/share/pixmaps \
-     -name 'typora.*'
-```
-
-Take the largest PNG — the launcher uses **PNG only**, so an icon that exists only as `.svg`
-cannot be used; leave `Icon` out and the app gets the default tile.
-
-```
-Icon=/data/data/com.termux/files/usr/var/lib/proot-distro/containers/debian/rootfs/usr/share/icons/hicolor/256x256/apps/typora.png
-```
-
-Write the path out in full. `$PREFIX` is not expanded inside a `.desktop` file.
-
-### The Exec line
-
-Take the container's own `Exec=`, drop the `%f`, `%u`, `%U` and other `%` codes from it — they
-are placeholders for files you are not passing — and wrap what is left:
-
-```
-Exec=proot-distro login <container> --shared-x11 -e DISPLAY=${DISPLAY:-:0} -- /bin/sh -c '<command>'
-```
-
-So `Exec=typora %U` inside the container becomes:
-
-```
-Exec=proot-distro login debian --shared-x11 -e DISPLAY=${DISPLAY:-:0} -- /bin/sh -c 'typora'
-```
-
-If the command itself contains a single quote, double it up the usual shell way (`'\''`).
-
-### StartupWMClass
-
-If the container's file has a `StartupWMClass=` line, copy it across. It is how the launcher
-matches a window on the display back to the app that opened it, so the window chip gets the right
-name and icon.
-
-## A worked example
-
-Typora, installed in a Debian container. Its own file says:
-
-```
-[Desktop Entry]
-Name=Typora
-Comment=a minimal Markdown reading & writing app.
-Exec=typora %U
-Icon=typora
-Type=Application
-```
-
-The launcher file:
-
-```
-[Desktop Entry]
-Type=Application
-Name=Typora (Debian)
-Comment=a minimal Markdown reading & writing app.
-Icon=/data/data/com.termux/files/usr/var/lib/proot-distro/containers/debian/rootfs/usr/share/icons/hicolor/256x256/apps/typora.png
-Exec=proot-distro login debian --shared-x11 -e DISPLAY=${DISPLAY:-:0} -- /bin/sh -c 'typora --no-sandbox'
-Terminal=false
-```
-
-The `--no-sandbox` is explained below.
-
-## When something is off
-
-- **"Running as root without --no-sandbox is not supported."** Everything built on Electron —
-  Typora, VS Code, Obsidian, Discord — refuses to start as root, and `proot-distro login` makes
-  you root. Add `--no-sandbox` to the command, or log in as an ordinary user of the container
-  with `-u yourname` if it has one.
-- **`Failed to connect to the bus: /run/dbus/system_bus_socket`**, over and over. Harmless. A
-  proot has no system D-Bus; apps that print this still open. If an app genuinely needs a session
-  bus, start it with `dbus-run-session -- <command>` inside the container.
-- **Nothing happens, or the app exits at once.** Run the same `proot-distro login …` line by hand
-  in a Termux shell and read what it prints. Most of the time it is the app's own complaint —
-  a missing font, a missing library — not the display.
-- **"unable to open display".** Either no display is running (`termux-x11 :0 &`), or
-  `--shared-x11` is missing from the command.
-- **The app is not in the drawer.** Check `Type=Application`, a `Name`, an `Exec`, and that the
-  file does not say `NoDisplay=true`, `Hidden=true` or `Terminal=true` — the launcher skips all
-  three, as any desktop menu does. The file must end in `.desktop`.
-- **The icon is a blank tile.** The path is wrong, or the file is not a PNG.
-
-## Removing them
-
-They are ordinary files:
-
-```sh
-rm $PREFIX/local/share/applications/debian-*.desktop
-```
-
-Nothing else is written, and nothing inside the container is touched.
+Return to the launcher and **Eyes** is in the drawer. `Icon=` takes a full path to a PNG or SVG
+file — `$PREFIX` is not expanded inside one of these files — and `StartupWMClass=`, if the app has
+one, is what names its window on the display. Delete the file to remove the tile; nothing inside
+the distro is touched.

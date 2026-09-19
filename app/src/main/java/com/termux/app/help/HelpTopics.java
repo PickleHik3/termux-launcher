@@ -470,9 +470,17 @@ public final class HelpTopics {
                 R.string.help_topic_display_apps_purpose, R.string.help_topic_display_apps_action)
             .reveal(R.string.help_topic_display_apps_reveal)
             .target("windows", PaneWallPage.DISPLAY)
-            .related("start", "display_keys", "scale")
+            .related("distro_apps", "start", "display_keys", "scale")
             .aliases(R.string.help_topic_display_apps_aliases)
             .doc("X11_Display.md#apps-on-the-display"));
+        b.add(topic("distro_apps", Group.DISPLAY, R.string.help_topic_distro_apps_title,
+                R.string.help_topic_distro_apps_summary, R.string.help_topic_distro_apps_action)
+            .steps(R.string.help_topic_distro_apps_step1, R.string.help_topic_distro_apps_step2,
+                R.string.help_topic_distro_apps_step3)
+            .wayBack(R.string.help_topic_distro_apps_back)
+            .related("display_apps", "start", "fix_display").terms("app_drawer", "place")
+            .aliases(R.string.help_topic_distro_apps_aliases)
+            .doc("Linux_Apps_From_A_Distro.md"));
         b.add(topic("scale", Group.DISPLAY, R.string.help_scale_title,
                 R.string.help_topic_scale_purpose, R.string.help_topic_scale_action)
             .reveal(R.string.help_topic_scale_reveal)

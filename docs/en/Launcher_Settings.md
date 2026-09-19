@@ -299,6 +299,8 @@ as the third place of the home screen — see [The Linux display](X11_Display.md
 mode, **Keyboard follows text fields** — the keyboard opens when you tap a text field on the
 display and closes when you tap elsewhere, on by default and available in Touchscreen touch mode —
 resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer,
+setting a Linux system up for those apps and choosing which of them stay out of the drawer
+(see [Linux apps from a distro](Linux_Apps_From_A_Distro.md)),
 the window manager started with the display, the mark on the Display place's badge in the status
 bar, starting the display with the launcher, the start command, pointing new shells at the
 display, two compatibility switches, and what your GPU can do for Linux apps. Where the extra keys

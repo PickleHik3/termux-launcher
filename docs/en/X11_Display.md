@@ -231,6 +231,10 @@ running, opens the app on it full size, and takes you to the Display place — n
 They can be pinned and searched like any other app. `pkg install firefox`, and Firefox is in the
 drawer the next time you return to the launcher.
 
+Apps installed inside a distro are listed the same way, under **Linux Apps** in the drawer, and
+the launcher can set a distro up for you — see [Linux apps from a distro](Linux_Apps_From_A_Distro.md).
+An app whose menu entry asks for a terminal opens in a terminal pane rather than on the display.
+
 Two things make this work and can be changed on the Display page in Settings:
 
 - **Window manager.** The launcher starts a small window manager with the display so windows
@@ -263,7 +267,8 @@ in with `-e` — exporting it in your Termux shell does not carry it across. The
 `-ac` and the container needs no `xauth`.
 
 Inside, install and start any X11 desktop or app as usual (`pacman -S xfce4 && startxfce4`, or a
-single app). To give one of those apps a tile in the app drawer, see
+single app). A single app needs none of this from the drawer's point of view: apps installed in a
+container are listed in the app drawer by themselves, and a tap opens one here — see
 [Linux apps from a distro](Linux_Apps_From_A_Distro.md).
 
 GPU profiles work inside the proot too: install the *distro's* Mesa, export the same
@@ -309,7 +314,7 @@ the container is then just `debian`.
   profile and tries the rest.
 - **A black display.** Start the server with `-legacy-drawing`; if that helps, keep it in the
   start command.
-- **Apps cannot open the display from a proot.** Log in with `--shared-tmp`, and check
+- **Apps cannot open the display from a proot.** Log in with `--shared-x11`, and check
   `echo $DISPLAY` inside.
 - **Nothing is accelerated.** `glmark2-es2` names the renderer in its first lines — `llvmpipe`
   means a profile variable is missing or the profile does not fit this GPU.
