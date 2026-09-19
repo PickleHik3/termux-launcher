@@ -149,6 +149,18 @@ final class HelpStyle {
     }
 
     /**
+     * The card a recorded clip plays in: the same corner and the same faint fill as the note and
+     * the rows around it, so a moving picture sits in the page like everything else. The fill is
+     * only ever seen for the instant before the first frame arrives.
+     */
+    GradientDrawable clipCard() {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(ColorUtils.setAlphaComponent(dress.textColor, 20));
+        shape.setCornerRadius(dp(10));
+        return shape;
+    }
+
+    /**
      * One thing to read next: its name, and the sentence that says what it is. A row is a whole
      * touch target, never smaller than a thumb, and named for a reader.
      */
