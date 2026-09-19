@@ -226,6 +226,30 @@ public final class TourSignalRelay implements TourSignals {
     }
 
     /**
+     * The pinned-apps editor came up. A fresh editor is built for every open, so there is no state
+     * to compare against: every call is the hold the user just performed.
+     */
+    public void onPinEditorOpened() {
+        emit(PIN_EDITOR_OPENED);
+    }
+
+    /**
+     * The pinned-apps editor went away, reported from its one dismiss path so that the Done
+     * button, the Close beside it and a swipe off the sheet all arrive here.
+     *
+     * <p>Only a close that left something pinned is a signal. An editor opened and closed again
+     * changed nothing, and an editor that saved an empty dock has not taught the user what a
+     * pinned app is — the card stays where it is and asks again.
+     *
+     * @param saved whether the editor wrote the pinned list while it was open
+     * @param pinnedCount how many pins it left in the dock
+     */
+    public void onPinEditorClosed(boolean saved, int pinnedCount) {
+        if (!saved || pinnedCount < 1) return;
+        emit(PINNED_APPS_SAVED);
+    }
+
+    /**
      * Whether help is up, once it has settled either way. Edge-triggered like the status bar: the
      * launcher reports the resting state when it builds the run and on every path that puts help
      * away, so the first call only says where help rests, and a close of a help the run never saw

@@ -114,6 +114,10 @@ public final class TourViewTargets implements TourTargets {
                 return help != null ? help : paneCornerRect();
             case PANE_CORNER:
                 return paneCornerRect();
+            // The pane itself, which the corner zone above is measured out of.
+            case TERMINAL_PANE:
+                return rectInOverlay(mFinder.findTourView(R.id.terminal_view),
+                    "no terminal pane is on screen");
             // Both dock styles are the same view; landscape swaps it for the rail.
             case DOCK:
                 return rectInOverlay(firstShown(R.id.apps_bar_viewpager, R.id.place_apps_bar_host),

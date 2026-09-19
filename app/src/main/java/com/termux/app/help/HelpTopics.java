@@ -59,6 +59,8 @@ public final class HelpTopics {
 
     /** Tap a corner, then ? — the lesson that teaches where help lives. */
     public static final String LESSON_FIND_HELP = "find_help";
+    /** Hold the dock, then pin an app in the editor it raises. */
+    public static final String LESSON_PIN_APPS = "pin_apps";
     /** Pull down the dock, open an app, come back. */
     public static final String LESSON_FIND_APPS = "find_apps";
     /** Show and hide the keyboard with the keyboard button. */
@@ -67,7 +69,8 @@ public final class HelpTopics {
     public static final String LESSON_FIND_ACTION = "find_action";
     /** The only lessons a topic may hand practice to. */
     public static final List<String> LESSON_IDS = Collections.unmodifiableList(Arrays.asList(
-        LESSON_FIND_HELP, LESSON_FIND_APPS, LESSON_KEYBOARD, LESSON_FIND_ACTION));
+        LESSON_FIND_HELP, LESSON_PIN_APPS, LESSON_FIND_APPS, LESSON_KEYBOARD,
+        LESSON_FIND_ACTION));
 
     /** One topic, and everything help knows to say about it. */
     public static final class Entry {
@@ -266,6 +269,7 @@ public final class HelpTopics {
         b.add(topic("organize_apps", Group.APPS, R.string.help_topic_organize_title,
                 R.string.help_topic_organize_summary, R.string.help_topic_organize_action)
             .steps(R.string.help_topic_organize_step1, R.string.help_topic_organize_step2)
+            .lesson(LESSON_PIN_APPS)
             .related("dock", "az").terms("dock")
             .aliases(R.string.help_topic_organize_aliases)
             .doc("Launcher_Usage.md#pinned-apps"));

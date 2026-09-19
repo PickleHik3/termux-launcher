@@ -7562,6 +7562,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncAzScrubLettersAndTint();
             syncPinnedAppsHost();
         });
+        // The pinned-apps sheet is a window of its own, so the tour cannot see it for itself: the
+        // dock is the one place that raises it, and it says so here.
+        mSuggestionBarView.setPinEditorListener(new com.termux.app.launcher.PinnedAppsEditor.Listener() {
+            @Override
+            public void onPinEditorOpened() {
+                if (mFirstBootTour != null) mFirstBootTour.onPinEditorOpened();
+            }
+
+            @Override
+            public void onPinEditorClosed(boolean saved, int pinnedCount) {
+                if (mFirstBootTour != null) mFirstBootTour.onPinEditorClosed(saved, pinnedCount);
+            }
+        });
         mSuggestionBarView.setOverflowInteractionListener(new SuggestionBarView.OverflowInteractionListener() {
             @Override
             public void onOverflowInteractionChanged(boolean interacting) {

@@ -26,7 +26,19 @@ import java.util.List;
 public final class TourController {
 
     /** Bumped when the run changes enough that a run in progress has to be mapped onto the new one. */
-    public static final int RUN_VERSION = 2;
+    public static final int RUN_VERSION = 3;
+
+    /**
+     * The run before the pin lesson was put second. Its card numbers mean different lessons than
+     * this run's, so a run in progress from it is re-indexed by {@link #versionTwoCardFor} rather
+     * than read at face value.
+     */
+    private static final int VERSION_BEFORE_THE_PIN_LESSON = 2;
+
+    /** The six cards of that run, in the order it showed them. */
+    private static final List<String> VERSION_TWO_CARDS = Collections.unmodifiableList(
+        Arrays.asList(TourRun.FIND_HELP, TourRun.FIND_APPS, TourRun.KEYBOARD,
+            TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING));
 
     /** How long a freshly shown card ignores signals. */
     public static final long ARM_DELAY_MS = 400L;
@@ -37,6 +49,14 @@ public final class TourController {
     /** The buttons a practice hint offers instead of a lesson's Skip step and End tour. */
     private static final List<TourAction> PRACTICE_ACTIONS = Collections.unmodifiableList(
         Arrays.asList(TourAction.DONE, TourAction.END_PRACTICE));
+
+    /**
+     * The buttons a stage that is only shown offers. Done takes the place of Skip step: on a card
+     * the run is not waiting on, reading it and being done with it are the same thing, and two
+     * buttons that did the same would only ask the user to choose between them.
+     */
+    private static final List<TourAction> SHOWN_STAGE_ACTIONS = Collections.unmodifiableList(
+        Arrays.asList(TourAction.BACK, TourAction.DONE, TourAction.END_TOUR));
 
     /** What the user answered on the home-screen card. */
     public enum Choice {
@@ -87,6 +107,20 @@ public final class TourController {
             default:
                 return null;
         }
+    }
+
+    /**
+     * The card {@code stepIndex} meant in the run before the pin lesson, or null when that run had
+     * no such card.
+     *
+     * <p>Every card of that run is still in this one, under the same id, so nothing is lost and
+     * nothing is asked twice: the number moved because a lesson was inserted second, and the id is
+     * what the stored place really meant. The stage is kept with it — the cards themselves did not
+     * change — so a user halfway through Find help comes back exactly where they were.
+     */
+    public static String versionTwoCardFor(int stepIndex) {
+        return stepIndex >= 0 && stepIndex < VERSION_TWO_CARDS.size()
+            ? VERSION_TWO_CARDS.get(stepIndex) : null;
     }
 
     /** The clock, injected so tests can step it. */
@@ -227,7 +261,8 @@ public final class TourController {
     public List<TourAction> currentActions() {
         TourStep step = currentStep();
         if (step == null) return Collections.emptyList();
-        return mPracticing ? PRACTICE_ACTIONS : step.actions();
+        if (mPracticing) return PRACTICE_ACTIONS;
+        return step.isShownOnlyStage(mStage) ? SHOWN_STAGE_ACTIONS : step.actions();
     }
 
     /** Whether the run that is up, or the one that just ended, had a card skipped. */
@@ -301,20 +336,35 @@ public final class TourController {
         if (stored < 0) return false;
         if (mPrefs.getTourRunVersion() < RUN_VERSION) return resumeOlderRun(stored);
         if (stored >= mSteps.size()) return false;
-        mPracticing = false;
-        mRunning = true;
-        mStepIndex = stored;
-        mStage = clampStage(mSteps.get(stored), mPrefs.getTourStepStage());
-        mArmedAt = mClock.nowMillis();
-        notifyStep();
-        return true;
+        return resumeAt(stored, mPrefs.getTourStepStage());
     }
 
     private boolean resumeOlderRun(int storedStepIndex) {
+        if (mPrefs.getTourRunVersion() >= VERSION_BEFORE_THE_PIN_LESSON) {
+            int index = indexOf(versionTwoCardFor(storedStepIndex));
+            // Nothing to ask about: every card of that run is a card of this one, so the only way
+            // here is a stored number that run never had, and there is nothing to resume from it.
+            return index >= 0 && resumeAt(index, mPrefs.getTourStepStage());
+        }
         String lesson = migratedLessonFor(storedStepIndex);
         if (lesson != null) return startAt(lesson);
         mAwaitingResumeChoice = true;
         if (mListener != null) mListener.onTourResumeOrRestart();
+        return true;
+    }
+
+    /** Picks the run up on {@code index}, at the furthest stage of that card {@code stage} can be. */
+    private boolean resumeAt(int index, int stage) {
+        mPracticing = false;
+        mAwaitingResumeChoice = false;
+        mRunning = true;
+        mStepIndex = index;
+        mStage = clampStage(mSteps.get(index), stage);
+        mArmedAt = mClock.nowMillis();
+        mPrefs.setTourRunVersion(RUN_VERSION);
+        mPrefs.setTourStepIndex(index);
+        mPrefs.setTourStepStage(mStage);
+        notifyStep();
         return true;
     }
 
@@ -344,7 +394,7 @@ public final class TourController {
         if (mClock.nowMillis() - mArmedAt < ARM_DELAY_MS) return;
         if (!signalId.equals(step.signalAt(mStage))) return;
         mStage++;
-        if (mStage >= step.signalCount()) {
+        if (mStage >= step.stageCount()) {
             advance();
         } else {
             if (!mPracticing) mPrefs.setTourStepStage(mStage);
@@ -394,7 +444,31 @@ public final class TourController {
         end();
     }
 
-    /** The End practice button, and the Done beside it: both leave without writing anything. */
+    /**
+     * The Done button, wherever it appears. On a practice hint it is the way out; on a stage the
+     * run only shows, it is the way on, because there is no gesture for the launcher to report.
+     */
+    public void done() {
+        if (mPracticing) {
+            finishPractice();
+            return;
+        }
+        continueShownStage();
+    }
+
+    /**
+     * Past a stage that is only shown. Ignored on any other stage, so a Done tapped on a card the
+     * run has since replaced cannot skip a gesture the run is still waiting to see.
+     */
+    public boolean continueShownStage() {
+        TourStep step = currentStep();
+        if (step == null || mPracticing || !step.isShownOnlyStage(mStage)) return false;
+        // The shown stage is the last of its card, so there is nothing after it but the next card.
+        advance();
+        return true;
+    }
+
+    /** The End practice button: it leaves without writing anything. */
     public void endPractice() {
         if (!mRunning || !mPracticing) return;
         finishPractice();
@@ -463,6 +537,6 @@ public final class TourController {
 
     private static int clampStage(TourStep step, int stage) {
         if (stage <= 0) return 0;
-        return Math.min(stage, Math.max(0, step.signalCount() - 1));
+        return Math.min(stage, Math.max(0, step.stageCount() - 1));
     }
 }

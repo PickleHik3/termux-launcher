@@ -18,6 +18,10 @@ public final class TourFingerTrace {
     /** The gap the finger keeps from the exact edge it is dragging from, in dp. */
     private static final float INSET_DP = 10f;
 
+    /** How far into a hold the finger has landed, and where it starts to lift again. */
+    private static final float HOLD_LAND = 0.22f;
+    private static final float HOLD_LIFT = 0.86f;
+
     /**
      * Fills {@code out} with the finger's x and y for {@code progress} in 0..1.
      *
@@ -67,6 +71,7 @@ public final class TourFingerTrace {
                 scrubPoint(left, right, centerY, inset, travel, eased, out);
                 break;
             case TAP:
+            case HOLD:
             case NONE:
             default:
                 out[0] = centerX;
@@ -83,6 +88,19 @@ public final class TourFingerTrace {
         float bounded = clamp01(progress);
         if (bounded < 0.25f) return bounded / 0.25f;
         return Math.max(0f, 1f - ((bounded - 0.25f) / 0.75f));
+    }
+
+    /**
+     * The hold's press, 0 with the finger off the control and 1 with it down on it. The finger has
+     * nowhere to travel, so the press is the whole of the gesture: it lands over the first quarter,
+     * stays down for two thirds of the pass — long enough to read as a hold and not as a tap — and
+     * lifts at the end.
+     */
+    public static float holdPress(float progress) {
+        float bounded = clamp01(progress);
+        if (bounded < HOLD_LAND) return ease(bounded / HOLD_LAND);
+        if (bounded <= HOLD_LIFT) return 1f;
+        return 1f - ease((bounded - HOLD_LIFT) / (1f - HOLD_LIFT));
     }
 
     /** Slide along the row for the first two thirds, then lift away from it. */

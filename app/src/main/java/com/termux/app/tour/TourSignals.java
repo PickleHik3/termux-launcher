@@ -53,6 +53,14 @@ public interface TourSignals {
     /** The launcher is in front of the user again after an app was launched from it. */
     String LAUNCHER_RESUMED = "launcher.resumed";
 
+    /** The pinned-apps editor came up, from the dock's hold or from anywhere else. */
+    String PIN_EDITOR_OPENED = "pins.editor_opened";
+    /**
+     * The pinned-apps editor went away having saved at least one app to the dock. A dock left
+     * empty is not this signal: the lesson is only over once there is something pinned in it.
+     */
+    String PINNED_APPS_SAVED = "pins.saved";
+
     /** Help came up, from the corner tab or from anywhere else that opens it. */
     String HELP_OPENED = "help.opened";
     /** Help went away again, however it was dismissed. */

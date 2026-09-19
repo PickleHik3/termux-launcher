@@ -36,6 +36,8 @@ public interface TourTargets {
     /** The keyboard button of the extra keys row: the one control that shows and hides the keyboard. */
     String KEYBOARD_TOGGLE_KEY = "keyboard_toggle_key";
     String PANE_CORNER = "pane_corner";
+    /** The whole terminal pane, for the one card that is about the terminal itself. */
+    String TERMINAL_PANE = "terminal_pane";
     String DOCK = "dock";
     String AZ_ROW = "az_row";
 

@@ -1821,6 +1821,8 @@
     <string name="tour_card_find_help_corner">Hold a pane corner.</string>
     <string name="tour_card_find_help_open">Tap ? to see what the controls do.</string>
     <string name="tour_card_find_help_close">Close help to continue.</string>
+    <string name="tour_card_pin_apps_hold">Hold the dock to choose your apps.</string>
+    <string name="tour_card_pin_apps_choose">Pick an app to pin, then tap Done.</string>
     <string name="tour_card_find_apps_dock">Pull down on the dock.</string>
     <string name="tour_card_find_apps_open">Tap an app to open it.</string>
     <string name="tour_card_find_apps_back_home">Press Home to come back.</string>
@@ -1829,6 +1831,7 @@
     <string name="tour_card_keyboard_show_again">Tap it again to bring the keyboard back.</string>
     <string name="tour_card_keyboard_show">Tap the keyboard button to show the keyboard.</string>
     <string name="tour_card_keyboard_hide_again">Tap it again to hide the keyboard.</string>
+    <string name="tour_card_keyboard_hold_terminal">Hold the terminal: a short hold makes your finger the mouse, a longer hold opens the text menu.</string>
     <string name="tour_card_find_action_palette">Swipe up on the space bar to open the command palette.</string>
     <string name="tour_card_find_action_close">Find Settings or Help, then tap outside the palette to close it.</string>
     <string name="tour_card_home_choice">Use Termux as your home screen?</string>
