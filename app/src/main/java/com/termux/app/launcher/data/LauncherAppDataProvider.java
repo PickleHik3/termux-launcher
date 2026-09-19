@@ -79,21 +79,36 @@ public final class LauncherAppDataProvider {
                 ? linuxAppIcon(ref) : iconResolver.resolveDetailed(ref, null, null).drawable);
     }
 
-    /** A Linux app's icon from the prefix, or the drawer's generic mark for one without a PNG. */
+    /**
+     * The Linux apps the last listing found, by id. The icon store asks for one drawable at a
+     * time, and a scan now reads every container's desktop files as well as the prefix's, so
+     * answering from the listing the drawer was just built from is what keeps a full scan from
+     * happening once per tile. An id that is not in it — a pin from before the display was
+     * switched on — still falls back to a scan.
+     */
+    @NonNull
+    private volatile Map<String, com.termux.app.x11.LinuxAppCatalog.LinuxApp> linuxAppsById =
+        Collections.emptyMap();
+
+    /**
+     * A Linux app's icon, from the prefix or from the container it is installed in, or the
+     * drawer's generic mark for one without a PNG.
+     */
     @Nullable
     private Drawable linuxAppIcon(@NonNull AppRef ref) {
-        List<com.termux.app.x11.LinuxAppCatalog.LinuxApp> apps =
-            com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.applicationDirs());
-        com.termux.app.x11.LinuxAppCatalog.LinuxApp app =
-            com.termux.app.x11.LinuxAppCatalog.find(apps, com.termux.app.x11.X11Apps.desktopId(ref));
+        String id = com.termux.app.x11.X11Apps.desktopId(ref);
+        com.termux.app.x11.LinuxAppCatalog.LinuxApp app = linuxAppsById.get(id);
+        if (app == null) {
+            app = com.termux.app.x11.LinuxAppCatalog.find(
+                com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots()), id);
+        }
         return linuxAppIcon(app);
     }
 
     @Nullable
     private Drawable linuxAppIcon(@Nullable com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
         if (app != null) {
-            java.io.File file = com.termux.app.x11.LinuxAppIcons.find(app.icon,
-                com.termux.app.x11.LinuxAppIcons.prefix());
+            java.io.File file = com.termux.app.x11.LinuxAppIcons.find(app);
             Drawable icon = file == null ? null
                 : com.termux.app.x11.LinuxAppIcons.load(context.getResources(), file);
             if (icon != null) return icon;
@@ -102,16 +117,20 @@ public final class LauncherAppDataProvider {
     }
 
     /**
-     * The prefix's Linux apps, when the display is switched on and the user wants them listed. They
+     * The Linux apps in the prefix and in every installed distro container, when the display is
+     * switched on and the user wants them listed. They
      * are catalogue entries like any other — ranked, pinnable, searchable — under the reserved
      * package {@link com.termux.app.x11.X11Apps#PACKAGE}; a tap runs them on the display.
      */
     private void addLinuxApps(@NonNull Snapshot snapshot) {
+        linuxAppsById = Collections.emptyMap();
         if (!com.termux.BuildConfig.X11_SERVER) return;
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
         if (prefs == null || !prefs.isX11DisplayEnabled() || !prefs.isX11DrawerAppsEnabled()) return;
+        Map<String, com.termux.app.x11.LinuxAppCatalog.LinuxApp> byId = new HashMap<>();
         for (com.termux.app.x11.LinuxAppCatalog.LinuxApp app
-                : com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.applicationDirs())) {
+                : com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots())) {
+            byId.put(app.id, app);
             AppRef ref = com.termux.app.x11.X11Apps.ref(app.id);
             if (snapshot.byId.containsKey(ref.stableId())) continue;
             iconStore.prime(ref, linuxAppIcon(app));
@@ -127,6 +146,7 @@ public final class LauncherAppDataProvider {
             }
             bucket.add(entry);
         }
+        linuxAppsById = byId;
     }
 
     /**

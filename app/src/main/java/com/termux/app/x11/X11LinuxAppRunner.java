@@ -126,8 +126,9 @@ public final class X11LinuxAppRunner {
 
     /**
      * The shell line that runs the app: the display, the GPU environment, the home directory,
-     * then the desktop file's own command. The touch environment goes in first so a GPU profile
-     * still has the last word over anything it sets. Pure, so the composition is tested.
+     * then the app's command — its own, or a {@code proot-distro login} around it when the app is
+     * installed in a container. The touch environment goes in first so a GPU profile still has the
+     * last word over anything it sets. Pure, so the composition is tested.
      */
     @NonNull
     static String script(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
@@ -137,7 +138,7 @@ public final class X11LinuxAppRunner {
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
         for (String line : env) script.append("export ").append(line).append('\n');
         script.append("cd \"$HOME\"\n");
-        script.append("exec ").append(app.exec).append('\n');
+        script.append("exec ").append(app.command()).append('\n');
         return script.toString();
     }
 }
