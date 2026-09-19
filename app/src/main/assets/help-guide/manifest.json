@@ -1,5 +1,5 @@
 {
-  "source": "Waydroid, Android 13 (LineageOS 20), 600x1300 @180dpi, Termux Launcher 0.2.37 dev f2b7a2a8, recorded 2026-09-18. Eleven clips (places, status, stats, mouse_mode, dock, az, organize_apps, scale, touchpad, start, start_stop) re-taken 2026-09-19 on pong (Nothing A065, 1080x2412 @420 dpi, scaled to 600 px wide; the frame there is 600x1340).",
+  "source": "Waydroid, Android 13 (LineageOS 20), 600x1300 @180dpi, Termux Launcher 0.2.37 dev f2b7a2a8, recorded 2026-09-18. Eleven clips (places, status, stats, mouse_mode, dock, az, organize_apps, scale, touchpad, start, start_stop) re-taken 2026-09-19 on pong (Nothing A065, 1080x2412 @420 dpi, kept at native 1080 px width (frame 1080x2412) so the phone shows them without upscaling).",
   "frame": "Clips are cropped strips of the 600px-wide phone frame; multi-band clips stack two or three horizontal bands top to bottom (see bands: [x,y,w,h] in frame coordinates). Gesture markers are burnt in.",
   "encoding": "H.264 yuv420p 30fps, no audio, faststart; JPEG poster per clip.",
   "coverage": {
@@ -483,16 +483,16 @@
       "id": "az",
       "video": "az.mp4",
       "poster": "az.jpg",
-      "width": 600,
-      "height": 175,
+      "width": 1080,
+      "height": 315,
       "duration": 6.72,
-      "bytes": 234758,
+      "bytes": 1001019,
       "bands": [
         [
           0,
-          790,
-          600,
-          175
+          1422,
+          1080,
+          315
         ]
       ],
       "gestures": [
@@ -500,15 +500,15 @@
           "t": 1.6,
           "kind": "swipe",
           "points": [
-            44,
-            892,
-            556,
-            892
+            80,
+            1606,
+            1000,
+            1606
           ],
           "duration": 2.5
         }
       ],
-      "source": "pong"
+      "source": "pong native 1080"
     },
     "base_values": {
       "id": "base_values",
@@ -730,22 +730,22 @@
       "id": "dock",
       "video": "dock.mp4",
       "poster": "dock.jpg",
-      "width": 600,
-      "height": 550,
+      "width": 1080,
+      "height": 990,
       "duration": 7.25,
-      "bytes": 291881,
+      "bytes": 1560721,
       "bands": [
         [
           0,
-          64,
-          600,
-          430
+          115,
+          1080,
+          774
         ],
         [
           0,
-          790,
-          600,
-          120
+          1422,
+          1080,
+          216
         ]
       ],
       "gestures": [
@@ -753,15 +753,15 @@
           "t": 1.6,
           "kind": "swipe",
           "points": [
-            300,
-            833,
-            300,
-            1056
+            540,
+            1500,
+            540,
+            1900
           ],
           "duration": 0.6
         }
       ],
-      "source": "pong"
+      "source": "pong native 1080"
     },
     "find_text": {
       "id": "find_text",
@@ -1219,22 +1219,22 @@
       "id": "mouse_mode",
       "video": "mouse_mode.mp4",
       "poster": "mouse_mode.jpg",
-      "width": 600,
-      "height": 102,
+      "width": 1080,
+      "height": 183,
       "duration": 5.76,
-      "bytes": 36190,
+      "bytes": 130448,
       "bands": [
         [
           0,
-          168,
-          600,
-          44
+          302,
+          1080,
+          79
         ],
         [
           0,
-          904,
-          600,
-          58
+          1627,
+          1080,
+          104
         ]
       ],
       "gestures": [
@@ -1242,8 +1242,8 @@
           "t": 1.6,
           "kind": "tap",
           "points": [
-            128,
-            933
+            231,
+            1680
           ],
           "duration": 0.65
         },
@@ -1251,28 +1251,28 @@
           "t": 3.15,
           "kind": "tap",
           "points": [
-            128,
-            933
+            231,
+            1680
           ],
           "duration": 0.65
         }
       ],
-      "source": "pong"
+      "source": "pong native 1080"
     },
     "organize_apps": {
       "id": "organize_apps",
       "video": "organize_apps.mp4",
       "poster": "organize_apps.jpg",
-      "width": 600,
-      "height": 450,
+      "width": 1080,
+      "height": 810,
       "duration": 7.68,
-      "bytes": 238126,
+      "bytes": 1070887,
       "bands": [
         [
           0,
-          455,
-          600,
-          450
+          819,
+          1080,
+          810
         ]
       ],
       "gestures": [
@@ -1280,15 +1280,15 @@
           "t": 1.6,
           "kind": "swipe",
           "points": [
-            557,
-            836,
-            557,
-            836
+            1002,
+            1504,
+            1002,
+            1504
           ],
           "duration": 0.9
         }
       ],
-      "source": "pong"
+      "source": "pong native 1080"
     },
     "pages": {
       "id": "pages",
@@ -1480,16 +1480,16 @@
       "id": "places",
       "video": "places.mp4",
       "poster": "places.jpg",
-      "width": 600,
-      "height": 560,
+      "width": 1080,
+      "height": 1008,
       "duration": 7.83,
-      "bytes": 486598,
+      "bytes": 2019139,
       "bands": [
         [
           0,
-          64,
-          600,
-          560
+          115,
+          1080,
+          1008
         ]
       ],
       "gestures": [
@@ -1497,10 +1497,10 @@
           "t": 1.6,
           "kind": "swipe",
           "points": [
-            344,
-            189,
-            578,
-            189
+            620,
+            341,
+            1040,
+            341
           ],
           "duration": 0.6
         },
@@ -1508,30 +1508,30 @@
           "t": 4.57,
           "kind": "swipe",
           "points": [
-            556,
-            189,
-            278,
-            189
+            1000,
+            341,
+            500,
+            341
           ],
           "duration": 0.6
         }
       ],
-      "source": "pong"
+      "source": "pong native 1080"
     },
     "scale": {
       "id": "scale",
       "video": "scale.mp4",
       "poster": "scale.jpg",
-      "width": 600,
-      "height": 560,
+      "width": 1080,
+      "height": 1008,
       "duration": 13.86,
-      "bytes": 61407,
+      "bytes": 233932,
       "bands": [
         [
           0,
-          168,
-          600,
-          560
+          302,
+          1080,
+          1008
         ]
       ],
       "gestures": [
@@ -1539,10 +1539,10 @@
           "t": 1.6,
           "kind": "swipe",
           "points": [
-            9,
-            219,
-            9,
-            219
+            16,
+            395,
+            16,
+            395
           ],
           "duration": 0.8
         },
@@ -1550,10 +1550,10 @@
           "t": 4.72,
           "kind": "swipe",
           "points": [
-            30,
-            536,
-            30,
-            667
+            54,
+            965,
+            54,
+            1200
           ],
           "duration": 0.9
         },
@@ -1561,10 +1561,10 @@
           "t": 8.15,
           "kind": "swipe",
           "points": [
-            30,
-            667,
-            30,
-            536
+            54,
+            1200,
+            54,
+            965
           ],
           "duration": 0.9
         },
@@ -1572,13 +1572,13 @@
           "t": 11.56,
           "kind": "tap",
           "points": [
-            300,
-            667
+            540,
+            1200
           ],
           "duration": 0.65
         }
       ],
-      "source": "pong"
+      "source": "pong native 1080"
     },
     "settings": {
       "id": "settings",
@@ -1722,16 +1722,16 @@
       "id": "start",
       "video": "start.mp4",
       "poster": "start.jpg",
-      "width": 600,
-      "height": 700,
+      "width": 1080,
+      "height": 1260,
       "duration": 7.82,
-      "bytes": 71159,
+      "bytes": 697514,
       "bands": [
         [
           0,
-          168,
-          600,
-          700
+          302,
+          1080,
+          1260
         ]
       ],
       "gestures": [
@@ -1739,28 +1739,28 @@
           "t": 1.6,
           "kind": "tap",
           "points": [
-            300,
-            697
+            540,
+            1255
           ],
           "duration": 0.65
         }
       ],
-      "source": "pong"
+      "source": "pong native 1080"
     },
     "start_stop": {
       "id": "start_stop",
       "video": "start_stop.mp4",
       "poster": "start_stop.jpg",
-      "width": 600,
-      "height": 700,
+      "width": 1080,
+      "height": 1260,
       "duration": 12.19,
-      "bytes": 155463,
+      "bytes": 1250415,
       "bands": [
         [
           0,
-          168,
-          600,
-          700
+          302,
+          1080,
+          1260
         ]
       ],
       "gestures": [
@@ -1768,10 +1768,10 @@
           "t": 1.6,
           "kind": "swipe",
           "points": [
-            9,
-            219,
-            9,
-            219
+            16,
+            395,
+            16,
+            395
           ],
           "duration": 0.8
         },
@@ -1779,8 +1779,8 @@
           "t": 4.73,
           "kind": "tap",
           "points": [
-            42,
-            242
+            75,
+            435
           ],
           "duration": 0.65
         },
@@ -1788,28 +1788,28 @@
           "t": 7.51,
           "kind": "tap",
           "points": [
-            468,
-            790
+            842,
+            1422
           ],
           "duration": 0.65
         }
       ],
-      "source": "pong"
+      "source": "pong native 1080"
     },
     "stats": {
       "id": "stats",
       "video": "stats.mp4",
       "poster": "stats.jpg",
-      "width": 600,
-      "height": 575,
+      "width": 1080,
+      "height": 1035,
       "duration": 7.38,
-      "bytes": 251658,
+      "bytes": 1311513,
       "bands": [
         [
           0,
-          168,
-          600,
-          575
+          302,
+          1080,
+          1035
         ]
       ],
       "gestures": [
@@ -1817,13 +1817,13 @@
           "t": 1.6,
           "kind": "tap",
           "points": [
-            544,
-            189
+            980,
+            341
           ],
           "duration": 0.65
         }
       ],
-      "source": "pong"
+      "source": "pong native 1080"
     },
     "text_size": {
       "id": "text_size",
@@ -1922,22 +1922,22 @@
       "id": "touchpad",
       "video": "touchpad.mp4",
       "poster": "touchpad.jpg",
-      "width": 600,
-      "height": 1020,
+      "width": 1080,
+      "height": 1836,
       "duration": 11.47,
-      "bytes": 150728,
+      "bytes": 748370,
       "bands": [
         [
           0,
-          168,
-          600,
-          620
+          302,
+          1080,
+          1116
         ],
         [
           0,
-          906,
-          600,
-          400
+          1631,
+          1080,
+          720
         ]
       ],
       "gestures": [
@@ -1945,8 +1945,8 @@
           "t": 1.6,
           "kind": "tap",
           "points": [
-            128,
-            1278
+            231,
+            2300
           ],
           "duration": 0.65
         },
@@ -1954,10 +1954,10 @@
           "t": 3.95,
           "kind": "swipe",
           "points": [
-            167,
-            1083,
-            361,
-            1167
+            300,
+            1950,
+            650,
+            2100
           ],
           "duration": 0.8
         },
@@ -1965,8 +1965,8 @@
           "t": 6.82,
           "kind": "tap",
           "points": [
-            267,
-            1111
+            480,
+            2000
           ],
           "duration": 0.65
         },
@@ -1974,13 +1974,13 @@
           "t": 9.15,
           "kind": "tap",
           "points": [
-            128,
-            933
+            231,
+            1680
           ],
           "duration": 0.65
         }
       ],
-      "source": "pong"
+      "source": "pong native 1080"
     },
     "widget": {
       "id": "widget",
@@ -2110,16 +2110,16 @@
       "id": "status",
       "video": "status.mp4",
       "poster": "status.jpg",
-      "width": 600,
-      "height": 200,
+      "width": 1080,
+      "height": 360,
       "duration": 10.58,
-      "bytes": 203020,
+      "bytes": 864228,
       "bands": [
         [
           0,
-          64,
-          600,
-          200
+          115,
+          1080,
+          360
         ]
       ],
       "gestures": [
@@ -2127,10 +2127,10 @@
           "t": 1.6,
           "kind": "swipe",
           "points": [
-            300,
-            94,
-            300,
-            233
+            540,
+            170,
+            540,
+            420
           ],
           "duration": 0.6
         },
@@ -2138,10 +2138,10 @@
           "t": 4.33,
           "kind": "swipe",
           "points": [
-            344,
-            189,
-            578,
-            189
+            620,
+            341,
+            1040,
+            341
           ],
           "duration": 0.6
         },
@@ -2149,15 +2149,15 @@
           "t": 7.31,
           "kind": "swipe",
           "points": [
-            556,
-            189,
-            278,
-            189
+            1000,
+            341,
+            500,
+            341
           ],
           "duration": 0.6
         }
       ],
-      "source": "pong"
+      "source": "pong native 1080"
     }
   }
 }
