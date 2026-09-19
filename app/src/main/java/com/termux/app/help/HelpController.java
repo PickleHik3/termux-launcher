@@ -101,6 +101,11 @@ public final class HelpController {
      * sent them here, so closing the overlay takes them back to that page, not to the sheet.
      */
     private boolean fromHelpScreen;
+    /**
+     * True once the screen has been asked for and nothing has opened help again since. The
+     * explorer can report itself closed more than one way, and the reader asked once.
+     */
+    private boolean handedBack;
     /** A remeasurement mid-render would ask for another one; one pass at a time. */
     private boolean rendering;
 
@@ -151,6 +156,7 @@ public final class HelpController {
         ensureViews();
         closeExplorer();
         fromHelpScreen = false;
+        handedBack = false;
         navigation.open(place == null ? PaneWallPage.TERMINAL : place);
         remeasure();
         endTextEntry();
@@ -165,6 +171,7 @@ public final class HelpController {
     public void showTopic(@Nullable PaneWallPage place, String topicId) {
         ensureViews();
         closeExplorer();
+        handedBack = false;
         navigation.openTopic(place == null ? PaneWallPage.TERMINAL : place, topicId);
         remeasure();
         panel.show();
@@ -269,6 +276,7 @@ public final class HelpController {
         closeExplorer();
         navigation.open(place == null ? PaneWallPage.TERMINAL : place);
         fromHelpScreen = true;
+        handedBack = false;
         remeasure();
         endTextEntry();
         panel.hide();
@@ -289,6 +297,7 @@ public final class HelpController {
         if (topicId != null) navigation.topic(resolve(topicId));
         navigation.practiceStart();
         fromHelpScreen = true;
+        handedBack = false;
         panel.hide();
         if (practiceListener != null) practiceListener.onPracticeRequested(lessonId);
     }
@@ -411,6 +420,8 @@ public final class HelpController {
      * page; null lands them wherever they were reading when they asked for the launcher.
      */
     private void handBack(@Nullable String topicId) {
+        if (handedBack) return;
+        handedBack = true;
         PaneWallPage place = navigation.place();
         fromHelpScreen = false;
         // Dismissed before the stack is tidied: dismiss() is the one path that tells the host

@@ -42,6 +42,13 @@ public final class HelpActivity extends AppCompatActivity {
     public static final String EXTRA_ACTION = "com.termux.app.help.extra.ACTION";
     /** The lesson {@link #ACTION_PRACTICE} is about. */
     public static final String EXTRA_LESSON = "com.termux.app.help.extra.LESSON";
+    /**
+     * Whether "Try it" may be offered at all. Absent means no: a run that is already partway
+     * through a lesson has nowhere to put a second one, and a caller that does not know had
+     * better not promise.
+     */
+    public static final String EXTRA_PRACTICE_AVAILABLE =
+        "com.termux.app.help.extra.PRACTICE_AVAILABLE";
 
     /** Explore the whole screen the reader came from. */
     public static final String ACTION_EXPLORE = "explore";
@@ -55,19 +62,32 @@ public final class HelpActivity extends AppCompatActivity {
     private static final String STATE_NAVIGATION = "help_navigation";
     private static final int MENU_SEARCH = 1;
 
-    /** The whole guide, opened on a place; a topic id opens that page, null opens home. */
+    /**
+     * The whole guide, opened on a place; a topic id opens that page, null opens home. Practice is
+     * not offered: a caller that cannot say whether a lesson may start does not offer one.
+     */
     public static Intent intent(Context context, @Nullable PaneWallPage place,
                                 @Nullable String topicId, @Nullable Bundle navigation) {
+        return intent(context, place, topicId, navigation, false);
+    }
+
+    /** The same, from a caller that knows whether a practice run may start. */
+    public static Intent intent(Context context, @Nullable PaneWallPage place,
+                                @Nullable String topicId, @Nullable Bundle navigation,
+                                boolean practiceAvailable) {
         Intent intent = new Intent(context, HelpActivity.class);
         if (place != null) intent.putExtra(EXTRA_PLACE, place.name());
         if (topicId != null) intent.putExtra(EXTRA_TOPIC, topicId);
         if (navigation != null) intent.putExtra(EXTRA_NAVIGATION, navigation);
+        if (practiceAvailable) intent.putExtra(EXTRA_PRACTICE_AVAILABLE, true);
         return intent;
     }
 
     private final HelpNavigation navigation = new HelpNavigation();
     private HelpPanelView panel;
     private Toolbar toolbar;
+    /** Whether this visit may hand the reader over to a lesson; the caller decides. */
+    private boolean practiceAvailable;
 
     @Override protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -76,6 +96,8 @@ public final class HelpActivity extends AppCompatActivity {
         if (saved == null) saved = getIntent() == null ? null
             : getIntent().getBundleExtra(EXTRA_NAVIGATION);
         if (!navigation.restoreState(saved)) openFromIntent();
+        practiceAvailable = getIntent() != null
+            && getIntent().getBooleanExtra(EXTRA_PRACTICE_AVAILABLE, false);
 
         HelpStyle style = HelpStyle.of(this, navigation.place());
         LinearLayout root = new LinearLayout(this);
@@ -179,7 +201,7 @@ public final class HelpActivity extends AppCompatActivity {
     }
 
     private void render() {
-        panel.render(navigation, true);
+        panel.render(navigation, practiceAvailable);
         // Through the activity's own title: the support action bar owns the toolbar's, and sets
         // it from here after onCreate has run.
         setTitle(panel.pageTitle());
@@ -195,6 +217,18 @@ public final class HelpActivity extends AppCompatActivity {
         if (topicId != null) data.putExtra(EXTRA_TOPIC, topicId);
         if (lessonId != null) data.putExtra(EXTRA_LESSON, lessonId);
         data.putExtra(EXTRA_NAVIGATION, navigation.saveState());
+        if (getCallingActivity() == null) {
+            // Opened from Settings, the palette or a shortcut: nobody is waiting for a result, so
+            // the ask goes to the launcher itself, which is the only thing that can run it. It is
+            // the home activity and a single task, so this is the one instance of it coming
+            // forward, never a second.
+            Intent launcher = new Intent(this, com.termux.app.TermuxActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtras(data);
+            startActivity(launcher);
+            finish();
+            return;
+        }
         setResult(RESULT_OK, data);
         finish();
     }

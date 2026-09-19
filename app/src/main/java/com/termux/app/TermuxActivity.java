@@ -312,7 +312,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                 @Nullable String topicId) {
         android.content.Intent intent = com.termux.app.help.HelpActivity.intent(this,
             place == null ? currentWallPlace() : place, topicId,
-            topicId == null ? mHelpScreenNavigation : null);
+            topicId == null ? mHelpScreenNavigation : null,
+            // The same answer the sheet was given: a run partway through a lesson has nowhere to
+            // put a second one, so the screen does not offer to start one.
+            mFirstBootTour == null || mFirstBootTour.canStartPractice());
         mHelpScreenNavigation = null;
         if (mHelpScreenLauncher != null) mHelpScreenLauncher.launch(intent);
         else startActivity(intent);
@@ -323,6 +326,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * it did from the sheet, and the page stack comes with it so that closing the overlay puts
      * the reader back where they were reading.
      */
+    /**
+     * The help screen with nobody waiting on its result — opened from Settings or the palette —
+     * sends what the reader asked for here instead. Same extras, same path.
+     */
+    private void handleHelpScreenActionIntent(@Nullable Intent intent) {
+        if (intent == null
+            || intent.getStringExtra(com.termux.app.help.HelpActivity.EXTRA_ACTION) == null) return;
+        android.content.Intent asked = new android.content.Intent(intent);
+        intent.removeExtra(com.termux.app.help.HelpActivity.EXTRA_ACTION);
+        intent.removeExtra(com.termux.app.help.HelpActivity.EXTRA_TOPIC);
+        intent.removeExtra(com.termux.app.help.HelpActivity.EXTRA_LESSON);
+        intent.removeExtra(com.termux.app.help.HelpActivity.EXTRA_NAVIGATION);
+        onHelpScreenResult(asked);
+    }
+
     private void onHelpScreenResult(@Nullable android.content.Intent data) {
         mHelpScreenNavigation = data == null ? null
             : data.getBundleExtra(com.termux.app.help.HelpActivity.EXTRA_NAVIGATION);
@@ -1322,6 +1340,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             handleLayoutEditorIntent(getIntent());
             handleEditExtraKeysIntent(getIntent());
             handleShowHelpIntent(getIntent());
+            handleHelpScreenActionIntent(getIntent());
         }
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
         try {
@@ -1571,6 +1590,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         handleLayoutEditorIntent(intent);
         handleEditExtraKeysIntent(intent);
         handleShowHelpIntent(intent);
+        handleHelpScreenActionIntent(intent);
         handleReplayTourIntent(intent);
         if (isLauncherHomeIntent(intent)) {
             mLastLaunchWasLauncherEntry = true;

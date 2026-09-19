@@ -1,6 +1,7 @@
 package com.termux.app.help;
 
 import android.app.Application;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Looper;
@@ -56,6 +57,20 @@ public class HelpActivityTest {
             place, topicId, navigation);
     }
 
+    private HelpActivity openWithPractice(PaneWallPage place, String topicId) {
+        controller = Robolectric.buildActivity(HelpActivity.class,
+            HelpActivity.intent(org.robolectric.RuntimeEnvironment.getApplication(), place,
+                topicId, null, true)).setup();
+        activity = controller.get();
+        return activity;
+    }
+
+    private static HelpTopics.Entry lessonTopic() {
+        for (HelpTopics.Entry entry : HelpTopics.all())
+            if (entry.lessonId != null) return entry;
+        throw new AssertionError("no topic hands practice a lesson");
+    }
+
     private String string(int res) {
         return activity.getString(res);
     }
@@ -64,6 +79,12 @@ public class HelpActivityTest {
         View view = activity.panel().named(name);
         assertNotNull("no control named " + name, view);
         view.performClick();
+    }
+
+    /** Someone is waiting on the result: the launcher, as it launches this screen. */
+    private void withCaller() {
+        Shadows.shadowOf(activity).setCallingActivity(
+            new ComponentName(activity, com.termux.app.TermuxActivity.class));
     }
 
     private Intent result() {
@@ -173,6 +194,7 @@ public class HelpActivityTest {
     @Test public void showOnScreenFinishesWithTheActionTheTopicAndThePageStack() {
         HelpTopics.Entry entry = topicWithTarget();
         open(intent(PaneWallPage.DISPLAY, entry.id, null));
+        withCaller();
         tap(string(R.string.help_show_on_screen));
 
         assertTrue(activity.isFinishing());
@@ -194,6 +216,7 @@ public class HelpActivityTest {
 
     @Test public void exploreFromHelpHomeFinishesWithTheExploreAction() {
         open(intent(PaneWallPage.TERMINAL, null, null));
+        withCaller();
         tap(string(R.string.help_home_explore));
         assertTrue(activity.isFinishing());
         Intent result = result();
@@ -204,17 +227,71 @@ public class HelpActivityTest {
     }
 
     @Test public void practiceFinishesWithTheLessonItIsAbout() {
-        HelpTopics.Entry entry = null;
-        for (HelpTopics.Entry candidate : HelpTopics.all())
-            if (candidate.lessonId != null) { entry = candidate; break; }
-        assertNotNull("no topic hands practice a lesson", entry);
-        open(intent(PaneWallPage.TERMINAL, entry.id, null));
+        HelpTopics.Entry entry = lessonTopic();
+        openWithPractice(PaneWallPage.TERMINAL, entry.id);
+        withCaller();
         tap(string(R.string.help_try_it));
         Intent result = result();
         assertNotNull(result);
         assertEquals(HelpActivity.ACTION_PRACTICE, result.getStringExtra(HelpActivity.EXTRA_ACTION));
         assertEquals(entry.id, result.getStringExtra(HelpActivity.EXTRA_TOPIC));
         assertEquals(entry.lessonId, result.getStringExtra(HelpActivity.EXTRA_LESSON));
+    }
+
+    /**
+     * "Try it" is the caller's to offer. A run already partway through a lesson has nowhere to put
+     * a second one, so a caller that does not say so is taken to mean no.
+     */
+    @Test public void practiceIsOnlyOfferedWhenTheCallerSaysItMay() {
+        HelpTopics.Entry entry = lessonTopic();
+        open(intent(PaneWallPage.TERMINAL, entry.id, null));
+        assertNull("Try it was offered with no caller to honour it",
+            activity.panel().named(string(R.string.help_try_it)));
+        controller.close();
+
+        openWithPractice(PaneWallPage.TERMINAL, entry.id);
+        assertNotNull("Try it was not offered to a reader who may practise",
+            activity.panel().named(string(R.string.help_try_it)));
+    }
+
+    /**
+     * Opened from Settings there is no result to finish into, so what the reader asked for goes
+     * to the launcher itself — the one instance of it, brought forward.
+     */
+    @Test public void withNoCallerTheAskGoesToTheLauncher() {
+        HelpTopics.Entry entry = topicWithTarget();
+        open(intent(PaneWallPage.DISPLAY, entry.id, null));
+        tap(string(R.string.help_show_on_screen));
+
+        assertTrue(activity.isFinishing());
+        assertNull("a result was set with nobody to read it", result());
+        Intent started = Shadows.shadowOf(activity).getNextStartedActivity();
+        assertNotNull("nothing was asked of the launcher", started);
+        assertEquals(new ComponentName(activity, com.termux.app.TermuxActivity.class),
+            started.getComponent());
+        assertEquals(HelpActivity.ACTION_SHOW_ON_SCREEN,
+            started.getStringExtra(HelpActivity.EXTRA_ACTION));
+        assertEquals(entry.id, started.getStringExtra(HelpActivity.EXTRA_TOPIC));
+        assertNotNull(started.getBundleExtra(HelpActivity.EXTRA_NAVIGATION));
+        // The launcher is the home activity and a single task: no second instance of it.
+        assertTrue((started.getFlags() & Intent.FLAG_ACTIVITY_CLEAR_TOP) != 0);
+        assertTrue((started.getFlags() & Intent.FLAG_ACTIVITY_SINGLE_TOP) != 0);
+    }
+
+    /** With a caller waiting on the result, that is the only way the ask travels. */
+    @Test public void withACallerTheAskComesBackAsTheResult() {
+        HelpTopics.Entry entry = topicWithTarget();
+        open(intent(PaneWallPage.TERMINAL, entry.id, null));
+        Shadows.shadowOf(activity).setCallingActivity(
+            new ComponentName(activity, com.termux.app.TermuxActivity.class));
+        tap(string(R.string.help_show_on_screen));
+
+        Intent result = result();
+        assertNotNull(result);
+        assertEquals(HelpActivity.ACTION_SHOW_ON_SCREEN,
+            result.getStringExtra(HelpActivity.EXTRA_ACTION));
+        assertNull("the launcher was started as well as answered",
+            Shadows.shadowOf(activity).getNextStartedActivity());
     }
 
     // ---- coming back -------------------------------------------------------------------------
