@@ -4695,11 +4695,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         if (shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
-            // Once accessory_surface_host has actually laid out at the expanded height and its
-            // matching crop is installed, the transparent keyboard exposes that one unified
-            // material. Until then, keep a keyboard-local glass background in place: changing the
-            // RelativeLayout rules above only requests layout, so clearing this background here
-            // would expose sharp wallpaper for a frame (or the whole IME transition).
+            // Once accessory_surface_host has actually laid out at the expanded height — and, when
+            // there is a frame to blur, its matching crop is installed — the transparent keyboard
+            // exposes that one unified material. Until then, keep a keyboard-local glass background
+            // in place: changing the RelativeLayout rules above only requests layout, so clearing
+            // this background here would expose sharp wallpaper for a frame (or the whole IME
+            // transition). It must come off the moment the shared surface is there, though: the
+            // expanded surface already paints this glass under the keyboard, and a local coat left
+            // on top is the same translucent material twice — a keyboard visibly darker than the
+            // band above it.
             if (isUnifiedAccessoryBackdropReady(state)) {
                 surfaceHost.setBackground(null);
                 clearInAppKeyboardBackdrop();
@@ -4933,18 +4937,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         );
     }
 
-    /** True only after both expanded layout geometry and its matching unified crop are installed. */
+    /**
+     * True once the one expanded dock+keyboard surface is the material on screen: its geometry is
+     * laid out over both, and — only when there is a frame to blur — its crop is installed and
+     * current. See {@link ChromePolicy#unifiedKeyboardSurfaceIsTheMaterial} for why the crop is not
+     * asked for when there is none.
+     */
     private boolean isUnifiedAccessoryBackdropReady(@NonNull ChromeSpec state) {
         if (!shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
             return false;
         }
-        ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
+        return ChromePolicy.unifiedKeyboardSurfaceIsTheMaterial(
+            isUnifiedAccessorySurfaceLaidOut(state), state.blurEnabled,
+            isUnifiedAccessoryCropInstalled(state));
+    }
+
+    /** The expanded surface's own geometry: laid out over the dock and the keyboard together. */
+    private boolean isUnifiedAccessorySurfaceLaidOut(@NonNull ChromeSpec state) {
         View surfaceHost = findViewById(R.id.accessory_surface_host);
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
-        if (backdrop == null || surfaceHost == null || accessoryContainer == null
-            || keyboardContainer == null || keyboardContainer.getVisibility() == View.GONE
-            || backdrop.getDrawable() == null || backdrop.getVisibility() != View.VISIBLE) {
+        if (surfaceHost == null || accessoryContainer == null || keyboardContainer == null
+            || keyboardContainer.getVisibility() == View.GONE) {
             return false;
         }
         ViewGroup.LayoutParams containerParams = accessoryContainer.getLayoutParams();
@@ -4956,7 +4970,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Before expanded layout, both values above can still describe the old dock-only state and
         // therefore appear consistent. A unified dock+keyboard host must be taller than the
         // keyboard portion by itself.
-        if (surfaceHost.getHeight() <= state.keyboardHeight) {
+        return surfaceHost.getHeight() > state.keyboardHeight;
+    }
+
+    /** The expanded surface's blurred crop: installed, sized to the surface, and current. */
+    private boolean isUnifiedAccessoryCropInstalled(@NonNull ChromeSpec state) {
+        ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
+        View surfaceHost = findViewById(R.id.accessory_surface_host);
+        if (backdrop == null || surfaceHost == null || backdrop.getDrawable() == null
+            || backdrop.getVisibility() != View.VISIBLE) {
             return false;
         }
         int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);

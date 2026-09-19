@@ -49,6 +49,27 @@ public final class ChromePolicy {
     }
 
     /**
+     * Whether that one expanded dock+keyboard surface is the material on screen yet, so the
+     * keyboard-local coat of the same glass can come off.
+     *
+     * <p>Two things can hold it back, and only one of them always applies. The geometry does: until
+     * the shared surface has actually laid out over the keyboard as well, taking the local coat off
+     * uncovers the wallpaper. The blurred crop only applies when there is a frame to blur — with the
+     * blur at 0, or under a live wallpaper that leaves Android holding no still, the tint alone is
+     * the whole material and there is no crop to wait for.</p>
+     *
+     * <p>Waiting for one anyway is what made the keyboard read darker than the band above it: the
+     * expanded surface already paints the dock's glass under the keyboard, and the local coat
+     * painted the same translucent glass again on top. Two coats of one material is a visibly
+     * darker keyboard, and no amount of matching the two recipes could have closed it.</p>
+     */
+    public static boolean unifiedKeyboardSurfaceIsTheMaterial(boolean geometryReady,
+                                                              boolean blurEnabled,
+                                                              boolean cropReady) {
+        return geometryReady && (!blurEnabled || cropReady);
+    }
+
+    /**
      * Where the keyboard's "space under the keys" allowance lands, as a bottom margin under the
      * surface. Floating, the glass is a capsule that has to wrap the keys, so the allowance is a
      * taller gap under it and the whole surface lifts; padding there would leave an empty band of

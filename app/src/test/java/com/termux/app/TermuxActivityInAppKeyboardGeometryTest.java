@@ -198,6 +198,23 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     }
 
     @Test
+    public void unifiedKeyboardGlassWaitsForACropOnlyWhenThereIsOneToWaitFor() {
+        // With a frame to blur, both the expanded layout and its crop have to be there before the
+        // keyboard-local coat comes off, or the keyboard flashes sharp wallpaper.
+        assertTrue(ChromePolicy.unifiedKeyboardSurfaceIsTheMaterial(true, true, true));
+        assertFalse(ChromePolicy.unifiedKeyboardSurfaceIsTheMaterial(true, true, false));
+        // With no frame — blur at 0, or a live wallpaper Android holds no still for — the tint
+        // alone is the whole material, so the layout is the only thing left to wait for. Waiting
+        // for a crop that never arrives left the keyboard wearing this glass twice: once from the
+        // expanded surface under it, once from its own coat on top.
+        assertTrue(ChromePolicy.unifiedKeyboardSurfaceIsTheMaterial(true, false, false));
+        // The geometry always has to be there: nothing paints the keyboard's share of the shared
+        // surface until that surface has laid out over it.
+        assertFalse(ChromePolicy.unifiedKeyboardSurfaceIsTheMaterial(false, false, false));
+        assertFalse(ChromePolicy.unifiedKeyboardSurfaceIsTheMaterial(false, true, true));
+    }
+
+    @Test
     public void matchAllSurfacesOutranksAnEditedKeyboardBackground() {
         // An edited scheme or an opacity genuinely differing from the shared material owns the
         // keyboard surface on its own...
