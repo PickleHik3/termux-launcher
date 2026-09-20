@@ -1,11 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The body's scrollbar thumb. A thumb sitting at 40% of its track is the only thing on screen
-     that says how much more there is; the fade says only that there is some. -->
+<!-- The body's scrollbar mark. It says how far down the list the rows on screen are; it is not a
+     control and not a rule, so it is the quietest ink in the card and it fades once the finger
+     stops. The shipped accent bar, on permanently, read as a piece of the card's furniture. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:alpha="0.6">
+    <item android:alpha="0.3">
         <shape android:shape="rectangle">
-            <solid android:color="?attr/termuxColorPrimary" />
-            <corners android:radius="2dp" />
+            <solid android:color="?attr/termuxColorOnSurface" />
+            <corners android:radius="1dp" />
         </shape>
     </item>
 </layer-list>

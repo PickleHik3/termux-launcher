@@ -1345,6 +1345,10 @@
                 <string name="termux_surface_tuning_unsaved_save">Save</string>
                 <string name="termux_surface_tuning_unsaved_keep_editing">Keep editing</string>
 
+                <!-- Beside Done in either editor's header, and only while there is something to
+                     put back. -->
+                <string name="termux_editor_shell_undo">Undo</string>
+
                 <!-- The Layout editor: the miniature of one place, and the way out of it. -->
                 <string name="termux_layout_editor_title">Layout</string>
                 <!-- The chooser above the miniature. The header already names the place, so this

@@ -45,6 +45,7 @@ import com.termux.R;
 import com.termux.app.editorshell.EditorShellControlHost;
 import com.termux.app.editorshell.EditorShellHeader;
 import com.termux.app.editorshell.EditorShellMetrics;
+import com.termux.app.editorshell.EditorShellPaint;
 import com.termux.app.editorshell.EditorShellRows;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.notice.AppNotice;
@@ -377,8 +378,8 @@ public final class SurfaceEditorController {
         final ImageView glyph;
         final TextView title;
         final ImageView save;
-        final ImageView reset;
-        final ImageView done;
+        final TextView reset;
+        final TextView done;
         final ImageView close;
         final ViewGroup chooserSlot;
         final ViewGroup presets;
@@ -718,15 +719,22 @@ public final class SurfaceEditorController {
     private void bindPanel(@NonNull Panel panel) {
         // Before the first layout pass, so neither view's first frame is bare glyphs over the
         // wallpaper.
-        panel.root.setBackground(buildPanelBackground(24));
+        panel.root.setBackground(buildCardBackground());
+        EditorShellPaint.applyCardElevation(panel.root,
+            mHost.context().getResources().getDisplayMetrics().density);
         panel.floatRoot.setBackground(buildFloatBackground());
         setIcon(panel.save, R.drawable.ic_symbol_save, false);
-        setIcon(panel.reset, R.drawable.ic_symbol_restart, false);
+        // Which editor this is. The surface under it is what the card is pointed at.
+        EditorShellHeader.applyEyebrow(panel.header, R.string.action_appearance_editor);
         // Appearance uses four of the header's five slots; Close is the one Layout leaves empty.
         panel.close.setVisibility(View.VISIBLE);
         panel.save.setContentDescription(getString(R.string.termux_surface_editor_save_look));
         panel.reset.setContentDescription(getString(R.string.termux_surface_editor_revert));
-        setIcon(panel.done, R.drawable.ic_symbol_check, true);
+        EditorShellHeader.applyDoneGlyph(panel.done,
+            androidx.core.content.ContextCompat.getDrawable(
+                mHost.context(), R.drawable.ic_symbol_check),
+            mHost.themeColor(com.termux.shared.R.attr.termuxColorOnPrimary,
+                R.color.termux_on_primary));
         setIcon(panel.close, R.drawable.ic_symbol_close, false);
         setIcon(panel.floatPalette, R.drawable.ic_symbol_palette, false);
         setIcon(panel.floatDone, R.drawable.ic_symbol_check, true);
@@ -1196,8 +1204,15 @@ public final class SurfaceEditorController {
     private ScrollView buildBodyScroller(@NonNull Context context) {
         ScrollView scroller = new ScrollView(EditorShellRows.scrollerContext(context)) {
             @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                int room = Math.max(dp(80), mRowsMaxHeightPx);
                 super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
-                    Math.max(dp(80), mRowsMaxHeightPx), View.MeasureSpec.AT_MOST));
+                    room, View.MeasureSpec.AT_MOST));
+                // Now that the rows have measured, take the cut back to the last whole one.
+                int whole = EditorShellRows.wholeRowCapPx(this, room,
+                    getResources().getDisplayMetrics().density);
+                if (whole < room)
+                    super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
+                        whole, View.MeasureSpec.AT_MOST));
             }
         };
         scroller.setClipToPadding(false);
@@ -1248,41 +1263,14 @@ public final class SurfaceEditorController {
         int chromePx = headerPx + paddingPx + (pinned ? chooserPx : 0);
         int available = SurfaceEditorPillMetrics.bodyCapPx(regionPx, chromePx, standoffPx,
             dp(80), dp(360));
-        int capped = available;
-        int pitch = measuredRowPitchPx();
-        if (pitch > 0) {
-            int content = Math.max(heightOf(mRows), heightOf(mRowsTrailing));
-            capped = EditorShellMetrics.bodyCap(available, content, pitch,
-                dp(EditorShellMetrics.PEEK_DP)).capPx;
-        }
-        if (capped == mRowsMaxHeightPx)
+        // The room the rows have, and only that: where it cuts is the scroller's own business,
+        // because that is the only moment the rows' real heights are known.
+        if (available == mRowsMaxHeightPx)
             return;
-        mRowsMaxHeightPx = capped;
+        mRowsMaxHeightPx = available;
         mRowsScroller.requestLayout();
         if (mRowsScrollerTrailing != null)
             mRowsScrollerTrailing.requestLayout();
-    }
-
-    private static int heightOf(@Nullable View view) {
-        return view == null ? 0 : view.getHeight();
-    }
-
-    /**
-     * A row as it really measured, which is what the cut is quantised to. The nominal 48dp would
-     * desync the moment a font scale or a locale made the rows taller than the kit's floor.
-     */
-    private int measuredRowPitchPx() {
-        for (LinearLayout column : new LinearLayout[] {mRows, mRowsTrailing}) {
-            if (column == null)
-                continue;
-            for (int index = 0; index < column.getChildCount(); index++) {
-                int height = column.getChildAt(index).getHeight();
-                if (height >= dp(EditorShellMetrics.ROW_MIN_HEIGHT_DP))
-                    return height;
-            }
-        }
-        return mRows != null && mRows.getChildCount() > 0
-            ? dp(EditorShellMetrics.ROW_MIN_HEIGHT_DP) : 0;
     }
 
     /**
@@ -2016,6 +2004,21 @@ public final class SurfaceEditorController {
         return background;
     }
 
+    /**
+     * The card's own material, shared with the Layout editor: the scheme's surface lifted a little
+     * towards the ink on it, under a rim of that ink. See {@link EditorShellPaint}.
+     */
+    @NonNull
+    private Drawable buildCardBackground() {
+        return EditorShellPaint.cardBackground(
+            mHost.themeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
+                R.color.termux_surface_base),
+            mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+                R.color.termux_on_surface),
+            mHost.context().getResources().getDisplayMetrics().density);
+    }
+
+    /** A small card that is not the editor's own sheet — the swatches over a key cap. */
     private Drawable buildPanelBackground(int cornerDp) {
         GradientDrawable background = new GradientDrawable();
         background.setColor(mHost.themeColor(

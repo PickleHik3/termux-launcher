@@ -2,7 +2,6 @@ package com.termux.app.layouteditor;
 
 import android.content.Context;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.GradientDrawable;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -11,12 +10,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.Button;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
 import android.widget.TextView;
 
-import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
@@ -30,6 +27,7 @@ import com.termux.R;
 import com.termux.app.editorshell.EditorShellControlHost;
 import com.termux.app.editorshell.EditorShellHeader;
 import com.termux.app.editorshell.EditorShellMetrics;
+import com.termux.app.editorshell.EditorShellPaint;
 import com.termux.app.editorshell.EditorShellRows;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
@@ -114,9 +112,9 @@ public final class LayoutEditorController {
         final ViewGroup root;
         final View header;
         final TextView title;
-        final ImageView revert;
+        final TextView revert;
         final TextView discard;
-        final ImageView done;
+        final TextView done;
         final ViewGroup chooserSlot;
         final View orientationRow;
         final EditorShellControlHost orientationHost;
@@ -241,8 +239,15 @@ public final class LayoutEditorController {
 
     private void bind(@NonNull Card card) {
         card.root.setBackground(cardBackground());
-        setIcon(card.revert, R.drawable.ic_symbol_restart, false);
-        setIcon(card.done, R.drawable.ic_symbol_check, true);
+        EditorShellPaint.applyCardElevation(card.root,
+            mHost.context().getResources().getDisplayMetrics().density);
+        // Which editor this is. The place under it is what the card is pointed at.
+        EditorShellHeader.applyEyebrow(card.header, R.string.termux_layout_editor_title);
+        EditorShellHeader.applyDoneGlyph(card.done,
+            androidx.core.content.ContextCompat.getDrawable(
+                mHost.context(), R.drawable.ic_symbol_check),
+            mHost.themeColor(com.termux.shared.R.attr.termuxColorOnPrimary,
+                R.color.termux_on_primary));
         card.revert.setContentDescription(
             mHost.context().getString(R.string.termux_layout_editor_revert));
         // Layout has no way to save a look and no ✕: its ✓ is the only way out that keeps.
@@ -384,14 +389,9 @@ public final class LayoutEditorController {
         if (!pinned && !twoPanes)
             available = LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height,
                 chromePx - chooserPx, floorPx);
+        // The room the rows have, and only that. Where it cuts is the scroller's own business:
+        // it is the only place the rows' real heights are known, and this runs before they exist.
         mRowsCapPx = available;
-        if (mRows != null && mRows.getChildCount() > 0) {
-            View first = mRows.getChildAt(0);
-            int pitch = first.getHeight() > 0 ? first.getHeight()
-                : Math.round(dpToPx(EditorShellMetrics.ROW_MIN_HEIGHT_DP));
-            mRowsCapPx = EditorShellMetrics.bodyCap(available, mRows.getHeight(), pitch,
-                Math.round(dpToPx(EditorShellMetrics.PEEK_DP))).capPx;
-        }
         if (mRowsScroller != null)
             mRowsScroller.requestLayout();
         ViewGroup.LayoutParams params = card.miniature.getLayoutParams();
@@ -562,8 +562,15 @@ public final class LayoutEditorController {
         // reached its end has to hand the rest of the drag on rather than swallow it.
         NestedScrollView scroller = new NestedScrollView(EditorShellRows.scrollerContext(context)) {
             @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+                int room = Math.max(1, mRowsCapPx);
                 super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
-                    Math.max(1, mRowsCapPx), View.MeasureSpec.AT_MOST));
+                    room, View.MeasureSpec.AT_MOST));
+                // Now that the rows have measured, take the cut back to the last whole one.
+                int whole = EditorShellRows.wholeRowCapPx(this, room,
+                    getResources().getDisplayMetrics().density);
+                if (whole < room)
+                    super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
+                        whole, View.MeasureSpec.AT_MOST));
             }
         };
         scroller.setClipToPadding(false);
@@ -840,28 +847,12 @@ public final class LayoutEditorController {
 
     @NonNull
     private Drawable cardBackground() {
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(mHost.themeColor(
-            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-            R.color.termux_surface_panel_high));
-        background.setCornerRadius(dpToPx(24));
-        background.setStroke(Math.max(1, Math.round(dpToPx(1))), mHost.themeColor(
-            com.termux.shared.R.attr.termuxColorOutlineVariant,
-            R.color.termux_outline_variant));
-        return background;
-    }
-
-    private void setIcon(@NonNull ImageView view, @DrawableRes int drawableRes, boolean onAccent) {
-        Drawable icon = androidx.core.content.ContextCompat.getDrawable(
-            mHost.context(), drawableRes);
-        if (icon == null)
-            return;
-        icon = icon.mutate();
-        icon.setTint(onAccent
-            ? mHost.themeColor(com.termux.shared.R.attr.termuxColorOnAccentContainer,
-                R.color.termux_on_accent_container)
-            : mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary));
-        view.setImageDrawable(icon);
+        return EditorShellPaint.cardBackground(
+            mHost.themeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
+                R.color.termux_surface_base),
+            mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+                R.color.termux_on_surface),
+            mHost.context().getResources().getDisplayMetrics().density);
     }
 
     private float dpToPx(float dp) {

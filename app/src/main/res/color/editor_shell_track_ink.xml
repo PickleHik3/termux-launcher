@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The part of a slider's track the value has not reached. On-surface at 14%: present enough to
+     show how far the travel goes, quiet enough that the filled part is what the eye lands on. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:alpha="0.14" android:color="?attr/termuxColorOnSurface" />
+</selector>

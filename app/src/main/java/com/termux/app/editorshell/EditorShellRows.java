@@ -103,12 +103,12 @@ public final class EditorShellRows {
     }
 
     /**
-     * The three things that make a capped body legible about what is below it.
+     * The two things that make a capped body legible about what is below it.
      *
-     * <p>Quantising the cap to whole rows (EditorShellMetrics.bodyCap) is the fix for a body cut
-     * through the middle of a row's glyphs; these are what make the cut readable as a list that
-     * continues. The fade covers the peek and the top of the row behind it, and the scrollbar is
-     * the only thing on screen that says <em>how much</em> more there is, so it never fades out.
+     * <p>Cutting the body at a whole row ({@link #wholeRowCapPx}) is the fix for a body cut through
+     * the middle of a row's glyphs; these are what make the cut readable as a list that continues.
+     * The fade covers the peek and the top of the row behind it, and the mark down the edge says
+     * where in the list the rows on screen are.
      *
      * @return the context to build the scroller with, carrying the shell's scrollbar ink
      */
@@ -118,14 +118,23 @@ public final class EditorShellRows {
             context, R.style.ThemeOverlay_Termux_EditorShellScroller);
     }
 
+    /** How long the mark stays up after the finger stops, in milliseconds. */
+    public static final int SCROLLBAR_FADE_DELAY_MS = 1000;
+
     /**
-     * Turns the fade and the persistent scrollbar on for a body scroller.
+     * Turns the fade and the scrollbar on for a body scroller.
      *
-     * <p>The scrollbar's drawables have to be handed over here. A view built with the one-argument
+     * <p>The scrollbar's thumb has to be handed over here. A view built with the one-argument
      * constructor never reads the scrollbar attributes off its theme — only the inflating
-     * constructors do — so turning the scrollbar on without them leaves the platform with nothing
-     * to draw, and it throws the moment a body is long enough to show one. The themed context
-     * still carries the size; only the drawables need setting, and only from the release that can.
+     * constructors do — so turning the scrollbar on without a thumb leaves the platform with
+     * nothing to draw, and it throws the moment a body is long enough to show one. The themed
+     * context still carries the size; only the thumb needs setting, and only from the release that
+     * can.
+     *
+     * <p>It fades, and it has no track. A 3dp accent bar standing there permanently against a rule
+     * of its own read as a piece of the card's furniture rather than as a position in a list; a
+     * quiet mark that appears while the list is moving and goes a second after it stops says the
+     * same thing and then stops saying it.
      */
     public static void applyBodyScroller(@NonNull View scroller) {
         float density = scroller.getResources().getDisplayMetrics().density;
@@ -136,15 +145,53 @@ public final class EditorShellRows {
                 scroller.getContext(), R.drawable.editor_shell_scrollbar_thumb);
             if (thumb != null) {
                 scroller.setVerticalScrollbarThumbDrawable(thumb);
-                scroller.setVerticalScrollbarTrackDrawable(ContextCompat.getDrawable(
-                    scroller.getContext(), R.drawable.editor_shell_scrollbar_track));
+                scroller.setVerticalScrollbarTrackDrawable(null);
                 scroller.setVerticalScrollBarEnabled(true);
-                scroller.setScrollbarFadingEnabled(false);
+                scroller.setScrollbarFadingEnabled(true);
+                scroller.setScrollBarDefaultDelayBeforeFade(SCROLLBAR_FADE_DELAY_MS);
             }
         }
         int inset = EditorShellMetrics.px(2, density);
         scroller.setPadding(scroller.getPaddingLeft(), scroller.getPaddingTop(), inset,
             scroller.getPaddingBottom());
+    }
+
+    /**
+     * The height a body scroller may actually take, ending on a whole row.
+     *
+     * <p>Called from the scroller's own {@code onMeasure}, after one pass at {@code availablePx},
+     * and the answer re-measured at. That is the only moment the rows' real heights are known: the
+     * cap used to be worked out while the card was being restated, from heights left over from the
+     * <em>last</em> layout — and on the first open there was no last layout, so no cut was taken at
+     * all and the body ended wherever the arithmetic landed, which was through the middle of a row.
+     *
+     * @param scroller the body scroller, whose one child is the column of rows
+     */
+    public static int wholeRowCapPx(@NonNull ViewGroup scroller, int availablePx, float density) {
+        if (scroller.getChildCount() == 0)
+            return availablePx;
+        View child = scroller.getChildAt(0);
+        if (!(child instanceof ViewGroup))
+            return availablePx;
+        ViewGroup column = (ViewGroup) child;
+        int count = column.getChildCount();
+        if (count == 0)
+            return availablePx;
+        int[] heights = new int[count];
+        for (int index = 0; index < count; index++) {
+            View row = column.getChildAt(index);
+            if (row.getVisibility() == View.GONE)
+                continue;
+            int height = row.getMeasuredHeight();
+            ViewGroup.LayoutParams params = row.getLayoutParams();
+            if (params instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
+                height += margins.topMargin + margins.bottomMargin;
+            }
+            heights[index] = height;
+        }
+        return EditorShellMetrics.bodyCap(availablePx, heights,
+            EditorShellMetrics.px(EditorShellMetrics.PEEK_DP, density)).capPx;
     }
 
     /** Grows a small view's touch target inside its parent, up to the row's own height. */

@@ -10,9 +10,10 @@
     android:layout_height="wrap_content"
     android:layout_marginTop="12dp"
     android:layout_marginBottom="4dp"
+    android:fontFamily="sans-serif-medium"
     android:gravity="center_vertical"
-    android:letterSpacing="0.06"
+    android:letterSpacing="0.08"
     android:minHeight="24dp"
     android:textColor="?attr/termuxColorOnSurfaceVariant"
-    android:textSize="11sp"
-    android:textStyle="bold" />
+    android:textAllCaps="true"
+    android:textSize="12sp" />
