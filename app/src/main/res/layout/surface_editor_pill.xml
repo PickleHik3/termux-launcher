@@ -70,9 +70,7 @@
             android:baselineAligned="false"
             android:gravity="center_vertical"
             android:minHeight="48dp"
-            android:orientation="horizontal"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
+            android:orientation="horizontal">
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/editor_shell_row_label"
@@ -83,8 +81,8 @@
                 android:maxLines="1"
                 android:text="@string/termux_surface_editor_shape"
                 android:textColor="?attr/termuxColorOnSurface"
-                android:textSize="12.5sp"
-                app:autoSizeMaxTextSize="12.5sp"
+                android:textSize="14sp"
+                app:autoSizeMaxTextSize="14sp"
                 app:autoSizeMinTextSize="10sp"
                 app:autoSizeStepGranularity="0.5sp"
                 app:autoSizeTextType="uniform" />
@@ -122,9 +120,7 @@
             android:baselineAligned="false"
             android:gravity="center_vertical"
             android:minHeight="48dp"
-            android:orientation="horizontal"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp">
+            android:orientation="horizontal">
 
             <androidx.appcompat.widget.AppCompatTextView
                 android:id="@+id/editor_shell_row_label"
@@ -135,8 +131,8 @@
                 android:maxLines="1"
                 android:text="@string/termux_surface_editor_material"
                 android:textColor="?attr/termuxColorOnSurface"
-                android:textSize="12.5sp"
-                app:autoSizeMaxTextSize="12.5sp"
+                android:textSize="14sp"
+                app:autoSizeMaxTextSize="14sp"
                 app:autoSizeMinTextSize="10sp"
                 app:autoSizeStepGranularity="0.5sp"
                 app:autoSizeTextType="uniform" />

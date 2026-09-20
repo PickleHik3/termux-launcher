@@ -254,7 +254,7 @@ public class EditorShellMetricsTest {
     }
 
     @Test
-    public void theChooserUnpinsOnlyWhereSixtyDpOfChromeWouldCostRows() {
+    public void theChooserUnpinsOnlyWhereItsChromeWouldCostRows() {
         assertTrue(EditorShellMetrics.chooserPinned(
             EditorShellMetrics.px(200, WIDE_DENSITY), WIDE_DENSITY));
         assertFalse(EditorShellMetrics.chooserPinned(
@@ -313,6 +313,128 @@ public class EditorShellMetricsTest {
             .wholeRows);
         assertEquals(2, EditorShellMetrics.bodyCap(available, 10 * measured, measured, peek)
             .wholeRows);
+    }
+
+    // ------------------------------------------------ the cut, taken from the rows themselves
+
+    /** pong: 1080x2412 at 420dpi. */
+    private static final float PONG_DENSITY = 2.625f;
+    private static final int PONG_HEIGHT_PX = 2412;
+
+    /**
+     * The room the Layout editor's rows have on pong, in portrait, on the Terminal place, worked
+     * out the way {@code LayoutEditorController.applyCanvasHeight} works it out.
+     */
+    private static int pongRowsRoomPx() {
+        int header = EditorShellMetrics.headerHeightPx(PONG_HEIGHT_PX, PONG_DENSITY);
+        int chooser = EditorShellMetrics.px(EditorShellMetrics.CHOOSER_DP, PONG_DENSITY);
+        // The card's own bottom padding, the sheet's handle, and the gaps around the canvas. No
+        // notice lines: the Terminal place in portrait has nothing to say about its arrangement.
+        int padding = EditorShellMetrics.px(10, PONG_DENSITY);
+        int handleAndGaps = EditorShellMetrics.px(18 + 10, PONG_DENSITY);
+        int chrome = header + chooser + padding + handleAndGaps;
+        // The portrait frame at 42% of the screen, plus the hide tray's 48dp under it.
+        int miniature = Math.round(0.42f * PONG_HEIGHT_PX)
+            + EditorShellMetrics.px(48, PONG_DENSITY);
+        int floor = EditorShellMetrics.px(96, PONG_DENSITY);
+        // The sheet stands in four fifths of the screen; the fifth above it is the live place.
+        int budget = Math.round(0.80f * PONG_HEIGHT_PX);
+        return Math.max(floor, budget - miniature - chrome);
+    }
+
+    /**
+     * The rows standing under the miniature on pong: the "Keyboard" heading, a pick row — which is
+     * the segment's own 48dp slot and no more — and two number rows, each the 48dp floor inside the
+     * row's 6dp of air. Three shapes, which is the whole reason one pitch cannot describe them.
+     */
+    private static int[] pongRowsPx() {
+        int heading = EditorShellMetrics.px(EditorShellMetrics.SECTION_MIN_HEIGHT_DP, PONG_DENSITY)
+            + EditorShellMetrics.px(EditorShellMetrics.SECTION_BOTTOM_MARGIN_DP, PONG_DENSITY);
+        int pick = EditorShellMetrics.px(EditorShellMetrics.SEGMENT_HEIGHT_DP, PONG_DENSITY);
+        int number = EditorShellMetrics.px(EditorShellMetrics.ROW_MIN_HEIGHT_DP, PONG_DENSITY)
+            + (2 * EditorShellMetrics.px(EditorShellMetrics.ROW_VERTICAL_PADDING_DP, PONG_DENSITY));
+        return new int[] {heading, pick, number, number};
+    }
+
+    @Test
+    public void theRoomPongLeavesTheRowsCutsThroughARow() {
+        // The reproduction: the room the card has is not a whole number of anything the body is
+        // made of, so a body simply given that room ends inside a row's glyphs.
+        int room = pongRowsRoomPx();
+        int[] rows = pongRowsPx();
+        int bottom = 0;
+        boolean landsOnARow = false;
+        for (int height : rows) {
+            int top = bottom;
+            bottom += height;
+            if (room > top && room < bottom)
+                landsOnARow = true;
+        }
+        assertTrue("pong's room should fall inside a row, or this is not the bug", landsOnARow);
+    }
+
+    @Test
+    public void theCutTakenFromTheRowsThemselvesLandsAPeekPastAWholeRow() {
+        int room = pongRowsRoomPx();
+        int[] rows = pongRowsPx();
+        int peek = EditorShellMetrics.px(EditorShellMetrics.PEEK_DP, PONG_DENSITY);
+        BodyCap cap = EditorShellMetrics.bodyCap(room, rows, peek);
+        assertTrue(cap.overflows);
+        assertTrue("the cut never takes more than the room there is", cap.capPx <= room);
+        int bottom = 0;
+        for (int index = 0; index < cap.wholeRows; index++)
+            bottom += rows[index];
+        assertEquals("the cut lands a peek past the last whole row", bottom + peek, cap.capPx);
+        assertEquals("the heading and two rows, with a sliver of the last", 3, cap.wholeRows);
+    }
+
+    @Test
+    public void everyRoomCutsAtARowBoundaryWhateverTheRowsAreMadeOf() {
+        // Mixed heights are the point: a heading is half a row, a row with a note under it is
+        // taller than one without, and one pitch cannot describe any of that.
+        int[] rows = {74, 158, 126, 126, 190, 126};
+        int peek = 42;
+        for (int room = 1; room <= 1200; room++) {
+            BodyCap cap = EditorShellMetrics.bodyCap(room, rows, peek);
+            assertTrue(cap.capPx <= room);
+            if (!cap.overflows || cap.wholeRows == 0)
+                continue;
+            int bottom = 0;
+            for (int index = 0; index < cap.wholeRows; index++)
+                bottom += rows[index];
+            assertEquals("room " + room, bottom + peek, cap.capPx);
+        }
+    }
+
+    @Test
+    public void aBodyThatFitsIsNotCutAtAll() {
+        int[] rows = {74, 158, 126};
+        BodyCap cap = EditorShellMetrics.bodyCap(1000, rows, 42);
+        assertFalse(cap.overflows);
+        assertEquals(1000, cap.capPx);
+        assertEquals(3, cap.wholeRows);
+    }
+
+    @Test
+    public void aRoomTooShortForTheFirstRowStillReportsTheRoomItHas() {
+        int[] rows = {158, 158};
+        BodyCap cap = EditorShellMetrics.bodyCap(100, rows, 42);
+        assertTrue(cap.overflows);
+        assertEquals(100, cap.capPx);
+        assertEquals(0, cap.wholeRows);
+    }
+
+    // ------------------------------------------------------------------------- the segment slot
+
+    @Test
+    public void aSegmentIsPaintedShortOfTheSlotItIsTappedIn() {
+        assertEquals("the slot is the platform's touch floor",
+            EditorShellMetrics.ROW_MIN_HEIGHT_DP, EditorShellMetrics.SEGMENT_HEIGHT_DP);
+        assertEquals(36, EditorShellMetrics.SEGMENT_VISUAL_HEIGHT_DP);
+        assertEquals("the air above and below is what keeps the target at the floor", 6,
+            EditorShellMetrics.SEGMENT_INSET_DP);
+        assertEquals(EditorShellMetrics.SEGMENT_HEIGHT_DP,
+            EditorShellMetrics.SEGMENT_VISUAL_HEIGHT_DP + (2 * EditorShellMetrics.SEGMENT_INSET_DP));
     }
 
     @Test

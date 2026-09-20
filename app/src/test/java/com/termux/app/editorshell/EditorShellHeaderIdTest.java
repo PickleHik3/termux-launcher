@@ -37,6 +37,7 @@ public class EditorShellHeaderIdTest {
         assertNotNull("header", root.findViewById(R.id.editor_shell_header));
         assertNotNull("glyph", root.findViewById(R.id.editor_shell_header_glyph));
         assertNotNull("title", root.findViewById(R.id.editor_shell_header_title));
+        assertNotNull("eyebrow", root.findViewById(R.id.editor_shell_header_eyebrow));
         assertNotNull("save", root.findViewById(R.id.editor_shell_header_save));
         assertNotNull("revert", root.findViewById(R.id.editor_shell_header_revert));
         assertNotNull("done", root.findViewById(R.id.editor_shell_header_done));
@@ -50,6 +51,7 @@ public class EditorShellHeaderIdTest {
         View root = inflate(R.layout.layout_editor);
         assertNotNull("header", root.findViewById(R.id.editor_shell_header));
         assertNotNull("title", root.findViewById(R.id.editor_shell_header_title));
+        assertNotNull("eyebrow", root.findViewById(R.id.editor_shell_header_eyebrow));
         assertNotNull("revert", root.findViewById(R.id.editor_shell_header_revert));
         assertNotNull("discard", root.findViewById(R.id.editor_shell_header_discard));
         assertNotNull("done", root.findViewById(R.id.editor_shell_header_done));

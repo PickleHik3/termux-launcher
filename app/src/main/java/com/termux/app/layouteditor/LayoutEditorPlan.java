@@ -39,7 +39,18 @@ import java.util.List;
 public final class LayoutEditorPlan {
 
     /** How much of the screen's height the portrait miniature's phone frame stands in. */
-    public static final float PORTRAIT_FRAME_SCREEN_FRACTION = 0.55f;
+    public static final float PORTRAIT_FRAME_SCREEN_FRACTION = 0.42f;
+
+    /**
+     * How much of a portrait screen the card may stand in. The editor is a sheet from the bottom
+     * edge rather than a panel over the whole screen: what is left above it is the live place it
+     * is a picture of, still showing its status strip and its chip row, so a drop can be seen
+     * landing on the real thing rather than only on the miniature.
+     *
+     * <p>A landscape screen has no height to give away — its card is already the short edge — so
+     * the rule is the portrait screen's alone, and {@link #cardBudgetPx} says which it is.
+     */
+    public static final float PORTRAIT_CARD_SCREEN_FRACTION = 0.80f;
 
     /**
      * The headings the rows stand under, in the order they stand in, and whether that element's
@@ -270,14 +281,16 @@ public final class LayoutEditorPlan {
 
     /**
      * How tall the miniature has to be for its phone frame to stand at the size this orientation
-     * asks for: about {@value #PORTRAIT_FRAME_SCREEN_FRACTION} of the screen's height in portrait,
+     * asks for: {@value #PORTRAIT_FRAME_SCREEN_FRACTION} of the screen's height in portrait,
      * and the full width of the screen in landscape, where a frame sized from the height would be
      * a sliver.
      *
-     * <p>The landscape frame is then bounded by what the screen has left. A landscape phone is
-     * about as wide as the screen is tall, so a frame sized from the width alone asks for the
+     * <p>Either frame is then bounded by what the card has left of its budget: a landscape phone
+     * is about as wide as the screen is tall, so a frame sized from the width alone asks for the
      * whole screen and pushes everything under the canvas off the bottom of the card. The portrait
-     * frame is a fraction of the height and never reaches that, so it is left alone.
+     * frame is a fraction of the height and only reaches that bound at a large font scale, where
+     * the chrome around it has grown — and there the sheet keeps its shape and the picture gives
+     * way, rather than the sheet growing over the place behind it.
      *
      * @param frameAspect the frame's width over its height, for the orientation asked about
      * @param reservedPx  the room the miniature keeps under the frame for the hide tray
@@ -287,11 +300,26 @@ public final class LayoutEditorPlan {
     public static int miniatureHeightPx(@NonNull PlaceOrientation orientation, int screenWidthPx,
                                         int screenHeightPx, float frameAspect, int reservedPx,
                                         int roomBelowPx) {
-        if (orientation != PlaceOrientation.LANDSCAPE)
-            return Math.round(PORTRAIT_FRAME_SCREEN_FRACTION * screenHeightPx) + reservedPx;
-        float frameHeight = screenWidthPx / Math.max(frameAspect, 0.01f);
-        int roomForFrame = Math.max(0, screenHeightPx - roomBelowPx - reservedPx);
+        float frameHeight = orientation == PlaceOrientation.LANDSCAPE
+            ? screenWidthPx / Math.max(frameAspect, 0.01f)
+            : PORTRAIT_FRAME_SCREEN_FRACTION * screenHeightPx;
+        int roomForFrame = Math.max(0,
+            cardBudgetPx(screenWidthPx, screenHeightPx) - roomBelowPx - reservedPx);
         return Math.round(Math.min(frameHeight, roomForFrame)) + reservedPx;
+    }
+
+    /**
+     * How much height the card may take: the whole screen where the screen is already short, and
+     * {@value #PORTRAIT_CARD_SCREEN_FRACTION} of it on a portrait screen, where the rest is the
+     * live place above the sheet.
+     *
+     * <p>The screen's own shape decides it, not the orientation on the toggle: flipping the
+     * miniature to the other orientation changes the picture, and the card it stands in is still
+     * the one this screen has room for.
+     */
+    public static int cardBudgetPx(int screenWidthPx, int screenHeightPx) {
+        return screenWidthPx >= screenHeightPx ? screenHeightPx
+            : Math.round(PORTRAIT_CARD_SCREEN_FRACTION * screenHeightPx);
     }
 
     /**
