@@ -1371,9 +1371,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
             View contentView = findViewById(android.R.id.content);
             contentView.post(() -> {
-                // A run a process death interrupted picks back up on its own card, no permission
-                // chain involved — that already ran the first time this run started. Skipped for
-                // a forced replay, which always restarts from card one instead.
+                // A run a process death interrupted picks back up on its own card, no setup
+                // involved — that already ran the first time this run started. Skipped for a
+                // forced replay, which always restarts from card one instead.
                 FirstBootTour tour = firstBootTour();
                 if (!forceOnboarding && tour != null && tour.resumeIfInProgress()) return;
                 // Otherwise this is either the first launch ever or Settings asking for the tour
@@ -1390,7 +1390,43 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 });
                 startFirstRunPermissionChain(forceOnboarding);
             });
+        } else {
+            resumeFirstRunSetupAfterRestart();
         }
+    }
+
+    /**
+     * The setup, picked back up by an activity rebuilt from a saved state.
+     *
+     * <p>Everything above is a cold-start matter, so it is gated on there being no saved state at
+     * all — but the process can die while the setup card is up, and the card is the very first
+     * thing a fresh install shows. Without this the activity that comes back has no card, nobody
+     * listening for the setup to close and therefore no tour, with both stored flags still false:
+     * the user is stranded short of a true cold relaunch. A rotation does not come through here —
+     * this activity keeps itself across one — so this really is a restart after a death.
+     */
+    private void resumeFirstRunSetupAfterRestart() {
+        View contentView = findViewById(android.R.id.content);
+        if (contentView == null) return;
+        contentView.post(() -> {
+            if (isFinishing() || isDestroyed() || mPreferences == null) return;
+            // A run that was already going picks back up on its own card, exactly as on a cold
+            // start; the setup behind it has closed long before.
+            FirstBootTour tour = firstBootTour();
+            if (tour != null && tour.resumeIfInProgress()) return;
+            if (!com.termux.app.firstrun.FirstRunPermissionsCard.shouldResume(
+                    mPreferences.isFirstRunChainDone(),
+                    mPreferences.isFirstRunPermissionsCardSeen(),
+                    firstRunWallpaperState(), firstRunWeatherState(),
+                    mFirstRunPermissionsCard != null)) {
+                return;
+            }
+            setFirstRunChainFinishedListener(() -> {
+                FirstBootTour t = firstBootTour();
+                if (t != null) t.startIfNeeded();
+            });
+            startFirstRunPermissionChain(false);
+        });
     }
 
     /**
@@ -1412,6 +1448,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void startFirstRunPermissionChain(boolean replay) {
         if (isFinishing() || isDestroyed()) return;
+        // Never a second card over the one already up, whichever path asked for it.
+        if (mFirstRunPermissionsCard != null) return;
         mFirstRunChainFinishedNotified = false;
         if (mPreferences == null) {
             finishFirstRunChain();

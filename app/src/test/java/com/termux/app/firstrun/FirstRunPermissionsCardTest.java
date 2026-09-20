@@ -30,6 +30,9 @@ public class FirstRunPermissionsCardTest {
     /** Settings asking for the tour again, rather than a launch asking nothing of the user. */
     private static final boolean REPLAY = true;
     private static final boolean OPENED = false;
+    /** Whether the card is already on the screen when a restart asks whether to raise one. */
+    private static final boolean CARD_UP = true;
+    private static final boolean NO_CARD = false;
 
     @Test
     public void aFreshInstallAlwaysOpensOnTheCard() {
@@ -91,6 +94,38 @@ public class FirstRunPermissionsCardTest {
         }
         assertFalse(FirstRunPermissionsCard.shouldShow(FRESH, UNSEEN, State.DENIED, null,
             REPLAY));
+    }
+
+    @Test
+    public void aRestartWithTheSetupUnansweredRaisesTheCardAgain() {
+        // The process can die with the card up — it is the very first thing a fresh install shows
+        // — and the activity that comes back has to raise it again, or nothing ever starts the
+        // tour and both stored flags stay false.
+        for (State wallpaper : State.values())
+            for (State weather : State.values())
+                assertTrue(wallpaper + "/" + weather, FirstRunPermissionsCard
+                    .shouldResume(FRESH, UNSEEN, wallpaper, weather, NO_CARD));
+        // And on an update, on the same terms the cold start uses.
+        assertTrue(FirstRunPermissionsCard.shouldResume(UPDATER, UNSEEN, State.DENIED,
+            State.GRANTED, NO_CARD));
+    }
+
+    @Test
+    public void aRestartRaisesNothingOverACardAlreadyUp() {
+        assertFalse(FirstRunPermissionsCard.shouldResume(FRESH, UNSEEN, State.NOT_ASKED,
+            State.NOT_ASKED, CARD_UP));
+        assertFalse(FirstRunPermissionsCard.shouldResume(UPDATER, UNSEEN, State.DENIED,
+            State.DENIED, CARD_UP));
+    }
+
+    @Test
+    public void aRestartWithTheSetupAlreadyAnsweredRaisesNothing() {
+        assertFalse(FirstRunPermissionsCard.shouldResume(UPDATER, SEEN, State.DENIED,
+            State.DENIED, NO_CARD));
+        assertFalse(FirstRunPermissionsCard.shouldResume(UPDATER, UNSEEN, State.GRANTED,
+            State.GRANTED, NO_CARD));
+        assertFalse(FirstRunPermissionsCard.shouldResume(UPDATER, UNSEEN, State.GRANTED, null,
+            NO_CARD));
     }
 
     @Test

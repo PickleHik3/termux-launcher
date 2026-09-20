@@ -140,6 +140,30 @@ public final class FirstRunPermissionsCard {
     }
 
     /**
+     * Whether an activity rebuilt from a saved state has to raise the setup itself.
+     *
+     * <p>The setup is kicked off on a cold start only, because everything it does is a
+     * first-launch matter. But the process can die while the card is up — the card is the very
+     * first thing a fresh install shows, and a fresh install is the moment the system is least
+     * likely to leave a background process alone — and the activity that comes back would have no
+     * card, no one listening for the setup to close and therefore no tour, with both stored flags
+     * still false and nothing short of a true cold relaunch to get any of it back. So a restart
+     * asks the same question a cold start does.
+     *
+     * <p>A replay never enters here: Settings' request rides an intent extra, which the launch
+     * that carried it has already consumed.
+     *
+     * @param cardShowing whether the card is up already, which a restart must never raise a
+     *                    second one over
+     */
+    public static boolean shouldResume(boolean firstRunChainDone, boolean cardSeen,
+                                       @NonNull State wallpaper, @Nullable State weather,
+                                       boolean cardShowing) {
+        if (cardShowing) return false;
+        return shouldShow(firstRunChainDone, cardSeen, wallpaper, weather, false);
+    }
+
+    /**
      * The card's rows, in order. A row is left out rather than shown dead: there is no weather row
      * on an install with the weather widget switched off, and no display row in a build with no
      * display server in it.
