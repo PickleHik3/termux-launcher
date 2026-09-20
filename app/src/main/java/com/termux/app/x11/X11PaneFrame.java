@@ -825,15 +825,14 @@ public final class X11PaneFrame extends PaneContentFrame {
         // it should the moment the display stops, without a pass of its own to run then.
         PaneGlass.apply(style, this, mGlass, radiusPx);
         // The tab is part of the page's own outline, exactly as the Widgets page's is: flush in the
-        // corner inside the rim's line, filled with the page's own tint. It stays inside that line
+        // corner inside the rim's line, in the tab's own fixed material. It stays inside that line
         // rather than against the bounding box, where the page's own corner mask would paint the
         // wall over its outer corner and it would read as hanging out past the rounded edge.
         if (mControls != null) {
             mControls.setPaneBorder(radiusPx, glass
                 ? com.termux.app.GlassRimRenderer.strokePx(
                     getResources().getDisplayMetrics().density) : 0f);
-            mControls.setPaneFill(glass && style != null ? style.paneGlassTintColor() : 0);
-            PaneGlass.dressTab(glass ? style : null, mControls);
+            PaneGlass.dressTab(style, mControls);
         }
         // The frame must not clip to its shape here: the mask's arcs lie exactly outside the
         // rounded outline, so a clipping frame cut away the very paint that rounds the surface,

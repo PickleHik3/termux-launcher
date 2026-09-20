@@ -3249,7 +3249,6 @@ public class TerminalPaneController {
                 frame.bounds.set(pane);
                 frame.radiusPx = controlCornerRadiusPx();
                 frame.borderPx = controlBorderStrokePx();
-                frame.fillColor = controlFillColor();
                 return true;
             });
             applyControlActions();
@@ -3936,10 +3935,6 @@ public class TerminalPaneController {
          * and the tab keeps the theme's panel colour, which is what holds the buttons off the
          * terminal underneath.
          */
-        private int controlFillColor() {
-            return paneGlassActive() && mSurfaceStyle != null
-                ? mSurfaceStyle.paneGlassTintColor() : 0;
-        }
 
         @Override
         protected void onDraw(Canvas canvas) {
