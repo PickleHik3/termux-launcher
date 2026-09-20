@@ -87,8 +87,12 @@ public final class EditorShellRows {
         View inner = innerRow(row);
         if (inner != null) {
             inner.setMinimumHeight(metrics.minHeightPx);
-            inner.setPadding(inner.getPaddingLeft(), metrics.verticalPaddingPx,
-                inner.getPaddingRight(), metrics.verticalPaddingPx);
+            // A segment row needs no air of its own: each segment is painted short of the slot it
+            // is tapped in, and that inset is the same air. Adding the row's on top of it made a
+            // pick row taller than the number row beside it for no reason the eye could name.
+            int air = row.findViewById(R.id.editor_shell_row_pills) == null
+                ? metrics.verticalPaddingPx : 0;
+            inner.setPadding(inner.getPaddingLeft(), air, inner.getPaddingRight(), air);
         }
     }
 

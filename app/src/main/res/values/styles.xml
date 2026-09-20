@@ -72,8 +72,6 @@
     <style name="Widget.Termux.EditorShell.Slider" parent="">
         <item name="android:progressDrawable">@drawable/editor_shell_slider_track</item>
         <item name="android:thumb">@drawable/editor_shell_slider_thumb</item>
-        <!-- The knob sits on the ends of the track rather than hanging off them. -->
-        <item name="android:thumbOffset">0dp</item>
         <!-- The track is the drawable's own 4dp; this is the height the row gives the control. -->
         <item name="android:minHeight">32dp</item>
         <item name="android:maxHeight">32dp</item>
