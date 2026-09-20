@@ -11962,6 +11962,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onDrawerOpenSettled(boolean open, boolean userDriven) {
+            // A setup command run in the terminal never leaves this activity, so onResume's
+            // re-read does not fire; the drawer opening is the moment the new apps are wanted.
+            // Cheap when nothing changed: a signature compare, no listing.
+            if (open) refreshLinuxApps(false);
             if (mFirstBootTour == null) return;
             mFirstBootTour.onDrawerOpenSettled(open, userDriven);
             mFirstBootTour.onChromeChanged();
