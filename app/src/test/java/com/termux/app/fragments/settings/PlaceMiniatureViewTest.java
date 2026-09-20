@@ -2,6 +2,7 @@ package com.termux.app.fragments.settings;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -9,6 +10,7 @@ import static org.junit.Assert.assertTrue;
 import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Color;
 import android.graphics.RectF;
 import android.os.Build;
 import android.view.MotionEvent;
@@ -16,7 +18,10 @@ import android.view.View;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.ColorUtils;
 
+import com.termux.R;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -816,5 +821,99 @@ public class PlaceMiniatureViewTest {
         assertTrue("a hidden bar is named as hidden", description.contains("Hidden"));
         assertTrue(description, description.contains("Extra keys"));
         assertTrue(description, description.contains("A–Z index"));
+    }
+
+    // ---- The paint: the miniature shows what the screen shows -----------------------------------
+
+    @Test
+    public void everyStripIsTheScreensOwnGlassAndNotARoleColour() {
+        Context app = RuntimeEnvironment.getApplication();
+        int surface = ContextCompat.getColor(app, R.color.termux_surface_base);
+        int[] roles = {R.color.termux_primary, R.color.termux_secondary,
+            R.color.termux_accent_container, R.color.termux_tertiary_container};
+        for (PlaceMiniatureView.Block bar : new PlaceMiniatureView.Block[]{
+            PlaceMiniatureView.Block.STATUS_BAR, PlaceMiniatureView.Block.APPS_ROW,
+            PlaceMiniatureView.Block.ALPHABETS_ROW, PlaceMiniatureView.Block.EXTRA_KEYS}) {
+            int fill = PlaceMiniatureView.blockColor(app, bar);
+            assertEquals(bar + " is the surface, not a colour of its own",
+                surface & 0xFFFFFF, fill & 0xFFFFFF);
+            assertTrue(bar + " reads as glass over the screen",
+                Color.alpha(fill) < 255 && Color.alpha(fill) > 180);
+            for (int role : roles) {
+                assertNotEquals(bar + " does not wear a role colour",
+                    ContextCompat.getColor(app, role) & 0xFFFFFF, fill & 0xFFFFFF);
+            }
+        }
+        assertEquals("the canvas is the surface itself",
+            surface, PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.CANVAS));
+    }
+
+    @Test
+    public void everyStripCarriesTheSameGlass() {
+        Context app = RuntimeEnvironment.getApplication();
+        int status = PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.STATUS_BAR);
+        assertEquals(status, PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.APPS_ROW));
+        assertEquals(status,
+            PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.ALPHABETS_ROW));
+        assertEquals(status,
+            PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.EXTRA_KEYS));
+        assertEquals("and it is the surface laid over the canvas",
+            ColorUtils.setAlphaComponent(
+                ContextCompat.getColor(app, R.color.termux_surface_base), Color.alpha(status)),
+            status);
+    }
+
+    @Test
+    public void thePhoneHasAPhonesCornerAndAHairlineEdge() {
+        PlaceMiniatureView view = sized();
+        float density = view.getResources().getDisplayMetrics().density;
+        assertEquals("the corner is a phone's, not a diagram's",
+            18f * density, view.frameRadiusPx(), 0.01f);
+        assertEquals("the edge is a hairline", 1f * density, view.frameStrokePx(), 0.01f);
+    }
+
+    @Test
+    public void theShelfIsUnderThePhoneBeforeAnythingIsPutAway() {
+        PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        assertEquals("nothing is hidden, but the shelf is still drawn",
+            PlaceMiniatureView.TrayState.EMPTY, view.trayState());
+        assertFalse("and it has room of its own", view.trayRect().isEmpty());
+
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        assertEquals("a put-away bar fills it with chips",
+            PlaceMiniatureView.TrayState.CHIPS, view.trayState());
+    }
+
+    @Test
+    public void theShelfOffersItselfWhileABarIsInTheAir() {
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        assertEquals("the lifted bar may be dropped on the shelf",
+            PlaceMiniatureView.TrayState.OFFERING, view.trayState());
+
+        touch(view, MotionEvent.ACTION_UP, grip.centerX(), grip.centerY());
+        assertEquals("and the shelf goes back to resting",
+            PlaceMiniatureView.TrayState.EMPTY, view.trayState());
+    }
+
+    @Test
+    public void theStatusBarInTheAirIsNotOfferedTheShelf() {
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.STATUS_BAR);
+        assertNotNull(grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        assertNull("the one bar that never hides sees no shelf", view.trayState());
     }
 }

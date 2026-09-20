@@ -12,17 +12,21 @@
 
      The card is a scroller: it stands as tall as its column wants and no taller than the screen
      leaves it, so a short screen at a large font scale still reaches the rows and the way out. The
-     rows keep a scroller of their own inside it, capped to the room the canvas leaves. -->
+     rows keep a scroller of their own inside it, capped to the room the canvas leaves.
+
+     In portrait it is a sheet rather than a panel: it comes up from the bottom edge and stops
+     about a fifth of the screen down, so the place it is editing keeps its status strip and its
+     chip row in view above it. The handle at the top says which way it came from. -->
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/layout_editor_card"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_gravity="bottom"
-    android:layout_marginStart="10dp"
-    android:layout_marginEnd="10dp"
+    android:layout_marginStart="12dp"
+    android:layout_marginEnd="12dp"
     android:layout_marginBottom="12dp"
-    android:elevation="6dp"
+    android:elevation="12dp"
     android:scrollbars="none">
 
     <LinearLayout
@@ -34,6 +38,18 @@
         android:paddingTop="0dp"
         android:paddingEnd="16dp"
         android:paddingBottom="10dp">
+
+        <!-- The sheet's handle: the one mark that says the card came up from the bottom edge and
+             goes back down there. Decorative — nothing is dragged by it — so it is not announced.
+             LayoutEditorController paints it from the theme's on-surface colour. -->
+        <View
+            android:id="@+id/layout_editor_sheet_handle"
+            android:layout_width="32dp"
+            android:layout_height="4dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="6dp"
+            android:importantForAccessibility="no" />
 
         <include
                 layout="@layout/editor_shell_header" />
@@ -53,30 +69,17 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:baselineAligned="false"
-                android:gravity="center_vertical"
-                android:minHeight="60dp"
+                android:gravity="center"
+                android:minHeight="44dp"
                 android:orientation="horizontal">
 
-                <androidx.appcompat.widget.AppCompatTextView
-                    android:id="@+id/editor_shell_row_label"
-                    android:layout_width="96dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginEnd="12dp"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:text="@string/termux_layout_editor_orientation"
-                    android:textColor="?attr/termuxColorOnSurface"
-                    android:textSize="12.5sp"
-                    app:autoSizeMaxTextSize="12.5sp"
-                    app:autoSizeMinTextSize="10sp"
-                    app:autoSizeStepGranularity="0.5sp"
-                    app:autoSizeTextType="uniform" />
-
+                <!-- No label: two segments that each say a phone and a word are the question as
+                     well as the answer. The host is given its width in code, from the shell's
+                     own segment metric, so the pill stays the size of its words on any card. -->
                 <com.termux.app.editorshell.EditorShellControlHost
                     android:id="@+id/layout_editor_orientation_host"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1">
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content">
 
                     <com.google.android.material.button.MaterialButtonToggleGroup
                         android:id="@+id/layout_editor_orientation"
@@ -88,12 +91,20 @@
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/layout_editor_orientation_portrait"
                             style="@style/Widget.Termux.EditorShell.Segment"
-                            android:text="@string/settings_layout_orientation_portrait" />
+                            android:text="@string/settings_layout_orientation_portrait"
+                            app:icon="@drawable/ic_symbol_phone_portrait"
+                            app:iconGravity="textStart"
+                            app:iconPadding="4dp"
+                            app:iconSize="16dp" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/layout_editor_orientation_landscape"
                             style="@style/Widget.Termux.EditorShell.Segment"
-                            android:text="@string/settings_layout_orientation_landscape" />
+                            android:text="@string/settings_layout_orientation_landscape"
+                            app:icon="@drawable/ic_symbol_phone_landscape"
+                            app:iconGravity="textStart"
+                            app:iconPadding="4dp"
+                            app:iconSize="16dp" />
                     </com.google.android.material.button.MaterialButtonToggleGroup>
                 </com.termux.app.editorshell.EditorShellControlHost>
             </LinearLayout>

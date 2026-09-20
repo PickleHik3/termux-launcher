@@ -1,16 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The editor shell's header, included by both editors' cards.
 
-     It names what is being edited and carries every way out of the card, in one order: save the
-     look, put it back, Discard, Done, close. Done is the only commit and the only filled control in
-     the whole card; close, where an editor has one, only puts the card down and asks nothing. Each
-     editor fills the slots it has and leaves the rest gone — the slot set is per editor, the sizes,
-     the order and the spacing are the shell's.
+     It names which editor is open and what is being edited, and carries every way out of the card,
+     in one order: save the look, put it back, Discard, Done, close. Done is the only commit and the
+     only filled control in the whole card; close, where an editor has one, only puts the card down
+     and asks nothing. Each editor fills the slots it has and leaves the rest gone — the slot set is
+     per editor, the sizes, the order and the spacing are the shell's.
+
+     Two lines of name, not one: the eyebrow says which editor this is, because the two cards were
+     otherwise identical from the top, and the line under it says what the card is pointed at.
 
      The bar stands at 56dp and comes down to 44dp where the card has little height to spend; both
-     are set in code from EditorShellMetrics, and every glyph keeps a 48dp target through a touch
+     are set in code from EditorShellMetrics, and every control keeps a 48dp target through a touch
      delegate whichever it is. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/editor_shell_header"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -30,17 +34,41 @@
         android:scaleType="fitCenter"
         android:visibility="gone" />
 
-    <androidx.appcompat.widget.AppCompatTextView
-        android:id="@+id/editor_shell_header_title"
+    <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:ellipsize="end"
-        android:fontFamily="sans-serif-medium"
         android:gravity="center_vertical"
-        android:maxLines="1"
-        android:textColor="?attr/termuxColorOnSurface"
-        android:textSize="15sp" />
+        android:orientation="vertical">
+
+        <!-- Which editor is open. Each controller sets its own word; gone until one does. -->
+        <TextView
+            android:id="@+id/editor_shell_header_eyebrow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:letterSpacing="0.12"
+            android:maxLines="1"
+            android:textAllCaps="true"
+            android:textColor="?attr/termuxColorOnSurfaceVariant"
+            android:textSize="11sp"
+            android:visibility="gone" />
+
+        <androidx.appcompat.widget.AppCompatTextView
+            android:id="@+id/editor_shell_header_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="1"
+            android:textColor="?attr/termuxColorOnSurface"
+            android:textSize="20sp"
+            app:autoSizeMaxTextSize="20sp"
+            app:autoSizeMinTextSize="14sp"
+            app:autoSizeStepGranularity="0.5sp"
+            app:autoSizeTextType="uniform" />
+    </LinearLayout>
 
     <!-- Keeping the look: the least-reached-for action, so it sits furthest from Done. -->
     <ImageView
@@ -53,39 +81,54 @@
         android:visibility="gone" />
 
     <!-- Both of these exist only while there is something to lose, which is also how the header
-         says the edit is unsaved. -->
-    <ImageView
+         says the edit is unsaved. Outlines, not fills: they are the ways out that lose something. -->
+    <TextView
         android:id="@+id/editor_shell_header_revert"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_marginStart="4dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
-        android:padding="10dp"
-        android:scaleType="fitCenter"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:layout_marginStart="6dp"
+        android:background="@drawable/editor_shell_ghost_pill"
+        android:ellipsize="end"
+        android:gravity="center"
+        android:maxLines="1"
+        android:paddingHorizontal="12dp"
+        android:text="@string/termux_editor_shell_undo"
+        android:textColor="?attr/termuxColorOnSurfaceVariant"
+        android:textSize="13sp"
         android:visibility="gone" />
 
     <TextView
         android:id="@+id/editor_shell_header_discard"
         android:layout_width="wrap_content"
-        android:layout_height="40dp"
-        android:layout_marginStart="4dp"
-        android:background="?attr/selectableItemBackgroundBorderless"
+        android:layout_height="36dp"
+        android:layout_marginStart="6dp"
+        android:background="@drawable/editor_shell_ghost_pill"
+        android:ellipsize="end"
         android:gravity="center"
-        android:paddingHorizontal="8dp"
+        android:maxLines="1"
+        android:paddingHorizontal="12dp"
         android:text="@string/termux_surface_tuning_unsaved_discard"
         android:textColor="?attr/termuxColorOnSurfaceVariant"
         android:textSize="13sp"
         android:visibility="gone" />
 
-    <ImageView
+    <!-- The one commit, and the only filled control in the card. The tick beside the word is set in
+         code, so it carries the ink the accent asks for. -->
+    <TextView
         android:id="@+id/editor_shell_header_done"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:layout_marginStart="4dp"
-        android:background="@drawable/dock_tuning_done_pill"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:layout_marginStart="6dp"
+        android:background="@drawable/editor_shell_done_pill"
         android:contentDescription="@string/termux_dock_tuning_done"
-        android:padding="10dp"
-        android:scaleType="fitCenter" />
+        android:drawablePadding="6dp"
+        android:fontFamily="sans-serif-medium"
+        android:gravity="center"
+        android:maxLines="1"
+        android:paddingHorizontal="14dp"
+        android:text="@string/termux_dock_tuning_done"
+        android:textColor="?attr/termuxColorOnPrimary"
+        android:textSize="13sp" />
 
     <ImageView
         android:id="@+id/editor_shell_header_close"

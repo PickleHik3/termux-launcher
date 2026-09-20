@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A segment's outline: the accent around the chosen one, a hairline around the rest. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:color="?attr/termuxColorPrimary" android:state_checked="true" />
+    <item android:alpha="0.18" android:color="?attr/termuxColorOnSurface" />
+</selector>

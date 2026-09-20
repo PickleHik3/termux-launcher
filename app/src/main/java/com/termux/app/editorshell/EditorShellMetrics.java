@@ -69,8 +69,17 @@ public final class EditorShellMetrics {
      */
     public static final int SEGMENT_MIN_DP = 88;
     public static final int SEGMENT_MAX_DP = 160;
-    /** Fixed, not wrapped: auto-sizing switches off entirely the moment a dimension wraps. */
-    public static final int SEGMENT_HEIGHT_DP = 44;
+    /**
+     * The slot a segment stands in. Fixed, not wrapped: auto-sizing switches off entirely the
+     * moment a dimension wraps, and this is also the segment's touch target, so it is the
+     * platform's floor and not the height the segment is drawn at.
+     */
+    public static final int SEGMENT_HEIGHT_DP = ROW_MIN_HEIGHT_DP;
+    /** How tall a segment is actually painted inside that slot. */
+    public static final int SEGMENT_VISUAL_HEIGHT_DP = 36;
+    /** The air above and below the paint, which is what keeps the target at the floor. */
+    public static final int SEGMENT_INSET_DP =
+        (SEGMENT_HEIGHT_DP - SEGMENT_VISUAL_HEIGHT_DP) / 2;
 
     // ------------------------------------------------------------------------------ the panes
 
@@ -97,8 +106,23 @@ public final class EditorShellMetrics {
     public static final int HEADER_COMPACT_DP = 44;
     /** Below this much card height the header goes compact. */
     public static final int HEADER_COMPACT_BELOW_DP = 280;
-    /** The one slot under the header for the choice that changes what the whole card shows. */
-    public static final int CHOOSER_DP = 60;
+    /**
+     * The one slot under the header for the choice that changes what the whole card shows.
+     *
+     * <p>It is the segment's own slot and the air around it, and no more: the choice is a compact
+     * pill of two segments that say what they are, not a settings row with a label column beside
+     * it. What the slot used to spend on that label is the top of the live place instead.
+     *
+     * <p>A floor rather than a measurement: the pill it holds is a segment in its
+     * {@link #SEGMENT_HEIGHT_DP} touch slot, so the row comes out a little taller than this once
+     * it has been laid out, and both editors take the greater of the two.
+     */
+    public static final int CHOOSER_DP = 44;
+    /**
+     * One segment of that pill: a glyph, a word, and the air around them. Sized to the words
+     * rather than to the card, so the pill stays the same compact thing on a phone and a tablet.
+     */
+    public static final int CHOOSER_SEGMENT_DP = 104;
     /** Below this much body the chooser unpins and scrolls with the rows. */
     public static final int CHOOSER_PIN_MIN_BODY_DP = 200;
 
@@ -353,5 +377,41 @@ public final class EditorShellMetrics {
         int quantised = (wholeRows * pitch) + peek;
         // Where the room cannot hold one whole row and the peek, the honest answer is the room.
         return new BodyCap(Math.min(available, quantised), wholeRows, true);
+    }
+
+    /**
+     * The same cut, taken from the rows as they actually measured rather than from one pitch.
+     *
+     * <p>A body is not a stack of identical rows: a section heading is half the height of a row, a
+     * slider row and a segment row differ by the segment's own inset, and a note under a row adds a
+     * second line to that one row alone. Quantising all of it to a single pitch therefore lands the
+     * cut wherever the arithmetic falls — which is the middle of a row's glyphs about as often as
+     * anywhere else. Walking the children instead puts the cut at the bottom of the last one that
+     * wholly fits, plus the same {@value #PEEK_DP} dp peek of the one after it.
+     *
+     * @param childHeightsPx each child of the rows column, top to bottom, margins included
+     */
+    @NonNull
+    public static BodyCap bodyCap(int availablePx, @NonNull int[] childHeightsPx, int peekPx) {
+        int available = Math.max(0, availablePx);
+        int peek = Math.max(0, peekPx);
+        int content = 0;
+        for (int height : childHeightsPx)
+            content += Math.max(0, height);
+        if (content <= available)
+            return new BodyCap(available, childHeightsPx.length, false);
+        int bottom = 0;
+        int whole = 0;
+        int cut = 0;
+        for (int height : childHeightsPx) {
+            int next = bottom + Math.max(0, height);
+            if (next + peek > available)
+                break;
+            bottom = next;
+            whole++;
+            cut = next + peek;
+        }
+        // Where the room cannot hold even the first row and the peek, the honest answer is the room.
+        return new BodyCap(cut > 0 ? Math.min(available, cut) : available, whole, true);
     }
 }
