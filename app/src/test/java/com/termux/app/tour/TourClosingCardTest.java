@@ -36,20 +36,25 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void everyEditionGetsFourSectionsWithAHeadingAndASentence() {
+    public void everyEditionGetsTheSameThreeSectionsWithAHeadingAndASentence() {
         for (TourEdition edition : TourEdition.values()) {
             List<TourClosingCard.Section> sections = TourClosingCard.sections(edition);
-            assertEquals("four sections for " + edition, 4, sections.size());
+            assertEquals("three sections for " + edition, 3, sections.size());
             for (TourClosingCard.Section section : sections) {
                 assertNotEquals("no heading for " + edition, 0, section.headingRes);
                 assertNotEquals("no copy for " + edition, 0, section.copyRes);
             }
+            // Graphical apps were the one section an edition disagreed about, and they have a
+            // screen of their own now; what is left reads the same everywhere.
+            assertEquals(TourClosingCard.sections(TourEdition.TERMUX), sections);
+            assertEquals(TourClosingCard.commandResources(TourEdition.TERMUX),
+                TourClosingCard.commandResources(edition));
         }
     }
 
     @Test
     public void theMultitaskingSectionIsTheSameOneEverywhereAndCarriesNoCommand() {
-        // None of the four lessons opens a shell, a window or a session, so the model is told
+        // None of the five lessons opens a shell, a window or a session, so the model is told
         // here and the rest is left to help.
         for (TourEdition edition : TourEdition.values()) {
             TourClosingCard.Section multitasking = TourClosingCard.sections(edition).get(0);
@@ -60,70 +65,26 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void theLauncherExtrasAndGraphicalSectionsAreStillThere() {
-        for (TourEdition edition : TourEdition.values()) {
-            assertEquals(R.string.tour_closing_extras_heading,
-                TourClosingCard.sections(edition).get(2).headingRes);
-            assertEquals(R.string.tour_closing_graphical_heading,
-                TourClosingCard.sections(edition).get(3).headingRes);
-        }
-    }
-
-    @Test
-    public void customisationSitsBetweenMultitaskingAndTheExtrasAndCarriesNoCommand() {
+    public void makeItYoursSitsBetweenMultitaskingAndTheExtrasAndCarriesNoCommand() {
         // The run teaches no lesson about the editors, so the way to them is said here.
         for (TourEdition edition : TourEdition.values()) {
-            TourClosingCard.Section customisation = TourClosingCard.sections(edition).get(1);
-            assertEquals(R.string.tour_closing_customisation_heading, customisation.headingRes);
-            assertEquals(R.string.tour_closing_customisation_copy, customisation.copyRes);
-            assertFalse("customisation has nothing to run", customisation.hasCommand());
+            TourClosingCard.Section makeItYours = TourClosingCard.sections(edition).get(1);
+            assertEquals(R.string.tour_closing_make_it_yours_heading, makeItYours.headingRes);
+            assertEquals(R.string.tour_closing_make_it_yours_copy, makeItYours.copyRes);
+            assertFalse("make it yours has nothing to run", makeItYours.hasCommand());
         }
     }
 
     @Test
-    public void theVajEditionKeepsPkgAndOnlyNixDiffers() {
-        assertEquals(TourClosingCard.sections(TourEdition.TERMUX),
-            TourClosingCard.sections(TourEdition.VAJ));
-        assertEquals(TourClosingCard.commandResources(TourEdition.TERMUX),
-            TourClosingCard.commandResources(TourEdition.VAJ));
-
-        TourClosingCard.Section termux = TourClosingCard.sections(TourEdition.TERMUX).get(3);
-        TourClosingCard.Section nix = TourClosingCard.sections(TourEdition.NIX).get(3);
-        // Same heading, different sentence: nixpkgs has no x11-repo to add, which is a different
-        // thing to say rather than a different package name.
-        assertEquals(termux.headingRes, nix.headingRes);
-        assertNotEquals(termux.copyRes, nix.copyRes);
-        assertTrue(termux.hasCommand());
-        assertFalse(nix.hasCommand());
-    }
-
-    @Test
-    public void theExtrasSectionIsTheOneCommandEveryEditionOffers() {
+    public void theExtrasSectionIsTheCardsOneCommandAndTheLastThingOnIt() {
         for (TourEdition edition : TourEdition.values()) {
-            TourClosingCard.Section extras = TourClosingCard.sections(edition).get(2);
+            List<TourClosingCard.Section> sections = TourClosingCard.sections(edition);
+            TourClosingCard.Section extras = sections.get(sections.size() - 1);
+            assertEquals(R.string.tour_closing_extras_heading, extras.headingRes);
             assertTrue("no extras command for " + edition, extras.hasCommand());
-            assertTrue("extras missing from the copy-all list for " + edition,
-                TourClosingCard.commandResources(edition).contains(extras.commandRes));
+            assertEquals("one command on the card for " + edition,
+                java.util.Collections.singletonList(extras.commandRes),
+                TourClosingCard.commandResources(edition));
         }
-    }
-
-    @Test
-    public void copyAllIsEverySectionsCommandInCardOrderAndNothingElse() {
-        assertEquals("cmd-1\ncmd-2", TourClosingCard.copyAllText(TourEdition.TERMUX, numbered()));
-        // The Nix edition has only the extras command, so Copy all is one line with no blank
-        // second one where the graphical command would have been.
-        assertEquals("cmd-1", TourClosingCard.copyAllText(TourEdition.NIX, numbered()));
-    }
-
-    @Test
-    public void copyAllSkipsACommandThatResolvesToNothingAndSurvivesNoResolverAtAll() {
-        assertEquals("", TourClosingCard.copyAllText(TourEdition.TERMUX, res -> ""));
-        assertEquals("", TourClosingCard.copyAllText(TourEdition.TERMUX, null));
-    }
-
-    /** Names each command by its place in the edition's list, so the order is what is asserted. */
-    private static TourClosingCard.CommandText numbered() {
-        List<Integer> termux = TourClosingCard.commandResources(TourEdition.TERMUX);
-        return res -> "cmd-" + (termux.indexOf(res) + 1);
     }
 }
