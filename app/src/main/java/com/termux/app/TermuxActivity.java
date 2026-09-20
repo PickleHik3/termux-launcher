@@ -6848,6 +6848,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             LauncherCtlApiServer.getInstance().ensureCliScriptsInstalled();
             TermuxShellIntegrationInstaller.ensureInstalled(this);
             TermuxLauncherConfigInstaller.ensureInstalled(this);
+            // Same for the display's and the tool store's commands: their start-up pass found no
+            // prefix to write into.
+            if (com.termux.BuildConfig.X11_SERVER) {
+                com.termux.app.x11.X11CliInstaller.installAsync(this, result -> { });
+            }
+            com.termux.app.store.TlstoreInstaller.installAsync(this, result -> { });
 
             // Activity might have been destroyed.
             if (mTermuxService == null) {
@@ -15429,6 +15435,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Run the configured start command as a background task, as if it had been typed. */
     private void startEmbeddedDisplay() {
+        if (mTermuxService == null || mPreferences == null || !isX11DisplayEnabled()) return;
+        // The prefix commands are written at start-up, which on a first launch is before the
+        // bootstrap exists. Put them in now if they are missing, then start.
+        if (!com.termux.app.x11.X11CliInstaller.isInstalled(this)) {
+            com.termux.app.x11.X11CliInstaller.installAsync(this, result -> {
+                if (isFinishing() || isDestroyed()) return;
+                if (com.termux.app.x11.X11CliInstaller.isInstalled(this)) startEmbeddedDisplayNow();
+                else Logger.logWarn(LOG_TAG, "Display commands not installed: " + result);
+            });
+            return;
+        }
+        startEmbeddedDisplayNow();
+    }
+
+    private void startEmbeddedDisplayNow() {
         if (mTermuxService == null || mPreferences == null || !isX11DisplayEnabled()) return;
         String[] argv = com.termux.app.x11.X11StartCommand.argv(mPreferences.getX11DisplayCommand(),
             mPreferences.getX11DisplayDpi(), mPreferences.isX11LegacyDrawingEnabled(),

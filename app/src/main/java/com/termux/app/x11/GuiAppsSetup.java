@@ -45,6 +45,8 @@ public final class GuiAppsSetup {
 
     /** The file the script writes the chosen account name into, beside the container's rootfs. */
     public static final String RECORD_FILE_NAME = "launcher-user";
+    /** The X keyboard data the display server needs before it can start. */
+    public static final String KEYBOARD_DATA_PACKAGE = "xkeyboard-config";
 
     /** Where {@code proot-distro} 5.x keeps its containers, as a Termux shell writes it. */
     private static final String CONTAINERS_PATH = "$PREFIX/var/lib/proot-distro/containers";
@@ -265,10 +267,12 @@ public final class GuiAppsSetup {
     private static String x11Command(@NonNull Set<StarterApp> starters) {
         String base = "pkg install -y x11-repo";
         List<String> packages = new ArrayList<>();
+        // The display itself needs the keyboard data before it can start; it rides along with
+        // whatever apps were ticked, so a fresh install gets a display that starts.
+        packages.add(KEYBOARD_DATA_PACKAGE);
         for (StarterApp app : StarterApp.values()) {
             if (starters.contains(app)) packages.add(termuxPackageFor(app));
         }
-        if (packages.isEmpty()) return base;
         return base + " && pkg install -y " + join(packages);
     }
 
@@ -290,6 +294,10 @@ public final class GuiAppsSetup {
         StringBuilder out = new StringBuilder();
         out.append("( set -e\n");
         out.append("command -v proot-distro >/dev/null 2>&1 || pkg install -y proot-distro\n");
+        // The display needs xkeyboard-config; the Termux edition finds it in x11-repo, the VAJ
+        // edition in its main repository, so the repo step is allowed to fail quietly.
+        out.append("[ -d \"$PREFIX/share/X11/xkb\" ] || { pkg install -y x11-repo >/dev/null 2>&1 || true; "
+            + "pkg install -y ").append(KEYBOARD_DATA_PACKAGE).append("; }\n");
         out.append("[ -d \"").append(CONTAINERS_PATH).append('/').append(distro.alias)
             .append("/rootfs\" ] || proot-distro install ").append(distro.alias).append('\n');
         // The name is asked for out here, not inside the container: the container is entered once,
