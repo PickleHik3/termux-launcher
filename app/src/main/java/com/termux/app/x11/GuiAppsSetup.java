@@ -2,6 +2,8 @@ package com.termux.app.x11;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.tour.TourEdition;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -72,6 +74,28 @@ public final class GuiAppsSetup {
             for (Route route : values()) if (route.key.equals(key)) return route;
             return X11_REPO;
         }
+    }
+
+    /**
+     * The routes {@code edition} offers on the "Get GUI apps" screen, in menu order.
+     *
+     * <p>Decision D1 (user, 2026-09-20): the VAJ edition sticks to the distro route only — its
+     * user does not want to build X11 apps for it, and every route it does offer must actually
+     * work there. The nix edition keeps both for now, pending its own research; that decision has
+     * a single call site here so changing it later does not need to touch the screen.
+     */
+    @NonNull
+    public static List<Route> routesFor(@NonNull TourEdition edition) {
+        if (edition == TourEdition.VAJ) return Collections.singletonList(Route.DISTRO);
+        // TERMUX and, for now, NIX: both routes.
+        return Collections.unmodifiableList(Arrays.asList(Route.X11_REPO, Route.DISTRO));
+    }
+
+    /** The route to fall back to for {@code edition} when nothing is stored yet, or a stored
+     * choice no longer applies. */
+    @NonNull
+    public static Route defaultRoute(@NonNull TourEdition edition) {
+        return routesFor(edition).get(0);
     }
 
     /** One of the four apps the screen offers to install alongside the route. */

@@ -20,12 +20,14 @@ import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.notice.AppNotice;
+import com.termux.app.tour.TourEdition;
 import com.termux.app.x11.DistroSetupStore;
 import com.termux.app.x11.GuiAppsSetup;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.TermuxConstants;
 
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -43,6 +45,7 @@ import java.util.Set;
 @Keep
 public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFragment {
 
+    static final String KEY_HINT = "gui_apps_hint";
     static final String KEY_ROUTE = "gui_apps_route";
     static final String KEY_DISTRO = "gui_apps_distro";
     static final String KEY_COPY = "gui_apps_copy";
@@ -67,8 +70,22 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
         setPreferencesFromResource(R.xml.gui_apps_setup_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
 
+        List<GuiAppsSetup.Route> routes =
+            GuiAppsSetup.routesFor(TourEdition.of(context.getPackageName()));
         ListPreference route = findPreference(KEY_ROUTE);
-        if (route != null) {
+        if (routes.size() == 1) {
+            // Nothing to choose: hide the row, and force the stored value to the one route this
+            // edition offers, so a choice stored before the gate existed cannot build a command
+            // for a route the screen no longer even shows.
+            String only = routes.get(0).key;
+            if (route != null) {
+                route.setVisible(false);
+                route.setValue(only);
+            }
+            applyDistroRow(only);
+            Preference hint = findPreference(KEY_HINT);
+            if (hint != null) hint.setSummary(R.string.settings_gui_apps_intro_distro_only);
+        } else if (route != null) {
             applyDistroRow(route.getValue());
             route.setOnPreferenceChangeListener((preference, value) -> {
                 applyDistroRow(String.valueOf(value));

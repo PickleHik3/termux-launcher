@@ -272,6 +272,7 @@
     <string name="settings_gui_apps_title">Get GUI apps</string>
     <string name="settings_gui_apps_row_summary">Pick the apps you want and copy the command that installs them.</string>
     <string name="settings_gui_apps_hint">Apps with windows come either from Termux itself or from a Linux you install inside it. Pick one, tick what you want, then copy the command.</string>
+    <string name="settings_gui_apps_intro_distro_only">Install a Linux system with a few apps to start with, then copy the command.</string>
     <string name="settings_gui_apps_route_title">Where the apps come from</string>
     <string name="settings_gui_apps_route_summary">Termux\'s own apps install in a minute or two. A full Linux takes longer and offers far more.</string>
     <string name="settings_gui_apps_distro_title">Which Linux</string>
