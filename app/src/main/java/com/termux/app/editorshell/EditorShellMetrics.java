@@ -106,8 +106,23 @@ public final class EditorShellMetrics {
     public static final int HEADER_COMPACT_DP = 44;
     /** Below this much card height the header goes compact. */
     public static final int HEADER_COMPACT_BELOW_DP = 280;
-    /** The one slot under the header for the choice that changes what the whole card shows. */
-    public static final int CHOOSER_DP = 60;
+    /**
+     * The one slot under the header for the choice that changes what the whole card shows.
+     *
+     * <p>It is the segment's own slot and the air around it, and no more: the choice is a compact
+     * pill of two segments that say what they are, not a settings row with a label column beside
+     * it. What the slot used to spend on that label is the top of the live place instead.
+     *
+     * <p>A floor rather than a measurement: the pill it holds is a segment in its
+     * {@link #SEGMENT_HEIGHT_DP} touch slot, so the row comes out a little taller than this once
+     * it has been laid out, and both editors take the greater of the two.
+     */
+    public static final int CHOOSER_DP = 44;
+    /**
+     * One segment of that pill: a glyph, a word, and the air around them. Sized to the words
+     * rather than to the card, so the pill stays the same compact thing on a phone and a tablet.
+     */
+    public static final int CHOOSER_SEGMENT_DP = 104;
     /** Below this much body the chooser unpins and scrolls with the rows. */
     public static final int CHOOSER_PIN_MIN_BODY_DP = 200;
 

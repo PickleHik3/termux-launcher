@@ -1,7 +1,9 @@
 package com.termux.app.layouteditor;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -24,6 +26,8 @@ import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import com.termux.R;
+import com.termux.app.ReducedMotion;
+import com.termux.app.Spring;
 import com.termux.app.editorshell.EditorShellControlHost;
 import com.termux.app.editorshell.EditorShellHeader;
 import com.termux.app.editorshell.EditorShellMetrics;
@@ -110,6 +114,10 @@ public final class LayoutEditorController {
         final ViewGroup host;
         /** The card itself: a scroller, so a screen too short for the column still reaches it. */
         final ViewGroup root;
+        /** The column inside the scroller, which is where the card's own padding lives. */
+        final ViewGroup column;
+        /** The mark at the top that says the sheet came up from the bottom edge. */
+        final View handle;
         final View header;
         final TextView title;
         final TextView revert;
@@ -128,6 +136,8 @@ public final class LayoutEditorController {
         Card(ViewGroup host, ViewGroup root) {
             this.host = host;
             this.root = root;
+            column = root.findViewById(R.id.layout_editor_card_column);
+            handle = root.findViewById(R.id.layout_editor_sheet_handle);
             header = root.findViewById(R.id.editor_shell_header);
             title = root.findViewById(R.id.editor_shell_header_title);
             revert = root.findViewById(R.id.editor_shell_header_revert);
@@ -145,7 +155,8 @@ public final class LayoutEditorController {
         }
 
         boolean complete() {
-            return header != null && title != null && revert != null && discard != null
+            return column != null && handle != null && header != null && title != null
+                && revert != null && discard != null
                 && done != null && chooserSlot != null && orientationRow != null
                 && orientationHost != null && orientation != null && orientationNotice != null
                 && body != null && miniature != null && narrowNotice != null && rowsHost != null;
@@ -167,6 +178,18 @@ public final class LayoutEditorController {
     @Nullable private String mRowsKey;
     /** How tall the rows may grow before they scroll, from the room the canvas left. */
     private int mRowsCapPx;
+    /**
+     * The sheet's own channel: 1 is the card parked below the bottom edge, 0 is the card in place.
+     * One spring for both directions, so a card closed while it is still opening turns round from
+     * where it is rather than jumping.
+     */
+    @NonNull private final Spring mSheet = new Spring(1f, 420f, 41f);
+    private boolean mSheetAnimating;
+    private long mSheetLastFrameNanos;
+    /** The wash over the live place behind the card, built with the card and never blurred. */
+    @Nullable private View mScrim;
+    /** Whether the card is up or coming up; false the moment something asks it to leave. */
+    private boolean mShowing;
 
     public LayoutEditorController(@NonNull Host host) {
         mHost = host;
@@ -209,9 +232,17 @@ public final class LayoutEditorController {
         if (mPlan == null) mPlan = LayoutEditorPlan.enter(places, place, mHost.placeOrientation());
         else mPlan.showPlace(place);
         card.host.setVisibility(View.VISIBLE);
+        card.host.setClickable(true);
+        card.host.setFocusable(true);
         card.host.bringToFront();
         mHost.holdPaneWallOnPlace(place, true);
         sync();
+        // A second door opened while the card is already up moves it to that place; it does not
+        // play the card in again.
+        if (!mShowing) {
+            mShowing = true;
+            startSheet(card);
+        }
     }
 
     /** Inflates the card into its host, once. */
@@ -222,6 +253,8 @@ public final class LayoutEditorController {
         ViewGroup host = mHost.findView(R.id.layout_editor_host);
         if (host == null)
             return null;
+        if (mScrim == null)
+            mScrim = addScrim(host);
         ViewGroup root = host.findViewById(R.id.layout_editor_card);
         if (root == null) {
             LayoutInflater.from(mHost.context()).inflate(R.layout.layout_editor, host, true);
@@ -250,6 +283,15 @@ public final class LayoutEditorController {
                 R.color.termux_on_primary));
         card.revert.setContentDescription(
             mHost.context().getString(R.string.termux_layout_editor_revert));
+        card.handle.setBackground(handleBar());
+        // The chooser is a pill sized to its own two words, not a control column stretched to
+        // whatever the card had left.
+        ViewGroup.LayoutParams pill = card.orientationHost.getLayoutParams();
+        if (pill != null) {
+            pill.width = EditorShellMetrics.px(2 * EditorShellMetrics.CHOOSER_SEGMENT_DP,
+                mHost.context().getResources().getDisplayMetrics().density);
+            card.orientationHost.setLayoutParams(pill);
+        }
         // Layout has no way to save a look and no ✕: its ✓ is the only way out that keeps.
         card.orientationHost.setSegmentCount(card.orientation.getChildCount());
 
@@ -339,11 +381,39 @@ public final class LayoutEditorController {
         card.narrowNotice.setVisibility(View.VISIBLE);
     }
 
+    /** How long the two unsaved glyphs take to arrive, rather than appearing between frames. */
+    @VisibleForTesting static final long CHROME_FADE_MS = 150L;
+
     /** The revert glyph and Discard, which exist only while there is something to lose. */
     private void syncDirty(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
-        int dirty = plan.isDirty() ? View.VISIBLE : View.GONE;
-        card.revert.setVisibility(dirty);
-        card.discard.setVisibility(dirty);
+        boolean dirty = plan.isDirty();
+        fadeChrome(card.revert, dirty);
+        fadeChrome(card.discard, dirty);
+    }
+
+    /**
+     * One of the two unsaved glyphs. The first drop is what puts them on the header, and a glyph
+     * that simply exists on the next frame reads as the header having changed shape; fading it in
+     * reads as an answer to the drop. Going is immediate: there is nothing left to say.
+     */
+    private void fadeChrome(@NonNull View view, boolean shown) {
+        if (!shown) {
+            view.animate().cancel();
+            view.setAlpha(1f);
+            view.setVisibility(View.GONE);
+            return;
+        }
+        // Already there, or already arriving: a second drop must not restart the fade under the
+        // glyph the first one brought in.
+        if (view.getVisibility() == View.VISIBLE)
+            return;
+        view.setVisibility(View.VISIBLE);
+        if (ReducedMotion.isEnabled(mHost.context())) {
+            view.setAlpha(1f);
+            return;
+        }
+        view.setAlpha(0f);
+        view.animate().alpha(1f).setDuration(CHROME_FADE_MS).start();
     }
 
     /**
@@ -363,7 +433,11 @@ public final class LayoutEditorController {
         int chooserPx = Math.max(card.orientationRow.getHeight(),
             Math.round(dpToPx(EditorShellMetrics.CHOOSER_DP)));
         int chromePx = cardChromePx(metrics.heightPixels, chooserPx,
-            card.root.getPaddingTop() + card.root.getPaddingBottom(), density);
+            card.column.getPaddingTop() + card.column.getPaddingBottom(), noticeLines(plan),
+            density);
+        // What the card may stand in: the whole screen where the screen is already short, and a
+        // sheet's share of a portrait one, so the place it is a picture of stays visible above it.
+        int budgetPx = LayoutEditorPlan.cardBudgetPx(metrics.widthPixels, metrics.heightPixels);
         float frameAspect = PlaceMiniatureView.frameAspect(plan.shownOrientation());
         int reservedPx = Math.round(card.miniature.reservedHeightPx());
 
@@ -374,7 +448,7 @@ public final class LayoutEditorController {
         boolean twoPanes = rowsBesideMiniature(naturalPx, split, density);
         applyCardWidth(card, metrics.widthPixels, split, density, twoPanes);
 
-        int bodyPx = Math.max(floorPx, metrics.heightPixels - chromePx);
+        int bodyPx = Math.max(floorPx, budgetPx - chromePx);
         int height = twoPanes
             ? LayoutEditorPlan.miniatureHeightInPanePx(frameAspect, reservedPx,
                 split.leadingWidthPx, bodyPx)
@@ -383,11 +457,11 @@ public final class LayoutEditorController {
         applyBodyPanes(card, split, twoPanes, height);
 
         int available = twoPanes ? bodyPx
-            : LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height, chromePx, floorPx);
+            : LayoutEditorPlan.rowsHeightCapPx(budgetPx, height, chromePx, floorPx);
         boolean pinned = EditorShellMetrics.chooserPinned(available, density);
         EditorShellHeader.applyChooserPin(card.orientationRow, card.chooserSlot, mRows, pinned);
         if (!pinned && !twoPanes)
-            available = LayoutEditorPlan.rowsHeightCapPx(metrics.heightPixels, height,
+            available = LayoutEditorPlan.rowsHeightCapPx(budgetPx, height,
                 chromePx - chooserPx, floorPx);
         // The room the rows have, and only that. Where it cuts is the scroller's own business:
         // it is the only place the rows' real heights are known, and this runs before they exist.
@@ -446,6 +520,9 @@ public final class LayoutEditorController {
         view.setLayoutParams(pane);
     }
 
+    /** The air the sheet keeps at each side, which is what {@code layout_editor.xml} declares. */
+    @VisibleForTesting static final int SHEET_SIDE_MARGIN_DP = 12;
+
     /**
      * The card stops inheriting the screen's width. What is left over is symmetric air with the
      * live place showing through it, which is the thing the editor is a picture of.
@@ -458,7 +535,11 @@ public final class LayoutEditorController {
             : EditorShellMetrics.paneSplit(Math.min(
                 EditorShellMetrics.contentWidthPx(screenWidthPx, density),
                 EditorShellMetrics.px(EditorShellMetrics.ROW_MAX_INNER_DP, density)), 0, density);
-        int width = EditorShellMetrics.cardWidthPx(screenWidthPx, shown, density);
+        // The sheet keeps a little more air at its sides than the shell's own margin, so its
+        // corners read as a card lifted off the place rather than as the screen's own edges.
+        int width = Math.min(EditorShellMetrics.cardWidthPx(screenWidthPx, shown, density),
+            Math.max(0, screenWidthPx
+                - EditorShellMetrics.px(2 * SHEET_SIDE_MARGIN_DP, density)));
         ViewGroup.LayoutParams params = card.root.getLayoutParams();
         if (params == null || params.width == width)
             return;
@@ -477,20 +558,42 @@ public final class LayoutEditorController {
         R.id.editor_shell_row_segment_0, R.id.editor_shell_row_segment_1,
         R.id.editor_shell_row_segment_2, R.id.editor_shell_row_segment_3};
 
-    /** The two notice lines and the gaps the miniature stands between. */
-    @VisibleForTesting static final float NOTICES_AND_GAPS_DP = 56f;
+    /** The handle at the top of the sheet, and the air above and below it. */
+    @VisibleForTesting static final float HANDLE_SLOT_DP = 18f;
+    /** The gaps the miniature stands between: above it, and above the rows under it. */
+    @VisibleForTesting static final float GAPS_DP = 10f;
+    /** One line of notice under the chooser, and the air above it. */
+    @VisibleForTesting static final float NOTICE_LINE_DP = 22f;
 
     /**
      * Everything on the card that is not the canvas or the rows, at the height the card has.
      *
      * <p>Declared rather than derived: the rows' cap is what sets the scroller's height, so a
      * chrome read back by subtracting the scroller from the card is a layout-pass loop that never
-     * settles once the cap is quantised to whole rows.
+     * settles once the cap is quantised to whole rows. The notices are counted rather than
+     * allowed for, because the sheet's whole budget is now the thing being divided up: reserving
+     * two lines that are usually not there costs the rows a whole row of the little they have.
+     *
+     * @param noticeLines how many lines of notice the plan says apply, which is a question about
+     *     the arrangement and never about a measured view — so it cannot start a layout loop
      */
     @VisibleForTesting
-    static int cardChromePx(int cardHeightPx, int chooserPx, int paddingPx, float density) {
+    static int cardChromePx(int cardHeightPx, int chooserPx, int paddingPx, int noticeLines,
+                            float density) {
         return EditorShellMetrics.headerHeightPx(cardHeightPx, density) + chooserPx + paddingPx
-            + EditorShellMetrics.px(NOTICES_AND_GAPS_DP, density);
+            + EditorShellMetrics.px(HANDLE_SLOT_DP + GAPS_DP, density)
+            + (Math.max(0, noticeLines) * EditorShellMetrics.px(NOTICE_LINE_DP, density));
+    }
+
+    /** How many lines of notice stand under the chooser for this arrangement. */
+    @VisibleForTesting
+    static int noticeLines(@NonNull LayoutEditorPlan plan) {
+        int lines = plan.warnsOtherOrientation() ? 1 : 0;
+        if (plan.warnsNarrowCanvas())
+            lines++;
+        if (plan.warnsSideStatusBar())
+            lines++;
+        return lines;
     }
     /** The rows keep at least this much even where the canvas would have taken it all. */
     @VisibleForTesting static final float ROWS_FLOOR_DP = 96f;
@@ -831,19 +934,141 @@ public final class LayoutEditorController {
 
     @VisibleForTesting
     void exit() {
+        if (mPlan == null && !mShowing)
+            return;
         PaneWallPage place = mPlan == null ? null : mPlan.place();
         mPlan = null;
         mRowsKey = null;
         mDraggedSlider = null;
+        mShowing = false;
         if (mCard != null) {
-            mCard.revert.setVisibility(View.GONE);
-            mCard.discard.setVisibility(View.GONE);
-            mCard.host.setVisibility(View.GONE);
+            fadeChrome(mCard.revert, false);
+            fadeChrome(mCard.discard, false);
+            // The card is leaving: from here the touches are the live place's again, which is
+            // where they went the moment the host disappeared before there was an animation.
+            mCard.host.setClickable(false);
+            mCard.host.setFocusable(false);
+            startSheet(mCard);
         }
         if (place != null) mHost.holdPaneWallOnPlace(place, false);
     }
 
+    // -------------------------------------------------------------------------------- the motion
+
+    /** How black the wash over the live place goes while the sheet is up. */
+    @VisibleForTesting static final float SCRIM_ALPHA = 0.28f;
+
+    /**
+     * The wash between the live place and the card. It is a plain fill and never a blur: what is
+     * behind it is the thing being edited, and the point is to read the card against it, not to
+     * take the place away.
+     *
+     * <p>It takes no touches of its own, so what the host did with a touch beside the card before
+     * there was a scrim is what it still does.
+     */
+    @NonNull
+    private View addScrim(@NonNull ViewGroup host) {
+        View scrim = new View(mHost.context());
+        scrim.setBackgroundColor(Color.BLACK);
+        scrim.setAlpha(0f);
+        scrim.setClickable(false);
+        scrim.setFocusable(false);
+        scrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        host.addView(scrim, 0, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        return scrim;
+    }
+
+    /**
+     * Runs the sheet towards wherever {@link #mShowing} says it belongs — up from the bottom edge,
+     * or back down past it — on the launcher's own spring. With the phone told to play no
+     * animations it is simply there, or simply gone.
+     */
+    private void startSheet(@NonNull Card card) {
+        // An open that is not interrupting a close starts from below the bottom edge; one that is
+        // turns round from wherever the card had got to.
+        if (mShowing && !mSheetAnimating)
+            mSheet.reset(1f);
+        mSheet.target = mShowing ? 0f : 1f;
+        // Whatever was in flight is stale: one channel, one loop, and a frame that never ran —
+        // the card was detached mid-close — must not leave the next open with nothing driving it.
+        card.root.removeCallbacks(mSheetFrame);
+        mSheetAnimating = false;
+        if (ReducedMotion.isEnabled(mHost.context())) {
+            mSheet.reset(mSheet.target);
+            applySheetProgress(card, mSheet.value);
+            if (!mShowing)
+                hideCard(card);
+            return;
+        }
+        applySheetProgress(card, mSheet.value);
+        mSheetAnimating = true;
+        mSheetLastFrameNanos = 0L;
+        card.root.postOnAnimation(mSheetFrame);
+    }
+
+    private final Runnable mSheetFrame = new Runnable() {
+        @Override
+        public void run() {
+            Card card = mCard;
+            if (!mSheetAnimating || card == null)
+                return;
+            long now = System.nanoTime();
+            float dt = mSheetLastFrameNanos == 0L ? Spring.MIN_DT
+                : Spring.clampDelta((now - mSheetLastFrameNanos) / 1_000_000_000f);
+            mSheetLastFrameNanos = now;
+            boolean moving = mSheet.tick(false, dt);
+            applySheetProgress(card, mSheet.value);
+            if (moving) {
+                card.root.postOnAnimation(this);
+                return;
+            }
+            mSheetAnimating = false;
+            if (!mShowing)
+                hideCard(card);
+        }
+    };
+
+    /**
+     * The card at one point of its travel: 1 is parked below the bottom edge, 0 is in place. The
+     * travel is the card's own height, or the screen's while it has not been laid out yet — which
+     * is only ever the first frame of the first open, and off screen either way.
+     */
+    private void applySheetProgress(@NonNull Card card, float progress) {
+        float at = Math.max(0f, Math.min(1f, progress));
+        int travel = card.root.getHeight() > 0 ? card.root.getHeight()
+            : mHost.context().getResources().getDisplayMetrics().heightPixels;
+        card.root.setTranslationY(at * travel);
+        if (mScrim != null)
+            mScrim.setAlpha((1f - at) * SCRIM_ALPHA);
+    }
+
+    /** The card has finished leaving. */
+    private void hideCard(@NonNull Card card) {
+        card.host.setVisibility(View.GONE);
+        card.root.setTranslationY(0f);
+        if (mScrim != null)
+            mScrim.setAlpha(0f);
+    }
+
     // -------------------------------------------------------------------------------- the chrome
+
+    /**
+     * The handle: a bar of the card's own on-surface colour, quiet enough to be a mark rather than
+     * a control, because nothing is dragged by it.
+     */
+    @NonNull
+    private Drawable handleBar() {
+        float density = mHost.context().getResources().getDisplayMetrics().density;
+        GradientDrawable bar = new GradientDrawable();
+        bar.setShape(GradientDrawable.RECTANGLE);
+        bar.setCornerRadius(2f * density);
+        int onSurface = mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+            R.color.termux_on_surface);
+        bar.setColor(Color.argb(Math.round(0.28f * 255f), Color.red(onSurface),
+            Color.green(onSurface), Color.blue(onSurface)));
+        return bar;
+    }
 
     @NonNull
     private Drawable cardBackground() {

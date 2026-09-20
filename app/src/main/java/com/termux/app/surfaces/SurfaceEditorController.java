@@ -1249,8 +1249,11 @@ public final class SurfaceEditorController {
         EditorShellHeader.apply(panel.header, cardRoomPx);
         int headerPx = EditorShellMetrics.headerHeightPx(cardRoomPx, density);
         int paddingPx = panel.root.getPaddingTop() + panel.root.getPaddingBottom();
+        // The presets row's own height, which is what stands in this card's chooser slot: a tile,
+        // its name under it, and the air around them. Not the shell's chooser height, which is the
+        // Layout editor's compact pill and shorter than a tile.
         int chooserPx = panel.presets.getVisibility() == View.GONE ? 0
-            : Math.max(panel.presets.getHeight(), dp(EditorShellMetrics.CHOOSER_DP));
+            : Math.max(panel.presets.getHeight(), dp(EditorShellMetrics.PRESET_ROW_DP));
 
         // Asked of the body the card would have with the chooser pinned: unpinning is what a body
         // too short to carry 60dp of chrome does, and the answer must not depend on the last one.

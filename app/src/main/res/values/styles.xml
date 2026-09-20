@@ -64,6 +64,9 @@
         <item name="strokeWidth">1dp</item>
         <item name="rippleColor">?attr/termuxColorPrimary</item>
         <item name="iconPadding">0dp</item>
+        <!-- A segment that carries a glyph (the Layout editor's Portrait / Landscape pill) wants
+             it the same colour as the word beside it, chosen or not. -->
+        <item name="iconTint">@color/editor_shell_segment_text</item>
     </style>
 
     <!-- A slider in either editor. The shipped row had no progress drawable at all: a hairline

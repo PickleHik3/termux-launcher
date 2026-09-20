@@ -254,7 +254,7 @@ public class EditorShellMetricsTest {
     }
 
     @Test
-    public void theChooserUnpinsOnlyWhereSixtyDpOfChromeWouldCostRows() {
+    public void theChooserUnpinsOnlyWhereItsChromeWouldCostRows() {
         assertTrue(EditorShellMetrics.chooserPinned(
             EditorShellMetrics.px(200, WIDE_DENSITY), WIDE_DENSITY));
         assertFalse(EditorShellMetrics.chooserPinned(
@@ -328,15 +328,18 @@ public class EditorShellMetricsTest {
     private static int pongRowsRoomPx() {
         int header = EditorShellMetrics.headerHeightPx(PONG_HEIGHT_PX, PONG_DENSITY);
         int chooser = EditorShellMetrics.px(EditorShellMetrics.CHOOSER_DP, PONG_DENSITY);
-        // The card's own bottom padding, and the two notice lines and gaps around the canvas.
+        // The card's own bottom padding, the sheet's handle, and the gaps around the canvas. No
+        // notice lines: the Terminal place in portrait has nothing to say about its arrangement.
         int padding = EditorShellMetrics.px(10, PONG_DENSITY);
-        int noticesAndGaps = EditorShellMetrics.px(56, PONG_DENSITY);
-        int chrome = header + chooser + padding + noticesAndGaps;
-        // The portrait frame at 55% of the screen, plus the hide tray's 48dp under it.
-        int miniature = Math.round(0.55f * PONG_HEIGHT_PX)
+        int handleAndGaps = EditorShellMetrics.px(18 + 10, PONG_DENSITY);
+        int chrome = header + chooser + padding + handleAndGaps;
+        // The portrait frame at 42% of the screen, plus the hide tray's 48dp under it.
+        int miniature = Math.round(0.42f * PONG_HEIGHT_PX)
             + EditorShellMetrics.px(48, PONG_DENSITY);
         int floor = EditorShellMetrics.px(96, PONG_DENSITY);
-        return Math.max(floor, PONG_HEIGHT_PX - miniature - chrome);
+        // The sheet stands in four fifths of the screen; the fifth above it is the live place.
+        int budget = Math.round(0.80f * PONG_HEIGHT_PX);
+        return Math.max(floor, budget - miniature - chrome);
     }
 
     /**
