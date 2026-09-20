@@ -87,9 +87,10 @@
             app:summary="@string/settings_x11_drawer_apps_summary"
             android:defaultValue="true" />
         <Preference
-            app:key="x11_distro_setup"
-            app:title="@string/settings_x11_distro_setup_title"
-            app:summary="@string/settings_x11_distro_setup_summary" />
+            app:key="x11_gui_apps_setup"
+            app:title="@string/settings_gui_apps_title"
+            app:summary="@string/settings_gui_apps_row_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.GuiAppsSetupPreferencesFragment" />
         <Preference
             app:key="x11_hidden_apps"
             app:title="@string/settings_x11_hidden_apps_title"

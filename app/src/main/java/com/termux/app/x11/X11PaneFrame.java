@@ -14,6 +14,7 @@ import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerHoldArbiter;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.fragments.settings.termux.GuiAppsSetupPreferencesFragment;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
@@ -679,9 +680,25 @@ public final class X11PaneFrame extends PaneContentFrame {
         setup.setVisibility(offer ? VISIBLE : GONE);
     }
 
-    /** The offer's own tap: what the launcher would do, and the two answers. */
+    /**
+     * The offer's own tap: the Get GUI apps screen in Settings, which is where every choice about
+     * this now lives.
+     *
+     * <p>Opening the screen is deliberately <em>not</em> remembered as an answer. A user who looks
+     * at it and comes back without copying anything has done nothing about their Linux, and an
+     * offer that vanished on the way to the screen would have taken itself away at the one moment
+     * it was still needed. The screen records the dismissal itself when the command is copied,
+     * which is the moment the user actually has what the offer was for.
+     */
     private void openDistroSetup() {
-        DistroSetupDialog.show(getContext(), DistroSetup.read(), true, this::applyEmptyState);
+        try {
+            getContext().startActivity(GuiAppsSetupPreferencesFragment.intent(getContext())
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (RuntimeException e) {
+            // A home screen's empty state is not worth a crash; the row in Settings is still there.
+            return;
+        }
+        applyEmptyState();
     }
 
     /** The empty state's guide button: the setup section of the Linux display guide. */

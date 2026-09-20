@@ -153,7 +153,7 @@ public final class ProotDistro {
             if (!name.matches(SAFE_NAME)) continue;
             File rootfs = new File(entry, "rootfs");
             if (!rootfs.isDirectory()) continue;
-            User user = loginUser(rootfs);
+            User user = resolveUser(entry, rootfs);
             containers.add(new Container(name, rootfs, user.name, user.home));
         }
         Collections.sort(containers, (a, b) -> a.name.compareToIgnoreCase(b.name));
@@ -182,15 +182,36 @@ public final class ProotDistro {
      */
     @NonNull
     public static User loginUser(@NonNull File rootfs) {
-        File passwd = new File(rootfs, "etc/passwd");
+        String passwd = readFile(new File(rootfs, "etc/passwd"));
+        return passwd == null ? ROOT : parsePasswd(passwd);
+    }
+
+    /**
+     * Who to log in as, the way {@code containers()} actually decides it: the account a setup
+     * script recorded beside {@code rootfs} (see {@link #recordedUser}), when that record is
+     * present and still checks out against this container's own {@code /etc/passwd}; otherwise
+     * today's discovery ({@link #loginUser}), unchanged.
+     */
+    @NonNull
+    private static User resolveUser(@NonNull File entry, @NonNull File rootfs) {
+        String passwd = readFile(new File(rootfs, "etc/passwd"));
+        if (passwd == null) return ROOT;
+        String record = readFile(new File(entry, GuiAppsSetup.RECORD_FILE_NAME));
+        User recorded = recordedUser(record, passwd);
+        return recorded != null ? recorded : parsePasswd(passwd);
+    }
+
+    /** The contents of {@code file}, or null if it cannot be read. */
+    @Nullable
+    private static String readFile(@NonNull File file) {
         StringBuilder content = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new FileReader(passwd))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
             String line;
             while ((line = reader.readLine()) != null) content.append(line).append('\n');
         } catch (IOException e) {
-            return ROOT;
+            return null;
         }
-        return parsePasswd(content.toString());
+        return content.toString();
     }
 
     /**
@@ -243,6 +264,39 @@ public final class ProotDistro {
             best = new User(name, home.isEmpty() ? "/home/" + name : home);
         }
         return best == null ? ROOT : best;
+    }
+
+    /**
+     * What {@link GuiAppsSetup}'s setup script may have recorded as the account it logged in as:
+     * lower-case only, by construction of the shell that wrote it.
+     */
+    private static final String RECORDED_NAME = "[a-z0-9_]+";
+
+    /**
+     * The account a setup script recorded for this container, if the record still checks out —
+     * a bare lower-case name, not {@code root}, that {@code passwd} actually has with a login
+     * shell — or null otherwise, which is the caller's cue to fall back to
+     * {@link #parsePasswd} discovery.
+     *
+     * <p>An absent or unreadable record, one with anything on the line besides the name (a
+     * second word, trailing garbage, upper case), one naming {@code root}, and one naming an
+     * account {@code passwd} does not have or refuses to log into, are all the same "no record"
+     * case: they only ever came from a corrupted or stale write, never from the script, which
+     * writes exactly one lower-case name after a login that already succeeded.
+     */
+    @Nullable
+    public static User recordedUser(@Nullable String recordFileContents, @NonNull String passwd) {
+        if (recordFileContents == null) return null;
+        String name = recordFileContents.trim();
+        if (name.isEmpty() || name.equals("root") || !name.matches(RECORDED_NAME)) return null;
+        for (String line : passwd.split("\n")) {
+            String[] fields = line.split(":", -1);
+            if (fields.length < 6 || !fields[0].trim().equals(name)) continue;
+            if (fields.length > 6 && !isLoginShell(fields[6].trim())) return null;
+            String home = fields[5].trim();
+            return new User(name, home.isEmpty() ? "/home/" + name : home);
+        }
+        return null;
     }
 
     /**

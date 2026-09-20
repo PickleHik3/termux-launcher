@@ -148,6 +148,91 @@ public class ProotDistroTest {
         assertEquals("root", ProotDistro.loginUser(odd).name);
     }
 
+    // --- the account a setup script recorded -----------------------------------------------
+
+    private static final String PASSWD =
+        "root:x:0:0:root:/root:/bin/bash\n"
+        + "amal:x:1000:1000::/home/amal:/bin/bash\n"
+        + "second:x:1001:1001::/home/second:/bin/bash\n"
+        + "barred:x:1002:1002::/home/barred:/usr/sbin/nologin\n";
+
+    @Test public void theRecordedAccountWinsEvenOverALowerUid() {
+        ProotDistro.User user = ProotDistro.recordedUser("second\n", PASSWD);
+
+        assertNotNull(user);
+        assertEquals("second", user.name);
+        assertEquals("/home/second", user.home);
+    }
+
+    @Test public void aRecordNamingAnAccountNotInPasswdFallsBack() {
+        assertNull(ProotDistro.recordedUser("nosuchuser\n", PASSWD));
+    }
+
+    @Test public void aRecordNamingRootFallsBack() {
+        assertNull(ProotDistro.recordedUser("root\n", PASSWD));
+    }
+
+    @Test public void aRecordNamingAnAccountThatCannotBeLoggedIntoFallsBack() {
+        assertNull(ProotDistro.recordedUser("barred\n", PASSWD));
+    }
+
+    @Test public void aMissingRecordFallsBack() {
+        assertNull(ProotDistro.recordedUser(null, PASSWD));
+    }
+
+    @Test public void anEmptyOrWhitespaceRecordFallsBack() {
+        assertNull(ProotDistro.recordedUser("\n", PASSWD));
+        assertNull(ProotDistro.recordedUser("   \n", PASSWD));
+    }
+
+    @Test public void aRecordWithExtraWordsFallsBack() {
+        assertNull(ProotDistro.recordedUser("amal extra\n", PASSWD));
+    }
+
+    @Test public void aRecordWithUppercaseFallsBack() {
+        assertNull(ProotDistro.recordedUser("Amal\n", PASSWD));
+    }
+
+    @Test public void aRecordThatIsJustGarbageFallsBack() {
+        assertNull(ProotDistro.recordedUser("!!not-a-name!!\n", PASSWD));
+    }
+
+    @Test public void theContainerListingPrefersTheRecordedAccountToDiscovery() throws IOException {
+        File containers = temp.newFolder("containers");
+        File rootfs = rootfs(containers, "debian");
+        write(rootfs, "etc/passwd", PASSWD);
+        write(containers, "debian/launcher-user", "second\n");
+
+        ProotDistro.Container debian = ProotDistro.byName(ProotDistro.containers(containers), "debian");
+
+        assertNotNull(debian);
+        assertEquals("second", debian.user);
+        assertEquals("/home/second", debian.home);
+    }
+
+    @Test public void theContainerListingFallsBackWhenTheRecordDoesNotCheckOut() throws IOException {
+        File containers = temp.newFolder("containers");
+        File rootfs = rootfs(containers, "debian");
+        write(rootfs, "etc/passwd", PASSWD);
+        write(containers, "debian/launcher-user", "nosuchuser\n");
+
+        ProotDistro.Container debian = ProotDistro.byName(ProotDistro.containers(containers), "debian");
+
+        assertNotNull(debian);
+        assertEquals("amal", debian.user);
+    }
+
+    @Test public void theContainerListingIsUnchangedWithNoRecordFile() throws IOException {
+        File containers = temp.newFolder("containers");
+        File rootfs = rootfs(containers, "debian");
+        write(rootfs, "etc/passwd", PASSWD);
+
+        ProotDistro.Container debian = ProotDistro.byName(ProotDistro.containers(containers), "debian");
+
+        assertNotNull(debian);
+        assertEquals("amal", debian.user);
+    }
+
     // --- the line that runs an app ---------------------------------------------------------
 
     @Test public void theLoginLineSharesX11AndCarriesTheDisplayIn() throws IOException {

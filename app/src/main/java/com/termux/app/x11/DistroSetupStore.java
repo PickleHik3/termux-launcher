@@ -7,8 +7,11 @@ import androidx.annotation.NonNull;
 
 import com.termux.shared.termux.TermuxConstants;
 
+import java.io.File;
+
 /**
- * The one thing D9's offer has to remember: that the user has already said no to it.
+ * The one thing the Display place's offer has to remember: that the user has already answered it
+ * — by saying no to it, or by taking the command the Get GUI apps screen builds.
  *
  * <p>The offer sits on the Display place, which is somewhere the user goes to run things, so it
  * has to be possible to make it go away for good — and equally it must not stay away when the
@@ -22,9 +25,9 @@ import com.termux.shared.termux.TermuxConstants;
  *   <li>Say "not now" to a container missing its fonts and finish the job yourself in a shell:
  *       nothing is left to offer, so nothing is offered. Fix only half of it and the remaining
  *       half is a new situation and is offered again, once.
- *   <li>Say "not now" and change nothing — the case of someone who runs their container their own
- *       way — and the offer never comes back on its own. Settings → Display is where they can
- *       still reach it.
+ *   <li>Answer it and change nothing — the case of someone who runs their container their own
+ *       way, and of someone who copied the command and has not pasted it yet — and the offer
+ *       never comes back on its own. Settings → Display is where they can still reach it.
  * </ul>
  *
  * <p>One string in the launcher's own preferences file, in the style of
@@ -53,6 +56,24 @@ public final class DistroSetupStore {
     /** Remember this situation as one the user has already turned down. */
     public void dismiss(@NonNull DistroSetup.Readiness readiness) {
         sharedPreferences.edit().putString(PREFS_KEY_DISMISSED_V1, readiness.signature()).apply();
+    }
+
+    /**
+     * Remember the situation the containers are in right now.
+     *
+     * <p>What counts as having answered the offer is copying the command — that is the moment the
+     * user has what they came for, and until then the offer has not been acted on at all. Opening
+     * the screen and backing out of it is not an answer, so it must leave the offer where it was.
+     *
+     * @param containersDir the containers directory to read the situation from
+     */
+    public static void dismissCurrent(@NonNull Context context, @NonNull File containersDir) {
+        new DistroSetupStore(context).dismiss(DistroSetup.read(containersDir));
+    }
+
+    /** The same, for the running prefix's containers. */
+    public static void dismissCurrent(@NonNull Context context) {
+        dismissCurrent(context, ProotDistro.containersDir());
     }
 
     /**

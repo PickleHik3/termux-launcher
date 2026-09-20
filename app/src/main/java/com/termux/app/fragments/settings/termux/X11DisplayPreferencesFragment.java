@@ -42,7 +42,6 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
     private static final String KEY_RESOLUTION_EXACT = "displayResolutionExact";
     private static final String KEY_RESOLUTION_CUSTOM = "displayResolutionCustom";
     private static final String KEY_GPU = "x11_gpu";
-    private static final String KEY_DISTRO_SETUP = "x11_distro_setup";
 
     private final ExecutorService probeExecutor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "x11-gpu-probe");
@@ -66,13 +65,6 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
         manager.setPreferenceDataStore(new X11DisplayPreferencesDataStore(context));
         setPreferencesFromResource(R.xml.x11_display_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
-        Preference distroSetup = findPreference(KEY_DISTRO_SETUP);
-        if (distroSetup != null) distroSetup.setOnPreferenceClickListener(preference -> {
-            // The same offer the Display place makes, minus its memory: a row the user went
-            // looking for is not something to remember them turning down.
-            com.termux.app.x11.DistroSetupDialog.show(preference.getContext(), false, null);
-            return true;
-        });
         ListPreference touch = findPreference(KEY_TOUCH_MODE);
         if (touch != null) {
             applyKeyboardFollowsTextRow(touch.getValue());

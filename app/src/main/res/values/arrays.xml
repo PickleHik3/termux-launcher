@@ -212,4 +212,22 @@
         <item>exact</item>
         <item>custom</item>
     </string-array>
+    <string-array name="gui_apps_route_entries">
+        <item>Termux\'s own apps</item>
+        <item>A full Linux inside</item>
+    </string-array>
+    <string-array name="gui_apps_route_values">
+        <item>x11</item>
+        <item>distro</item>
+    </string-array>
+    <string-array name="gui_apps_distro_entries">
+        <item>Debian (recommended)</item>
+        <item>Ubuntu</item>
+        <item>Arch Linux</item>
+    </string-array>
+    <string-array name="gui_apps_distro_values">
+        <item>debian</item>
+        <item>ubuntu</item>
+        <item>arch</item>
+    </string-array>
 </resources>
