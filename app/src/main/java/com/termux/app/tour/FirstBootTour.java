@@ -145,6 +145,10 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
      * its own flag rather than by {@link TermuxAppSharedPreferences#getFirstBootTourCompletedVersion()}
      * — Replay legitimately zeroes that version, and reading it back after that would look
      * exactly like "never migrated" and clobber the replay to "seen".
+     *
+     * <p>What it records is the version before the welcome card rather than the current one: the
+     * old introduction is a run they sat through, so it is not replayed, but they have never been
+     * offered this one, so the welcome card is put to them once.
      */
     private static void migrateLegacyOnboardingCompletionIfNeeded(
             @NonNull Activity activity, @NonNull TermuxAppSharedPreferences preferences) {
@@ -155,7 +159,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         if (TourController.legacyOnboardingCounts(
                 legacyVersion, LEGACY_ONBOARDING_COMPLETED_VERSION,
                 preferences.getFirstBootTourCompletedVersion())) {
-            preferences.setFirstBootTourCompletedVersion(TourController.RUN_VERSION);
+            preferences.setFirstBootTourCompletedVersion(
+                TourController.VERSION_BEFORE_THE_WELCOME_CARD);
             // The footage tour ran the permission chain once already; an upgrade stays silent.
             preferences.setFirstRunChainDone(true);
         }
@@ -179,11 +184,12 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     }
 
     /**
-     * Starts the run for someone who has just finished first launch. Does nothing for a user who
-     * has already been through one, which is what keeps an upgrade silent.
+     * Offers the run to someone who has just finished first launch, and to anyone whose last run
+     * was of an older version of it: an update brings cards they have never been shown, so the
+     * welcome card asks once and their answer is remembered.
      */
     public void startIfNeeded() {
-        if (mController.isFinished() || mController.isRunning()) return;
+        if (!mController.isOffered() || mController.isRunning()) return;
         if (waitForHelpToClose(this::startIfNeeded)) return;
         rebuildRunForThisPhone();
         bringTheWallHome();
@@ -559,6 +565,13 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             case USE_AS_HOME: mController.choose(TourController.Choice.USE_AS_HOME); break;
             case KEEP_TRYING: mController.choose(TourController.Choice.KEEP_TRYING); break;
             case CONTINUE: mController.choose(TourController.Choice.CONTINUE); break;
+            case TAKE_THE_TOUR:
+                // The two sentences that read the phone are read again here: the user has had the
+                // welcome card in front of them, and the keyboard may have gone since it appeared.
+                rebuildRunForThisPhone();
+                mController.takeTheTour();
+                break;
+            case NOT_NOW: mController.notNow(); break;
             case START_USING: mController.finish(); break;
             case RESUME: mController.resumeChosen(); break;
             case RESTART: mController.restartChosen(); break;
@@ -577,10 +590,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         android.content.ClipboardManager clipboard = (android.content.ClipboardManager)
             mActivity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
         if (clipboard == null) return;
-        TourEdition edition = TourEdition.of(mActivity.getPackageName());
-        String text = commandRes == 0
-            ? TourClosingCard.copyAllText(edition, mActivity::getString)
-            : mActivity.getString(commandRes);
+        if (commandRes == 0) return;
+        String text = mActivity.getString(commandRes);
         if (text.isEmpty()) return;
         clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
             mActivity.getString(R.string.tour_copy_commands), text));

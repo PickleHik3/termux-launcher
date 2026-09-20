@@ -27,6 +27,8 @@ public final class TourStep {
         LESSON,
         /** A question with an answer per button and no gesture at all. */
         CHOICE,
+        /** The first card, which offers the run rather than being part of it. */
+        WELCOME,
         /** The last card, which ends the run on its own action. */
         CLOSING
     }
@@ -38,11 +40,25 @@ public final class TourStep {
     /** The closing card's one action. */
     private static final TourAction[] CLOSING_ACTIONS = {TourAction.START_USING};
 
+    /** The welcome card's two answers. */
+    private static final TourAction[] WELCOME_ACTIONS =
+        {TourAction.TAKE_THE_TOUR, TourAction.NOT_NOW};
+
     /** Stable id, used by prefs and by the tests; never shown. */
     public final String id;
 
     /** Which kind of card this is. */
     public final Kind kind;
+
+    /**
+     * String resource for the small line above the card's title, or 0 on a card with no title.
+     * Only the two cards that are read rather than performed — the welcome and the closing one —
+     * carry one; a lesson is a single sentence beside the control it names.
+     */
+    public final int kickerRes;
+
+    /** String resource for the card's title, or 0 on a card that is one sentence. */
+    public final int titleRes;
 
     /** String resource for the card's sentence. */
     public final int copyRes;
@@ -157,6 +173,19 @@ public final class TourStep {
     public TourStep(String id, Kind kind, int[] copyLines, String[] targetIds, String[] signals,
                     TourGesture[] gestures, boolean topAnchored, boolean chordGlow,
                     TourAction[] actions, boolean endsShown) {
+        this(id, kind, 0, 0, copyLines, targetIds, signals, gestures, topAnchored, chordGlow,
+            actions, endsShown);
+    }
+
+    /**
+     * The same shape for a card that is read rather than performed: a small line, a title and
+     * then the sentence. The welcome and closing cards share it, so the run opens and closes on
+     * the same object.
+     */
+    public TourStep(String id, Kind kind, int kickerRes, int titleRes, int[] copyLines,
+                    String[] targetIds, String[] signals, TourGesture[] gestures,
+                    boolean topAnchored, boolean chordGlow, TourAction[] actions,
+                    boolean endsShown) {
         if (endsShown && signals.length == 0)
             throw new IllegalArgumentException("step " + id + " shows a stage it never reaches");
         if (endsShown && gestures.length <= signals.length)
@@ -168,6 +197,8 @@ public final class TourStep {
         if (copyLines.length == 0 || copyLines[0] == 0)
             throw new IllegalArgumentException("step " + id + " has no copy at all");
         this.id = id;
+        this.kickerRes = kickerRes;
+        this.titleRes = titleRes;
         this.copyLines = copyLines.clone();
         this.copyRes = copyLines[0];
         this.secondLineRes = copyLines.length > 1 ? copyLines[1] : 0;
@@ -191,9 +222,15 @@ public final class TourStep {
     private static TourAction[] defaultActions(Kind kind) {
         switch (kind) {
             case CLOSING: return CLOSING_ACTIONS;
+            case WELCOME: return WELCOME_ACTIONS;
             case LESSON: return LESSON_ACTIONS;
             default: return new TourAction[0];
         }
+    }
+
+    /** Whether this card carries a title above its sentence. */
+    public boolean hasTitle() {
+        return titleRes != 0;
     }
 
     /** The buttons this card offers, in order. */
@@ -279,6 +316,11 @@ public final class TourStep {
     /** Whether this is the closing card, which ends the run on its own action. */
     public boolean isClosingCard() {
         return kind == Kind.CLOSING;
+    }
+
+    /** Whether this is the card the run is offered on, which is not one of its steps. */
+    public boolean isWelcomeCard() {
+        return kind == Kind.WELCOME;
     }
 
     /** Whether this card is a question the user answers with one of its buttons. */

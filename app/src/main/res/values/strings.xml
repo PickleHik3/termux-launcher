@@ -1850,8 +1850,13 @@
     <string name="tour_keep_trying">Keep trying</string>
     <string name="tour_continue">Continue</string>
     <string name="tour_start_using">Start using Termux</string>
+    <string name="tour_take_the_tour">Take the tour</string>
+    <string name="tour_not_now">Not now</string>
     <string name="tour_resume">Pick up where I left off</string>
     <string name="tour_restart">Start over</string>
+    <string name="tour_card_kicker">Termux Launcher</string>
+    <string name="tour_card_welcome_title">Welcome</string>
+    <string name="tour_card_welcome">A terminal, your apps and a Linux display on one home screen. A two-minute tour shows you the basics.</string>
     <string name="tour_card_find_help_corner">Hold a pane corner.</string>
     <string name="tour_card_find_help_open">Tap ? to see what the controls do.</string>
     <string name="tour_card_find_help_close">Close help to continue.</string>
@@ -1871,25 +1876,21 @@
     <string name="tour_card_home_choice">Use Termux as your home screen?</string>
     <string name="tour_card_home_choice_already">Termux is your home screen.</string>
     <string name="tour_card_resume_or_restart">Termux has a new, shorter introduction.</string>
-    <string name="tour_card_closing">That is the tour. Enjoy the launcher.</string>
+    <string name="tour_card_closing_title">That is the tour</string>
+    <string name="tour_card_closing">Here is what is worth knowing on the way out.</string>
     <string name="tour_card_return_to_terminal">Swipe the status bar back to the terminal to continue.</string>
     <string name="tour_copy">Copy</string>
-    <string name="tour_copy_all">Copy all</string>
     <string name="tour_copied_commands">Copied</string>
     <string name="tour_copy_commands">Commands</string>
     <string name="tour_read_the_docs">Read the docs</string>
     <string name="tour_closing_multitasking_heading">Multitasking</string>
     <string name="tour_closing_multitasking_copy">A session groups your windows. A window holds panes, and each pane runs a shell. Help has the full reference for every key and gesture.</string>
-    <string name="tour_closing_customisation_heading">Customisation</string>
-    <string name="tour_closing_customisation_copy">Hold a pane corner for the Appearance and Layout editors to make the launcher yours.</string>
+    <string name="tour_closing_make_it_yours_heading">Make it yours</string>
+    <string name="tour_closing_make_it_yours_copy">Hold a pane corner for the Appearance and Layout editors to make the launcher yours.</string>
     <string name="tour_closing_extras_heading">Launcher extras</string>
     <string name="tour_closing_extras_copy">Install the launcher\'s own extras.</string>
-    <string name="tour_closing_graphical_heading">Graphical apps</string>
-    <string name="tour_closing_graphical_copy">Add the X11 repository, then install graphical apps to launch them from the app drawer.</string>
-    <string name="tour_closing_graphical_copy_nix">Graphical apps come straight from nixpkgs here, with no repository to add first.</string>
     <!-- Shell commands: never translated. -->
     <string name="tour_closing_extras_command" translatable="false">tlstore install fastfetch sigye claude-code</string>
-    <string name="tour_closing_graphical_command" translatable="false">pkg install x11-repo</string>
     <string name="tour_docs_url" translatable="false">https://picklehik3.github.io/termux-launcher-site/#wiki</string>
 
     <!-- Settings: replay the first-boot tour -->
