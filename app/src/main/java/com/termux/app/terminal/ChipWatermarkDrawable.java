@@ -2,6 +2,7 @@ package com.termux.app.terminal;
 
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.Path;
@@ -275,7 +276,10 @@ final class ChipWatermarkDrawable extends Drawable {
         Rect bounds = getBounds();
         if (bounds.isEmpty() || mOutline.isEmpty()) return;
 
-        mFillPaint.setColor(mFillColor);
+        // The resting surface fades out as the chip becomes the current one: the strip draws the
+        // selected pill beneath, over the chip and its × together, and a second fill and outline
+        // ending at the title's edge on top of it is the two crossing pills the user saw.
+        mFillPaint.setColor(restingAlpha(mFillColor));
         canvas.drawPath(mOutline, mFillPaint);
 
         drawWatermark(canvas);
@@ -318,6 +322,12 @@ final class ChipWatermarkDrawable extends Drawable {
         canvas.restoreToCount(save);
     }
 
+    /** A resting colour scaled by how far this chip is from being the selected one. */
+    private int restingAlpha(int color) {
+        return ColorUtils.setAlphaComponent(color,
+            Math.round(Color.alpha(color) * (1f - mSelection)));
+    }
+
     @NonNull
     private PorterDuffColorFilter iconTint(int opaqueColor) {
         if (mIconTint == null || mIconTintColor != opaqueColor) {
@@ -334,8 +344,11 @@ final class ChipWatermarkDrawable extends Drawable {
      */
     private void drawOutline(@NonNull Canvas canvas) {
         if (mStrokePx <= 0f) return;
-        mStrokePaint.setColor(mStrokeColor);
-        canvas.drawPath(mOutline, mStrokePaint);
+        int restingStroke = restingAlpha(mStrokeColor);
+        if (Color.alpha(restingStroke) > 0) {
+            mStrokePaint.setColor(restingStroke);
+            canvas.drawPath(mOutline, mStrokePaint);
+        }
         if (!mBusy) return;
 
         float length = pathLengthPx();

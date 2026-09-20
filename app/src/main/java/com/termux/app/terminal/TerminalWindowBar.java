@@ -327,6 +327,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     private static final float CLOSE_SEGMENT_DP = ChipWatermarkGeometry.CLOSE_SEGMENT_DP;
     private static final float CLOSE_TARGET_DP = 24f;
+    /** The hairline before the × keeps this much of the selected outline's alpha. */
+    private static final float CLOSE_DIVIDER_ALPHA = .45f;
 
     private final SelectionStrip mTabs;
 
@@ -1927,7 +1929,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                                float strokeWidth) {
             mFillPaint.setColor(fillColor);
             mStrokePaint.setColor(strokeColor);
-            mDividerPaint.setColor(strokeColor);
+            // Softer than the outline: it separates the title from the ×, it does not frame it.
+            mDividerPaint.setColor(ColorUtils.setAlphaComponent(strokeColor,
+                Math.round(android.graphics.Color.alpha(strokeColor) * CLOSE_DIVIDER_ALPHA)));
             mStrokePaint.setStrokeWidth(strokeWidth);
             mCornerRadius = Math.max(0f, cornerRadius);
             invalidate();
