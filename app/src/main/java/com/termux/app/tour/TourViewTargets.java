@@ -3,6 +3,7 @@ package com.termux.app.tour;
 import android.graphics.Rect;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -10,6 +11,7 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.AzScrubRowView;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
@@ -39,6 +41,13 @@ public final class TourViewTargets implements TourTargets {
     /** The extra key that shows and hides the keyboard, as the keys row names it. */
     private static final String KEYBOARD_TOGGLE_KEY_NAME = "KEYBOARD";
 
+    /**
+     * How far outside its own frame a pane still answers a corner hold, in dp. The same number
+     * {@code TerminalPaneController.findTouchedCorner} hit-tests with: the divider's empty pixels
+     * belong to the corners on either side of it, and so does the glow that teaches them.
+     */
+    private static final float PANE_CORNER_SLOP_DP = 6f;
+
     /** The seams the tour needs into the activity's view tree. */
     public interface ViewFinder {
         @Nullable
@@ -60,6 +69,15 @@ public final class TourViewTargets implements TourTargets {
          * chrome that drew it can say where that one is.
          */
         default boolean findTourHelpButtonRect(@NonNull Rect outOnScreen) {
+            return false;
+        }
+
+        /**
+         * The command palette's own glass, in screen coordinates, or false when the palette is
+         * shut. The palette lives in a host that fills the window and paints an animated rect
+         * inside it, so the view's bounds say nothing about where the palette actually is.
+         */
+        default boolean findTourCommandPaletteRect(@NonNull Rect outOnScreen) {
             return false;
         }
     }
@@ -114,6 +132,8 @@ public final class TourViewTargets implements TourTargets {
                 return help != null ? help : paneCornerRect();
             case PANE_CORNER:
                 return paneCornerRect();
+            case COMMAND_PALETTE:
+                return paletteRect();
             // The pane itself, which the corner zone above is measured out of.
             case TERMINAL_PANE:
                 return rectInOverlay(mFinder.findTourView(R.id.terminal_view),
@@ -203,21 +223,66 @@ public final class TourViewTargets implements TourTargets {
 
     /**
      * A corner of the terminal pane, and the terminal's rather than the display's, because the
-     * display may well be switched off. The square is the one the panes themselves answer touches
-     * in — the bigger {@link CornerZones#PANE_SIZE_DP} a terminal pane keeps, because its corner is
-     * held rather than tapped — clamped the same way, so the glow is the hit area and not a guess
-     * at it.
+     * display may well be switched off.
+     *
+     * <p>Measured off the pane's <em>frame</em>, never off the terminal inside it: the frame holds
+     * the terminal clear of its own corner arcs, so a square built on the terminal's bounds starts
+     * a few pixels in from the border the user is being asked to hold and the finger cue lands
+     * inside the text. The square itself is the one the panes answer touches in — the bigger
+     * {@link CornerZones#PANE_SIZE_DP} a terminal pane keeps, because its corner is held rather
+     * than tapped — grown outward by the same slop, so it straddles the border as the hit area
+     * does.
      */
     @Nullable
     private Rect paneCornerRect() {
-        Rect pane = rectInOverlay(mFinder.findTourView(R.id.terminal_view),
-            "no terminal pane is on screen");
-        if (pane == null) return null;
+        View frameView = paneFrameView();
+        if (frameView == null) return miss("no terminal pane is on screen");
+        Rect frame = rectInOverlay(frameView, "no terminal pane is on screen");
+        if (frame == null) return null;
         float density = mOverlay.getResources().getDisplayMetrics().density;
-        int size = Math.round(CornerZones.clampSize(CornerZones.paneSizePx(density),
-            pane.width(), pane.height()));
-        if (size <= 0) return miss("the pane is too small to have a corner zone");
-        return new Rect(pane.left, pane.top, pane.left + size, pane.top + size);
+        float size = CornerZones.clampSize(CornerZones.paneSizePx(density),
+            frame.width(), frame.height());
+        Rect out = new Rect();
+        if (!TourGlowGeometry.cornerZone(frame, size, PANE_CORNER_SLOP_DP * density, out))
+            return miss("the pane is too small to have a corner zone");
+        return out;
+    }
+
+    /**
+     * The frame of the pane the user is working in: the focused one when the launcher can say
+     * which that is, and otherwise the first pane laid out. Never the terminal view itself — that
+     * is the rect this exists to stop being used.
+     */
+    @Nullable
+    private View paneFrameView() {
+        View root = mOverlay.getRootView();
+        View focusedFrame = paneFrameOf(root == null ? null : root.findFocus());
+        if (isOnScreen(focusedFrame)) return focusedFrame;
+        View firstFrame = paneFrameOf(mFinder.findTourView(R.id.terminal_view));
+        return isOnScreen(firstFrame) ? firstFrame : null;
+    }
+
+    /** The pane frame this view sits in, or null when it is not in one. */
+    @Nullable
+    private static View paneFrameOf(@Nullable View view) {
+        View walk = view;
+        while (walk != null) {
+            if (walk instanceof PaneContentFrame) return walk;
+            ViewParent parent = walk.getParent();
+            walk = parent instanceof View ? (View) parent : null;
+        }
+        return null;
+    }
+
+    /** The palette's glass, converted out of screen coordinates into the overlay's. */
+    @Nullable
+    private Rect paletteRect() {
+        Rect onScreen = new Rect();
+        if (!mFinder.findTourCommandPaletteRect(onScreen) || onScreen.isEmpty())
+            return miss("the command palette is not open");
+        mOverlay.getLocationOnScreen(mLocation);
+        onScreen.offset(-mLocation[0], -mLocation[1]);
+        return onScreen;
     }
 
     /**

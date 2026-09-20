@@ -149,6 +149,18 @@ public class HelpPresentationTest {
         layout();
     }
 
+    /** A finger that travelled: a swipe over the launcher under help, not a tap on help. */
+    private void swipe(float fromX, float fromY, float toX, float toY) {
+        MotionEvent down = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, fromX, fromY, 0);
+        MotionEvent move = MotionEvent.obtain(0, 1, MotionEvent.ACTION_MOVE, toX, toY, 0);
+        MotionEvent up = MotionEvent.obtain(0, 2, MotionEvent.ACTION_UP, toX, toY, 0);
+        assertTrue(overlay.dispatchTouchEvent(down));
+        assertTrue(overlay.dispatchTouchEvent(move));
+        assertTrue(overlay.dispatchTouchEvent(up));
+        down.recycle(); move.recycle(); up.recycle();
+        layout();
+    }
+
     private java.util.List<TextView> texts() {
         java.util.List<TextView> found = new java.util.ArrayList<>();
         collect(overlay, found);
@@ -321,15 +333,21 @@ public class HelpPresentationTest {
         assertEquals(0, closed);
     }
 
-    /** Nothing to put away, so a tap on the washed launcher underneath does nothing at all. */
-    @Test public void tappingEmptySpaceInTheOverviewDoesNothing() {
+    /** Nothing to put away on the overview, so the empty space around it is the way out. */
+    @Test public void tappingEmptySpaceInTheOverviewClosesHelp() {
         overview(PaneWallPage.TERMINAL);
-        java.util.List<String> before = overlay.overviewCardIds();
         float[] point = emptyPoint();
         tap(point[0], point[1]);
-        assertEquals(before, overlay.overviewCardIds());
-        assertTrue(overlay.isShowing());
         assertNull(read);
+        assertEquals(1, closed);
+    }
+
+    /** A finger that travelled was a swipe over the launcher, not a tap on the empty space. */
+    @Test public void aFingerThatMovedIsNotAWayOutOfTheOverview() {
+        overview(PaneWallPage.TERMINAL);
+        float[] point = emptyPoint();
+        swipe(point[0], point[1], point[0] + 300, point[1] + 300);
+        assertTrue(overlay.isShowing());
         assertEquals(0, closed);
     }
 
@@ -420,9 +438,19 @@ public class HelpPresentationTest {
         tap(200, 400);
         assertNull(overlay.cardBounds());
         assertNull(overlay.selectedTopicId());
-        assertTrue("an outside tap is not a way out of help", overlay.isShowing());
+        assertTrue("the first outside tap only puts the card away", overlay.isShowing());
         assertEquals(0, closed);
         assertFalse(overlay.markerTargetIds().isEmpty());
+    }
+
+    /** With no card up there is nothing left to put away, so the next tap outside closes help. */
+    @Test public void aSecondTapOnEmptySpaceClosesHelp() {
+        explore(PaneWallPage.TERMINAL);
+        tapMarker("status");
+        tap(200, 400);
+        assertEquals(0, closed);
+        tap(200, 400);
+        assertEquals(1, closed);
     }
 
     @Test public void backPutsTheCardAwayFirstAndThenHandsBackToHelp() {

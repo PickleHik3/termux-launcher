@@ -1993,6 +1993,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
             return mPaneController != null && mPaneController.helpButtonRectOnScreen(out);
         }
+
+        @Override public boolean commandPaletteRectOnScreen(@NonNull android.graphics.Rect out) {
+            // The live controller only: asking for one would build a palette nobody opened.
+            return mCommandPalette != null && mCommandPalette.frameOnScreen(out);
+        }
     }
 
     @Override

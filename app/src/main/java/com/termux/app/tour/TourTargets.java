@@ -36,6 +36,12 @@ public interface TourTargets {
     /** The keyboard button of the extra keys row: the one control that shows and hides the keyboard. */
     String KEYBOARD_TOGGLE_KEY = "keyboard_toggle_key";
     String PANE_CORNER = "pane_corner";
+    /**
+     * The command palette, as the glass it actually paints rather than as the full-screen host it
+     * lives in. Only ever on screen while the palette is open, and the one thing the last lesson's
+     * closing card can stand against.
+     */
+    String COMMAND_PALETTE = "command_palette";
     /** The whole terminal pane, for the one card that is about the terminal itself. */
     String TERMINAL_PANE = "terminal_pane";
     String DOCK = "dock";

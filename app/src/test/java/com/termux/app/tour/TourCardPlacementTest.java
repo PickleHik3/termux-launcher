@@ -255,6 +255,58 @@ public class TourCardPlacementTest {
         assertNull(TourCardPlacement.anchorRect(true, null, new Rect()));
     }
 
+    // ---- a card that asks for a side of its own ---------------------------------------------
+
+    private static TourCardPlacement place(Rect target, int preferredSide) {
+        return TourCardPlacement.place(W, H, CARD_W, CARD_H, target, MARGIN, MARGIN, MARGIN, GAP,
+            POINTER, POINTER_HALF, preferredSide);
+    }
+
+    /**
+     * A palette grown tall enough that its middle falls in the top half of the screen, which is
+     * the case the ask exists for: the surface reaches the bottom of the display either way.
+     */
+    private static final Rect TALL_PALETTE = new Rect(48, 400, 1032, 1800);
+
+    @Test
+    public void aCardThatAsksToStandAboveDoesSoWhateverHalfItsControlsMiddleFallsIn() {
+        TourCardPlacement placement = place(TALL_PALETTE, TourCardPlacement.SIDE_ABOVE);
+        assertEquals(400 - STAND_OFF - CARD_H, placement.top);
+        assertEquals(TourCardPlacement.POINTER_BOTTOM, placement.pointerEdge);
+    }
+
+    @Test
+    public void theSameCardWithoutTheAskWouldHaveGoneUnderIt() {
+        TourCardPlacement placement = place(TALL_PALETTE);
+        assertEquals(1800 + STAND_OFF, placement.top);
+        assertEquals(TourCardPlacement.POINTER_TOP, placement.pointerEdge);
+    }
+
+    @Test
+    public void aCardThatAsksToStandBelowDoesSoEvenInTheBottomHalf() {
+        Rect target = new Rect(400, 1500, 680, 1600);
+        TourCardPlacement placement = place(target, TourCardPlacement.SIDE_BELOW);
+        assertEquals(1600 + STAND_OFF, placement.top);
+        assertEquals(TourCardPlacement.POINTER_TOP, placement.pointerEdge);
+    }
+
+    @Test
+    public void anAskForASideWithNoRoomStillFlips() {
+        // Nothing above a control this near the top can hold the card, so the ask gives way.
+        Rect target = new Rect(400, 80, 680, 140);
+        TourCardPlacement placement = place(target, TourCardPlacement.SIDE_ABOVE);
+        assertEquals(140 + STAND_OFF, placement.top);
+        assertEquals(TourCardPlacement.POINTER_TOP, placement.pointerEdge);
+    }
+
+    @Test
+    public void askingForNoSideIsTheRuleEveryOtherCardTakes() {
+        Rect top = new Rect(400, 200, 680, 300);
+        assertEquals(place(top).top, place(top, TourCardPlacement.SIDE_AUTO).top);
+        Rect bottom = new Rect(400, 1900, 680, 2000);
+        assertEquals(place(bottom).top, place(bottom, TourCardPlacement.SIDE_AUTO).top);
+    }
+
     @Test
     public void aCardKeptOnAStaleControlIsPlacedExactlyWhereItWas() {
         Rect chip = new Rect(400, 60, 560, 120);

@@ -61,6 +61,15 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         default boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
             return false;
         }
+
+        /**
+         * The command palette's glass, in screen coordinates, or false when it is shut. The
+         * palette paints an animated rect inside a host that fills the window, so its view's
+         * bounds say nothing about where it is.
+         */
+        default boolean commandPaletteRectOnScreen(@NonNull android.graphics.Rect out) {
+            return false;
+        }
     }
 
     /**
@@ -649,6 +658,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @Override
     public boolean findTourHelpButtonRect(@NonNull android.graphics.Rect outOnScreen) {
         return mChromeProbe != null && mChromeProbe.helpButtonRectOnScreen(outOnScreen);
+    }
+
+    @Override
+    public boolean findTourCommandPaletteRect(@NonNull android.graphics.Rect outOnScreen) {
+        return mChromeProbe != null && mChromeProbe.commandPaletteRectOnScreen(outOnScreen);
     }
 
     @Nullable

@@ -178,9 +178,10 @@ public final class TourRun {
         return new TourStep(FIND_ACTION,
             new int[] {R.string.tour_card_find_action_palette,
                 R.string.tour_card_find_action_close},
-            new String[] {TourTargets.SPACE_BAR, TourTargets.NONE},
+            new String[] {TourTargets.SPACE_BAR, TourTargets.COMMAND_PALETTE},
             new String[] {TourSignals.PALETTE_OPENED, TourSignals.PALETTE_CLOSED},
-            new TourGesture[] {TourGesture.SWIPE_UP, TourGesture.TAP}, false, false);
+            new TourGesture[] {TourGesture.SWIPE_UP, TourGesture.TAP}, false, false,
+            TourStep.Placement.ABOVE);
     }
 
     /**

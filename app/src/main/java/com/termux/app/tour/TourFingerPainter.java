@@ -3,8 +3,10 @@ package com.termux.app.tour;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.RectF;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
 /**
@@ -28,8 +30,27 @@ public final class TourFingerPainter {
                             @NonNull TourGesture gesture, float left, float top, float right,
                             float bottom, float density, float progress, int accent,
                             @NonNull float[] scratchPoint, @NonNull float[] scratchTrail) {
+        draw(canvas, paint, gesture, left, top, right, bottom, density, progress, accent,
+            scratchPoint, scratchTrail, null);
+    }
+
+    /**
+     * The same, held inside the area the cue is allowed to draw in.
+     *
+     * <p>A control against the edge of the screen — the first cap of the keys row is flush with
+     * it — puts the finger's own circle half off the display, and a soft ring cut in half by the
+     * edge reads as a drawing mistake rather than as a gesture. {@code cueBounds} is where the
+     * centre may be, so the caller has already taken the widest ring off it; null asks for no
+     * holding at all.
+     */
+    public static void draw(@NonNull Canvas canvas, @NonNull Paint paint,
+                            @NonNull TourGesture gesture, float left, float top, float right,
+                            float bottom, float density, float progress, int accent,
+                            @NonNull float[] scratchPoint, @NonNull float[] scratchTrail,
+                            @Nullable RectF cueBounds) {
         if (gesture == TourGesture.NONE) return;
         TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, progress, scratchPoint);
+        TourGlowGeometry.clampPoint(scratchPoint, cueBounds);
         float radius = RADIUS_DP * density;
         int opaque = opaque(accent);
         if (gesture == TourGesture.HOLD) {
@@ -47,6 +68,7 @@ public final class TourFingerPainter {
                 paint);
         } else if (gesture != TourGesture.TAP) {
             TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, 0f, scratchTrail);
+            TourGlowGeometry.clampPoint(scratchTrail, cueBounds);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeCap(Paint.Cap.ROUND);
             paint.setStrokeWidth(TRAIL_WIDTH_DP * density);
