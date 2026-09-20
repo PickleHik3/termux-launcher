@@ -796,8 +796,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final Handler mBackgroundProcessHandler = new Handler(Looper.getMainLooper());
     /** Height the in-app notice chip is occupying above the background stack; 0 when not showing. */
     private int mAppNoticeOccupancyPx;
-    /** True between the first-run permission chain starting and its last dialog closing. */
-    private boolean mFirstRunPermissionChainActive;
+    /** The first-run permissions card while it is up, or null. */
+    @Nullable private com.termux.app.firstrun.FirstRunPermissionsCardView mFirstRunPermissionsCard;
+    /** The view group the card was added to, so it is taken off the same one. */
+    @Nullable private ViewGroup mFirstRunPermissionsCardHost;
+    /**
+     * Whether the card has already asked for the weather's location this showing. There is no
+     * stored flag for it the way there is for the wallpaper read: the card is answered in one
+     * sitting, and an install that gets as far as Continue is never asked again.
+     */
+    private boolean mFirstRunWeatherAsked;
     /** Guards {@link #mFirstRunChainFinishedListener} firing more than once per chain. */
     private boolean mFirstRunChainFinishedNotified;
     /** Told about exactly once, when the first-run permission chain has fully closed. */
@@ -1363,70 +1371,108 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
             View contentView = findViewById(android.R.id.content);
             contentView.post(() -> {
-                // A run a process death interrupted picks back up on its own card, no permission
-                // chain involved — that already ran the first time this run started. Skipped for
-                // a forced replay, which always restarts from card one instead.
+                // A run a process death interrupted picks back up on its own card, no setup
+                // involved — that already ran the first time this run started. Skipped for a
+                // forced replay, which always restarts from card one instead.
                 FirstBootTour tour = firstBootTour();
                 if (!forceOnboarding && tour != null && tour.resumeIfInProgress()) return;
                 // Otherwise this is either the first launch ever or Settings asking for the tour
-                // again from a cold start. The chain's own dialogs no-op for anyone who has
-                // already answered them, so running it unconditionally is safe both ways; the
-                // tour starts (or restarts) only once it closes — registered first, because a
-                // chain with nothing left to ask closes inside the call below.
+                // again from a cold start. Running the setup unconditionally is safe both ways —
+                // it has nothing to show anyone who has already answered it, and a replay is the
+                // tour and nothing else; the tour starts (or restarts) only once the setup
+                // closes — registered first, because a setup with nothing to ask closes inside
+                // the call below.
                 setFirstRunChainFinishedListener(() -> {
                     FirstBootTour t = firstBootTour();
                     if (t == null) return;
                     if (forceOnboarding) t.restart();
                     else t.startIfNeeded();
                 });
-                startFirstRunPermissionChain();
+                startFirstRunPermissionChain(forceOnboarding);
             });
+        } else {
+            resumeFirstRunSetupAfterRestart();
         }
     }
 
     /**
-     * The permissions the launcher wants but cannot function without, asked for once, in order,
-     * on first launch — before the overlay tour starts, so the run teaches gestures on a screen
-     * that already looks and behaves the way it will from then on.
+     * The setup, picked back up by an activity rebuilt from a saved state.
      *
-     * <p>Both used to be asked reactively — the wallpaper one only after a read had already failed
-     * and the surface had drawn wrong, the location one at the moment the user first opened the
-     * weather card. Asking up front instead means the dialogs have a reason attached before the
-     * tour ever points at the surfaces they gate, and the first real frame is already correct.
-     *
-     * <p>Strictly sequential: two runtime permission dialogs requested in the same frame means the
-     * second one is dropped by the framework, so the location step is started from the wallpaper
-     * step's result rather than beside it. The Linux display step sits between the two: it needs
-     * no runtime permission, but keeps the same one-dialog-at-a-time shape.
-     *
-     * <p>{@link #setFirstRunChainFinishedListener(Runnable)} is told once the last link has closed,
-     * by whichever path that turns out to be.
+     * <p>Everything above is a cold-start matter, so it is gated on there being no saved state at
+     * all — but the process can die while the setup card is up, and the card is the very first
+     * thing a fresh install shows. Without this the activity that comes back has no card, nobody
+     * listening for the setup to close and therefore no tour, with both stored flags still false:
+     * the user is stranded short of a true cold relaunch. A rotation does not come through here —
+     * this activity keeps itself across one — so this really is a restart after a death.
      */
-    private void startFirstRunPermissionChain() {
+    private void resumeFirstRunSetupAfterRestart() {
+        View contentView = findViewById(android.R.id.content);
+        if (contentView == null) return;
+        contentView.post(() -> {
+            if (isFinishing() || isDestroyed() || mPreferences == null) return;
+            // A run that was already going picks back up on its own card, exactly as on a cold
+            // start; the setup behind it has closed long before.
+            FirstBootTour tour = firstBootTour();
+            if (tour != null && tour.resumeIfInProgress()) return;
+            if (!com.termux.app.firstrun.FirstRunPermissionsCard.shouldResume(
+                    mPreferences.isFirstRunChainDone(),
+                    mPreferences.isFirstRunPermissionsCardSeen(),
+                    firstRunWallpaperState(), firstRunWeatherState(),
+                    mFirstRunPermissionsCard != null)) {
+                return;
+            }
+            setFirstRunChainFinishedListener(() -> {
+                FirstBootTour t = firstBootTour();
+                if (t != null) t.startIfNeeded();
+            });
+            startFirstRunPermissionChain(false);
+        });
+    }
+
+    /**
+     * The three things the launcher would like on the way in — the wallpaper read, the weather's
+     * rough location, the Linux display — asked for on one card, before the tour's welcome card.
+     *
+     * <p>They used to be three dialogs in a row, each raised from the last one's result, so a
+     * fresh install opened on a stack of system prompts before the user had seen the launcher at
+     * all. Decision (user, 2026-09-20): one card instead, the way an established app asks, and it
+     * is the first thing on a fresh install. An install that has already been through the old
+     * chain sees it only while something on it is still ungranted, and only once.
+     *
+     * <p>{@link #setFirstRunChainFinishedListener(Runnable)} is told once Continue closes the
+     * card, or straight away when there is nothing to show, so the tour follows exactly as before.
+     *
+     * @param replay whether Settings asked for the tour again. A replay is the tour and nothing
+     *               else: the user asked to be walked through the launcher, not to be asked for
+     *               permissions a second time, so the card stays down however they stand.
+     */
+    private void startFirstRunPermissionChain(boolean replay) {
         if (isFinishing() || isDestroyed()) return;
+        // Never a second card over the one already up, whichever path asked for it.
+        if (mFirstRunPermissionsCard != null) return;
         mFirstRunChainFinishedNotified = false;
-        // The chain asks once, on the first launch. Every cold start still goes through here so
-        // the tour's listener fires, but a chain that has already run has nothing left to ask.
-        if (mPreferences != null && mPreferences.isFirstRunChainDone()) {
+        if (mPreferences == null) {
             finishFirstRunChain();
             return;
         }
-        mFirstRunPermissionChainActive = true;
-        if (requestWallpaperReadPermissionForFirstRun()) return;
-        if (requestDisplayEnableForFirstRun()) return;
-        requestWeatherLocationPermissionForFirstRun();
+        if (!com.termux.app.firstrun.FirstRunPermissionsCard.shouldShow(
+                mPreferences.isFirstRunChainDone(), mPreferences.isFirstRunPermissionsCardSeen(),
+                firstRunWallpaperState(), firstRunWeatherState(), replay)) {
+            finishFirstRunChain();
+            return;
+        }
+        showFirstRunPermissionsCard();
     }
 
     /**
-     * Lets the first-boot tour know when the first-run permission chain has fully closed — every
-     * dialog in it dismissed or skipped — so the overlay run can wait for it instead of racing the
-     * last dialog. Does not start the tour itself.
+     * Lets the first-boot tour know when the first-run permissions card has closed, so the overlay
+     * run can wait for it instead of racing it. Does not start the tour itself.
      */
     public void setFirstRunChainFinishedListener(@Nullable Runnable listener) {
         mFirstRunChainFinishedListener = listener;
     }
 
-    /** Fires {@link #mFirstRunChainFinishedListener} at most once per chain. */
+    /** Fires {@link #mFirstRunChainFinishedListener} at most once per launch. */
     private void finishFirstRunChain() {
         if (mFirstRunChainFinishedNotified) return;
         mFirstRunChainFinishedNotified = true;
@@ -1434,97 +1480,176 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mFirstRunChainFinishedListener != null) mFirstRunChainFinishedListener.run();
     }
 
-    /** @return true when a dialog was raised, so the chain continues from its result instead. */
-    private boolean requestWallpaperReadPermissionForFirstRun() {
-        if (mPreferences == null) return false;
-        boolean granted = androidx.core.content.ContextCompat.checkSelfPermission(this,
-            android.Manifest.permission.READ_EXTERNAL_STORAGE)
+    /**
+     * Where the wallpaper read stands. "Asked already" is the stored flag the reactive prompt
+     * reads too, so a card and a failed read never both count as the first ask.
+     */
+    @NonNull
+    private com.termux.app.firstrun.FirstRunPermissionsCard.State firstRunWallpaperState() {
+        return firstRunPermissionState(android.Manifest.permission.READ_EXTERNAL_STORAGE,
+            mPreferences != null && mPreferences.isWallpaperReadPermissionPrompted());
+    }
+
+    /**
+     * Where the weather's location stands, or null when the weather widget is switched off — a
+     * permission for a feature the user is not running is exactly the row that gets refused out of
+     * hand, so it is left off the card entirely.
+     */
+    @Nullable
+    private com.termux.app.firstrun.FirstRunPermissionsCard.State firstRunWeatherState() {
+        if (mPreferences == null || !mPreferences.isStatusWidgetWeatherEnabled()) return null;
+        return firstRunPermissionState(android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            mFirstRunWeatherAsked);
+    }
+
+    @NonNull
+    private com.termux.app.firstrun.FirstRunPermissionsCard.State firstRunPermissionState(
+            @NonNull String permission, boolean asked) {
+        boolean granted = androidx.core.content.ContextCompat.checkSelfPermission(this, permission)
             == android.content.pm.PackageManager.PERMISSION_GRANTED;
-        if (granted || mPreferences.isWallpaperReadPermissionPrompted()) return false;
-        mWallpaperReadPermissionPromptShowing = true;
-        new MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.title_wallpaper_read_permission)
-            .setMessage(R.string.msg_wallpaper_read_permission)
-            .setPositiveButton(R.string.action_wallpaper_read_permission_allow, (dialog, which) -> {
-                mPreferences.setWallpaperReadPermissionPrompted(true);
-                androidx.core.app.ActivityCompat.requestPermissions(this,
-                    new String[] {android.Manifest.permission.READ_EXTERNAL_STORAGE},
-                    REQUEST_CODE_WALLPAPER_READ_PERMISSION);
-            })
-            .setNegativeButton(R.string.action_wallpaper_read_permission_dismiss, (dialog, which) -> {
-                mPreferences.setWallpaperReadPermissionPrompted(true);
-                if (!requestDisplayEnableForFirstRun()) requestWeatherLocationPermissionForFirstRun();
-            })
-            .setOnCancelListener(dialog -> {
-                mPreferences.setWallpaperReadPermissionPrompted(true);
-                if (!requestDisplayEnableForFirstRun()) requestWeatherLocationPermissionForFirstRun();
-            })
-            .setOnDismissListener(dialog -> mWallpaperReadPermissionPromptShowing = false)
-            .show();
-        return true;
+        if (granted) return com.termux.app.firstrun.FirstRunPermissionsCard.State.GRANTED;
+        return asked ? com.termux.app.firstrun.FirstRunPermissionsCard.State.DENIED
+            : com.termux.app.firstrun.FirstRunPermissionsCard.State.NOT_ASKED;
     }
 
-    /**
-     * Second link in the chain: switch the embedded Linux display on. Skipped when the build has
-     * no display server, when it is already on, or once this has already been asked. "Turn on"
-     * takes the exact path the Display place's own button and the Settings switch take,
-     * {@link #turnOnEmbeddedDisplay()}, so the pref, the defaults pass and the page state all agree
-     * with what the user would get either other way.
-     *
-     * @return true when a dialog was raised, so the chain continues from its result instead.
-     */
-    private boolean requestDisplayEnableForFirstRun() {
-        if (mPreferences == null || !com.termux.BuildConfig.X11_SERVER) return false;
-        if (isX11DisplayEnabled() || mPreferences.isDisplayEnablePrompted()) return false;
-        new MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.title_display_enable_permission)
-            .setMessage(R.string.msg_display_enable_permission)
-            .setPositiveButton(R.string.action_display_enable_permission_allow, (dialog, which) -> {
-                mPreferences.setDisplayEnablePrompted(true);
-                turnOnEmbeddedDisplay();
-                requestWeatherLocationPermissionForFirstRun();
-            })
-            .setNegativeButton(R.string.action_display_enable_permission_dismiss, (dialog, which) -> {
-                mPreferences.setDisplayEnablePrompted(true);
-                requestWeatherLocationPermissionForFirstRun();
-            })
-            .setOnCancelListener(dialog -> {
-                mPreferences.setDisplayEnablePrompted(true);
-                requestWeatherLocationPermissionForFirstRun();
-            })
-            .show();
-        return true;
-    }
-
-    /**
-     * Third link in the chain: coarse location, which is the only thing the weather widget needs.
-     * Skipped when the widget is switched off — a permission for a feature the user is not running
-     * is exactly the kind of prompt that gets denied out of hand. The last link, so every path
-     * through it — skipped outright, or its dialog dismissed either way — closes the chain.
-     */
-    private void requestWeatherLocationPermissionForFirstRun() {
-        if (!mFirstRunPermissionChainActive || isFinishing() || isDestroyed()) return;
-        mFirstRunPermissionChainActive = false;
-        if (mPreferences == null || !mPreferences.isStatusWidgetWeatherEnabled()) {
+    /** Raises the card over the live chrome, which it takes every touch away from while it is up. */
+    private void showFirstRunPermissionsCard() {
+        if (mFirstRunPermissionsCard != null) return;
+        ViewGroup content = findViewById(android.R.id.content);
+        if (content == null) {
             finishFirstRunChain();
             return;
         }
-        if (androidx.core.content.ContextCompat.checkSelfPermission(this,
-                android.Manifest.permission.ACCESS_COARSE_LOCATION)
-                == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-            finishFirstRunChain();
+        com.termux.app.firstrun.FirstRunPermissionsCardView card =
+            new com.termux.app.firstrun.FirstRunPermissionsCardView(this);
+        card.setCallbacks(new com.termux.app.firstrun.FirstRunPermissionsCardView.Callbacks() {
+            @Override
+            public void onFirstRunPermissionTapped(
+                    @NonNull com.termux.app.firstrun.FirstRunPermissionsCard.Item item) {
+                onFirstRunPermissionRowTapped(item);
+            }
+
+            @Override
+            public void onFirstRunDisplayToggled(boolean enabled) {
+                setEmbeddedDisplayEnabled(enabled);
+            }
+
+            @Override
+            public void onFirstRunContinueTapped() {
+                dismissFirstRunPermissionsCard();
+                finishFirstRunChain();
+            }
+        });
+        card.setOnApplyWindowInsetsListener((view, insets) -> {
+            androidx.core.graphics.Insets bars =
+                androidx.core.view.WindowInsetsCompat.toWindowInsetsCompat(insets, view)
+                    .getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+            card.setSystemBarInsets(bars.top, bars.bottom);
+            return insets;
+        });
+        content.addView(card, com.termux.app.firstrun.FirstRunPermissionsCardView.buildLayoutParams());
+        mFirstRunPermissionsCard = card;
+        mFirstRunPermissionsCardHost = content;
+        android.view.WindowInsets current = card.getRootWindowInsets();
+        if (current != null) {
+            androidx.core.graphics.Insets bars =
+                androidx.core.view.WindowInsetsCompat.toWindowInsetsCompat(current, card)
+                    .getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+            card.setSystemBarInsets(bars.top, bars.bottom);
+        }
+        refreshFirstRunPermissionsCard();
+        card.animateIn();
+    }
+
+    /** Rebuilds the card's rows from where the permissions and the display setting stand now. */
+    private void refreshFirstRunPermissionsCard() {
+        if (mFirstRunPermissionsCard == null) return;
+        mFirstRunPermissionsCard.bind(com.termux.app.firstrun.FirstRunPermissionsCard.rows(
+            firstRunWallpaperState(), firstRunWeatherState(),
+            com.termux.BuildConfig.X11_SERVER, isX11DisplayEnabled()));
+    }
+
+    /** Takes the card off the screen; the answers it collected are already stored. */
+    private void dismissFirstRunPermissionsCard() {
+        if (mFirstRunPermissionsCard == null) return;
+        if (mPreferences != null) {
+            mPreferences.setFirstRunPermissionsCardSeen(true);
+            // Asked once, on the card, whatever the user answered: the later prompt raised by a
+            // failed wallpaper read reads the same flag and must not treat this as unasked.
+            mPreferences.setWallpaperReadPermissionPrompted(true);
+        }
+        if (mFirstRunPermissionsCardHost != null)
+            mFirstRunPermissionsCardHost.removeView(mFirstRunPermissionsCard);
+        mFirstRunPermissionsCard = null;
+        mFirstRunPermissionsCardHost = null;
+    }
+
+    /**
+     * A row's Allow button. The system stops raising its own dialog after the second refusal, so
+     * past that point the button opens this app's settings page rather than doing nothing at all.
+     */
+    private void onFirstRunPermissionRowTapped(
+            @NonNull com.termux.app.firstrun.FirstRunPermissionsCard.Item item) {
+        String permission = item == com.termux.app.firstrun.FirstRunPermissionsCard.Item.WEATHER
+            ? android.Manifest.permission.ACCESS_COARSE_LOCATION
+            : android.Manifest.permission.READ_EXTERNAL_STORAGE;
+        com.termux.app.firstrun.FirstRunPermissionsCard.State state =
+            item == com.termux.app.firstrun.FirstRunPermissionsCard.Item.WEATHER
+                ? firstRunWeatherState() : firstRunWallpaperState();
+        if (state == null) return;
+        boolean canAskAgain =
+            state != com.termux.app.firstrun.FirstRunPermissionsCard.State.DENIED
+                || androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(
+                    this, permission);
+        switch (com.termux.app.firstrun.FirstRunPermissionsCard.tapFor(state, canAskAgain)) {
+            case REQUEST:
+                if (item == com.termux.app.firstrun.FirstRunPermissionsCard.Item.WEATHER) {
+                    mFirstRunWeatherAsked = true;
+                    androidx.core.app.ActivityCompat.requestPermissions(this,
+                        new String[] {permission}, REQUEST_CODE_WEATHER_LOCATION);
+                } else {
+                    if (mPreferences != null)
+                        mPreferences.setWallpaperReadPermissionPrompted(true);
+                    androidx.core.app.ActivityCompat.requestPermissions(this,
+                        new String[] {permission}, REQUEST_CODE_WALLPAPER_READ_PERMISSION);
+                }
+                break;
+            case OPEN_SETTINGS:
+                openAppSettingsPage();
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** This app's page in the system settings, where a permission refused twice is turned back on. */
+    private void openAppSettingsPage() {
+        try {
+            startActivity(new Intent(
+                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.fromParts("package", getPackageName(), null))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (android.content.ActivityNotFoundException notFound) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "no settings page for this package", notFound);
+        }
+    }
+
+    /**
+     * The Linux display switch, wherever it is moved from. On takes the same path the Display
+     * place's own button and the Settings switch take, so the pref, the defaults pass and the page
+     * state all agree with what the user would get either other way.
+     */
+    private void setEmbeddedDisplayEnabled(boolean enabled) {
+        if (mPreferences == null || !com.termux.BuildConfig.X11_SERVER) return;
+        if (enabled) {
+            turnOnEmbeddedDisplay();
             return;
         }
-        new MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.title_weather_location_permission)
-            .setMessage(R.string.msg_weather_location_permission)
-            .setPositiveButton(R.string.action_weather_location_permission_allow, (dialog, which) ->
-                androidx.core.app.ActivityCompat.requestPermissions(this,
-                    new String[] {android.Manifest.permission.ACCESS_COARSE_LOCATION},
-                    REQUEST_CODE_WEATHER_LOCATION))
-            .setNegativeButton(R.string.action_weather_location_permission_dismiss, null)
-            .setOnDismissListener(dialog -> finishFirstRunChain())
-            .show();
+        mPreferences.setX11DisplayEnabled(false);
+        com.termux.app.x11.X11PaneFrame page = mPaneWallController == null
+            ? null : mPaneWallController.displayPage();
+        if (page != null) page.applyEnabled(false);
+        syncPlaceBar();
     }
 
     /**
@@ -1830,6 +1955,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Also here, not only in onStart: a wallpaper picker shown over this activity never stops
         // it, so the arrival back from one is an onResume on its own.
         refreshWallpaperPictureOnArrival();
+        // A row whose button opened the system settings page comes back here, so the card reads
+        // what was granted there rather than what it said before we left.
+        refreshFirstRunPermissionsCard();
         // The DISPLAY opt-in can have been flipped in Settings while we were away.
         syncDisplayEnvironment();
         // `pkg install xkeyboard-config` in a shell leaves no broadcast behind either, so the
@@ -5418,11 +5546,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         // The overlay tour draws its cards over the live home screen; a system dialog opening on
-        // top of one would fight it for attention. The first-run permission chain already asks
-        // this same question before the tour starts, so a failed read while the tour is up means
-        // the user declined it there — a later failed read re-arms this path once the run is done.
+        // top of one would fight it for attention. The first-run permissions card already asks
+        // this same question before the tour starts, so a failed read while either is up means the
+        // user has not answered it yet — a later failed read re-arms this path once they are gone.
         FirstBootTour tour = firstBootTour();
-        if (tour != null && tour.isShowing()) {
+        if (mFirstRunPermissionsCard != null || (tour != null && tour.isShowing())) {
             return;
         }
         boolean permissionGranted = androidx.core.content.ContextCompat.checkSelfPermission(this,
@@ -13133,6 +13261,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 ensureWeatherController().forceRefresh();
             }
+            // Granted or refused, the row says where it now stands; the card stays up either way.
+            refreshFirstRunPermissionsCard();
         } else if (requestCode == REQUEST_CODE_WALLPAPER_READ_PERMISSION) {
             if (grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -13140,8 +13270,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 refreshWallpaperPicture();
                 mChrome.onWallpaperChanged();
             }
-            // Granted or denied, the first-run chain moves on: the two permissions are unrelated.
-            if (!requestDisplayEnableForFirstRun()) requestWeatherLocationPermissionForFirstRun();
+            refreshFirstRunPermissionsCard();
         }
     }
 
