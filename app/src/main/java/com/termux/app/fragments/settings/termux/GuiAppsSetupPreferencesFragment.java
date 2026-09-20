@@ -50,8 +50,6 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
     /** How long the launcher is given to come forward before the notice is raised on it. */
     private static final long NOTICE_DELAY_MS = 350L;
 
-    private final Handler handler = new Handler(Looper.getMainLooper());
-
     /** The Intent that opens this screen from outside Settings. */
     @NonNull
     public static Intent intent(@NonNull Context context) {
@@ -90,12 +88,6 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
         if (getActivity() != null) getActivity().setTitle(R.string.settings_gui_apps_title);
     }
 
-    @Override
-    public void onDestroy() {
-        handler.removeCallbacksAndMessages(null);
-        super.onDestroy();
-    }
-
     /** Which Linux to put inside is only a question for the route that puts one inside. */
     private void applyDistroRow(@Nullable String route) {
         Preference distro = findPreference(KEY_DISTRO);
@@ -119,7 +111,9 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
         rememberTheOfferWasAnswered(appContext);
         Activity activity = getActivity();
         if (activity != null) activity.finish();
-        handler.postDelayed(
+        // A handler of its own, not the fragment's: finish() above can run onDestroy() inside
+        // the delay, and the fragment's handler is cleared there, which would drop the notice.
+        new Handler(Looper.getMainLooper()).postDelayed(
             () -> AppNotice.show(appContext, R.string.settings_gui_apps_copied), NOTICE_DELAY_MS);
     }
 

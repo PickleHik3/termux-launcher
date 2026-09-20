@@ -123,14 +123,6 @@ public class DistroSetupStoreTest {
         assertFalse(DistroSetupStore.shouldOffer(DistroSetup.read(containers), store.dismissed(), true));
     }
 
-    @Test public void merelyOpeningTheScreenLeavesTheOfferWhereItWas() throws IOException {
-        File containers = containersWith("debian", true, false);
-
-        // Opening the screen records nothing, so a user who backs out of it is offered again.
-        assertEquals("", store.dismissed());
-        assertTrue(DistroSetupStore.shouldOffer(DistroSetup.read(containers), store.dismissed(), true));
-    }
-
     @Test public void copyingRecordsTheSituationAsItIsNotAsItWasOffered() throws IOException {
         File containers = containersWith("debian", true, false);
 

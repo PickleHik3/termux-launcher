@@ -213,7 +213,7 @@
         <item>custom</item>
     </string-array>
     <string-array name="gui_apps_route_entries">
-        <item>Termux\'s X11 apps</item>
+        <item>Termux\'s own apps</item>
         <item>A full Linux inside</item>
     </string-array>
     <string-array name="gui_apps_route_values">
