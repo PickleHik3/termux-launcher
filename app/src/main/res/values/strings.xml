@@ -2304,4 +2304,7 @@
     <string name="help_overview_guide">Guide</string>
     <string name="help_overview_guide_action">Open the guide</string>
     <string name="help_key_paste">Paste</string>
+
+    <!-- The shelf under the phone in the Layout editor, when nothing is put away. -->
+    <string name="settings_layout_tray_empty">Hidden</string>
 </resources>
