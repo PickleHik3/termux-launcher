@@ -36,10 +36,10 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void everyEditionGetsTheSameThreeSectionsWithAHeadingAndASentence() {
+    public void everyEditionGetsTheSameFourSectionsWithAHeadingAndASentence() {
         for (TourEdition edition : TourEdition.values()) {
             List<TourClosingCard.Section> sections = TourClosingCard.sections(edition);
-            assertEquals("three sections for " + edition, 3, sections.size());
+            assertEquals("four sections for " + edition, 4, sections.size());
             for (TourClosingCard.Section section : sections) {
                 assertNotEquals("no heading for " + edition, 0, section.headingRes);
                 assertNotEquals("no copy for " + edition, 0, section.copyRes);
@@ -53,38 +53,51 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void theMultitaskingSectionIsTheSameOneEverywhereAndCarriesNoCommand() {
-        // None of the five lessons opens a shell, a window or a session, so the model is told
-        // here and the rest is left to help.
+    public void theShortcutsSectionComesFirstEverywhereAndCarriesNoCommand() {
+        // No lesson teaches the shortcut key, so the card names it on the way out.
         for (TourEdition edition : TourEdition.values()) {
-            TourClosingCard.Section multitasking = TourClosingCard.sections(edition).get(0);
-            assertEquals(R.string.tour_closing_multitasking_heading, multitasking.headingRes);
-            assertEquals(R.string.tour_closing_multitasking_copy, multitasking.copyRes);
-            assertFalse("multitasking has nothing to run", multitasking.hasCommand());
+            TourClosingCard.Section shortcuts = TourClosingCard.sections(edition).get(0);
+            assertEquals(R.string.tour_closing_shortcuts_heading, shortcuts.headingRes);
+            assertEquals(R.string.tour_closing_shortcuts_copy, shortcuts.copyRes);
+            assertFalse("shortcuts has nothing to run", shortcuts.hasCommand());
         }
     }
 
     @Test
-    public void makeItYoursSitsBetweenMultitaskingAndTheExtrasAndCarriesNoCommand() {
+    public void customizeSitsBetweenTheShortcutsAndTheExtrasAndCarriesNoCommand() {
         // The run teaches no lesson about the editors, so the way to them is said here.
         for (TourEdition edition : TourEdition.values()) {
-            TourClosingCard.Section makeItYours = TourClosingCard.sections(edition).get(1);
-            assertEquals(R.string.tour_closing_make_it_yours_heading, makeItYours.headingRes);
-            assertEquals(R.string.tour_closing_make_it_yours_copy, makeItYours.copyRes);
-            assertFalse("make it yours has nothing to run", makeItYours.hasCommand());
+            TourClosingCard.Section customize = TourClosingCard.sections(edition).get(1);
+            assertEquals(R.string.tour_closing_customize_heading, customize.headingRes);
+            assertEquals(R.string.tour_closing_customize_copy, customize.copyRes);
+            assertFalse("customize has nothing to run", customize.hasCommand());
         }
     }
 
     @Test
-    public void theExtrasSectionIsTheCardsOneCommandAndTheLastThingOnIt() {
+    public void theExtrasSectionIsTheCardsOneCommand() {
         for (TourEdition edition : TourEdition.values()) {
-            List<TourClosingCard.Section> sections = TourClosingCard.sections(edition);
-            TourClosingCard.Section extras = sections.get(sections.size() - 1);
+            TourClosingCard.Section extras = TourClosingCard.sections(edition).get(2);
             assertEquals(R.string.tour_closing_extras_heading, extras.headingRes);
+            assertEquals(R.string.tour_closing_extras_copy, extras.copyRes);
             assertTrue("no extras command for " + edition, extras.hasCommand());
+            assertEquals(R.string.tour_closing_extras_command, extras.commandRes);
             assertEquals("one command on the card for " + edition,
                 java.util.Collections.singletonList(extras.commandRes),
                 TourClosingCard.commandResources(edition));
+        }
+    }
+
+    @Test
+    public void graphicalAppsAreTheLastSectionAndAreASentenceRatherThanACommand() {
+        // Graphical apps have a screen of their own in Settings now, so the card points at it
+        // instead of handing a newcomer a line to paste.
+        for (TourEdition edition : TourEdition.values()) {
+            List<TourClosingCard.Section> sections = TourClosingCard.sections(edition);
+            TourClosingCard.Section guiApps = sections.get(sections.size() - 1);
+            assertEquals(R.string.tour_closing_gui_apps_heading, guiApps.headingRes);
+            assertEquals(R.string.tour_closing_gui_apps_copy, guiApps.copyRes);
+            assertFalse("graphical apps have nothing to run", guiApps.hasCommand());
         }
     }
 }

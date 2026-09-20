@@ -185,8 +185,13 @@ public final class TourRun {
 
     /**
      * The home-screen question, asked once the lessons are over so that the answer is an informed
-     * one. A phone that is already set up this way has nothing to decide, and is told so rather
-     * than asked again.
+     * one. A phone that is already set up this way has nothing to decide, so the card is not put
+     * in front of the user at all: the run walks straight past it to the closing card, and Back
+     * from that card lands on the last lesson.
+     *
+     * <p>The card is still one of the run's steps on such a phone — every stored card number, and
+     * every number an older run is mapped onto, means the card it has always meant — and its one
+     * Continue is what {@link TourController} reads it by.
      */
     private static TourStep homeChoice(RunContext context) {
         return new TourStep(HOME_CHOICE, TourStep.Kind.CHOICE,

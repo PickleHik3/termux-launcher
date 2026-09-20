@@ -1863,9 +1863,9 @@
     <string name="tour_card_keyboard_show_again">Tap it again to bring the keyboard back.</string>
     <string name="tour_card_keyboard_show">Tap the keyboard button to show the keyboard.</string>
     <string name="tour_card_keyboard_hide_again">Tap it again to hide the keyboard.</string>
-    <string name="tour_card_keyboard_hold_terminal">Hold the terminal: a short hold makes your finger the mouse, a longer hold opens the text menu.</string>
+    <string name="tour_card_keyboard_hold_terminal">A short hold, until the first buzz, sends mouse clicks and drags to apps in the terminal. A longer hold opens the text menu, the way plain Termux does.</string>
     <string name="tour_card_find_action_palette">Swipe up on the space bar to open the command palette.</string>
-    <string name="tour_card_find_action_close">Find Settings or Help, then tap outside the palette to close it.</string>
+    <string name="tour_card_find_action_close">Search for anything, launch Android apps and reach Termux Launcher features. Tap outside the palette to close it.</string>
     <string name="tour_card_home_choice">Use Termux as your home screen?</string>
     <string name="tour_card_home_choice_already">Termux is your home screen.</string>
     <string name="tour_card_resume_or_restart">Termux has a new, shorter introduction.</string>
@@ -1876,14 +1876,16 @@
     <string name="tour_copied_commands">Copied</string>
     <string name="tour_copy_commands">Commands</string>
     <string name="tour_read_the_docs">Read the docs</string>
-    <string name="tour_closing_multitasking_heading">Multitasking</string>
-    <string name="tour_closing_multitasking_copy">A session groups your windows. A window holds panes, and each pane runs a shell. Help has the full reference for every key and gesture.</string>
-    <string name="tour_closing_make_it_yours_heading">Make it yours</string>
-    <string name="tour_closing_make_it_yours_copy">Hold a pane corner for the Appearance and Layout editors to make the launcher yours.</string>
+    <string name="tour_closing_shortcuts_heading">Shortcuts</string>
+    <string name="tour_closing_shortcuts_copy">Ctrl + Alt is the default shortcut key; hold it to see what each key does.</string>
+    <string name="tour_closing_customize_heading">Customize</string>
+    <string name="tour_closing_customize_copy">Hold any pane corner to open the guide or customize Termux Launcher.</string>
     <string name="tour_closing_extras_heading">Launcher extras</string>
-    <string name="tour_closing_extras_copy">Install the launcher\'s own extras.</string>
+    <string name="tour_closing_extras_copy">Use tlstore to install terminal goodies such as fastfetch with GIF support, the sigye clock, Claude Code and kitten, kitty\'s companion tool.</string>
+    <string name="tour_closing_gui_apps_heading">GUI apps</string>
+    <string name="tour_closing_gui_apps_copy">Settings \u2192 Display \u2192 Get GUI apps sets up graphical Linux apps that open from the app drawer.</string>
     <!-- Shell commands: never translated. -->
-    <string name="tour_closing_extras_command" translatable="false">tlstore install fastfetch sigye claude-code</string>
+    <string name="tour_closing_extras_command" translatable="false">tlstore install fastfetch sigye claude-code kitten</string>
     <string name="tour_docs_url" translatable="false">https://picklehik3.github.io/termux-launcher-site/#wiki</string>
 
     <!-- Settings: replay the first-boot tour -->

@@ -25,6 +25,9 @@ public class TourControllerTest {
     /** A phone this launcher is not the home app of, with the keyboard up. */
     private static final TourRun.RunContext PHONE = new TourRun.RunContext(false, true);
 
+    /** The same phone, already set up with this launcher as its home screen. */
+    private static final TourRun.RunContext HOME_PHONE = new TourRun.RunContext(true, true);
+
     private FakeClock clock;
     private FakePrefs prefs;
     private RecordingListener listener;
@@ -57,6 +60,12 @@ public class TourControllerTest {
             return;
         }
         controller.onSignal(step.signalAt(controller.currentStage()));
+    }
+
+    /** Builds the run again for a phone this launcher is already the home app of. */
+    private void thePhoneIsAlreadyOurHome() {
+        controller = new TourController(TourRun.steps(HOME_PHONE), prefs, clock);
+        controller.setListener(listener);
     }
 
     /** The run as the user meets it: the welcome card, and the tour taken from it. */
@@ -420,6 +429,61 @@ public class TourControllerTest {
         assertTrue(listener.chosen.isEmpty());
     }
 
+    @Test
+    public void aPhoneAlreadySetUpThisWayIsNeverShownTheHomeQuestion() {
+        thePhoneIsAlreadyOurHome();
+        controller.startAt(TourRun.FIND_ACTION);
+        clearTheCard();
+        assertEquals(TourRun.CLOSING, controller.currentStep().id);
+        // The card the run walked past is never written down as the card the user is on.
+        assertEquals(6, prefs.stepIndex);
+        assertTrue(listener.chosen.isEmpty());
+        assertFalse(listener.shown.contains(TourRun.HOME_CHOICE + ":0"));
+        assertFalse(prefs.skipped);
+    }
+
+    @Test
+    public void backFromTheClosingCardOnSuchAPhoneLandsOnTheLastLesson() {
+        thePhoneIsAlreadyOurHome();
+        controller.startAt(TourRun.CLOSING);
+        controller.back();
+        assertEquals(TourRun.FIND_ACTION, controller.currentStep().id);
+        assertEquals(0, controller.currentStage());
+        assertEquals(4, prefs.stepIndex);
+    }
+
+    @Test
+    public void endTourOnSuchAPhoneStillEndsOnTheClosingCard() {
+        thePhoneIsAlreadyOurHome();
+        controller.startAt(TourRun.FIND_HELP);
+        controller.endTour();
+        assertTrue(controller.isRunning());
+        assertEquals(TourRun.CLOSING, controller.currentStep().id);
+        assertTrue(prefs.skipped);
+    }
+
+    @Test
+    public void aRunStoredOnThatCardComesBackOnTheClosingCardWhenThePhoneIsAlreadyOurHome() {
+        // The user made this launcher their home screen between the two runs, so the card they
+        // stopped on has nothing left to ask.
+        thePhoneIsAlreadyOurHome();
+        prefs.runVersion = TourController.RUN_VERSION;
+        prefs.stepIndex = 5;
+        prefs.stage = 0;
+        assertTrue(controller.resumeIfInProgress());
+        assertEquals(TourRun.CLOSING, controller.currentStep().id);
+        assertEquals(6, prefs.stepIndex);
+    }
+
+    @Test
+    public void aPhoneThatIsNotOurHomeIsStillAsked() {
+        controller.startAt(TourRun.FIND_ACTION);
+        clearTheCard();
+        assertEquals(TourRun.HOME_CHOICE, controller.currentStep().id);
+        assertEquals(Arrays.asList(TourAction.USE_AS_HOME, TourAction.KEEP_TRYING),
+            controller.currentActions());
+    }
+
     // Practice.
 
     @Test
@@ -664,14 +728,26 @@ public class TourControllerTest {
     }
 
     @Test
-    public void thatStageOffersDoneInPlaceOfSkipStep() {
+    public void thatStageOffersTheSameThreeButtonsAsEveryOtherStage() {
         controller.startAt(TourRun.KEYBOARD);
         assertEquals(Arrays.asList(TourAction.BACK, TourAction.SKIP_STEP, TourAction.END_TOUR),
             controller.currentActions());
         doTheGesture();
         doTheGesture();
-        assertEquals(Arrays.asList(TourAction.BACK, TourAction.DONE, TourAction.END_TOUR),
+        assertEquals(Arrays.asList(TourAction.BACK, TourAction.SKIP_STEP, TourAction.END_TOUR),
             controller.currentActions());
+    }
+
+    @Test
+    public void skipStepOnThatStageIsTheWayOnAndNotASkip() {
+        controller.startAt(TourRun.KEYBOARD);
+        doTheGesture();
+        doTheGesture();
+        assertTrue(controller.currentStep().isShownOnlyStage(controller.currentStage()));
+        controller.skip();
+        assertEquals(TourRun.FIND_ACTION, controller.currentStep().id);
+        // Nothing was passed over: the card asked for nothing on that stage.
+        assertFalse(prefs.skipped);
     }
 
     @Test
