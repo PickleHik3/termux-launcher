@@ -11,26 +11,24 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The last card's three sections, and what its Copy button puts on the clipboard.
+ * The last card's four sections, and what its Copy button puts on the clipboard.
  *
- * <p>Three things are worth knowing on the way out — how the launcher stacks sessions, windows and
- * panes, where the launcher is made the user's own, and the launcher's own extras — and the first
- * device pass showed that a paragraph carrying a command inside the prose is not a thing anyone
- * can act on from a phone. So each section is a heading, one sentence, and where there is
- * something to run, the command on its own line with its own Copy button.
+ * <p>Four things are worth knowing on the way out — the key every launcher shortcut starts with,
+ * where the launcher is made the user's own, the launcher's own extras, and where graphical Linux
+ * apps are set up — and the first device pass showed that a paragraph carrying a command inside
+ * the prose is not a thing anyone can act on from a phone. So each section is a heading, one
+ * sentence, and where there is something to run, the command on its own line with its own Copy
+ * button.
  *
- * <p>The multitasking section is the one the run no longer teaches by hand: none of the five
- * lessons opens a shell, a window or a session, so the model is told here in three sentences and
- * the rest is left to help, which the first lesson has just taught the user to reach.
+ * <p>The shortcuts and customize sections are the two the run never teaches: nothing in either is
+ * a lesson, and a newcomer who does not know the shortcut key or the editors exist will not go
+ * looking for them.
  *
- * <p>The "make it yours" section is the one the run never teaches: nothing in it is a lesson, and
- * a newcomer who does not know the editors exist will not go looking for them.
+ * <p>Graphical apps are a section again, but a sentence rather than a command: they are a Display
+ * matter now and have a screen of their own in Settings, which asks what the user actually wants
+ * rather than handing a newcomer one line to paste.
  *
- * <p>Graphical apps used to be a fourth section, with a command and an edition of its own. They
- * are a Display matter now and have a screen of their own in Settings, which can ask what the
- * user actually wants rather than handing a newcomer one line to paste.
- *
- * <p>Pure, so the table below is a unit test rather than three screenshots.
+ * <p>Pure, so the table below is a unit test rather than four screenshots.
  */
 public final class TourClosingCard {
 
@@ -53,19 +51,22 @@ public final class TourClosingCard {
         }
     }
 
-    private static final Section MULTITASKING = new Section(
-        R.string.tour_closing_multitasking_heading, R.string.tour_closing_multitasking_copy, 0);
-    private static final Section MAKE_IT_YOURS = new Section(
-        R.string.tour_closing_make_it_yours_heading, R.string.tour_closing_make_it_yours_copy, 0);
+    private static final Section SHORTCUTS = new Section(
+        R.string.tour_closing_shortcuts_heading, R.string.tour_closing_shortcuts_copy, 0);
+    private static final Section CUSTOMIZE = new Section(
+        R.string.tour_closing_customize_heading, R.string.tour_closing_customize_copy, 0);
     private static final Section EXTRAS = new Section(R.string.tour_closing_extras_heading,
         R.string.tour_closing_extras_copy, R.string.tour_closing_extras_command);
+    private static final Section GUI_APPS = new Section(
+        R.string.tour_closing_gui_apps_heading, R.string.tour_closing_gui_apps_copy, 0);
 
     private static final List<Section> SECTIONS = Collections.unmodifiableList(
-        Arrays.asList(MULTITASKING, MAKE_IT_YOURS, EXTRAS));
+        Arrays.asList(SHORTCUTS, CUSTOMIZE, EXTRAS, GUI_APPS));
 
     /**
-     * The card's sections, in order. The same three in every edition: what was left of the card
-     * once graphical apps moved to their own screen says nothing an edition disagrees with.
+     * The card's sections, in order. The same four in every edition: graphical apps are a screen
+     * in Settings now, so the one section an edition used to disagree about says the same thing
+     * everywhere.
      */
     @NonNull
     public static List<Section> sections(@NonNull TourEdition edition) {

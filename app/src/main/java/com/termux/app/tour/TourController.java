@@ -66,12 +66,14 @@ public final class TourController {
         Arrays.asList(TourAction.DONE, TourAction.END_PRACTICE));
 
     /**
-     * The buttons a stage that is only shown offers. Done takes the place of Skip step: on a card
-     * the run is not waiting on, reading it and being done with it are the same thing, and two
-     * buttons that did the same would only ask the user to choose between them.
+     * The buttons a stage that is only shown offers: the same three every other stage offers. The
+     * card the run is not waiting on used to say Done instead, and a middle button that changes
+     * its word halfway through a lesson reads as a different button doing a different thing. It
+     * is the same way on, so it is the same word; moving past a card that asked for nothing is
+     * not counted as a lesson skipped.
      */
     private static final List<TourAction> SHOWN_STAGE_ACTIONS = Collections.unmodifiableList(
-        Arrays.asList(TourAction.BACK, TourAction.DONE, TourAction.END_TOUR));
+        Arrays.asList(TourAction.BACK, TourAction.SKIP_STEP, TourAction.END_TOUR));
 
     /** What the user answered on the home-screen card. */
     public enum Choice {
@@ -375,6 +377,8 @@ public final class TourController {
     public boolean startAt(String stepId) {
         int index = indexOf(stepId);
         if (index < 0) return false;
+        index = shownFrom(index);
+        if (index >= mSteps.size()) return false;
         mPracticing = false;
         mAwaitingResumeChoice = false;
         mShowingWelcome = false;
@@ -453,6 +457,13 @@ public final class TourController {
 
     /** Picks the run up on {@code index}, at the furthest stage of that card {@code stage} can be. */
     private boolean resumeAt(int index, int stage) {
+        // The phone may have been made this launcher's home screen since the run was stored, in
+        // which case the card it stopped on is one this run no longer shows: it is walked past,
+        // and the card after it starts where every card starts.
+        int shown = shownFrom(index);
+        if (shown >= mSteps.size()) return false;
+        if (shown != index) stage = 0;
+        index = shown;
         mPracticing = false;
         mAwaitingResumeChoice = false;
         mShowingWelcome = false;
@@ -518,12 +529,19 @@ public final class TourController {
     /** Back to the first stage of the lesson before this one; nothing to do on the first. */
     public void back() {
         if (offTheRun() || mStepIndex <= 0) return;
-        moveTo(mStepIndex - 1);
+        int previous = shownBackFrom(mStepIndex - 1);
+        if (previous < 0) return;
+        moveTo(previous);
     }
 
-    /** The Skip step button: this lesson is not for this user, move on. */
+    /**
+     * The Skip step button: this lesson is not for this user, move on. On the one stage the run
+     * only shows it is the way on rather than a skip — there is no gesture to pass over — so the
+     * run is not marked as skipped for it.
+     */
     public void skip() {
         if (offTheRun()) return;
+        if (continueShownStage()) return;
         mPrefs.setTourSkipped(true);
         advance();
     }
@@ -541,8 +559,9 @@ public final class TourController {
         }
         mPrefs.setTourSkipped(true);
         int choice = indexOf(TourRun.HOME_CHOICE);
-        if (choice > mStepIndex) {
-            moveTo(choice);
+        int target = choice >= 0 ? shownFrom(choice) : mSteps.size();
+        if (target > mStepIndex && target < mSteps.size()) {
+            moveTo(target);
             return;
         }
         end();
@@ -596,11 +615,38 @@ public final class TourController {
     private void advance() {
         if (mPracticing) {
             finishPractice();
-        } else if (mStepIndex + 1 >= mSteps.size()) {
-            end();
-        } else {
-            moveTo(mStepIndex + 1);
+            return;
         }
+        int next = shownFrom(mStepIndex + 1);
+        if (next >= mSteps.size()) end();
+        else moveTo(next);
+    }
+
+    /**
+     * Whether this card is passed over rather than shown. The home-screen question on a phone the
+     * launcher is already the home app of has nothing to ask and nothing to answer, so the run
+     * walks past it in both directions instead of stopping the user on a card with one button.
+     *
+     * <p>The card stays in the run either way: every stored card number, and every number the
+     * older runs are mapped onto, means the card it has always meant.
+     */
+    private static boolean isPassedOver(TourStep step) {
+        return step.isChoiceCard() && step.actions().size() == 1
+            && step.actions().get(0) == TourAction.CONTINUE;
+    }
+
+    /** The first card at or after {@code index} that is shown, or the run's size when none is. */
+    private int shownFrom(int index) {
+        int at = Math.max(0, index);
+        while (at < mSteps.size() && isPassedOver(mSteps.get(at))) at++;
+        return at;
+    }
+
+    /** The last card at or before {@code index} that is shown, or -1 when none is. */
+    private int shownBackFrom(int index) {
+        int at = Math.min(index, mSteps.size() - 1);
+        while (at >= 0 && isPassedOver(mSteps.get(at))) at--;
+        return at;
     }
 
     private void moveTo(int index) {
