@@ -1598,16 +1598,29 @@ public final class HelpOverlayView extends FrameLayout {
             case MotionEvent.ACTION_UP:
                 if (moved || onSomething(downX, downY) || onSomething(event.getX(), event.getY())) break;
                 performClick();
-                // The overview has nothing to put away: it is all one page, and a stray tap on the
-                // launcher underneath must not read as a way out of help.
-                if (mode == Mode.OVERVIEW) break;
-                // The control itself is as good a marker as its dot; empty space puts the card away.
+                // The overview is all one page, so a tap on the empty space around it is the way
+                // out — the same tap that closes every other thing this launcher lays over the
+                // screen.
+                if (mode == Mode.OVERVIEW) { closeHelp(); break; }
+                // The control itself is as good a marker as its dot; empty space puts the card
+                // away, and empty space with no card up closes help.
                 String id = targetAt(event.getX(), event.getY());
                 if (id != null) select(id, false);
-                else deselect();
+                else if (model.selectedTargetId() != null) deselect();
+                else closeHelp();
                 break;
         }
         return true;
+    }
+
+    /**
+     * The one way out a tap has. It goes through the listener rather than through
+     * {@link #dismiss()} so that help goes away the same way the Close button takes it away —
+     * which is what tells the launcher, and the first-boot run's "close help to continue" card,
+     * that help has gone.
+     */
+    private void closeHelp() {
+        if (listener != null) listener.onCloseHelp();
     }
 
     private boolean onSomething(float x, float y) {

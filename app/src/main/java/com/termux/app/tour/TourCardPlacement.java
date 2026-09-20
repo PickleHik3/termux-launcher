@@ -23,6 +23,13 @@ import androidx.annotation.Nullable;
  */
 public final class TourCardPlacement {
 
+    /** The side of the control is whichever half of the overlay the control is standing in. */
+    public static final int SIDE_AUTO = 0;
+    /** The card asks to stand above its control whenever that side can hold it. */
+    public static final int SIDE_ABOVE = 1;
+    /** The card asks to stand below its control whenever that side can hold it. */
+    public static final int SIDE_BELOW = 2;
+
     /** The card carries no pointer: it is not anchored to anything it can point at. */
     public static final int POINTER_NONE = 0;
     /** The pointer is on the card's top edge, so the target is above the card. */
@@ -88,6 +95,26 @@ public final class TourCardPlacement {
                                           int cardWidth, int cardHeight, @Nullable Rect target,
                                           int sideMargin, int topMargin, int bottomMargin,
                                           int gap, int pointerHeight, int pointerHalfWidth) {
+        return place(overlayWidth, overlayHeight, cardWidth, cardHeight, target, sideMargin,
+            topMargin, bottomMargin, gap, pointerHeight, pointerHalfWidth, SIDE_AUTO);
+    }
+
+    /**
+     * The same, for a card that asks for a side of its own.
+     *
+     * <p>One card in the run has to: the palette is a surface the user is being asked to close,
+     * and it sprouts from the bottom of the screen, so the card belongs above it however the
+     * halves of the overlay happen to fall. The ask is honoured only while that side can hold the
+     * card — a side with no room still flips, exactly as it does for every other card.
+     *
+     * @param preferredSide {@link #SIDE_AUTO}, {@link #SIDE_ABOVE} or {@link #SIDE_BELOW}
+     */
+    @NonNull
+    public static TourCardPlacement place(int overlayWidth, int overlayHeight,
+                                          int cardWidth, int cardHeight, @Nullable Rect target,
+                                          int sideMargin, int topMargin, int bottomMargin,
+                                          int gap, int pointerHeight, int pointerHalfWidth,
+                                          int preferredSide) {
         if (overlayWidth <= 0 || overlayHeight <= 0 || cardWidth <= 0 || cardHeight <= 0)
             return new TourCardPlacement(sideMargin, topMargin, POINTER_NONE, 0);
 
@@ -107,7 +134,8 @@ public final class TourCardPlacement {
         // The target's own half of the overlay decides which side is tried first; the other side
         // is taken whenever the first one has no room, which is the same test as "the card would
         // have to be clamped back over the control it is pointing at".
-        boolean preferBelow = target.centerY() < overlayHeight / 2;
+        boolean preferBelow = preferredSide == SIDE_BELOW
+            || (preferredSide != SIDE_ABOVE && target.centerY() < overlayHeight / 2);
         int preferredTop = preferBelow ? topBelow : topAbove;
         int flippedTop = preferBelow ? topAbove : topBelow;
 

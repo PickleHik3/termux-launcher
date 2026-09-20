@@ -21,6 +21,23 @@ import java.util.List;
  */
 public final class TourStep {
 
+    /**
+     * Which side of its control a card asks to stand on.
+     *
+     * <p>Almost every card takes {@link #AUTO}: the half of the screen the control is standing in
+     * is a better answer than anything a card could have decided for itself. The exception is a
+     * card about a surface that sprouts from one end of the screen — the palette — where the side
+     * is part of what the card is.
+     */
+    public enum Placement {
+        /** Whichever half of the overlay the control is standing in decides. */
+        AUTO,
+        /** Above the control, whenever that side can hold the card. */
+        ABOVE,
+        /** Below the control, whenever that side can hold the card. */
+        BELOW
+    }
+
     /** What kind of card this is, which is what decides the buttons it offers. */
     public enum Kind {
         /** A lesson: one control, one gesture per stage, cleared by watching the user do it. */
@@ -114,6 +131,9 @@ public final class TourStep {
      */
     public final boolean chordGlow;
 
+    /** The side of its control this card asks to stand on. */
+    public final Placement placement;
+
     /** The buttons this card offers, in the order they are read. */
     private final List<TourAction> actions;
 
@@ -147,6 +167,17 @@ public final class TourStep {
     public TourStep(String id, int[] copyLines, String[] targetIds, String[] signals,
                     TourGesture[] gestures, boolean topAnchored, boolean chordGlow) {
         this(id, copyLines, targetIds, signals, gestures, topAnchored, chordGlow, false);
+    }
+
+    /**
+     * The same shape, for a card that asks to stand on a side of its control rather than letting
+     * the overlay's halves decide.
+     */
+    public TourStep(String id, int[] copyLines, String[] targetIds, String[] signals,
+                    TourGesture[] gestures, boolean topAnchored, boolean chordGlow,
+                    Placement placement) {
+        this(id, signals.length == 0 ? Kind.CLOSING : Kind.LESSON, 0, 0, copyLines, targetIds,
+            signals, gestures, topAnchored, chordGlow, null, false, placement);
     }
 
     /** The same shape, for a lesson whose last stage is only shown. */
@@ -186,6 +217,15 @@ public final class TourStep {
                     String[] targetIds, String[] signals, TourGesture[] gestures,
                     boolean topAnchored, boolean chordGlow, TourAction[] actions,
                     boolean endsShown) {
+        this(id, kind, kickerRes, titleRes, copyLines, targetIds, signals, gestures, topAnchored,
+            chordGlow, actions, endsShown, Placement.AUTO);
+    }
+
+    /** The whole shape, for a card that also asks for a side of its control. */
+    public TourStep(String id, Kind kind, int kickerRes, int titleRes, int[] copyLines,
+                    String[] targetIds, String[] signals, TourGesture[] gestures,
+                    boolean topAnchored, boolean chordGlow, TourAction[] actions,
+                    boolean endsShown, Placement placement) {
         if (endsShown && signals.length == 0)
             throw new IllegalArgumentException("step " + id + " shows a stage it never reaches");
         if (endsShown && gestures.length <= signals.length)
@@ -209,6 +249,7 @@ public final class TourStep {
         this.topAnchored = topAnchored;
         this.chordGlow = chordGlow;
         this.endsShown = endsShown;
+        this.placement = placement == null ? Placement.AUTO : placement;
         if (kind == Kind.CHOICE && signals.length != 0)
             throw new IllegalArgumentException("choice " + id + " is cleared by a button, not a"
                 + " gesture");

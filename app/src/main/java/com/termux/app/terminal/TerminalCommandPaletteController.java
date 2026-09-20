@@ -206,6 +206,23 @@ public final class TerminalCommandPaletteController
         return mOpen;
     }
 
+    /**
+     * The glass the palette is actually painting, in screen coordinates.
+     *
+     * <p>For the first-boot run, which stands its card against the palette. The host fills the
+     * window and the palette is an animated rect inside it, so the host's own bounds would put the
+     * card against the whole screen.
+     *
+     * @return false while the palette is shut or has never been built
+     */
+    public boolean frameOnScreen(@NonNull android.graphics.Rect out) {
+        if (!mOpen || mHost == null || mFrame.isEmpty()) return false;
+        mHost.getLocationOnScreen(mLocation);
+        out.set(Math.round(mFrame.left) + mLocation[0], Math.round(mFrame.top) + mLocation[1],
+            Math.round(mFrame.right) + mLocation[0], Math.round(mFrame.bottom) + mLocation[1]);
+        return !out.isEmpty();
+    }
+
     /** The query line as typed so far. */
     @VisibleForTesting
     @NonNull

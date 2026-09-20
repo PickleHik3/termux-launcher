@@ -201,7 +201,10 @@ public class TourRunTest {
         assertEquals(TourTargets.SPACE_BAR, action.targetIdAt(0));
         assertEquals(TourGesture.SWIPE_UP, action.gestureAt(0));
         assertEquals(TourSignals.PALETTE_OPENED, action.signalAt(0));
-        assertEquals(TourTargets.NONE, action.targetIdAt(1));
+        // The closing stage stands against the palette itself, above it, rather than at the top
+        // of the screen with nothing to point at.
+        assertEquals(TourTargets.COMMAND_PALETTE, action.targetIdAt(1));
+        assertEquals(TourStep.Placement.ABOVE, action.placement);
         assertEquals(TourSignals.PALETTE_CLOSED, action.signalAt(1));
         assertNotEquals(action.copyResAt(0), action.copyResAt(1));
         // The stage that may be read over the palette is the one asking for its close.

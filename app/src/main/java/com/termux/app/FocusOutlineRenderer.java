@@ -245,6 +245,18 @@ public final class FocusOutlineRenderer {
     }
 
     /**
+     * How far {@link #drawRoundRectFallback} paints beyond the rect it is given: half the stroke,
+     * which straddles the path, plus the whole of the blurred halo outside it.
+     *
+     * <p>For callers that have to keep the ring on the screen. The first-boot run glows controls
+     * that sit flush against the edge of the display, where the halo alone is what crossed it.
+     */
+    public static float fallbackOuterReachPx(float density) {
+        return (Math.max(1f, density * STROKE_WIDTH_DP) / 2f)
+            + Math.max(1f, density * HALO_RADIUS_DP);
+    }
+
+    /**
      * Fallback for focus targets without an artwork mask (folder previews, views measured at zero).
      * Same stroke, halo, and tint parameters as the contour path so the two are visually siblings.
      */

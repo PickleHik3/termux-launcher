@@ -88,7 +88,12 @@ public final class TourOverlayView extends FrameLayout {
     private static final long TARGET_RETRY_MS = 1500L;
     /** How often the retry above asks again: often enough to follow a reveal, rarely enough. */
     private static final long TARGET_RETRY_INTERVAL_MS = 32L;
-    private static final float GLOW_PADDING_DP = 4f;
+    /**
+     * The gap the glow keeps outside the control. Tight on purpose: the ring also carries a
+     * blurred halo outside this rect, and on a control flush with the edge of the screen every dp
+     * of it is a dp of the halo hanging off the display.
+     */
+    private static final float GLOW_PADDING_DP = 2f;
     private static final float GLOW_RADIUS_DP = 12f;
     private static final float FINGER_RADIUS_DP = 9f;
     private static final float FINGER_TRAIL_WIDTH_DP = 3f;
@@ -102,6 +107,8 @@ public final class TourOverlayView extends FrameLayout {
     private final Path mPointerFill = new Path();
     private final Path mPointerEdges = new Path();
     private final RectF mGlowRect = new RectF();
+    /** Where the finger cue's centre may be, so its own circle stays on the screen. */
+    private final RectF mCueBounds = new RectF();
     private final float[] mFingerPoint = new float[2];
     private final float[] mTrailPoint = new float[2];
 
@@ -401,15 +408,16 @@ public final class TourOverlayView extends FrameLayout {
     /** Re-measures the control the card points at; cheap enough for every layout pass. */
     public void refreshTarget() {
         if (mStep == null) return;
-        boolean compact = mPresentation != TourCardVisibility.NORMAL;
         String targetId = glowTargetId();
         Rect updated = null;
         Rect topBar = null;
         String reason = "no targets host";
-        if (compact && mTargets != null) {
-            // The ceiling the card rests under, asked for on the same pass as everything else so
-            // a keyboard, a rotation or a place change moves the card with it. The card's own
-            // control is still measured below: resting at the top does not mean glowing nothing.
+        if (mTargets != null) {
+            // The ceiling a card that rests at the top sits under, asked for on the same pass as
+            // everything else so a keyboard, a rotation or a place change moves the card with it.
+            // Measured whatever the presentation: a card whose own control cannot be found rests
+            // there too, and it finds that out after this. The card's own control is still
+            // measured below — resting at the top does not mean glowing nothing.
             topBar = mTargets.rectFor(TourTargets.STATUS_BAR);
         }
         if (mTargets != null) {
@@ -480,8 +488,29 @@ public final class TourOverlayView extends FrameLayout {
     @Nullable
     private Rect anchorRect() {
         if (mStep == null) return null;
-        boolean namesAControl = !TourTargets.NONE.equals(glowTargetId());
+        String targetId = glowTargetId();
+        boolean namesAControl = !TourTargets.NONE.equals(targetId);
+        boolean measured = mTargetRect != null && !mTargetRect.isEmpty();
+        // The swipe that opens the palette is performed on the space bar, and the space bar is
+        // not there at all while the keyboard is down. That is not a control still arriving, so
+        // the card does not keep the last one's place: it stands against the key that brings the
+        // keyboard back, and against nothing when even that is gone.
+        if (namesAControl && !measured && TourTargets.SPACE_BAR.equals(targetId)) {
+            Rect instead = mTargets == null
+                ? null : mTargets.rectFor(TourTargets.KEYBOARD_TOGGLE_KEY);
+            return instead != null && !instead.isEmpty() ? instead : null;
+        }
         return TourCardPlacement.anchorRect(namesAControl, mTargetRect, mLastAnchorRect);
+    }
+
+    /** The side of its control this card asks to stand on; almost every card asks for none. */
+    private int preferredCardSide() {
+        if (mStep == null) return TourCardPlacement.SIDE_AUTO;
+        switch (mStep.placement) {
+            case ABOVE: return TourCardPlacement.SIDE_ABOVE;
+            case BELOW: return TourCardPlacement.SIDE_BELOW;
+            default: return TourCardPlacement.SIDE_AUTO;
+        }
     }
 
     /** The control the card is glowing right now, for the log. Null when it has none. */
@@ -561,15 +590,19 @@ public final class TourOverlayView extends FrameLayout {
         super.onDraw(canvas);
         if (mStep == null) return;
         drawCardPointer(canvas);
+        // Only a card standing against its control wears the marks. A compact card is at the top
+        // of the screen because a surface is covering that control, and a glow on what is behind
+        // that surface is a glow on something the user cannot see.
+        if (mPresentation != TourCardVisibility.NORMAL) return;
         if (mTargetRect == null || mTargetRect.isEmpty()) return;
         drawGlow(canvas);
         drawFinger(canvas);
     }
 
     private void drawGlow(@NonNull Canvas canvas) {
-        float padding = GLOW_PADDING_DP * mDensity;
-        mGlowRect.set(mTargetRect.left - padding, mTargetRect.top - padding,
-            mTargetRect.right + padding, mTargetRect.bottom + padding);
+        TourGlowGeometry.glowRect(mTargetRect, GLOW_PADDING_DP * mDensity,
+            FocusOutlineRenderer.fallbackOuterReachPx(mDensity), getWidth(), getHeight(),
+            TourGlowGeometry.EDGE_MARGIN_DP * mDensity, mGlowRect);
         FocusOutlineRenderer.drawRoundRectFallback(canvas, mGlowRect, GLOW_RADIUS_DP * mDensity,
             mAccent, 1f, 1f, mDensity);
     }
@@ -577,9 +610,13 @@ public final class TourOverlayView extends FrameLayout {
     private void drawFinger(@NonNull Canvas canvas) {
         TourGesture gesture = mStep.gestureAt(mStage);
         if (gesture == TourGesture.NONE || mTraceProgress >= 1f) return;
+        // The widest ring the cue ever draws is the hold's halo, at 1.9 times the finger's own
+        // radius; the centre is kept in far enough that even that stays on the screen.
+        TourGlowGeometry.cueBounds(getWidth(), getHeight(), FINGER_RADIUS_DP * 1.9f * mDensity,
+            TourGlowGeometry.EDGE_MARGIN_DP * mDensity, mCueBounds);
         TourFingerPainter.draw(canvas, mFingerPaint, gesture, mTargetRect.left, mTargetRect.top,
             mTargetRect.right, mTargetRect.bottom, mDensity, mTraceProgress, mAccent,
-            mFingerPoint, mTrailPoint);
+            mFingerPoint, mTrailPoint, mCueBounds);
     }
 
     /**
@@ -593,16 +630,23 @@ public final class TourOverlayView extends FrameLayout {
         int height = mCard.getMeasuredHeight();
         if (width <= 0 || height <= 0) return;
         int margin = dp(CARD_SIDE_MARGIN_DP);
-        boolean atTheTop = mPresentation == TourCardVisibility.COMPACT_TOP
-            || mPresentation == TourCardVisibility.AWAY;
+        // Away from the place it is taught on, the card stands against nothing by definition: the
+        // control it names is on another page of the wall.
+        Rect anchor = mPresentation == TourCardVisibility.AWAY ? null : anchorRect();
+        // A card that names a control and has nothing to stand against rests under the launcher's
+        // own top bar. The middle of the screen is where the missing control would have been, and
+        // a card sitting there reads as pointing at it.
+        boolean atTheTop = anchor == null
+            && (mPresentation != TourCardVisibility.NORMAL
+                || !TourTargets.NONE.equals(glowTargetId()));
         TourCardPlacement placement = atTheTop
             ? TourCardPlacement.placeUnderStatusBar(getWidth(), getHeight(), width, height,
                 margin, margin + mSystemInsetTop, margin + mSystemInsetBottom, mTopBarRect,
                 dp(CARD_GAP_DP))
             : TourCardPlacement.place(getWidth(), getHeight(),
-                width, height, anchorRect(), margin, margin + mSystemInsetTop,
+                width, height, anchor, margin, margin + mSystemInsetTop,
                 margin + mSystemInsetBottom, dp(CARD_GAP_DP), dp(POINTER_HEIGHT_DP),
-                dp(POINTER_HALF_WIDTH_DP));
+                dp(POINTER_HALF_WIDTH_DP), preferredCardSide());
         mPlacement = placement;
         mCard.layout(placement.left, placement.top, placement.left + width,
             placement.top + height);
