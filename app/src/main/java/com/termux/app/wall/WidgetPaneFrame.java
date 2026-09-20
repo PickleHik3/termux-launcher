@@ -470,6 +470,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
                 ? com.termux.app.GlassRimRenderer.strokePx(
                     getResources().getDisplayMetrics().density) : 0f);
             mControls.setPaneFill(glass && style != null ? style.paneGlassTintColor() : 0);
+            PaneGlass.dressTab(glass ? style : null, mControls);
         }
         // A page is never a divided pane, so its radius is the surface's own; only the glass
         // shape clips, exactly as on a full-height terminal pane.

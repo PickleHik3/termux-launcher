@@ -2816,6 +2816,10 @@ public class TerminalPaneController {
             if (!PaneGlass.apply(mSurfaceStyle, frame, backdrop, radiusPx))
                 releasePanePlank(frame);
         }
+        // The corner tab is cut from the same glass as the pane it grows out of, and re-dressed
+        // in the same pass, so a new frost frame reaches the tab as it reaches the slabs.
+        if (mInteractionOverlay != null)
+            PaneGlass.dressTab(mSurfaceStyle, mInteractionOverlay.controlsView());
         // The clip that keeps the terminal's rectangular cell backgrounds from poking past the
         // slab's corners is part of the pane's shape, which updateActiveBorders owns for every
         // pane, glass or not — it runs on every render, and this does not.
