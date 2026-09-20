@@ -71,7 +71,8 @@ public class X11GpuProbeTest {
 
         assertNotNull(best);
         assertEquals(Arrays.asList("MESA_LOADER_DRIVER_OVERRIDE=zink", "TU_DEBUG=noconform,flushall,syncdraw",
-            "VK_ICD_FILENAMES=/data/data/com.termux/files/usr/share/vulkan/icd.d/freedreno_icd.aarch64.json"),
+            "VK_ICD_FILENAMES=" + com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH
+                + "/share/vulkan/icd.d/freedreno_icd.aarch64.json"),
             best.env);
     }
 
