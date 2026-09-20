@@ -9,20 +9,29 @@ Everything here was checked on a phone, against a Debian 13 container and `proot
 
 ## Set it up in one go
 
-**Settings → Display → Apps → Set up Linux apps** does the whole thing: it installs a distro if
-you have none, makes you an ordinary account inside it, adds the fonts a fresh distro does not
-ship, adds its graphics support, and installs a couple of apps to start with. The work runs in a
-terminal pane you can watch, and you can leave it and come back.
+**Settings → Display → Apps → Get GUI apps** builds the command that does this. Choose where the
+apps come from — Termux's own, or a full Linux inside it — tick the ones you want, then tap
+**Copy the command**: it goes on the clipboard, a notice tells you it is there, and Settings closes
+so the terminal is in front. Paste it and press Enter.
 
-The Display place offers the same setup by itself when it finds a distro that is not ready.
-Answer *Not now* and it stops asking about that distro.
+For a full Linux, pick a distro first — Debian, Ubuntu or Arch Linux, Debian recommended if you
+are not sure. The pasted command installs the distro if you have none, then asks you, in the
+terminal, for a username and a password for your account inside it. The password is only ever
+typed there; the launcher never stores it. The username is kept so the launcher knows which
+account your apps belong to — it is what lets a tap on a Linux app open as you, not as whoever the
+distro happens to pick. The same command adds the fonts a fresh distro does not ship, adds its
+graphics support, and installs the apps you ticked. It finishes with a line telling you it is
+done.
+
+The Display place offers this same screen by itself when it finds a distro that is not ready.
+Copy a command from it and it stops asking about that distro.
 
 A first run downloads a few hundred megabytes and takes several minutes. If it stops partway,
-start it again — nothing is lost and it carries on from where it stopped.
+paste the command again — nothing is lost and it carries on from where it stopped.
 
-The offer is for distros that install their packages with `apt` — Debian, Ubuntu and their
-relatives. An Arch or Alpine distro is left alone; its apps are still listed in the drawer, you
-just install them yourself.
+The Display place's offer is for distros that install their packages with `apt` — Debian, Ubuntu
+and their relatives. An Arch or Alpine distro is left alone; its apps are still listed in the
+drawer, you just install them yourself from the terminal.
 
 ## Install an app, and it is in the drawer
 
@@ -54,7 +63,7 @@ start.
 ## Hiding the ones you do not want
 
 A distro installs menu entries for helpers and viewers you may never open by hand.
-**Settings → Display → Apps → Hidden Linux apps** lists the Linux apps it found; untick one and it
+**Settings → Display → Apps → GUI apps** lists the Linux apps it found; untick one and it
 leaves the drawer. It is one app at a time, not a whole distro, and it holds across restarts. The
 list holds Linux apps only — your Android apps are not in it.
 
@@ -87,14 +96,14 @@ command when you start them this way. From the drawer the launcher takes care of
 
 ## When something is off
 
-- **No Linux apps in the drawer at all.** Either nothing is installed yet — run **Set up Linux
+- **No Linux apps in the drawer at all.** Either nothing is installed yet — use **Get GUI
   apps** — or the **Linux apps in the drawer** switch is off. Check too that the distro was
   installed by `proot-distro` 5.x.
-- **One app is missing.** Look in **Hidden Linux apps** first. Otherwise the app has no menu entry
+- **One app is missing.** Look in **GUI apps** first. Otherwise the app has no menu entry
   of its own: command-line programs usually have none, and the launcher lists what the distro's own
   menu lists. Write the entry yourself, below.
 - **An app opens and closes again, or nothing happens.** Most often a fresh distro missing fonts;
-  **Set up Linux apps** installs them. To see the app's own complaint, run it by hand:
+  **Get GUI apps** installs them. To see the app's own complaint, run it by hand:
   `proot-distro login debian --shared-x11 -e DISPLAY=:0 -- <command>`.
 - **`Failed to connect to the bus`, over and over.** Harmless — apps that print it still open. One
   that genuinely needs a session bus wants `dbus-run-session -- <command>` inside the distro.

@@ -2187,7 +2187,7 @@
     <string name="help_topic_distro_apps_title">Linux apps in the drawer</string>
     <string name="help_topic_distro_apps_summary">Apps you install in Linux sit in the app drawer beside your Android ones.</string>
     <string name="help_topic_distro_apps_action">Open the app drawer and look under Linux Apps.</string>
-    <string name="help_topic_distro_apps_step1">Settings, under Display, can set Linux up for you, with a few apps to start with.</string>
+    <string name="help_topic_distro_apps_step1">Get GUI apps, in Settings under Display, installs a Linux system with a few apps to start with.</string>
     <string name="help_topic_distro_apps_step2">Anything you install afterwards is there when you come back to the launcher.</string>
     <string name="help_topic_distro_apps_step3">A tap opens the app on the display, full size.</string>
     <string name="help_topic_distro_apps_back">Hide one you never open in Settings, under Display.</string>
