@@ -26,7 +26,17 @@ import java.util.List;
 public final class TourController {
 
     /** Bumped when the run changes enough that a run in progress has to be mapped onto the new one. */
-    public static final int RUN_VERSION = 3;
+    public static final int RUN_VERSION = 4;
+
+    /**
+     * The run before the welcome card. Its lessons are this run's lessons, under the same numbers
+     * — the welcome card is offered before the run rather than counted inside it — so a run in
+     * progress from it is picked up exactly where it stopped.
+     *
+     * <p>It is also what the legacy migration records, so an install that only ever sat through
+     * an older introduction is offered the welcome card once.
+     */
+    public static final int VERSION_BEFORE_THE_WELCOME_CARD = 3;
 
     /**
      * The run before the pin lesson was put second. Its card numbers mean different lessons than
@@ -38,6 +48,11 @@ public final class TourController {
     /** The six cards of that run, in the order it showed them. */
     private static final List<String> VERSION_TWO_CARDS = Collections.unmodifiableList(
         Arrays.asList(TourRun.FIND_HELP, TourRun.FIND_APPS, TourRun.KEYBOARD,
+            TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING));
+
+    /** The seven cards of the run before the welcome card, in the order it showed them. */
+    private static final List<String> VERSION_THREE_CARDS = Collections.unmodifiableList(
+        Arrays.asList(TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEYBOARD,
             TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING));
 
     /** How long a freshly shown card ignores signals. */
@@ -107,6 +122,18 @@ public final class TourController {
             default:
                 return null;
         }
+    }
+
+    /**
+     * The card {@code stepIndex} meant in the run before the welcome card, or null when that run
+     * had no such card.
+     *
+     * <p>Every number means what it always meant: the welcome card is offered before the run and
+     * is not one of its steps, so nothing after it moved.
+     */
+    public static String versionThreeCardFor(int stepIndex) {
+        return stepIndex >= 0 && stepIndex < VERSION_THREE_CARDS.size()
+            ? VERSION_THREE_CARDS.get(stepIndex) : null;
     }
 
     /**
@@ -196,6 +223,15 @@ public final class TourController {
     private boolean mPracticing;
     /** Whether the user has been asked to resume or restart and has not answered yet. */
     private boolean mAwaitingResumeChoice;
+    /** Whether the card up is the welcome card, which is offered before the run and not in it. */
+    private boolean mShowingWelcome;
+
+    /**
+     * The card the run is offered on. Held apart from {@link #mSteps} on purpose: it is not a
+     * lesson, it is never stored, and keeping it out of the list is what leaves every lesson's
+     * stored number meaning what it meant before this card existed.
+     */
+    private final TourStep mWelcome = TourRun.welcome();
 
     public TourController(List<TourStep> steps, Prefs prefs, Clock clock) {
         mSteps = new ArrayList<>(steps);
@@ -212,20 +248,37 @@ public final class TourController {
      * system setting — the way back from an app, and which way round the keyboard lesson goes —
      * are only right if they are built from what the phone says when the run starts, so the host
      * hands the run back in before every start, replay, resume and practice. Ignored while a card
-     * is up: changing the run under a running one would move the card the user is reading.
+     * of the run is up: changing the run under a running one would move the card the user is
+     * reading. The welcome card is not one of them — it is offered before the run — so the run can
+     * still be rebuilt under it, which is what makes the keyboard lesson right for the keyboard
+     * the user actually has when they take the tour.
      */
     public void setSteps(List<TourStep> steps) {
-        if (mRunning || steps == null || steps.isEmpty()) return;
+        if ((mRunning && !mShowingWelcome) || steps == null || steps.isEmpty()) return;
         mSteps.clear();
         mSteps.addAll(steps);
     }
 
     /**
-     * Whether the user has already been through a run. Any finished run counts, whatever version
-     * it was: someone who sat through the thirteen-card run is not shown this one on upgrade.
+     * Whether the user has already been through a run of some version. This is the "a run ever
+     * completed" question — what {@link #resumeIfInProgress()} asks before looking for a run to
+     * pick back up — and not the question of whether to offer this one, which is
+     * {@link #isOffered()}.
      */
     public boolean isFinished() {
         return mPrefs.getTourCompletedVersion() >= 1;
+    }
+
+    /**
+     * Whether this run should be offered at all: the user has never finished this version of it.
+     *
+     * <p>Someone who sat through an older run is offered this one once, on the welcome card,
+     * because the launcher they finished that run on is not the one they have now. Their answer —
+     * the tour taken to its end, or "Not now" — records this version, so they are asked once and
+     * not again until the run changes.
+     */
+    public boolean isOffered() {
+        return mPrefs.getTourCompletedVersion() < RUN_VERSION;
     }
 
     /** Whether a card is up right now. */
@@ -243,8 +296,14 @@ public final class TourController {
         return mAwaitingResumeChoice;
     }
 
+    /** Whether the card up is the one the run is offered on. */
+    public boolean isShowingWelcome() {
+        return mShowingWelcome;
+    }
+
     /** The card that is up, or null. */
     public TourStep currentStep() {
+        if (mShowingWelcome) return mWelcome;
         return mRunning && mStepIndex >= 0 && mStepIndex < mSteps.size()
             ? mSteps.get(mStepIndex) : null;
     }
@@ -270,11 +329,42 @@ public final class TourController {
         return mPrefs.getTourSkipped();
     }
 
-    /** Starts at the first lesson, discarding any earlier run. This is what Replay does. */
+    /**
+     * Offers the run on the welcome card, discarding any earlier one. This is what a first launch
+     * and Replay both do; the lessons begin on the user's own {@link #takeTheTour()}.
+     */
     public boolean start() {
         if (mSteps.isEmpty()) return false;
         mPrefs.setTourSkipped(false);
-        return startAt(mSteps.get(0).id);
+        mPracticing = false;
+        mAwaitingResumeChoice = false;
+        mShowingWelcome = true;
+        mRunning = true;
+        mStepIndex = STEP_NONE;
+        mStage = 0;
+        mArmedAt = mClock.nowMillis();
+        notifyStep();
+        return true;
+    }
+
+    /** The welcome card's yes: the run begins at its first lesson. */
+    public boolean takeTheTour() {
+        if (!mShowingWelcome) return false;
+        mShowingWelcome = false;
+        return !mSteps.isEmpty() && startAt(mSteps.get(0).id);
+    }
+
+    /**
+     * The welcome card's other answer. The run ends where it stands and records this version, so
+     * the offer is not made again until the run itself changes; it counts as skipped, which is
+     * what it is.
+     */
+    public boolean notNow() {
+        if (!mShowingWelcome) return false;
+        mShowingWelcome = false;
+        mPrefs.setTourSkipped(true);
+        end();
+        return true;
     }
 
     /**
@@ -287,6 +377,7 @@ public final class TourController {
         if (index < 0) return false;
         mPracticing = false;
         mAwaitingResumeChoice = false;
+        mShowingWelcome = false;
         mRunning = true;
         mPrefs.setTourCompletedVersion(0);
         mPrefs.setTourRunVersion(RUN_VERSION);
@@ -308,6 +399,7 @@ public final class TourController {
         if (index < 0) return false;
         mPracticing = true;
         mAwaitingResumeChoice = false;
+        mShowingWelcome = false;
         mRunning = true;
         mStepIndex = index;
         mStage = 0;
@@ -316,9 +408,9 @@ public final class TourController {
         return true;
     }
 
-    /** Starts a run unless this user has already finished one. */
+    /** Offers the run unless this user has already been through this version of it. */
     public boolean startIfNeeded() {
-        return !isFinished() && !mRunning && !mAwaitingResumeChoice && start();
+        return isOffered() && !mRunning && !mAwaitingResumeChoice && start();
     }
 
     /**
@@ -340,6 +432,12 @@ public final class TourController {
     }
 
     private boolean resumeOlderRun(int storedStepIndex) {
+        if (mPrefs.getTourRunVersion() >= VERSION_BEFORE_THE_WELCOME_CARD) {
+            // The run the welcome card was added to: same lessons, same numbers, so the card the
+            // user stopped on is picked back up and the welcome card is not put in their way.
+            int index = indexOf(versionThreeCardFor(storedStepIndex));
+            return index >= 0 && resumeAt(index, mPrefs.getTourStepStage());
+        }
         if (mPrefs.getTourRunVersion() >= VERSION_BEFORE_THE_PIN_LESSON) {
             int index = indexOf(versionTwoCardFor(storedStepIndex));
             // Nothing to ask about: every card of that run is a card of this one, so the only way
@@ -357,6 +455,7 @@ public final class TourController {
     private boolean resumeAt(int index, int stage) {
         mPracticing = false;
         mAwaitingResumeChoice = false;
+        mShowingWelcome = false;
         mRunning = true;
         mStepIndex = index;
         mStage = clampStage(mSteps.get(index), stage);
@@ -384,13 +483,18 @@ public final class TourController {
         return !mSteps.isEmpty() && startAt(mSteps.get(0).id);
     }
 
+    /** Whether a button that moves the run is being pressed on a card that is not part of it. */
+    private boolean offTheRun() {
+        return !mRunning || mPracticing || mShowingWelcome;
+    }
+
     /**
      * A gesture the launcher observed. Advances the card when it is the one being waited on, and
      * is otherwise ignored — including a signal that arrives while the card is still arming.
      */
     public void onSignal(String signalId) {
         TourStep step = currentStep();
-        if (step == null || signalId == null) return;
+        if (step == null || signalId == null || mShowingWelcome) return;
         if (mClock.nowMillis() - mArmedAt < ARM_DELAY_MS) return;
         if (!signalId.equals(step.signalAt(mStage))) return;
         mStage++;
@@ -413,13 +517,13 @@ public final class TourController {
 
     /** Back to the first stage of the lesson before this one; nothing to do on the first. */
     public void back() {
-        if (!mRunning || mPracticing || mStepIndex <= 0) return;
+        if (offTheRun() || mStepIndex <= 0) return;
         moveTo(mStepIndex - 1);
     }
 
     /** The Skip step button: this lesson is not for this user, move on. */
     public void skip() {
-        if (!mRunning || mPracticing) return;
+        if (offTheRun()) return;
         mPrefs.setTourSkipped(true);
         advance();
     }
@@ -430,7 +534,7 @@ public final class TourController {
      * costs the one card an experienced user came for. A run with no choice card left ahead ends.
      */
     public void endTour() {
-        if (!mRunning) return;
+        if (!mRunning || mShowingWelcome) return;
         if (mPracticing) {
             endPractice();
             return;
@@ -449,6 +553,7 @@ public final class TourController {
      * run only shows, it is the way on, because there is no gesture for the launcher to report.
      */
     public void done() {
+        if (mShowingWelcome) return;
         if (mPracticing) {
             finishPractice();
             return;
@@ -462,7 +567,7 @@ public final class TourController {
      */
     public boolean continueShownStage() {
         TourStep step = currentStep();
-        if (step == null || mPracticing || !step.isShownOnlyStage(mStage)) return false;
+        if (step == null || offTheRun() || !step.isShownOnlyStage(mStage)) return false;
         // The shown stage is the last of its card, so there is nothing after it but the next card.
         advance();
         return true;
@@ -476,7 +581,7 @@ public final class TourController {
 
     /** The closing card's action, and anything else that ends the run deliberately. */
     public void finish() {
-        if (!mRunning) return;
+        if (!mRunning || mShowingWelcome) return;
         if (mPracticing) finishPractice();
         else end();
     }
@@ -512,6 +617,7 @@ public final class TourController {
     private void end() {
         mRunning = false;
         mPracticing = false;
+        mShowingWelcome = false;
         mStepIndex = STEP_NONE;
         mStage = 0;
         mPrefs.setTourStepIndex(STEP_NONE);
@@ -525,6 +631,7 @@ public final class TourController {
     private void finishPractice() {
         mRunning = false;
         mPracticing = false;
+        mShowingWelcome = false;
         mStepIndex = STEP_NONE;
         mStage = 0;
         if (mListener != null) mListener.onTourFinished(false);

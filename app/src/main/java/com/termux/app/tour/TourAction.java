@@ -34,6 +34,11 @@ public enum TourAction {
     /** The same card when the launcher already is the home app: there is nothing to decide. */
     CONTINUE(R.string.tour_continue),
 
+    /** The welcome card's yes: the run starts at the first lesson. */
+    TAKE_THE_TOUR(R.string.tour_take_the_tour),
+    /** The welcome card's other answer: the run ends there and is not offered again. */
+    NOT_NOW(R.string.tour_not_now),
+
     /** The closing card's one action. */
     START_USING(R.string.tour_start_using),
 

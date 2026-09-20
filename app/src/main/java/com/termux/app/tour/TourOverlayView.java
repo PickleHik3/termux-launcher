@@ -57,9 +57,9 @@ public final class TourOverlayView extends FrameLayout {
         void onTourActionTapped(@NonNull TourAction action);
 
         /**
-         * A Copy button on the closing card.
+         * The Copy button beside a command on the closing card.
          *
-         * @param commandRes the single command that button stands beside, or 0 for Copy all
+         * @param commandRes the command that button stands beside
          */
         void onTourCopyCommandTapped(int commandRes);
 
@@ -106,11 +106,14 @@ public final class TourOverlayView extends FrameLayout {
     private final float[] mTrailPoint = new float[2];
 
     private final LinearLayout mCard;
+    /** The small line above the title, on the two cards that carry one. */
+    private final TextView mKicker;
+    /** The title, on the two cards that carry one. */
+    private final TextView mTitle;
     private final TextView mCopy;
     private final ScrollView mBodyScroll;
     private final LinearLayout mSections;
     private final LinearLayout mClosingButtonRow;
-    private final TextView mCopyAll;
     private final TextView mDocsLink;
     private final LinearLayout mButtonRow;
     /** The card's action buttons, rebuilt whenever the card offers a different set. */
@@ -174,6 +177,29 @@ public final class TourOverlayView extends FrameLayout {
         mCard.setClickable(false);
         mCard.setFocusable(false);
 
+        // The shell the run opens and closes on: a small line, a title, then the sentence. Every
+        // other card is one sentence and carries neither, so both are gone rather than empty.
+        mKicker = new TextView(context);
+        mKicker.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        mKicker.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        mKicker.setTextColor(ColorUtils.setAlphaComponent(mDress.textColor, 150));
+        mKicker.setLetterSpacing(0.08f);
+        mKicker.setAllCaps(true);
+        mKicker.setVisibility(GONE);
+        mCard.addView(mKicker, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        mTitle = new TextView(context);
+        mTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
+        mTitle.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        mTitle.setTextColor(mDress.textColor);
+        mTitle.setVisibility(GONE);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        titleParams.topMargin = dp(2);
+        titleParams.bottomMargin = dp(4);
+        mCard.addView(mTitle, titleParams);
+
         mCopy = new TextView(context);
         mCopy.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
         mCopy.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
@@ -206,18 +232,12 @@ public final class TourOverlayView extends FrameLayout {
         bodyParams.topMargin = dp(8);
         mCard.addView(mBodyScroll, bodyParams);
 
-        // Copy all and the docs link get their own row above Done: three text buttons side by side
-        // wrap onto each other on a narrow card long before 1.3x text.
+        // The docs link gets its own row above Start using: two text buttons side by side wrap
+        // onto each other on a narrow card long before 1.3x text.
         mClosingButtonRow = new LinearLayout(context);
         mClosingButtonRow.setOrientation(LinearLayout.HORIZONTAL);
         mClosingButtonRow.setGravity(Gravity.END);
         mClosingButtonRow.setVisibility(GONE);
-
-        mCopyAll = textButton(context, view -> onCopyTapped((TextView) view, 0));
-        LinearLayout.LayoutParams copyAllParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        copyAllParams.rightMargin = dp(6);
-        mClosingButtonRow.addView(mCopyAll, copyAllParams);
 
         mDocsLink = textButton(context, view -> {
             if (mCallbacks != null) mCallbacks.onTourDocsTapped();
@@ -346,8 +366,15 @@ public final class TourOverlayView extends FrameLayout {
      */
     private void applyCopy() {
         if (mStep == null) return;
-        mCopy.setText(mPresentation == TourCardVisibility.AWAY
-            ? R.string.tour_card_return_to_terminal : mStep.copyResAt(mStage));
+        boolean away = mPresentation == TourCardVisibility.AWAY;
+        mCopy.setText(away ? R.string.tour_card_return_to_terminal : mStep.copyResAt(mStage));
+        // The card asking the way back to the terminal is one sentence, whatever card it stands
+        // for: a title over it would be a title over something the user is not being told.
+        boolean shell = !away && mStep.hasTitle();
+        mKicker.setVisibility(shell && mStep.kickerRes != 0 ? VISIBLE : GONE);
+        if (shell && mStep.kickerRes != 0) mKicker.setText(mStep.kickerRes);
+        mTitle.setVisibility(shell ? VISIBLE : GONE);
+        if (shell) mTitle.setText(mStep.titleRes);
     }
 
     /**
@@ -699,14 +726,13 @@ public final class TourOverlayView extends FrameLayout {
         mTraceProgress = 1f;
     }
 
-    /** The running edition's three sections, built once and kept while the card is up. */
+    /** The card's three sections, built once and kept while the card is up. */
     private void showClosingSections() {
         TourEdition edition = TourEdition.of(getContext().getPackageName());
         if (edition != mSectionsEdition) buildClosingSections(edition);
         // Every Copy button back to offering rather than acknowledging: the card can be shown
         // again after a resume, and a row of buttons all saying "Copied" says nothing.
         for (TextView copyButton : mCopyButtons) copyButton.setText(R.string.tour_copy);
-        mCopyAll.setText(R.string.tour_copy_all);
         mBodyScroll.setVisibility(VISIBLE);
         mBodyScroll.scrollTo(0, 0);
         mClosingButtonRow.setVisibility(VISIBLE);
@@ -720,8 +746,6 @@ public final class TourOverlayView extends FrameLayout {
             mSections.addView(sectionView(section, first));
             first = false;
         }
-        mCopyAll.setText(R.string.tour_copy_all);
-        mCopyButtons.add(mCopyAll);
         mDocsLink.setText(R.string.tour_read_the_docs);
         mSectionsEdition = edition;
     }
@@ -787,7 +811,7 @@ public final class TourOverlayView extends FrameLayout {
         return block;
     }
 
-    /** @param commandRes the command this button stands beside, or 0 for Copy all */
+    /** @param commandRes the command this button stands beside */
     private void onCopyTapped(@NonNull TextView button, int commandRes) {
         if (mCallbacks == null) return;
         mCallbacks.onTourCopyCommandTapped(commandRes);
@@ -857,8 +881,6 @@ public final class TourOverlayView extends FrameLayout {
         }
         mDocsLink.setTextColor(mAccent);
         mDocsLink.setBackground(buttonBackground());
-        mCopyAll.setTextColor(mAccent);
-        mCopyAll.setBackground(buttonBackground());
         for (TextView copyButton : mCopyButtons) {
             copyButton.setTextColor(mAccent);
             copyButton.setBackground(buttonBackground());

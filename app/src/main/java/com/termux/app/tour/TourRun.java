@@ -21,6 +21,8 @@ import java.util.List;
  */
 public final class TourRun {
 
+    /** The card the run is offered on. Not a step: it is read before the run, and it starts it. */
+    public static final String WELCOME = "welcome";
     /** Find help: a pane corner, the ? behind it, and the way back out of help. */
     public static final String FIND_HELP = "find_help";
     /** Pin your apps: the dock's hold, and an app chosen in the editor it raises. */
@@ -59,6 +61,18 @@ public final class TourRun {
             this.launcherIsHome = launcherIsHome;
             this.keyboardShown = keyboardShown;
         }
+    }
+
+    /**
+     * The card the run opens on, for newcomers and for anyone who has not seen this run before.
+     * It is not one of the steps below: it carries no lesson, it is not counted or stored, and a
+     * run picked back up after a process death goes straight to the lesson it was on.
+     */
+    public static TourStep welcome() {
+        return new TourStep(WELCOME, TourStep.Kind.WELCOME,
+            R.string.tour_card_kicker, R.string.tour_card_welcome_title,
+            new int[] {R.string.tour_card_welcome}, new String[] {TourTargets.NONE},
+            new String[] {}, new TourGesture[] {TourGesture.NONE}, false, false, null, false);
     }
 
     /** The run, in order, for the phone described by {@code context}. */
@@ -186,11 +200,16 @@ public final class TourRun {
                 : new TourAction[] {TourAction.USE_AS_HOME, TourAction.KEEP_TRYING});
     }
 
-    /** The last card: what is worth knowing on the way out, and one action to leave on. */
+    /**
+     * The last card: what is worth knowing on the way out, and one action to leave on. It wears
+     * the welcome card's shell — the same small line, title and sentence — so the run opens and
+     * closes on one object rather than on two unrelated ones.
+     */
     private static TourStep closing() {
         return new TourStep(CLOSING, TourStep.Kind.CLOSING,
+            R.string.tour_card_kicker, R.string.tour_card_closing_title,
             new int[] {R.string.tour_card_closing}, new String[] {TourTargets.NONE},
-            new String[] {}, new TourGesture[] {TourGesture.NONE}, false, false, null);
+            new String[] {}, new TourGesture[] {TourGesture.NONE}, false, false, null, false);
     }
 
     private TourRun() {}

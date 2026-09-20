@@ -274,6 +274,44 @@ public class TourRunTest {
     }
 
     @Test
+    public void theWelcomeCardIsOfferedBeforeTheRunAndIsNoPartOfIt() {
+        TourStep welcome = TourRun.welcome();
+        assertEquals(TourRun.WELCOME, welcome.id);
+        assertEquals(TourStep.Kind.WELCOME, welcome.kind);
+        assertTrue(welcome.isWelcomeCard());
+        assertFalse(welcome.isClosingCard());
+        assertFalse(welcome.isChoiceCard());
+        assertEquals(Arrays.asList(TourAction.TAKE_THE_TOUR, TourAction.NOT_NOW),
+            welcome.actions());
+        assertEquals(0, welcome.signalCount());
+        assertEquals(TourGesture.NONE, welcome.gestureAt(0));
+        assertFalse(welcome.taughtOnTheTerminal());
+        assertFalse(welcome.topAnchored);
+        // Not a step and not a lesson: every stored card number means what it always meant.
+        assertFalse(TourRun.lessons().contains(TourRun.WELCOME));
+        for (TourStep step : TourRun.steps(GUEST))
+            assertNotEquals("the welcome card is in the run", TourRun.WELCOME, step.id);
+    }
+
+    @Test
+    public void theRunOpensAndClosesOnTheSameShell() {
+        TourStep welcome = TourRun.welcome();
+        TourStep closing = step(TourRun.CLOSING);
+        for (TourStep step : new TourStep[] {welcome, closing}) {
+            assertTrue("no title on " + step.id, step.hasTitle());
+            assertNotEquals("no kicker on " + step.id, 0, step.kickerRes);
+        }
+        assertEquals(welcome.kickerRes, closing.kickerRes);
+        assertNotEquals(welcome.titleRes, closing.titleRes);
+        // Every other card is one sentence beside the control it names.
+        for (TourStep step : TourRun.steps(GUEST)) {
+            if (step.id.equals(TourRun.CLOSING)) continue;
+            assertFalse("a title on " + step.id, step.hasTitle());
+            assertEquals("a kicker on " + step.id, 0, step.kickerRes);
+        }
+    }
+
+    @Test
     public void noCardRestsAtTheTopOfTheScreenAndNoneIsAChord() {
         for (TourStep step : TourRun.steps(GUEST)) {
             assertFalse("top anchoring for " + step.id, step.topAnchored);

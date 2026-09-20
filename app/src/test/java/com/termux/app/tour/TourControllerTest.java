@@ -59,6 +59,12 @@ public class TourControllerTest {
         controller.onSignal(step.signalAt(controller.currentStage()));
     }
 
+    /** The run as the user meets it: the welcome card, and the tour taken from it. */
+    private void startTheLessons() {
+        controller.start();
+        controller.takeTheTour();
+    }
+
     /** Does every gesture the card that is up is waiting for. */
     private void clearTheCard() {
         TourStep step = controller.currentStep();
@@ -68,15 +74,68 @@ public class TourControllerTest {
     // Starting.
 
     @Test
-    public void startShowsTheFirstLesson() {
+    public void startOffersTheRunOnTheWelcomeCard() {
         assertTrue(controller.start());
         assertTrue(controller.isRunning());
+        assertTrue(controller.isShowingWelcome());
+        assertEquals(TourRun.WELCOME, controller.currentStep().id);
+        assertEquals(Arrays.asList(TourAction.TAKE_THE_TOUR, TourAction.NOT_NOW),
+            controller.currentActions());
+        assertEquals(Arrays.asList(TourRun.WELCOME + ":0"), listener.shown);
+        // The welcome card is not a step of the run, so nothing about a card is written under it:
+        // a process death there leaves the user offered the tour again rather than halfway in.
+        assertEquals(-1, prefs.stepIndex);
+        assertEquals(0, prefs.runVersion);
+    }
+
+    @Test
+    public void theWelcomeCardIsNotALessonAndNoGestureOrRunButtonMovesIt() {
+        controller.start();
+        assertFalse(TourRun.lessons().contains(TourRun.WELCOME));
+        arm();
+        controller.onSignal(TourSignals.PANE_CORNER_MENU);
+        controller.skip();
+        controller.back();
+        controller.endTour();
+        controller.done();
+        controller.finish();
+        assertTrue(controller.isShowingWelcome());
+        assertEquals(TourRun.WELCOME, controller.currentStep().id);
+        assertEquals(Arrays.asList(TourRun.WELCOME + ":0"), listener.shown);
+        assertTrue(listener.finished.isEmpty());
+    }
+
+    @Test
+    public void takingTheTourShowsTheFirstLesson() {
+        controller.start();
+        assertTrue(controller.takeTheTour());
+        assertFalse(controller.isShowingWelcome());
         assertEquals(TourRun.FIND_HELP, controller.currentStep().id);
         assertEquals(0, controller.currentStage());
-        assertEquals(Arrays.asList(TourRun.FIND_HELP + ":0"), listener.shown);
+        assertEquals(Arrays.asList(TourRun.WELCOME + ":0", TourRun.FIND_HELP + ":0"),
+            listener.shown);
         assertEquals(0, prefs.stepIndex);
         assertEquals(0, prefs.stage);
         assertEquals(TourController.RUN_VERSION, prefs.runVersion);
+        // Answered once: the card is gone, and so are its two buttons.
+        assertFalse(controller.takeTheTour());
+        assertFalse(controller.notNow());
+    }
+
+    @Test
+    public void notNowEndsTheRunAndRecordsThisVersion() {
+        controller.start();
+        assertTrue(controller.notNow());
+        assertFalse(controller.isRunning());
+        assertFalse(controller.isShowingWelcome());
+        assertNull(controller.currentStep());
+        assertEquals(TourController.RUN_VERSION, prefs.completedVersion);
+        assertTrue(prefs.skipped);
+        assertEquals(-1, prefs.stepIndex);
+        assertEquals(Arrays.asList(Boolean.TRUE), listener.finished);
+        // And that is the end of the offer until the run itself changes.
+        assertFalse(controller.isOffered());
+        assertFalse(newController().startIfNeeded());
     }
 
     @Test
@@ -88,10 +147,35 @@ public class TourControllerTest {
     }
 
     @Test
-    public void aFinishedRunOfTheOlderTourStaysFinished() {
-        // Upgrade shows nothing: someone who sat through the thirteen-card run, or skipped their
-        // way out of it, has been through a run.
-        prefs.completedVersion = 1;
+    public void anOlderRunIsOfferedThisOneOnceOnTheWelcomeCard() {
+        // An update brings cards they have never been shown, so the offer is made again — once.
+        for (int completed : new int[] {1, 2, TourController.VERSION_BEFORE_THE_WELCOME_CARD}) {
+            setUp();
+            prefs.completedVersion = completed;
+            prefs.skipped = true;
+            assertTrue("a run was finished at " + completed, controller.isFinished());
+            assertTrue("offered at " + completed, controller.isOffered());
+            assertTrue("started at " + completed, controller.startIfNeeded());
+            assertEquals(TourRun.WELCOME, controller.currentStep().id);
+        }
+    }
+
+    @Test
+    public void theOfferEndsAtTheVersionTheUserHasAnswered() {
+        for (int completed : new int[] {0, 1, 3}) {
+            prefs.completedVersion = completed;
+            assertTrue("offered at " + completed, controller.isOffered());
+        }
+        for (int completed : new int[] {TourController.RUN_VERSION,
+                TourController.RUN_VERSION + 1}) {
+            prefs.completedVersion = completed;
+            assertFalse("offered at " + completed, controller.isOffered());
+        }
+    }
+
+    @Test
+    public void aFinishedRunOfThisVersionIsNeverStartedAgainOrResumed() {
+        prefs.completedVersion = TourController.RUN_VERSION;
         prefs.skipped = true;
         assertTrue(controller.isFinished());
         assertFalse(controller.startIfNeeded());
@@ -103,6 +187,7 @@ public class TourControllerTest {
     public void startIfNeededRunsForAFreshInstall() {
         assertTrue(controller.startIfNeeded());
         assertTrue(controller.isRunning());
+        assertEquals(TourRun.WELCOME, controller.currentStep().id);
     }
 
     @Test
@@ -110,9 +195,11 @@ public class TourControllerTest {
         prefs.completedVersion = TourController.RUN_VERSION;
         prefs.skipped = true;
         assertTrue(controller.start());
+        assertEquals(TourRun.WELCOME, controller.currentStep().id);
+        assertFalse(prefs.skipped);
+        assertTrue(controller.takeTheTour());
         assertEquals(TourRun.FIND_HELP, controller.currentStep().id);
         assertEquals(0, prefs.completedVersion);
-        assertFalse(prefs.skipped);
     }
 
     @Test
@@ -141,7 +228,7 @@ public class TourControllerTest {
 
     @Test
     public void aSignalWhileTheCardIsArmingIsIgnored() {
-        controller.start();
+        startTheLessons();
         clock.advance(TourController.ARM_DELAY_MS - 1);
         controller.onSignal(TourSignals.PANE_CORNER_MENU);
         assertEquals(0, controller.currentStage());
@@ -149,16 +236,17 @@ public class TourControllerTest {
 
     @Test
     public void theExpectedSignalAdvancesToTheNextStage() {
-        controller.start();
+        startTheLessons();
         doTheGesture();
         assertEquals(1, controller.currentStage());
         assertEquals(1, prefs.stage);
-        assertEquals(TourRun.FIND_HELP + ":1", listener.shown.get(1));
+        assertEquals(TourRun.FIND_HELP + ":1",
+            listener.shown.get(listener.shown.size() - 1));
     }
 
     @Test
     public void anOutOfOrderSignalIsIgnored() {
-        controller.start();
+        startTheLessons();
         arm();
         controller.onSignal(TourSignals.HELP_CLOSED);
         assertEquals(0, controller.currentStage());
@@ -170,7 +258,7 @@ public class TourControllerTest {
 
     @Test
     public void theNextStageRearmsSoOneGestureCannotClearTwoOfThem() {
-        controller.start();
+        startTheLessons();
         arm();
         controller.onSignal(TourSignals.PANE_CORNER_MENU);
         controller.onSignal(TourSignals.HELP_OPENED);
@@ -180,7 +268,7 @@ public class TourControllerTest {
 
     @Test
     public void findHelpAdvancesOnlyAfterHelpHasBeenOpenedAndClosed() {
-        controller.start();
+        startTheLessons();
         arm();
         controller.onSignal(TourSignals.PANE_CORNER_MENU);
         arm();
@@ -208,7 +296,7 @@ public class TourControllerTest {
 
     @Test
     public void skipStepMovesToTheNextLessonAndIsRemembered() {
-        controller.start();
+        startTheLessons();
         controller.skip();
         assertEquals(TourRun.PIN_APPS, controller.currentStep().id);
         assertTrue(prefs.skipped);
@@ -244,7 +332,7 @@ public class TourControllerTest {
 
     @Test
     public void endTourLeavesTheLessonsButStillAsksAboutTheHomeScreen() {
-        controller.start();
+        startTheLessons();
         controller.endTour();
         assertTrue(controller.isRunning());
         assertEquals(TourRun.HOME_CHOICE, controller.currentStep().id);
@@ -281,7 +369,7 @@ public class TourControllerTest {
 
     @Test
     public void nothingHappensAfterTheRunEnds() {
-        controller.start();
+        startTheLessons();
         controller.finish();
         int shown = listener.shown.size();
         arm();
@@ -296,7 +384,7 @@ public class TourControllerTest {
 
     @Test
     public void everyLessonOffersItsOwnThreeButtons() {
-        controller.start();
+        startTheLessons();
         assertEquals(Arrays.asList(TourAction.BACK, TourAction.SKIP_STEP, TourAction.END_TOUR),
             controller.currentActions());
         controller.finish();
@@ -322,7 +410,7 @@ public class TourControllerTest {
 
     @Test
     public void aChoiceIsOnlyEverTakenOnTheCardThatAsksOne() {
-        controller.start();
+        startTheLessons();
         controller.choose(TourController.Choice.USE_AS_HOME);
         assertEquals(TourRun.FIND_HELP, controller.currentStep().id);
         assertTrue(listener.chosen.isEmpty());
@@ -414,7 +502,7 @@ public class TourControllerTest {
 
     @Test
     public void practiceIsRefusedWhileARunIsUpAndLeavesItWhereItWas() {
-        controller.start();
+        startTheLessons();
         clearTheCard();
         assertEquals(TourRun.PIN_APPS, controller.currentStep().id);
         doTheGesture();
@@ -436,7 +524,7 @@ public class TourControllerTest {
 
     @Test
     public void resumeComesBackOnTheSameCardAndStage() {
-        controller.start();
+        startTheLessons();
         doTheGesture();
 
         TourController restarted = newController();
@@ -449,7 +537,7 @@ public class TourControllerTest {
 
     @Test
     public void resumeArmsTheCardAgain() {
-        controller.start();
+        startTheLessons();
         doTheGesture();
 
         controller = newController();
@@ -463,7 +551,7 @@ public class TourControllerTest {
 
     @Test
     public void resumeRemembersASkip() {
-        controller.start();
+        startTheLessons();
         controller.skip();
 
         TourController restarted = newController();
@@ -481,7 +569,7 @@ public class TourControllerTest {
 
     @Test
     public void thereIsNothingToResumeAfterTheRunFinished() {
-        controller.start();
+        startTheLessons();
         controller.finish();
         assertFalse(newController().resumeIfInProgress());
     }
@@ -519,7 +607,7 @@ public class TourControllerTest {
 
     @Test
     public void resumeDoesNothingWhileARunIsAlreadyUp() {
-        controller.start();
+        startTheLessons();
         assertFalse(controller.resumeIfInProgress());
     }
 
@@ -678,7 +766,7 @@ public class TourControllerTest {
 
     @Test
     public void aRunOfThisVersionIsNeverMigrated() {
-        controller.start();
+        startTheLessons();
         controller.skip();
         controller.skip();
         controller.skip();
@@ -728,6 +816,35 @@ public class TourControllerTest {
         assertEquals(TourRun.FIND_HELP, controller.currentStep().id);
         assertEquals(2, controller.currentStage());
         assertEquals(0, prefs.stepIndex);
+    }
+
+    @Test
+    public void aRunInterruptedBeforeTheWelcomeCardComesBackOnTheSameCardAndStage() {
+        // The welcome card was added in front of the run, not into it, so every stored number
+        // still means the lesson it always meant and the user is not sent back to the start.
+        prefs.runVersion = TourController.VERSION_BEFORE_THE_WELCOME_CARD;
+        prefs.stepIndex = 3;
+        prefs.stage = 1;
+        assertTrue(controller.resumeIfInProgress());
+        assertFalse(controller.isShowingWelcome());
+        assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
+        assertEquals(1, controller.currentStage());
+        assertEquals(3, prefs.stepIndex);
+        assertEquals(1, prefs.stage);
+        assertEquals(TourController.RUN_VERSION, prefs.runVersion);
+        assertEquals(0, listener.resumeOrRestartAsked);
+    }
+
+    @Test
+    public void everyCardOfTheRunBeforeTheWelcomeCardMeansItself() {
+        String[] cards = {TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS,
+            TourRun.KEYBOARD, TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING};
+        for (int i = 0; i < cards.length; i++) {
+            assertEquals("card " + i, cards[i], TourController.versionThreeCardFor(i));
+            assertEquals("card " + i, cards[i], TourRun.steps(PHONE).get(i).id);
+        }
+        for (int outside : new int[] {-1, cards.length, 99})
+            assertNull("card " + outside, TourController.versionThreeCardFor(outside));
     }
 
     @Test
