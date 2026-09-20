@@ -256,7 +256,7 @@ public final class FirstRunPermissionsCardView extends FrameLayout {
         return line;
     }
 
-    /** The row's control: a switch, a button to ask with, or the word for an answer already given. */
+    /** The row's control: a switch, a button to ask with, or the word for an answer given. */
     @NonNull
     private View controlFor(@NonNull FirstRunPermissionsCard.Row row) {
         Context context = getContext();

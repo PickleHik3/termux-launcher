@@ -1377,17 +1377,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 FirstBootTour tour = firstBootTour();
                 if (!forceOnboarding && tour != null && tour.resumeIfInProgress()) return;
                 // Otherwise this is either the first launch ever or Settings asking for the tour
-                // again from a cold start. The chain's own dialogs no-op for anyone who has
-                // already answered them, so running it unconditionally is safe both ways; the
-                // tour starts (or restarts) only once it closes — registered first, because a
-                // chain with nothing left to ask closes inside the call below.
+                // again from a cold start. Running the setup unconditionally is safe both ways —
+                // it has nothing to show anyone who has already answered it, and a replay is the
+                // tour and nothing else; the tour starts (or restarts) only once the setup
+                // closes — registered first, because a setup with nothing to ask closes inside
+                // the call below.
                 setFirstRunChainFinishedListener(() -> {
                     FirstBootTour t = firstBootTour();
                     if (t == null) return;
                     if (forceOnboarding) t.restart();
                     else t.startIfNeeded();
                 });
-                startFirstRunPermissionChain();
+                startFirstRunPermissionChain(forceOnboarding);
             });
         }
     }
@@ -1404,8 +1405,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * <p>{@link #setFirstRunChainFinishedListener(Runnable)} is told once Continue closes the
      * card, or straight away when there is nothing to show, so the tour follows exactly as before.
+     *
+     * @param replay whether Settings asked for the tour again. A replay is the tour and nothing
+     *               else: the user asked to be walked through the launcher, not to be asked for
+     *               permissions a second time, so the card stays down however they stand.
      */
-    private void startFirstRunPermissionChain() {
+    private void startFirstRunPermissionChain(boolean replay) {
         if (isFinishing() || isDestroyed()) return;
         mFirstRunChainFinishedNotified = false;
         if (mPreferences == null) {
@@ -1414,7 +1419,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!com.termux.app.firstrun.FirstRunPermissionsCard.shouldShow(
                 mPreferences.isFirstRunChainDone(), mPreferences.isFirstRunPermissionsCardSeen(),
-                firstRunWallpaperState(), firstRunWeatherState())) {
+                firstRunWallpaperState(), firstRunWeatherState(), replay)) {
             finishFirstRunChain();
             return;
         }

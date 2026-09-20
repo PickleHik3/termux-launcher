@@ -27,33 +27,38 @@ public class FirstRunPermissionsCardTest {
     private static final boolean UPDATER = true;
     private static final boolean SEEN = true;
     private static final boolean UNSEEN = false;
+    /** Settings asking for the tour again, rather than a launch asking nothing of the user. */
+    private static final boolean REPLAY = true;
+    private static final boolean OPENED = false;
 
     @Test
     public void aFreshInstallAlwaysOpensOnTheCard() {
         for (State wallpaper : State.values()) {
             for (State weather : State.values()) {
                 assertTrue(wallpaper + "/" + weather,
-                    FirstRunPermissionsCard.shouldShow(FRESH, UNSEEN, wallpaper, weather));
+                    FirstRunPermissionsCard.shouldShow(FRESH, UNSEEN, wallpaper, weather, OPENED));
             }
         }
         // Even with everything already granted, and even with no weather row to show.
-        assertTrue(FirstRunPermissionsCard.shouldShow(FRESH, UNSEEN, State.GRANTED, null));
-        assertTrue(FirstRunPermissionsCard.shouldShow(FRESH, UNSEEN, State.GRANTED, State.GRANTED));
+        assertTrue(FirstRunPermissionsCard.shouldShow(FRESH, UNSEEN, State.GRANTED, null, OPENED));
+        assertTrue(FirstRunPermissionsCard.shouldShow(FRESH, UNSEEN, State.GRANTED,
+            State.GRANTED, OPENED));
     }
 
     @Test
     public void anUpdaterSeesItOnlyWhileSomethingIsStillUngranted() {
         assertFalse(FirstRunPermissionsCard.shouldShow(UPDATER, UNSEEN, State.GRANTED,
-            State.GRANTED));
-        assertFalse(FirstRunPermissionsCard.shouldShow(UPDATER, UNSEEN, State.GRANTED, null));
+            State.GRANTED, OPENED));
+        assertFalse(FirstRunPermissionsCard.shouldShow(UPDATER, UNSEEN, State.GRANTED, null,
+            OPENED));
         assertTrue(FirstRunPermissionsCard.shouldShow(UPDATER, UNSEEN, State.DENIED,
-            State.GRANTED));
+            State.GRANTED, OPENED));
         assertTrue(FirstRunPermissionsCard.shouldShow(UPDATER, UNSEEN, State.NOT_ASKED,
-            State.GRANTED));
+            State.GRANTED, OPENED));
         assertTrue(FirstRunPermissionsCard.shouldShow(UPDATER, UNSEEN, State.GRANTED,
-            State.NOT_ASKED));
+            State.NOT_ASKED, OPENED));
         assertTrue(FirstRunPermissionsCard.shouldShow(UPDATER, UNSEEN, State.GRANTED,
-            State.DENIED));
+            State.DENIED, OPENED));
     }
 
     @Test
@@ -61,19 +66,37 @@ public class FirstRunPermissionsCardTest {
         for (State wallpaper : State.values())
             for (State weather : State.values())
                 assertFalse(wallpaper + "/" + weather,
-                    FirstRunPermissionsCard.shouldShow(UPDATER, SEEN, wallpaper, weather));
+                    FirstRunPermissionsCard.shouldShow(UPDATER, SEEN, wallpaper, weather, OPENED));
     }
 
     @Test
     public void aFreshInstallStillOpensOnTheCardEvenIfTheFlagWasSomehowSet() {
         // The fresh-install answer does not consult the seen flag at all: the card is the first
         // thing that install shows, and the flag is only written on the way out of it.
-        assertTrue(FirstRunPermissionsCard.shouldShow(FRESH, SEEN, State.GRANTED, State.GRANTED));
+        assertTrue(FirstRunPermissionsCard.shouldShow(FRESH, SEEN, State.GRANTED, State.GRANTED,
+            OPENED));
+    }
+
+    @Test
+    public void aTourReplayIsTheTourAndNothingElse() {
+        // Settings' "play the tour again" walks the launcher; it never re-opens the setup card,
+        // however the permissions stand and whether or not the card has been answered before.
+        for (State wallpaper : State.values()) {
+            for (State weather : State.values()) {
+                assertFalse("fresh " + wallpaper + "/" + weather, FirstRunPermissionsCard
+                    .shouldShow(FRESH, UNSEEN, wallpaper, weather, REPLAY));
+                assertFalse("updater " + wallpaper + "/" + weather, FirstRunPermissionsCard
+                    .shouldShow(UPDATER, UNSEEN, wallpaper, weather, REPLAY));
+            }
+        }
+        assertFalse(FirstRunPermissionsCard.shouldShow(FRESH, UNSEEN, State.DENIED, null,
+            REPLAY));
     }
 
     @Test
     public void everyRowCarriesATitleAndASentence() {
-        List<Row> rows = FirstRunPermissionsCard.rows(State.NOT_ASKED, State.NOT_ASKED, true, false);
+        List<Row> rows = FirstRunPermissionsCard.rows(State.NOT_ASKED, State.NOT_ASKED, true,
+            false);
         assertEquals(3, rows.size());
         assertEquals(Item.WALLPAPER, rows.get(0).item);
         assertEquals(Item.WEATHER, rows.get(1).item);

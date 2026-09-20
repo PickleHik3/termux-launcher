@@ -125,9 +125,15 @@ public final class FirstRunPermissionsCard {
      * @param wallpaper         where the wallpaper read stands
      * @param weather           where the location permission stands, or null when the weather
      *                          widget is switched off and the row is not offered at all
+     * @param replay            whether Settings asked for the tour again. A replay is the tour and
+     *                          nothing else — the user asked to be walked through the launcher,
+     *                          not to be asked for permissions a second time — so it answers no
+     *                          before anything else is considered.
      */
     public static boolean shouldShow(boolean firstRunChainDone, boolean cardSeen,
-                                     @NonNull State wallpaper, @Nullable State weather) {
+                                     @NonNull State wallpaper, @Nullable State weather,
+                                     boolean replay) {
+        if (replay) return false;
         if (!firstRunChainDone) return true;
         if (cardSeen) return false;
         return wallpaper != State.GRANTED || (weather != null && weather != State.GRANTED);
