@@ -286,6 +286,8 @@
     <string name="settings_gui_apps_copy_summary">Then paste it into the terminal and press Enter.</string>
     <string name="settings_gui_apps_clipboard_label">Get GUI apps</string>
     <string name="settings_gui_apps_copied">Command copied. Paste it into the terminal and press Enter.</string>
+    <string name="settings_gui_apps_nix_card">Graphical apps come from nixpkgs: add them to home.nix and run nix-on-droid switch.</string>
+    <string name="settings_gui_apps_nix_docs">Read the docs</string>
     <string name="settings_x11_display_title">Display</string>
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
     <string name="permission_x11_display_label">Run a Linux display</string>
@@ -1885,6 +1887,7 @@
     <string name="tour_closing_extras_copy">Use tlstore to install terminal goodies such as fastfetch with GIF support, the sigye clock, Claude Code and kitten, kitty\'s companion tool.</string>
     <string name="tour_closing_gui_apps_heading">GUI apps</string>
     <string name="tour_closing_gui_apps_copy">Settings \u2192 Display \u2192 Get GUI apps sets up graphical Linux apps that open from the app drawer.</string>
+    <string name="tour_closing_gui_apps_copy_nix">Graphical apps come from nixpkgs: add them to home.nix and run nix-on-droid switch.</string>
     <!-- Shell commands: never translated. -->
     <string name="tour_closing_extras_command" translatable="false">tlstore install fastfetch sigye claude-code kitten</string>
     <string name="tour_docs_url" translatable="false">https://picklehik3.github.io/termux-launcher-site/#wiki</string>

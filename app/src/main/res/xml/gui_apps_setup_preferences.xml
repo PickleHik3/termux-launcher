@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The Get GUI apps screen: where the apps come from, which Linux to put inside, what to start
-     with, and the one action that puts the command on the clipboard. The distro row is only out
-     for the route that has one; GuiAppsSetupPreferencesFragment does that. -->
+     with, and the one action that puts the command on the clipboard. Which rows are out depends
+     on the edition's routes (GuiAppsSetup.routesFor); GuiAppsSetupPreferencesFragment does that.
+     The nix edition offers no route at all, and gui_apps_nix_docs is its one extra row, hidden
+     here and shown only there. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
@@ -29,7 +31,9 @@
         app:entryValues="@array/gui_apps_distro_values"
         app:useSimpleSummaryProvider="true" />
 
-    <PreferenceCategory app:title="@string/settings_gui_apps_starters_title">
+    <PreferenceCategory
+        app:key="gui_apps_starters_category"
+        app:title="@string/settings_gui_apps_starters_title">
         <CheckBoxPreference
             app:key="gui_apps_starter_browser"
             app:title="@string/settings_gui_apps_starter_browser"
@@ -53,5 +57,11 @@
         app:title="@string/settings_gui_apps_copy_title"
         app:summary="@string/settings_gui_apps_copy_summary"
         app:persistent="false" />
+
+    <Preference
+        app:key="gui_apps_nix_docs"
+        app:title="@string/settings_gui_apps_nix_docs"
+        app:persistent="false"
+        app:isPreferenceVisible="false" />
 
 </PreferenceScreen>

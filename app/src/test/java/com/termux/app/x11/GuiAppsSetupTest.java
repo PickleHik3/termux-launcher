@@ -17,7 +17,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.EnumSet;
-import java.util.List;
 import java.util.Set;
 
 /**
@@ -251,11 +250,11 @@ public class GuiAppsSetupTest {
         assertEquals(Route.DISTRO, GuiAppsSetup.defaultRoute(TourEdition.VAJ));
     }
 
-    @Test public void nixOffersBothRoutesForNow() {
-        // Placeholder pending nix's own X11-apps research; see routesFor's javadoc.
-        List<Route> routes = GuiAppsSetup.routesFor(TourEdition.NIX);
-        assertEquals(Arrays.asList(Route.X11_REPO, Route.DISTRO), routes);
-        assertEquals(Route.X11_REPO, GuiAppsSetup.defaultRoute(TourEdition.NIX));
+    @Test public void nixOffersNoRoute() {
+        // Decision, 2026-09-20: graphical apps on nix come from nixpkgs and home.nix, a third
+        // way this class builds no command for.
+        assertTrue(GuiAppsSetup.routesFor(TourEdition.NIX).isEmpty());
+        assertEquals(null, GuiAppsSetup.defaultRoute(TourEdition.NIX));
     }
 
     @Test public void anUnknownStoredChoiceFallsBackToTheRecommendedOne() {

@@ -1,6 +1,7 @@
 package com.termux.app.x11;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.tour.TourEdition;
 
@@ -81,21 +82,26 @@ public final class GuiAppsSetup {
      *
      * <p>Decision D1 (user, 2026-09-20): the VAJ edition sticks to the distro route only — its
      * user does not want to build X11 apps for it, and every route it does offer must actually
-     * work there. The nix edition keeps both for now, pending its own research; that decision has
-     * a single call site here so changing it later does not need to touch the screen.
+     * work there. Decision (user, 2026-09-20): the nix edition offers neither route — graphical
+     * apps there come from nixpkgs and {@code home.nix}, a third way this class does not build a
+     * command for, so an empty list here is what tells the screen to show neither a route choice
+     * nor a command to copy.
      */
     @NonNull
     public static List<Route> routesFor(@NonNull TourEdition edition) {
         if (edition == TourEdition.VAJ) return Collections.singletonList(Route.DISTRO);
-        // TERMUX and, for now, NIX: both routes.
+        if (edition == TourEdition.NIX) return Collections.emptyList();
         return Collections.unmodifiableList(Arrays.asList(Route.X11_REPO, Route.DISTRO));
     }
 
-    /** The route to fall back to for {@code edition} when nothing is stored yet, or a stored
-     * choice no longer applies. */
-    @NonNull
+    /**
+     * The route to fall back to for {@code edition} when nothing is stored yet, or a stored
+     * choice no longer applies; {@code null} when {@code edition} offers no route at all.
+     */
+    @Nullable
     public static Route defaultRoute(@NonNull TourEdition edition) {
-        return routesFor(edition).get(0);
+        List<Route> routes = routesFor(edition);
+        return routes.isEmpty() ? null : routes.get(0);
     }
 
     /** One of the four apps the screen offers to install alongside the route. */
