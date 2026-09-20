@@ -2,11 +2,18 @@ package com.termux.app.wall;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Shader;
+import android.graphics.drawable.Drawable;
 import android.graphics.Typeface;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
@@ -51,6 +58,12 @@ import java.util.List;
  * it names, in the overlay's own coordinates.
  */
 public final class PaneControlsView extends View {
+
+    /**
+     * The panel veil's alpha, out of 255, under a tab with no frost: what the tab has always been
+     * filled with when the page had no tint of its own.
+     */
+    public static final int VEIL_ALPHA = 232;
 
     /** Told which button was run; the ids are the page's own. */
     public interface Listener {
@@ -177,6 +190,23 @@ public final class PaneControlsView extends View {
     private float mPaneBorderPx;
     /** The tint the page's own interior wears; transparent falls back to the theme's panel. */
     private int mPaneFillColor;
+    /**
+     * The tab's glass: the shared pre-blurred wallpaper frame the page's own slab draws, shown
+     * through the tab's shape at the tab's position on screen, with the page's frost filter and
+     * grain over it. Null while the page wears no frost, and then a veil of the theme's panel
+     * colour stands under the tint instead, so the buttons never sit on bare terminal text.
+     */
+    @Nullable private Bitmap mFrostFrame;
+    @Nullable private BitmapShader mFrostShader;
+    private final Paint mFrostPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Matrix mFrostMatrix = new Matrix();
+    private final Rect mFrostRect = new Rect();
+    private final int[] mLocation = new int[2];
+    private final int[] mRootLocation = new int[2];
+    @Nullable private Drawable mGrain;
+    /** The grain strength {@link #mGrain} was built from: a fresh drawable is not comparable. */
+    private int mGrainStrength;
+    @Nullable private ColorFilter mFrostFilter;
     /** Scratch for the tab's path points; never allocated per frame. */
     private final float[] mPathPoints = new float[CornerTabGeometry.PATH_POINTS * 2];
     /** The corner it comes out of; {@link CornerZones#NONE} until a page or the default says. */
@@ -234,6 +264,44 @@ public final class PaneControlsView extends View {
         if (mPaneFillColor == color) return;
         mPaneFillColor = color;
         invalidate();
+    }
+
+    /**
+     * The glass the page's own slab is made of, so the tab is cut from the same material: the
+     * shared pre-blurred wallpaper frame ({@code frameRect} says where it lies on screen), the
+     * frost's vibrancy filter, and the film grain. The tab used to carry only the page's tint,
+     * which over a page with a faint tint left the buttons floating on live terminal text.
+     *
+     * <p>Pass a null frame for a page with no frost — glass off, blur radius 0, or no still
+     * picture — and the tab stands its tint on a veil of the theme's panel colour instead, the
+     * legibility floor a page's tint alone never guaranteed. Compared by identity, as the pane's
+     * own slab does: a re-dress with what the tab already wears costs nothing.
+     */
+    public void setPaneGlass(@Nullable Bitmap frame, @NonNull Rect frameRect,
+                             @Nullable ColorFilter frostFilter, @Nullable Drawable grain,
+                             int grainStrength) {
+        Bitmap live = frame != null && !frame.isRecycled() ? frame : null;
+        if (live == mFrostFrame && mFrostFilter == frostFilter && mGrainStrength == grainStrength
+            && (mGrain == null) == (grain == null) && mFrostRect.equals(frameRect)) {
+            return;
+        }
+        mFrostFrame = live;
+        // CLAMP and a shader, as every other glass surface here draws the same frame: it does not
+        // always reach the screen's full width, and a plain drawBitmap left a sharp strip.
+        mFrostShader = live == null
+            ? null : new BitmapShader(live, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        mFrostPaint.setShader(mFrostShader);
+        mFrostPaint.setColorFilter(frostFilter);
+        mFrostFilter = frostFilter;
+        mFrostRect.set(frameRect);
+        mGrain = grain;
+        mGrainStrength = grainStrength;
+        invalidate();
+    }
+
+    /** True while the tab draws the page's frost rather than the panel veil. */
+    public boolean hasPaneGlass() {
+        return mFrostShader != null;
     }
 
     /**
@@ -499,9 +567,7 @@ public final class PaneControlsView extends View {
         // The fill runs a hair past the edge and is trimmed there by the clip, so no anti-aliased
         // seam opens up between the tab and the border it comes out from behind.
         CornerTabGeometry.buildTabFill(corner(), mClip, mTab, radius, dp(1), mPathPoints, mPath);
-        mPaint.setStyle(Paint.Style.FILL);
-        mPaint.setColor(fillColor(surface));
-        canvas.drawPath(mPath, mPaint);
+        drawMaterial(canvas, surface);
 
         // One line around frame and tab together: the frame's own stroke is the tab's outer edge,
         // so all the tab draws is the boundary it shares with the page's interior. Drawing its
@@ -538,15 +604,84 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * What the tab fills itself with: the page's own interior tint at its own alpha, so the tab is
-     * the frame grown rather than a panel over it. A page that answers no tint — no glass, or none
-     * asked for — keeps the theme's panel colour the tab has always used, which is what stands
-     * between the buttons and an opaque terminal underneath.
+     * The tab's material, inside {@link #mPath}: the page's own glass when it has any — the
+     * shared frost frame at this tab's place on screen, then the page's tint, then its grain —
+     * so the tab is the slab grown out of the corner rather than a panel laid over it. A page with
+     * no frost gets the theme's panel colour as a veil first and the tint over that: a tint alone
+     * can be almost clear, and the buttons then sat on live terminal text with nothing between,
+     * which is what stood between the buttons and the terminal before glass had a tint at all.
      */
-    private int fillColor(int surface) {
-        int fill = Color.alpha(mPaneFillColor) > 0 ? mPaneFillColor
-            : ColorUtils.setAlphaComponent(surface, 232);
-        return ColorUtils.setAlphaComponent(fill, Math.round(Color.alpha(fill) * mProgress));
+    private void drawMaterial(@NonNull Canvas canvas, int surface) {
+        int alpha = Math.round(255f * mProgress);
+        int save = canvas.save();
+        canvas.clipPath(mPath);
+        if (mFrostFrame != null && !mFrostFrame.isRecycled() && mFrostShader != null) {
+            aimFrost();
+            mFrostPaint.setAlpha(alpha);
+            canvas.drawRect(mTab.left - dp(1), mTab.top - dp(1), mTab.right + dp(1),
+                mTab.bottom + dp(1), mFrostPaint);
+        } else {
+            mPaint.setStyle(Paint.Style.FILL);
+            mPaint.setColor(scaleAlpha(ColorUtils.setAlphaComponent(surface, VEIL_ALPHA)));
+            canvas.drawRect(mClip, mPaint);
+        }
+        if (Color.alpha(mPaneFillColor) > 0) {
+            mPaint.setStyle(Paint.Style.FILL);
+            mPaint.setColor(scaleAlpha(mPaneFillColor));
+            canvas.drawRect(mClip, mPaint);
+        }
+        if (mGrain != null && mFrostFrame != null) {
+            mGrain.setBounds(Math.round(mClip.left), Math.round(mClip.top),
+                Math.round(mClip.right), Math.round(mClip.bottom));
+            mGrain.setAlpha(alpha);
+            mGrain.draw(canvas);
+        }
+        canvas.restoreToCount(save);
+    }
+
+    /** The colour at its own alpha scaled by the slide, so the material fades in with the tab. */
+    private int scaleAlpha(int color) {
+        return ColorUtils.setAlphaComponent(color, Math.round(Color.alpha(color) * mProgress));
+    }
+
+    /**
+     * Point the frost shader at the wallpaper under this view. Recomputed on every draw: the tab
+     * is out only briefly and the overlay it lives in moves under the keyboard, so caching by
+     * position buys nothing here and risks a stale aim.
+     */
+    private void aimFrost() {
+        if (mFrostFrame == null || mFrostShader == null) return;
+        layoutOriginOnScreen(mLocation);
+        float scaleX = mFrostRect.width() / (float) Math.max(1, mFrostFrame.getWidth());
+        float scaleY = mFrostRect.height() / (float) Math.max(1, mFrostFrame.getHeight());
+        mFrostMatrix.reset();
+        mFrostMatrix.setScale(scaleX, scaleY);
+        mFrostMatrix.postTranslate(mFrostRect.left - mLocation[0], mFrostRect.top - mLocation[1]);
+        mFrostShader.setLocalMatrix(mFrostMatrix);
+    }
+
+    /**
+     * This view's position on screen as laid out, ignoring every transform on the way up — the
+     * same anchor the pane's own slab uses, so the tab's frost lines up with the slab it grows
+     * out of while the pane tilts or slides under a finger.
+     */
+    private void layoutOriginOnScreen(@NonNull int[] out) {
+        float x = 0f;
+        float y = 0f;
+        View view = this;
+        while (true) {
+            x += view.getLeft();
+            y += view.getTop();
+            android.view.ViewParent parent = view.getParent();
+            if (!(parent instanceof View)) break;
+            View parentView = (View) parent;
+            x -= parentView.getScrollX();
+            y -= parentView.getScrollY();
+            view = parentView;
+        }
+        view.getLocationOnScreen(mRootLocation);
+        out[0] = Math.round(x) + mRootLocation[0];
+        out[1] = Math.round(y) + mRootLocation[1];
     }
 
     private void drawText(@NonNull Canvas canvas, @NonNull RectF button, @NonNull Action action,

@@ -72,6 +72,27 @@ public final class PaneGlass {
     }
 
     /**
+     * Cut a frame's corner tab from the same glass as the frame: the shared frost frame, the
+     * frost filter and a grain layer of its own, or nothing of the kind while the glass is off.
+     * The tab's tint and outline are the frame's business ({@code setPaneFill},
+     * {@code setPaneBorder}); this hands over only the material behind them. Runs wherever
+     * {@link #apply} runs, so a frost refresh reaches the tab in the same pass as the slab.
+     */
+    public static void dressTab(@Nullable PaneSurfaceStyle style,
+                                @Nullable com.termux.app.wall.PaneControlsView tab) {
+        if (tab == null) return;
+        if (!isActive(style)) {
+            tab.setPaneGlass(null, EMPTY_RECT, null, null, 0);
+            return;
+        }
+        tab.setPaneGlass(style.paneGlassBlurFrame(), style.paneGlassBlurFrameRect(),
+            style.paneGlassFrostFilter(), style.paneGlassGrainLayer(),
+            style.paneGlassGrainStrength());
+    }
+
+    private static final android.graphics.Rect EMPTY_RECT = new android.graphics.Rect();
+
+    /**
      * Keep a slab aimed at the wallpaper as its frame moves. A frame moves for reasons that never
      * redraw it (a sibling's divider drag, a float being dragged, the host resizing under the
      * keyboard, a wall page sliding), and the frost is positioned in screen space, so every move

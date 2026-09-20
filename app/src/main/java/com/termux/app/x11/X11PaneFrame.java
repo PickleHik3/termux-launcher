@@ -833,6 +833,7 @@ public final class X11PaneFrame extends PaneContentFrame {
                 ? com.termux.app.GlassRimRenderer.strokePx(
                     getResources().getDisplayMetrics().density) : 0f);
             mControls.setPaneFill(glass && style != null ? style.paneGlassTintColor() : 0);
+            PaneGlass.dressTab(glass ? style : null, mControls);
         }
         // The frame must not clip to its shape here: the mask's arcs lie exactly outside the
         // rounded outline, so a clipping frame cut away the very paint that rounds the surface,

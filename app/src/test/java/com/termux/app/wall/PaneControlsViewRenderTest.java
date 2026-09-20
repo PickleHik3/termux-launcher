@@ -74,7 +74,7 @@ public class PaneControlsViewRenderTest {
             RectF inner = new RectF();
             CornerTabGeometry.innerBounds(PANE, BORDER, inner);
             float arc = CornerTabGeometry.innerRadiusPx(RADIUS, BORDER);
-            int expected = ColorUtils.compositeColors(TINT, BEHIND);
+            int expected = tabFill();
 
             // The body of the tab: from the frame's own edge to a hair short of the tab's own
             // line, clear of both arcs — the frame's, which rounds the tab's outer corner, and the
@@ -115,7 +115,7 @@ public class PaneControlsViewRenderTest {
             view(corner).tabBounds(tab);
             RectF inner = new RectF();
             CornerTabGeometry.innerBounds(PANE, BORDER, inner);
-            int expected = ColorUtils.compositeColors(TINT, BEHIND);
+            int expected = tabFill();
             boolean left = CornerZones.isLeft(corner);
             // Across the tab, halfway down it: past the frame's corner arc, on the straight run.
             int row = Math.round((tab.top + tab.bottom) / 2f);
@@ -153,7 +153,7 @@ public class PaneControlsViewRenderTest {
             boolean left = CornerZones.isLeft(corner);
             boolean top = CornerZones.isTop(corner);
             float topY = top ? tab.bottom : tab.top;
-            int fillComposite = ColorUtils.compositeColors(TINT, BEHIND);
+            int fillComposite = tabFill();
             int x = Math.round(left ? tab.left + 3f : tab.right - 3f);
             // The row fully inside the tab's own fill, adjacent to the join line: the fill runs
             // from the join up to the frame edge for a top corner, so that is the row just above
@@ -189,7 +189,15 @@ public class PaneControlsViewRenderTest {
 
     /** The tab, out at one corner of {@link #PANE}, laid out over the whole bitmap. */
     private PaneControlsView view(int corner) {
+        return view(corner, TINT, null);
+    }
+
+    /** As above, with the page's tint and frost frame chosen; the frame covers the whole bitmap. */
+    private PaneControlsView view(int corner, final int tint, Bitmap frost) {
         PaneControlsView view = new PaneControlsView(mContext);
+        if (frost != null) {
+            view.setPaneGlass(frost, new android.graphics.Rect(0, 0, WIDTH, HEIGHT), null, null, 0);
+        }
         // Marks that draw nothing: the buttons' own glyphs are painted in the same colour as the
         // frame's stroke, and this test is about the line around the tab, not what is in it.
         view.setActions(
@@ -199,7 +207,7 @@ public class PaneControlsViewRenderTest {
             frame.bounds.set(PANE);
             frame.radiusPx = RADIUS;
             frame.borderPx = BORDER;
-            frame.fillColor = TINT;
+            frame.fillColor = tint;
             return true;
         });
         view.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
@@ -207,6 +215,61 @@ public class PaneControlsViewRenderTest {
         view.layout(0, 0, WIDTH, HEIGHT);
         view.showNow(corner);
         return view;
+    }
+
+    /**
+     * What a tab with no frost is filled with: the page's tint standing on the theme's panel veil
+     * over the wall. The tint alone used to be the whole fill, and a faint one left the buttons on
+     * bare terminal text.
+     */
+    private int tabFill() {
+        int panel = MaterialColors.getColor(mContext, com.termux.shared.R.attr.termuxColorSurfacePanel,
+            androidx.core.content.ContextCompat.getColor(mContext, R.color.termux_surface_panel));
+        int veil = ColorUtils.compositeColors(
+            ColorUtils.setAlphaComponent(panel, PaneControlsView.VEIL_ALPHA), BEHIND);
+        return ColorUtils.compositeColors(TINT, veil);
+    }
+
+    /**
+     * A page with a faint tint and no frost: the tab is still nearly opaque, because the veil
+     * stands under the tint. This is the case the user could not see the buttons in.
+     */
+    @Test
+    public void aFaintTintStillGetsAnOpaqueTab() {
+        PaneControlsView view = view(CornerZones.TOP_RIGHT, 0x14204058, null);
+        Bitmap bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+        view.draw(new Canvas(bitmap));
+        RectF tab = new RectF();
+        view.tabBounds(tab);
+        int pixel = bitmap.getPixel(Math.round(tab.centerX()), Math.round(tab.centerY()));
+        assertTrue("the tab is see-through: " + hex(pixel),
+            Color.alpha(pixel) >= PaneControlsView.VEIL_ALPHA);
+    }
+
+    /**
+     * A page wearing frost: the tab is cut from the same frame, at its own place on screen, and
+     * the tint goes over it — no veil, since the frost already stands between the buttons and
+     * whatever is under the tab.
+     */
+    @Test
+    public void aFrostedPageGivesTheTabItsOwnFrost() {
+        final int frostColor = 0xFF3060A0;
+        Bitmap frost = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+        frost.eraseColor(frostColor);
+        PaneControlsView view = view(CornerZones.TOP_RIGHT, TINT, frost);
+        Bitmap bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(BEHIND);
+        view.draw(canvas);
+        RectF tab = new RectF();
+        view.tabBounds(tab);
+        int pixel = bitmap.getPixel(Math.round(tab.centerX()), Math.round(tab.centerY()));
+        int expected = ColorUtils.compositeColors(TINT, frostColor);
+        assertTrue("the tab is not the page's frost under its tint: " + hex(pixel) + " for "
+            + hex(expected), near(pixel, expected));
+        // And the frost stays inside the tab: the wall beside it is untouched.
+        int outside = bitmap.getPixel(Math.round(tab.left) - 6, Math.round(tab.bottom) + 6);
+        assertTrue("frost leaked past the tab: " + hex(outside), near(outside, BEHIND));
     }
 
     private static boolean near(int pixel, int expected) {
