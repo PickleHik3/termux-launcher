@@ -20,18 +20,24 @@
     </style>
 
     <!-- One segment of an editor-shell toggle group, in both editors. Tighter than a stock
-         outlined button on every axis the card is short of: no vertical inset, no minimum width,
-         and text that autosizes down rather than truncating. The bar stands at 44dp inside a 48dp
-         row — the shipped 30dp was under the platform touch floor. -->
+         outlined button on every axis the card is short of: no minimum width, and text that
+         autosizes down rather than truncating.
+
+         The bar is drawn 36dp tall inside a 48dp slot: the insets are what keep the platform's
+         touch floor while the segment itself stops looking like a button from a form. The shipped
+         pair of near-identical dark fills is replaced by a wash of the accent behind the chosen
+         answer, the accent's own outline around it, and a hairline around the rest. -->
     <style name="Widget.Termux.EditorShell.Segment" parent="Widget.Material3.Button.OutlinedButton">
         <item name="android:layout_width">0dp</item>
         <!-- A fixed height, not wrap_content: appcompat switches auto-sizing off entirely when
              either dimension wraps, and auto-sizing is what keeps "Floating" whole at a large font
              scale in a segment this narrow. -->
-        <item name="android:layout_height">44dp</item>
+        <item name="android:layout_height">48dp</item>
         <item name="android:layout_weight">1</item>
-        <item name="android:insetTop">0dp</item>
-        <item name="android:insetBottom">0dp</item>
+        <!-- 48dp of view, 36dp of paint. Not a shorter view: a 36dp segment is under the platform
+             touch floor, which is the thing the 44dp height before it was there to fix. -->
+        <item name="android:insetTop">6dp</item>
+        <item name="android:insetBottom">6dp</item>
         <item name="android:minWidth">0dp</item>
         <item name="android:minHeight">0dp</item>
         <!-- Material3's outlined button ships 24dp of horizontal padding, set as left/right; both
@@ -44,25 +50,44 @@
         <item name="android:paddingEnd">6dp</item>
         <item name="android:maxLines">1</item>
         <item name="android:ellipsize">end</item>
-        <item name="android:textSize">12sp</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
         <item name="android:letterSpacing">0</item>
         <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">@color/editor_shell_segment_text</item>
         <item name="autoSizeTextType">uniform</item>
         <item name="autoSizeMinTextSize">9sp</item>
-        <item name="autoSizeMaxTextSize">12sp</item>
+        <item name="autoSizeMaxTextSize">13sp</item>
         <item name="autoSizeStepGranularity">0.5sp</item>
+        <item name="backgroundTint">@color/editor_shell_segment_fill</item>
+        <item name="strokeColor">@color/editor_shell_segment_stroke</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="rippleColor">?attr/termuxColorPrimary</item>
         <item name="iconPadding">0dp</item>
+    </style>
+
+    <!-- A slider in either editor. The shipped row had no progress drawable at all: a hairline
+         with no filled part and a large pale thumb, so the only thing that said where the value
+         stood was the number printed beside it. -->
+    <style name="Widget.Termux.EditorShell.Slider" parent="">
+        <item name="android:progressDrawable">@drawable/editor_shell_slider_track</item>
+        <item name="android:thumb">@drawable/editor_shell_slider_thumb</item>
+        <!-- The track is the drawable's own 4dp; this is the height the row gives the control. -->
+        <item name="android:minHeight">32dp</item>
+        <item name="android:maxHeight">32dp</item>
+        <item name="android:splitTrack">false</item>
+        <item name="android:paddingStart">11dp</item>
+        <item name="android:paddingEnd">11dp</item>
     </style>
 
     <!-- The editor body's scroller. Applied as a theme overlay rather than a style, because the
          Appearance editor's scroller is a ScrollView and the Layout editor's is a NestedScrollView
-         and only one of them has a constructor that takes a style. Both editors draw the scrollbar
-         always: it is what says how much more there is, and a body capped short of its last rows
-         with no scrollbar reads as the whole list. -->
+         and only one of them has a constructor that takes a style. A 2dp mark and no track at
+         all: the bar says where in the list the rows on screen are, and it fades once the finger
+         stops rather than standing there as a piece of the card's furniture. -->
     <style name="ThemeOverlay.Termux.EditorShellScroller" parent="">
-        <item name="android:scrollbarSize">3dp</item>
+        <item name="android:scrollbarSize">2dp</item>
         <item name="android:scrollbarThumbVertical">@drawable/editor_shell_scrollbar_thumb</item>
-        <item name="android:scrollbarTrackVertical">@drawable/editor_shell_scrollbar_track</item>
     </style>
 
     <style name="SettingsSegmentLabel">

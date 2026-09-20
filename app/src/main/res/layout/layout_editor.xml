@@ -66,8 +66,8 @@
                     android:maxLines="1"
                     android:text="@string/termux_layout_editor_orientation"
                     android:textColor="?attr/termuxColorOnSurface"
-                    android:textSize="12.5sp"
-                    app:autoSizeMaxTextSize="12.5sp"
+                    android:textSize="14sp"
+                    app:autoSizeMaxTextSize="14sp"
                     app:autoSizeMinTextSize="10sp"
                     app:autoSizeStepGranularity="0.5sp"
                     app:autoSizeTextType="uniform" />

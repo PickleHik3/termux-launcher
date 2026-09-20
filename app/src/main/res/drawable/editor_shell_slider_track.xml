@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A slider's track: one 4dp capsule, with the travel up to the knob filled in the accent.
+
+     The shipped row had no progress drawable at all, so the platform drew a hairline with no
+     filled part — a control that never said where its value stood without reading the number
+     beside it. Both layers are centred vertically so the 4dp bar sits in the middle of the row's
+     touch height rather than at the top of it. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item
+        android:id="@android:id/background"
+        android:gravity="center_vertical"
+        android:height="4dp">
+        <shape android:shape="rectangle">
+            <corners android:radius="2dp" />
+            <solid android:color="@color/editor_shell_track_ink" />
+        </shape>
+    </item>
+
+    <item
+        android:id="@android:id/progress"
+        android:gravity="center_vertical"
+        android:height="4dp">
+        <clip>
+            <shape android:shape="rectangle">
+                <corners android:radius="2dp" />
+                <solid android:color="?attr/termuxColorPrimary" />
+            </shape>
+        </clip>
+    </item>
+</layer-list>

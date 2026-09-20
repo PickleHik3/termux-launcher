@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A segment's fill. The chosen one is washed with the accent; the rest are the card itself.
+     The shipped pair was a near-black fill inside a near-black outline, which is what made the
+     chosen answer hard to find. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:alpha="0.16" android:color="?attr/termuxColorPrimary"
+        android:state_checked="true" />
+    <item android:color="@android:color/transparent" />
+</selector>
