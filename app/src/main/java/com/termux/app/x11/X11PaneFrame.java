@@ -14,6 +14,7 @@ import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerHoldArbiter;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.fragments.settings.termux.GuiAppsSetupPreferencesFragment;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
@@ -679,9 +680,27 @@ public final class X11PaneFrame extends PaneContentFrame {
         setup.setVisibility(offer ? VISIBLE : GONE);
     }
 
-    /** The offer's own tap: what the launcher would do, and the two answers. */
+    /**
+     * The offer's own tap: the Get GUI apps screen in Settings, which is where every choice about
+     * this now lives.
+     *
+     * <p>The tap is also what the offer is remembered by. It is the only "not now" left on the
+     * place — the screen it opens does its work through the clipboard and a terminal, so nothing
+     * comes back here to say how it went — and a home screen that kept asking after it had already
+     * shown the user the screen would just be nagging. Settings is the way back, and any change to
+     * the situation (a container appearing, an account created by hand) is a different situation
+     * and is offered once more.
+     */
     private void openDistroSetup() {
-        DistroSetupDialog.show(getContext(), DistroSetup.read(), true, this::applyEmptyState);
+        try {
+            new DistroSetupStore(getContext()).dismiss(DistroSetup.read());
+            getContext().startActivity(GuiAppsSetupPreferencesFragment.intent(getContext())
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (RuntimeException e) {
+            // A home screen's empty state is not worth a crash; the row in Settings is still there.
+            return;
+        }
+        applyEmptyState();
     }
 
     /** The empty state's guide button: the setup section of the Linux display guide. */

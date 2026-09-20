@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Get GUI apps screen: where the apps come from, which Linux to put inside, what to start
+     with, and the one action that puts the command on the clipboard. The distro row is only out
+     for the route that has one; GuiAppsSetupPreferencesFragment does that. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <Preference
+        app:key="gui_apps_hint"
+        app:summary="@string/settings_gui_apps_hint"
+        app:selectable="false"
+        app:persistent="false" />
+
+    <ListPreference
+        app:key="gui_apps_route"
+        app:title="@string/settings_gui_apps_route_title"
+        app:dialogMessage="@string/settings_gui_apps_route_summary"
+        android:defaultValue="x11"
+        app:entries="@array/gui_apps_route_entries"
+        app:entryValues="@array/gui_apps_route_values"
+        app:useSimpleSummaryProvider="true" />
+
+    <ListPreference
+        app:key="gui_apps_distro"
+        app:title="@string/settings_gui_apps_distro_title"
+        app:dialogMessage="@string/settings_gui_apps_distro_summary"
+        android:defaultValue="debian"
+        app:entries="@array/gui_apps_distro_entries"
+        app:entryValues="@array/gui_apps_distro_values"
+        app:useSimpleSummaryProvider="true" />
+
+    <PreferenceCategory app:title="@string/settings_gui_apps_starters_title">
+        <CheckBoxPreference
+            app:key="gui_apps_starter_browser"
+            app:title="@string/settings_gui_apps_starter_browser"
+            android:defaultValue="true" />
+        <CheckBoxPreference
+            app:key="gui_apps_starter_files"
+            app:title="@string/settings_gui_apps_starter_files"
+            android:defaultValue="true" />
+        <CheckBoxPreference
+            app:key="gui_apps_starter_editor"
+            app:title="@string/settings_gui_apps_starter_editor"
+            android:defaultValue="true" />
+        <CheckBoxPreference
+            app:key="gui_apps_starter_terminal"
+            app:title="@string/settings_gui_apps_starter_terminal"
+            android:defaultValue="false" />
+    </PreferenceCategory>
+
+    <Preference
+        app:key="gui_apps_copy"
+        app:title="@string/settings_gui_apps_copy_title"
+        app:summary="@string/settings_gui_apps_copy_summary"
+        app:persistent="false" />
+
+</PreferenceScreen>
