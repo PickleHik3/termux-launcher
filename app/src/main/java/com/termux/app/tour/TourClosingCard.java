@@ -26,7 +26,8 @@ import java.util.List;
  *
  * <p>Graphical apps are a section again, but a sentence rather than a command: they are a Display
  * matter now and have a screen of their own in Settings, which asks what the user actually wants
- * rather than handing a newcomer one line to paste.
+ * rather than handing a newcomer one line to paste. Nix has no such screen — its apps come from
+ * nixpkgs and {@code home.nix} — so its version of the sentence says that instead.
  *
  * <p>Pure, so the table below is a unit test rather than four screenshots.
  */
@@ -59,18 +60,27 @@ public final class TourClosingCard {
         R.string.tour_closing_extras_copy, R.string.tour_closing_extras_command);
     private static final Section GUI_APPS = new Section(
         R.string.tour_closing_gui_apps_heading, R.string.tour_closing_gui_apps_copy, 0);
+    /**
+     * Decision (user, 2026-09-20): nix has no "Get GUI apps" screen at all — graphical apps there
+     * come from nixpkgs and {@code home.nix} — so its card keeps the same heading but says that
+     * instead of pointing at a screen it does not have.
+     */
+    private static final Section GUI_APPS_NIX = new Section(
+        R.string.tour_closing_gui_apps_heading, R.string.tour_closing_gui_apps_copy_nix, 0);
 
     private static final List<Section> SECTIONS = Collections.unmodifiableList(
         Arrays.asList(SHORTCUTS, CUSTOMIZE, EXTRAS, GUI_APPS));
+    private static final List<Section> SECTIONS_NIX = Collections.unmodifiableList(
+        Arrays.asList(SHORTCUTS, CUSTOMIZE, EXTRAS, GUI_APPS_NIX));
 
     /**
-     * The card's sections, in order. The same four in every edition: graphical apps are a screen
-     * in Settings now, so the one section an edition used to disagree about says the same thing
-     * everywhere.
+     * The card's sections, in order. The same four in every edition, and the same heading for the
+     * last one everywhere; nix's last section carries its own sentence, since it has no "Get GUI
+     * apps" screen for the others' sentence to point at.
      */
     @NonNull
     public static List<Section> sections(@NonNull TourEdition edition) {
-        return SECTIONS;
+        return edition == TourEdition.NIX ? SECTIONS_NIX : SECTIONS;
     }
 
     /** Every command this edition offers, in the order the sections carry them. */

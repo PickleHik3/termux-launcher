@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.tour.TourEdition;
 import com.termux.app.x11.GuiAppsSetup.Distro;
 import com.termux.app.x11.GuiAppsSetup.Route;
 import com.termux.app.x11.GuiAppsSetup.StarterApp;
@@ -234,6 +235,26 @@ public class GuiAppsSetupTest {
     @Test public void theDefaultTicksAreABrowserAFileManagerAndAnEditor() {
         assertEquals(EnumSet.of(StarterApp.BROWSER, StarterApp.FILE_MANAGER,
             StarterApp.TEXT_EDITOR), GuiAppsSetup.defaultStarters());
+    }
+
+    // --- which routes an edition offers -------------------------------------------------------
+
+    @Test public void termuxOffersBothRoutes() {
+        assertEquals(Arrays.asList(Route.X11_REPO, Route.DISTRO),
+            GuiAppsSetup.routesFor(TourEdition.TERMUX));
+        assertEquals(Route.X11_REPO, GuiAppsSetup.defaultRoute(TourEdition.TERMUX));
+    }
+
+    @Test public void vajOffersOnlyTheDistroRoute() {
+        assertEquals(Arrays.asList(Route.DISTRO), GuiAppsSetup.routesFor(TourEdition.VAJ));
+        assertEquals(Route.DISTRO, GuiAppsSetup.defaultRoute(TourEdition.VAJ));
+    }
+
+    @Test public void nixOffersNoRoute() {
+        // Decision, 2026-09-20: graphical apps on nix come from nixpkgs and home.nix, a third
+        // way this class builds no command for.
+        assertTrue(GuiAppsSetup.routesFor(TourEdition.NIX).isEmpty());
+        assertEquals(null, GuiAppsSetup.defaultRoute(TourEdition.NIX));
     }
 
     @Test public void anUnknownStoredChoiceFallsBackToTheRecommendedOne() {

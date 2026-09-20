@@ -272,6 +272,7 @@
     <string name="settings_gui_apps_title">Get GUI apps</string>
     <string name="settings_gui_apps_row_summary">Pick the apps you want and copy the command that installs them.</string>
     <string name="settings_gui_apps_hint">Apps with windows come either from Termux itself or from a Linux you install inside it. Pick one, tick what you want, then copy the command.</string>
+    <string name="settings_gui_apps_intro_distro_only">Install a Linux system with a few apps to start with, then copy the command.</string>
     <string name="settings_gui_apps_route_title">Where the apps come from</string>
     <string name="settings_gui_apps_route_summary">Termux\'s own apps install in a minute or two. A full Linux takes longer and offers far more.</string>
     <string name="settings_gui_apps_distro_title">Which Linux</string>
@@ -285,6 +286,8 @@
     <string name="settings_gui_apps_copy_summary">Then paste it into the terminal and press Enter.</string>
     <string name="settings_gui_apps_clipboard_label">Get GUI apps</string>
     <string name="settings_gui_apps_copied">Command copied. Paste it into the terminal and press Enter.</string>
+    <string name="settings_gui_apps_nix_card">Graphical apps come from nixpkgs: add them to home.nix and run nix-on-droid switch.</string>
+    <string name="settings_gui_apps_nix_docs">Read the docs</string>
     <string name="settings_x11_display_title">Display</string>
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
     <string name="permission_x11_display_label">Run a Linux display</string>
@@ -1884,6 +1887,7 @@
     <string name="tour_closing_extras_copy">Use tlstore to install terminal goodies such as fastfetch with GIF support, the sigye clock, Claude Code and kitten, kitty\'s companion tool.</string>
     <string name="tour_closing_gui_apps_heading">GUI apps</string>
     <string name="tour_closing_gui_apps_copy">Settings \u2192 Display \u2192 Get GUI apps sets up graphical Linux apps that open from the app drawer.</string>
+    <string name="tour_closing_gui_apps_copy_nix">Graphical apps come from nixpkgs: add them to home.nix and run nix-on-droid switch.</string>
     <!-- Shell commands: never translated. -->
     <string name="tour_closing_extras_command" translatable="false">tlstore install fastfetch sigye claude-code kitten</string>
     <string name="tour_docs_url" translatable="false">https://picklehik3.github.io/termux-launcher-site/#wiki</string>
