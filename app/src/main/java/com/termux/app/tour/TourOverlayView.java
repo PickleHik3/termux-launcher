@@ -120,7 +120,6 @@ public final class TourOverlayView extends FrameLayout {
     private final TextView mCopy;
     private final ScrollView mBodyScroll;
     private final LinearLayout mSections;
-    private final LinearLayout mClosingButtonRow;
     private final TextView mDocsLink;
     private final LinearLayout mButtonRow;
     /** The card's action buttons, rebuilt whenever the card offers a different set. */
@@ -239,29 +238,18 @@ public final class TourOverlayView extends FrameLayout {
         bodyParams.topMargin = dp(8);
         mCard.addView(mBodyScroll, bodyParams);
 
-        // The docs link gets its own row above Start using: two text buttons side by side wrap
-        // onto each other on a narrow card long before 1.3x text.
-        mClosingButtonRow = new LinearLayout(context);
-        mClosingButtonRow.setOrientation(LinearLayout.HORIZONTAL);
-        mClosingButtonRow.setGravity(Gravity.END);
-        mClosingButtonRow.setVisibility(GONE);
-
-        mDocsLink = textButton(context, view -> {
-            if (mCallbacks != null) mCallbacks.onTourDocsTapped();
-        });
-        mClosingButtonRow.addView(mDocsLink, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        LinearLayout.LayoutParams closingRowParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        closingRowParams.gravity = Gravity.END;
-        closingRowParams.topMargin = dp(6);
-        closingRowParams.rightMargin = -dp(4);
-        mCard.addView(mClosingButtonRow, closingRowParams);
-
         mButtonRow = new LinearLayout(context);
         mButtonRow.setOrientation(LinearLayout.HORIZONTAL);
         mButtonRow.setGravity(Gravity.END);
+
+        // The docs link shares the button row: it leads, takes the slack, and Start using keeps
+        // the trailing edge, so the closing card ends on one row of buttons.
+        mDocsLink = textButton(context, view -> {
+            if (mCallbacks != null) mCallbacks.onTourDocsTapped();
+        });
+        mDocsLink.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        mDocsLink.setVisibility(GONE);
+        mButtonRow.addView(mDocsLink, docsLinkParams());
 
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -336,7 +324,7 @@ public final class TourOverlayView extends FrameLayout {
         if (closing) showClosingSections();
         else {
             mBodyScroll.setVisibility(GONE);
-            mClosingButtonRow.setVisibility(GONE);
+            mDocsLink.setVisibility(GONE);
         }
         applyPresentation();
         if (!sameCard && getVisibility() == VISIBLE) animateCardIn();
@@ -779,7 +767,7 @@ public final class TourOverlayView extends FrameLayout {
         for (TextView copyButton : mCopyButtons) copyButton.setText(R.string.tour_copy);
         mBodyScroll.setVisibility(VISIBLE);
         mBodyScroll.scrollTo(0, 0);
-        mClosingButtonRow.setVisibility(VISIBLE);
+        mDocsLink.setVisibility(VISIBLE);
     }
 
     private void buildClosingSections(@NonNull TourEdition edition) {
@@ -869,6 +857,7 @@ public final class TourOverlayView extends FrameLayout {
             mActions.clear();
             mActions.addAll(actions);
             mButtonRow.removeAllViews();
+            mButtonRow.addView(mDocsLink, docsLinkParams());
             mActionButtons.clear();
             for (TourAction action : mActions) {
                 TextView button = textButton(getContext(), view -> onActionTapped(action));
@@ -884,6 +873,13 @@ public final class TourOverlayView extends FrameLayout {
             }
         }
         mButtonRow.setVisibility(mActions.isEmpty() ? GONE : VISIBLE);
+    }
+
+    private static LinearLayout.LayoutParams docsLinkParams() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        params.gravity = Gravity.CENTER_VERTICAL;
+        return params;
     }
 
     private void onActionTapped(@NonNull TourAction action) {
