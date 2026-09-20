@@ -43,8 +43,6 @@ public class PaneControlsViewRenderTest {
     private static final int HEIGHT = 340;
     /** The wall behind the pane: nothing of the frame or the tab is this colour. */
     private static final int BEHIND = 0xFF101010;
-    /** The pane's own glass tint, which the tab fills itself with. */
-    private static final int TINT = 0x99204058;
     private static final float RADIUS = 12f;
     private static final float BORDER = 2f;
     /** How far a channel may drift before two colours are different colours. */
@@ -189,14 +187,14 @@ public class PaneControlsViewRenderTest {
 
     /** The tab, out at one corner of {@link #PANE}, laid out over the whole bitmap. */
     private PaneControlsView view(int corner) {
-        return view(corner, TINT, null);
+        return view(corner, null);
     }
 
-    /** As above, with the page's tint and frost frame chosen; the frame covers the whole bitmap. */
-    private PaneControlsView view(int corner, final int tint, Bitmap frost) {
+    /** As above, with the app's blur frame chosen; the frame covers the whole bitmap. */
+    private PaneControlsView view(int corner, Bitmap frost) {
         PaneControlsView view = new PaneControlsView(mContext);
         if (frost != null) {
-            view.setPaneGlass(frost, new android.graphics.Rect(0, 0, WIDTH, HEIGHT), null, null, 0);
+            view.setPaneGlass(frost, new android.graphics.Rect(0, 0, WIDTH, HEIGHT), null);
         }
         // Marks that draw nothing: the buttons' own glyphs are painted in the same colour as the
         // frame's stroke, and this test is about the line around the tab, not what is in it.
@@ -207,7 +205,6 @@ public class PaneControlsViewRenderTest {
             frame.bounds.set(PANE);
             frame.radiusPx = RADIUS;
             frame.borderPx = BORDER;
-            frame.fillColor = tint;
             return true;
         });
         view.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
@@ -217,46 +214,40 @@ public class PaneControlsViewRenderTest {
         return view;
     }
 
-    /**
-     * What a tab with no frost is filled with: the page's tint standing on the theme's panel veil
-     * over the wall. The tint alone used to be the whole fill, and a faint one left the buttons on
-     * bare terminal text.
-     */
+    /** What a tab with no blur is filled with: the theme's panel scrim, alone, over the wall. */
     private int tabFill() {
-        int panel = MaterialColors.getColor(mContext, com.termux.shared.R.attr.termuxColorSurfacePanel,
-            androidx.core.content.ContextCompat.getColor(mContext, R.color.termux_surface_panel));
-        int veil = ColorUtils.compositeColors(
-            ColorUtils.setAlphaComponent(panel, PaneControlsView.VEIL_ALPHA), BEHIND);
-        return ColorUtils.compositeColors(TINT, veil);
+        return ColorUtils.compositeColors(
+            ColorUtils.setAlphaComponent(panel(), PaneControlsView.SCRIM_ALPHA), BEHIND);
     }
 
-    /**
-     * A page with a faint tint and no frost: the tab is still nearly opaque, because the veil
-     * stands under the tint. This is the case the user could not see the buttons in.
-     */
+    private int panel() {
+        return MaterialColors.getColor(mContext, com.termux.shared.R.attr.termuxColorSurfacePanel,
+            androidx.core.content.ContextCompat.getColor(mContext, R.color.termux_surface_panel));
+    }
+
+    /** Whatever the page wears, a tab with no blur is close to opaque over what is under it. */
     @Test
-    public void aFaintTintStillGetsAnOpaqueTab() {
-        PaneControlsView view = view(CornerZones.TOP_RIGHT, 0x14204058, null);
+    public void theTabIsNeverSeeThrough() {
+        PaneControlsView view = view(CornerZones.TOP_RIGHT, null);
         Bitmap bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
         view.draw(new Canvas(bitmap));
         RectF tab = new RectF();
         view.tabBounds(tab);
         int pixel = bitmap.getPixel(Math.round(tab.centerX()), Math.round(tab.centerY()));
         assertTrue("the tab is see-through: " + hex(pixel),
-            Color.alpha(pixel) >= PaneControlsView.VEIL_ALPHA);
+            Color.alpha(pixel) >= PaneControlsView.SCRIM_ALPHA);
     }
 
     /**
-     * A page wearing frost: the tab is cut from the same frame, at its own place on screen, and
-     * the tint goes over it — no veil, since the frost already stands between the buttons and
-     * whatever is under the tab.
+     * With the app's wallpaper blur handed in, the tab shows it under the scrim, at the tab's own
+     * place on screen, and nothing of it leaks past the tab.
      */
     @Test
-    public void aFrostedPageGivesTheTabItsOwnFrost() {
+    public void theBlurShowsThroughTheScrimInsideTheTabOnly() {
         final int frostColor = 0xFF3060A0;
         Bitmap frost = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
         frost.eraseColor(frostColor);
-        PaneControlsView view = view(CornerZones.TOP_RIGHT, TINT, frost);
+        PaneControlsView view = view(CornerZones.TOP_RIGHT, frost);
         Bitmap bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(bitmap);
         canvas.drawColor(BEHIND);
@@ -264,12 +255,14 @@ public class PaneControlsViewRenderTest {
         RectF tab = new RectF();
         view.tabBounds(tab);
         int pixel = bitmap.getPixel(Math.round(tab.centerX()), Math.round(tab.centerY()));
-        int expected = ColorUtils.compositeColors(TINT, frostColor);
-        assertTrue("the tab is not the page's frost under its tint: " + hex(pixel) + " for "
+        int expected = ColorUtils.compositeColors(
+            ColorUtils.setAlphaComponent(panel(), PaneControlsView.SCRIM_ON_FROST_ALPHA), frostColor);
+        assertTrue("the tab is not the blur under the scrim: " + hex(pixel) + " for "
             + hex(expected), near(pixel, expected));
-        // And the frost stays inside the tab: the wall beside it is untouched.
+        assertTrue("the scrim alone would look the same: the blur is not showing",
+            far(pixel, tabFill()));
         int outside = bitmap.getPixel(Math.round(tab.left) - 6, Math.round(tab.bottom) + 6);
-        assertTrue("frost leaked past the tab: " + hex(outside), near(outside, BEHIND));
+        assertTrue("blur leaked past the tab: " + hex(outside), near(outside, BEHIND));
     }
 
     private static boolean near(int pixel, int expected) {

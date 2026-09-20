@@ -13,7 +13,6 @@ import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
-import android.graphics.drawable.Drawable;
 import android.graphics.Typeface;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
@@ -60,10 +59,16 @@ import java.util.List;
 public final class PaneControlsView extends View {
 
     /**
-     * The panel veil's alpha, out of 255, under a tab with no frost: what the tab has always been
-     * filled with when the page had no tint of its own.
+     * The tab's one material, the same on every screen: the theme's panel colour as a scrim,
+     * over the app's shared wallpaper blur when it has one. Two strengths, both fixed — the tab
+     * does not follow the page's own tint, blur or grain. Following them put a pane's film grain
+     * on a 40dp tab, where it read as static (pong, 2026-09-20), and a pane's faint tint left the
+     * buttons on bare terminal text.
      */
-    public static final int VEIL_ALPHA = 232;
+    /** The scrim's alpha, out of 255, over the wallpaper blur: enough to read on any picture. */
+    public static final int SCRIM_ON_FROST_ALPHA = 184;
+    /** The scrim's alpha, out of 255, standing alone: what the tab was always filled with. */
+    public static final int SCRIM_ALPHA = 232;
 
     /** Told which button was run; the ids are the page's own. */
     public interface Listener {
@@ -149,12 +154,6 @@ public final class PaneControlsView extends View {
         public float radiusPx;
         /** The border it paints — the line the tab lines up inside, 0 when it paints none. */
         public float borderPx;
-        /**
-         * What its interior is tinted with, so the tab fills itself the same way and reads as the
-         * frame grown rather than as a panel laid over it. Transparent when the frame has no tint
-         * of its own, and then the tab falls back to the theme's panel colour.
-         */
-        public int fillColor;
     }
 
     /** Where the tab's frame is now; asked afresh every time the tab is laid out or drawn. */
@@ -188,13 +187,10 @@ public final class PaneControlsView extends View {
     private float mPaneRadiusPx;
     /** The border the page paints — the line the tab lines up inside, 0 when it paints none. */
     private float mPaneBorderPx;
-    /** The tint the page's own interior wears; transparent falls back to the theme's panel. */
-    private int mPaneFillColor;
     /**
-     * The tab's glass: the shared pre-blurred wallpaper frame the page's own slab draws, shown
-     * through the tab's shape at the tab's position on screen, with the page's frost filter and
-     * grain over it. Null while the page wears no frost, and then a veil of the theme's panel
-     * colour stands under the tint instead, so the buttons never sit on bare terminal text.
+     * The tab's glass: the app's shared pre-blurred wallpaper frame, shown through the tab's
+     * shape at the tab's position on screen, under the scrim. Null while the app has no blur
+     * frame, and the scrim then stands alone.
      */
     @Nullable private Bitmap mFrostFrame;
     @Nullable private BitmapShader mFrostShader;
@@ -203,9 +199,6 @@ public final class PaneControlsView extends View {
     private final Rect mFrostRect = new Rect();
     private final int[] mLocation = new int[2];
     private final int[] mRootLocation = new int[2];
-    @Nullable private Drawable mGrain;
-    /** The grain strength {@link #mGrain} was built from: a fresh drawable is not comparable. */
-    private int mGrainStrength;
     @Nullable private ColorFilter mFrostFilter;
     /** Scratch for the tab's path points; never allocated per frame. */
     private final float[] mPathPoints = new float[CornerTabGeometry.PATH_POINTS * 2];
@@ -255,34 +248,16 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * What the page's interior is tinted with. The tab fills itself with the same colour at the
-     * same alpha, so it reads as the frame having grown rather than as a panel laid over it; a page
-     * that has no tint of its own passes 0 and the tab falls back to the theme's panel colour,
-     * which is what a page with no glass has always shown.
-     */
-    public void setPaneFill(int color) {
-        if (mPaneFillColor == color) return;
-        mPaneFillColor = color;
-        invalidate();
-    }
-
-    /**
-     * The glass the page's own slab is made of, so the tab is cut from the same material: the
-     * shared pre-blurred wallpaper frame ({@code frameRect} says where it lies on screen), the
-     * frost's vibrancy filter, and the film grain. The tab used to carry only the page's tint,
-     * which over a page with a faint tint left the buttons floating on live terminal text.
-     *
-     * <p>Pass a null frame for a page with no frost — glass off, blur radius 0, or no still
-     * picture — and the tab stands its tint on a veil of the theme's panel colour instead, the
-     * legibility floor a page's tint alone never guaranteed. Compared by identity, as the pane's
-     * own slab does: a re-dress with what the tab already wears costs nothing.
+     * The blur the tab shows through its scrim: the app's shared pre-blurred wallpaper frame
+     * ({@code frameRect} says where it lies on screen) and the frost's vibrancy filter. Pass a
+     * null frame while the app has none — blur off, or no still picture — and the scrim stands
+     * alone. Compared by identity, as the pane's own slab does: a re-dress with what the tab
+     * already wears costs nothing.
      */
     public void setPaneGlass(@Nullable Bitmap frame, @NonNull Rect frameRect,
-                             @Nullable ColorFilter frostFilter, @Nullable Drawable grain,
-                             int grainStrength) {
+                             @Nullable ColorFilter frostFilter) {
         Bitmap live = frame != null && !frame.isRecycled() ? frame : null;
-        if (live == mFrostFrame && mFrostFilter == frostFilter && mGrainStrength == grainStrength
-            && (mGrain == null) == (grain == null) && mFrostRect.equals(frameRect)) {
+        if (live == mFrostFrame && mFrostFilter == frostFilter && mFrostRect.equals(frameRect)) {
             return;
         }
         mFrostFrame = live;
@@ -294,12 +269,10 @@ public final class PaneControlsView extends View {
         mFrostPaint.setColorFilter(frostFilter);
         mFrostFilter = frostFilter;
         mFrostRect.set(frameRect);
-        mGrain = grain;
-        mGrainStrength = grainStrength;
         invalidate();
     }
 
-    /** True while the tab draws the page's frost rather than the panel veil. */
+    /** True while the tab shows the wallpaper blur under its scrim. */
     public boolean hasPaneGlass() {
         return mFrostShader != null;
     }
@@ -332,7 +305,6 @@ public final class PaneControlsView extends View {
         mBounds.set(mFrame.bounds);
         mPaneRadiusPx = Math.max(0f, mFrame.radiusPx);
         mPaneBorderPx = Math.max(0f, mFrame.borderPx);
-        mPaneFillColor = mFrame.fillColor;
         return mBounds.width() > 0f && mBounds.height() > 0f;
     }
 
@@ -604,38 +576,25 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * The tab's material, inside {@link #mPath}: the page's own glass when it has any — the
-     * shared frost frame at this tab's place on screen, then the page's tint, then its grain —
-     * so the tab is the slab grown out of the corner rather than a panel laid over it. A page with
-     * no frost gets the theme's panel colour as a veil first and the tint over that: a tint alone
-     * can be almost clear, and the buttons then sat on live terminal text with nothing between,
-     * which is what stood between the buttons and the terminal before glass had a tint at all.
+     * The tab's material, inside {@link #mPath}: the app's wallpaper blur at this tab's place
+     * on screen under the panel scrim, or the scrim alone, stronger, when there is no blur. One
+     * recipe for every screen — a terminal pane, the Display page, the Widgets page — so the
+     * buttons read the same wherever the corner is.
      */
     private void drawMaterial(@NonNull Canvas canvas, int surface) {
-        int alpha = Math.round(255f * mProgress);
         int save = canvas.save();
         canvas.clipPath(mPath);
-        if (mFrostFrame != null && !mFrostFrame.isRecycled() && mFrostShader != null) {
+        boolean frosted = mFrostFrame != null && !mFrostFrame.isRecycled() && mFrostShader != null;
+        if (frosted) {
             aimFrost();
-            mFrostPaint.setAlpha(alpha);
+            mFrostPaint.setAlpha(Math.round(255f * mProgress));
             canvas.drawRect(mTab.left - dp(1), mTab.top - dp(1), mTab.right + dp(1),
                 mTab.bottom + dp(1), mFrostPaint);
-        } else {
-            mPaint.setStyle(Paint.Style.FILL);
-            mPaint.setColor(scaleAlpha(ColorUtils.setAlphaComponent(surface, VEIL_ALPHA)));
-            canvas.drawRect(mClip, mPaint);
         }
-        if (Color.alpha(mPaneFillColor) > 0) {
-            mPaint.setStyle(Paint.Style.FILL);
-            mPaint.setColor(scaleAlpha(mPaneFillColor));
-            canvas.drawRect(mClip, mPaint);
-        }
-        if (mGrain != null && mFrostFrame != null) {
-            mGrain.setBounds(Math.round(mClip.left), Math.round(mClip.top),
-                Math.round(mClip.right), Math.round(mClip.bottom));
-            mGrain.setAlpha(alpha);
-            mGrain.draw(canvas);
-        }
+        mPaint.setStyle(Paint.Style.FILL);
+        mPaint.setColor(scaleAlpha(ColorUtils.setAlphaComponent(surface,
+            frosted ? SCRIM_ON_FROST_ALPHA : SCRIM_ALPHA)));
+        canvas.drawRect(mClip, mPaint);
         canvas.restoreToCount(save);
     }
 
