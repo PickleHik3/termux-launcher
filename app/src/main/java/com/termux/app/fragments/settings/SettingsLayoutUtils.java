@@ -8,6 +8,7 @@ import androidx.preference.PreferenceGroup;
 import androidx.preference.PreferenceScreen;
 import androidx.preference.SeekBarPreference;
 import androidx.preference.SwitchPreferenceCompat;
+import androidx.preference.TwoStatePreference;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.termux.CategorySortProgressPreference;
@@ -102,6 +103,13 @@ public final class SettingsLayoutUtils {
         // PillPreference keeps its own trailing pill widget.
         if (preference instanceof PillPreference) return;
 
+        // Switches: the Material 3 switch, whose on state is a filled primary track — the same role
+        // the segmented pills' selected segment uses — instead of appcompat's pale track + thumb.
+        if (preference instanceof SwitchPreferenceCompat) {
+            preference.setWidgetLayoutResource(R.layout.preference_widget_material_switch);
+            return;
+        }
+
         if (usesChevron(preference)) {
             preference.setWidgetLayoutResource(R.layout.preference_widget_chevron);
         }
@@ -117,7 +125,8 @@ public final class SettingsLayoutUtils {
 
     private static boolean usesChevron(@NonNull Preference preference) {
         if (!preference.isSelectable()) return false;
-        if (preference instanceof SwitchPreferenceCompat) return false;
+        // A switch or a checkbox is its own widget; a chevron over it would hide the state.
+        if (preference instanceof TwoStatePreference) return false;
         if (ACTION_ROW_KEYS.contains(preference.getKey())) return false;
         return !(preference instanceof PreferenceCategory);
     }
@@ -126,6 +135,6 @@ public final class SettingsLayoutUtils {
      * Rows that run something on tap instead of opening a screen or a chooser. The chevron promises
      * navigation, so these keep a bare row.
      */
-    private static final Set<String> ACTION_ROW_KEYS = Collections.singleton(
-        "app_launcher_category_refresh");
+    private static final Set<String> ACTION_ROW_KEYS = new java.util.HashSet<>(java.util.Arrays.asList(
+        "app_launcher_category_refresh", "gui_apps_copy"));
 }

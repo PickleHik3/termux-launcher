@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One pick row, used by both editors: what the choice is called, and one toggle group answering
+     it. One question per line and one segment width per line — Docked / Floating at 238 dp beside
+     Solid / Glass / Frost at 192 dp read as one ragged five-way choice when they are two questions.
+
+     A group has no number to print beside it, so the row keeps the label column and gives the group
+     everything after it. Four segment slots are declared and the ones a value set does not use are
+     taken off, which keeps the group's corners at the ends of what is offered. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:baselineAligned="false"
+    android:gravity="center_vertical"
+    android:minHeight="48dp"
+    android:orientation="horizontal"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp">
+
+    <androidx.appcompat.widget.AppCompatTextView
+        android:id="@+id/editor_shell_row_label"
+        android:layout_width="96dp"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="12dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="?attr/termuxColorOnSurface"
+        android:textSize="12.5sp"
+        app:autoSizeMaxTextSize="12.5sp"
+        app:autoSizeMinTextSize="10sp"
+        app:autoSizeStepGranularity="0.5sp"
+        app:autoSizeTextType="uniform" />
+
+    <com.termux.app.editorshell.EditorShellControlHost
+        android:id="@+id/editor_shell_row_control"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1">
+
+        <com.google.android.material.button.MaterialButtonToggleGroup
+            android:id="@+id/editor_shell_row_pills"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            app:selectionRequired="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/editor_shell_row_segment_0"
+                style="@style/Widget.Termux.EditorShell.Segment" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/editor_shell_row_segment_1"
+                style="@style/Widget.Termux.EditorShell.Segment" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/editor_shell_row_segment_2"
+                style="@style/Widget.Termux.EditorShell.Segment" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/editor_shell_row_segment_3"
+                style="@style/Widget.Termux.EditorShell.Segment" />
+        </com.google.android.material.button.MaterialButtonToggleGroup>
+    </com.termux.app.editorshell.EditorShellControlHost>
+</LinearLayout>

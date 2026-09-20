@@ -56,6 +56,22 @@ public final class ExtraKeyActionLabels {
         return ExtraKeyButton.resolveDisplay(key.key, key.display, displayMap);
     }
 
+    /**
+     * The glyph a tool's key cap draws when the tool has one worth a cap: the wall's places wear
+     * the marks the status bar gives them. Null for everything else, where the title seeds the cap.
+     */
+    @Nullable
+    public static String defaultCapGlyph(@NonNull String toolName) {
+        switch (toolName) {
+            case LauncherToolRegistry.TOOL_WALL_WIDGETS: return "\uf015";
+            case LauncherToolRegistry.TOOL_WALL_TERMINAL: return "\uf120";
+            case LauncherToolRegistry.TOOL_WALL_DISPLAY: return "\uf108";
+            case LauncherToolRegistry.TOOL_MOUSE_TOGGLE: return "\uDB80\uDF7D"; // nf-md-mouse
+            case LauncherToolRegistry.TOOL_KEYBOARD_CYCLE_FORM: return "\uf11c";
+            default: return null;
+        }
+    }
+
     /** True for a name the row treats as a key rather than as text to type. */
     public static boolean isNamedKey(@NonNull String spec) {
         return ExtraKeysConstants.PRIMARY_KEY_CODES_FOR_STRINGS.containsKey(spec)

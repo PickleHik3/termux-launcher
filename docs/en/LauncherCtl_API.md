@@ -119,6 +119,13 @@ HTTP 409 with error code `ambiguous` and a `candidates` array containing up to e
 An empty query returns HTTP 400 with `bad_request`. A matched app that Android cannot start returns
 HTTP 500 with `launch_failed`.
 
+A query that matches a Linux (X11) desktop app runs it on the embedded display instead of starting
+an Android component; the display starts first if it was off. This route never goes through the
+terminal action dispatcher, so it does not need the launcher in the foreground either, and the X
+server and any apps already running on it keep going whether or not the terminal is on screen — the
+display's rendering surface simply detaches while the Display page is not the one showing and
+reattaches on its own once it is again.
+
 The route allows 30 requests per minute. The installed shell client reads the endpoint and bearer
 token from `~/.launcherctl`, then sends this request:
 
@@ -133,8 +140,12 @@ launcherctl launch com.example.maps
 
 These routes exist so that something running inside a shell — an AI coding agent, a build, a
 script — can open a pane of its own to show its work in, the way it would open a browser tab, and
-drive that pane while the user watches. Every route runs as one terminal action on the UI thread
-and needs the terminal to be in the foreground (otherwise HTTP 409 `activity_not_running`).
+drive that pane whether or not the user is currently looking at the terminal. Every route runs as
+one terminal action on the UI thread. The launcher does not need to be in the foreground: it only
+needs to be running at all, which covers a plain app switch (the user opened something else, or
+the screen is off) as well as the terminal actually being on screen. `activity_not_running` (HTTP
+409) means the launcher process itself is not there to ask — it was killed, or the Activity was
+destroyed and nothing has recreated it yet — not merely that another app is in front right now.
 
 | Method | Path | Purpose |
 | --- | --- | --- |
@@ -201,6 +212,27 @@ launcherctl pane close "$id"
 Every `pane` command prints the server's JSON body and exits 1 on an HTTP error, so the error code
 (`not_owned`, `pane_not_found`, …) is always visible to the caller.
 
+### The on-screen keyboard
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/keyboard/show` | Raise the in-app keyboard |
+| POST | `/v1/keyboard/hide` | Put the in-app keyboard down |
+
+Both take `{"source": "manual"}` (the default) or `{"source": "focus"}`. `manual` is the user
+asking. `focus` says a text field took focus, which is a signal rather than an order: on the
+Display place it goes through the same rules a tap there does — see
+[The keyboard follows text fields](X11_Display.md#the-keyboard-follows-text-fields) — and
+elsewhere it simply opens or closes the keyboard. Both put something on a screen, so a stopped
+launcher answers 409 `activity_not_running`; 409 `unavailable` means the in-app keyboard is off.
+Rate limit: 240 a minute each.
+
+```sh
+launcherctl keyboard show --source focus
+launcherctl keyboard hide --source focus
+launcherctl keyboard show          # source=manual
+```
+
 ### OpenAI-compatible
 
 | Method | Path | Purpose |
@@ -222,8 +254,8 @@ Each entry in the standard OpenAI-shaped `data` array includes TAI-specific meta
 - `_backend`: backend routing for the model, currently `litert-lm` (default LiteRT-LM runtime) or `mnn-llm` (bundled MNN backend).
 - `_capabilities`: ordered list of endpoint capability strings, for example `text_chat`, `image_input`, `audio_input`, `tool_use`, or `code`. This is what the installed APK can currently serve and is identical to `_endpoint_capabilities`.
 - `_source_capabilities`: informational upstream/package capabilities. Clients should not treat these as enabled endpoint features.
-- `_default_max_output_tokens`, `_endpoint_context_window`, and `_source_context_window`: runtime default, TAI endpoint cap, and upstream/package context metadata.
-- `_tool_mode`: present for tool-capable models. MNN tool support is `prompt_fallback`; LiteRT tool support is native when advertised.
+- `_default_max_output_tokens`, `_endpoint_context_window`, and `_source_context_window`: runtime default, the context window TAI serves on this device, and the model's own limit. The endpoint window grows with device RAM up to the model's limit and follows the **Context window** setting when one is set; see [Termux AI backends](Termux_AI_Backends.md#context-window-sizing).
+- `_tool_mode`: present for tool-capable models. MNN tool support is `prompt_fallback` (the model's own chat template renders the tools when it can, TAI's prompt otherwise); LiteRT tool support is native when advertised.
 
 `GET /v1/models/{id}` returns the single matching object (HTTP 404 if unknown).
 
@@ -404,6 +436,10 @@ Inspect `/v1/models` first to confirm both `_backend == "mnn-llm"` and the endpo
 - If same app UID ecosystem is compromised, token can be read.
 - LAN mode trusts every device on the local network; it does not implement per-device authentication, and it carries the token in cleartext.
 - Consider Unix domain sockets for tighter local access boundaries in future.
+- The pane routes' exposure window is now the launcher process's lifetime, not just its time on
+  screen. This does not add capabilities — ownership still confines `write`/`text`/`close` to panes
+  opened through the API, and nothing here can bring the launcher to the Android foreground on its
+  own — but the same token now reaches a pane for longer.
 
 ## Troubleshooting
 

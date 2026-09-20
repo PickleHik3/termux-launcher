@@ -27,7 +27,8 @@ public interface HostActions {
 
     void requestBackwardLayout();
 
-    void openKeyboardSettings();
+    /** The settings key: the launcher's settings, not a page about the keyboard alone. */
+    void openLauncherSettings();
 
     void hideKeyboard();
 

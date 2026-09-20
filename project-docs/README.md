@@ -42,6 +42,7 @@ task-oriented guide is [`../docs/en/Terminal_Modernization.md`](../docs/en/Termi
 | [`plans/keyboard-mis-input-correction.md`](plans/keyboard-mis-input-correction.md) | Whether the in-app keyboard can fix mis-taps without a dictionary. Nothing implemented. |
 | [`plans/nix-edition-vanilla-study.md`](plans/nix-edition-vanilla-study.md) | Whether the Nix edition could track upstream nix-on-droid and ship only the launcher's extras. What the fork actually carries, what going vanilla would cost new and existing users, and why it was declined on 2026-09-01. Nothing implemented. |
 | [`plans/pane-wall-x11-study.md`](plans/pane-wall-x11-study.md) | The pane wall: home-screen pane, terminal area, embedded X11 pane. Why termux-x11 gets forked and bundled, and why the wall is an outer container, not a new leaf type. Nothing implemented. |
+| [`plans/input-latency-study.md`](plans/input-latency-study.md) | Touch-to-intent latency measured on pong, 2026-09-08: where the time actually goes, twelve tactical fixes and seven architectural directions, which two or three to do first, and which to close. Nothing implemented. |
 
 ## Release notes
 
@@ -53,6 +54,12 @@ The release being written keeps its own `release-notes-v<version>.md` so `gh rel
 --notes-file` can point at it; once every edition is published it moves into `release-notes.md` and
 that file goes — one history, never two. Versions before v0.2.35 live on their GitHub releases only.
 AGENTS.md has the full convention.
+
+## Development environment
+
+| | |
+|---|---|
+| [`termux-on-device-build.md`](termux-on-device-build.md) | Building the launcher from a Termux session on the phone itself: where the aarch64 NDK and build-tools come from, the three workarounds AGP needs on an ARM host, and recommended minimum specs. |
 
 ## Verification
 

@@ -298,6 +298,10 @@ public final class KeybindHintPresenter {
      * A touch on the terminal while the compact hints are up dismisses them — the user has moved on
      * from the chord — and they stay gone until the prefix is taken up afresh. The sticky full
      * table handles the same gesture through its own outside-tap watcher, so it is left alone here.
+     *
+     * <p>Only touches that land on the terminal belong here. A tap on the in-app keyboard is part
+     * of the chord — Shift joining the latched Ctrl+Alt, a bound cap about to run — and reading it
+     * as moving on spent the prefix, so the strip fell and did not return when Shift lifted.
      */
     public void onTerminalTouch(@NonNull MotionEvent ev) {
         if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return;

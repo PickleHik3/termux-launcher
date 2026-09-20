@@ -32,7 +32,7 @@ public class ChromeRendererTest {
     @Before
     public void setUp() {
         surfaces = new FakeChromeSurfaces(RuntimeEnvironment.getApplication());
-        chrome = new ChromeRenderer(surfaces);
+        chrome = new ChromeRenderer(surfaces, null);
         wallpaperFrame = new View(RuntimeEnvironment.getApplication());
     }
 
@@ -61,13 +61,108 @@ public class ChromeRendererTest {
         assertEquals(2, surfaces.applied.size());
     }
 
+    /**
+     * The contract this replaced ran the apply inline, so nine call sites that fire during one
+     * gesture cost nine full applies. Now they book one commit for the frame.
+     */
     @Test
-    public void applyNowRunsBeforeTheCallReturns() {
-        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_NOW);
+    public void manyApplyRequestsInOneFrameCostOneCommit() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_BACKDROPS);
+
+        assertTrue(chrome.isCommitPending());
+        assertEquals("the apply is coalesced, not run inline", 0, surfaces.applied.size());
+
+        mainLooper().idle();
 
         assertEquals(1, surfaces.applied.size());
         assertSame(surfaces.spec, surfaces.applied.get(0));
-        assertEquals("a synchronous apply is not the coalesced pass", 0, surfaces.invariantsEnforced);
+        assertEquals("a commit is not the accessory render pass", 0, surfaces.invariantsEnforced);
+        assertFalse(chrome.isCommitPending());
+
+        // And the next frame can book again.
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        mainLooper().idle();
+        assertEquals(2, surfaces.applied.size());
+    }
+
+    /**
+     * The post-layout render pass exists to re-cut crops against geometry the commit could not
+     * read, so a commit whose apply asks for it gets exactly one — and that pass asking again for
+     * itself is not a reason to run a third. Two page changes cost 37 of these passes when every
+     * caller inside a pass could book its successor (Pong, 2026-09-09).
+     */
+    @Test
+    public void anApplyThatAsksForARenderGetsOnePassNotAChain() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_ACCESSORY_RENDER;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        mainLooper().idle();
+
+        assertEquals("the frame's commit, then one post-layout pass", 2, surfaces.applied.size());
+        assertEquals(1, surfaces.invariantsEnforced);
+        assertFalse(chrome.isRenderSyncPending());
+
+        // And nothing is left circling.
+        mainLooper().idle();
+        assertEquals(2, surfaces.applied.size());
+    }
+
+    /** A pass that left a crop stale has work its own run could not do, and books the follow-up. */
+    @Test
+    public void aRenderPassThatInvalidatesACropBooksOneMore() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes =
+            ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_DOCK_BACKDROP;
+        surfaces.applyRequestsRemaining = 2;   // the commit's apply, then the first render pass
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        mainLooper().idle();
+
+        assertEquals("the commit, the pass it books, and the pass that one earns",
+            3, surfaces.applied.size());
+        assertEquals(2, surfaces.invariantsEnforced);
+        assertFalse(chrome.isRenderSyncPending());
+    }
+
+    /** The commit runs before layout, the render after it: two phases, so two passes. */
+    @Test
+    public void anApplyAndARenderInOneFrameAreStillTwoPasses() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        chrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+
+        assertEquals(0, surfaces.applied.size());
+        mainLooper().idle();
+
+        assertEquals(2, surfaces.applied.size());
+        assertEquals(1, surfaces.invariantsEnforced);
+    }
+
+    @Test
+    public void cancellingPendingWorkDropsTheBookedCommit() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+
+        chrome.cancelPendingWork();
+        mainLooper().idle();
+
+        assertFalse(chrome.isCommitPending());
+        assertEquals(0, surfaces.applied.size());
+    }
+
+    /** The in-place session recovery resets transient chrome; the activity stays on screen. */
+    @Test
+    public void cancellingThePendingRenderKeepsTheBookedCommit() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+
+        chrome.cancelPendingRender();
+        mainLooper().idle();
+
+        assertFalse(chrome.isRenderSyncPending());
+        assertEquals("the commit lands, the render does not", 1, surfaces.applied.size());
+        assertEquals(0, surfaces.invariantsEnforced);
     }
 
     @Test
@@ -77,6 +172,7 @@ public class ChromeRendererTest {
 
         assertEquals(0, surfaces.applied.size());
         assertFalse(chrome.isRenderSyncPending());
+        assertFalse(chrome.isCommitPending());
     }
 
     @Test
@@ -155,6 +251,21 @@ public class ChromeRendererTest {
         assertNotSame("the outgoing orientation's frame must not be reused", portrait, landscape);
         assertEquals(2, surfaces.captureCount);
         assertEquals(200, chrome.blurCache().frameRectWidth());
+    }
+
+    /** A keyboard or navigation change arrives through the same callback and moves nothing. */
+    @Test
+    public void aConfigurationChangeThatKeepsTheOrientationKeepsTheFrames() {
+        chrome.blurCache().obtain(0, wallpaperFrame);
+        int clearsBefore = surfaces.cacheClearedCallbacks;
+
+        chrome.onConfigurationChanged();
+
+        assertEquals(1, chrome.blurCache().residentRadiiCount());
+        assertEquals(clearsBefore, surfaces.cacheClearedCallbacks);
+        assertSame("the same frame is still the one handed out",
+            chrome.blurCache().obtain(0, wallpaperFrame), chrome.blurCache().obtain(0, wallpaperFrame));
+        assertEquals(1, surfaces.captureCount);
     }
 
     @Test

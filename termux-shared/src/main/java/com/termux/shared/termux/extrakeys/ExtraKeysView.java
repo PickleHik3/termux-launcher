@@ -13,6 +13,7 @@ import android.graphics.RadialGradient;
 import android.graphics.Shader;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.InsetDrawable;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -28,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.stream.Collectors;
 import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
@@ -368,6 +370,88 @@ public final class ExtraKeysView extends GridLayout {
      *  a press-hold indication, not just repetitive/special ones). */
     @Nullable private Runnable mGenericHoldVisualRunnable;
 
+    // ------------------------------------------------------------------- usable keys and colours
+
+    /**
+     * Whether a key can act where the row is currently standing. The row itself knows nothing about
+     * places; the host answers, and the row draws the answer.
+     */
+    public interface KeyUsabilityPolicy {
+        /**
+         * @param keyValue the key or macro the button sends, exactly as configured.
+         * @return {@code false} to draw the key dead and let taps fall through it.
+         */
+        boolean isKeyUsable(@NonNull String keyValue);
+    }
+
+    /** Where a key stands relative to the place the wall is showing. */
+    public enum PlaceFocus {
+        /** Not a place switch: the key is drawn like any other. */
+        NOT_A_PLACE,
+        /** Switches to the place now in front. */
+        FOCUSED,
+        /** Switches to one of the places behind it. */
+        UNFOCUSED
+    }
+
+    /**
+     * Which keys switch the wall to a place, and which place is in front. As with usability, the
+     * row itself knows nothing about places: the host answers, and the row draws the answer.
+     */
+    public interface PlaceSwitchPolicy {
+        /** @param keyValue the key or macro the button sends, exactly as configured. */
+        @NonNull PlaceFocus placeFocusOf(@NonNull String keyValue);
+    }
+
+    /**
+     * Told the colour every place switch's glyph is painted in, whenever the row restates them.
+     *
+     * <p>The row is where a place's colour is decided — it comes off the key's own role, which the
+     * user can change in the extra-keys editor — so anything else that draws the same three places
+     * takes the answer from here rather than deriving one of its own. The status bar's lens does.
+     */
+    public interface PlaceGlyphColorListener {
+        /** @param colorsByKeyValue each place switch's glyph colour, by the key value it sends. */
+        void onPlaceGlyphColors(@NonNull Map<String, Integer> colorsByKeyValue);
+    }
+
+    /** A key tapped while the row is in pick mode, instead of the key firing. */
+    public interface KeyPickListener {
+        void onExtraKeyPicked(int keyIndex, @NonNull ExtraKeyButton buttonInfo,
+                              @NonNull MaterialButton button);
+    }
+
+    /** Material's disabled-content opacity, as an alpha channel: 38% of 255. */
+    private static final int DISABLED_LABEL_ALPHA = 97;
+
+    /**
+     * The rounding a coloured cap is drawn with. The row's own keys carry no shape — their fill is
+     * normally transparent — so this is the one shape a key ever shows.
+     */
+    private static final float COLORED_KEY_CORNER_RADIUS_DP = 12f;
+
+    /**
+     * How far a coloured cap sits in from its cell, so two coloured keys standing side by side
+     * show a gap between their pills instead of touching.
+     */
+    private static final float COLORED_KEY_INSET_HORIZONTAL_DP = 2f;
+    private static final float COLORED_KEY_INSET_VERTICAL_DP = 3f;
+
+
+    @Nullable private KeyUsabilityPolicy mUsabilityPolicy;
+    @Nullable private PlaceSwitchPolicy mPlaceSwitchPolicy;
+    @Nullable private PlaceGlyphColorListener mPlaceGlyphColorListener;
+    @Nullable private KeyPickListener mKeyPickListener;
+    /** While true a tap picks the key for the editor instead of firing it, and nothing is dead. */
+    private boolean mPickMode;
+
+    /** The definition behind each built button, so styling can be restated without the matrix. */
+    private final Map<MaterialButton, ExtraKeyButton> mKeyInfo = new HashMap<>();
+    /** Colours the editor is previewing, which stand in front of the stored ones until it commits. */
+    private final Map<MaterialButton, ExtraKeyColorRole> mPreviewRoles = new HashMap<>();
+    /** Role colours resolved from the theme once, rather than per press. Cleared on a theme change. */
+    private final Map<ExtraKeyColorRole, int[]> mRoleColors = new HashMap<>();
+
     public ExtraKeysView(Context context, AttributeSet attrs) {
         super(context, attrs);
         // The hold bloom lives in this view's overlay and must be allowed to draw past the
@@ -393,6 +477,21 @@ public final class ExtraKeysView extends GridLayout {
 
     public void setToolbarTextInputSwipeListener(@Nullable Runnable listener) {
         mToolbarTextInputSwipeListener = listener;
+    }
+
+    /** True when the keys stand in a column on a screen edge instead of lying in a row. */
+    private boolean mVertical;
+
+    /**
+     * Lay the keys out as a column: each configured row becomes a column and the keys in it run
+     * top to bottom. Takes effect on the next {@link #reload}.
+     */
+    public void setVertical(boolean vertical) {
+        mVertical = vertical;
+    }
+
+    public boolean isVertical() {
+        return mVertical;
     }
 
     /**
@@ -630,10 +729,14 @@ public final class ExtraKeysView extends GridLayout {
             return;
         for (SpecialButtonState state : mSpecialButtons.values()) state.buttons = new ArrayList<>();
         mGlowLevels.clear();
+        mKeyInfo.clear();
+        mPreviewRoles.clear();
         removeAllViews();
         ExtraKeyButton[][] buttons = extraKeysInfo.getMatrix();
-        setRowCount(buttons.length);
-        setColumnCount(maximumLength(buttons));
+        mLoadedMatrix = buttons;
+        // A column transposes the matrix: the configured rows stand side by side as columns.
+        setRowCount(mVertical ? maximumLength(buttons) : buttons.length);
+        setColumnCount(mVertical ? buttons.length : maximumLength(buttons));
         for (int row = 0; row < buttons.length; row++) {
             for (int col = 0; col < buttons[row].length; col++) {
                 final ExtraKeyButton buttonInfo = buttons[row][col];
@@ -659,6 +762,7 @@ public final class ExtraKeysView extends GridLayout {
                     }
                 });
 
+                mKeyInfo.put(button, buttonInfo);
                 setKeyCapText(button, buttonInfo.getDisplay());
                 button.setTextColor(mButtonTextColor);
                 // Keep multi-letter labels (SHFT, CTRL) on one line. The active/sticky background is
@@ -684,6 +788,28 @@ public final class ExtraKeysView extends GridLayout {
                 final float[] popupSwipeDownRawX = new float[1];
                 final boolean[] toolbarPageSwipeTriggered = new boolean[1];
                 button.setOnTouchListener((view, event) -> {
+                    // Picking a key is not pressing it: the editor wants to know which cap was
+                    // touched, and the key must not fire while it is being dressed.
+                    if (mPickMode) {
+                        switch (event.getAction()) {
+                            case MotionEvent.ACTION_DOWN:
+                                animateKeyCapDip(button, KeyVisualState.PRESSED);
+                                break;
+                            case MotionEvent.ACTION_UP:
+                                animateKeyCapDip(button, KeyVisualState.RESTING);
+                                if (mKeyPickListener != null) {
+                                    mKeyPickListener.onExtraKeyPicked(
+                                        indexOfChild(button), buttonInfo, button);
+                                }
+                                break;
+                            case MotionEvent.ACTION_CANCEL:
+                                animateKeyCapDip(button, KeyVisualState.RESTING);
+                                break;
+                            default:
+                                break;
+                        }
+                        return true;
+                    }
                     switch(event.getAction()) {
                         case MotionEvent.ACTION_DOWN:
                             popupSwipeDownRawY[0] = event.getRawY();
@@ -797,12 +923,48 @@ public final class ExtraKeysView extends GridLayout {
                     param.height = 0;
                 }
                 param.setMargins(0, 0, 0, 0);
-                param.columnSpec = GridLayout.spec(col, GridLayout.FILL, 1.f);
-                param.rowSpec = GridLayout.spec(row, GridLayout.FILL, 1.f);
+                param.columnSpec = GridLayout.spec(mVertical ? row : col, GridLayout.FILL, 1.f);
+                param.rowSpec = GridLayout.spec(mVertical ? col : row, GridLayout.FILL, 1.f);
                 button.setLayoutParams(param);
                 addView(button);
+                // Its colour, and whether it can act here at all, decided once as it is built —
+                // never on the draw path.
+                restoreButtonVisualState(button, buttonInfo);
             }
         }
+        // The row a key edit or a theme change has just rebuilt may stand different place
+        // switches, in different colours, from the one it replaced.
+        publishPlaceGlyphColors();
+    }
+
+    /**
+     * The key that sends {@code key}, or null when this row is not carrying it.
+     *
+     * <p>The children are added in the matrix's own row-major order and never reordered, so the
+     * matrix is the index: nothing has to be tagged, and a row that stopped short of building
+     * every key still answers for the ones it did build.
+     */
+    @Nullable
+    public ExtraKeyButton definitionForChild(int childIndex) {
+        if (mLoadedMatrix == null || childIndex < 0 || childIndex >= getChildCount()) return null;
+        int index = 0;
+        for (ExtraKeyButton[] row : mLoadedMatrix)
+            for (ExtraKeyButton key : row) if (index++ == childIndex) return key;
+        return null;
+    }
+
+    @Nullable
+    public View buttonForKey(@NonNull String key) {
+        if (mLoadedMatrix == null) return null;
+        int index = 0;
+        for (ExtraKeyButton[] row : mLoadedMatrix) {
+            for (ExtraKeyButton buttonInfo : row) {
+                if (buttonInfo != null && key.equals(buttonInfo.getKey()))
+                    return index < getChildCount() ? getChildAt(index) : null;
+                index++;
+            }
+        }
+        return null;
     }
 
     public void onExtraKeyButtonClick(View view, ExtraKeyButton buttonInfo, MaterialButton button) {
@@ -966,7 +1128,8 @@ public final class ExtraKeysView extends GridLayout {
         // A latched modifier keeps its glyphs glowing (persists across rebuilds). When it goes
         // inactive, clear its glow so a consumed one-shot modifier doesn't leave a stale halo
         // (a tap-to-toggle-off still plays its release fade via the following releaseKeyGlow call).
-        if (state.isActive || state.isLocked) {
+        // A key drawn dead shows no glow either — a halo on an inert cap reads as "still armed".
+        if ((state.isActive || state.isLocked) && isKeyUsable(mKeyInfo.get(button))) {
             // A latch is a sustained state — show it at the hold tier (wider, whiter halo).
             applyKeyGlow(button, 1f, glowRadiusDp(KEY_GLOW_RADIUS_HOLD_DP), KEY_GLOW_WHITE_MIX_HOLD);
         } else if (mGlowLevels.containsKey(button)) {
@@ -976,10 +1139,286 @@ public final class ExtraKeysView extends GridLayout {
 
     private void applyButtonVisualState(@NonNull MaterialButton button, @NonNull KeyVisualState state,
                                         boolean activeText) {
-        // Feedback is now the glyph glow, not a pill: keep the background flat in every state and let
-        // the glow (plus the active text colour) carry the pressed / latched indication.
-        button.setTextColor(activeText ? mButtonActiveTextColor : mButtonTextColor);
-        button.setBackground(new ColorDrawable(mButtonBackgroundColor));
+        // Feedback is the glyph glow, not a pill: the background stays flat in every state unless
+        // the key was given a colour of its own, and the glow (plus the active text colour) carries
+        // the pressed / latched indication either way.
+        ExtraKeyButton info = mKeyInfo.get(button);
+        // Only the focused place switch carries a glyph glow, and every repaint restates it from
+        // nothing, so each state starts by taking it off: a switch that stops being the place in
+        // front would otherwise keep the halo it had.
+        button.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT);
+        boolean usable = isKeyUsable(info);
+        if (button.isEnabled() != usable)
+            button.setEnabled(usable);
+        if (!usable) {
+            // Material's disabled look: the label at 38%, nothing behind it, nothing to press.
+            button.setTextColor(withAlpha(mButtonTextColor, DISABLED_LABEL_ALPHA));
+            button.setBackground(new ColorDrawable(mButtonBackgroundColor));
+            return;
+        }
+        ExtraKeyColorRole role = roleFor(button, info);
+        PlaceFocus placeFocus = placeFocusOf(info);
+        if (placeFocus != PlaceFocus.NOT_A_PLACE) {
+            // The place switches wear no cap at all: three filled pills standing together read as
+            // their own widget rather than as part of the row. Their role paints the glyph instead,
+            // full strength for the place in front and held back for the ones behind it.
+            //
+            // Not the role's own colour, though — a Material scheme draws primary, secondary and
+            // tertiary off one seed, so two of them share a hue outright and all three read as
+            // shades of one thing once there is no cap behind them. The glyph takes the vivid
+            // derivative of the role instead: see PlaceSwitchGlyph. Only these keys.
+            int glyph = placeGlyphColor(button);
+            if (placeFocus == PlaceFocus.FOCUSED) {
+                // Where the wall is standing: full colour, between two switches of the same
+                // colours faded. That is the whole of the statement — the switch in front wears no
+                // halo, which at this glyph size read as a smudge around the icon rather than as a
+                // light behind it. PlaceSwitchGlyph#GLOW_RADIUS_DP brings a softer one back: a
+                // text shadow layer rather than the row's press bloom, because this is a resting
+                // state and has to survive every press, latch and repaint the bloom plays over it,
+                // and the row sets clipChildren false so the halo spills past the button.
+                button.setTextColor(glyph);
+                if (PlaceSwitchGlyph.GLOW_RADIUS_DP > 0f) {
+                    button.setShadowLayer(dpToPx(PlaceSwitchGlyph.GLOW_RADIUS_DP), 0f, 0f,
+                        withAlpha(glyph, PlaceSwitchGlyph.GLOW_ALPHA));
+                }
+            } else {
+                button.setTextColor(withAlpha(glyph, PlaceSwitchGlyph.UNFOCUSED_ALPHA));
+            }
+            button.setBackground(new ColorDrawable(mButtonBackgroundColor));
+            return;
+        }
+        if (role == null) {
+            button.setTextColor(activeText ? mButtonActiveTextColor : mButtonTextColor);
+            button.setBackground(new ColorDrawable(mButtonBackgroundColor));
+            return;
+        }
+        int[] colors = roleColors(role);
+        // A latched modifier still wins: its accent label reads over the role's own fill.
+        button.setTextColor(activeText ? mButtonActiveTextColor : colors[1]);
+        GradientDrawable cap = new GradientDrawable();
+        cap.setShape(GradientDrawable.RECTANGLE);
+        cap.setCornerRadius(dpToPx(COLORED_KEY_CORNER_RADIUS_DP));
+        cap.setColor(colors[0]);
+        int insetH = Math.round(dpToPx(COLORED_KEY_INSET_HORIZONTAL_DP));
+        int insetV = Math.round(dpToPx(COLORED_KEY_INSET_VERTICAL_DP));
+        button.setBackground(new InsetDrawable(cap, insetH, insetV, insetH, insetV));
+        // The first time a MaterialButton is given a background of its own, it treats its style's
+        // backgroundTint (transparent, for the borderless style every key uses) as still binding
+        // and DrawableCompat#setTintList's it straight onto that new drawable — which paints the
+        // role's fill straight back out, leaving only the label colour to show the role at all.
+        // Nothing else here wants a tint, so drop it and let the cap's own colour render.
+        button.setBackgroundTintList(null);
+    }
+
+    /** The colour a key is painted in: what the editor is previewing, else what it was given. */
+    @Nullable
+    private ExtraKeyColorRole roleFor(@NonNull MaterialButton button,
+                                      @Nullable ExtraKeyButton info) {
+        if (mPreviewRoles.containsKey(button))
+            return mPreviewRoles.get(button);
+        return info == null ? null : info.getColor();
+    }
+
+    /** {@code {background, label}} for a role, resolved from the theme once and then remembered. */
+    @NonNull
+    private int[] roleColors(@NonNull ExtraKeyColorRole role) {
+        int[] cached = mRoleColors.get(role);
+        if (cached != null)
+            return cached;
+        int[] resolved = { role.background(getContext()), role.label(getContext()) };
+        mRoleColors.put(role, resolved);
+        return resolved;
+    }
+
+    /** Whether this key acts where the row is standing. In pick mode every key is live to be picked. */
+    private boolean isKeyUsable(@Nullable ExtraKeyButton info) {
+        if (mPickMode || mUsabilityPolicy == null || info == null)
+            return true;
+        return mUsabilityPolicy.isKeyUsable(info.getKey());
+    }
+
+    /**
+     * Which keys can act where the row now stands. Setting a policy restates every key once; the
+     * host calls this again whenever the wall settles on another place.
+     */
+    public void setKeyUsabilityPolicy(@Nullable KeyUsabilityPolicy policy) {
+        mUsabilityPolicy = policy;
+        restateEveryKey();
+    }
+
+    /**
+     * The vivid colour one place switch's glyph is painted in.
+     *
+     * <p>Read across the whole row rather than off this key alone, because the spread that keeps
+     * two switches on the same palette hue apart is a property of the set: the row hands
+     * {@link PlaceSwitchGlyph#vividRow} every switch's role colour in drawing order and takes back
+     * this one's. A handful of keys, restated only when the row, the theme or the place changes.
+     */
+    private int placeGlyphColor(@NonNull MaterialButton button) {
+        int[] sources = new int[getChildCount()];
+        MaterialButton[] buttons = new MaterialButton[getChildCount()];
+        int count = collectPlaceSwitches(sources, null, buttons);
+        int index = -1;
+        for (int i = 0; i < count; i++) {
+            if (buttons[i] == button) {
+                index = i;
+                break;
+            }
+        }
+        boolean darkGlass = PlaceSwitchGlyph.isDarkGlass(mButtonTextColor);
+        if (index < 0) {
+            // Not in the row yet (a key being styled while it is built): its own hue, unspread.
+            ExtraKeyColorRole role = roleFor(button, mKeyInfo.get(button));
+            return PlaceSwitchGlyph.vividFor(
+                role == null ? mButtonTextColor : roleColors(role)[0], darkGlass);
+        }
+        return PlaceSwitchGlyph.vividRow(java.util.Arrays.copyOf(sources, count), darkGlass)[index];
+    }
+
+    /**
+     * The row's place switches in drawing order: their role colours, their key values and the
+     * buttons themselves, as far as the caller asked for each. Returns how many there were.
+     */
+    private int collectPlaceSwitches(@NonNull int[] sources, @Nullable String[] keys,
+                                     @Nullable MaterialButton[] buttons) {
+        int count = 0;
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (!(child instanceof MaterialButton))
+                continue;
+            MaterialButton other = (MaterialButton) child;
+            ExtraKeyButton info = mKeyInfo.get(other);
+            if (placeFocusOf(info) == PlaceFocus.NOT_A_PLACE)
+                continue;
+            ExtraKeyColorRole role = roleFor(other, info);
+            sources[count] = role == null ? mButtonTextColor : roleColors(role)[0];
+            if (keys != null) keys[count] = info == null ? null : info.getKey();
+            if (buttons != null) buttons[count] = other;
+            count++;
+        }
+        return count;
+    }
+
+    /**
+     * The colour each place switch paints its glyph in now, by the key value it sends — the same
+     * answer {@link #placeGlyphColor} gives each of them, read across the row in one pass.
+     *
+     * <p>Empty when the row stands no place switches at all, which is the answer: there is no
+     * palette here for anything else to follow.
+     */
+    @NonNull
+    public Map<String, Integer> placeGlyphColors() {
+        int[] sources = new int[getChildCount()];
+        String[] keys = new String[getChildCount()];
+        int count = collectPlaceSwitches(sources, keys, null);
+        Map<String, Integer> colors = new LinkedHashMap<>();
+        if (count == 0)
+            return colors;
+        int[] vivid = PlaceSwitchGlyph.vividRow(java.util.Arrays.copyOf(sources, count),
+            PlaceSwitchGlyph.isDarkGlass(mButtonTextColor));
+        for (int i = 0; i < count; i++) {
+            if (keys[i] != null) colors.put(keys[i], vivid[i]);
+        }
+        return colors;
+    }
+
+    /**
+     * Follows the row's place colours. Setting a listener tells it what they are now; it is told
+     * again after every restatement, which is what carries a role edit, a theme change or a new
+     * place through to whatever else draws these three places.
+     */
+    public void setPlaceGlyphColorListener(@Nullable PlaceGlyphColorListener listener) {
+        mPlaceGlyphColorListener = listener;
+        publishPlaceGlyphColors();
+    }
+
+    private void publishPlaceGlyphColors() {
+        if (mPlaceGlyphColorListener != null)
+            mPlaceGlyphColorListener.onPlaceGlyphColors(placeGlyphColors());
+    }
+
+    /** Where this key stands relative to the place in front. */
+    @NonNull
+    private PlaceFocus placeFocusOf(@Nullable ExtraKeyButton info) {
+        if (mPlaceSwitchPolicy == null || info == null || info.getKey() == null)
+            return PlaceFocus.NOT_A_PLACE;
+        return mPlaceSwitchPolicy.placeFocusOf(info.getKey());
+    }
+
+    /**
+     * Which keys switch places, and which of them points at the place in front. Setting a policy
+     * restates every key once; the host sets it again whenever the wall settles somewhere else,
+     * which is what moves the bright glyph from one switch to another.
+     */
+    public void setPlaceSwitchPolicy(@Nullable PlaceSwitchPolicy policy) {
+        mPlaceSwitchPolicy = policy;
+        restateEveryKey();
+    }
+
+    /**
+     * Pick mode: a tap reports the key to {@link #setKeyPickListener} instead of firing it, and no
+     * key is drawn dead, so any of them can be given a colour. The Appearance editor holds this
+     * while its keyboard card is up.
+     */
+    public void setPickMode(boolean pickMode) {
+        if (mPickMode == pickMode)
+            return;
+        mPickMode = pickMode;
+        dismissPopup();
+        restateEveryKey();
+    }
+
+    public boolean isPickMode() {
+        return mPickMode;
+    }
+
+    public void setKeyPickListener(@Nullable KeyPickListener listener) {
+        mKeyPickListener = listener;
+    }
+
+    /**
+     * Shows a colour on one key without storing it, for the editor's live preview. A null role
+     * previews "no colour"; {@link #clearPreviewColors()} puts the stored colours back.
+     */
+    public void previewKeyColor(@NonNull MaterialButton button,
+                                @Nullable ExtraKeyColorRole role) {
+        mPreviewRoles.put(button, role);
+        restoreButtonVisualStateFor(button);
+    }
+
+    /** Drops every previewed colour, leaving the keys as they are stored. */
+    public void clearPreviewColors() {
+        if (mPreviewRoles.isEmpty())
+            return;
+        mPreviewRoles.clear();
+        restateEveryKey();
+    }
+
+    /**
+     * Re-reads every role from the theme and repaints. The host calls this when the theme, the
+     * scheme or the wallpaper palette moves under an already-built row.
+     */
+    public void refreshKeyStyles() {
+        mRoleColors.clear();
+        restateEveryKey();
+    }
+
+    /** One pass over the built keys. Cheap by construction: a row holds a handful of buttons. */
+    private void restateEveryKey() {
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child instanceof MaterialButton)
+                restoreButtonVisualStateFor((MaterialButton) child);
+        }
+        publishPlaceGlyphColors();
+    }
+
+    private void restoreButtonVisualStateFor(@NonNull MaterialButton button) {
+        ExtraKeyButton info = mKeyInfo.get(button);
+        if (info == null)
+            applyButtonVisualState(button, KeyVisualState.RESTING, false);
+        else
+            restoreButtonVisualState(button, info);
     }
 
     private void animateKeyCapDip(@NonNull MaterialButton button, @NonNull KeyVisualState state) {
@@ -1070,6 +1509,9 @@ public final class ExtraKeysView extends GridLayout {
     }
 
     private final Map<MaterialButton, GlowState> mGlowLevels = new HashMap<>();
+
+    /** The matrix the children were last built from; the index anything looks a key up by. */
+    @Nullable private ExtraKeyButton[][] mLoadedMatrix;
     private final Map<MaterialButton, GlowGradient> mGlowGradients = new HashMap<>();
     private final Paint mGlowPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 

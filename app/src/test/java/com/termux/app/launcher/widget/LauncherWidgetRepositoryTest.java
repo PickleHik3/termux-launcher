@@ -102,6 +102,55 @@ public class LauncherWidgetRepositoryTest {
         assertNull(repository.get(7));
     }
 
+    @Test public void putRecordsCommitsTheWholeBatchAtomically() {
+        Memory storage = new Memory();
+        LauncherWidgetRepository repository = new LauncherWidgetRepository(storage);
+        assertTrue(repository.putRecord(placed(1, new WidgetCellRect(0, 0, 1, 1))));
+        assertTrue(repository.putRecord(placed(2, new WidgetCellRect(1, 0, 2, 1))));
+        long before = repository.revision();
+        // A swap: neither half is placeable on its own, the pair is.
+        assertTrue(repository.putRecords(java.util.Arrays.asList(
+            placed(1, new WidgetCellRect(1, 0, 2, 1)),
+            placed(2, new WidgetCellRect(0, 0, 1, 1)))));
+        assertEquals(before + 1, repository.revision());
+        assertEquals(new WidgetCellRect(1, 0, 2, 1), repository.get(1).cell);
+        assertEquals(new WidgetCellRect(0, 0, 1, 1), repository.get(2).cell);
+        LauncherWidgetRepository restored = new LauncherWidgetRepository(new Memory(storage.value));
+        assertEquals(new WidgetCellRect(1, 0, 2, 1), restored.get(1).cell);
+        assertEquals(new WidgetCellRect(0, 0, 1, 1), restored.get(2).cell);
+    }
+
+    @Test public void putRecordsRejectsAnOverlappingBatchAndChangesNothing() {
+        LauncherWidgetRepository repository = new LauncherWidgetRepository(new Memory());
+        assertTrue(repository.putRecord(placed(1, new WidgetCellRect(0, 0, 1, 1))));
+        assertTrue(repository.putRecord(placed(2, new WidgetCellRect(1, 0, 2, 1))));
+        long before = repository.revision();
+        assertFalse(repository.putRecords(java.util.Arrays.asList(
+            placed(1, new WidgetCellRect(2, 0, 3, 1)),
+            placed(2, new WidgetCellRect(2, 0, 3, 1)))));
+        assertEquals(before, repository.revision());
+        assertEquals(new WidgetCellRect(0, 0, 1, 1), repository.get(1).cell);
+        assertEquals(new WidgetCellRect(1, 0, 2, 1), repository.get(2).cell);
+    }
+
+    @Test public void putRecordsRejectsAProviderMismatch() {
+        LauncherWidgetRepository repository = new LauncherWidgetRepository(new Memory());
+        assertTrue(repository.putRecord(placed(1, new WidgetCellRect(0, 0, 1, 1))));
+        try {
+            repository.putRecords(java.util.Collections.singletonList(
+                new LauncherWidgetRecord(1, new ComponentName("other", "P"), 0,
+                    LauncherWidgetRecord.State.ACTIVE, new WidgetCellRect(1, 0, 2, 1),
+                    new Bundle(), null)));
+            throw new AssertionError("provider mismatch accepted");
+        } catch (IllegalArgumentException expected) { }
+        assertEquals(new WidgetCellRect(0, 0, 1, 1), repository.get(1).cell);
+    }
+
+    private static LauncherWidgetRecord placed(int id, WidgetCellRect cell) {
+        return new LauncherWidgetRecord(id, new ComponentName("pkg", "Provider"), 0,
+            LauncherWidgetRecord.State.ACTIVE, cell, new Bundle(), null);
+    }
+
     private static LauncherWidgetRecord record(int id, LauncherWidgetRecord.State state) {
         Bundle options = new Bundle();
         options.putInt("width", 42);

@@ -34,33 +34,34 @@ the app, so finish or save work in running shells first. Never uninstall the app
 unless you have backed up everything you need: Android removes the app's private data when it is
 uninstalled.
 
-## 3. Complete the first-launch tour
+## 3. Complete the first launch
 
-The first open shows three skippable pages made from real launcher footage:
+After the Termux bootstrap finishes, Android may ask to let the launcher read your wallpaper (for
+the blurred status bar, dock and keyboard) and whether to turn on the Linux display. Answer either
+one or tap **Not now** — both stay changeable later in Settings.
 
-1. update packages and request shared-storage access;
-2. find Android apps from the dock or terminal search; and
-3. use terminal windows, status widgets, and persistent workspaces.
+Then a short tour plays over the real home screen: nine cards, each glowing the control it wants
+you to try. Skip appears on every card if you would rather explore on your own, and the last card
+offers a **Copy commands** button for the extras it mentions. Play it again any time from
+**Settings → Apps → Play the tour again**.
 
-Run the first command after the Termux bootstrap has finished:
+Run these in your first terminal:
 
 ```sh
 pkg update && pkg upgrade
 ```
 
-Run the storage command only if shell programs need files in Android shared storage:
-
 ```sh
 termux-setup-storage
 ```
 
-Approve Android's files prompt. The command creates familiar storage links under `~/storage`.
-
-Finishing or skipping the v0.2.31 tour records it as complete so it does not appear on every launch.
+The first command refreshes the Termux package environment. The second asks Android for
+shared-storage access; approve its files prompt, which creates familiar storage links under
+`~/storage`. Skip it if command-line tools do not need your shared files.
 
 ## 4. Make it the Home app
 
-Open **Settings → Launcher & apps → Set as default launcher**, then select Termux Launcher in
+Open **Settings → Apps → Set as default launcher**, then select Termux Launcher in
 Android's default Home app screen.
 
 You can open the app settings in either of these ways:
@@ -71,11 +72,17 @@ You can open the app settings in either of these ways:
 Keeping **Show in Recents when not the default launcher** enabled is useful while testing the app
 before making it the default Home app.
 
-## 5. Learn the four main surfaces
+## 5. Learn the three places and the four surfaces
 
-From top to bottom in portrait:
+The home screen is three places side by side: **Widgets** on the left, the **Terminal** in the
+middle and a Linux **Display** on the right. Swipe left or right on the status bar to move between
+them, or tap the place icon peeking in from the bar's edge. The launcher opens on the place you
+left it on.
 
-- **Status row:** session number, terminal windows, a `+` window button, CPU, memory, and weather.
+From top to bottom in portrait, on the terminal:
+
+- **Status row:** the place icon and clock, session number, terminal windows, CPU, memory, and
+  weather.
 - **Terminal:** the focused Termux shell or the current pane layout.
 - **Dock:** pinned Android apps, the A–Z app index, and the terminal action row.
 - **Keyboard:** the built-in terminal keyboard by default on a fresh installation.
@@ -91,8 +98,10 @@ workspaces.
 - Tap a pinned app to launch it.
 - Scrub across the A–Z row to browse installed apps.
 - At an idle shell prompt, type `%settings` to filter the dock for apps matching “settings”. `%` is
-  the default prefix and can be changed under **Settings → Launcher & apps → App search prefix**.
+  the default prefix and can be changed under **Settings → Apps → App search prefix**.
 - Tap `+` in the top row to create another terminal window.
+- Swipe right on the status bar for your widgets, left for the Linux display. The display is off
+  until you tap **Turn on** there; [The Linux display](X11_Display.md) takes it from there.
 - Open the command palette by long-pressing the terminal and choosing **Command palette**. With a
   hardware keyboard, use `Ctrl+Alt+Shift+P`.
 - Search the palette for `split`, `workspace`, `font`, or `settings` instead of memorizing every
@@ -100,7 +109,7 @@ workspaces.
 
 ## 7. Choose the keyboard behavior
 
-Fresh installations use the built-in terminal keyboard. Open **Settings → Keyboard & input →
+Fresh installations use the built-in terminal keyboard. Open **Settings → Keyboard →
 On-screen keyboard** to choose:
 
 - **Built-in terminal keyboard**;
@@ -117,21 +126,15 @@ None of these are required for the basic launcher and terminal:
 - **Termux:API:** install the matching package/signing-family build when shell scripts need Android
   APIs.
 - **Termux:Styling:** still works with `~/.termux/font.ttf`; the launcher's own font picker is under
-  **Settings → Appearance → Terminal fonts**.
+  **Settings → Look → Terminal fonts**.
 - **Shizuku:** optional privileged backend for features such as the Shizuku lock method. Normal
   launching, panes, workspaces, and the terminal do not need it.
 - **TAI / Termux AI:** optional local model host under **Settings → Services & permissions → TAI ·
   Termux AI**. See the [TAI user guide](Termux_AI.md).
-- **Shell setup scripts:** [`setup-launcher`](examples/setup-launcher) installs the showcase shell —
-  everything, the essentials (fish + Oh My Posh with wallpaper Material colors, zoxide, eza), or one
-  item at a time — and nothing under `~/.termux`, which the app seeds for itself. The full install
-  also brings in the build tools (`build-essential`, i.e. clang, make and pkg-config, plus cmake and
-  autotools), which anything that compiles from source needs — Neovim's treesitter parsers included.
-  [`setup-nvim`](examples/setup-nvim) sets up Neovim with the distro of your
-  choice — AstroNvim (default), NvChad, LazyVim, kickstart, or stock — plus OSC 52 clipboard, line
-  wrap, and, on AstroNvim and NvChad, a colorscheme generated from the wallpaper palette — on a
-  transparent background, so the wallpaper shows through the editor the way it does through the
-  terminal. `:MaterialTransparent off` gives you solid Material surfaces instead.
+- **`tlstore`:** the launcher's own tool store. `tlstore shell` installs fish with a wallpaper-matched
+  prompt, `eza` and `zoxide`; `tlstore install` opens a picker for everything else — a Neovim colour
+  scheme that follows your wallpaper, the showcase binaries (sigye, fastfetch, kitten), and Claude
+  Code. See the [tlstore guide](Tlstore.md).
 
 ## 9. Your first recovery commands
 

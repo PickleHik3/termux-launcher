@@ -28,6 +28,16 @@ import juloo.keyboard2.KeyValue;
  */
 public abstract class FocuslessKeyIntake implements TerminalKeyEventHandler.KeyValueInterceptor {
 
+    @NonNull private final ClipboardText mClipboardSource;
+
+    protected FocuslessKeyIntake() {
+        this(() -> null);
+    }
+
+    protected FocuslessKeyIntake(@NonNull ClipboardText clipboardSource) {
+        mClipboardSource = clipboardSource;
+    }
+
     public abstract boolean isActive();
 
     /** @return true when the committed character was claimed by the active editor. */
@@ -62,6 +72,8 @@ public abstract class FocuslessKeyIntake implements TerminalKeyEventHandler.KeyV
                 switch (value.getEditing()) {
                     case SPACE_BAR: onText(" ", ctrl, alt); break;
                     case BACKSPACE: onBackspace(); break;
+                    case PASTE:
+                    case PASTE_PLAIN: pasteClipboard(); break;
                     default: break;
                 }
                 break;
@@ -82,6 +94,13 @@ public abstract class FocuslessKeyIntake implements TerminalKeyEventHandler.KeyV
                 break;
         }
         return true;
+    }
+
+    /** Inserts the clipboard text, sanitized for a single-line field, through {@link #onText}. */
+    private void pasteClipboard() {
+        String text = mClipboardSource.read();
+        if (text != null && !text.isEmpty())
+            onText(PasteText.sanitizeSingleLine(text), false, false);
     }
 
     /** @return true when the stroke was claimed by the active editor. */

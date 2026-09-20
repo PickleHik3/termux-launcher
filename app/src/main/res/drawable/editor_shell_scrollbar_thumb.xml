@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The body's scrollbar thumb. A thumb sitting at 40% of its track is the only thing on screen
+     that says how much more there is; the fade says only that there is some. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:alpha="0.6">
+        <shape android:shape="rectangle">
+            <solid android:color="?attr/termuxColorPrimary" />
+            <corners android:radius="2dp" />
+        </shape>
+    </item>
+</layer-list>

@@ -47,13 +47,15 @@ public final class WidgetGridView extends ViewGroup {
     private final int touchSlop;
     private final Runnable emptyLongPressFire = this::fireEmptyLongPress;
     private boolean emptyLongPressPending;
+    /** Whether a pane corner may still claim the finger that is down; see {@link #setHoldExempt}. */
+    private boolean holdExempt;
     private float emptyDownX, emptyDownY;
     private float emptyDownRawX, emptyDownRawY;
 
     public WidgetGridView(@NonNull Context context) {
         super(context);
-        edgePadding = Math.round(4f * getResources().getDisplayMetrics().density);
-        gap = Math.round(4f * getResources().getDisplayMetrics().density);
+        edgePadding = Math.round(6f * getResources().getDisplayMetrics().density);
+        gap = Math.round(8f * getResources().getDisplayMetrics().density);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setClipChildren(true);
         setClipToPadding(true);
@@ -70,6 +72,19 @@ public final class WidgetGridView extends ViewGroup {
 
     public void setListener(@Nullable Listener value) { listener = value; }
 
+    /**
+     * The page's frame says a corner square may still take this finger, so the grid and its cells
+     * leave the long press to it: a press that lands in a corner belongs to the corner, and the
+     * grid never opens its menu underneath the tab that hold brings out. It is handed straight
+     * back when the corner gives the gesture up.
+     */
+    public void setHoldExempt(boolean exempt) {
+        if (holdExempt == exempt) return;
+        holdExempt = exempt;
+        if (exempt) cancelEmptyLongPress();
+        for (WidgetCellView cell : cells.values()) cell.setHoldExempt(exempt);
+    }
+
     public void refresh(@NonNull WidgetGridDefinition grid,
                         @NonNull List<LauncherWidgetRecord> snapshot) {
         definition = grid;
@@ -83,6 +98,7 @@ public final class WidgetGridView extends ViewGroup {
             WidgetCellView cell = cells.get(record.appWidgetId);
             if (cell == null) {
                 cell = new WidgetCellView(getContext());
+                cell.setHoldExempt(holdExempt);
                 cell.setId(ViewCompat.generateViewId());
                 cells.put(record.appWidgetId, cell);
                 addView(cell);
@@ -136,9 +152,11 @@ public final class WidgetGridView extends ViewGroup {
             case MotionEvent.ACTION_DOWN:
                 emptyDownX = event.getX(); emptyDownY = event.getY();
                 emptyDownRawX = event.getRawX(); emptyDownRawY = event.getRawY();
-                emptyLongPressPending = true;
-                postDelayed(emptyLongPressFire,
-                    ViewConfiguration.getLongPressTimeout());
+                if (!holdExempt) {
+                    emptyLongPressPending = true;
+                    postDelayed(emptyLongPressFire,
+                        ViewConfiguration.getLongPressTimeout());
+                }
                 return true;
             case MotionEvent.ACTION_MOVE:
                 if (emptyLongPressPending && Math.hypot(event.getX() - emptyDownX,
@@ -202,27 +220,72 @@ public final class WidgetGridView extends ViewGroup {
             child.layout(bounds.left, bounds.top, bounds.right, bounds.bottom);
             if (record.state == LauncherWidgetRecord.State.ACTIVE) {
                 final int orientation = getResources().getConfiguration().orientation;
-                final int contentWidth = Math.max(1, child.getWidth() - child.getPaddingLeft()
-                    - child.getPaddingRight());
-                final int contentHeight = Math.max(1, child.getHeight() - child.getPaddingTop()
-                    - child.getPaddingBottom());
-                long packed = packSize(contentWidth, contentHeight, orientation);
+                long packed = packSize(child.providerContentWidth(),
+                    child.providerContentHeight(), orientation);
                 Long previous = committedSizes.put(record.appWidgetId, packed);
-                if (previous == null || previous.longValue() != packed) {
-                    final int id = record.appWidgetId;
-                    post(() -> {
-                        Long current = committedSizes.get(id);
-                        if (current == null || current.longValue() != packed
-                            || packed == deliveredSizes.getOrDefault(id, Long.MIN_VALUE)) return;
-                        if (controller != null && isShown()) {
-                            controller.onHostSizeCommitted(id, contentWidth, contentHeight,
-                                orientation);
-                            deliveredSizes.put(id, packed);
-                        }
-                    });
+                if (previous == null || previous.longValue() != packed
+                    || packed != deliveredSizes.getOrDefault(record.appWidgetId, Long.MIN_VALUE)) {
+                    sizeDeliveryPending = true;
                 }
             }
         }
+        if (sizeDeliveryPending) scheduleSizeDelivery();
+    }
+
+    private boolean sizeDeliveryPending;
+
+    /**
+     * A layout pass that changed a cell's size waits this long for the next one before the size
+     * reaches the provider. The grid is laid out once per frame while the wall slides or the
+     * status bar animates between places, and each delivery makes the provider re-render and push
+     * new RemoteViews — ~200 ms of main thread per widget on Pong. One delivery per settled size,
+     * not one per frame.
+     */
+    static final long SIZE_DELIVERY_SETTLE_MS = 160L;
+    private final Runnable deliverCommittedSizesRunnable = this::deliverCommittedSizes;
+
+    private void scheduleSizeDelivery() {
+        removeCallbacks(deliverCommittedSizesRunnable);
+        postDelayed(deliverCommittedSizesRunnable, SIZE_DELIVERY_SETTLE_MS);
+    }
+
+    /**
+     * Tell each provider the size its widget really has — the cell less the gutter and less the
+     * host view's own padding, which is what the framework measures its layout by — once the
+     * grid is on screen. The grid is first laid out while its page waits off screen, so this
+     * cannot happen in that layout pass and must run again when the page comes into view — a
+     * provider that never hears its size lays out for the size it assumed and shows up cut off
+     * at the edges.
+     */
+    private void deliverCommittedSizes() {
+        if (controller == null || !isShown()) return;
+        sizeDeliveryPending = false;
+        int orientation = getResources().getConfiguration().orientation;
+        for (LauncherWidgetRecord record : records) {
+            if (record.state != LauncherWidgetRecord.State.ACTIVE) continue;
+            Long packed = committedSizes.get(record.appWidgetId);
+            if (packed == null
+                || packed == deliveredSizes.getOrDefault(record.appWidgetId, Long.MIN_VALUE)) {
+                continue;
+            }
+            WidgetCellView child = cells.get(record.appWidgetId);
+            if (child == null) continue;
+            controller.onHostSizeCommitted(record.appWidgetId, child.providerContentWidth(),
+                child.providerContentHeight(), orientation);
+            deliveredSizes.put(record.appWidgetId, packed);
+        }
+    }
+
+    @Override
+    protected void onVisibilityChanged(@NonNull View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        if (visibility == VISIBLE && sizeDeliveryPending) scheduleSizeDelivery();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (sizeDeliveryPending) scheduleSizeDelivery();
     }
 
     private static long packSize(int width, int height, int orientation) {

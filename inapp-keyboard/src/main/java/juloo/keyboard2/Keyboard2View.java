@@ -53,11 +53,15 @@ public class Keyboard2View extends View
   private float _keyCornerRadiusOverridePx = -1f;
   /** Absolute key cap background opacity (0..1), or -1 to keep the theme's translucency. */
   private float _keyOpacity = -1f;
+  /** Parting of the split keyboard type in key-width units; 0 is the full-width docked one. */
+  private float _splitGapUnits;
 
   /** Stable host content height used as the fractional keyboard-height cap reference. */
   private int _heightCapReferencePx;
 
   private float _keyWidth;
+  /** The width the keys are laid out across: the measured view less its own side margins. */
+  private float _keyContentWidth;
   private float _mainLabelSize;
   private float _subLabelSize;
   private float _marginRight;
@@ -66,6 +70,14 @@ public class Keyboard2View extends View
 
   private Theme _theme;
   private Theme.Computed _tc;
+  private final Paint _splitBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  /**
+   * Host-set colour for the split slabs, or null to paint them in the keyboard's own background.
+   * The host owns this because a parted keyboard lies over the content rather than inside a
+   * surface of the host's, so the slabs are the panel and only the host knows which role that
+   * is. Local addition, see UPSTREAM.md.
+   */
+  private Integer _splitBackgroundColor;
   private final Paint _overrideBackgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _overrideBorderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private SparseArray<KeyColorOverride> _keyColorOverrides = new SparseArray<>();
@@ -77,7 +89,7 @@ public class Keyboard2View extends View
   private OnKeyPaintListener _keyPaintListener;
   private String _lastPaintedKeyId;
   private float _launchWaveDensity;
-  private final int[] _spaceBarLocation = new int[2];
+  private final int[] _keyRectLocation = new int[2];
   private final Paint _trailPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -183,7 +195,18 @@ public class Keyboard2View extends View
     _fxFillPaint.setColor(_theme.pressedColor);
     _fxStrokePaint.setColor(_theme.pressedColor);
     _fxHaloPaint.setColor(_theme.pressedColor);
-    setBackgroundColor(withOpacity(_theme.colorKeyboard, _theme.opacity));
+    applyKeyboardBackground();
+  }
+
+  /**
+   * The keyboard's own background. Docked it is the view's, filling it; split, the view keeps
+   * none and {@link #drawSplitBackground} paints it under the key runs alone, so the parting
+   * shows whatever lies beneath the keyboard.
+   */
+  private void applyKeyboardBackground()
+  {
+    setBackgroundColor(_splitGapUnits > 0f ? Color.TRANSPARENT
+        : withOpacity(_theme.colorKeyboard, _theme.opacity));
   }
 
   /** Brief host-triggered wave that subtly modulates each key as the dock front reaches it. */
@@ -508,6 +531,75 @@ public class Keyboard2View extends View
     return (rowIndex << 16) | (keyIndex & 0xFFFF);
   }
 
+  /**
+   * Tells the actual enter/editor-action key apart from the rest of the Action role — upstream
+   * layouts give shift, ctrl, backspace, arrows, layout switch and config the same role as
+   * enter (see bottom_row.xml), so the theme distinction between "the action key" and "a
+   * function key" is made here, from the key's own value, rather than from its role.
+   */
+  private static boolean isEnterKey(KeyboardData.Key k)
+  {
+    KeyValue v = k.keys[0];
+    return v != null && v.getKind() == KeyValue.Kind.Keyevent
+        && v.getKeyevent() == KeyEvent.KEYCODE_ENTER;
+  }
+
+  /** Paint tiers a key can draw with; see [tierFor]. */
+  enum KeyTier { LETTER, FUNCTION, ACTION, SPACE_BAR, SUGGESTION }
+
+  /**
+   * The paint tier of a key. Layouts may omit [role] (the shipped launcher layout and most user
+   * layouts do), so a [Normal] key is classified from its own value: enter is the action key,
+   * modifiers, non-printing key events and layout/config events are function keys, the space
+   * editing key is the space bar, everything else is a letter key.
+   */
+  static KeyTier tierFor(KeyboardData.Key k)
+  {
+    switch (k.role)
+    {
+      case Action: return isEnterKey(k) ? KeyTier.ACTION : KeyTier.FUNCTION;
+      case Space_bar: return KeyTier.SPACE_BAR;
+      case Suggestion: return KeyTier.SUGGESTION;
+      default: break;
+    }
+    KeyValue v = k.keys[0];
+    if (v == null)
+      return KeyTier.LETTER;
+    switch (v.getKind())
+    {
+      case Keyevent:
+        switch (v.getKeyevent())
+        {
+          case KeyEvent.KEYCODE_ENTER: return KeyTier.ACTION;
+          case KeyEvent.KEYCODE_ESCAPE: case KeyEvent.KEYCODE_TAB:
+          case KeyEvent.KEYCODE_DEL: case KeyEvent.KEYCODE_FORWARD_DEL:
+          case KeyEvent.KEYCODE_DPAD_UP: case KeyEvent.KEYCODE_DPAD_DOWN:
+          case KeyEvent.KEYCODE_DPAD_LEFT: case KeyEvent.KEYCODE_DPAD_RIGHT:
+          case KeyEvent.KEYCODE_MOVE_HOME: case KeyEvent.KEYCODE_MOVE_END:
+          case KeyEvent.KEYCODE_PAGE_UP: case KeyEvent.KEYCODE_PAGE_DOWN:
+          case KeyEvent.KEYCODE_INSERT:
+            return KeyTier.FUNCTION;
+          default: return KeyTier.LETTER;
+        }
+      case Modifier: case Event: return KeyTier.FUNCTION;
+      case Editing:
+        return v.getEditing() == KeyValue.Editing.SPACE_BAR ? KeyTier.SPACE_BAR : KeyTier.FUNCTION;
+      default: return KeyTier.LETTER;
+    }
+  }
+
+  private Theme.Computed.Key paintFor(KeyboardData.Key k)
+  {
+    switch (tierFor(k))
+    {
+      case ACTION: return _tc.key_action;
+      case FUNCTION: return _tc.key_function;
+      case SPACE_BAR: return _tc.key_space_bar;
+      case SUGGESTION: return _tc.key_suggestion;
+      default: return _tc.key;
+    }
+  }
+
   private static int parseKeyId(String keyId)
   {
     int colon = keyId.indexOf(':');
@@ -547,6 +639,26 @@ public class Keyboard2View extends View
     return withOpacity(_theme.colorKeyboard, _theme.opacity);
   }
 
+  /**
+   * The colour the split slabs are painted in. Null restores the keyboard's own background, so
+   * a host that says nothing gets what upstream draws. Local addition, see UPSTREAM.md.
+   */
+  public void setSplitBackgroundColor(Integer color)
+  {
+    requireMainThread();
+    if (Objects.equals(_splitBackgroundColor, color))
+      return;
+    _splitBackgroundColor = color;
+    invalidate();
+  }
+
+  /** The resolved slab colour: the host's when it set one, the keyboard's background otherwise. */
+  public int getSplitBackgroundColor()
+  {
+    return _splitBackgroundColor != null ? _splitBackgroundColor
+        : withOpacity(_theme.colorKeyboard, _theme.opacity);
+  }
+
   /** Label color used by transient host controls drawn against the keyboard palette. */
   public int getKeyboardLabelColor()
   {
@@ -569,6 +681,73 @@ public class Keyboard2View extends View
   public float getHeightScale()
   {
     return _heightScale;
+  }
+
+  /**
+   * Parts the keyboard for the split type: the layout the host hands in is already parted, and
+   * this is the gap it was parted by, in key-width units. The view then paints its background
+   * under the key runs alone and lets a press that starts in the parting fall through to what is
+   * beneath it. Zero — the default — is the docked keyboard, which is untouched. Local addition,
+   * see UPSTREAM.md.
+   */
+  public void setSplitGapUnits(float gapUnits)
+  {
+    requireMainThread();
+    float units = Float.isNaN(gapUnits) || Float.isInfinite(gapUnits)
+        || gapUnits < SplitLayout.MIN_GAP_UNITS ? 0f : gapUnits;
+    if (Float.compare(_splitGapUnits, units) == 0)
+      return;
+    _splitGapUnits = units;
+    applyKeyboardBackground();
+    requestLayout();
+    invalidate();
+  }
+
+  public float getSplitGapUnits()
+  {
+    return _splitGapUnits;
+  }
+
+  /**
+   * The band the parting leaves empty on every row, in view pixels, for a host that wants to
+   * stand something in the gap. False, leaving [out] alone, when the keyboard is not split, has
+   * not been measured, or its rows share no band.
+   */
+  public boolean getSplitGapBounds(Rect out)
+  {
+    if (_splitGapUnits <= 0f || _keyboard == null || _tc == null || _keyWidth <= 0f)
+      return false;
+    float[] band = SplitLayout.commonGap(_keyboard, _splitGapUnits);
+    if (band == null)
+      return false;
+    int left = Math.round(_marginLeft + band[0] * _keyWidth);
+    int right = Math.round(_marginLeft + band[1] * _keyWidth);
+    int height = getHeight() > 0 ? getHeight() : getMeasuredHeight();
+    if (right <= left || height <= 0)
+      return false;
+    out.set(left, 0, right, height);
+    return true;
+  }
+
+  /**
+   * The width the keys are laid out across, in px: the measured view less its own side margins.
+   * Zero until the view has been measured once. A host converting a parting between pixels and
+   * key-width units measures it against this, not against the view's width.
+   */
+  public float getKeyContentWidthPx()
+  {
+    return _keyContentWidth;
+  }
+
+  /**
+   * The corner radius of the slabs {@link #drawSplitBackground} paints under the key runs, in
+   * px. Square: the slabs reach the view's edges and meet each other vertically, so a radius
+   * would only round the parting's inner edges. A host standing a panel in the parting reads
+   * it from here, so the three surfaces stay one shape.
+   */
+  public static float splitSlabRadiusPx()
+  {
+    return SPLIT_SLAB_RADIUS_PX;
   }
 
   /** Scales both horizontal and vertical gaps without replacing immutable Config. */
@@ -698,9 +877,28 @@ public class Keyboard2View extends View
    */
   public boolean getSpaceBarRectOnScreen(Rect out)
   {
-    if (_keyboard == null || _tc == null)
+    return getKeyRectOnScreen("space", out);
+  }
+
+  /**
+   * On-screen bounds of one key of the rendered layout, named the way a layout file names it
+   * ("ctrl", "alt", "shift", "enter", "space", "c"). Hosts that want to point at a key — the
+   * first-boot tour glowing a chord — cannot ask for it as a view: the keyboard lays its caps
+   * out itself and none of them is a child.
+   *
+   * <p>Only the cap at the middle of a key is matched, never one of its eight corner values: a
+   * corner is a swipe, not the key the host is naming.
+   *
+   * @return false when the layout has no such key, or has not been measured yet
+   */
+  public boolean getKeyRectOnScreen(String keyName, Rect out)
+  {
+    if (_keyboard == null || _tc == null || keyName == null)
       return false;
-    getLocationOnScreen(_spaceBarLocation);
+    KeyValue wanted = KeyValue.getKeyByName(keyName);
+    if (wanted == null)
+      return false;
+    getLocationOnScreen(_keyRectLocation);
     float y = getPaddingTop() + _tc.margin_top;
     for (KeyboardData.Row row : _keyboard.rows)
     {
@@ -711,12 +909,12 @@ public class Keyboard2View extends View
       {
         x += k.shift * _keyWidth;
         float keyW = _keyWidth * k.width - _tc.horizontal_margin;
-        if (isSpaceBar(k))
+        if (isKeyNamed(k, wanted))
         {
-          out.set(Math.round(_spaceBarLocation[0] + x),
-              Math.round(_spaceBarLocation[1] + y),
-              Math.round(_spaceBarLocation[0] + x + keyW),
-              Math.round(_spaceBarLocation[1] + y + keyH));
+          out.set(Math.round(_keyRectLocation[0] + x),
+              Math.round(_keyRectLocation[1] + y),
+              Math.round(_keyRectLocation[0] + x + keyW),
+              Math.round(_keyRectLocation[1] + y + keyH));
           return true;
         }
         x += _keyWidth * k.width;
@@ -727,6 +925,140 @@ public class Keyboard2View extends View
   }
 
   /**
+   * On-screen bounds of the glyph a key's corner value is drawn as — the settings cog that hangs
+   * off the Fn key, say. The answer is the drawn label, not the cap it sits on and not the swipe's
+   * hit area: a host pointing at the cog wants a box round the cog.
+   *
+   * <p>The first corner carrying the value wins, in the layout's own order, and the geometry
+   * mirrors {@link #drawSubLabel} so the box lands on the glyph the user is looking at. Held
+   * modifiers are left out of the comparison: which corner a value sits on does not move with them.
+   *
+   * @return false when no key carries that value on a corner, or nothing is measured yet
+   */
+  public boolean getKeyCornerRectOnScreen(String valueName, Rect out)
+  {
+    if (_keyboard == null || _tc == null || valueName == null)
+      return false;
+    KeyValue wanted = KeyValue.getKeyByName(valueName);
+    if (wanted == null)
+      return false;
+    getLocationOnScreen(_keyRectLocation);
+    float y = getPaddingTop() + _tc.margin_top;
+    for (KeyboardData.Row row : _keyboard.rows)
+    {
+      y += row.shift * _tc.row_height;
+      float x = _marginLeft + _tc.margin_left;
+      float keyH = row.height * _tc.row_height - _tc.vertical_margin;
+      for (KeyboardData.Key k : row.keys)
+      {
+        x += k.shift * _keyWidth;
+        float keyW = _keyWidth * k.width - _tc.horizontal_margin;
+        for (int i = 1; i < 9; i++)
+        {
+          if (k.keys[i] == null || !sameValue(k.keys[i], wanted))
+            continue;
+          subLabelBounds(k, k.keys[i], i, x, y, keyW, keyH, out);
+          return true;
+        }
+        x += _keyWidth * k.width;
+      }
+      y += row.height * _tc.row_height;
+    }
+    return false;
+  }
+
+  /** Where one sub-label is drawn, in screen coordinates; {@link #drawSubLabel}'s own arithmetic. */
+  private void subLabelBounds(KeyboardData.Key k, KeyValue kv, int sub_index,
+      float x, float y, float keyW, float keyH, Rect out)
+  {
+    Paint.Align a = LABEL_POSITION_H[sub_index];
+    Vertical v = LABEL_POSITION_V[sub_index];
+    Theme.Computed.Key tc_key = themeKeyFor(k.role);
+    float textSize = scaleTextSize(kv, false);
+    Paint p = tc_key.sublabel_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT),
+        tc_key.subLabelColor, textSize, a);
+    float subPadding = _config.keyPaddingPx;
+    if (a != Paint.Align.CENTER && v != Vertical.CENTER)
+      subPadding += tc_key.border_radius * 0.3f;
+    float baseline = y;
+    if (v == Vertical.CENTER)
+      baseline += (keyH - p.ascent() - p.descent()) / 2f;
+    else
+      baseline += (v == Vertical.TOP) ? subPadding - p.ascent() : keyH - subPadding - p.descent();
+    float anchor = x;
+    if (a == Paint.Align.CENTER)
+      anchor += keyW / 2f;
+    else
+      anchor += (a == Paint.Align.LEFT) ? subPadding : keyW - subPadding;
+    String label = kv.getString();
+    int label_len = label.length();
+    if (label_len > 3 && kv.getKind() == KeyValue.Kind.String)
+      label_len = 3;
+    float width = p.measureText(label, 0, label_len);
+    float top = baseline + p.ascent();
+    float bottom = baseline + p.descent();
+    // A font with no metrics for the glyph would give the caller an empty rect, which reads as
+    // "not there"; the label's own size is a box the right shape in the right corner.
+    if (width <= 0f)
+      width = textSize;
+    if (bottom - top <= 0f)
+    {
+      top = baseline - textSize * 0.8f;
+      bottom = baseline + textSize * 0.2f;
+    }
+    float left = (a == Paint.Align.LEFT) ? anchor
+      : (a == Paint.Align.RIGHT) ? anchor - width : anchor - width / 2f;
+    out.set(Math.round(_keyRectLocation[0] + left),
+        Math.round(_keyRectLocation[1] + top),
+        Math.round(_keyRectLocation[0] + left + width),
+        Math.round(_keyRectLocation[1] + bottom));
+  }
+
+  /** The computed theme a key of this role is drawn with, as {@link #onDraw} picks it. */
+  private Theme.Computed.Key themeKeyFor(KeyboardData.Key.Role role)
+  {
+    switch (role)
+    {
+      case Action: return _tc.key_action;
+      case Space_bar: return _tc.key_space_bar;
+      case Suggestion: return _tc.key_suggestion;
+      default: return _tc.key;
+    }
+  }
+
+  /**
+   * Whether a key's centre cap is the named one. Flags are deliberately out of the comparison —
+   * the same key carries different rendering flags depending on how a layout file spells it, and
+   * "the Alt key" is the same key either way — so kind and value decide.
+   */
+  private static boolean isKeyNamed(KeyboardData.Key key, KeyValue wanted)
+  {
+    if (isSpaceBar(wanted))
+      return isSpaceBar(key);
+    return sameValue(key.keys[0], wanted);
+  }
+
+  /** Whether two values are the same key, flags aside — see {@link #isKeyNamed}. */
+  private static boolean sameValue(KeyValue value, KeyValue wanted)
+  {
+    if (value == null)
+      return false;
+    if (value.sameKey(wanted))
+      return true;
+    if (value.getKind() != wanted.getKind())
+      return false;
+    switch (value.getKind())
+    {
+      case Modifier: return value.getModifier() == wanted.getModifier();
+      case Keyevent: return value.getKeyevent() == wanted.getKeyevent();
+      case Char: return value.getChar() == wanted.getChar();
+      case Editing: return value.getEditing() == wanted.getEditing();
+      case Event: return value.getEvent() == wanted.getEvent();
+      default: return false;
+    }
+  }
+
+  /**
    * Space bar identity, matching {@code Pointers.swipeKeyName}: the role attribute, or the
    * center value for user layout files that predate it.
    */
@@ -734,9 +1066,13 @@ public class Keyboard2View extends View
   {
     if (key.role == KeyboardData.Key.Role.Space_bar)
       return true;
-    KeyValue center = key.keys[0];
-    return center != null && center.getKind() == KeyValue.Kind.Editing
-      && center.getEditing() == KeyValue.Editing.SPACE_BAR;
+    return isSpaceBar(key.keys[0]);
+  }
+
+  private static boolean isSpaceBar(KeyValue value)
+  {
+    return value != null && value.getKind() == KeyValue.Kind.Editing
+      && value.getEditing() == KeyValue.Editing.SPACE_BAR;
   }
 
   /** @deprecated Use [resetInputState()]. */
@@ -904,9 +1240,13 @@ public class Keyboard2View extends View
         p = event.getActionIndex();
         float tx = event.getX(p);
         float ty = event.getY(p);
+        KeyboardData.Key rawKey = getKeyAtPosition(tx, ty);
+        // The parting of a split keyboard is not the keyboard's: refusing the press hands the
+        // whole stream to whatever is under the gap.
+        if (rawKey == null && _splitGapUnits > 0f)
+          return false;
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN)
           requestDisallowIntercept(true);
-        KeyboardData.Key rawKey = getKeyAtPosition(tx, ty);
         KeyboardData.Key key = resolveTap(rawKey, tx, ty);
         if (key != null)
         {
@@ -1156,6 +1496,7 @@ public class Keyboard2View extends View
     _marginRight = getPaddingRight() + _config.horizontalMarginPx;
     _marginBottom = getPaddingBottom() + _config.bottomMarginPx;
     float contentWidth = Math.max(0f, width - _marginLeft - _marginRight);
+    _keyContentWidth = contentWidth;
     _keyWidth = contentWidth / _keyboard.keysWidth;
 
     float fixedHeight = getPaddingTop() + _config.marginTopPx + _marginBottom;
@@ -1213,6 +1554,47 @@ public class Keyboard2View extends View
     Vertical.BOTTOM
   };
 
+  /** The radius the run slabs are drawn with; {@link #splitSlabRadiusPx} is how a host reads it. */
+  private static final float SPLIT_SLAB_RADIUS_PX = 0f;
+
+  /**
+   * The keyboard background of a split keyboard: one slab under each run of keys, so the parting
+   * between the halves is left clear. Slabs meet vertically and reach both view edges, so the
+   * result is the docked background with the gap taken out of it.
+   */
+  private void drawSplitBackground(Canvas canvas)
+  {
+    _splitBackgroundPaint.setColor(getSplitBackgroundColor());
+    float y = getPaddingTop() + _tc.margin_top;
+    int lastRow = _keyboard.rows.size() - 1;
+    for (int rowIndex = 0; rowIndex <= lastRow; rowIndex++)
+    {
+      KeyboardData.Row row = _keyboard.rows.get(rowIndex);
+      float top = rowIndex == 0 ? 0f : y;
+      y += (row.shift + row.height) * _tc.row_height;
+      float bottom = rowIndex == lastRow ? getHeight() : y;
+      float x = _marginLeft;
+      float runLeft = 0f;
+      float runRight = -1f;
+      for (int keyIndex = 0; keyIndex < row.keys.size(); keyIndex++)
+      {
+        KeyboardData.Key key = row.keys.get(keyIndex);
+        float keyLeft = x + key.shift * _keyWidth;
+        if (keyIndex > 0 && SplitLayout.startsRun(key, _splitGapUnits))
+        {
+          canvas.drawRoundRect(runLeft, top, runRight, bottom,
+              SPLIT_SLAB_RADIUS_PX, SPLIT_SLAB_RADIUS_PX, _splitBackgroundPaint);
+          runLeft = keyLeft;
+        }
+        x = keyLeft + key.width * _keyWidth;
+        runRight = x;
+      }
+      if (runRight > runLeft)
+        canvas.drawRoundRect(runLeft, top, getWidth(), bottom,
+            SPLIT_SLAB_RADIUS_PX, SPLIT_SLAB_RADIUS_PX, _splitBackgroundPaint);
+    }
+  }
+
   @Override
   protected void onDraw(Canvas canvas)
   {
@@ -1223,6 +1605,8 @@ public class Keyboard2View extends View
     _launchWaveDensity = getResources().getDisplayMetrics().density;
     boolean animateNextFrame = false;
     int hintTraceIndex = 0;
+    if (_splitGapUnits > 0f)
+      drawSplitBackground(canvas);
     float y = getPaddingTop() + _tc.margin_top;
     for (int rowIndex = 0; rowIndex < _keyboard.rows.size(); rowIndex++)
     {
@@ -1254,14 +1638,7 @@ public class Keyboard2View extends View
         if (isKeyDown)
           tc_key = _tc.key_activated;
         else
-          switch (k.role)
-          {
-            case Action: tc_key = _tc.key_action; break;
-            case Space_bar: tc_key = _tc.key_space_bar; break;
-            case Suggestion: tc_key = _tc.key_suggestion; break;
-            default:
-            case Normal: tc_key = _tc.key; break;
-          }
+          tc_key = paintFor(k);
         if (hintOverride != null && _hintFadeAnimator != null)
         {
           hintOverride = fadeHintOverride(hintOverride, schemeOverride, tc_key);

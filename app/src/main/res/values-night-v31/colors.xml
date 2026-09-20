@@ -21,7 +21,7 @@
     <color name="termux_error">@color/red_error_link</color>
     <color name="termux_error_container">@color/red_error</color>
     <color name="termux_on_error_container">@android:color/white</color>
-    <color name="termux_scrollbar">#66FFFFFF</color>
+    <color name="termux_scrollbar">#B3808080</color>
 
     <color name="main_accent">@color/termux_on_surface</color>
     <color name="highlight_accent">@color/termux_surface_panel_highest</color>

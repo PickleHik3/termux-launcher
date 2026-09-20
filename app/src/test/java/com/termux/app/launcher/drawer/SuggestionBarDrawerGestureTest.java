@@ -136,9 +136,13 @@ public class SuggestionBarDrawerGestureTest {
         assertEquals(0, listener.begins);
         assertEquals(0, listener.drags);
         assertEquals(0, listener.ends);
-        // No synthetic cancel on the paging path — the child sees its own UP and bounces back.
-        assertEquals(0, child.countOf(MotionEvent.ACTION_CANCEL));
-        assertEquals(1, child.countOf(MotionEvent.ACTION_UP));
+        // Updated with a reason: the paging claim stands its children down the same way a claimed
+        // drawer drag does, with exactly one synthetic cancel at the claim. It used to send none
+        // and leave the release to the child's own UP — which a committed swipe consumes itself,
+        // so the icon the finger came down on kept its press-down lift and stood there looking
+        // permanently touched.
+        assertEquals(1, child.countOf(MotionEvent.ACTION_CANCEL));
+        assertEquals(0, child.countOf(MotionEvent.ACTION_UP));
     }
 
     @Test
@@ -160,7 +164,7 @@ public class SuggestionBarDrawerGestureTest {
         List<String> failures = new ArrayList<>();
         // "searchText" is deliberately absent: a filtered apps row no longer vetoes the pull-down
         // (the vertical pull is unambiguous even over filtered results).
-        for (String veto : new String[] {"pref", "surfaceEditor", "palette", "engaged", "full",
+        for (String veto : new String[] {"pref", "surfaceEditor", "palette", "engaged",
             "azLetter", "landscape", "activePickup", "noListener"}) {
             setUp();
             applyVeto(veto);
@@ -198,7 +202,6 @@ public class SuggestionBarDrawerGestureTest {
             case "surfaceEditor": listener.surfaceEditor = true; break;
             case "palette": listener.paletteOpen = true; break;
             case "engaged": listener.drawerEngaged = true; break;
-            case "full": listener.fullStatusPaneClosed = false; break;
             case "searchText": ReflectionHelpers.setField(row, "lastInput", "ls "); break;
             case "azLetter":
                 ReflectionHelpers.setField(row, "activeAzLetter", Character.valueOf('A'));
@@ -269,6 +272,46 @@ public class SuggestionBarDrawerGestureTest {
         assertEquals(ROW_HEIGHT, rect.height());
     }
 
+    // ------------------------------------------------------------------ the rail
+
+    @Test
+    public void aRailNeverClaimsTheDragItsHostArbitrates() {
+        // Standing on a side the row is the rail: a drag down it scrolls the pinned apps, and the
+        // sideways pull that opens the drawer is DockRailScrollView's to claim. Before this the row
+        // still ran the portrait pull-down, so a scroll down the rail opened the drawer.
+        row.setVerticalForm(true);
+        row.setDrawerPull(AppDrawerGestureArbiter.Pull.NONE);
+
+        dispatch(MotionEvent.ACTION_DOWN, 40f, 300f);
+        dispatch(MotionEvent.ACTION_MOVE, 40f, 300f + TRAVEL);
+        dispatch(MotionEvent.ACTION_UP, 40f, 300f + TRAVEL);
+        assertEquals(0, listener.begins);
+        assertEquals(CLAIM_PENDING, claim());
+
+        // And the sideways one is left alone too — the rail has one page, so there is nothing for
+        // the page swipe to switch to and nothing to translate under the finger.
+        dispatch(MotionEvent.ACTION_DOWN, 40f, 300f);
+        dispatch(MotionEvent.ACTION_MOVE, 40f + TRAVEL, 300f);
+        assertEquals(CLAIM_PENDING, claim());
+        assertEquals(0f, row.getTranslationX(), 0.01f);
+        dispatch(MotionEvent.ACTION_UP, 40f + TRAVEL, 300f);
+    }
+
+    @Test
+    public void aRowToldItPullsDownClaimsWhateverTheOrientationIs() {
+        // A row lying along the top or the bottom pulls down; the orientation used to decide that
+        // on its own, which left a landscape row with no drawer gesture at all.
+        context.getResources().getConfiguration().orientation =
+            Configuration.ORIENTATION_LANDSCAPE;
+        row.setDrawerPull(AppDrawerGestureArbiter.Pull.DOWN);
+
+        dispatch(MotionEvent.ACTION_DOWN, 100f, 20f);
+        dispatch(MotionEvent.ACTION_MOVE, 100f, 20f + TRAVEL);
+        assertEquals(CLAIM_DRAWER_DRAG, claim());
+        assertEquals(1, listener.begins);
+        dispatch(MotionEvent.ACTION_UP, 100f, 20f + TRAVEL);
+    }
+
     // ------------------------------------------------------------------ plumbing
 
     private int claim() {
@@ -315,7 +358,6 @@ public class SuggestionBarDrawerGestureTest {
         boolean surfaceEditor = false;
         boolean paletteOpen = false;
         boolean drawerEngaged = false;
-        boolean fullStatusPaneClosed = true;
 
         int begins;
         int drags;
@@ -341,11 +383,6 @@ public class SuggestionBarDrawerGestureTest {
         @Override
         public boolean isAppDrawerEngaged() {
             return drawerEngaged;
-        }
-
-        @Override
-        public boolean isFullStatusPaneClosed() {
-            return fullStatusPaneClosed;
         }
 
         @Override

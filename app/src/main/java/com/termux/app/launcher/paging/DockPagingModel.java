@@ -49,6 +49,22 @@ public final class DockPagingModel {
     }
 
     /**
+     * Slots one page of a rail renders: as many whole slots as the column's usable length holds.
+     *
+     * <p>A rail's slots are a fixed pitch ({@code DockLayoutPolicy.railSlotLengthPx}) rather than
+     * a share of the bar, so unlike a row — whose slot count is the user's own icons-per-page —
+     * how many fit is a question about the column. Always at least one, so a column shorter than
+     * a single slot still draws the icon it holds rather than nothing.
+     *
+     * @param usableLengthPx the column's own length, its padding already taken off
+     * @param slotLengthPx   one slot's pitch along the column
+     */
+    public static int railItemsPerPage(int usableLengthPx, int slotLengthPx) {
+        if (slotLengthPx <= 0) return 1;
+        return Math.max(1, Math.max(0, usableLengthPx) / slotLengthPx);
+    }
+
+    /**
      * Pages occupied by the user's persisted pinned items, excluding the dynamic most-used page.
      * An empty row still owns one (empty) page.
      */

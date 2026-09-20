@@ -13,6 +13,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
@@ -124,25 +125,25 @@ public class TerminalSheetControllerTest {
     }
 
     @Test
-    public void dismissClearsTheBrowsersRefreshCallback() {
+    public void dismissClearsTheDrawersRefreshCallback() {
         TermuxActivity activity = laidOutActivity();
 
-        TerminalSessionBrowser.show(activity);
+        TerminalSessionBrowser.toggle(activity);
 
-        assertNotNull("the browser subscribes to foreground refreshes while it is up",
+        assertNotNull("the drawer subscribes to foreground refreshes while it is up",
             ReflectionHelpers.getField(activity, "mSessionBrowserRefreshCallback"));
 
         activity.getTerminalSheetController().dismiss();
 
-        assertNull("a callback left behind would keep reloading a browser that is gone",
+        assertNull("a callback left behind would keep reloading a drawer that is gone",
             ReflectionHelpers.getField(activity, "mSessionBrowserRefreshCallback"));
     }
 
-    /** A sheet opened over the browser must not clear the browser's own subscription. */
+    /** A sheet opened over the drawer must not clear the drawer's own subscription. */
     @Test
-    public void aStackedSheetLeavesTheBrowsersRefreshCallbackAlone() {
+    public void aStackedSheetLeavesTheDrawersRefreshCallbackAlone() {
         TermuxActivity activity = laidOutActivity();
-        TerminalSessionBrowser.show(activity);
+        TerminalSessionBrowser.toggle(activity);
         TerminalSheetController sheet = activity.getTerminalSheetController();
 
         sheet.show("Workspace name", new TextView(activity));
@@ -156,7 +157,7 @@ public class TerminalSheetControllerTest {
     public void theSheetIsNeverATextEditorAndNeverTakesFocus() {
         TermuxActivity activity = laidOutActivity();
 
-        TerminalSessionBrowser.show(activity);
+        TerminalSessionBrowser.promptSaveWorkspace(activity);
 
         View host = activity.findViewById(R.id.terminal_sheet_host);
         assertFalse(host.onCheckIsTextEditor());
@@ -168,26 +169,27 @@ public class TerminalSheetControllerTest {
         assertFalse(card.onCheckIsTextEditor());
         assertEquals(ViewGroup.FOCUS_BLOCK_DESCENDANTS,
             ((ViewGroup) card).getDescendantFocusability());
-        assertNull("the search field must be a label typed from the key channel, not an EditText",
+        assertNull("every field here is a label typed from the key channel, not an EditText",
             findEditText(card));
     }
 
     /** …and the field it types instead really is driven by the key channel. */
     @Test
-    public void typingReachesTheSearchFieldThroughTheKeyChannel() {
+    public void typingReachesTheDrawersFieldThroughTheKeyChannel() {
         TermuxActivity activity = laidOutActivity();
-        TerminalSessionBrowser.show(activity);
-        TextView search = activity.findViewById(R.id.session_browser_search);
+        TerminalSessionBrowser.promptSaveWorkspace(activity);
+        TextView field = findCaretField(activity.getTerminalSheetController().topCard());
+        assertNotNull("the save field is open, so something has to be holding the caret", field);
 
         assertTrue(activity.handleTerminalSheetCodePoint('v', false));
         assertTrue(activity.handleTerminalSheetCodePoint('i', false));
 
-        assertEquals("vi▏", search.getText().toString());
+        assertEquals("vi▏", field.getText().toString());
 
         assertTrue(activity.handleTerminalSheetKey(KeyEvent.KEYCODE_DEL,
             new KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL)));
 
-        assertEquals("v▏", search.getText().toString());
+        assertEquals("v▏", field.getText().toString());
     }
 
     // ------------------------------------------------------------ the seam, driven by a fake host
@@ -244,6 +246,158 @@ public class TerminalSheetControllerTest {
         assertFalse(sheet.isOpen());
     }
 
+    /**
+     * The keys are how a sheet with a field is typed into, and the plane covers the whole activity —
+     * so the Save-workspace prompt used to ask for a name over a keyboard hidden behind its own
+     * frost. The plane stops at the keyboard's top edge instead.
+     */
+    @Test
+    public void thePlaneStopsAboveTheInAppKeyboard() {
+        FakeSheetHost host = new FakeSheetHost();
+        host.keyboardRect.set(0, 600, 400, 800);
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("Workspace name", new TextView(host.context()), false, new NoopSink(), null);
+
+        View stack = host.findView(R.id.terminal_sheet_stack);
+        assertEquals("the cards stop where the keys start", 200,
+            ((ViewGroup.MarginLayoutParams) stack.getLayoutParams()).bottomMargin);
+    }
+
+    /**
+     * A workspace prompt or the search bar rises out of the terminal's own bottom edge: it spans the
+     * terminal's frame, sits on that edge, and the plane is cut off there so the panel is clipped by
+     * it on the way in and out instead of sliding across the dock.
+     */
+    @Test
+    public void aFootPanelSitsOnTheTerminalsBottomEdgeAndIsClippedByIt() {
+        FakeSheetHost host = new FakeSheetHost();
+        host.keyboardRect.set(0, 600, 400, 800);
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("Save workspace", new TextView(host.context()), false, new NoopSink(), null,
+            false, TerminalSheetController.Placement.terminalFoot());
+
+        ViewGroup stack = host.findView(R.id.terminal_sheet_stack);
+        assertEquals("the plane stops on the terminal's bottom edge, not the keyboard's top", 240,
+            ((ViewGroup.MarginLayoutParams) stack.getLayoutParams()).bottomMargin);
+        assertTrue("the panel has to be cut off by that edge as it rises and sinks",
+            stack.getClipChildren());
+
+        FrameLayout.LayoutParams card =
+            (FrameLayout.LayoutParams) sheet.topCard().getLayoutParams();
+        assertEquals("edge to edge inside the terminal's frame", 384, card.width);
+        assertEquals(8, card.leftMargin);
+        assertEquals(0, card.bottomMargin);
+        assertEquals("the terminal's ceiling is what stops a long list", 40, card.topMargin);
+        assertEquals(Gravity.BOTTOM | Gravity.START, card.gravity);
+    }
+
+    /** A list panel has no height of its own to wrap, so it takes the terminal's. */
+    @Test
+    public void aFillHeightFootPanelTakesTheWholeTerminal() {
+        FakeSheetHost host = new FakeSheetHost();
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("Sessions", new TextView(host.context()), true, null, null, false,
+            TerminalSheetController.Placement.terminalFoot());
+
+        FrameLayout.LayoutParams card =
+            (FrameLayout.LayoutParams) sheet.topCard().getLayoutParams();
+        assertEquals("a weighted list inside a wrap-height card measures to nothing",
+            ViewGroup.LayoutParams.MATCH_PARENT, card.height);
+        assertEquals(40, card.topMargin);
+    }
+
+    /**
+     * The drawer: the terminal area's whole height across every pane, its leading edge, and a width
+     * that leaves the terminal visible behind it.
+     */
+    @Test
+    public void aDrawerSpansTheTerminalAreaFromItsLeadingEdge() {
+        FakeSheetHost host = new FakeSheetHost();
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("", new TextView(host.context()), true, null, null, false,
+            TerminalSheetController.Placement.terminalLeading());
+
+        FrameLayout.LayoutParams card =
+            (FrameLayout.LayoutParams) sheet.topCard().getLayoutParams();
+        assertEquals("the area's leading edge, not the plane's", 8, card.leftMargin);
+        assertEquals(40, card.topMargin);
+        assertEquals("every pane of the split, so it is the terminal's panel and not a pane's",
+            520, card.height);
+        assertEquals("45% of a 384px area, which bites well before the 340dp cap", 173, card.width);
+        assertEquals(Gravity.TOP | Gravity.START, card.gravity);
+        assertTrue("a drawer travelling its own width has to be cut off by the plane",
+            ((ViewGroup) host.findView(R.id.terminal_sheet_stack)).getClipChildren());
+    }
+
+    /** The dimming is the terminal's own area; the dock and the status row stay lit. */
+    @Test
+    public void aDrawerDimsTheTerminalAreaAndNothingElse() {
+        FakeSheetHost host = new FakeSheetHost();
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("", new TextView(host.context()), true, null, null, false,
+            TerminalSheetController.Placement.terminalLeading());
+
+        ViewGroup stack = host.findView(R.id.terminal_sheet_stack);
+        assertEquals("the scrim, then the card over it", 2, stack.getChildCount());
+        FrameLayout.LayoutParams scrim =
+            (FrameLayout.LayoutParams) stack.getChildAt(0).getLayoutParams();
+        assertEquals(8, scrim.leftMargin);
+        assertEquals(40, scrim.topMargin);
+        assertEquals(384, scrim.width);
+        assertEquals(520, scrim.height);
+
+        sheet.dismiss();
+        assertEquals("both leave together", 0, stack.getChildCount());
+    }
+
+    /** In a right-to-left layout the leading edge is the other one, and so is the drawer. */
+    @Test
+    public void aDrawerFollowsTheLayoutDirection() {
+        RuntimeEnvironment.setQualifiers("+ar-rXB-ldrtl");
+        FakeSheetHost host = new FakeSheetHost();
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("", new TextView(host.context()), true, null, null, false,
+            TerminalSheetController.Placement.terminalLeading());
+
+        FrameLayout.LayoutParams card =
+            (FrameLayout.LayoutParams) sheet.topCard().getLayoutParams();
+        assertEquals("flush with the area's right edge, which leads in RTL",
+            8 + 384 - 173, card.leftMargin);
+        assertEquals(173, card.width);
+    }
+
+    /** A drawer is a list first; it must not push the terminal around to open a keyboard. */
+    @Test
+    public void aDrawerDoesNotSummonTheKeyboardUntilAFieldAsksForIt() {
+        FakeSheetHost host = new FakeSheetHost();
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("", new TextView(host.context()), true, new NoopSink(), null, false,
+            TerminalSheetController.Placement.terminalLeading());
+        assertEquals(0, host.keyboardRequests);
+
+        sheet.requestTypingKeyboard();
+        assertEquals(1, host.keyboardRequests);
+    }
+
+    /** With no keyboard up there is nothing to avoid, and the plane keeps the whole screen. */
+    @Test
+    public void thePlaneKeepsTheScreenWhenNoKeyboardIsUp() {
+        FakeSheetHost host = new FakeSheetHost();
+        TerminalSheetController sheet = new TerminalSheetController(host);
+
+        sheet.show("Sessions", new TextView(host.context()));
+
+        View stack = host.findView(R.id.terminal_sheet_stack);
+        assertEquals(0, ((ViewGroup.MarginLayoutParams) stack.getLayoutParams()).bottomMargin);
+    }
+
     @Test
     public void aCardWearsTheHostsGlassAndFrost() {
         FakeSheetHost host = new FakeSheetHost();
@@ -276,6 +430,14 @@ public class TerminalSheetControllerTest {
         final View blur;
         final Drawable glass = new ColorDrawable(0xFF102030);
         final Rect keyboardRect = new Rect();
+        /** The terminal's frame: below a status bar, above the dock and keys. */
+        final Rect terminalRect = new Rect(8, 40, 392, 560);
+        float terminalCornerRadiusPx = 20f;
+        @Nullable com.termux.app.notice.TerminalDress.Source dressSource =
+            new com.termux.app.notice.TerminalDress.Source() {
+                @Override public float terminalCornerRadiusPx() { return 20f; }
+                @Override public int terminalFillColor() { return 0xFF102030; }
+            };
         int yields;
         int keyboardRequests;
         int frostRequests;
@@ -325,6 +487,26 @@ public class TerminalSheetControllerTest {
             return keyboardRect.contains(Math.round(rawX), Math.round(rawY));
         }
 
+        @Override public boolean inAppKeyboardBoundsOnScreen(@NonNull Rect out) {
+            if (keyboardRect.isEmpty()) return false;
+            out.set(keyboardRect);
+            return true;
+        }
+
+        @Override public boolean terminalFrameOnScreen(@NonNull Rect out) {
+            if (terminalRect.isEmpty()) return false;
+            out.set(terminalRect);
+            return true;
+        }
+
+        @Override public float terminalCornerRadiusPx() {
+            return terminalCornerRadiusPx;
+        }
+
+        @Nullable @Override public com.termux.app.notice.TerminalDress.Source terminalDressSource() {
+            return dressSource;
+        }
+
         @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
             frostRequests++;
             return true;
@@ -334,13 +516,24 @@ public class TerminalSheetControllerTest {
             return glass;
         }
 
-        @Override public boolean dockBoundsOnScreen(@NonNull Rect out) {
-            return false;
-        }
 
         @Override public boolean isReducedMotionEnabled() {
             return true;
         }
+    }
+
+    /** The one label carrying the caret, whichever row of the drawer unfolded it. */
+    @Nullable
+    private static TextView findCaretField(@Nullable View view) {
+        if (view instanceof TextView && !(view instanceof EditText)
+            && ((TextView) view).getText().toString().contains("▏")) return (TextView) view;
+        if (!(view instanceof ViewGroup)) return null;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            TextView found = findCaretField(group.getChildAt(i));
+            if (found != null) return found;
+        }
+        return null;
     }
 
     @Nullable

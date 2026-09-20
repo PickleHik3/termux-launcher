@@ -47,7 +47,7 @@ following the global default, and the scratchpad keeps an independent size.
 
 ## Install and tune terminal fonts in the app
 
-Open **Settings → Appearance → Terminal fonts** to choose from fourteen curated families. The picker
+Open **Settings → Look → Terminal fonts** to choose from fourteen curated families. The picker
 shows download size and license, verifies every download with a pinned SHA-256, and applies each
 family's icon, ligature, and feature defaults.
 

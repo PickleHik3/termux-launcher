@@ -6,26 +6,33 @@ import androidx.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 
-/** Immutable session/window/pane projection used by the searchable session browser. */
+/** Immutable session/window/pane projection the sessions drawer is built from. */
 public final class SessionBrowserModel {
 
     public static final class Pane {
         @Nullable public final String cwd;
         @Nullable public final String foreground;
+        /** What the AI coding agent in this pane is doing, or null when it is not running one. */
+        @Nullable public final AgentStatus.State agentState;
 
         public Pane(@Nullable String cwd, @Nullable String foreground) {
+            this(cwd, foreground, null);
+        }
+
+        public Pane(@Nullable String cwd, @Nullable String foreground,
+                    @Nullable AgentStatus.State agentState) {
             this.cwd = emptyToNull(cwd);
             this.foreground = emptyToNull(foreground);
+            this.agentState = agentState;
         }
     }
 
     /**
      * Home-relative display form of a working directory: paths inside the Termux home render as
      * {@code ~} or {@code ~/sub}, while anything above home — the user walked backward out of it —
-     * keeps its full {@code /data/data/com.termux/...} prefix. Display-only; the model and the
-     * search filter keep the raw path.
+     * keeps its full {@code /data/data/com.termux/...} prefix. Display-only; the model keeps the
+     * raw path.
      */
     @NonNull
     public static String displayCwd(@NonNull String cwd) {
@@ -65,6 +72,12 @@ public final class SessionBrowserModel {
         public final boolean current;
         @Nullable public final String name;
         @NonNull public final List<Window> windows;
+        /**
+         * The rolled-up agent reading over every pane of every window: blocked outranks working
+         * outranks idle, and null means no pane here is running an agent. Derived, never passed in,
+         * so the header row can never disagree with the pane lines under it.
+         */
+        @Nullable public final AgentStatus.State agentState;
 
         public Session(int index, boolean current, @Nullable String name,
                        @NonNull List<Window> windows) {
@@ -78,6 +91,11 @@ public final class SessionBrowserModel {
             this.current = current;
             this.name = emptyToNull(name);
             this.windows = Collections.unmodifiableList(new ArrayList<>(windows));
+            AgentStatus.State folded = null;
+            for (Window window : this.windows) {
+                for (Pane pane : window.panes) folded = AgentStatus.rollUp(folded, pane.agentState);
+            }
+            this.agentState = folded;
         }
 
         public int paneCount() {
@@ -88,36 +106,6 @@ public final class SessionBrowserModel {
     }
 
     private SessionBrowserModel() {}
-
-    /** Case-insensitive search over session name plus every pane's CWD and foreground label. */
-    @NonNull
-    public static List<Session> filter(@NonNull List<Session> sessions, @Nullable String query) {
-        String needle = query == null ? "" : query.trim().toLowerCase(Locale.ROOT);
-        if (needle.isEmpty()) return new ArrayList<>(sessions);
-        List<Session> filtered = new ArrayList<>();
-        for (Session session : sessions) {
-            if (contains(session.name, needle)) {
-                filtered.add(session);
-                continue;
-            }
-            boolean matched = false;
-            for (Window window : session.windows) {
-                for (Pane pane : window.panes) {
-                    if (contains(pane.cwd, needle) || contains(pane.foreground, needle)) {
-                        matched = true;
-                        break;
-                    }
-                }
-                if (matched) break;
-            }
-            if (matched) filtered.add(session);
-        }
-        return filtered;
-    }
-
-    private static boolean contains(@Nullable String value, @NonNull String needle) {
-        return value != null && value.toLowerCase(Locale.ROOT).contains(needle);
-    }
 
     @Nullable
     private static String emptyToNull(@Nullable String value) {

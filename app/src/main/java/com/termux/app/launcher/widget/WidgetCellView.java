@@ -1,7 +1,12 @@
 package com.termux.app.launcher.widget;
 
+import android.appwidget.AppWidgetHostView;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.content.res.Resources;
+import android.os.Build;
+import android.graphics.RectF;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.os.SystemClock;
 import android.view.HapticFeedbackConstants;
@@ -42,20 +47,27 @@ public final class WidgetCellView extends FrameLayout {
 
     private final int gutter;
     private final int touchSlop;
+    /** The corner every widget wears, the radius the platform gives widget backgrounds. */
+    private final float cornerRadius;
+    private final Path clipPath = new Path();
+    private final RectF clipRect = new RectF();
     private boolean touchStreamAccepted;
     @Nullable private LongPressListener longPressListener;
     @Nullable private EditorFocusListener editorFocusListener;
     @Nullable private View focusedEditor;
     private final Runnable longPressFire = this::fireLongPress;
     private boolean longPressPending;
+    /** Whether a pane corner may still claim the finger that is down; see {@link #setHoldExempt}. */
+    private boolean holdExempt;
     private boolean streamTakenOver;
     private float longPressDownX, longPressDownY;
     private float lastRawX, lastRawY;
 
     public WidgetCellView(@NonNull Context context) {
         super(context);
-        gutter = Math.max(1, Math.round(2f * getResources().getDisplayMetrics().density));
+        gutter = gutterPx(getResources());
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        cornerRadius = systemWidgetRadius(context);
         setPadding(gutter, gutter, gutter, gutter);
         setClipChildren(true);
         setClipToPadding(true);
@@ -68,6 +80,16 @@ public final class WidgetCellView extends FrameLayout {
     public void setLongPressListener(@Nullable LongPressListener listener) {
         longPressListener = listener;
         if (listener == null) cancelLongPressWatch();
+    }
+
+    /**
+     * A press that landed in one of the page's corner squares is the corner's to claim, so the
+     * cell leaves the long press alone until the corner has given it back. The grid relays this
+     * from the page's frame.
+     */
+    public void setHoldExempt(boolean exempt) {
+        holdExempt = exempt;
+        if (exempt) cancelLongPressWatch();
     }
 
     public void setEditorFocusListener(@Nullable EditorFocusListener listener) {
@@ -121,6 +143,36 @@ public final class WidgetCellView extends FrameLayout {
         addView(child, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
     }
 
+    /** The gutter every cell keeps between its edge and the provider's view. */
+    public static int gutterPx(@NonNull Resources resources) {
+        return Math.max(1, Math.round(2f * resources.getDisplayMetrics().density));
+    }
+
+    /**
+     * The width the provider really draws into. The framework's host view pads every widget on
+     * its own ({@code AppWidgetHostView.setAppWidget}), and that padding is space the provider
+     * never gets — so a size reported from the cell alone told wide widgets they had more room
+     * than they did, and their edges went under the clip.
+     */
+    public int providerContentWidth() {
+        int width = getWidth() - getPaddingLeft() - getPaddingRight();
+        View content = getChildCount() == 1 ? getChildAt(0) : null;
+        if (content instanceof AppWidgetHostView) {
+            width -= content.getPaddingLeft() + content.getPaddingRight();
+        }
+        return Math.max(1, width);
+    }
+
+    /** The height the provider really draws into; see {@link #providerContentWidth()}. */
+    public int providerContentHeight() {
+        int height = getHeight() - getPaddingTop() - getPaddingBottom();
+        View content = getChildCount() == 1 ? getChildAt(0) : null;
+        if (content instanceof AppWidgetHostView) {
+            height -= content.getPaddingTop() + content.getPaddingBottom();
+        }
+        return Math.max(1, height);
+    }
+
     @NonNull public DownRegion classifyDown(float x, float y) {
         if (x < gutter || y < gutter || x >= getWidth() - gutter || y >= getHeight() - gutter) {
             return DownRegion.LAUNCHER_GUTTER;
@@ -140,14 +192,36 @@ public final class WidgetCellView extends FrameLayout {
         return interactive ? DownRegion.INTERACTIVE_PROVIDER : DownRegion.NON_INTERACTIVE_PROVIDER;
     }
 
+    /**
+     * The radius the platform hands widgets for their own backgrounds, so a widget that draws
+     * its corners and one that does not end up the same shape; 16dp where the platform has no
+     * say (before Android 12).
+     */
+    private static float systemWidgetRadius(@NonNull Context context) {
+        float density = context.getResources().getDisplayMetrics().density;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                return context.getResources().getDimension(
+                    android.R.dimen.system_app_widget_background_radius);
+            } catch (Resources.NotFoundException ignored) {
+                // Fall through to the fixed radius.
+            }
+        }
+        return 16f * density;
+    }
+
     @Override protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
         super.onSizeChanged(width, height, oldWidth, oldHeight);
         setClipBounds(new Rect(0, 0, width, height));
+        clipRect.set(0f, 0f, width, height);
+        clipPath.reset();
+        clipPath.addRoundRect(clipRect, cornerRadius, cornerRadius, Path.Direction.CW);
     }
 
     @Override protected void dispatchDraw(@NonNull Canvas canvas) {
         int save = canvas.save();
-        canvas.clipRect(0, 0, getWidth(), getHeight());
+        if (clipPath.isEmpty()) canvas.clipRect(0, 0, getWidth(), getHeight());
+        else canvas.clipPath(clipPath);
         super.dispatchDraw(canvas);
         canvas.restoreToCount(save);
     }
@@ -199,6 +273,7 @@ public final class WidgetCellView extends FrameLayout {
         switch (action) {
             case MotionEvent.ACTION_DOWN:
                 longPressDownX = x; longPressDownY = y;
+                if (holdExempt) break;
                 longPressPending = true;
                 postDelayed(longPressFire,
                     ViewConfiguration.getLongPressTimeout());

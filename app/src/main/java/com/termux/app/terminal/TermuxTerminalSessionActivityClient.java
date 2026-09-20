@@ -9,33 +9,36 @@ import android.media.SoundPool;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
-import android.widget.ListView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import com.termux.R;
 import com.termux.app.notice.AppNotice;
+import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
 import com.termux.shared.interact.ShareUtils;
+import com.termux.shared.termux.shell.TermuxShellManager;
 import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.app.TermuxService;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.terminal.io.BellHandler;
 import com.termux.shared.logger.Logger;
 import com.termux.app.theme.LauncherSchemeTheme;
+import com.termux.app.theme.templates.PaletteSet;
+import com.termux.app.theme.templates.ThemeTemplates;
 import com.termux.terminal.TerminalColors;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Properties;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * The {@link TerminalSessionClient} implementation that may require an {@link Activity} for its
@@ -58,12 +61,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     public static final int MAX_SESSIONS = 32;
     private static final long FOREGROUND_REFRESH_DEFER_MS = 120L;
-    private static final ExecutorService MATERIAL_COLOR_FILE_EXECUTOR =
-        Executors.newSingleThreadExecutor(runnable -> {
-            Thread thread = new Thread(runnable, "termux-material-color-writer");
-            thread.setDaemon(true);
-            return thread;
-        });
 
     private SoundPool mBellSoundPool;
 
@@ -74,6 +71,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private boolean mTerminalScreenUpdatePending;
     /** Sessions with a coalesced screen-update posted but not yet drawn (one entry per pane). */
     private final java.util.Set<TerminalSession> mPendingScreenUpdateSessions = new java.util.HashSet<>();
+    /**
+     * Sessions whose screen moved while the terminal place was off the wall, so no redraw was
+     * posted for them. One entry per pane; each is drawn exactly once when the terminal can be
+     * seen again, whatever the shell printed in the meantime.
+     */
+    private final java.util.Set<TerminalSession> mDeferredScreenUpdateSessions = new java.util.HashSet<>();
+    /** Scratch for {@link #paneCanBeSeen}, so the on-screen test allocates nothing per burst. */
+    private final android.graphics.Rect mPaneVisibleRect = new android.graphics.Rect();
     private boolean mForegroundRefreshPending;
     private int mLastMaterialTerminalPaletteSignature;
     @NonNull private String mLastFontErrorSummary = "";
@@ -141,6 +146,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         releaseBellSoundPool();
         mTerminalScreenUpdatePending = false;
         mPendingScreenUpdateSessions.clear();
+        mDeferredScreenUpdateSessions.clear();
         mForegroundRefreshPending = false;
         mUiHandler.removeCallbacks(mForegroundTerminalRefreshRunnable);
     }
@@ -167,8 +173,19 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mHost.noteShellActivity(changedSession);
         // Split-pane: redraw whichever pane is showing the changed session (may be the
         // non-active pane). Coalesce per-session so two live panes never drop each other's frames.
-        if (mHost.viewForSession(changedSession) == null)
+        com.termux.view.TerminalView changedView = mHost.viewForSession(changedSession);
+        if (changedView == null)
             return;
+        // A shell printing into a terminal that is a whole place away — the wall rests on Widgets
+        // or on the Display — is asking for a repaint of pixels nobody can see. Idle on the Home
+        // place that was a re-render per output burst, sixteen times a second, each one a full
+        // TerminalView.onDraw with its URL scan behind it. Remember the pane instead and draw it
+        // once when the terminal comes back; everything above this line — the activity's notion of
+        // shell activity, the emulator, the scrollback, titles and bells — is untouched.
+        if (!mHost.isTerminalPlaceOnScreen() && !paneCanBeSeen(changedView)) {
+            mDeferredScreenUpdateSessions.add(changedSession);
+            return;
+        }
         if (!mPendingScreenUpdateSessions.add(changedSession))
             return;
         mTerminalScreenUpdatePending = true;
@@ -177,9 +194,16 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             mTerminalScreenUpdatePending = !mPendingScreenUpdateSessions.isEmpty();
             if (!mHost.isVisible())
                 return;
+            // The wall left for another place between the post and this frame: hand the pane to
+            // the deferred set rather than drawing it, so the one redraw happens on return.
             com.termux.view.TerminalView view = mHost.viewForSession(changedSession);
-            if (view != null)
-                view.onScreenUpdated();
+            if (view == null)
+                return;
+            if (!mHost.isTerminalPlaceOnScreen() && !paneCanBeSeen(view)) {
+                mDeferredScreenUpdateSessions.add(changedSession);
+                return;
+            }
+            drawScreen(view);
         };
         // Under a flood of output the main thread is mostly *parsing* bytes, and where this redraw is
         // posted decides how it interleaves with that parsing. Measured over four configurations:
@@ -197,12 +221,61 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         boolean pumpFrames = mHost.preferences() != null
             && mHost.preferences().isLazyModeEnabled();
         if (pumpFrames) {
-            com.termux.view.TerminalView pendingView =
-                mHost.viewForSession(changedSession);
-            pendingView.postOnAnimation(redraw);
+            changedView.postOnAnimation(redraw);
         } else {
             mUiHandler.post(redraw);
         }
+    }
+
+    /**
+     * The terminal place can be seen again — the wall moved, committed to the terminal, or came to
+     * rest on it. Every pane whose screen changed while it was away is drawn once, here and not on
+     * a post: a slide towards the terminal must not show a frame of stale text on the way in.
+     *
+     * <p>Called for any wall movement, so it has to be free when nothing was deferred, which it is:
+     * an empty set and a return.
+     */
+    public void onTerminalPlaceMayBeVisible() {
+        if (mDeferredScreenUpdateSessions.isEmpty())
+            return;
+        if (!mHost.isVisible())
+            return;
+        // Taken and emptied before a single pane is drawn, so a redraw that lands us back here —
+        // an accessibility event, a listener — finds nothing owed rather than the same list again.
+        java.util.List<TerminalSession> deferred =
+            new ArrayList<>(mDeferredScreenUpdateSessions);
+        mDeferredScreenUpdateSessions.clear();
+        for (TerminalSession session : deferred) {
+            com.termux.view.TerminalView view = mHost.viewForSession(session);
+            if (view != null)
+                drawScreen(view);
+        }
+    }
+
+    /**
+     * Whether this pane really has pixels on screen, asked of the view hierarchy rather than of the
+     * wall's own record of which place it rests on.
+     *
+     * <p>The wall's page is bookkeeping and can disagree with what the user is looking at; when it
+     * does, believing it strands the terminal, because output is then filed for a redraw that only
+     * the next wall movement delivers — the screen sits frozen until something jogs it, and a
+     * keyboard opening is what people find. So the wall may only withhold a redraw for a pane the
+     * hierarchy also says is not showing. Off on another place the two agree, the pane is clipped
+     * away, and the saved repaints are saved exactly as before.
+     */
+    @VisibleForTesting
+    boolean paneCanBeSeen(@NonNull com.termux.view.TerminalView view) {
+        return view.isShown() && view.getGlobalVisibleRect(mPaneVisibleRect);
+    }
+
+    /**
+     * Paint a pane's screen. The one line of this class that actually draws, kept as its own call
+     * so a JVM test can count redraws: {@link com.termux.view.TerminalView} is final, so there is
+     * no stub of it to count them on.
+     */
+    @VisibleForTesting
+    void drawScreen(@NonNull com.termux.view.TerminalView view) {
+        view.onScreenUpdated();
     }
 
     private boolean shouldDeferForegroundScreenRefresh() {
@@ -223,12 +296,19 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // reports progress, which made the notice fire several times a second for one background job.
         // A window of this session says so on its own pill; another session's job gets a standing row
         // in the corner stack. Neither needs a transient copy of the same news.
+        //
+        // The chips do care: an agent's title is how it says its turn started or ended, so the bar
+        // is repainted on the same coalesced beat as output rather than at the next label poll.
+        mHost.scheduleWindowBarRefresh();
         mHost.syncBackgroundProcessStack();
         termuxSessionListNotifyUpdated();
     }
 
     @Override
     public void onSessionFinished(@NonNull TerminalSession finishedSession) {
+        // Nothing to paint for a shell that has ended, and no reason to hold it here until the
+        // wall next moves.
+        mDeferredScreenUpdateSessions.remove(finishedSession);
         TermuxService service = mHost.service();
         if (service == null || service.wantsToStop()) {
             // The service wants to stop as soon as possible.
@@ -273,7 +353,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             // Show indicator for non-current sessions that exit.
             // Verify that session was not removed before we got told about it finishing:
             if (index >= 0)
-                mHost.showSessionSwitchIndicator(toToastTitle(finishedSession) + " - exited");
+                mHost.showTerminalNotice(toToastTitle(finishedSession) + " - exited",
+                    AppNoticeItem.Hold.INFO);
         }
         if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
             // On Android TV devices we need to use older behaviour because we may
@@ -304,6 +385,21 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         String text = ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
         if (text != null)
             mHost.focusedView().mEmulator.paste(text);
+    }
+
+    /**
+     * Answer an OSC 52 clipboard read query ({@code ESC ] 52 ; c ; ? BEL}). Null (not the launcher
+     * being visible, the setting off, or nothing on the clipboard) reads as an empty clipboard to
+     * the caller, which still answers the query rather than leaving the program hanging.
+     */
+    @Override
+    public String onReadTextFromClipboard(@NonNull TerminalSession session) {
+        if (!mHost.isVisible())
+            return null;
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(mContext, false);
+        if (preferences == null || !preferences.isOsc52ClipboardReadEnabled())
+            return null;
+        return ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
     }
 
     @Override
@@ -471,9 +567,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             // and two stacked notices for one keypress read as noise. The indicator view stays for
             // notices that carry real news — an exited session, a refused split.
         }
-        // We call the following even when the session is already being displayed since config may
-        // be stale, like current session not selected or scrolled to.
-        checkAndScrollToSession(session);
         updateBackgroundColor();
     }
 
@@ -583,9 +676,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             // can do nothing about mid-dialog. The window and pane paths report this on the notice
             // chip; match them. This branch returns before createShellForCwd, so the same event
             // never produces two presentations.
-            mHost.showSessionSwitchIndicator(
+            mHost.showTerminalNotice(
                 mContext.getString(R.string.title_max_terminals_reached) + " — "
-                    + mContext.getString(R.string.msg_max_terminals_reached));
+                    + mContext.getString(R.string.msg_max_terminals_reached),
+                AppNoticeItem.Hold.REFUSAL);
             return false;
         } else {
             if (workingDirectory == null) {
@@ -596,7 +690,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 return false;
             TerminalSession newTerminalSession = newTermuxSession.getTerminalSession();
             setCurrentSession(newTerminalSession);
-            mHost.closeDrawers();
             return true;
         }
     }
@@ -665,24 +758,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mHost.notifySessionListUpdated();
     }
 
-    public void checkAndScrollToSession(TerminalSession session) {
-        if (!mHost.isVisible())
-            return;
-        TermuxService service = mHost.service();
-        if (service == null)
-            return;
-        // Use the drawer-visible index (secondary panes are filtered out).
-        final int indexOfSession = mHost.sessions().indexOf(session);
-        if (indexOfSession < 0)
-            return;
-        final ListView termuxSessionsListView = mHost.sessions().listView();
-        if (termuxSessionsListView == null)
-            return;
-        termuxSessionsListView.setItemChecked(indexOfSession, true);
-        // Delay is necessary otherwise sometimes scroll to newly added session does not happen
-        termuxSessionsListView.postDelayed(() -> termuxSessionsListView.smoothScrollToPosition(indexOfSession), 1000);
-    }
-
     String toToastTitle(TerminalSession session) {
         TermuxService service = mHost.service();
         if (service == null)
@@ -733,17 +808,11 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                     MaterialTerminalColorScheme.signature(mContext, level);
                 // Built here, on the main thread, and handed over as finished values: the writer thread
                 // must not touch the theme or resources, and this way the files describe the same
-                // palette the terminal just took.
-                final Properties exported =
-                    MaterialTerminalColorScheme.createMaterialRoleProperties(mContext, props, level);
-                MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
-                    try {
-                        MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
-                    } catch (Exception e) {
-                        Logger.logStackTraceWithMessage(LOG_TAG,
-                            "Error writing material color files", e);
-                    }
-                });
+                // palette the terminal just took. The dark and light halves are derived beside it,
+                // off forced-mode configuration contexts, so the templates can dress a tool for the
+                // mode the phone is not in.
+                ThemeTemplates.exportPaletteAndRunPassAsync(mContext,
+                    MaterialTerminalColorScheme.createPaletteSet(mContext, level, props));
             } else {
                 props = new Properties();
                 mLastMaterialTerminalPaletteSignature = 0;
@@ -777,19 +846,39 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // thread rather than costing the activity two stats and a palette build during onCreate.
         final Properties snapshot = new Properties();
         snapshot.putAll(terminalProps);
-        MATERIAL_COLOR_FILE_EXECUTOR.execute(() -> {
-            try {
-                LinkedHashMap<String, Integer> tokens = LauncherSchemeTheme.tokens();
-                if (tokens == null) return;
-                Properties exported = LauncherSchemeTheme.exportProperties(tokens);
-                for (String key : snapshot.stringPropertyNames()) {
-                    exported.setProperty("terminal_" + key, snapshot.getProperty(key));
-                }
-                MaterialTerminalColorScheme.writeMaterialColorFiles(exported);
-            } catch (Exception e) {
-                Logger.logStackTraceWithMessage(LOG_TAG, "Error writing scheme color files", e);
+        ThemeTemplates.exportPaletteAndRunPassAsync(mContext, () -> {
+            LinkedHashMap<String, Integer> tokens = LauncherSchemeTheme.tokens();
+            if (tokens == null) return null;
+            Properties exported = LauncherSchemeTheme.exportProperties(tokens);
+            for (String key : snapshot.stringPropertyNames()) {
+                exported.setProperty("terminal_" + key, snapshot.getProperty(key));
             }
+            // One palette, and honestly so: a scheme file is a scheme file whatever the phone's
+            // night setting says, so there is no second mode to derive and no mode file to write.
+            return PaletteSet.of(exported);
         });
+    }
+
+    /**
+     * The terminal palette inside an exported role file: the {@code terminal_}-prefixed keys, with
+     * the prefix taken off and everything that is not a palette key dropped.
+     *
+     * <p>The export also carries noctalia's aliases — {@code terminal_normal_black} and friends,
+     * and {@code terminal_selection_bg} — which are descriptions of the palette rather than slots in
+     * it. {@code TerminalColorScheme.updateWith()} throws on the first of those, mid-iteration, so
+     * they are dropped here rather than half applied there.
+     */
+    @NonNull
+    @VisibleForTesting
+    static Properties terminalColorsOf(@NonNull Properties exported) {
+        Properties terminal = new Properties();
+        String prefix = "terminal_";
+        for (String key : exported.stringPropertyNames()) {
+            if (!key.startsWith(prefix)) continue;
+            String name = key.substring(prefix.length());
+            if (isTerminalColorKey(name)) terminal.setProperty(name, exported.getProperty(key));
+        }
+        return terminal;
     }
 
     /**
@@ -900,20 +989,86 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         applyTerminalColors();
     }
 
+    /**
+     * Reload the palette in every live session.
+     *
+     * <p>Through {@code resetColorsToScheme} rather than {@code mColors.reset()} directly: that is
+     * the emulator's own door, and it repaints and then reports the flip to a program that asked for
+     * mode 2031 ({@code CSI ?997;1|2 n}). The report is per class change — see
+     * {@code TerminalEmulator.notifyColorPreferenceIfChanged}, which keeps {@code mLastReportedDark}
+     * and returns without writing when the new background is the same dark-or-light as the last one
+     * reported — so the activity's own recreate reaching here after the background refresh already
+     * pushed the same palette is a repaint and nothing more, not a second ping.
+     */
     private void resetAllSessionColors() {
         TermuxService service = mHost.service();
         if (service != null) {
             for (TermuxSession termuxSession : service.getTermuxSessions()) {
                 TerminalSession session = termuxSession.getTerminalSession();
                 if (session != null && session.getEmulator() != null) {
-                    session.getEmulator().mColors.reset();
+                    session.getEmulator().resetColorsToScheme();
                 }
             }
             return;
         }
         TerminalSession session = mHost.currentSession();
         if (session != null && session.getEmulator() != null) {
-            session.getEmulator().mColors.reset();
+            session.getEmulator().resetColorsToScheme();
+        }
+    }
+
+    /**
+     * Push an exported palette into every live session with no activity in sight.
+     *
+     * <p>The background day/night refresh (D2) has no session client and no service binding of its
+     * own — it is the application object reacting to a configuration change while the activity is
+     * merely stopped. The sessions are still there though, in the shell manager the service keeps
+     * them in, and a shell whose colours moved has to be told: without this the terminal kept the
+     * palette the wallpaper wore before the flip until the user reopened the launcher, however
+     * fresh the exported files beside it were.
+     *
+     * <p>Must run on the main thread: the session list is the one an activity's adapter observes.
+     */
+    public static void pushExportedPaletteToLiveSessions(@NonNull Properties exported) {
+        Properties terminal = terminalColorsOf(exported);
+        if (terminal.isEmpty()) return;
+        TerminalColors.COLOR_SCHEME.updateWith(terminal);
+        TermuxShellManager shellManager = TermuxShellManager.getShellManager();
+        if (shellManager == null) return;
+        // Copied: a session that dies while its colours are being reset must not take the loop with
+        // it, and this list is only ever mutated on this thread.
+        for (TermuxSession termuxSession : new ArrayList<>(shellManager.mTermuxSessions)) {
+            if (termuxSession == null) continue;
+            TerminalSession session = termuxSession.getTerminalSession();
+            if (session != null && session.getEmulator() != null) {
+                session.getEmulator().resetColorsToScheme();
+            }
+        }
+    }
+
+    /**
+     * Push the "Trim trailing spaces on wrapped lines" preference into every live session's
+     * emulator, the same way {@link #resetAllSessionColors()} pushes a palette change: an
+     * emulator has no preferences access of its own, and a toggle should not need its shell
+     * reopened to take effect. Called for a newly shown session and again on the settings-return
+     * refresh.
+     */
+    public void applyTrimWrappedTrailingSpacesPreference() {
+        boolean enabled = mHost.preferences() == null
+            || mHost.preferences().isTrimWrappedTrailingSpacesEnabled();
+        TermuxService service = mHost.service();
+        if (service != null) {
+            for (TermuxSession termuxSession : service.getTermuxSessions()) {
+                TerminalSession session = termuxSession.getTerminalSession();
+                if (session != null && session.getEmulator() != null) {
+                    session.getEmulator().setTrimWrappedTrailingSpaces(enabled);
+                }
+            }
+            return;
+        }
+        TerminalSession session = mHost.currentSession();
+        if (session != null && session.getEmulator() != null) {
+            session.getEmulator().setTrimWrappedTrailingSpaces(enabled);
         }
     }
 

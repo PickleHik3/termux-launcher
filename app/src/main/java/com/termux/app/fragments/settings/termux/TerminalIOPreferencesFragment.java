@@ -23,7 +23,7 @@ public class TerminalIOPreferencesFragment extends MaterialPreferenceFragment {
         preferenceManager.setPreferenceDataStore(TerminalIOPreferencesDataStore.getInstance(context));
         setPreferencesFromResource(R.xml.termux_terminal_io_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
-        // Same two switches as the Terminal & status page, so they answer the same Shizuku check.
+        // Same two switches as the Status bar page, so they answer the same Shizuku check.
         StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_cpu"));
         StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_ram"));
     }
@@ -75,6 +75,12 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "compatibility_mode":
                 mPreferences.setCompatibilityModeEnabled(value);
                 break;
+            case "terminal_osc52_clipboard_read_enabled":
+                mPreferences.setOsc52ClipboardReadEnabled(value);
+                break;
+            case "terminal_trim_wrapped_trailing_spaces":
+                mPreferences.setTrimWrappedTrailingSpacesEnabled(value);
+                break;
             case "top_pane_clock_am_pm":
                 mPreferences.setTopPaneClockAmPmEnabled(value);
                 break;
@@ -121,6 +127,10 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isSoftKeyboardEnabledOnlyIfNoHardware();
             case "compatibility_mode":
                 return mPreferences.isCompatibilityModeEnabled();
+            case "terminal_osc52_clipboard_read_enabled":
+                return mPreferences.isOsc52ClipboardReadEnabled();
+            case "terminal_trim_wrapped_trailing_spaces":
+                return mPreferences.isTrimWrappedTrailingSpacesEnabled();
             case "top_pane_clock_am_pm":
                 return mPreferences.isTopPaneClockAmPmEnabled();
             case "show_key_hints":

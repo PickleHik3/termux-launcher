@@ -21,6 +21,7 @@ public enum AppDrawerCategory {
     TRAVEL("travel", R.string.app_drawer_category_travel, false),
     INFORMATION_READING("information_reading", R.string.app_drawer_category_information_reading,
         false),
+    LINUX_APPS("linux_apps", R.string.app_drawer_category_linux_apps, false),
     OTHER("other", R.string.app_drawer_category_other, false);
 
     @NonNull public final String slug;

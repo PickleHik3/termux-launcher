@@ -125,14 +125,58 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DEFAULT_BUTTONS, value, false);
     }
 
+    /**
+     * Where the three sizes a place owns actually live once the launcher has a layout store.
+     *
+     * <p>Dock height, keyboard height and the keyboard's chin are laid out per place and per
+     * orientation, not shared. The launcher installs the layout store here through
+     * {@link #setPlaceSizes}, so the getters below keep their signatures and start answering for
+     * the place and orientation on screen — the same trick that makes the look layer resolve
+     * without a per-place branch above it. Nothing installed leaves the shared values the launcher
+     * kept before, which is what the Settings screens and the tests read.
+     */
+    public interface PlaceSizes {
+        float dockHeightScale();
+        void setDockHeightScale(float value);
+        float keyboardHeightScale();
+        void setKeyboardHeightScale(float value);
+        int keyboardChinDp();
+        void setKeyboardChinDp(int value);
+    }
+
+    @Nullable private PlaceSizes mPlaceSizes;
+
+    /** Hands the three per-place sizes to the layout store. Null puts them back on the file. */
+    public void setPlaceSizes(@Nullable PlaceSizes placeSizes) {
+        mPlaceSizes = placeSizes;
+    }
+
     public float getAppLauncherBarHeightScale() {
-        float heightScale = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT);
-        return DataUtils.rangedOrDefault(heightScale, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT, 0.4f, 3.0f);
+        if (mPlaceSizes != null) return mPlaceSizes.dockHeightScale();
+        return getSharedAppLauncherBarHeightScale();
     }
 
     public void setAppLauncherBarHeightScale(float value) {
+        if (mPlaceSizes != null) {
+            mPlaceSizes.setDockHeightScale(value);
+            return;
+        }
         SharedPreferenceUtils.setFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT,
-            Math.max(0.4f, Math.min(3.0f, value)), false);
+            clampAppLauncherBarHeightScale(value), false);
+    }
+
+    /** The dock height the launcher kept for everything, before it became a layout value. */
+    public float getSharedAppLauncherBarHeightScale() {
+        float heightScale = SharedPreferenceUtils.getFloat(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_BAR_HEIGHT, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT);
+        return DataUtils.rangedOrDefault(heightScale, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT,
+            TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT, TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT);
+    }
+
+    public static float clampAppLauncherBarHeightScale(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value))
+            return TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
+        return Math.max(TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT,
+            Math.min(TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT, value));
     }
 
     public String getAppLauncherDockStyle() {
@@ -360,6 +404,38 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             DataUtils.clamp(value, 0, 100), false);
     }
 
+    /**
+     * The starting magnification for a device that has never set the wallpaper alignment slider,
+     * as a percent. Nothing OS magnifies the wallpaper at composite time and ignores a request not
+     * to; every other ROM measured so far renders it unzoomed.
+     *
+     * @param manufacturer {@link Build#MANUFACTURER}, or {@code null} where it is unknown
+     */
+    public static int defaultWallpaperRenderZoom(@Nullable String manufacturer) {
+        return "nothing".equalsIgnoreCase(manufacturer)
+            ? TERMUX_APP.DEFAULT_WALLPAPER_RENDER_ZOOM_NOTHING_OS
+            : TERMUX_APP.DEFAULT_WALLPAPER_RENDER_ZOOM;
+    }
+
+    public static int clampWallpaperRenderZoom(int value) {
+        return DataUtils.clamp(value, TERMUX_APP.MIN_WALLPAPER_RENDER_ZOOM,
+            TERMUX_APP.MAX_WALLPAPER_RENDER_ZOOM);
+    }
+
+    /**
+     * Magnification of the wallpaper copy behind the glass surfaces, as a percent of its unzoomed
+     * size; see {@link TERMUX_APP#KEY_WALLPAPER_RENDER_ZOOM} for why the user owns it.
+     */
+    public int getWallpaperRenderZoom() {
+        return clampWallpaperRenderZoom(SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_WALLPAPER_RENDER_ZOOM, defaultWallpaperRenderZoom(Build.MANUFACTURER)));
+    }
+
+    public void setWallpaperRenderZoom(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_RENDER_ZOOM,
+            clampWallpaperRenderZoom(value), false);
+    }
+
     /** Gap between tiled terminal panes, in dp. */
     public int getTerminalPaneGap() {
         return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
@@ -501,6 +577,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL, value, false);
     }
 
+    public boolean isOsc52ClipboardReadEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED, TERMUX_APP.DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED);
+    }
+
+    public void setOsc52ClipboardReadEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED, value, false);
+    }
+
+    public boolean isTrimWrappedTrailingSpacesEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES, TERMUX_APP.DEFAULT_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES);
+    }
+
+    public void setTrimWrappedTrailingSpacesEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES, value, false);
+    }
+
     public boolean isAppLauncherDisplayAppNamesEnabled() {
         // App names are always shown; no longer user-configurable.
         return true;
@@ -605,6 +699,38 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_APP_LAUNCHER_EXTRA_KEYS_ROW_ENABLED, value, false);
     }
 
+    /** Columns across a widget page, clamped to the range the grid can lay out. */
+    public int getAppLauncherWidgetGridColumns() {
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_COLUMNS);
+        return Math.max(TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+            Math.min(TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS, value));
+    }
+
+    public void setAppLauncherWidgetGridColumns(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+            Math.max(TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+                Math.min(TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS, value)), false);
+    }
+
+    /** Rows down a widget page, clamped to the range the grid can lay out. */
+    public int getAppLauncherWidgetGridRows() {
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_GRID_ROWS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_WIDGET_GRID_ROWS);
+        return Math.max(TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
+            Math.min(TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS, value));
+    }
+
+    public void setAppLauncherWidgetGridRows(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_GRID_ROWS,
+            Math.max(TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
+                Math.min(TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS, value)), false);
+    }
+
     public boolean isAppLauncherWidgetPaneEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED,
@@ -614,6 +740,187 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setAppLauncherWidgetPaneEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED, value, false);
+    }
+
+    public boolean isX11DisplayEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_ENABLED, TERMUX_APP.DEFAULT_X11_DISPLAY_ENABLED);
+    }
+
+    public void setX11DisplayEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_ENABLED, value, false);
+    }
+
+    @NonNull
+    public String getX11DisplayCommand() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_COMMAND, TERMUX_APP.DEFAULT_X11_DISPLAY_COMMAND, true);
+        return value == null || value.trim().isEmpty()
+            ? TERMUX_APP.DEFAULT_X11_DISPLAY_COMMAND : value.trim();
+    }
+
+    public void setX11DisplayCommand(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_COMMAND, value, false);
+    }
+
+    public boolean isX11DisplayAutostartEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART, TERMUX_APP.DEFAULT_X11_DISPLAY_AUTOSTART);
+    }
+
+    public void setX11DisplayAutostartEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART, value, false);
+    }
+
+    public boolean isX11SetDisplayEnvEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_SET_DISPLAY_ENV, TERMUX_APP.DEFAULT_X11_SET_DISPLAY_ENV);
+    }
+
+    public void setX11SetDisplayEnvEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_SET_DISPLAY_ENV, value, false);
+    }
+
+    /** 0 means "leave it to the server". */
+    public int getX11DisplayDpi() {
+        return Math.max(0, SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_DPI, TERMUX_APP.DEFAULT_X11_DISPLAY_DPI));
+    }
+
+    public void setX11DisplayDpi(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DISPLAY_DPI, Math.max(0, value), false);
+    }
+
+    public boolean isX11LegacyDrawingEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_LEGACY_DRAWING, TERMUX_APP.DEFAULT_X11_LEGACY_DRAWING);
+    }
+
+    public void setX11LegacyDrawingEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_LEGACY_DRAWING, value, false);
+    }
+
+    public boolean isX11ForceBgraEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_FORCE_BGRA, TERMUX_APP.DEFAULT_X11_FORCE_BGRA);
+    }
+
+    public void setX11ForceBgraEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_FORCE_BGRA, value, false);
+    }
+
+    /** Whether a tap on a text field inside the display raises the keyboard. */
+    public boolean isX11KeyboardFollowsTextEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_KEYBOARD_FOLLOWS_TEXT, TERMUX_APP.DEFAULT_X11_KEYBOARD_FOLLOWS_TEXT);
+    }
+
+    public void setX11KeyboardFollowsTextEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_KEYBOARD_FOLLOWS_TEXT, value, false);
+    }
+
+    /** Whether the Display place types with the phone's own keyboard instead of the launcher's. */
+    public boolean isX11AndroidKeyboardEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_ANDROID_KEYBOARD, TERMUX_APP.DEFAULT_X11_ANDROID_KEYBOARD);
+    }
+
+    public void setX11AndroidKeyboardEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_ANDROID_KEYBOARD, value, false);
+    }
+
+    public boolean isX11DrawerAppsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DRAWER_APPS, TERMUX_APP.DEFAULT_X11_DRAWER_APPS);
+    }
+
+    public void setX11DrawerAppsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_X11_DRAWER_APPS, value, false);
+    }
+
+    /** Trimmed; empty means no window manager. */
+    @NonNull
+    public String getX11WindowManager() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_WINDOW_MANAGER, TERMUX_APP.DEFAULT_X11_WINDOW_MANAGER, false);
+        return value == null ? "" : value.trim();
+    }
+
+    public void setX11WindowManager(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_WINDOW_MANAGER, value == null ? "" : value.trim(), false);
+    }
+
+    /**
+     * @return {@code "bottom"}, {@code "left"} or {@code "right"}; anything else stored reads back
+     * as the bottom row, so the keys are never nowhere.
+     */
+    @NonNull
+    public String getX11ExtraKeysSide() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE, TERMUX_APP.DEFAULT_X11_EXTRA_KEYS_SIDE, true);
+        return normalizeX11ExtraKeysSide(value);
+    }
+
+    public void setX11ExtraKeysSide(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_EXTRA_KEYS_SIDE, normalizeX11ExtraKeysSide(value), false);
+    }
+
+    @NonNull
+    private static String normalizeX11ExtraKeysSide(String value) {
+        if (TERMUX_APP.X11_EXTRA_KEYS_SIDE_LEFT.equals(value)) return TERMUX_APP.X11_EXTRA_KEYS_SIDE_LEFT;
+        if (TERMUX_APP.X11_EXTRA_KEYS_SIDE_RIGHT.equals(value)) return TERMUX_APP.X11_EXTRA_KEYS_SIDE_RIGHT;
+        return TERMUX_APP.X11_EXTRA_KEYS_SIDE_BOTTOM;
+    }
+
+    public boolean areX11DefaultsApplied() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_DEFAULTS_APPLIED, false);
+    }
+
+    public void setX11DefaultsApplied(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_X11_DEFAULTS_APPLIED, value, false);
+    }
+
+    /** The name of the wall place last rested on, or null when none was recorded. */
+    @Nullable
+    public String getWallLastPage() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_WALL_LAST_PAGE, null, false);
+        return value == null || value.trim().isEmpty() ? null : value.trim();
+    }
+
+    public void setWallLastPage(@Nullable String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_WALL_LAST_PAGE,
+            value == null ? "" : value, false);
+    }
+
+    /** Whether the user has ever set the display's text size; unset reads as the default 0. */
+    public boolean hasX11DisplayDpi() {
+        return mSharedPreferences != null && mSharedPreferences.contains(TERMUX_APP.KEY_X11_DISPLAY_DPI);
+    }
+
+    /** One of termux, arch, ubuntu, debian, fedora; anything else reads as termux. */
+    public String getX11RuntimeBadge() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_X11_RUNTIME_BADGE, TERMUX_APP.DEFAULT_X11_RUNTIME_BADGE, false);
+        return value == null || value.trim().isEmpty()
+            ? TERMUX_APP.DEFAULT_X11_RUNTIME_BADGE : value.trim();
+    }
+
+    public void setX11RuntimeBadge(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_X11_RUNTIME_BADGE,
+            value == null ? TERMUX_APP.DEFAULT_X11_RUNTIME_BADGE : value.trim(), false);
     }
 
     public String getAppLauncherUseCaseMode() {
@@ -987,7 +1294,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         "accent_aigu", "accent_grave", "accent_circonflexe", "accent_tilde",
         "accent_cedille", "accent_trema", "accent_ring", "accent_caron",
         "accent_macron", "accent_ogonek", "accent_breve", "accent_dot_above",
-        "accent_double_aigu", "accent_slash", "accent_bar"
+        "accent_double_aigu", "accent_slash", "accent_bar",
+        // A launcher action offered in the same catalogue: it steps the keyboard between docked,
+        // floating and split. The canonical order here is what a selection is written back in, so
+        // a name missing from this list would be dropped on save.
+        "tool:keyboard.cycle_form"
     };
 
     /**
@@ -1101,12 +1412,21 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public float getInAppKeyboardHeightScale() {
+        if (mPlaceSizes != null) return mPlaceSizes.keyboardHeightScale();
+        return getSharedInAppKeyboardHeightScale(isLandscapeOrientation());
+    }
+
+    /**
+     * The keyboard height the launcher kept globally for one orientation, whatever place is on
+     * screen. Landscape falls back to portrait's number, which is what it always did.
+     */
+    public float getSharedInAppKeyboardHeightScale(boolean landscape) {
         float defaultValue = SharedPreferenceUtils.getFloat(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE,
             getDefaultInAppKeyboardHeightScale());
         if (Float.isNaN(defaultValue) || Float.isInfinite(defaultValue))
             defaultValue = getDefaultInAppKeyboardHeightScale();
-        if (!isLandscapeOrientation())
+        if (!landscape)
             return clampInAppKeyboardHeightScale(defaultValue);
         float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE_LANDSCAPE,
@@ -1116,6 +1436,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public void setInAppKeyboardHeightScale(float value) {
+        if (mPlaceSizes != null) {
+            mPlaceSizes.setKeyboardHeightScale(value);
+            return;
+        }
         SharedPreferenceUtils.setFloat(mSharedPreferences,
             isLandscapeOrientation()
                 ? TERMUX_APP.KEY_IN_APP_KEYBOARD_HEIGHT_SCALE_LANDSCAPE
@@ -1133,6 +1457,102 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
         return Math.max(TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
             Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE, value));
+    }
+
+    /**
+     * How wide a floating keyboard is, as a fraction of the width it could take. One value per
+     * orientation, each with its own default and its own key: unlike the height scale, landscape
+     * does not fall back to what portrait was set to, because a fraction that suits one is wrong
+     * for the other.
+     */
+    public float getInAppKeyboardFloatingWidthScale() {
+        boolean landscape = isLandscapeOrientation();
+        float defaultValue = landscape
+            ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE_LANDSCAPE
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE;
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            landscape ? TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE_LANDSCAPE
+                : TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE,
+            defaultValue);
+        if (Float.isNaN(value) || Float.isInfinite(value)) return defaultValue;
+        return clampInAppKeyboardFloatingWidthScale(value);
+    }
+
+    public void setInAppKeyboardFloatingWidthScale(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences,
+            isLandscapeOrientation()
+                ? TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE_LANDSCAPE
+                : TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE,
+            clampInAppKeyboardFloatingWidthScale(value), false);
+    }
+
+    public static float clampInAppKeyboardFloatingWidthScale(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value))
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE;
+        return Math.max(TERMUX_APP.MIN_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE,
+            Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE, value));
+    }
+
+    /**
+     * How tall a floating keyboard's rows are, as a multiplier on the height the same keyboard
+     * has docked. One value per orientation and its own key each, like the floating width beside
+     * it: the drag on the card's corner and the Settings slider write the same number.
+     */
+    public float getInAppKeyboardFloatingHeightScale() {
+        boolean landscape = isLandscapeOrientation();
+        float defaultValue = landscape
+            ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE_LANDSCAPE
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE;
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            landscape ? TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE_LANDSCAPE
+                : TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE,
+            defaultValue);
+        if (Float.isNaN(value) || Float.isInfinite(value)) return defaultValue;
+        return clampInAppKeyboardFloatingHeightScale(value);
+    }
+
+    public void setInAppKeyboardFloatingHeightScale(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences,
+            isLandscapeOrientation()
+                ? TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE_LANDSCAPE
+                : TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE,
+            clampInAppKeyboardFloatingHeightScale(value), false);
+    }
+
+    public static float clampInAppKeyboardFloatingHeightScale(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value))
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE;
+        return Math.max(TERMUX_APP.MIN_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE,
+            Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE, value));
+    }
+
+    /** The gap a split keyboard parts its rows by, as a fraction of the keyboard's width. */
+    public float getInAppKeyboardSplitGapFraction() {
+        boolean landscape = isLandscapeOrientation();
+        float defaultValue = landscape
+            ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION_LANDSCAPE
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION;
+        float value = SharedPreferenceUtils.getFloat(mSharedPreferences,
+            landscape ? TERMUX_APP.KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION_LANDSCAPE
+                : TERMUX_APP.KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION,
+            defaultValue);
+        if (Float.isNaN(value) || Float.isInfinite(value)) return defaultValue;
+        return clampInAppKeyboardSplitGapFraction(value);
+    }
+
+    public void setInAppKeyboardSplitGapFraction(float value) {
+        SharedPreferenceUtils.setFloat(mSharedPreferences,
+            isLandscapeOrientation()
+                ? TERMUX_APP.KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION_LANDSCAPE
+                : TERMUX_APP.KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION,
+            clampInAppKeyboardSplitGapFraction(value), false);
+    }
+
+    public static float clampInAppKeyboardSplitGapFraction(float value) {
+        if (Float.isNaN(value) || Float.isInfinite(value))
+            return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION;
+        return Math.max(TERMUX_APP.MIN_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION,
+            Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION, value));
     }
 
     public float getInAppKeyboardKeyMarginScale() {
@@ -1171,7 +1591,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             getAppLauncherDockStyle());
     }
 
-    private float getDefaultInAppKeyboardHeightScale() {
+    /** The keyboard height a place that has never been given one of its own opens at. */
+    public float getDefaultInAppKeyboardHeightScale() {
         return usesRoundedInAppKeyboardDefaults()
             ? TERMUX_APP.DEFAULT_ROUNDED_IN_APP_KEYBOARD_HEIGHT_SCALE
             : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
@@ -1203,12 +1624,22 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** Extra air under the last key row, in dp, inside the keyboard's own surface. */
     public int getInAppKeyboardBottomPadding() {
+        if (mPlaceSizes != null) return mPlaceSizes.keyboardChinDp();
+        return getSharedInAppKeyboardBottomPadding();
+    }
+
+    /** The chin the launcher kept for everything, before it became a layout value. */
+    public int getSharedInAppKeyboardBottomPadding() {
         return clampInAppKeyboardBottomPadding(SharedPreferenceUtils.getInt(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING,
             TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING));
     }
 
     public void setInAppKeyboardBottomPadding(int value) {
+        if (mPlaceSizes != null) {
+            mPlaceSizes.setKeyboardChinDp(value);
+            return;
+        }
         SharedPreferenceUtils.setInt(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_BOTTOM_PADDING,
             clampInAppKeyboardBottomPadding(value), false);
@@ -1488,7 +1919,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public synchronized int getAndIncrementTerminalSessionNumberSinceBoot() {
         // Keep value at MAX_VALUE on integer overflow and not 0, since not first shell
-        return SharedPreferenceUtils.getAndIncrementInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_SESSION_NUMBER_SINCE_BOOT, TERMUX_APP.DEFAULT_VALUE_TERMINAL_SESSION_NUMBER_SINCE_BOOT, true, Integer.MAX_VALUE);
+        // apply(), not commit(): this runs on the main thread while a shell is being created, and a
+        // synchronous commit fsyncs the preferences file (~140 ms measured). The number only has to
+        // be unique since boot; a write lost to a crash would at worst reuse one.
+        return SharedPreferenceUtils.getAndIncrementInt(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_SESSION_NUMBER_SINCE_BOOT, TERMUX_APP.DEFAULT_VALUE_TERMINAL_SESSION_NUMBER_SINCE_BOOT, false, Integer.MAX_VALUE);
     }
 
     public synchronized void resetTerminalSessionNumberSinceBoot() {
@@ -1517,6 +1951,22 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setWallpaperReadPermissionPrompted(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_READ_PERMISSION_PROMPTED, value, false);
+    }
+
+    public boolean isDisplayEnablePrompted() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_DISPLAY_ENABLE_PROMPTED, TERMUX_APP.DEFAULT_VALUE_DISPLAY_ENABLE_PROMPTED);
+    }
+
+    public void setDisplayEnablePrompted(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_DISPLAY_ENABLE_PROMPTED, value, false);
+    }
+
+    public boolean isFirstRunChainDone() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_FIRST_RUN_CHAIN_DONE, TERMUX_APP.DEFAULT_VALUE_FIRST_RUN_CHAIN_DONE);
+    }
+
+    public void setFirstRunChainDone(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_FIRST_RUN_CHAIN_DONE, value, false);
     }
 
     public int getTerminalBackgroundOpacity() {
@@ -2048,9 +2498,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_FLUSH_DOCK, value, false);
     }
 
+    /**
+     * Always on. The frame is what the glass rim, the pane inset and the help guide's boxes are
+     * drawn against, so it is no longer a choice; the stored value is kept for old looks that
+     * still carry the key, and ignored.
+     */
     public boolean isTerminalBorderEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED,
-            TERMUX_APP.DEFAULT_VALUE_TERMINAL_BORDER_ENABLED);
+        return true;
     }
 
     public void setTerminalBorderEnabled(boolean value) {
@@ -2171,6 +2625,21 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             level.value, false);
     }
 
+    /** The shipped theme templates the user has turned on, by template id. */
+    @NonNull
+    public java.util.Set<String> getThemeTemplatesEnabled() {
+        java.util.Set<String> enabled = SharedPreferenceUtils.getStringSet(mSharedPreferences,
+            TERMUX_APP.KEY_THEME_TEMPLATES_ENABLED, java.util.Collections.emptySet());
+        // Copied out: the set a SharedPreferences hands back must not be modified, and callers pass
+        // it straight to a preference dialog that will.
+        return enabled == null ? new java.util.LinkedHashSet<>() : new java.util.LinkedHashSet<>(enabled);
+    }
+
+    public void setThemeTemplatesEnabled(@Nullable java.util.Set<String> value) {
+        SharedPreferenceUtils.setStringSet(mSharedPreferences, TERMUX_APP.KEY_THEME_TEMPLATES_ENABLED,
+            value == null ? java.util.Collections.emptySet() : new java.util.LinkedHashSet<>(value), false);
+    }
+
     public boolean arePluginErrorNotificationsEnabled(boolean readFromFile) {
         if (readFromFile)
             return SharedPreferenceUtils.getBoolean(mMultiProcessSharedPreferences, TERMUX_APP.KEY_PLUGIN_ERROR_NOTIFICATIONS_ENABLED, TERMUX_APP.DEFAULT_VALUE_PLUGIN_ERROR_NOTIFICATIONS_ENABLED);
@@ -2191,5 +2660,75 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void setCrashReportNotificationsEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_CRASH_REPORT_NOTIFICATIONS_ENABLED, value, false);
+    }
+
+    /** The first-boot tour run the user has finished, or 0. */
+    public int getFirstBootTourCompletedVersion() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION,
+            TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_COMPLETED_VERSION);
+    }
+
+    public void setFirstBootTourCompletedVersion(int version) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION, version, true);
+    }
+
+    /** The version of the run an unfinished tour belongs to, or 0 for an older one. */
+    public int getFirstBootTourRunVersion() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_RUN_VERSION,
+            TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_RUN_VERSION);
+    }
+
+    public void setFirstBootTourRunVersion(int version) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_RUN_VERSION, version, true);
+    }
+
+    /** The card an unfinished run is on, or -1. */
+    public int getFirstBootTourStep() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP, TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_STEP);
+    }
+
+    public void setFirstBootTourStep(int step) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP, step, true);
+    }
+
+    /** How many of that card's gestures have been observed. */
+    public int getFirstBootTourStepStage() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP_STAGE,
+            TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_STEP_STAGE);
+    }
+
+    public void setFirstBootTourStepStage(int stage) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_STEP_STAGE, stage, true);
+    }
+
+    /** Whether a card was skipped in the run the user is on. */
+    public boolean getFirstBootTourSkipped() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_SKIPPED, TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_SKIPPED);
+    }
+
+    public void setFirstBootTourSkipped(boolean skipped) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_SKIPPED, skipped, true);
+    }
+
+    /** Whether the removed footage onboarding's completion has already been folded in, or not. */
+    public boolean isFirstBootTourLegacyOnboardingMigrated() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED,
+            TERMUX_APP.DEFAULT_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED);
+    }
+
+    public void setFirstBootTourLegacyOnboardingMigrated(boolean migrated) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED, migrated, true);
     }
 }

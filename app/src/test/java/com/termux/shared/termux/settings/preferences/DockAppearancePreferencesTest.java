@@ -40,6 +40,27 @@ public class DockAppearancePreferencesTest {
     }
 
     @Test
+    public void wallpaperAlignmentRoundTripsAndClampsToItsSlider() {
+        // Nothing stored yet: the device's measured starting point, not a hard-coded 100.
+        assertEquals(TermuxAppSharedPreferences.defaultWallpaperRenderZoom(Build.MANUFACTURER),
+            preferences.getWallpaperRenderZoom());
+
+        preferences.setWallpaperRenderZoom(108);
+        assertEquals(108, preferences.getWallpaperRenderZoom());
+
+        preferences.setWallpaperRenderZoom(80);
+        assertEquals(90, preferences.getWallpaperRenderZoom());
+
+        preferences.setWallpaperRenderZoom(150);
+        assertEquals(120, preferences.getWallpaperRenderZoom());
+
+        // A value written past the bounds by hand is still read back inside them.
+        store.edit().putInt(TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_RENDER_ZOOM, 300)
+            .commit();
+        assertEquals(120, preferences.getWallpaperRenderZoom());
+    }
+
+    @Test
     public void iconCountUsesTheSameBoundsAsItsSlider() {
         preferences.setAppLauncherButtonCount(0);
         assertEquals(1, preferences.getAppLauncherButtonCount());

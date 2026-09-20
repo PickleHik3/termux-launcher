@@ -9,6 +9,7 @@ import android.view.Choreographer;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -30,6 +31,7 @@ import com.termux.app.launcher.data.LauncherCategoryPendingApps;
 import com.termux.app.launcher.data.LauncherCategorySortState;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
+import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -72,11 +74,13 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
  * <p>Step 6 ({@code SuggestionBarView} arbitration) drives the opening drag through:
  *
  * <ul>
- *   <li>{@link #beginDrag(float)} — the dock's arbiter latched {@code DRAWER_DRAG}; pass the
- *       {@code ACTION_DOWN} raw Y. Captures geometry and takes ownership of the stack.
- *   <li>{@link #updateDrag(float)} — every {@code ACTION_MOVE}, raw Y.
+ *   <li>{@link #beginDrag(float, AppDrawerGestureArbiter.Pull, AppDrawerPullGeometry.Seed)} — the
+ *       row's arbiter latched {@code DRAWER_DRAG}; pass the {@code ACTION_DOWN} point projected
+ *       onto the pull's axis, the pull itself and the rectangle the plane grows out of. Captures
+ *       geometry and takes ownership of the stack.
+ *   <li>{@link #updateDrag(float)} — every {@code ACTION_MOVE}, the same projected coordinate.
  *   <li>{@link #endDrag(float)} — {@code ACTION_UP}, with the release velocity in px/s, positive
- *       downwards. Applies {@link AppDrawerCommitPolicy} and springs to the outcome.
+ *       along the pull. Applies {@link AppDrawerCommitPolicy} and springs to the outcome.
  *   <li>{@link #cancelDrag()} — {@code ACTION_CANCEL}: springs back to where the drag started.
  * </ul>
  *
@@ -105,8 +109,29 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         /** The launcher row the grid borrows icons, tint and launch ladder from; null before built. */
         @Nullable SuggestionBarView suggestionBar();
 
+        /**
+         * The plane has settled open, or has finished closing and been torn down.
+         *
+         * @param userDriven whether the finger did it. A close the launcher performed on its own —
+         *     HOME, {@code onStop}, a rotation, a preference reload — reaches here exactly like a
+         *     swipe does, and a listener that cannot tell them apart reads the user's trip to the
+         *     home screen as a gesture they never made.
+         */
+        default void onDrawerOpenSettled(boolean open, boolean userDriven) {}
+
         /** Wallpaper frost for the plane's glass; true when the live blur should rest. */
         boolean applyWallpaperFrost(@NonNull ImageView frost);
+
+        /**
+         * The under-pill navigation strip's opacity; 1 whenever the drawer is not engaged.
+         *
+         * <p>The one surface an open plane cannot cover. The strip is the topmost child of the
+         * decor view — above every pixel of the activity's content — so a plane that reaches the
+         * physical bottom edge still has the dock's band lying across it. It crosses over with the
+         * plane instead: full while the plane's bottom edge is still up at the dock, gone by the
+         * time the plane's own glass has arrived underneath it.
+         */
+        default void setDecorNavStripAlpha(float alpha) {}
 
         /** Re-applies the accessory geometry the engaged plane suppressed. Runs from a finally. */
         void flushPendingAccessoryGeometry();
@@ -177,9 +202,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /** Glass handoff: two identical rectangles swapping over the first tenth of the transition. */
     private static final float GLASS_FADE_END = 0.10f;
-    /** A-Z row and indicator band leave early — they are the dock's, not the drawer's. */
+    /**
+     * The dock's rows leave early — they are the dock's, not the drawer's. One window for all of
+     * them, ending where the pinned icons' own staggered wave ends, so no row on the glass is gone
+     * before another: a row with a curve of its own reads as peeling off the surface, and with the
+     * apps row hidden the letters are the only row there is to notice it in.
+     */
     private static final float ROW_FADE_START = 0.02f;
-    private static final float ROW_FADE_END = 0.26f;
+    private static final float ROW_FADE_END = 0.30f;
 
     /** Below this the closing spring is close enough to shut to tear the plane down. */
     /**
@@ -207,7 +237,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * frames, and the plane's bottom edge and the keyboard's top are the same edge to the eye.
      */
     private final Spring mReveal = new Spring(0f, STIFFNESS, DAMPING);
-    private final AppDrawerSearchController mSearch = new AppDrawerSearchController();
+    private final AppDrawerSearchController mSearch;
     private final AppDrawerCategoryNudgePolicy mCategoryNudge = new AppDrawerCategoryNudgePolicy();
     /** Read per open: the Android-keyboard search, through the content's own text field. */
     private boolean mTextFieldSearch;
@@ -256,8 +286,14 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     @Nullable private View mAzLabelOverlay;
     @Nullable private View mExtraKeysView;
     @Nullable private View mKeyboardView;
+    /** The dock as one object: the glass and every row standing on it, hopping together. */
+    @Nullable private View[] mDockLiftGroup;
+    /** Every row that leaves before the plane fills it, on one curve. */
+    @Nullable private View[] mDockRowFadeGroup;
     /** The app-owned top status bar, the one band above the plane. */
     @Nullable private View mStatusBarView;
+    /** The status-bar inset strip: the same pane's glass, continued above the pane's own top. */
+    @Nullable private View mStatusInsetStripView;
     private float mStatusCompactHeightPx;
     private boolean mRoundedStyle;
     private boolean mHasBands;
@@ -281,11 +317,17 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     /** Progress the current drag started from; non-zero only when catching a settling plane. */
     private float mGrabProgress;
 
+    /** True once {@link #warmUp()} has built and bound the grid; it runs at most once per process. */
+    private boolean mWarmed;
+    /** A warm-up waiting on the catalogue or on the host's geometry; one retry is in flight. */
+    private boolean mWarmDeferred;
+
     private boolean mFrameScheduled;
     private long mLastFrameTimeNanos;
 
     public AppDrawerController(@NonNull Host host) {
         mHost = host;
+        mSearch = new AppDrawerSearchController(ClipboardText.forContext(host.context()));
         mDensity = host.context().getResources().getDisplayMetrics().density;
         // Wired here rather than with the views: the three intake channels are routed through the
         // activity, which has no idea whether the plane has been built yet, and a search that only
@@ -322,20 +364,34 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * passed in: a drag that starts with the drawer up is a close, and one that starts on the dock
      * is an open, and there is no third case.
      *
-     * @param downRawY the gesture's {@code ACTION_DOWN} raw screen Y
+     * @param downPull the gesture's {@code ACTION_DOWN} point on the pull's own axis
      */
-    public void beginDrag(float downRawY) {
+    public void beginDrag(float downPull) {
+        beginDrag(downPull, AppDrawerGestureArbiter.Pull.DOWN, AppDrawerPullGeometry.Seed.DOCK);
+    }
+
+    /**
+     * The same, told which way the pull runs and which rectangle the plane grows out of — the
+     * pinned apps row's edge decides both ({@link AppDrawerPullGeometry}). A rail therefore opens
+     * sideways out of the rail's own column and closes back into it, with no dock hop, while the
+     * bottom dock keeps the motion it has always had.
+     *
+     * <p>Both are read once here and frozen for the life of the transition, like every other number
+     * the capture takes: a close drag continues the rectangle the open drag grew.
+     */
+    public void beginDrag(float downPull, @NonNull AppDrawerGestureArbiter.Pull pull,
+                          @NonNull AppDrawerPullGeometry.Seed seed) {
         if (!bindViews()) return;
         // Engaged means the plane is already on screen, so the only gesture that can reach this is
         // the plane's own — and the plane only claims downward drags.
         boolean closing = mEngaged || mOpen;
         // Cold start only: geometry captured mid-transition would bake the transforms already
         // applied to the bands into their captured tops.
-        if (!closing && !captureGeometry()) return;
+        if (!closing && !captureGeometry(pull, seed)) return;
         mDirection = closing
             ? AppDrawerCommitPolicy.Direction.CLOSING
             : AppDrawerCommitPolicy.Direction.OPENING;
-        mDownRawY = downRawY;
+        mDownRawY = downPull;
         mDragging = true;
         mProgress.vel = 0f;
         if (!closing) {
@@ -431,7 +487,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mProgress.reset(0f);
         if (!mEngaged) return;
         applyFrame(0f);
-        onClosed();
+        onClosed(false);
     }
 
     private void settle(boolean open, float velocityPxPerSec) {
@@ -442,6 +498,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // typed into a drawer that is on its way out.
         applyContentOpenState();
         if (open) {
+            mHost.onDrawerOpenSettled(true, true);
             requestSearchKeyboardOnOpenIfEnabled();
             nudgeCategorizationIfPending();
         } else {
@@ -654,7 +711,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mProgress.reset(0f);
             mReveal.reset(0f);
             applyFrame(0f);
-            onClosed();
+            // Reached only by a settle the finger asked for: a release, a cancelled drag, Back.
+            // The lifecycle's own teardown goes through closeImmediate() and says so.
+            onClosed(true);
             return;
         }
         if (moving || revealMoving || fxMoving || mTextFieldFocusPending) kick();
@@ -685,7 +744,23 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             || !preferences.isAppLauncherDrawerSearchOnOpenEnabled()) {
             return;
         }
+        if (skipsSearchKeyboardOnOpen(mTextFieldSearch, isLandscape())) return;
         content.requestSearchKeyboard();
+    }
+
+    /**
+     * In landscape the system keyboard covers all but the search field of the drawer, so an
+     * Android-keyboard search does not open with it raised; the pill tap still raises it on demand.
+     * The in-app keyboard is a band of the drawer's own layout and keeps the on-open behaviour.
+     */
+    @VisibleForTesting
+    static boolean skipsSearchKeyboardOnOpen(boolean textFieldSearch, boolean landscape) {
+        return textFieldSearch && landscape;
+    }
+
+    private boolean isLandscape() {
+        return mHost.context().getResources().getConfiguration().orientation
+            == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
     }
 
     /**
@@ -813,13 +888,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     @Nullable
     private Frame contentRect() {
-        Frame openRect = mOpenRect;
-        if (openRect == null) return null;
-        if (mReveal.target <= 0f || !hasRevealableKeyboard()) return openRect;
+        Frame base = resolveContentBaseRect(mOpenRect);
+        if (base == null) return null;
+        if (mReveal.target <= 0f || !hasRevealableKeyboard()) return base;
         float bottom = pinTopPx() - revealGapPx();
-        if (bottom >= openRect.bottom) return openRect;
-        return new Frame(openRect.left, openRect.top, openRect.right,
-            Math.max(openRect.top, bottom));
+        if (bottom >= base.bottom) return base;
+        return new Frame(base.left, base.top, base.right, Math.max(base.top, bottom));
     }
 
     private boolean isReducedMotion() {
@@ -894,14 +968,93 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     /**
+     * Builds, binds and lays the grid out ahead of the first pull, off the touch path.
+     *
+     * <p>{@link #buildContent} charged the whole content tree to the frame the first drag began on:
+     * a {@code RecyclerView}'s first layout and first bind of sixteen cells, measured at 95ms of
+     * traversal inside a 139ms frame on a 120Hz phone. Nothing about that work needs a finger on the
+     * glass, so the launcher pays it once it has been up and quiet for a moment instead — the same
+     * tree, at the same geometry, in a frame nobody is waiting on.
+     *
+     * <p>Invisible by construction: {@code app_drawer_host} stays {@code INVISIBLE} and the plane's
+     * content host stays at alpha 0, so the tree is measured and laid out (only {@code GONE} would
+     * skip that) while nothing of it is drawn, takes a touch or reaches accessibility. The glass
+     * material, the backdrop blur and the wallpaper frost are {@link #prepareOverlay}'s and are not
+     * touched here.
+     *
+     * <p>Runs at most once. A drawer that has already been pulled — the plane exists — is left
+     * alone, and so is one that is disabled, one whose host has not laid out, and one whose
+     * catalogue has not loaded: binding an empty grid would warm the wrong layout. The last two
+     * defer once and come back rather than giving up.
+     *
+     * @return true when this call built the content; false when it was refused or deferred, in
+     *     which case the first pull runs exactly as it always has.
+     */
+    public boolean warmUp() {
+        // The plane existing means a pull has already built everything this would have built.
+        if (mWarmed || mPlane != null || mContent != null || mEngaged || mOpen) return false;
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        if (preferences == null || !preferences.isAppLauncherDrawerEnabled()) return false;
+        // The grid borrows its icons, tint and launch ladder from the dock; before that exists
+        // there is nothing to warm.
+        if (mHost.suggestionBar() == null) return false;
+        View host = mHost.findView(R.id.app_drawer_host);
+        if (host == null) return false;
+        if (host.getWidth() <= 0 || host.getHeight() <= 0) return deferWarmUp(host);
+        LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(mHost.context());
+        if (!provider.hasLoadedApps()) {
+            if (mWarmDeferred) return false;
+            mWarmDeferred = true;
+            provider.warmAsync(this::retryWarmUp);
+            return false;
+        }
+        if (!bindViews()) return false;
+        AppDrawerPlaneView plane = mPlane;
+        AppDrawerContentView content = mContent;
+        if (plane == null || content == null) return false;
+        // Resolved exactly as captureGeometry resolves it, so the layout this pays for is the layout
+        // the first pull would have paid for: the column count is a function of the plane's width,
+        // and a grid warmed at the wrong width would be re-laid out on the touch frame anyway.
+        mRoundedStyle = mHost.dockLayout().capsule;
+        mOpenRadiusPx = resolveOpenRadiusPx();
+        mOpenRect = resolveOpenRect();
+        if (mOpenRect == null) return false;
+        prepareContent(plane);
+        // prepareContent ends by showing the content for an open that is not happening. Put it back
+        // to what buildContent left it at — the measure and layout happen either way, and the open
+        // path is the only thing allowed to show it.
+        content.setVisibility(View.INVISIBLE);
+        mWarmed = true;
+        return true;
+    }
+
+    /** One retry, when the host has been inflated but not yet laid out. */
+    private boolean deferWarmUp(@NonNull View host) {
+        if (mWarmDeferred) return false;
+        mWarmDeferred = true;
+        host.post(this::retryWarmUp);
+        return false;
+    }
+
+    /**
+     * The deferred attempt. Every guard is re-read: a drawer opened, disabled or torn down while
+     * the catalogue was loading refuses here exactly as it would have refused on the first call.
+     */
+    private void retryWarmUp() {
+        mWarmDeferred = false;
+        warmUp();
+    }
+
+    /**
      * Everything the transition reads, sampled once per gesture.
      *
      * @return false when the dock has not laid out yet, in which case the drag is refused rather
      *     than run against a zero rect.
      */
-    private boolean captureGeometry() {
+    private boolean captureGeometry(@NonNull AppDrawerGestureArbiter.Pull pull,
+                                    @NonNull AppDrawerPullGeometry.Seed seed) {
         FrameLayout host = mHostLayout;
-        View dock = mHost.findView(R.id.accessory_surface_host);
+        View dock = seedView(seed);
         if (host == null || dock == null || host.getWidth() <= 0 || host.getHeight() <= 0
             || dock.getWidth() <= 0 || dock.getHeight() <= 0) return false;
 
@@ -914,14 +1067,18 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // resolveOpenRect) the outer inset all come off the same value.
         DockLayout dockLayout = mHost.dockLayout();
         mRoundedStyle = dockLayout.capsule;
-        mSeedRadiusPx = mRoundedStyle ? dockLayout.capsuleCornerRadiusPx(dock.getHeight()) : 0f;
+        // The seed's short side, which is the dock row's height and the rail column's width: a
+        // capsule is rounded by the band it is, whichever way the band lies.
+        mSeedRadiusPx = mRoundedStyle
+            ? dockLayout.capsuleCornerRadiusPx(Math.min(dock.getWidth(), dock.getHeight())) : 0f;
         mOpenRadiusPx = resolveOpenRadiusPx();
 
         mOpenRect = resolveOpenRect();
 
-        mTravelPx = AppDrawerTransitionGeometry.resolveOpenTravelPx(host.getHeight(),
+        mTravelPx = AppDrawerTransitionGeometry.resolveOpenTravelPx(
+            AppDrawerPullGeometry.travelSpanPx(pull, host.getWidth(), host.getHeight()),
             dp(MIN_TRAVEL_DP), dp(MAX_TRAVEL_DP));
-        mLiftPx = dp(DOCK_LIFT_DP);
+        mLiftPx = AppDrawerPullGeometry.liftPxFor(pull, dp(DOCK_LIFT_DP));
         mSlopPx = ViewConfiguration.get(mHost.context()).getScaledTouchSlop();
 
         mAccessorySurface = dock;
@@ -935,6 +1092,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mAzFxUnderlay = mHost.findView(R.id.apps_bar_az_fx_underlay);
         mAzFxOverlay = mHost.findView(R.id.apps_bar_az_fx_overlay);
         mAzLabelOverlay = mHost.findView(R.id.apps_bar_az_label_overlay);
+        // Groups, not a list of calls: the dock hops as one object and its rows leave on one
+        // curve, and that is only true if there is one place a row can be left out of.
+        mDockLiftGroup = new View[] {mAccessorySurface, mAppsPager, mAzRow, mIndicatorBand};
+        mDockRowFadeGroup = new View[] {
+            mAzRow, mIndicatorBand, mAzFxUnderlay, mAzFxOverlay, mAzLabelOverlay};
         captureBands(dockRect);
         captureStatusBand(dockLayout);
         return true;
@@ -954,6 +1116,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     private void captureStatusBand(@NonNull DockLayout dockLayout) {
         mStatusBarView = mHost.findView(R.id.terminal_window_bar_host);
+        mStatusInsetStripView = mHost.findView(R.id.terminal_status_bar_background);
         Frame bar = isBandVisible(mStatusBarView) ? frameOf(mStatusBarView) : null;
         mStatusBand = bar == null ? null
             : new AppDrawerAccessoryChoreography.Band(bar.top, bar.height());
@@ -968,9 +1131,18 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      *
      * <p>The top edge is the host's own, not the status bar's bottom: the plane swallows the bar,
      * which leaves through {@link AppDrawerStatusBandChoreography} instead of standing over the
-     * drawer under the backdrop tint. The host itself begins below the system status-bar inset —
-     * the root consumes it as padding — so the inset strip above stays the system's, exactly as it
-     * does for the command palette.
+     * drawer under the backdrop tint.
+     *
+     * <p><b>One sheet, bezel to bezel.</b> The host is laid out with negative vertical margins that
+     * give back exactly what {@code fitsSystemWindows} padded the root by, so in the default style
+     * the open rect runs from the physical top edge to the physical bottom edge and the two strips
+     * that used to frame the drawer — the status-bar inset strip above it, the under-pill strip
+     * below — are covered rather than left standing in their own materials. The grid does not
+     * follow: {@link #resolveContentBaseRect} pulls it back inside the bars.
+     *
+     * <p>The rounded style keeps today's rectangle. There the dock is a floating capsule inside the
+     * system bars, neither strip is drawn at all, and a drawer that ran under the bezel would be
+     * answering a question that style never asks.
      *
      * @return null when the host has not laid out; callers keep the rect they already had
      */
@@ -981,14 +1153,74 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         host.getLocationOnScreen(mHostLocation);
         // The drawer keeps the dock's outer margin rather than inventing one — same preference,
         // same edge. The horizontal lerp is carried by the plane rect itself, whose seed left/right
-        // are the dock's and whose open left/right are this inset.
+        // are the dock's and whose open left/right are this inset. Horizontal is never bled: a side
+        // navigation bar in landscape is a column the dock already stays out of.
         int dockInsetPx = mHost.dockLayout().horizontalInsetPx;
         float inset = AppDrawerTransitionGeometry.resolveInsetPx(dockInsetPx, dockInsetPx, 1f);
-        // Square bottom corners in default style are expressed by pushing the bottom edge one
-        // radius past the host: Outline clipping is a single-radius round rect, and a Path clip
-        // would cost the cheap outline clip for two corners nobody can see.
-        float bottomBleed = mRoundedStyle ? 0f : mOpenRadiusPx;
-        return new Frame(inset, 0f, host.getWidth() - inset, host.getHeight() + bottomBleed);
+        // Square corners at whichever edge touches the bezel, expressed by pushing that edge one
+        // radius past the screen: Outline clipping is a single-radius round rect, and a Path clip
+        // would cost the cheap outline clip for corners nobody can see.
+        float cornerBleed = mRoundedStyle ? 0f : mOpenRadiusPx;
+        float topBleed = hostBleedTopPx();
+        // The top is squared only when the host was actually bled to the bezel. A host whose insets
+        // never arrived keeps the rectangle it has always had, rather than growing half a corner
+        // into a status strip it does not reach the top of.
+        float top = mRoundedStyle ? topBleed : (topBleed > 0f ? -cornerBleed : 0f);
+        float bottom = mRoundedStyle
+            ? host.getHeight() - hostBleedBottomPx()
+            : host.getHeight() + cornerBleed;
+        return new Frame(inset, top, host.getWidth() - inset, bottom);
+    }
+
+    /**
+     * The rectangle the grid and the search field are laid out in: the open rect pulled back inside
+     * the system bars, so nothing of the content is ever under one. Only the glass goes edge to
+     * edge; the rows sit exactly where they sat when the plane stopped at the host's own edges.
+     *
+     * <p>Derived from the open rect on every call rather than captured beside it: the two must
+     * never be able to disagree, and this runs off the per-frame path — the insets, a reveal
+     * retarget, a host relayout — and not on it.
+     *
+     * <p>The rounded style and an unbled host both answer with the open rect itself: there is no
+     * bleed to give back in the first case and none was taken in the second.
+     *
+     * @return null when there is no open rect yet
+     */
+    @Nullable
+    private Frame resolveContentBaseRect(@Nullable Frame openRect) {
+        FrameLayout host = mHostLayout;
+        if (openRect == null) return null;
+        if (mRoundedStyle || host == null) return openRect;
+        return new Frame(openRect.left, hostBleedTopPx(), openRect.right,
+            host.getHeight() - hostBleedBottomPx() + mOpenRadiusPx);
+    }
+
+    /**
+     * How far the drawer host reaches past the padded content root, at the top and at the bottom.
+     *
+     * <p>The activity writes these as negative margins from the same insets the two strips are
+     * sized by, once per inset change and never on the touch path. Reading them back here is how
+     * the content finds the safe area again without a second copy of the same two numbers — and it
+     * is why a host that was never bled (a test tree, an activity whose insets never arrived) falls
+     * back to exactly the rectangle the drawer had before.
+     */
+    private float hostBleedTopPx() {
+        ViewGroup.MarginLayoutParams margins = hostMargins();
+        return margins == null ? 0f : Math.max(0f, -margins.topMargin);
+    }
+
+    private float hostBleedBottomPx() {
+        ViewGroup.MarginLayoutParams margins = hostMargins();
+        return margins == null ? 0f : Math.max(0f, -margins.bottomMargin);
+    }
+
+    @Nullable
+    private ViewGroup.MarginLayoutParams hostMargins() {
+        FrameLayout host = mHostLayout;
+        if (host == null) return null;
+        ViewGroup.LayoutParams params = host.getLayoutParams();
+        return params instanceof ViewGroup.MarginLayoutParams
+            ? (ViewGroup.MarginLayoutParams) params : null;
     }
 
     /**
@@ -1028,6 +1260,24 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     /** A view's on-screen bounds, in host coordinates. */
+    /**
+     * The view the plane is seeded from. A rail or a lying-down row off the dock is its own
+     * rectangle; anything else is the dock's glass. A seed that has not laid out — a rail with
+     * nothing pinned, say — falls back to the dock rather than refusing the drag.
+     */
+    @Nullable
+    private View seedView(@NonNull AppDrawerPullGeometry.Seed seed) {
+        View view = null;
+        switch (seed) {
+            case RAIL: view = mHost.findView(R.id.place_apps_bar_host); break;
+            case PLANK: view = mHost.findView(R.id.place_off_dock_plank_host); break;
+            case DOCK:
+            default: break;
+        }
+        if (view != null && view.getWidth() > 0 && view.getHeight() > 0) return view;
+        return mHost.findView(R.id.accessory_surface_host);
+    }
+
     @Nullable
     private Frame frameOf(@Nullable View view) {
         if (view == null || mHostLayout == null) return null;
@@ -1084,11 +1334,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     private void prepareContent(@NonNull AppDrawerPlaneView plane) {
         AppDrawerContentView content = mContent;
-        Frame openRect = mOpenRect;
-        if (content == null || openRect == null) return;
+        Frame contentRect = resolveContentBaseRect(mOpenRect);
+        if (content == null || contentRect == null) return;
         content.setDock(mHost.suggestionBar());
-        plane.setContentInsets(openRect);
-        mContentRect = openRect;
+        plane.setContentInsets(contentRect);
+        mContentRect = contentRect;
         content.setSurfaceRadiusPx(mOpenRadiusPx);
         // Which keyboard the search will ask for is decided here, once per open, so a switch flipped
         // in Settings takes effect on the next pull and never mid-search.
@@ -1098,7 +1348,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mSearch.setTextFieldOwnsInput(mTextFieldSearch);
         content.setTextFieldSearch(mTextFieldSearch);
         content.setViewType(mLayoutConfig.viewType);
-        applyContentMetrics(content, openRect, false);
+        applyContentMetrics(content, contentRect, false);
         content.bind(LauncherAppDataProvider.getInstance(mHost.context()), mSearch);
         // Visible, but not yet interactive: interactivity is settle()'s to grant, and it grants it
         // from mOpen alone. The plane's own alpha-driven visibility flip on the content host keeps
@@ -1110,7 +1360,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     /** Reconfigures the existing content tree; never enters styling/accessory/activity paths. */
     private void applyLayoutConfig() {
         AppDrawerContentView content = mContent;
-        Frame rect = mContentRect != null ? mContentRect : mOpenRect;
+        Frame rect = mContentRect != null ? mContentRect : resolveContentBaseRect(mOpenRect);
         if (content == null || rect == null) return;
         content.cancelTransientFolderState();
         content.setViewType(mLayoutConfig.viewType);
@@ -1298,22 +1548,24 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         mHostLayout.setAlpha(handoff);
         applyAlpha(mAccessorySurface, 1f - handoff);
 
-        // Dock lift rides the two rows, never accessory_stack_container: applyDockImeOffset owns
-        // that view's translationY, and writing it here makes the dock jump by the IME lift.
-        applyTranslationY(mAppsPager, lift);
-        applyTranslationY(mAzRow, lift);
+        // The hop belongs to the dock, not to its rows: the glass takes the same lift the plane's
+        // seed rect takes, so the two rectangles the hand-off cross-fades stay identical and every
+        // row standing on the glass rises with it instead of off it. Never
+        // accessory_stack_container: applyDockImeOffset owns that view's translationY, and writing
+        // it here makes the dock jump by the IME lift.
+        applyGroupTranslationY(mDockLiftGroup, lift);
 
-        float rowAlpha = 1f - AppDrawerTransitionGeometry.ramp(p, ROW_FADE_START, ROW_FADE_END);
-        applyAlpha(mAzRow, rowAlpha);
-        applyAlpha(mIndicatorBand, rowAlpha);
-        applyAlpha(mAzFxUnderlay, rowAlpha);
-        applyAlpha(mAzFxOverlay, rowAlpha);
-        applyAlpha(mAzLabelOverlay, rowAlpha);
+        applyGroupAlpha(mDockRowFadeGroup,
+            1f - AppDrawerTransitionGeometry.ramp(p, ROW_FADE_START, ROW_FADE_END));
 
         // The built-in keyboard's bands come back with the reveal only when they are what is being
         // revealed; under a system keyboard they stay where the plane pushed them.
         applyAccessoryBands(p, frame.bottom, mImePinTopPx > 0f ? 0f : k);
         applyStatusBand(p);
+        // The under-pill strip lives on the decor, above every pixel of this, so it is the one
+        // surface that has to be faded rather than covered. Linear in p, which is what the plane's
+        // own bottom edge is: the two cross over exactly as the glass arrives underneath it.
+        mHost.setDecorNavStripAlpha(1f - p);
 
         AppDrawerDockChoreographyTarget target = mDockTarget;
         if (target != null) target.setDrawerTransitionProgress(p);
@@ -1374,6 +1626,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerStatusBandChoreography.Result result = AppDrawerStatusBandChoreography.resolve(
             p, band.heightPx, mStatusCompactHeightPx);
         applyBand(mStatusBarView, result.translationY, result.clipTopPx, result.alpha);
+        // The inset strip is that same pane's glass continued above it, so it leaves on the pane's
+        // own fade and on nothing else: its height and its translation are the activity's, written
+        // from the status inset, and a transform here would drop it back over the terminal. The
+        // plane covers the strip outright at p = 1 — it is the later sibling — but the plane's top
+        // edge does not arrive until then, and a bright band standing over a darkening scene for
+        // the whole transition is the thing being fixed.
+        applyAlpha(mStatusInsetStripView, result.alpha);
     }
 
     /**
@@ -1402,6 +1661,16 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (view != null) view.setTranslationY(translationY);
     }
 
+    private static void applyGroupAlpha(@Nullable View[] group, float alpha) {
+        if (group == null) return;
+        for (View view : group) applyAlpha(view, alpha);
+    }
+
+    private static void applyGroupTranslationY(@Nullable View[] group, float translationY) {
+        if (group == null) return;
+        for (View view : group) applyTranslationY(view, translationY);
+    }
+
     // ------------------------------------------------------------------ teardown
 
     /**
@@ -1413,7 +1682,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * {@code applyAccessoryGeometryIfNeeded} suppressed for the life of the activity — a dock that
      * silently stops responding to every style and height change.
      */
-    private void onClosed() {
+    private void onClosed(boolean userDriven) {
+        mHost.onDrawerOpenSettled(false, userDriven);
         try {
             // First, and before anything that can throw: a full-screen grid left interactive and
             // VISIBLE over the terminal swallows every touch, and does it silently.
@@ -1445,18 +1715,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             }
             removeHostLayoutListener();
             applyAlpha(mAccessorySurface, 1f);
-            applyTranslationY(mAppsPager, 0f);
-            applyTranslationY(mAzRow, 0f);
-            applyAlpha(mAzRow, 1f);
-            applyAlpha(mIndicatorBand, 1f);
-            applyAlpha(mAzFxUnderlay, 1f);
-            applyAlpha(mAzFxOverlay, 1f);
-            applyAlpha(mAzLabelOverlay, 1f);
+            applyGroupTranslationY(mDockLiftGroup, 0f);
+            applyGroupAlpha(mDockRowFadeGroup, 1f);
             applyBand(mExtraKeysView, 0f, 0f, 1f);
             applyBand(mKeyboardView, 0f, 0f, 1f);
             // Unconditional, unlike applyStatusBand's null guard: a bar that was captured and then
             // hidden mid-transition must still be handed back untransformed.
             applyBand(mStatusBarView, 0f, 0f, 1f);
+            applyAlpha(mStatusInsetStripView, 1f);
+            mHost.setDecorNavStripAlpha(1f);
             AppDrawerDockChoreographyTarget target = mDockTarget;
             if (target != null) target.setDrawerTransitionProgress(0f);
             if (mHostLayout != null) {
@@ -1471,6 +1738,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             }
             mHasBands = false;
             mStatusBand = null;
+            mStatusInsetStripView = null;
         } finally {
             mEngaged = false;
             mHost.flushPendingAccessoryGeometry();

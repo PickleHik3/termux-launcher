@@ -9,11 +9,13 @@ package com.termux.app.surfaces;
  * neighbour is occupied by the dock pushes the pill above the dock without anybody deciding that
  * case, and a surface with no room on its own side ends up on the other one.
  *
- * <p>The body gives way with the room. A system IME on a cramped phone can collapse the band
+ * <p>The card gives way with the room. A system IME on a cramped phone can collapse the band
  * between the anchors below anything the card's whole list needs (issue #20), and the answer is a
- * shorter scrolling body rather than a clipped card or a card pinned over the surfaces bounding it:
- * {@link #bodyCapPx} is that height, and it has a floor, so a region too short for anything still
- * leaves a usable strip of list.
+ * shorter card rather than a clipped one or one pinned over the surfaces bounding it. What gives is
+ * the scrolling body ({@link #bodyCapPx}), which has a floor, so a region too short for anything
+ * still leaves a strip of list. The chooser row above it does not shrink — it unpins and scrolls
+ * with the body instead, which is
+ * {@link com.termux.app.editorshell.EditorShellMetrics#chooserPinned}'s business.
  *
  * <p>Pure arithmetic on pixels, no views, so the cases that matter — keyboard up, keyboard down, a
  * top-anchored surface, a squeezed screen — are testable without inflating the editor.

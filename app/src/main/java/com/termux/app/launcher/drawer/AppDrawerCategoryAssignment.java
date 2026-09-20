@@ -6,7 +6,9 @@ import androidx.annotation.NonNull;
 public final class AppDrawerCategoryAssignment {
 
     /** Pipeline stages in precedence order; higher stages always beat lower ones. */
-    public enum Source { USER, CURATED_FORCE, PLATFORM, CURATED_FILL, ROLE, HEURISTIC, DEFAULT }
+    public enum Source {
+        USER, LINUX_APP, CURATED_FORCE, PLATFORM, CURATED_FILL, ROLE, HEURISTIC, DEFAULT
+    }
 
     @NonNull public final AppDrawerCategory category;
     @NonNull public final Source source;

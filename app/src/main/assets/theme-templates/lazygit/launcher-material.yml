@@ -1,0 +1,27 @@
+# Launcher Material theme for lazygit
+# Rendered by Termux Launcher - do not edit manually
+
+gui:
+  theme:
+    activeBorderColor:
+      - "{{colors.primary.default.hex}}"
+      - bold
+    inactiveBorderColor:
+      - "{{colors.outline_variant.default.hex}}"
+    searchingActiveBorderColor:
+      - "{{colors.tertiary.default.hex}}"
+      - bold
+    optionsTextColor:
+      - "{{colors.secondary.default.hex}}"
+    selectedLineBgColor:
+      - "{{colors.surface_container_high.default.hex}}"
+    selectedRangeBgColor:
+      - "{{colors.surface_container_high.default.hex}}"
+    cherryPickedCommitBgColor:
+      - "{{colors.tertiary_container.default.hex}}"
+    cherryPickedCommitFgColor:
+      - "{{colors.on_tertiary_container.default.hex}}"
+    unstagedChangesColor:
+      - "{{colors.error.default.hex}}"
+    defaultFgColor:
+      - "{{colors.on_surface.default.hex}}"

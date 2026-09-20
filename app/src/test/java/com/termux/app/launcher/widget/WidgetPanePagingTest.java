@@ -6,7 +6,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.widget.EditText;
 
-import com.termux.app.statusbar.TopStatusBarState;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -46,8 +45,8 @@ public class WidgetPanePagingTest {
         assertNotNull(fixture.pane.grid().cellForId(2));
         assertNull(fixture.pane.grid().cellForId(1));
 
-        fixture.controller.onFullFrame(0f);
-        assertEquals("the pane always reopens on page 0", 0, fixture.controller.currentPage());
+        fixture.controller.onWallPageShown(false);
+        assertEquals("the page always reopens on page 0", 0, fixture.controller.currentPage());
     }
 
     @Test public void menuAddWidgetOpensPickerAndNewWidgetsLandOnTheVisiblePage() {
@@ -111,11 +110,9 @@ public class WidgetPanePagingTest {
             activity.setContentView(pane);
             controller = new WidgetPaneController(pane, widgets, new WidgetPaneController.Host() {
                 @Override public boolean reducedMotion() { return true; }
-                @Override public boolean isFullEngaged() { return true; }
-                @Override public TopStatusBarState fullPriorState() {
-                    return TopStatusBarState.EXPANDED;
-                }
-                @Override public void restoreFull(TopStatusBarState prior) { }
+                @Override public boolean isWidgetSurfaceShowing() { return true; }
+                @Override public void captureWidgetSurfaceOrigin() { }
+                @Override public void restoreWidgetSurfaceOrigin() { }
             });
         }
     }

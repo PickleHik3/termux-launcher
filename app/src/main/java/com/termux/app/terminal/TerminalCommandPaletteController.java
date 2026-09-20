@@ -18,6 +18,7 @@ import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
@@ -110,6 +111,7 @@ public final class TerminalCommandPaletteController
     private final LauncherUsageStatsStore mAppUsageStats;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final float mDensity;
+    private final ClipboardText mClipboardSource;
 
     /**
      * The dock plank's 170/17 pair is tuned for a plank that tilts continuously under a finger; a
@@ -132,6 +134,8 @@ public final class TerminalCommandPaletteController
     private FrameLayout mHost;
     private FrameLayout mGlass;
     private CommandPaletteView mView;
+    /** The glass's live blur, when the backdrop is not a wallpaper frost. */
+    @Nullable private com.github.mmin18.widget.RealtimeBlurView mLiveBlur;
 
     private boolean mOpen;
     private boolean mFrameScheduled;
@@ -185,15 +189,45 @@ public final class TerminalCommandPaletteController
     private String mCrumb = "";
 
     public TerminalCommandPaletteController(@NonNull TermuxActivity activity) {
+        this(activity, ClipboardText.forContext(activity));
+    }
+
+    TerminalCommandPaletteController(@NonNull TermuxActivity activity,
+                                     @NonNull ClipboardText clipboardSource) {
         mActivity = activity;
         mStats = new CommandPaletteActionStats(activity);
         mAppProvider = LauncherAppDataProvider.getInstance(activity);
         mAppUsageStats = LauncherUsageStatsStore.getInstance(activity);
         mDensity = activity.getResources().getDisplayMetrics().density;
+        mClipboardSource = clipboardSource;
     }
 
     public boolean isOpen() {
         return mOpen;
+    }
+
+    /**
+     * The glass the palette is actually painting, in screen coordinates.
+     *
+     * <p>For the first-boot run, which stands its card against the palette. The host fills the
+     * window and the palette is an animated rect inside it, so the host's own bounds would put the
+     * card against the whole screen.
+     *
+     * @return false while the palette is shut or has never been built
+     */
+    public boolean frameOnScreen(@NonNull android.graphics.Rect out) {
+        if (!mOpen || mHost == null || mFrame.isEmpty()) return false;
+        mHost.getLocationOnScreen(mLocation);
+        out.set(Math.round(mFrame.left) + mLocation[0], Math.round(mFrame.top) + mLocation[1],
+            Math.round(mFrame.right) + mLocation[0], Math.round(mFrame.bottom) + mLocation[1]);
+        return !out.isEmpty();
+    }
+
+    /** The query line as typed so far. */
+    @VisibleForTesting
+    @NonNull
+    public String query() {
+        return mQuery;
     }
 
     /** Opens the palette, or collapses it when the same invocation arrives while it is up. */
@@ -207,7 +241,6 @@ public final class TerminalCommandPaletteController
 
     public void show() {
         if (!bindViews()) return;
-        mActivity.closeFullStatusBarImmediate();
         // Two full-screen glass surfaces must never stack: the palette is transient and summonable
         // over anything, so the drawer is the one that yields. Immediate rather than animated —
         // a plane springing shut behind a palette sprouting open reads as a glitch, not a handoff.
@@ -219,6 +252,7 @@ public final class TerminalCommandPaletteController
         mEntries.addAll(TerminalCommandPalette.buildEntries(mActivity));
         mEntries.addAll(TerminalCommandPalette.buildSessionEntries(mActivity));
         mEntries.addAll(TerminalCommandPalette.buildKeyboardLayoutEntries(mActivity));
+        mEntries.addAll(TerminalCommandPalette.buildKeyboardFormEntries(mActivity));
         if (mEntries.isEmpty()) {
             AppNotice.show(mActivity, R.string.palette_empty, false);
             return;
@@ -261,6 +295,9 @@ public final class TerminalCommandPaletteController
         mHost.setVisibility(View.VISIBLE);
         applyFrame();
         mActivity.setCommandPaletteInterceptorActive(true);
+        // The query line takes every key from here on, and a line with nothing blinking in it does
+        // not look like one that does.
+        mView.setCaretBlinking(true);
         kick();
     }
 
@@ -276,6 +313,8 @@ public final class TerminalCommandPaletteController
         mPendingEntry = null;
         mCrumb = "";
         mActivity.setCommandPaletteInterceptorActive(false);
+        // Nothing of the palette's may keep ticking behind a closed palette.
+        if (mView != null) mView.setCaretBlinking(false);
         mProgress.target = 0f;
         kick();
     }
@@ -287,6 +326,7 @@ public final class TerminalCommandPaletteController
         mCaptureStroke = "";
         mCaptureConflict = null;
         mActivity.setCommandPaletteInterceptorActive(false);
+        if (mView != null) mView.setCaretBlinking(false);
         mProgress.reset(0f);
         if (mGlass != null) mGlass.setVisibility(View.INVISIBLE);
         if (mHost != null) mHost.setVisibility(View.INVISIBLE);
@@ -303,6 +343,8 @@ public final class TerminalCommandPaletteController
         mGlass = mActivity.findViewById(R.id.command_palette_glass);
         View blur = mActivity.findViewById(R.id.command_palette_blur);
         if (mHost == null || mGlass == null || blur == null) return false;
+        mLiveBlur = blur instanceof com.github.mmin18.widget.RealtimeBlurView
+            ? (com.github.mmin18.widget.RealtimeBlurView) blur : null;
         mGlass.setClipToOutline(true);
         mGlass.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -356,6 +398,14 @@ public final class TerminalCommandPaletteController
         boolean moving = mProgress.tick(reduced, dt);
         moving |= mHeight.tick(reduced, dt);
         applyFrame();
+        // The live blur re-rasterises the decor on every frame the window draws — every frame of
+        // a list fling above it included. While the glass moves it has to; once the palette has
+        // settled it rests on one fresh capture, like the drawer does. What is behind it is the
+        // terminal, so a settled palette shows the terminal as it was when it settled.
+        if (mLiveBlur != null) {
+            if (moving) mLiveBlur.setUpdatesPaused(false);
+            else if (mOpen) mLiveBlur.refreshThenRest();
+        }
         // Faded out is enough to tear down — deliberately not "and both channels have settled".
         // The height channel tracks a result count that can keep nudging it, and anything that
         // leaves it in motion would otherwise pin the blur pane open over the space bar, since
@@ -715,6 +765,8 @@ public final class TerminalCommandPaletteController
                 switch (value.getEditing()) {
                     case SPACE_BAR: appendText(" "); break;
                     case BACKSPACE: backspace(); break;
+                    case PASTE:
+                    case PASTE_PLAIN: pasteClipboard(); break;
                     default: break;
                 }
                 return true;
@@ -799,6 +851,12 @@ public final class TerminalCommandPaletteController
             case KeyEvent.KEYCODE_BACK: collapse(); return true;
             default: return false;
         }
+    }
+
+    /** Inserts the clipboard text, sanitized for the single-line query, at the cursor. */
+    private void pasteClipboard() {
+        String text = mClipboardSource.read();
+        if (text != null && !text.isEmpty()) appendText(PasteText.sanitizeSingleLine(text));
     }
 
     private void appendText(@NonNull String text) {

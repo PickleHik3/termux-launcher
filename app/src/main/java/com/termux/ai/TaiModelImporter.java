@@ -155,6 +155,91 @@ public final class TaiModelImporter {
         }
     }
 
+    /** Copy a selected MNN package into a private staging directory before making it visible. */
+    public JSONObject importMnnDirectory(Uri tree, String requestedId, Set<String> declared) throws JSONException {
+        File staging = null;
+        try {
+            String rootId = android.provider.DocumentsContract.getTreeDocumentId(tree);
+            Uri root = android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, rootId);
+            String id = sanitizeModelId(requestedId == null || requestedId.trim().isEmpty()
+                ? readMetadata(root).displayName : requestedId);
+            if (id.isEmpty()) return error(400, "bad_request", "Enter a model name.");
+            File destination = new File(store.getModelsDirectory(), id);
+            if (destination.exists() || store.getUserModel(id) != null)
+                return error(409, "model_exists", "Choose a different model name; this one is already in use.");
+            java.util.LinkedHashMap<String, Uri> documents = new java.util.LinkedHashMap<>();
+            collectDocuments(tree, rootId, "", documents, 0);
+            if (!documents.containsKey("config.json")) return error(400, "missing_config", "Choose the folder containing config.json.");
+            staging = new File(store.getModelsDirectory(), ".import-" + java.util.UUID.randomUUID());
+            if (!staging.mkdirs()) throw new java.io.IOException("Could not create the import directory.");
+            copyDocument(documents.get("config.json"), new File(staging, "config.json"));
+            java.util.LinkedHashSet<String> required = TaiMnnPackage.files(
+                TaiMnnPackage.readConfig(new File(staging, "config.json")), documents.keySet());
+            java.util.ArrayList<String> pending = new java.util.ArrayList<>(required);
+            long size = new File(staging, "config.json").length();
+            for (int i = 0; i < pending.size(); i++) {
+                String name = pending.get(i);
+                if (name.equals("config.json")) continue;
+                Uri document = documents.get(name);
+                if (document == null) throw new java.io.IOException("Model package is missing " + name);
+                File output = new File(staging, name);
+                if (!output.getParentFile().isDirectory() && !output.getParentFile().mkdirs())
+                    throw new java.io.IOException("Could not create the package directory.");
+                long bytes = readMetadata(document).sizeBytes;
+                if (bytes > 0 && staging.getUsableSpace() < bytes) throw new java.io.IOException("Not enough storage to import this model.");
+                copyDocument(document, output);
+                size += output.length();
+                if (name.endsWith(".json")) {
+                    TaiMnnPackage.references(TaiMnnPackage.readConfig(output), required);
+                    for (String dependency : required) if (!pending.contains(dependency)) pending.add(dependency);
+                }
+                if (pending.size() > 10000) throw new java.io.IOException("Model package has too many files.");
+            }
+            TaiMnnPackage.validate(new File(staging, "config.json"));
+            if (!staging.renameTo(destination)) throw new java.io.IOException("Could not finish importing the model.");
+            staging = destination;
+            File config = new File(destination, "config.json");
+            TaiModelSpec spec = new TaiModelSpec(id, id, "Imported local model", "imported",
+                config.getAbsolutePath(), "User-provided model; license accepted externally", size,
+                TaiModelStore.mnnPackageCapabilities(config, declared), false, null,
+                TaiModelSpec.BACKEND_MNN_LLM, TaiModelSpec.FORMAT_MNN, null, null, 4096, 0, null);
+            store.upsertUserModel(spec);
+            staging = null;
+            return new JSONObject().put("ok", true).put("imported", true).put("model", spec.toJson());
+        } catch (Exception e) {
+            return error(400, "model_import_failed", messageOrFallback(e, "Model import failed."));
+        } finally {
+            if (staging != null) deleteImportDirectory(staging);
+        }
+    }
+
+    private void collectDocuments(Uri tree, String documentId, String prefix,
+                                  java.util.Map<String, Uri> files, int depth) throws Exception {
+        if (depth > 24 || files.size() > 10000) throw new java.io.IOException("Model folder is too large.");
+        Uri children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(tree, documentId);
+        try (Cursor cursor = appContext.getContentResolver().query(children, new String[]{
+            android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE}, null, null, null)) {
+            if (cursor == null) throw new java.io.IOException("Could not read the selected folder.");
+            while (cursor.moveToNext()) {
+                String name = cursor.getString(1);
+                if (name == null || name.contains("/") || !TaiHuggingFace.safePath(name))
+                    throw new java.io.IOException("Invalid file name in model folder.");
+                String childId = cursor.getString(0);
+                if (android.provider.DocumentsContract.Document.MIME_TYPE_DIR.equals(cursor.getString(2)))
+                    collectDocuments(tree, childId, prefix + name + "/", files, depth + 1);
+                else files.put(prefix + name, android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, childId));
+            }
+        }
+    }
+
+    private static void deleteImportDirectory(File file) {
+        File[] children = file.listFiles();
+        if (children != null) for (File child : children) deleteImportDirectory(child);
+        file.delete();
+    }
+
     @NonNull
     public DocumentMetadata readMetadata(@NonNull Uri uri) {
         String displayName = "";

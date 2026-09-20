@@ -4,6 +4,7 @@ import android.app.Application;
 import android.os.Build;
 
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
+import com.termux.shared.termux.extrakeys.ExtraKeyColorRole;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
 
@@ -15,6 +16,7 @@ import org.robolectric.annotation.Config;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
@@ -226,5 +228,78 @@ public class ExtraKeysLayoutModelTest {
         assertEquals("[[\"CTRL\",\"TAB\",\"ESC\"]]", model.serialize());
         model.pruneEmptyRows();
         assertEquals(1, model.rowCount());
+    }
+
+    // ------------------------------------------------------------------------ the key's colour
+
+    @Test
+    public void aColourSurvivesTheRoundTripAndTurnsABareKeyIntoAnObject() {
+        ExtraKeysLayoutModel model = ExtraKeysLayoutModel.parse(
+            "[[ESC, {key: 'TAB', color: 'error_container'}]]");
+        assertNull(model.row(0).get(0).color);
+        assertSame(ExtraKeyColorRole.ERROR_CONTAINER, model.row(0).get(1).color);
+
+        // A plain key with a colour can no longer be a bare string, and one without still is.
+        model.row(0).get(0).color = ExtraKeyColorRole.BLACK;
+        assertEquals("[[{\"key\":\"ESC\",\"color\":\"black\"},"
+            + "{\"key\":\"TAB\",\"color\":\"error_container\"}]]", model.serialize());
+
+        assertSame(ExtraKeyColorRole.BLACK,
+            ExtraKeysLayoutModel.parse(model.serialize()).row(0).get(0).color);
+    }
+
+    @Test
+    public void clearingAColourGivesTheBareStringBack() {
+        ExtraKeysLayoutModel model = ExtraKeysLayoutModel.parse("[[{key: 'ESC', color: 'white'}]]");
+        assertSame(ExtraKeyColorRole.WHITE, model.row(0).get(0).color);
+        model.row(0).get(0).color = null;
+        assertEquals("[[\"ESC\"]]", model.serialize());
+    }
+
+    @Test
+    public void anUnreadableColourIsDroppedRatherThanLosingTheKey() {
+        ExtraKeysLayoutModel model = ExtraKeysLayoutModel.parse("[[{key: 'ESC', color: 'puce'}]]");
+        assertEquals("ESC", model.row(0).get(0).key);
+        assertNull(model.row(0).get(0).color);
+    }
+
+    @Test
+    public void aColouredKeyKeepsItsColourThroughACopy() {
+        ExtraKeysLayoutModel.Key key = new ExtraKeysLayoutModel.Key("ESC");
+        key.color = ExtraKeyColorRole.TERTIARY;
+        assertSame(ExtraKeyColorRole.TERTIARY, key.copy().color);
+    }
+
+    @Test
+    public void coloursAreWrittenByThePositionTheRowDrawsTheKeyIn() {
+        // Two rows, so the index has to count across them the way the view builds its children.
+        ExtraKeysLayoutModel model = ExtraKeysLayoutModel.parse("[[ESC, TAB],[CTRL, ALT]]");
+        java.util.Map<Integer, ExtraKeyColorRole> colors = new java.util.LinkedHashMap<>();
+        colors.put(1, ExtraKeyColorRole.PRIMARY);
+        colors.put(3, ExtraKeyColorRole.ERROR);
+        assertTrue(model.applyColorsByIndex(colors));
+
+        assertNull(model.row(0).get(0).color);
+        assertSame(ExtraKeyColorRole.PRIMARY, model.row(0).get(1).color);
+        assertNull(model.row(1).get(0).color);
+        assertSame(ExtraKeyColorRole.ERROR, model.row(1).get(1).color);
+        assertEquals(colors, model.colorsByIndex());
+
+        // A null clears one, and a write that moves nothing says so.
+        java.util.Map<Integer, ExtraKeyColorRole> clear = new java.util.LinkedHashMap<>();
+        clear.put(1, null);
+        assertTrue(model.applyColorsByIndex(clear));
+        assertNull(model.row(0).get(1).color);
+        assertFalse(model.applyColorsByIndex(clear));
+        assertFalse(model.applyColorsByIndex(new java.util.LinkedHashMap<>()));
+    }
+
+    @Test
+    public void anIndexPastTheEndOfThePageIsIgnored() {
+        ExtraKeysLayoutModel model = ExtraKeysLayoutModel.parse("[[ESC]]");
+        java.util.Map<Integer, ExtraKeyColorRole> colors = new java.util.LinkedHashMap<>();
+        colors.put(7, ExtraKeyColorRole.PRIMARY);
+        assertFalse(model.applyColorsByIndex(colors));
+        assertEquals("[[\"ESC\"]]", model.serialize());
     }
 }

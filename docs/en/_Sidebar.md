@@ -1,9 +1,10 @@
 # Termux Launcher
 
 - [Home](index.md)
-- [What’s new in 0.2.31](Whats_New_0.2.31.md)
 - [Getting started](Launcher_Getting_Started.md)
 - [Using the launcher](Launcher_Usage.md)
+- [Linux display](X11_Display.md)
+- [Linux apps from a distro](Linux_Apps_From_A_Distro.md)
 - [Settings map](Launcher_Settings.md)
 - [Shizuku](Shizuku.md)
 - [Troubleshooting](Launcher_Troubleshooting.md)

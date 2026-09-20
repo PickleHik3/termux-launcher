@@ -28,8 +28,18 @@ public final class TerminalHintSurface {
 
     /** Alpha a hint settles at: enough to read, not enough to hide the transcript behind it. */
     public static final float REST_ALPHA = 0.94f;
-    /** Flat material, so the fill and the hairline are the whole surface. */
-    private static final int SURFACE_ALPHA = 224;
+    /**
+     * Flat material, so the fill and the hairline are the whole surface. Near opaque: at 224 the
+     * transcript's glyphs still read through the card beside its own words, and a line of the
+     * legend with a URL showing between its letters looked like two things drawn on one spot.
+     */
+    private static final int SURFACE_ALPHA = 246;
+    /**
+     * The same material for a panel that is worked in rather than read past: the session prompts and
+     * the search bar carry a field, a list and the answer the user is about to give, and at a hint's
+     * alpha the transcript's own glyphs came through the rows and made both hard to read.
+     */
+    private static final int WORKING_SURFACE_ALPHA = 250;
     private static final int OUTLINE_ALPHA = 70;
     /**
      * The softening a hint keeps where the terminal has no radius of its own to lend it: a flush
@@ -37,6 +47,13 @@ public final class TerminalHintSurface {
      * rectangle rather than as a tab — the same 4dp the glass slabs fall back to for that reason.
      */
     private static final float MIN_FREE_CORNER_DP = 4f;
+    /**
+     * And the most a free corner rounds. Past this the notch a free corner leaves over the
+     * transcript is deep enough to show a word of it right against the legend's own first
+     * glyph - two texts on one spot - so the free corners follow the knob only this far while
+     * the corner that sits on the terminal's still takes the terminal's radius whole.
+     */
+    private static final float MAX_FREE_CORNER_DP = 8f;
 
     /**
      * The radius a hint's free corners take.
@@ -52,8 +69,9 @@ public final class TerminalHintSurface {
      */
     public static float freeCornerRadiusPx(@NonNull Context context, float terminalRadiusPx,
                                            int heightPx) {
-        float minimum = MIN_FREE_CORNER_DP * context.getResources().getDisplayMetrics().density;
-        float free = Math.max(minimum, terminalRadiusPx);
+        float density = context.getResources().getDisplayMetrics().density;
+        float minimum = MIN_FREE_CORNER_DP * density;
+        float free = Math.min(Math.max(minimum, terminalRadiusPx), MAX_FREE_CORNER_DP * density);
         return heightPx > 0 ? Math.min(free, heightPx / 2f) : free;
     }
 
@@ -67,6 +85,36 @@ public final class TerminalHintSurface {
     @NonNull
     public static GradientDrawable background(@NonNull Context context, float topStartRadiusPx,
                                               float topEndRadiusPx, float free) {
+        // top-left, top-right, bottom-right, bottom-left (x and y per corner)
+        return shape(context, SURFACE_ALPHA, new float[]{
+            topStartRadiusPx, topStartRadiusPx,
+            topEndRadiusPx, topEndRadiusPx,
+            free, free,
+            free, free});
+    }
+
+    /**
+     * The same dress for a panel that rises from the terminal's <em>bottom</em> edge — the workspace
+     * prompts and the scrollback search bar — so the whole family reads as part of the terminal
+     * window wherever it arrives from. The corners are simply the other way up: the terminal's own
+     * radius where the panel sits in its bottom corners, the free radius where it leaves the edge.
+     *
+     * @param bottomRadiusPx the terminal's own corner radius.
+     * @param free where the panel leaves the terminal's edge, from {@link #freeCornerRadiusPx}.
+     */
+    @NonNull
+    public static GradientDrawable footBackground(@NonNull Context context, float bottomRadiusPx,
+                                                  float free) {
+        return shape(context, WORKING_SURFACE_ALPHA, new float[]{
+            free, free,
+            free, free,
+            bottomRadiusPx, bottomRadiusPx,
+            bottomRadiusPx, bottomRadiusPx});
+    }
+
+    @NonNull
+    private static GradientDrawable shape(@NonNull Context context, int surfaceAlpha,
+                                          @NonNull float[] radii) {
         float density = context.getResources().getDisplayMetrics().density;
         int surface = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurfaceContainerHigh,
@@ -76,15 +124,10 @@ public final class TerminalHintSurface {
             com.google.android.material.R.attr.colorOutlineVariant,
             ContextCompat.getColor(context, R.color.termux_outline_variant));
         GradientDrawable shape = new GradientDrawable();
-        shape.setColor(ColorUtils.setAlphaComponent(surface, SURFACE_ALPHA));
+        shape.setColor(ColorUtils.setAlphaComponent(surface, surfaceAlpha));
         shape.setStroke(Math.max(1, Math.round(density)),
             ColorUtils.setAlphaComponent(outline, OUTLINE_ALPHA));
-        // top-left, top-right, bottom-right, bottom-left (x and y per corner)
-        shape.setCornerRadii(new float[]{
-            topStartRadiusPx, topStartRadiusPx,
-            topEndRadiusPx, topEndRadiusPx,
-            free, free,
-            free, free});
+        shape.setCornerRadii(radii);
         return shape;
     }
 }

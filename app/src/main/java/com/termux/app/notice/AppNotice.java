@@ -11,6 +11,7 @@ import android.os.Looper;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.annotation.MainThread;
@@ -28,11 +29,17 @@ import java.lang.ref.WeakReference;
  * <p>The app used to raise these as stock toasts. A toast lands bottom-centre — over the shell
  * prompt, over the soft keyboard, over the dock — it cannot be themed to match the surface it
  * covers, and from Android 11 onward {@code setGravity} is ignored for text toasts, so it cannot be
- * moved either. {@link AppNoticeHostView} draws them instead, in the top-trailing corner.
+ * moved either. {@link AppNoticeHostView} draws them instead, on one pill centred at the top of
+ * the screen — inside the terminal's own rim while there is a terminal on screen.
+ *
+ * <p>Every transient voice in the app is that one pill now. The terminal used to have two more: a
+ * chip in its top-leading corner for session news, and a label at the foot of the window for
+ * pending key chords. Three surfaces meant three shapes, three sets of timings and three places to
+ * look, and two of them could be up at once saying unrelated things.
  *
  * <p>Callers pass a {@link Context} and nothing else, exactly as {@code Toast.makeText} took one.
  * The host is found from that context when it is an activity, and otherwise from the foreground
- * activity this class tracks — services and preference data stores raise notices too, and the chip
+ * activity this class tracks — services and preference data stores raise notices too, and the pill
  * should still be the thing that shows them. A stock toast remains the fallback for the genuinely
  * headless case (a notice raised while no activity of ours is up), because a dropped message is
  * worse than a misplaced one.
@@ -124,10 +131,10 @@ public final class AppNotice {
      *
      * <p>This is what a snackbar with an Undo action used to be. The snackbar landed bottom-centre,
      * so it sat on the soft keyboard and ran into the display cutouts, it drew in Material's own
-     * palette rather than the app's, and it could not be swiped away. The chip is themed, is pinned
-     * to the one corner nothing else competes for, and dismisses on a swipe like every other notice
-     * — and it holds for {@link AppNoticeHostView#HOLD_UNDO_MS}, long enough to see what the write
-     * did and change one's mind.
+     * palette rather than the app's, and it could not be swiped away. The pill wears the terminal's
+     * own dress, sits in the row nothing else competes for, and dismisses on a swipe like every
+     * other notice — and it holds for {@link AppNoticeHostView#HOLD_UNDO_MS}, long enough to see
+     * what the write did and change one's mind.
      *
      * @param hint what the tap does, shown as the subtitle and announced to TalkBack.
      */
@@ -138,22 +145,63 @@ public final class AppNotice {
     }
 
     /**
-     * Names the action a key or a palette entry just ran, for a beat. The same pill as every other
-     * notice — it used to be its own chip in the terminal's top-trailing corner, the one message in
-     * the app that landed somewhere else — but fleeting: it replaces a hint already showing rather
-     * than queueing behind it, and it yields to any real notice.
+     * Names what a key, a tool key or a binding just did, for a beat. The same pill as every other
+     * notice — this used to be its own chip in the terminal's corner, one of three surfaces the app
+     * showed transient text on — but fleeting: it replaces a read-out already showing rather than
+     * queueing behind it, and it yields to any real notice.
      */
-    public static void hint(@Nullable Context context, @Nullable CharSequence label) {
+    public static void readout(@Nullable Context context, @Nullable CharSequence label) {
         if (context == null || TextUtils.isEmpty(label)) return;
         AppNoticeItem item = new AppNoticeItem(AppNoticeItem.Kind.INFO, label, null, null,
-            AppNoticeHostView.HOLD_HINT_MS, null, false, null, true);
-        Context appContext = context.getApplicationContext();
+            AppNoticeItem.Hold.READOUT.ms, null, false, null, true);
+        post(context, item);
+    }
+
+    /** A notice held for exactly as long as its kind is worth, rather than short-or-long. */
+    public static void held(@Nullable Context context, @NonNull AppNoticeItem.Kind kind,
+                            @Nullable CharSequence message, @NonNull AppNoticeItem.Hold hold) {
+        raise(context, kind, message, null, null, hold.ms, null, false, null);
+    }
+
+    /** Something the user asked for, done: copied, saved. */
+    public static void confirm(@Nullable Context context, @Nullable String glyph,
+                               @Nullable CharSequence message) {
+        raise(context, AppNoticeItem.Kind.SUCCESS, message, null, glyph,
+            AppNoticeItem.Hold.CONFIRM.ms, null, false, null);
+    }
+
+    /**
+     * Why something did not happen — no shell to split, no room for another terminal, a binding
+     * that answered with a reason. The longest hold of the ordinary kinds: a refusal is the one
+     * notice the user has to be able to read twice.
+     */
+    public static void refusal(@Nullable Context context, @Nullable CharSequence message) {
+        raise(context, AppNoticeItem.Kind.WARNING, message, null, null,
+            AppNoticeItem.Hold.REFUSAL.ms, null, false, null);
+    }
+
+    /**
+     * A report that stands until it is taken down: a multi-stroke binding waiting for its next key,
+     * a key mode that is latched. Raised again with different text while one is up, it swaps the
+     * words in place rather than replaying the entrance, so a chord being typed reads as one label
+     * changing rather than as a run of notices.
+     */
+    public static void sticky(@Nullable Context context, @Nullable CharSequence message) {
+        raise(context, AppNoticeItem.Kind.INFO, message, null, null,
+            AppNoticeItem.Hold.STICKY.ms, null, false, null);
+    }
+
+    /** Takes down whatever {@link #sticky} last put up, if it is still the thing on the pill. */
+    public static void clearSticky(@Nullable Context context) {
+        if (context == null) return;
         Activity fromContext = activityOf(context);
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            deliver(appContext, fromContext, item);
-        } else {
-            MAIN.post(() -> deliver(appContext, fromContext, item));
-        }
+        Runnable clear = () -> {
+            Activity activity = usable(fromContext) ? fromContext : current();
+            AppNoticeHostView host = usable(activity) ? hostFor(activity) : null;
+            if (host != null) host.clearSticky();
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) clear.run();
+        else MAIN.post(clear);
     }
 
     public static void error(@Nullable Context context, @Nullable CharSequence message) {
@@ -187,9 +235,13 @@ public final class AppNotice {
                               @Nullable Runnable onActivate, boolean attention,
                               @Nullable CharSequence actionHint) {
         if (context == null || TextUtils.isEmpty(title)) return;
+        post(context, new AppNoticeItem(kind, title, sub, glyph, holdMs,
+            onActivate, attention, actionHint));
+    }
+
+    /** Hands one notice to the main thread's pill, from whichever thread raised it. */
+    private static void post(@NonNull Context context, @NonNull AppNoticeItem item) {
         Context appContext = context.getApplicationContext();
-        AppNoticeItem item = new AppNoticeItem(kind, title, sub, glyph, holdMs,
-            onActivate, attention, actionHint);
         Activity fromContext = activityOf(context);
         if (Looper.myLooper() == Looper.getMainLooper()) {
             deliver(appContext, fromContext, item);
@@ -204,8 +256,9 @@ public final class AppNotice {
         Activity activity = usable(fromContext) ? fromContext : current();
         AppNoticeHostView host = usable(activity) ? hostFor(activity) : null;
         if (host == null) {
-            // A read-out of what a key did is meaningless once the window it happened in is gone.
-            if (item.fleeting) return;
+            // A read-out of what a key did, and a report of what the keyboard is waiting for, are
+            // both meaningless once the window they happened in is gone.
+            if (item.fleeting || item.isSticky()) return;
             // No window of ours to draw into. A stock toast is bottom-centre and unthemed, but it
             // is the only surface left, and losing the message outright would be worse.
             CharSequence text = TextUtils.isEmpty(item.sub)
@@ -218,7 +271,7 @@ public final class AppNotice {
         host.enqueue(item);
     }
 
-    /** The chip for this activity, creating and attaching it on first use. */
+    /** The pill for this activity, creating and attaching it on first use. */
     @MainThread
     @Nullable
     public static AppNoticeHostView hostFor(@NonNull Activity activity) {
@@ -227,15 +280,21 @@ public final class AppNotice {
         Object existing = anchor.getTag(HOST_TAG_KEY);
         if (existing instanceof AppNoticeHostView) {
             AppNoticeHostView host = (AppNoticeHostView) existing;
-            if (host.getParent() == anchor) return host;
+            if (host.getParent() != null && host.getParent().getParent() == anchor) return host;
         }
+        // The pill lives in a band rather than directly in the content root, because inside the
+        // terminal the band is what clips it: the pill drops in from above the terminal's own top
+        // edge, and without something to hide it up there it would cross the window bar and the
+        // status bar on the way down.
+        FrameLayout frame = AppNoticeHostView.buildFrame(activity);
         AppNoticeHostView host = new AppNoticeHostView(activity);
-        anchor.addView(host, AppNoticeHostView.buildHostLayoutParams(activity));
+        frame.addView(host, AppNoticeHostView.buildHostLayoutParams(activity));
+        anchor.addView(frame, AppNoticeHostView.buildFrameLayoutParams());
         anchor.setTag(HOST_TAG_KEY, host);
-        // Where the chip hangs from is derived and kept current rather than measured once here:
-        // the bar it hangs off may not be laid out yet, and it moves on rotation, on a resize and
-        // when a screen shows or hides it.
-        AppNoticePlacement.attach(anchor, host);
+        // Where the band sits is derived and kept current rather than measured once here: the
+        // terminal it belongs to resizes with the keyboard and with every split, and the bar it
+        // hangs off elsewhere may not be laid out yet at all.
+        AppNoticePlacement.attach(anchor, frame, host);
         return host;
     }
 

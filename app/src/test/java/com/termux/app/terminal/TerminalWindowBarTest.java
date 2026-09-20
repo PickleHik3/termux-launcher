@@ -2,7 +2,6 @@ package com.termux.app.terminal;
 
 import android.app.Application;
 import android.os.Build;
-import android.graphics.drawable.GradientDrawable;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -46,9 +45,13 @@ public class TerminalWindowBarTest {
         assertFalse(tabs.getChildAt(0).isSelected());
         assertTrue(tabs.getChildAt(1).isSelected());
         assertEquals("ssh-icon zbook", ((TextView) tabs.getChildAt(1)).getText().toString());
-        assertEquals(Math.round(3.5f * bar.getResources().getDisplayMetrics().density),
+        float density = bar.getResources().getDisplayMetrics().density;
+        // The title starts past the watermark: the trailing side keeps the row's own 3.5dp, the
+        // leading one carries the nudge that clears the glyph as well.
+        assertEquals(Math.round(3.5f * density)
+                + Math.round(ChipWatermarkGeometry.TITLE_NUDGE_DP * density),
             tabs.getChildAt(1).getPaddingLeft());
-        assertEquals(tabs.getChildAt(1).getPaddingLeft(), tabs.getChildAt(1).getPaddingRight());
+        assertEquals(Math.round(3.5f * density), tabs.getChildAt(1).getPaddingRight());
         assertFalse(((TextView) tabs.getChildAt(1)).getIncludeFontPadding());
 
         tabs.getChildAt(0).performClick();
@@ -100,20 +103,14 @@ public class TerminalWindowBarTest {
         TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
         bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem("home", "home")), 0);
         bar.setSurfaceStyle(false, 0f);
-        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
-        assertEquals(0f,
-            ((GradientDrawable) tabs.getChildAt(0).getBackground()).getCornerRadius(), .01f);
+        assertEquals(0f, bar.chipWatermarkAt(0).cornerRadiusPx(), .01f);
 
         // Docked, with the chip knob dialled in: the pills round.
         bar.setSurfaceStyle(false, 10f);
-        tabs = (LinearLayout) bar.getChildAt(0);
-        assertEquals(10f,
-            ((GradientDrawable) tabs.getChildAt(0).getBackground()).getCornerRadius(), .01f);
+        assertEquals(10f, bar.chipWatermarkAt(0).cornerRadiusPx(), .01f);
 
         bar.setSurfaceStyle(true, 40f);
-        tabs = (LinearLayout) bar.getChildAt(0);
-        assertEquals(40f,
-            ((GradientDrawable) tabs.getChildAt(0).getBackground()).getCornerRadius(), .01f);
+        assertEquals(40f, bar.chipWatermarkAt(0).cornerRadiusPx(), .01f);
     }
 
     @Test
@@ -138,11 +135,12 @@ public class TerminalWindowBarTest {
     }
 
     /**
-     * A window that rang gets a bell after its label, as a Windows Terminal tab does. The bell is a
-     * static mark — nothing about it needs frames — and the pill view is reused, not re-inflated.
+     * A window that rang gets a bell on its top-trailing corner, not in its label: the title keeps
+     * every character it had. The mark is static — nothing about it needs frames — and the pill
+     * view is reused, not re-inflated.
      */
     @Test
-    public void attentionOnlyChange_appendsTheBellWithoutAnimatingOrReinflating() {
+    public void attentionOnlyChange_marksTheCornerWithoutAnimatingOrReinflating() {
         TerminalWindowBar bar = attachedBar();
         java.util.List<TerminalWindowBar.WindowItem> idle = Arrays.asList(
             new TerminalWindowBar.WindowItem("home", "home"),
@@ -156,79 +154,270 @@ public class TerminalWindowBarTest {
 
         assertSame(second, tabs.getChildAt(1));
         assertFalse(bar.isBusyAnimationRunning());
-        assertEquals("work " + TerminalWindowBar.BELL_GLYPH,
-            ((TextView) tabs.getChildAt(1)).getText().toString());
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(1).mark());
+        assertEquals("work", ((TextView) tabs.getChildAt(1)).getText().toString());
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
         assertEquals("home", ((TextView) tabs.getChildAt(0)).getText().toString());
         assertTrue(tabs.getChildAt(1).getContentDescription().toString().contains("waiting for you"));
 
-        // The way out: acknowledged, the bell goes and the label is itself again.
+        // The way out: acknowledged, the dot goes and the chip is itself again.
         bar.setWindows(idle, 0);
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(1).mark());
         assertEquals("work", ((TextView) tabs.getChildAt(1)).getText().toString());
     }
 
     @Test
-    public void attentionAndBusyAreIndependentMarksOnTheSameWindow() {
+    public void attentionAndBusyBothShow_onTheCornerAndOnTheOutline() {
         TerminalWindowBar.WindowItem both = new TerminalWindowBar.WindowItem("home", "home")
             .withBusy(true).withAttention(true);
         assertTrue(both.busy);
         assertTrue(both.attention);
         // withBusy/withAttention compose rather than overwrite: a window can be working and asking
-        // at once, and gets both the ring and the bell.
+        // at once. Only one mark shows, in the one slot, and the asking outranks the working.
         assertSame(both, both.withAttention(true));
 
         TerminalWindowBar bar = attachedBar();
         bar.setWindows(Arrays.asList(both), 0);
         LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
-        CharSequence text = ((TextView) tabs.getChildAt(0)).getText();
-        assertTrue(text.toString().endsWith(" " + TerminalWindowBar.BELL_GLYPH));
-        assertEquals(1, ((android.text.Spanned) text)
-            .getSpans(0, text.length(), android.text.style.ReplacementSpan.class).length);
+        // The label is the title alone either way; the bell has the corner and the ring has the
+        // outline, so a window that is working and asking now says both at once.
+        assertEquals("home", ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
+        assertTrue(bar.chipWatermarkAt(0).busy());
         assertTrue(bar.isBusyAnimationRunning());
+
+        // Acknowledged, the corner clears and the ring keeps turning.
+        bar.setWindows(Arrays.asList(both.withAttention(false)), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
+        assertTrue(bar.chipWatermarkAt(0).busy());
+        assertTrue(bar.isBusyAnimationRunning());
+    }
+
+    /**
+     * An agent's state is the chip's one dot and one sentence for a screen reader — never a
+     * character of the title. Working says nothing in the dot, because the ring is already saying
+     * it; the pill view is reused, not re-inflated, when only the state moves.
+     */
+    @Test
+    public void anAgentsStateIsTheChipsOneDotAndOneSpokenSentence() {
+        TerminalWindowBar bar = attachedBar();
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("repo", "repo");
+        bar.setWindows(Arrays.asList(item), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        android.view.View pill = tabs.getChildAt(0);
+        assertEquals("repo", ((TextView) pill).getText().toString());
+        assertFalse(bar.isBusyAnimationRunning());
+
+        bar.setWindows(Arrays.asList(item.withAgentState(AgentStatus.State.BLOCKED)), 0);
+        assertSame(pill, tabs.getChildAt(0));
+        assertEquals("repo", ((TextView) pill).getText().toString());
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
+        assertTrue(pill.getContentDescription().toString().contains("Needs you."));
+        // Waiting is a solid dot: nothing about it needs frames.
+        assertFalse(bar.isBusyAnimationRunning());
+
+        // Working is the ring and only the ring — the dot slot is left for news.
+        bar.setWindows(Arrays.asList(item.withAgentState(AgentStatus.State.WORKING)), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
+        assertTrue(bar.chipWatermarkAt(0).busy());
+        assertTrue(pill.getContentDescription().toString().contains("Working."));
+        assertTrue(bar.isBusyAnimationRunning());
+
+        // Idle with nothing to report is a chip with nothing on it.
+        bar.setWindows(Arrays.asList(item.withAgentState(AgentStatus.State.IDLE)), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
+        assertFalse(bar.chipWatermarkAt(0).busy());
+        assertTrue(pill.getContentDescription().toString().contains("Idle."));
+        assertFalse(bar.isBusyAnimationRunning());
+
+        bar.setWindows(Arrays.asList(item), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
+        assertEquals("repo", ((TextView) tabs.getChildAt(0)).getText().toString());
+    }
+
+    /**
+     * The bell an agent rings when it hands its turn back is not a cry for help. On a pane running
+     * an agent the agent is the witness: while it reports idle, a bell means the turn finished and
+     * the chip shows the done dot, and only a blocked agent is allowed to say the window wants the
+     * user. This is the Codex case — it rings on finishing, and the chip used to go red for it.
+     */
+    @Test
+    public void anAgentsBellMeansFinishedNotHelpWanted() {
+        TerminalWindowBar bar = attachedBar();
+        TerminalWindowBar.WindowItem codex = new TerminalWindowBar.WindowItem("codex", "codex")
+            .withAgentState(AgentStatus.State.IDLE).withAttention(true);
+        bar.setWindows(Arrays.asList(codex), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.DONE, bar.chipWatermarkAt(0).mark());
+
+        // Actually asking, though, is the attention dot.
+        bar.setWindows(Arrays.asList(codex.withAgentState(AgentStatus.State.BLOCKED)), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
+
+        // And an ordinary shell is untouched: its bell still means what it always meant.
+        TerminalWindowBar.WindowItem shell = new TerminalWindowBar.WindowItem("build", "build")
+            .withAttention(true);
+        bar.setWindows(Arrays.asList(shell), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
+    }
+
+    /**
+     * One fact, one place. A working agent used to light the dot and the ring at once, because the
+     * generic CPU heuristic re-detected what the agent had already reported; now the agent's own
+     * reading drives the ring and nothing else competes with it.
+     */
+    @Test
+    public void aWorkingAgentLightsTheRingAndNothingElse() {
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("repo", "repo")
+            .withAgentState(AgentStatus.State.WORKING).withBusy(true).withAttention(true);
+        assertEquals(AgentStatus.State.WORKING, item.agentState);
+        assertSame(item, item.withAgentState(AgentStatus.State.WORKING));
+        assertEquals(AgentStatus.State.WORKING, item.withDone(true).agentState);
+        assertEquals(AgentStatus.State.WORKING, item.withProgress(40, false).agentState);
+
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(item), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        assertEquals("repo", ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertEquals("a working agent has no dot, whatever the generic layer thinks",
+            ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
+        assertTrue(bar.chipWatermarkAt(0).busy());
+
+        // The agent stopping stops the ring even while the CPU heuristic still calls it busy.
+        bar.setWindows(Arrays.asList(item.withAgentState(AgentStatus.State.IDLE)), 0);
+        assertFalse("the agent is the witness on its own pane", bar.chipWatermarkAt(0).busy());
+    }
+
+    /** The mark is a corner dot, so the process glyph keeps the watermark it was evicted from. */
+    @Test
+    public void aMarkLeavesTheProcessGlyphWhereItIs() {
+        String glyph = new String(Character.toChars(0xF023A));
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem(glyph + " home",
+            "fish in home").withDone(true)), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        assertEquals("home", ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertEquals(ChipWatermarkDrawable.Mark.DONE, bar.chipWatermarkAt(0).mark());
+        assertEquals(glyph, bar.chipWatermarkAt(0).glyph());
+
+        // A pill whose label is the glyph alone has no title at all — and still draws its icon.
+        bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem(glyph, "fish")
+            .withAttention(true)), 0);
+        assertEquals("", ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertEquals(glyph, bar.chipWatermarkAt(0).glyph());
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
     }
 
     /** A command that finished unseen leaves a tick; a bell outranks it, and a visit clears it. */
     @Test
-    public void doneAppendsATickThatABellOutranks() {
+    public void doneMarksTheCornerWithATickThatABellOutranks() {
         TerminalWindowBar bar = attachedBar();
         TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("build", "build");
         bar.setWindows(Arrays.asList(item.withDone(true)), 0);
         LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
-        assertEquals("build " + TerminalWindowBar.DONE_GLYPH,
-            ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertEquals(ChipWatermarkDrawable.Mark.DONE, bar.chipWatermarkAt(0).mark());
+        assertEquals("build", ((TextView) tabs.getChildAt(0)).getText().toString());
         assertTrue(tabs.getChildAt(0).getContentDescription().toString().contains("finished"));
         assertFalse(bar.isBusyAnimationRunning());
 
         bar.setWindows(Arrays.asList(item.withDone(true).withAttention(true)), 0);
-        assertEquals("build " + TerminalWindowBar.BELL_GLYPH,
-            ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
 
         bar.setWindows(Arrays.asList(item), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
         assertEquals("build", ((TextView) tabs.getChildAt(0)).getText().toString());
     }
 
+    /** A command that failed unseen says so: the tick becomes a cross, in the attention colour. */
+    @Test
+    public void aFailedCommandMarksTheTabWithACross() {
+        TerminalWindowBar bar = attachedBar();
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("build", "build");
+        bar.setWindows(Arrays.asList(item.withDone(true, true)), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        assertEquals(ChipWatermarkDrawable.Mark.FAILED, bar.chipWatermarkAt(0).mark());
+        assertEquals("build", ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertTrue(tabs.getChildAt(0).getContentDescription().toString().contains("failed"));
+
+        // Success and failure are different states, so the pill has to repaint between them.
+        bar.setWindows(Arrays.asList(item.withDone(true, false)), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.DONE, bar.chipWatermarkAt(0).mark());
+    }
+
     /**
-     * The ring takes the place of the process glyph, as Windows Terminal hides a tab's icon behind
-     * its progress ring: the span sits on the leading glyph run and nowhere else.
+     * The ring is the chip's own outline, and the label is the title alone: the process glyph
+     * leaves the text for the watermark behind it, and the title keeps every character.
      */
     @Test
-    public void busyRingReplacesTheLeadingProcessGlyph() {
+    public void busyRingRunsOnTheOutlineAndLeavesTheTitleAlone() {
         String label = new String(Character.toChars(0xF023A)) + " home";
         assertEquals(2, TerminalWindowBar.leadingGlyphEnd(label));
         assertEquals(1, TerminalWindowBar.leadingGlyphEnd("\uE795 1"));
+        assertEquals(1, TerminalWindowBar.leadingGlyphEnd("\uE795"));
         assertEquals(0, TerminalWindowBar.leadingGlyphEnd("home"));
         assertEquals(0, TerminalWindowBar.leadingGlyphEnd(""));
+
+        assertEquals("home", TerminalWindowBar.titleOf(label));
+        assertEquals(new String(Character.toChars(0xF023A)), TerminalWindowBar.glyphOf(label));
+        assertEquals("home", TerminalWindowBar.titleOf("home"));
+        assertEquals(null, TerminalWindowBar.glyphOf("home"));
 
         TerminalWindowBar bar = attachedBar();
         bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem(label, "fish in home", true)), 0);
         LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
-        android.text.Spanned text = (android.text.Spanned) ((TextView) tabs.getChildAt(0)).getText();
-        android.text.style.ReplacementSpan[] rings =
-            text.getSpans(0, text.length(), android.text.style.ReplacementSpan.class);
-        assertEquals(1, rings.length);
-        assertEquals(0, text.getSpanStart(rings[0]));
-        assertEquals(2, text.getSpanEnd(rings[0]));
-        // The label itself is untouched: the ring is a span, not a substitution.
-        assertEquals(label, text.toString());
+        assertEquals("home", ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertTrue(bar.chipWatermarkAt(0).busy());
+        assertEquals(TerminalWindowBar.WindowItem.NO_PERCENTAGE,
+            new TerminalWindowBar.WindowItem(label, "fish in home", true).progress);
+        // The item's own label is untouched: the chip reads the glyph off it, it does not rewrite it.
+        assertEquals(label, ((TerminalWindowBar.WindowItem) tabs.getChildAt(0)
+            .getTag(com.termux.R.id.terminal_window_tab_state)).label);
+    }
+
+    /**
+     * Regression: a process whose own icon already names it (pacman) must not vanish into a bare
+     * spinning ring the moment it starts working. Before this fix the Activity's window-bar caller
+     * (now {@link TerminalWindowBar#itemForForegroundProcess}) left the text empty whenever the
+     * glyph "named" the process, so once busy the ring — which only ever covers the leading glyph
+     * run — had no label left beside it to leave visible. Goes through the real factory, not a
+     * hand-built {@link TerminalWindowBar.WindowItem}, so it exercises the actual label policy.
+     */
+    @Test
+    public void busyPillForAGlyphNamedProcessStillShowsItsName() {
+        TerminalWindowBar.WindowItem item =
+            TerminalWindowBar.itemForForegroundProcess("pacman", null).withBusy(true);
+        assertTrue("the label must carry \"pacman\" beside its icon, not the icon alone",
+            item.label.endsWith(" pacman"));
+
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Collections.singletonList(item), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        // The ring is the outline and the icon is the watermark, so "pacman" itself is the label.
+        assertEquals("pacman", ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertTrue(bar.chipWatermarkAt(0).busy());
+        assertEquals(TerminalWindowBar.glyphOf(item.label), bar.chipWatermarkAt(0).glyph());
+    }
+
+    /** The real policy's other branch: an editor's open file outranks its own process name. */
+    @Test
+    public void itemForForegroundProcessPrefersTheOpenFileForEditors() {
+        TerminalWindowBar.WindowItem item =
+            TerminalWindowBar.itemForForegroundProcess("nvim", "app.js");
+        assertTrue(item.label.endsWith(" app.js"));
+        assertEquals("nvim editing app.js", item.spokenLabel);
+    }
+
+    /** A coding agent's chip wears the agent's own glyph, not the generic terminal. */
+    @Test
+    public void anAgentPaneWearsTheAgentsGlyph() {
+        TerminalWindowBar.WindowItem claude =
+            TerminalWindowBar.itemForForegroundProcess("claude", null);
+        assertEquals(new String(Character.toChars(0xEC82)), TerminalWindowBar.glyphOf(claude.label));
+        assertEquals("claude", claude.label.substring(TerminalWindowBar.leadingGlyphEnd(claude.label)).trim());
+        TerminalWindowBar.WindowItem codex = TerminalWindowBar.itemForNamed("build", "codex");
+        assertEquals(new String(Character.toChars(0xEC81)), TerminalWindowBar.glyphOf(codex.label));
+        TerminalWindowBar.WindowItem unknown =
+            TerminalWindowBar.itemForForegroundProcess("mystery", null);
+        assertEquals(ProcessGlyphs.DEFAULT, TerminalWindowBar.glyphOf(unknown.label));
     }
 
     /**
@@ -244,6 +433,8 @@ public class TerminalWindowBarTest {
         LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
 
         assertFalse(bar.isBusyAnimationRunning());
+        assertEquals("build", ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertTrue(bar.chipWatermarkAt(0).busy());
         String description = tabs.getChildAt(0).getContentDescription().toString();
         assertTrue(description, description.contains("working"));
         assertTrue(description, description.contains("42% done"));
@@ -275,8 +466,9 @@ public class TerminalWindowBarTest {
         assertSame(first, tabs.getChildAt(0));
         assertTrue(bar.isBusyAnimationRunning());
         assertTrue(tabs.getChildAt(0).getContentDescription().toString().contains("working"));
-        // A bare label has no glyph for the ring to stand in for, so one is put in front of it.
-        assertEquals("\u25cf home", ((TextView) tabs.getChildAt(0)).getText().toString());
+        // The ring is the chip's own outline, so a bare label needs no placeholder to carry it.
+        assertEquals("home", ((TextView) tabs.getChildAt(0)).getText().toString());
+        assertTrue(bar.chipWatermarkAt(0).busy());
         // The reuse path has to refresh descriptions too, or the second pill keeps a stale one.
         assertFalse(tabs.getChildAt(1).getContentDescription().toString().contains("working"));
     }
@@ -291,6 +483,72 @@ public class TerminalWindowBarTest {
         bar.setWindows(Arrays.asList(item), 0);
 
         assertFalse(bar.isBusyAnimationRunning());
+    }
+
+    /**
+     * The turning arc used to be driven by a ValueAnimator, so it redrew every working pill once
+     * per vsync — 154 times a turn on a 120 Hz panel, and a Choreographer callback every frame for
+     * as long as any shell was working. It now runs on a clock of its own at about 30 a second.
+     */
+    @Test
+    public void aTurningRingRedrawsOnItsOwnClockRatherThanEveryVsync() {
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home", true)), 0);
+        assertTrue(bar.isBusyAnimationRunning());
+        int before = bar.mRingRedraws;
+
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(com.termux.app.statusbar.WindowActivityRing.SPIN_MS,
+                java.util.concurrent.TimeUnit.MILLISECONDS);
+
+        int redraws = bar.mRingRedraws - before;
+        assertTrue("one turn cost " + redraws + " redraws", redraws >= 30 && redraws <= 45);
+
+        // And it stops with the work, rather than ticking on behind an idle row.
+        bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem("home", "home")), 0);
+        assertFalse(bar.isBusyAnimationRunning());
+        int settled = bar.mRingRedraws;
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(com.termux.app.statusbar.WindowActivityRing.SPIN_MS,
+                java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertEquals(settled, bar.mRingRedraws);
+    }
+
+    /**
+     * A burst of shell output hands the row the same windows several times a second, freshly built
+     * each time. Equal items are equal windows: nothing is re-inflated, and a change that IS
+     * visible still lands.
+     */
+    @Test
+    public void theSameWindowsAgainAreDroppedRatherThanRebuildingTheRow() {
+        assertEquals(new TerminalWindowBar.WindowItem("home", "home"),
+            new TerminalWindowBar.WindowItem("home", "home"));
+        assertEquals(new TerminalWindowBar.WindowItem("home", "home").hashCode(),
+            new TerminalWindowBar.WindowItem("home", "home").hashCode());
+        assertFalse(new TerminalWindowBar.WindowItem("home", "home")
+            .equals(new TerminalWindowBar.WindowItem("home", "home").withBusy(true)));
+
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home"),
+            new TerminalWindowBar.WindowItem("work", "work").withBusy(true)), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        android.view.View first = tabs.getChildAt(0);
+        android.view.View second = tabs.getChildAt(1);
+
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home"),
+            new TerminalWindowBar.WindowItem("work", "work").withBusy(true)), 0);
+
+        assertSame(first, tabs.getChildAt(0));
+        assertSame(second, tabs.getChildAt(1));
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, bar.chipWatermarkAt(0).mark());
+
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("home", "home").withAttention(true),
+            new TerminalWindowBar.WindowItem("work", "work").withBusy(true)), 0);
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, bar.chipWatermarkAt(0).mark());
     }
 
     @Test
@@ -322,30 +580,106 @@ public class TerminalWindowBarTest {
     }
 
     @Test
-    public void edgeOverswipeRequiresExtraDistanceAndReversalCancelsIt() {
+    public void edgeOverswipeStreamsTheSurplusDistanceAndFollowsAReversal() {
         TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
-        List<Boolean> requests = new ArrayList<>();
-        bar.setOnEdgeOverswipeListener(requests::add);
-        bar.setStatusBarCollapsed(true);
+        List<String> events = new ArrayList<>();
+        List<Float> offsets = new ArrayList<>();
+        bar.setOnEdgeOverswipeListener(new TerminalWindowBar.OnEdgeOverswipeListener() {
+            @Override public boolean onEdgeOverswipeBegin() { events.add("begin"); return true; }
+            @Override public void onEdgeOverswipe(float dxPx) { offsets.add(dxPx); }
+            @Override public void onEdgeOverswipeEnd(float velocityPxPerSec) { events.add("end"); }
+            @Override public void onEdgeOverswipeCancel() { events.add("cancel"); }
+        });
+        bar.measure(exact(220), exact(30));
+        bar.layout(0, 0, 220, 30);
+
+        // An empty strip cannot scroll at all, so every pixel of a horizontal drag is surplus.
+        int slop = android.view.ViewConfiguration.get(bar.getContext()).getScaledTouchSlop();
+        touch(bar, android.view.MotionEvent.ACTION_DOWN, 20, 15);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 80, 15);
+        assertEquals(Collections.singletonList("begin"), events);
+        // The slop that proved the intent is not travel, but the distance beyond it is: a coarse
+        // first move must not be thrown away.
+        assertEquals(60f - slop, offsets.get(0), 0.01f);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 120, 15);
+        assertEquals(100f - slop, offsets.get(offsets.size() - 1), 0.01f);
+        // A reversal walks the offset back rather than dropping the stream.
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 60, 15);
+        assertEquals(40f - slop, offsets.get(offsets.size() - 1), 0.01f);
+        touch(bar, android.view.MotionEvent.ACTION_UP, 60, 15);
+        assertEquals(Arrays.asList("begin", "end"), events);
+    }
+
+    @Test
+    public void aHostThatDeclinesTheSurplusLeavesTheStripScrolling() {
+        TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
+        List<String> events = new ArrayList<>();
+        bar.setOnEdgeOverswipeListener(new TerminalWindowBar.OnEdgeOverswipeListener() {
+            @Override public boolean onEdgeOverswipeBegin() { events.add("begin"); return false; }
+            @Override public void onEdgeOverswipe(float dxPx) { events.add("drag"); }
+            @Override public void onEdgeOverswipeEnd(float velocityPxPerSec) { events.add("end"); }
+            @Override public void onEdgeOverswipeCancel() { events.add("cancel"); }
+        });
         bar.measure(exact(220), exact(30));
         bar.layout(0, 0, 220, 30);
 
         touch(bar, android.view.MotionEvent.ACTION_DOWN, 20, 15);
-        touch(bar, android.view.MotionEvent.ACTION_MOVE, 80, 15);
-        touch(bar, android.view.MotionEvent.ACTION_MOVE, 40, 15); // reverse clears accumulated 60dp
-        touch(bar, android.view.MotionEvent.ACTION_UP, 40, 15);
-        assertEquals(0, requests.size());
-
-        touch(bar, android.view.MotionEvent.ACTION_DOWN, 20, 15);
-        touch(bar, android.view.MotionEvent.ACTION_MOVE, 90, 15);
-        touch(bar, android.view.MotionEvent.ACTION_UP, 90, 15);
-        assertEquals(Collections.singletonList(Boolean.FALSE), requests);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 120, 15);
+        touch(bar, android.view.MotionEvent.ACTION_UP, 120, 15);
+        assertFalse(events.contains("drag"));
+        assertFalse(events.contains("end"));
     }
 
     /**
      * A bar inside a real attached window, because the busy animator refuses to run while detached
      * or in an invisible window — the whole point of those guards.
      */
+    /**
+     * The watermark is the place's own colour, not the title's — sharing the text colour is what
+     * buried the glyph under it — and the title's halo is the fill of the chip it stands on, so
+     * both move when the place accent does.
+     */
+    @Test
+    public void theWatermarkTakesThePlaceAccentAndTheHaloTakesTheChipsFill() {
+        int accent = 0xFF12AB34;
+        TerminalWindowBar bar = attachedBar();
+        bar.setPlaceAccent(accent);
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("\uE795 home", "fish in home"),
+            new TerminalWindowBar.WindowItem("\uE795 zbook", "ssh in zbook")), 1);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+
+        // The accent's hue on both chips; only the strength says which one is selected.
+        assertEquals(accent & 0x00FFFFFF,
+            bar.chipWatermarkAt(0).watermarkColor() & 0x00FFFFFF);
+        assertEquals(accent & 0x00FFFFFF,
+            bar.chipWatermarkAt(1).watermarkColor() & 0x00FFFFFF);
+        assertEquals(ChipWatermarkGeometry.GLYPH_ALPHA,
+            android.graphics.Color.alpha(bar.chipWatermarkAt(0).watermarkColor()));
+        assertEquals(ChipWatermarkGeometry.SELECTED_GLYPH_ALPHA,
+            android.graphics.Color.alpha(bar.chipWatermarkAt(1).watermarkColor()));
+
+        // The halo is near-opaque whichever chip it is on, and the selected chip's fill is the
+        // accent's, so its halo carries that hue while the resting chip's does not.
+        TextView resting = (TextView) tabs.getChildAt(0);
+        TextView selected = (TextView) tabs.getChildAt(1);
+        assertEquals(ChipWatermarkGeometry.TITLE_HALO_ALPHA,
+            android.graphics.Color.alpha(resting.getShadowColor()));
+        assertEquals(ChipWatermarkGeometry.TITLE_HALO_ALPHA,
+            android.graphics.Color.alpha(selected.getShadowColor()));
+        assertEquals(accent & 0x00FFFFFF, selected.getShadowColor() & 0x00FFFFFF);
+        assertFalse("the two fills differ, so the two halos must too",
+            resting.getShadowColor() == selected.getShadowColor());
+        assertEquals(ChipWatermarkGeometry.TITLE_HALO_DP
+                * bar.getResources().getDisplayMetrics().density,
+            selected.getShadowRadius(), .001f);
+
+        // A new place repaints both: the watermark and the halo follow the accent, not the theme.
+        bar.setPlaceAccent(0xFF884400);
+        assertEquals(0x884400, bar.chipWatermarkAt(1).watermarkColor() & 0x00FFFFFF);
+        assertEquals(0x884400, ((TextView) tabs.getChildAt(1)).getShadowColor() & 0x00FFFFFF);
+    }
+
     private static TerminalWindowBar attachedBar() {
         return (TerminalWindowBar) attachedHost().getChildAt(0);
     }
@@ -357,6 +691,296 @@ public class TerminalWindowBarTest {
         host.addView(new TerminalWindowBar(activity, null));
         activity.setContentView(host);
         return host;
+    }
+
+    /**
+     * The × is a segment of the selected chip: it opens after the chip's trailing edge, 24dp wide,
+     * and the chips behind it are pushed along rather than covered.
+     */
+    @Test
+    public void tappingTheSelectedChipAgainOpensACloseSegment() {
+        AtomicInteger selected = new AtomicInteger(-1);
+        TerminalWindowBar bar = laidOutBar(selected, null);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        int plusBefore = tabs.getChildAt(2).getLeft();
+        int stripWidthBefore = tabs.getWidth();
+
+        tabs.getChildAt(1).performClick();
+        layOut(bar);
+
+        android.view.View close = bar.revealedCloseView();
+        assertTrue(close != null);
+        // Nothing was selected: the second tap on the chip that is already selected is the ask.
+        assertEquals(-1, selected.get());
+        android.view.View chip = tabs.getChildAt(1);
+        int segment = Math.round(24f * bar.getResources().getDisplayMetrics().density);
+        assertEquals(chip.getRight(), close.getLeft());
+        assertEquals(segment, close.getWidth());
+        // The neighbour moves out of the way, and the row is that much wider for it.
+        assertEquals(plusBefore + segment, tabs.getChildAt(2).getLeft());
+        assertEquals(stripWidthBefore + segment, tabs.getWidth());
+        assertTrue(close.isClickable());
+        assertTrue(close.isFocusable());
+        assertTrue(close.getContentDescription().toString().contains("ssh in zbook"));
+    }
+
+    /**
+     * A chip at the trailing end of a bar that is narrower than its chips has no room for the ×:
+     * the strip slides so the whole segment sits inside the viewport, because the × is what the
+     * thumb is reaching for.
+     */
+    @Test
+    public void revealingTheCloseOnATrailingChipScrollsItIntoView() {
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("fish-icon home", "fish in home"),
+            new TerminalWindowBar.WindowItem("ssh-icon zbook", "ssh in zbook"),
+            new TerminalWindowBar.WindowItem("vim-icon notes", "vim in notes")), 2);
+        int rowHeight = Math.round(24f * bar.getResources().getDisplayMetrics().density);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        bar.setLayoutParams(new android.widget.FrameLayout.LayoutParams(1000, rowHeight));
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(600, java.util.concurrent.TimeUnit.MILLISECONDS);
+        // Wide enough for the selected chip to end exactly at the viewport's edge, with no room
+        // left for its ×.
+        int width = tabs.getChildAt(2).getRight();
+        bar.setLayoutParams(new android.widget.FrameLayout.LayoutParams(width, rowHeight));
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(600, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertEquals(width, bar.getWidth());
+        bar.scrollTo(0, 0);
+
+        tabs.getChildAt(2).performClick();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(600, java.util.concurrent.TimeUnit.MILLISECONDS);
+
+        android.view.View close = bar.revealedCloseView();
+        assertTrue(close != null);
+        assertTrue("the × ends inside the viewport",
+            close.getRight() <= bar.getScrollX() + bar.getWidth());
+        assertTrue(bar.getScrollX() > 0);
+    }
+
+    /** The selection highlight follows the wider chip rather than stopping at the title. */
+    @Test
+    public void theSelectionHighlightGrowsOverTheCloseSegment() {
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), null);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+
+        tabs.getChildAt(1).performClick();
+        layOut(bar);
+
+        android.graphics.RectF highlight = new android.graphics.RectF();
+        assertTrue(bar.selectionHighlightBounds(highlight));
+        assertEquals(bar.revealedCloseView().getRight(), highlight.right, .01f);
+        assertEquals(tabs.getChildAt(1).getLeft(), highlight.left, .01f);
+    }
+
+    /** A window closed from the × puts the row back to the width it had before the ask. */
+    @Test
+    public void takingTheCloseAwayGivesTheRowItsWidthBack() {
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), null);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        int plusBefore = tabs.getChildAt(2).getLeft();
+
+        tabs.getChildAt(1).performClick();
+        layOut(bar);
+        // The way out: the same chip again takes the × back.
+        tabs.getChildAt(1).performClick();
+        layOut(bar);
+
+        assertEquals(null, bar.revealedCloseView());
+        assertEquals(plusBefore, tabs.getChildAt(2).getLeft());
+    }
+
+    @Test
+    public void tappingAnUnselectedChipStillOnlySelectsIt() {
+        AtomicInteger selected = new AtomicInteger(-1);
+        TerminalWindowBar bar = laidOutBar(selected, null);
+
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(0).performClick();
+        layOut(bar);
+
+        assertEquals(0, selected.get());
+        assertEquals(null, bar.revealedCloseView());
+    }
+
+    @Test
+    public void theCloseAsksTheHostToCloseTheChipItStandsOn() {
+        AtomicInteger closed = new AtomicInteger(-1);
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), closed);
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+
+        bar.revealedCloseView().performClick();
+
+        assertEquals(1, closed.get());
+        assertEquals(null, bar.revealedCloseView());
+    }
+
+    @Test
+    public void aBusyRefreshKeepsTheCloseAndTheChipsItSitsOn() {
+        // The row is pushed again several times a second while a shell works; a × that did not
+        // survive that would be gone before a thumb reached it.
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), null);
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+        android.view.View chip = ((LinearLayout) bar.getChildAt(0)).getChildAt(1);
+
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("fish-icon home", "fish in home"),
+            new TerminalWindowBar.WindowItem("ssh-icon zbook", "ssh in zbook", true)), 1);
+        layOut(bar);
+
+        assertSame(chip, ((LinearLayout) bar.getChildAt(0)).getChildAt(1));
+        assertTrue(bar.revealedCloseView() != null);
+    }
+
+    @Test
+    public void aDifferentWindowListOrSelectionPutsTheCloseAway() {
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), null);
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+        assertTrue(bar.revealedCloseView() != null);
+
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("fish-icon home", "fish in home"),
+            new TerminalWindowBar.WindowItem("ssh-icon zbook", "ssh in zbook")), 0);
+        layOut(bar);
+
+        assertEquals(null, bar.revealedCloseView());
+    }
+
+    @Test
+    public void aChipScrollNeverRevealsAClose() {
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), null);
+        int slop = android.view.ViewConfiguration.get(bar.getContext()).getScaledTouchSlop();
+
+        touch(bar, android.view.MotionEvent.ACTION_DOWN, 10, 10);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 10 + slop * 3, 10);
+        touch(bar, android.view.MotionEvent.ACTION_UP, 10 + slop * 3, 10);
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+
+        assertEquals(null, bar.revealedCloseView());
+    }
+
+    @Test
+    public void aVerticalPullNeverRevealsAClose() {
+        // The status bar's own gesture: it starts on a chip and must not leave a × behind.
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), null);
+        int slop = android.view.ViewConfiguration.get(bar.getContext()).getScaledTouchSlop();
+
+        touch(bar, android.view.MotionEvent.ACTION_DOWN, 10, 10);
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 10, 10 + slop * 3);
+        touch(bar, android.view.MotionEvent.ACTION_UP, 10, 10 + slop * 3);
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+
+        assertEquals(null, bar.revealedCloseView());
+    }
+
+    @Test
+    public void aTouchAnywhereElseOnTheRowPutsTheCloseAway() {
+        TerminalWindowBar bar = laidOutBar(new AtomicInteger(-1), null);
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOut(bar);
+        assertTrue(bar.revealedCloseView() != null);
+
+        touch(bar, android.view.MotionEvent.ACTION_DOWN, 230, 10);
+
+        assertEquals(null, bar.revealedCloseView());
+    }
+
+    /**
+     * A window that carries its own icon wears it where the process glyph would have been, at the
+     * same strength — the Display windows' mark, arriving after the pill is already up.
+     */
+    @Test
+    public void aWindowIconTakesTheProcessGlyphsPlaceOnTheWatermark() {
+        android.graphics.Bitmap icon = android.graphics.Bitmap.createBitmap(
+            8, 8, android.graphics.Bitmap.Config.ARGB_8888);
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem(
+            "\uE795 firefox", "firefox");
+        assertSame("nothing to copy when the icon has not changed", item, item.withIcon(null));
+        TerminalWindowBar.WindowItem marked = item.withIcon(icon);
+        assertSame(icon, marked.icon);
+        assertEquals(item.label, marked.label);
+        // The icon survives every other copy helper, as the agent reading does.
+        assertSame(icon, marked.withBusy(true).withDone(true).withAgentState(null).icon);
+
+        TerminalWindowBar bar = attachedBar();
+        bar.setWindows(Arrays.asList(item), 0);
+        LinearLayout tabs = (LinearLayout) bar.getChildAt(0);
+        android.view.View pill = tabs.getChildAt(0);
+        assertEquals(null, bar.chipWatermarkAt(0).icon());
+
+        // An icon resolved after the row was built reaches the pill without re-inflating it.
+        bar.setWindows(Arrays.asList(marked), 0);
+
+        assertSame(pill, tabs.getChildAt(0));
+        assertSame(icon, bar.chipWatermarkAt(0).icon());
+        assertEquals("firefox", ((TextView) pill).getText().toString());
+    }
+
+    /**
+     * The × is 24dp wide but only as tall as the chip inside a 24dp row; the row lends it the rest
+     * of a square thumb target, or the control is a 20dp one on the busiest strip in the app.
+     */
+    @Test
+    public void theCloseBorrowsASquareThumbTargetFromTheRowItStandsIn() {
+        android.widget.FrameLayout host = attachedHost();
+        TerminalWindowBar bar = (TerminalWindowBar) host.getChildAt(0);
+        bar.setOnWindowSelectedListener(index -> { });
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("fish-icon home", "fish in home"),
+            new TerminalWindowBar.WindowItem("ssh-icon zbook", "ssh in zbook")), 1);
+        layOutHost(host);
+
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        // The segment opens on the bar's settle curve; the target is handed over once it is there.
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(400, java.util.concurrent.TimeUnit.MILLISECONDS);
+        layOutHost(host);
+
+        android.view.TouchDelegate delegate = host.getTouchDelegate();
+        assertTrue("the row has to carry the × its target", delegate != null);
+        android.graphics.Rect bounds =
+            org.robolectric.Shadows.shadowOf(delegate).getBounds();
+        int target = Math.round(24f * bar.getResources().getDisplayMetrics().density);
+        assertEquals(target, bounds.width());
+        assertEquals(target, bounds.height());
+        assertSame(bar.revealedCloseView(), org.robolectric.Shadows.shadowOf(delegate)
+            .getDelegateView());
+
+        // The way out: no ×, no borrowed target.
+        ((LinearLayout) bar.getChildAt(0)).getChildAt(1).performClick();
+        layOutHost(host);
+        assertEquals(null, host.getTouchDelegate());
+    }
+
+    private static void layOutHost(android.widget.FrameLayout host) {
+        int rowHeight = Math.round(24f * host.getResources().getDisplayMetrics().density);
+        host.measure(exact(240), exact(rowHeight));
+        host.layout(0, 0, 240, rowHeight);
+    }
+
+    /** Two windows with the second selected, measured and laid out at a real row height. */
+    private static TerminalWindowBar laidOutBar(AtomicInteger selected, AtomicInteger closed) {
+        TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
+        bar.setOnWindowSelectedListener(selected::set);
+        if (closed != null) bar.setOnWindowCloseRequestedListener(closed::set);
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("fish-icon home", "fish in home"),
+            new TerminalWindowBar.WindowItem("ssh-icon zbook", "ssh in zbook")), 1);
+        layOut(bar);
+        return bar;
+    }
+
+    private static void layOut(TerminalWindowBar bar) {
+        int rowHeight = Math.round(24f * bar.getResources().getDisplayMetrics().density);
+        bar.measure(exact(240), exact(rowHeight));
+        bar.layout(0, 0, 240, rowHeight);
     }
 
     private static int exact(int size) {

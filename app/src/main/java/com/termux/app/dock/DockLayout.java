@@ -15,8 +15,8 @@ public final class DockLayout {
 
     /** True when the rounded (capsule) dock style is selected. */
     public final boolean capsule;
-    /** True when the window is landscape, where the horizontal dock rows collapse for the rail. */
-    public final boolean landscape;
+    /** True when the pinned apps stand on a screen edge, where the horizontal rows collapse. */
+    public final boolean appsRowOnEdge;
     public final float density;
 
     // --- Row metrics (the old DockLayoutMetrics) ---
@@ -25,10 +25,12 @@ public final class DockLayout {
     public final int azRowHeightPx;
     /** Dead space under the A-Z row's letters, drawn as its bottom padding; 0 unless it is last. */
     public final int azRowChinPaddingPx;
+    /** Air over the A-Z row's letters, drawn as its top padding; 0 unless it is the top row. */
+    public final int azRowCrownPaddingPx;
     public final int interRowGapPx;
     /** The apps row's usable (icon) height: the row minus its own vertical padding. */
     public final int appsBarHeightHintPx;
-    /** Row switches after the landscape gate, mirroring the render state's collapse. */
+    /** Row switches after the edge gate, mirroring the render state's collapse. */
     public final boolean appsRowEnabled;
     public final boolean azRowEnabled;
 
@@ -59,12 +61,51 @@ public final class DockLayout {
     /** The gap a floating capsule keeps below itself. */
     public final int capsuleBottomGapPx;
 
-    // --- Landscape rail ---
+    // --- Apps rail ---
     public final boolean railActive;
     public final boolean railOnRight;
     public final AppDrawerGestureArbiter.Pull railPull;
     public final int railEdgeInsetPx;
     public final int railWidthPx;
+    /** The rail's own band: its width without the display cutout the edge stack already carries. */
+    public final int railBandPx;
+    public final int railIconSizePx;
+    public final int railIconSpacingPx;
+    /** How much of the rail's axis one icon takes, itself and its air either side. */
+    public final int railSlotLengthPx;
+    /**
+     * One pinned icon in the form that lies down, for the row to draw rather than work out: the
+     * size preset scales this and nothing else, and a shared row's band is exactly it plus
+     * {@link com.termux.app.dock.DockLayoutPolicy#SHARED_ROW_AIR_DP} on each side.
+     */
+    public final int appsRowIconPx;
+    /**
+     * The band a lying-down pinned-apps row claims wherever it lies. Equal to
+     * {@link #appsBarHeightPx} while the row is the dock's own; non-zero for a row along the top,
+     * where the dock has collapsed and this is the only height there is.
+     */
+    public final int appsRowBandPx;
+    /**
+     * That band's usable (icon) height: {@link #appsRowBandPx} minus the row's own vertical
+     * padding. It is what the row sizes its icons against wherever it lies down, so a row standing
+     * off the dock — where {@link #appsBarHeightHintPx} is zero because the dock's row collapsed —
+     * still has a ceiling of its own instead of scaling to whatever host it was lent to.
+     */
+    public final int appsRowBandHintPx;
+    /**
+     * The band the row's page ticks stand in, which is part of the row's air on the side they take
+     * rather than a band beside it: a host carrying the strip gives it this and takes it off the
+     * row's own padding on that side, so the two together are {@link #appsRowTickSideAirPx}. Zero
+     * while the row shows no ticks, and for a rail, whose ticks stand in a column of their own.
+     */
+    public final int appsRowStripBandPx;
+
+    /**
+     * The air on the side of the icons the ticks stand on, which is {@link #appsTopPaddingPx} for
+     * every row but one standing alone: that one keeps its sliver on the other side and the
+     * strip's own band here, so its plank is as short as the two sides can make it.
+     */
+    public final int appsRowTickSideAirPx;
 
     /** The top pane's compact height in the active style, read by the drawer's top-band clip. */
     public final int compactStatusBarHeightPx;
@@ -74,12 +115,13 @@ public final class DockLayout {
 
     DockLayout(Builder b) {
         this.capsule = b.capsule;
-        this.landscape = b.landscape;
+        this.appsRowOnEdge = b.appsRowOnEdge;
         this.density = b.density;
         this.appsBarHeightPx = Math.max(0, b.appsBarHeightPx);
         this.indicatorBandHeightPx = Math.max(0, b.indicatorBandHeightPx);
         this.azRowHeightPx = Math.max(0, b.azRowHeightPx);
         this.azRowChinPaddingPx = Math.max(0, b.azRowChinPaddingPx);
+        this.azRowCrownPaddingPx = Math.max(0, b.azRowCrownPaddingPx);
         this.interRowGapPx = Math.max(0, b.interRowGapPx);
         this.appsBarHeightHintPx = Math.max(0, b.appsBarHeightHintPx);
         this.appsRowEnabled = b.appsRowEnabled;
@@ -104,6 +146,15 @@ public final class DockLayout {
         this.railPull = b.railPull;
         this.railEdgeInsetPx = b.railEdgeInsetPx;
         this.railWidthPx = b.railWidthPx;
+        this.railBandPx = Math.max(0, b.railBandPx);
+        this.railIconSizePx = Math.max(0, b.railIconSizePx);
+        this.railIconSpacingPx = Math.max(0, b.railIconSpacingPx);
+        this.railSlotLengthPx = Math.max(0, b.railSlotLengthPx);
+        this.appsRowBandPx = Math.max(0, b.appsRowBandPx);
+        this.appsRowBandHintPx = Math.max(0, b.appsRowBandHintPx);
+        this.appsRowIconPx = Math.max(0, b.appsRowIconPx);
+        this.appsRowStripBandPx = Math.max(0, b.appsRowStripBandPx);
+        this.appsRowTickSideAirPx = Math.max(0, b.appsRowTickSideAirPx);
         this.compactStatusBarHeightPx = b.compactStatusBarHeightPx;
         this.mConfiguredCornerRadiusDp = b.configuredCornerRadiusDp;
     }
@@ -115,6 +166,23 @@ public final class DockLayout {
     public float capsuleCornerRadiusPx(int surfaceHeightPx) {
         return DockLayoutPolicy.capsuleCornerRadiusPx(mConfiguredCornerRadiusDp, surfaceHeightPx,
             density);
+    }
+
+    /**
+     * The height of the row's own view inside its host: the band less the band the ticks stand in,
+     * which the host gives the strip. A row showing no ticks is the whole band.
+     */
+    public int appsRowViewBandPx() {
+        return Math.max(0, appsRowBandPx - appsRowStripBandPx);
+    }
+
+    /**
+     * The row view's own padding on the side its ticks stand on: the air there, less the band the
+     * strip already fills. Zero wherever the strip's band is the whole of that air, which is what
+     * keeps the host from reserving anything extra for it.
+     */
+    public int appsRowPaddingBesideTicksPx() {
+        return Math.max(0, appsRowTickSideAirPx - appsRowStripBandPx);
     }
 
     /** The dock's stacked height for the given extra-keys toolbar height. */
@@ -131,12 +199,13 @@ public final class DockLayout {
 
     static final class Builder {
         boolean capsule;
-        boolean landscape;
+        boolean appsRowOnEdge;
         float density;
         int appsBarHeightPx;
         int indicatorBandHeightPx;
         int azRowHeightPx;
         int azRowChinPaddingPx;
+        int azRowCrownPaddingPx;
         int interRowGapPx;
         int appsBarHeightHintPx;
         boolean appsRowEnabled;
@@ -161,6 +230,15 @@ public final class DockLayout {
         AppDrawerGestureArbiter.Pull railPull = AppDrawerGestureArbiter.Pull.NONE;
         int railEdgeInsetPx;
         int railWidthPx;
+        int railBandPx;
+        int railIconSizePx;
+        int railIconSpacingPx;
+        int railSlotLengthPx;
+        int appsRowBandPx;
+        int appsRowBandHintPx;
+        int appsRowIconPx;
+        int appsRowStripBandPx;
+        int appsRowTickSideAirPx;
         int compactStatusBarHeightPx;
         int configuredCornerRadiusDp;
 

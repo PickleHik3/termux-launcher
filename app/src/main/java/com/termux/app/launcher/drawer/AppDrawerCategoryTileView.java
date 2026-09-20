@@ -21,6 +21,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.termux.R;
 import com.termux.app.SuggestionBarView;
+import com.termux.app.chrome.ChromeShade;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
 import java.util.List;
@@ -36,7 +37,12 @@ import java.util.List;
  */
 public final class AppDrawerCategoryTileView extends ViewGroup {
     public static final float HEADING_TEXT_SP = 13f;
-    /** Card washes from the mock: white over the dark glass, wash-only like the search pill. */
+    /**
+     * Card washes from the mock: white over the dark glass, wash-only like the search pill. Seeds,
+     * not answers — {@link ChromeShade} restates them as shadow when the drawer is standing on the
+     * light band, where 5.5% white is a card with no card in it and the grid loses its structure
+     * entirely.
+     */
     private static final int FILL_COLOR = 0x0EFFFFFF;
     private static final int FILL_PRESSED_COLOR = 0x1CFFFFFF;
     private static final int STROKE_COLOR = 0x21FFFFFF;
@@ -65,6 +71,8 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
     private float tileSide;
     /** Label band inside the tile's top: the icon square starts below it. */
     private float headingBand;
+    /** Whether the card is under a finger, so its wash can be re-stated on a polarity change. */
+    private boolean pressed;
 
     public AppDrawerCategoryTileView(@NonNull Context context) {
         super(context);
@@ -73,10 +81,9 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         setClipToPadding(false);
         setClickable(false);
         fillPaint.setStyle(Paint.Style.FILL);
-        fillPaint.setColor(FILL_COLOR);
         strokePaint.setStyle(Paint.Style.STROKE);
         strokePaint.setStrokeWidth(Math.max(1f, getResources().getDisplayMetrics().density));
-        strokePaint.setColor(STROKE_COLOR);
+        applyShade();
         // The whole-card open target: a transparent sibling laid under the icons and over the drawn
         // card, reporting its pressed state back for the card's press dip. It is added first so the
         // three launch icons sit above it and can take their own taps; the display-only slots stay
@@ -114,7 +121,8 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
     private void applyPressedAppearance(boolean pressed) {
         setScaleX(pressed ? PRESSED_SCALE : 1f);
         setScaleY(pressed ? PRESSED_SCALE : 1f);
-        fillPaint.setColor(pressed ? FILL_PRESSED_COLOR : FILL_COLOR);
+        this.pressed = pressed;
+        applyShade();
         invalidate();
     }
 
@@ -392,8 +400,19 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         };
     }
 
+    /**
+     * Re-states the card's wash and stroke for whatever the chrome is standing on now. Called from
+     * {@code onDraw} as well as on a press because the polarity moves on a theme or wallpaper
+     * change, which the tile is never told about.
+     */
+    private void applyShade() {
+        fillPaint.setColor(ChromeShade.fill(pressed ? FILL_PRESSED_COLOR : FILL_COLOR));
+        strokePaint.setColor(ChromeShade.rim(STROKE_COLOR));
+    }
+
     @Override protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
+        applyShade();
         AppDrawerCategoryGridMetrics resolved = metrics;
         float radius = resolved == null ? 0f : Math.min(resolved.radiusPx, tileSide / 2f);
         float bottom = tileHeight();

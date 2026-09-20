@@ -32,10 +32,18 @@ public final class InAppKeyboardPaletteFactory {
             return createGlass(context, "system");
         SourceRoles roles = resolve(context);
 
-        int keyboard = roles.surface;
-        int key = roles.surfaceContainerHigh;
-        int action = roles.secondaryContainer;
-        int space = roles.surfaceContainerHighest;
+        // The whitest/most-elevated container tier is named oppositely across the two M3
+        // schemes: dark elevates by lightening (surfaceContainerHighest is the lightest
+        // container), light elevates by darkening (surfaceContainerHighest is the darkest — the
+        // lightest, "white-ish" tier there is surfaceContainerLowest). "system" tracks whichever
+        // scheme is actually active; "light"/"dark" force the opposite mode by bending these
+        // same starting points toward that mode's canonical luminance below.
+        boolean night = isNightMode(context);
+        int keyboard = night ? roles.surfaceContainer : roles.surfaceContainerLow;
+        int key = night ? roles.surfaceContainerHighest : roles.surfaceContainerLowest;
+        int function = roles.surfaceContainerHigh;
+        int space = key;
+        int action = roles.primary;
         int activated = roles.primaryContainer;
         int label = roles.onSurface;
         int subLabel = roles.onSurfaceVariant;
@@ -43,20 +51,22 @@ public final class InAppKeyboardPaletteFactory {
 
         switch (normalizedVariant) {
             case "light":
-                keyboard = towardLuminance(keyboard, 0.92d);
-                key = towardLuminance(key, 0.82d);
-                action = towardLuminance(action, 0.78d);
-                space = towardLuminance(space, 0.74d);
+                keyboard = towardLuminance(keyboard, 0.93d);
+                key = towardLuminance(key, 0.98d);
+                function = towardLuminance(function, 0.85d);
+                space = towardLuminance(space, 0.98d);
+                action = towardLuminance(action, 0.18d);
                 activated = towardLuminance(activated, 0.70d);
                 label = towardLuminance(label, 0.05d);
                 subLabel = towardLuminance(subLabel, 0.12d);
                 border = ColorUtils.setAlphaComponent(opaque(border), 209);
                 break;
             case "dark":
-                keyboard = towardLuminance(keyboard, 0.025d);
+                keyboard = towardLuminance(keyboard, 0.020d);
                 key = towardLuminance(key, 0.055d);
-                action = towardLuminance(action, 0.10d);
-                space = towardLuminance(space, 0.11d);
+                function = towardLuminance(function, 0.035d);
+                space = towardLuminance(space, 0.055d);
+                action = towardLuminance(action, 0.60d);
                 activated = towardLuminance(activated, 0.14d);
                 label = towardLuminance(label, 0.90d);
                 subLabel = towardLuminance(subLabel, 0.62d);
@@ -68,16 +78,21 @@ public final class InAppKeyboardPaletteFactory {
         }
 
         key = opaque(key);
+        function = opaque(function);
         action = opaque(action);
         space = opaque(space);
         activated = opaque(activated);
         label = ensureContrast(label, key);
         subLabel = ensureContrast(subLabel, key);
-        // Preserve the Material action role whenever it is readable. If its dynamic hue lands too
-        // close to either label, fall back to the already contrast-checked normal key surface.
-        if (!hasMinimumContrast(label, action) || !hasMinimumContrast(subLabel, action))
-            action = key;
-        int activatedLabel = ensureContrast(roles.primary, activated);
+        // Function keys read one tone lower than letters (surfaceContainerHigh vs.
+        // surfaceContainerHighest/Lowest) but share the same neutral label hue.
+        int functionLabel = ensureContrast(subLabel, function);
+        // The enter/action key is a filled Material button: primary background, onPrimary
+        // label. Unlike the old shared-label action role, ensureContrast alone keeps this
+        // readable regardless of the resolved primary's hue, so no key-surface fallback is
+        // needed here the way plain labels once needed one.
+        int actionLabel = ensureContrast(roles.onPrimary, action);
+        int activatedLabel = ensureContrast(roles.onPrimaryContainer, activated);
         // Non-selected labels on a pressed cap sit back so the resolved direction reads as the
         // single dominant glyph. The keyboard's label paint owns the alpha channel outright
         // (labelBrightness), so the set-back is pre-composited in RGB: the bright label sunk
@@ -89,7 +104,9 @@ public final class InAppKeyboardPaletteFactory {
         return new Theme.Palette(
             opaque(keyboard), key, action, space, activated,
             label, subLabel, activatedLabel, pressedLabel, lockedLabel,
-            border, true, 1f * density, 6f * density, 1f
+            border, false, 0f, 10f * density, 1f,
+            0.25f, 0.5f, actionLabel, actionLabel, null, 0, 0,
+            function, functionLabel
         );
     }
 
@@ -204,19 +221,24 @@ public final class InAppKeyboardPaletteFactory {
         boolean night = isNightMode(context);
         int glassBase = resolveDockGlassBaseColor(context);
 
-        int key = ColorUtils.setAlphaComponent(base.keyBackground, night ? 128 : 165);
-        int action = ColorUtils.setAlphaComponent(base.actionKeyBackground, night ? 110 : 140);
-        int space = ColorUtils.setAlphaComponent(base.spaceBarBackground, night ? 110 : 140);
+        // Glass keeps the Material tiers legible: letters are the most solid chip, function keys
+        // let more glass through so they sit one tone lower, and Enter stays a filled accent button.
+        int key = ColorUtils.setAlphaComponent(base.keyBackground, night ? 150 : 180);
+        int action = ColorUtils.setAlphaComponent(base.actionKeyBackground, night ? 228 : 236);
+        int function = ColorUtils.setAlphaComponent(base.functionKeyBackground, night ? 96 : 124);
+        int space = ColorUtils.setAlphaComponent(base.spaceBarBackground, night ? 150 : 180);
         int activated = ColorUtils.setAlphaComponent(base.activatedKeyBackground, 216);
 
         int keyOnBase = ColorUtils.compositeColors(key, glassBase);
         int actionOnBase = ColorUtils.compositeColors(action, glassBase);
+        int functionOnBase = ColorUtils.compositeColors(function, glassBase);
         int activatedOnBase = ColorUtils.compositeColors(activated, glassBase);
 
         int label = ensureContrast(base.labelColor, keyOnBase);
         int subLabel = ensureContrast(base.subLabelColor, keyOnBase);
         int actionLabel = ensureContrast(base.actionLabelColor, actionOnBase);
         int actionSubLabel = ensureContrast(base.actionSubLabelColor, actionOnBase);
+        int functionLabel = ensureContrast(base.functionLabelColor, functionOnBase);
         int activatedLabel = ensureContrast(base.activatedLabelColor, activatedOnBase);
         // Re-sunk against the composited chip; see the non-glass path for why RGB, not alpha.
         int pressedLabel = ColorUtils.blendARGB(activatedOnBase, activatedLabel, 130f / 255f);
@@ -235,9 +257,9 @@ public final class InAppKeyboardPaletteFactory {
         return new Theme.Palette(
             Color.TRANSPARENT, key, action, space, activated,
             label, subLabel, activatedLabel, pressedLabel, lockedLabel,
-            border, true, 1f * density, 6f * density, 1f,
+            border, false, 0f, 10f * density, 1f,
             0.25f, 0.5f, actionLabel, actionSubLabel, null,
-            gradientTop, gradientBottom
+            gradientTop, gradientBottom, function, functionLabel
         );
     }
 
@@ -270,7 +292,17 @@ public final class InAppKeyboardPaletteFactory {
             primary,
             secondary,
             materialColor(context, com.google.android.material.R.attr.colorOutlineVariant,
-                ColorUtils.blendARGB(surface, onSurface, 0.24f))
+                ColorUtils.blendARGB(surface, onSurface, 0.24f)),
+            materialColor(context, com.google.android.material.R.attr.colorSurfaceContainer,
+                ColorUtils.blendARGB(surfaceVariant, onSurface, 0.02f)),
+            materialColor(context, com.google.android.material.R.attr.colorSurfaceContainerLow,
+                ColorUtils.blendARGB(surface, onSurface, 0.02f)),
+            materialColor(context, com.google.android.material.R.attr.colorSurfaceContainerLowest,
+                surface),
+            materialColor(context, com.google.android.material.R.attr.colorOnPrimary,
+                ContextCompat.getColor(context, android.R.color.white)),
+            materialColor(context, com.google.android.material.R.attr.colorOnPrimaryContainer,
+                primary)
         );
     }
 
@@ -335,12 +367,6 @@ public final class InAppKeyboardPaletteFactory {
         return opaque(best);
     }
 
-    private static boolean hasMinimumContrast(@ColorInt int foreground,
-                                              @ColorInt int background) {
-        return ColorUtils.calculateContrast(opaque(foreground), opaque(background))
-            >= MIN_TEXT_CONTRAST;
-    }
-
     @ColorInt
     private static int opaque(@ColorInt int color) {
         return ColorUtils.setAlphaComponent(color, 255);
@@ -363,10 +389,17 @@ public final class InAppKeyboardPaletteFactory {
         final int primary;
         final int secondary;
         final int outlineVariant;
+        final int surfaceContainer;
+        final int surfaceContainerLow;
+        final int surfaceContainerLowest;
+        final int onPrimary;
+        final int onPrimaryContainer;
 
         SourceRoles(int surface, int surfaceContainerHigh, int secondaryContainer,
                     int surfaceContainerHighest, int primaryContainer, int onSurface,
-                    int onSurfaceVariant, int primary, int secondary, int outlineVariant) {
+                    int onSurfaceVariant, int primary, int secondary, int outlineVariant,
+                    int surfaceContainer, int surfaceContainerLow, int surfaceContainerLowest,
+                    int onPrimary, int onPrimaryContainer) {
             this.surface = surface;
             this.surfaceContainerHigh = surfaceContainerHigh;
             this.secondaryContainer = secondaryContainer;
@@ -377,12 +410,18 @@ public final class InAppKeyboardPaletteFactory {
             this.primary = primary;
             this.secondary = secondary;
             this.outlineVariant = outlineVariant;
+            this.surfaceContainer = surfaceContainer;
+            this.surfaceContainerLow = surfaceContainerLow;
+            this.surfaceContainerLowest = surfaceContainerLowest;
+            this.onPrimary = onPrimary;
+            this.onPrimaryContainer = onPrimaryContainer;
         }
 
         int signature() {
             return sourceRoleSignature(surface, surfaceContainerHigh, secondaryContainer,
                 surfaceContainerHighest, primaryContainer, onSurface, onSurfaceVariant,
-                primary, secondary, outlineVariant);
+                primary, secondary, outlineVariant, surfaceContainer, surfaceContainerLow,
+                surfaceContainerLowest, onPrimary, onPrimaryContainer);
         }
     }
 }

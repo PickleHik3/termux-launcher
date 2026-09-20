@@ -9,6 +9,7 @@ import android.graphics.Canvas;
 import android.graphics.ColorMatrix;
 import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
@@ -74,6 +75,8 @@ public final class DockIconCache {
     @NonNull private final DefaultIconSource defaultIconSource;
     @Nullable private final ArtworkSource artworkSource;
     @NonNull private final LruCache<String, Drawable> cache;
+    /** Which icon packs produced the artwork behind the current renders. See {@link #renderKey}. */
+    @NonNull private String iconPackIdentity = "";
 
     public DockIconCache(@NonNull Resources resources, int memoryClassMb,
                          @NonNull DefaultIconSource defaultIconSource) {
@@ -135,6 +138,58 @@ public final class DockIconCache {
     }
 
     /**
+     * Tells the cache which icon packs the artwork it is handed comes from, and drops everything
+     * rendered under a different answer.
+     *
+     * <p>The key used to record only <em>that</em> artwork came from a pack, never which one, so
+     * two packs produced byte-identical keys for the same app and correctness rested entirely on
+     * someone remembering to invalidate. With the identity in the key a stale render is
+     * unreachable even when every invalidation call is missed.
+     *
+     * @return true when the identity actually moved, and the cache was therefore dropped.
+     */
+    public boolean setIconPackIdentity(@Nullable String identity) {
+        String next = identity == null ? "" : identity;
+        if (iconPackIdentity.equals(next)) return false;
+        iconPackIdentity = next;
+        invalidateAll();
+        return true;
+    }
+
+    /** The identity the current renders were keyed under. */
+    @NonNull
+    public String iconPackIdentity() {
+        return iconPackIdentity;
+    }
+
+    /**
+     * The cache key for one render. Pure, so the identity rules can be tested without a cache:
+     * the pipeline version, the badge and the pack treatment all change what the pixels look
+     * like, and {@code iconPackIdentity} says which pack produced them.
+     *
+     * <p>{@code entry.iconPackArtwork} stays in the key beside the identity rather than being
+     * replaced by it: it is not "which pack" but "was this app's artwork treated at all", and it
+     * still selects the saturation nudge in {@link #normalize}. The same app can be untreated in
+     * the drawer and treated on a pinned page under one pack configuration.
+     */
+    @NonNull
+    public static String renderKey(@NonNull LauncherAppEntry entry, int sizePx,
+                                   @NonNull Badge badge, @Nullable String iconPackIdentity) {
+        return "glass" + RENDER_PIPELINE_VERSION
+            + (badge == Badge.CLONE ? "c" : badge == Badge.LINUX ? "x" : "")
+            + (entry.iconPackArtwork ? "p" : "")
+            + "[" + (iconPackIdentity == null ? "" : iconPackIdentity) + "]"
+            + entry.appRef.stableId() + "@" + sizePx;
+    }
+
+    /** The mark an entry earns from what it is: a profile clone, a Linux app, or neither. */
+    @NonNull
+    public static Badge badgeFor(@NonNull LauncherAppEntry entry) {
+        if (entry.appRef.clonedProfile) return Badge.CLONE;
+        return com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef) ? Badge.LINUX : Badge.NONE;
+    }
+
+    /**
      * The harmonized icon for {@code entry} at {@code sizePx}, from cache when possible.
      *
      * <p>Returns the raw artwork untouched when the size is not yet known ({@code sizePx <= 0}) or
@@ -146,15 +201,13 @@ public final class DockIconCache {
         if (sizePx <= 0) {
             return raw;
         }
-        boolean cloneBadge = entry.appRef.clonedProfile;
-        String key = "glass" + RENDER_PIPELINE_VERSION + (cloneBadge ? "c" : "")
-            + (entry.iconPackArtwork ? "p" : "")
-            + entry.appRef.stableId() + "@" + sizePx;
+        Badge badge = badgeFor(entry);
+        String key = renderKey(entry, sizePx, badge, iconPackIdentity);
         Drawable cached = cache.get(key);
         if (cached != null) {
             return cached;
         }
-        Drawable built = normalize(raw, sizePx, !entry.iconPackArtwork, cloneBadge);
+        Drawable built = normalize(raw, sizePx, !entry.iconPackArtwork, badge);
         if (built != null) {
             cache.put(key, built);
         }
@@ -196,6 +249,21 @@ public final class DockIconCache {
     @Nullable
     public Drawable normalize(@Nullable Drawable src, int sizePx, boolean tuneSaturation,
                               boolean cloneBadge) {
+        return normalize(src, sizePx, tuneSaturation, cloneBadge ? Badge.CLONE : Badge.NONE);
+    }
+
+    /** The small mark in an icon's corner that says what kind of app this is. */
+    public enum Badge {
+        NONE,
+        /** A work or clone profile's copy of an app. */
+        CLONE,
+        /** A Linux app that runs on the display. */
+        LINUX
+    }
+
+    @Nullable
+    public Drawable normalize(@Nullable Drawable src, int sizePx, boolean tuneSaturation,
+                              @NonNull Badge badge) {
         if (src == null || sizePx <= 0) {
             return src;
         }
@@ -229,7 +297,8 @@ public final class DockIconCache {
         }
         artworkCanvas.drawBitmap(iconBmp, null, iconRect, iconPaint);
         iconBmp.recycle();
-        if (cloneBadge) drawCloneBadge(artworkCanvas, sizePx);
+        if (badge == Badge.CLONE) drawCloneBadge(artworkCanvas, sizePx);
+        else if (badge == Badge.LINUX) drawLinuxBadge(artworkCanvas, sizePx);
 
         Bitmap display = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888);
         Canvas displayCanvas = new Canvas(display);
@@ -261,6 +330,41 @@ public final class DockIconCache {
         paint.setColor(0xFF5B6CFF);
         canvas.drawRoundRect(cx - tile * 0.20f, cy - tile * 0.20f,
             cx + tile * 0.60f, cy + tile * 0.60f, corner, corner, paint);
+    }
+
+    /**
+     * The same disc as the clone badge carrying a prompt — a chevron and a cursor — so a Linux
+     * app reads as one at a glance, in the drawer, the dock and the suggestions alike.
+     */
+    private void drawLinuxBadge(@NonNull Canvas canvas, int sizePx) {
+        float radius = Math.max(dp(6f), sizePx * 0.19f);
+        float cx = sizePx - radius - Math.max(dp(1f), sizePx * 0.025f);
+        float cy = sizePx - radius - Math.max(dp(1f), sizePx * 0.025f);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        paint.setColor(0xF2FFFFFF);
+        canvas.drawCircle(cx, cy, radius, paint);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(Math.max(dp(1f), sizePx * 0.025f));
+        paint.setColor(0x70000000);
+        canvas.drawCircle(cx, cy, radius - (paint.getStrokeWidth() * 0.5f), paint);
+
+        // The chevron: two strokes meeting at the right, set left of centre.
+        float stroke = Math.max(dp(1.25f), radius * 0.2f);
+        paint.setStrokeWidth(stroke);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setStrokeJoin(Paint.Join.ROUND);
+        paint.setColor(0xD9202020);
+        float half = radius * 0.34f;
+        float chevronLeft = cx - radius * 0.52f;
+        float chevronRight = cx - radius * 0.06f;
+        Path chevron = new Path();
+        chevron.moveTo(chevronLeft, cy - half);
+        chevron.lineTo(chevronRight, cy);
+        chevron.lineTo(chevronLeft, cy + half);
+        canvas.drawPath(chevron, paint);
+        // The cursor: a short bar on the baseline, in the badge accent.
+        paint.setColor(0xFF5B6CFF);
+        canvas.drawLine(cx + radius * 0.14f, cy + half, cx + radius * 0.56f, cy + half, paint);
     }
 
     /** Subtle silhouette contact shadow: 3dp feather, 1dp down, 28% black. */

@@ -9,6 +9,7 @@ ext {
     // Bootstrap of a different variant must not be manually installed by the user after app installation
     // by replacing $PREFIX since app code is dependent on the variant used to build the APK.
     // Currently supported values are: ["apt-android-7", "apt-android-5"]
+    litertLmVersion = "0.14.0"
     packageVariant = System.getenv("TERMUX_PACKAGE_VARIANT") ?: "apt-android-7" // Default: "apt-android-7"
 }
 
@@ -25,9 +26,15 @@ android {
     def releaseKeyAlias = System.getenv("TERMUX_RELEASE_KEY_ALIAS")
     def releaseKeyPassword = System.getenv("TERMUX_RELEASE_KEY_PASSWORD")
     def hasReleaseSigningConfig = releaseStoreFilePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+    // The embedded X server. Off with -Px11Server=false: the loader and libXlorie.so stay out of
+    // the APK and BuildConfig.X11_SERVER tells the app there is no display to offer.
+    // `project.` matters: inside the android block a bare hasProperty asks the extension.
+    def x11ServerEnabled = !project.hasProperty('x11Server')
+        || Boolean.parseBoolean(project.property('x11Server').toString())
 
     defaultConfig {
         applicationId "io.vaj.tl"
+        buildConfigField "String", "LITERT_LM_VERSION", "\"${project.ext.litertLmVersion}\""
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
@@ -38,6 +45,7 @@ android {
         validateVersionName(versionName)
 
         buildConfigField "String", "TERMUX_PACKAGE_VARIANT", "\"" + project.ext.packageVariant + "\"" // Used by TermuxApplication class
+        buildConfigField "boolean", "X11_SERVER", String.valueOf(x11ServerEnabled)
 
         manifestPlaceholders = [
             TERMUX_PACKAGE_NAME    : "io.vaj.tl",
@@ -131,6 +139,9 @@ android {
     packagingOptions {
         jniLibs {
             useLegacyPackaging false
+            // A build without the display carries no X server: the committed prebuilts stay in
+            // the tree and out of the APK.
+            if (!x11ServerEnabled) excludes.add('**/libXlorie.so')
         }
     }
 
@@ -153,7 +164,6 @@ android {
 dependencies {
     implementation "androidx.annotation:annotation:1.8.0"
     implementation "androidx.core:core:1.13.1"
-    implementation "androidx.drawerlayout:drawerlayout:1.2.0"
     implementation "androidx.preference:preference:1.2.1"
     implementation "androidx.recyclerview:recyclerview:1.1.0"
     implementation "androidx.viewpager:viewpager:1.1.0-alpha01"
@@ -167,11 +177,17 @@ dependencies {
     implementation 'com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava'
     // Renders the bundled Meteocons weather animations (app/src/main/assets/weather).
     implementation "com.airbnb.android:lottie:6.7.1"
-    implementation "com.google.ai.edge.litertlm:litertlm-android:0.14.0"
+    // Renders hicolor/scalable SVG icons a Linux app ships when it has no PNG (LinuxAppIcons).
+    implementation "com.caverock:androidsvg-aar:1.4"
+    implementation "com.google.ai.edge.litertlm:litertlm-android:${project.ext.litertLmVersion}"
     implementation "com.google.ai.edge.litert:litert:1.4.2"
     implementation project(":terminal-view")
     implementation project(":termux-shared")
     implementation project(":inapp-keyboard")
+    // The embedded X server's Java half. Always compiled — the Display page is written against
+    // it; -Px11Server=false drops the loader and the native library instead (see settings.gradle).
+    implementation project(":x11-server")
+
     // Shizuku dependencies for privileged operations
     implementation "dev.rikka.shizuku:api:13.1.5"
     implementation "dev.rikka.shizuku:provider:13.1.5"

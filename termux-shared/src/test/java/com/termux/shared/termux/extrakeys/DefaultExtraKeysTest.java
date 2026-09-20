@@ -21,30 +21,34 @@ public class DefaultExtraKeysTest {
             TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE, ExtraKeysConstants.CONTROL_CHARS_ALIASES);
         ExtraKeyButton[][] matrix = info.getMatrix();
         assertEquals(1, matrix.length);
-        // Window and session switching moved to the in-app keyboard's space-bar swipes, so the
-        // row only carries what no key on that keyboard can reach.
+        // The row carries what no key on the in-app keyboard reaches: the keyboard toggle (with
+        // the keyboard type on its swipe), mouse mode, the wall's three places, a new pane — Ctrl+Alt+Enter's split, along the longer side — (with a
+        // new window on its swipe) and the session browser (with a new session on its swipe). Window and session switching live on the
+        // keyboard's space-bar swipes; workspaces, search, prompt jumps and the scratchpad have
+        // chords and the palette.
         String[] expectedKeys = {
             "KEYBOARD",
-            "tool:session.new",
-            "tool:pane.split_vertical",
-            "tool:terminal.jump_previous_prompt",
-            "tool:terminal.search_scrollback",
-            "tool:workspace.picker",
-            "tool:terminal.toggle_scratchpad",
+            "tool:mouse.toggle",
+            "tool:wall.widgets",
+            "tool:wall.terminal",
+            "tool:wall.display",
+            "tool:pane.split",
+            "tool:session.browser",
         };
         String[] expectedPopups = {
-            "tool:terminal.select_at_cursor",
+            "tool:keyboard.cycle_form",
+            null,
+            null,
+            null,
+            null,
             "tool:window.new",
-            "tool:pane.split_horizontal",
-            "tool:terminal.jump_next_prompt",
-            "tool:terminal.hints",
-            "tool:workspace.save_prompt",
-            "tool:pane.toggle_float",
+            "tool:session.new",
         };
         assertEquals(expectedKeys.length, matrix[0].length);
         for (int i = 0; i < expectedKeys.length; i++) {
             assertEquals(expectedKeys[i], matrix[0][i].getKey());
-            assertEquals(expectedPopups[i], matrix[0][i].getPopup().getKey());
+            assertEquals(expectedPopups[i],
+                matrix[0][i].getPopup() == null ? null : matrix[0][i].getPopup().getKey());
         }
     }
 

@@ -71,7 +71,7 @@ final class TerminalLabelSymbolSpans {
 
     /** The face a code point draws from, resolved like the renderer: a later range wins. */
     @Nullable
-    private static Typeface faceFor(@NonNull TerminalRenderer.SymbolMap[] symbolMaps,
+    static Typeface faceFor(@NonNull TerminalRenderer.SymbolMap[] symbolMaps,
                                     int codePoint) {
         for (int i = symbolMaps.length - 1; i >= 0; i--) {
             TerminalRenderer.SymbolMap map = symbolMaps[i];

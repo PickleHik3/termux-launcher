@@ -26,12 +26,13 @@ public class TermuxLauncherConfigInstallerTest {
         Context context = ApplicationProvider.getApplicationContext();
         File home = home("fresh");
 
-        // Five examples plus three seeded live files.
-        assertEquals(8, TermuxLauncherConfigInstaller.install(context, home));
+        // Six examples plus three seeded live files.
+        assertEquals(9, TermuxLauncherConfigInstaller.install(context, home));
 
         File examples = new File(home, TermuxLauncherConfigInstaller.EXAMPLES_RELATIVE_PATH);
         assertTrue(new File(examples, "README.md").isFile());
         assertTrue(new File(examples, "termux-launcher-bindings.conf").isFile());
+        assertTrue(new File(examples, "kitty.conf").isFile());
         assertTrue(new File(examples, "fonts.conf").isFile());
         assertTrue(new File(examples, "keyboard-layout.xml").isFile());
         assertTrue(new File(examples, "termux.properties").isFile());
@@ -58,7 +59,7 @@ public class TermuxLauncherConfigInstallerTest {
     public void seededFilesActivateNothingAndUserEditsSurvive() throws Exception {
         Context context = ApplicationProvider.getApplicationContext();
         File home = home("edits");
-        assertEquals(8, TermuxLauncherConfigInstaller.install(context, home));
+        assertEquals(9, TermuxLauncherConfigInstaller.install(context, home));
 
         // The one directive the seed may activate: tap-to-open URLs is this fork's default for
         // fresh installs. Anything else live in a seeded file is behavior slipped in unreviewed.
@@ -105,7 +106,7 @@ public class TermuxLauncherConfigInstallerTest {
         writeFile(secondary, "terminal-cursor-style = block\n");
 
         // Five examples plus only two of the three seeded files.
-        assertEquals(7, TermuxLauncherConfigInstaller.install(context, home));
+        assertEquals(8, TermuxLauncherConfigInstaller.install(context, home));
 
         assertFalse(new File(home, "termux.properties").exists());
         assertEquals("terminal-cursor-style = block\n", readFile(secondary));

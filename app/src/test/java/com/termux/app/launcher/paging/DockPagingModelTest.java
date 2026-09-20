@@ -65,6 +65,34 @@ public class DockPagingModelTest {
         assertFalse(DockPagingModel.isMostUsedDynamicPage(0, 0, 3, false));
     }
 
+    // -------------------------------------------------------- rail (vertical) pages
+    //
+    // A rail's per-page slot count is not the row's maxButtonCount but
+    // DockPagingModel.railItemsPerPage(usableLengthPx, slotLengthPx) — SuggestionBarView feeds
+    // that through the same pinned/dynamic-page functions a row uses, so these exercise the
+    // functions with a rail's own perPage the way computePinnedItemsPerPage() does standing up.
+
+    @Test
+    public void aRailPagesTheSameWayARowDoesWithTheColumnsOwnPerPage() {
+        // A 300px column of 100px slots holds 3 items per page; 7 pinned items make 3 real
+        // pages, and the most-used page trails them as page index 3.
+        int perPage = DockPagingModel.railItemsPerPage(300, 100);
+        assertEquals(3, perPage);
+        assertEquals(3, DockPagingModel.realPinnedPageCount(7, perPage));
+        assertEquals(4, DockPagingModel.pinnedPageCount(7, perPage, true));
+        assertEquals(3, DockPagingModel.dynamicPageIndex(7, perPage, true));
+        assertTrue(DockPagingModel.isMostUsedDynamicPage(3, 7, perPage, true));
+        assertFalse(DockPagingModel.isMostUsedDynamicPage(2, 7, perPage, true));
+    }
+
+    @Test
+    public void aRailWithNoRecentEntriesGetsNoExtraPage() {
+        int perPage = DockPagingModel.railItemsPerPage(300, 100);
+        assertEquals(3, DockPagingModel.pinnedPageCount(7, perPage, false));
+        assertEquals(-1, DockPagingModel.dynamicPageIndex(7, perPage, false));
+        assertFalse(DockPagingModel.isMostUsedDynamicPage(3, 7, perPage, false));
+    }
+
     @Test
     public void pinnedPagesStartAtWholeMultiplesOfTheCapacity() {
         assertEquals(0, DockPagingModel.pinnedPageStart(0, 4));
@@ -228,6 +256,28 @@ public class DockPagingModelTest {
         assertEquals(0, DockPagingModel.commitPageDelta(-56f, 0f, 901f, commit, DENSITY));
     }
 
+    /** A lift that never moved is the commonest ACTION_UP of all, and it is not a page turn. */
+    @Test
+    public void aMotionlessLiftNeverCommits() {
+        assertEquals(0, DockPagingModel.commitPageDelta(0f, 0f, 0f, 216f, DENSITY));
+        assertEquals(0, DockPagingModel.commitPageDelta(0f, 0f, 4000f, 216f, DENSITY));
+    }
+
+    /** The dominance test applies to a fling too: a diagonal flick is not a page turn. */
+    @Test
+    public void aFlingThatIsNotDominantlyHorizontalNeverCommits() {
+        assertEquals(1, DockPagingModel.commitPageDelta(-60f, 40f, -901f, 216f, DENSITY));
+        assertEquals(0, DockPagingModel.commitPageDelta(-60f, 50f, -901f, 216f, DENSITY));
+    }
+
+    /** A row with no width yet still has the dp floor to clear, so a tap cannot page it. */
+    @Test
+    public void aRowWithNoWidthYetStillNeedsTheDpFloor() {
+        float commit = DockPagingModel.commitDistancePx(0f, DENSITY);
+        assertEquals(0, DockPagingModel.commitPageDelta(-84f, 0f, 0f, commit, DENSITY));
+        assertEquals(1, DockPagingModel.commitPageDelta(-85f, 0f, 0f, commit, DENSITY));
+    }
+
     @Test
     public void aDragThatIsNotDominantlyHorizontalNeverCommits() {
         float commit = 100f;
@@ -317,5 +367,31 @@ public class DockPagingModelTest {
         public boolean hasIconAt(int index) {
             return icons[index];
         }
+    }
+
+    // ------------------------------------------------------------------- the rail
+
+    /**
+     * A rail's page is however many of its fixed-pitch slots the column holds. The defect it fixes:
+     * one page held every pinned item whatever the column's length, so the run past the bottom of
+     * the canvas was clipped away and the last icons could not be reached at all.
+     */
+    @Test
+    public void aRailPagesByTheColumnItWasGiven() {
+        // The phone of record: a 1362 px canvas band and the rail's own 58dp slot at 2.75x.
+        int slotPx = 160;
+        assertEquals(8, DockPagingModel.railItemsPerPage(1362, slotPx));
+        assertEquals(2, DockPagingModel.realPinnedPageCount(14,
+            DockPagingModel.railItemsPerPage(1362, slotPx)));
+        // Whole slots only: a column that holds seven and a bit holds seven.
+        assertEquals(7, DockPagingModel.railItemsPerPage(7 * slotPx + slotPx - 1, slotPx));
+    }
+
+    @Test
+    public void aRailAlwaysHasASlotToDrawIn() {
+        assertEquals(1, DockPagingModel.railItemsPerPage(0, 160));
+        assertEquals(1, DockPagingModel.railItemsPerPage(40, 160));
+        assertEquals(1, DockPagingModel.railItemsPerPage(-100, 160));
+        assertEquals(1, DockPagingModel.railItemsPerPage(1362, 0));
     }
 }

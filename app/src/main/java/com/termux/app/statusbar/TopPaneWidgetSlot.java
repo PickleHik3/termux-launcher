@@ -14,6 +14,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.terminal.TerminalClockWidget;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 import java.util.List;
 
@@ -29,9 +30,10 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
     private static final float GUTTER_DP = 12f;
     private static final float GAP_DP = 12f;
+    /** The least run the media strip or the pinned cards keep beside a compact clock. */
+    private static final float SIDE_MIN_DP = 120f;
     private static final long MEDIA_TRANSITION_MS = 180L;
     private static final long PINNED_TRANSITION_MS = 200L;
-    private static final float STACK_HEIGHT_DP = 66f;
 
     private static final Interpolator INTERPOLATOR = new PathInterpolator(.16f, 1f, .3f, 1f);
 
@@ -46,8 +48,15 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     @Nullable private ViewPropertyAnimator mClockFade;
 
     private TopPaneSlotMode mMode = TopPaneSlotMode.CLOCK_ONLY;
+    @Nullable private Runnable mModeListener;
+    @Nullable private HomeAnchorListener mHomeAnchorListener;
+
+    /** Where the bar's home place icon belongs: on the clock's time line, at the band's height. */
+    public interface HomeAnchorListener {
+        void onHomeAnchor(float centerYPx, float sizePx);
+    }
     private int mPinnedCount;
-    private float mFullExpansionProgress;
+    @Nullable private String mClockAlignment;
 
     public TopPaneWidgetSlot(Context context) {
         this(context, null);
@@ -103,21 +112,30 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         applyFeed(false);
     }
 
+    /**
+     * The clock alignment decides where the clock's cell sits when it has the slot to itself: a
+     * centred clock is centred on the bar, not on what is left beside the place icon.
+     */
+    public void setClockAlignment(@Nullable String alignment) {
+        if (alignment == null ? mClockAlignment == null : alignment.equals(mClockAlignment)) return;
+        mClockAlignment = alignment;
+        requestLayout();
+    }
+
     @NonNull
     public TopPaneSlotMode getSlotMode() {
         return mMode;
     }
 
-    /** One controller-owned channel; child bounds are pure functions of this value. */
-    public void setFullExpansionProgress(float progress) {
-        float clamped = FullStatusBarGeometry.finiteUnit(progress);
-        if (Math.abs(clamped - mFullExpansionProgress) < .0001f) return;
-        mFullExpansionProgress = clamped;
-        if (mClock != null) mClock.setFullPresentationProgress(clamped);
-        requestLayout();
+    /** Told whenever the slot's mode changes: the bar's place icons keep clear of the cards. */
+    public void setModeListener(@Nullable Runnable listener) {
+        mModeListener = listener;
     }
 
-    public float getFullExpansionProgress() { return mFullExpansionProgress; }
+    /** Told after every layout where the home icon should sit; see {@link HomeAnchorListener}. */
+    public void setHomeAnchorListener(@Nullable HomeAnchorListener listener) {
+        mHomeAnchorListener = listener;
+    }
 
     @Override
     protected void onAttachedToWindow() {
@@ -150,15 +168,16 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         List<PinnedNotification> pinned = TopPaneFeed.getPinned();
         TopPaneMediaState media = TopPaneFeed.getMedia();
         TopPaneSlotMode mode = TopPaneSlotMode.derive(pinned.size(), media != null);
-        int pinnedCount = mode.showsNotifications()
-            ? Math.min(pinned.size(), TopPaneSlotMode.MAX_PINNED) : 0;
+        // Every match is handed over: two fill the slot and the rest are a swipe away, so the
+        // count here is what matched, not what fits.
+        int pinnedCount = mode.showsNotifications() ? pinned.size() : 0;
 
         // Content is only refreshed while the view is claiming the slot: a view on its way out keeps
         // its last frame so the fade has something to fade.
         if (mNotifications != null && mode.showsNotifications()) {
             mNotifications.setItems(pinned);
             mNotifications.setCompactCard(mode == TopPaneSlotMode.NOTIFICATIONS_AND_MEDIA
-                || pinnedCount == 2);
+                || pinnedCount >= TopPaneSlotMode.VISIBLE_PINNED);
         }
         if (mMedia != null && mode.showsMedia() && media != null) {
             mMedia.setForm(mode == TopPaneSlotMode.NOTIFICATIONS_AND_MEDIA
@@ -167,21 +186,10 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         }
 
         boolean modeChanged = mode != mMode || pinnedCount != mPinnedCount;
-        if (mFullExpansionProgress > 0f) {
-            // FULL owns every child bound. A feed update may change the mode, but no stale child
-            // animator is allowed to keep writing position while the row policy recomputes it.
-            if (mClockFade != null) mClockFade.cancel();
-            mClockFade = null;
-            mClock.animate().cancel();
-            mClock.setAlpha(1f);
-            mClock.setTranslationX(0f);
-            mClock.setTranslationY(0f);
-            if (mNotifications != null) mNotifications.animate().cancel();
-            if (mMedia != null) mMedia.animate().cancel();
-            animate = false;
-        }
+        boolean cardsChanged = (mode == TopPaneSlotMode.CLOCK_ONLY) != (mMode == TopPaneSlotMode.CLOCK_ONLY);
         mMode = mode;
         mPinnedCount = pinnedCount;
+        if (cardsChanged && mModeListener != null) mModeListener.run();
         applyClockForm(mode.clockForm(pinnedCount), animate);
         applyChildVisibility(mNotifications, mode.showsNotifications(), animate,
             PINNED_TRANSITION_MS, 0f, 6f);
@@ -263,6 +271,27 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             }).start();
     }
 
+    /**
+     * The clock's cell when it has the slot to itself, as {@code {start, end}} in px.
+     *
+     * <p>The widget centres its face inside its own bounds, so those bounds decide what "centre"
+     * means. Left and right keep the cell running from the place icon to the gutter, where the
+     * face sits flush against whichever edge it was asked for. Centre mirrors the leading cell on
+     * the trailing side instead, so the face lands on the bar's own centre line however wide the
+     * place icons grow — measured against the bar, not against what the icons leave over.
+     */
+    static int[] clockOnlySpan(int width, int leadingCell, int gutter, @Nullable String alignment) {
+        int start = leadingCell;
+        int end = width - gutter;
+        if (TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER.equals(alignment)) {
+            int inset = Math.max(leadingCell, gutter);
+            start = inset;
+            end = width - inset;
+        }
+        if (end < start) end = start;
+        return new int[]{start, end};
+    }
+
     // ---- Layout -----------------------------------------------------------
 
     @Override
@@ -274,48 +303,43 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
         int gutter = Math.round(dp(GUTTER_DP));
         int gap = Math.round(dp(GAP_DP));
-        int available = Math.max(0, width - gutter * 2);
-        boolean stacked = mMode.showsNotifications() && mPinnedCount >= TopPaneSlotMode.MAX_PINNED;
+        // The bar's home place icon sits beside the clock, whatever the clock's alignment; the
+        // clock and everything else lay out after it. The neighbours peek past the edges behind
+        // the content and take no room.
+        int contentStart = StatusBarLensView.leadingCellWidthPx(getContext());
+        int contentEnd = width - gutter;
+        int available = Math.max(0, contentEnd - contentStart);
 
         int clockWidth;
         int clockHeight;
+        int clockStart = contentStart;
         if (mMode == TopPaneSlotMode.CLOCK_ONLY) {
-            clockWidth = available;
+            int[] span = clockOnlySpan(width, contentStart, gutter, mClockAlignment);
+            clockStart = span[0];
+            clockWidth = Math.max(0, span[1] - span[0]);
             clockHeight = height;
         } else {
-            clockHeight = stacked ? Math.round(dp(14f)) : height;
+            clockHeight = height;
             mClock.measure(MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
                 MeasureSpec.makeMeasureSpec(clockHeight, MeasureSpec.EXACTLY));
-            clockWidth = Math.min(mClock.getMeasuredWidth(), Math.round(available * .55f));
+            // The clock keeps the width its compact face paints, as long as the media strip or
+            // the cards beside it still get a usable run; only then is it cut to just over half.
+            int sideMin = Math.round(dp(SIDE_MIN_DP)) + gap;
+            int cap = Math.max(Math.round(available * .55f), available - sideMin);
+            clockWidth = Math.min(mClock.getMeasuredWidth(), Math.max(0, cap));
         }
         mClock.measure(MeasureSpec.makeMeasureSpec(clockWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(clockHeight, MeasureSpec.EXACTLY));
-        mClockBounds.set(gutter, stacked ? 0 : (height - clockHeight) / 2,
-            gutter + clockWidth, (stacked ? 0 : (height - clockHeight) / 2) + clockHeight);
+        mClockBounds.set(clockStart, (height - clockHeight) / 2,
+            clockStart + clockWidth, (height - clockHeight) / 2 + clockHeight);
 
         mNotificationBounds.setEmpty();
         mMediaBounds.setEmpty();
-        if (mMode == TopPaneSlotMode.CLOCK_ONLY) {
-            applyFullRowPolicy(width, height, gutter, gap);
-            return;
-        }
+        if (mMode == TopPaneSlotMode.CLOCK_ONLY) return;
 
-        if (stacked) {
-            int stackHeight = Math.min(height, Math.round(dp(STACK_HEIGHT_DP)));
-            mNotificationBounds.set(gutter, Math.max(0, (height - stackHeight) / 2),
-                width - gutter, Math.max(0, (height - stackHeight) / 2) + stackHeight);
-            if (mNotifications != null) {
-                mNotifications.setHeaderInsetStart(clockWidth + gap);
-                measureExact(mNotifications, mNotificationBounds);
-            }
-            applyFullRowPolicy(width, height, gutter, gap);
-            return;
-        }
-
-        int contentLeft = gutter + clockWidth + gap;
-        int contentRight = width - gutter;
+        int contentLeft = contentStart + clockWidth + gap;
+        int contentRight = contentEnd;
         int contentWidth = Math.max(0, contentRight - contentLeft);
-        if (mNotifications != null) mNotifications.setHeaderInsetStart(0f);
 
         switch (mMode) {
             case NOTIFICATIONS_AND_MEDIA: {
@@ -331,7 +355,8 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
                 break;
             }
             case NOTIFICATIONS: {
-                // One card gets two body lines; two share the slot at one line each.
+                // One card gets two body lines and 48dp; two or more fill the slot at one line
+                // each, and anything past the second scrolls into the same two cards' room.
                 int desired = Math.round(dp(mPinnedCount == 1 ? 48f : 68f));
                 int cardsHeight = Math.min(height, desired);
                 int top = Math.max(0, (height - cardsHeight) / 2);
@@ -350,39 +375,9 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (contentWidth <= 0) {
             mNotificationBounds.setEmpty();
             mMediaBounds.setEmpty();
-            applyFullRowPolicy(width, height, gutter, gap);
             return;
         }
         if (mNotifications != null && !mNotificationBounds.isEmpty()) {
-            measureExact(mNotifications, mNotificationBounds);
-        }
-        if (mMedia != null && !mMediaBounds.isEmpty()) measureExact(mMedia, mMediaBounds);
-        applyFullRowPolicy(width, height, gutter, gap);
-    }
-
-    private void applyFullRowPolicy(int width, int height, int gutter, int gap) {
-        if (mClock == null) return;
-        boolean stacked = mMode.showsNotifications()
-            && mPinnedCount >= TopPaneSlotMode.MAX_PINNED;
-        int normalHeaderInset = stacked ? mClockBounds.width() + gap : 0;
-        int clockDesired = Math.max(1, Math.round(mClock.contentWidth()));
-        int notificationDesired = mNotificationBounds.isEmpty() ? 0
-            : Math.max(Math.round(dp(112f)), Math.min(mNotificationBounds.width(),
-                Math.round(width * .42f)));
-        int mediaDesired = mMediaBounds.isEmpty() ? 0
-            : Math.max(Math.round(dp(112f)), Math.min(mMediaBounds.width(),
-                Math.round(width * .42f)));
-        TopPaneFullRowPolicy.Result result = TopPaneFullRowPolicy.calculate(mMode, mPinnedCount,
-            width, height, gutter, gap, clockDesired, notificationDesired, mediaDesired,
-            new Rect(mClockBounds), new Rect(mNotificationBounds), new Rect(mMediaBounds),
-            mFullExpansionProgress, getLayoutDirection() == LAYOUT_DIRECTION_RTL);
-        mClockBounds.set(result.clock);
-        mNotificationBounds.set(result.notifications);
-        mMediaBounds.set(result.media);
-        measureExact(mClock, mClockBounds);
-        if (mNotifications != null && !mNotificationBounds.isEmpty()) {
-            float p = FullStatusBarGeometry.finiteUnit(mFullExpansionProgress);
-            mNotifications.setHeaderInsetStart(normalHeaderInset * (1f - p));
             measureExact(mNotifications, mNotificationBounds);
         }
         if (mMedia != null && !mMediaBounds.isEmpty()) measureExact(mMedia, mMediaBounds);
@@ -397,6 +392,15 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         if (mClock != null) {
             mClock.layout(mClockBounds.left, mClockBounds.top, mClockBounds.right, mClockBounds.bottom);
+            if (mHomeAnchorListener != null) {
+                // On the time's own line at the digits' height while the clock shows its full
+                // face; a compact face beside cards has no band, so the icon centres on it.
+                float band = mClock.fullBandCenterYPx();
+                float bandHeight = mClock.fullBandHeightPx();
+                float centerY = band >= 0f ? mClock.getTop() + band : mClockBounds.exactCenterY();
+                float size = bandHeight > 0f ? bandHeight : dp(28f);
+                mHomeAnchorListener.onHomeAnchor(centerY, size);
+            }
         }
         if (mNotifications != null && !mNotificationBounds.isEmpty()) {
             mNotifications.layout(mNotificationBounds.left, mNotificationBounds.top,

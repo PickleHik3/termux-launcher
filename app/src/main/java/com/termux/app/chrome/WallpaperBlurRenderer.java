@@ -2,6 +2,7 @@ package com.termux.app.chrome;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.os.Trace;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -19,6 +20,16 @@ final class WallpaperBlurRenderer {
 
     @Nullable
     static Bitmap preBlur(@NonNull Context context, @NonNull Bitmap sourceBitmap, int blurRadiusDp) {
+        Trace.beginSection("Blur.preBlur");
+        try {
+            return doPreBlur(context, sourceBitmap, blurRadiusDp);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    @Nullable
+    private static Bitmap doPreBlur(@NonNull Context context, @NonNull Bitmap sourceBitmap, int blurRadiusDp) {
         float blurRadiusPx = ViewUtils.dpToPx(context, Math.max(0, blurRadiusDp));
         if (blurRadiusPx <= 0f) {
             return sourceBitmap;

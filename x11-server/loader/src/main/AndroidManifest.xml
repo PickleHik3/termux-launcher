@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Never installed. This APK exists only to be put on app_process's CLASSPATH by
+     $PREFIX/bin/termux-x11, which is why it declares the system shared user id: an installable
+     manifest would be a second app to keep in sync, which is the whole thing the launcher avoids
+     by owning the server. -->
+<manifest android:sharedUserId="android.uid.system"
+    xmlns:android="http://schemas.android.com/apk/res/android" />

@@ -30,10 +30,12 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
+import androidx.core.widget.NestedScrollView;
 import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
@@ -64,10 +66,34 @@ import java.util.Set;
  */
 public final class PinnedAppsEditor {
 
+    /**
+     * What the editor tells the first-run tour: that it came up, and what it left behind.
+     *
+     * <p>Separate from {@code onSaved}, which is the dock asking to re-render: the editor writes
+     * the pinned list on every change, so {@code onSaved} runs several times while one editor is
+     * open, and a lesson about pinning an app has to know when the user is finished rather than
+     * when the list last moved.
+     */
+    public interface Listener {
+        /** The editor is in front of the user. */
+        default void onPinEditorOpened() {}
+
+        /**
+         * The editor has gone, however it was dismissed — Done, Close, or a swipe off the sheet.
+         *
+         * @param saved whether the editor wrote the pinned list while it was open
+         * @param pinnedCount how many pins it left in the dock
+         */
+        default void onPinEditorClosed(boolean saved, int pinnedCount) {}
+    }
+
     private static final int MOST_USED_COUNT = 6;
 
     private final Context context;
     @Nullable private final Runnable onSaved;
+    @Nullable private final Listener listener;
+    /** Whether this editor has written the pinned list at all. */
+    private boolean wrote;
     private final LauncherConfigRepository repository;
     private final LauncherUsageStatsStore usageStats;
 
@@ -86,9 +112,11 @@ public final class PinnedAppsEditor {
 
     private final boolean[] folderMode = new boolean[] {false};
 
-    private PinnedAppsEditor(@NonNull Context context, @Nullable Runnable onSaved) {
+    private PinnedAppsEditor(@NonNull Context context, @Nullable Runnable onSaved,
+                             @Nullable Listener listener) {
         this.context = context;
         this.onSaved = onSaved;
+        this.listener = listener;
         this.repository = LauncherConfigRepository.getInstance(context);
         this.usageStats = LauncherUsageStatsStore.getInstance(context);
         this.density = context.getResources().getDisplayMetrics().density;
@@ -101,7 +129,13 @@ public final class PinnedAppsEditor {
 
     /** Builds and shows the editor. Loads the app list (async if needed) before presenting. */
     public static void show(@NonNull Context context, @Nullable Runnable onSaved) {
-        new PinnedAppsEditor(context, onSaved).open();
+        show(context, onSaved, null);
+    }
+
+    /** The same editor, watched: the dock passes the tour's listener, Settings passes none. */
+    public static void show(@NonNull Context context, @Nullable Runnable onSaved,
+                            @Nullable Listener listener) {
+        new PinnedAppsEditor(context, onSaved, listener).open();
     }
 
     private void open() {
@@ -174,6 +208,10 @@ public final class PinnedAppsEditor {
         orderedBg.setColor(withAlpha(colorPanel, 0xAA));
         orderedBg.setStroke(dp(1), withAlpha(colorOutline, 0x44));
         orderedRecycler.setBackground(orderedBg);
+        // The list scrolls on its own, like the apps list below it. As a nested-scrolling child it
+        // handed the movement it could not use, a pull down at its top, up to the bottom sheet,
+        // which read that as a pull to dismiss and closed the editor mid-scroll.
+        orderedRecycler.setNestedScrollingEnabled(false);
         orderedRecycler.setOnTouchListener((v, e) -> {
             v.getParent().requestDisallowInterceptTouchEvent(true);
             return false;
@@ -331,8 +369,23 @@ public final class PinnedAppsEditor {
         buttons.addView(save);
         root.addView(buttons, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        dialog.setContentView(root);
+        // Scrollable, because the sheet is squeezed above the keyboard while the search field has
+        // focus, and a fixed column then pushed the field and the APPS list off the bottom: the
+        // user typed into a box they could not see and tapped rows that were not where they looked.
+        NestedScrollView scroller = new NestedScrollView(context);
+        scroller.setFillViewport(true);
+        scroller.addView(root, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        dialog.setContentView(scroller);
+        dialog.getBehavior().setSkipCollapsed(true);
+        dialog.getBehavior().setState(BottomSheetBehavior.STATE_EXPANDED);
+        // One dismiss path for every way out of the sheet, so the tour is told once whether the
+        // user tapped Done, tapped Close or swiped the sheet away.
+        dialog.setOnDismissListener(dismissed -> {
+            if (listener != null) listener.onPinEditorClosed(wrote, orderedSelected.size());
+        });
         dialog.show();
+        if (listener != null) listener.onPinEditorOpened();
         if (dialog.getWindow() != null) {
             dialog.getWindow().setBackgroundDrawable(new ColorDrawable(0x00000000));
             dialog.getWindow().setDimAmount(0.35f);
@@ -410,6 +463,7 @@ public final class PinnedAppsEditor {
     }
 
     private void persist() {
+        wrote = true;
         List<PinnedItem> result = new ArrayList<>();
         if (folderMode[0]) {
             // Collapse all selected app pins into one folder, preserving existing folders.

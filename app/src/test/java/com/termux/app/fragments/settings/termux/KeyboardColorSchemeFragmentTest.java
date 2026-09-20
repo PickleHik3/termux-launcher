@@ -21,6 +21,8 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import juloo.keyboard2.Theme;
+
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class KeyboardColorSchemeFragmentTest {
@@ -129,6 +131,26 @@ public class KeyboardColorSchemeFragmentTest {
         scheme.setSwatch(1, 0xFF445566);
         assertEquals("base01, primary, pinned",
             KeyboardColorSchemeFragment.slotDescription(context, scheme, 1));
+    }
+
+    @Test
+    public void withKeyboardBackgroundKeepsTheFunctionKeyTierFromTheBasePalette() {
+        // withKeyboardBackground only swaps the keyboard tray color for the settings preview;
+        // it must not drop the function-key tier back to the un-migrated default the way the
+        // pre-fix constructor call did.
+        Theme.Palette base = new Theme.Palette(
+            0xFF000000, 0xFF222222, 0xFF3333FF, 0xFF222222, 0xFF888888,
+            0xFFFFFFFF, 0xFFCCCCCC, 0xFFFFFFFF, 0xFFFFFFFF, 0xFF00FF00,
+            0xFF808080, false, 0f, 0f, 1f, 0.25f, 0.5f,
+            0xFFFFFF00, 0xFFFFFF00, null, 0, 0,
+            0xFF444444, 0xFF00FFFF);
+
+        Theme.Palette withNewBackground =
+            KeyboardColorSchemeFragment.withKeyboardBackground(base, 0xFF101010);
+
+        assertEquals(0xFF101010, withNewBackground.keyboardBackground);
+        assertEquals(base.functionKeyBackground, withNewBackground.functionKeyBackground);
+        assertEquals(base.functionLabelColor, withNewBackground.functionLabelColor);
     }
 
     @Test

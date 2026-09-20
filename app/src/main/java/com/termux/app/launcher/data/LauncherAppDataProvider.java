@@ -7,6 +7,7 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.LauncherActivityInfo;
 import android.content.pm.LauncherApps;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -26,6 +27,7 @@ import com.termux.app.launcher.icon.LauncherIconStore;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
+import java.lang.ref.WeakReference;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -49,7 +51,10 @@ public final class LauncherAppDataProvider {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService executor = newIdleFriendlyExecutor();
     private final LauncherIconResolver iconResolver;
+    private final IconPackRepository iconPackRepository;
     private final LauncherIconStore iconStore;
+    /** Memoized {@link #iconPackIdentity()}; null means "ask the packages again". */
+    @Nullable private String iconPackIdentity;
     private List<LauncherAppEntry> cachedApps = Collections.emptyList();
     private final Map<String, LauncherAppEntry> cachedById = new LinkedHashMap<>();
     private final Map<String, LauncherAppEntry> cachedFirstByPackage = new HashMap<>();
@@ -57,6 +62,8 @@ public final class LauncherAppDataProvider {
     private final Map<Character, List<LauncherAppEntry>> letterBuckets = new HashMap<>();
     private final Map<String, Long> cachedLastUpdateByPackage = new HashMap<>();
     private final List<Runnable> pendingRefreshCallbacks = new ArrayList<>();
+    private final List<WeakReference<IconArtworkListener>> artworkListeners = new ArrayList<>();
+    private final LauncherHiddenAppsStore hiddenAppsStore;
     private boolean loaded;
     private boolean loading;
     private boolean refreshing;
@@ -65,10 +72,83 @@ public final class LauncherAppDataProvider {
     private LauncherAppDataProvider(@NonNull Context context) {
         this.context = context.getApplicationContext();
         this.iconResolver = new LauncherIconResolver(this.context);
+        this.iconPackRepository = new IconPackRepository(this.context);
+        this.hiddenAppsStore = new LauncherHiddenAppsStore(this.context);
         this.iconStore = new LauncherIconStore(
             this.context.getResources(),
             DockIconCache.memoryClassMb(this.context),
-            ref -> iconResolver.resolveDetailed(ref, null, null).drawable);
+            ref -> com.termux.app.x11.X11Apps.isLinuxApp(ref)
+                ? linuxAppIcon(ref) : iconResolver.resolveDetailed(ref, null, null).drawable);
+    }
+
+    /**
+     * The Linux apps the last listing found, by id. The icon store asks for one drawable at a
+     * time, and a scan now reads every container's desktop files as well as the prefix's, so
+     * answering from the listing the drawer was just built from is what keeps a full scan from
+     * happening once per tile. An id that is not in it — a pin from before the display was
+     * switched on — still falls back to a scan.
+     */
+    @NonNull
+    private volatile Map<String, com.termux.app.x11.LinuxAppCatalog.LinuxApp> linuxAppsById =
+        Collections.emptyMap();
+
+    /**
+     * A Linux app's icon, from the prefix or from the container it is installed in, or the
+     * drawer's generic mark for one without a PNG.
+     */
+    @Nullable
+    private Drawable linuxAppIcon(@NonNull AppRef ref) {
+        String id = com.termux.app.x11.X11Apps.desktopId(ref);
+        com.termux.app.x11.LinuxAppCatalog.LinuxApp app = linuxAppsById.get(id);
+        if (app == null) {
+            app = com.termux.app.x11.LinuxAppCatalog.find(
+                com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots()), id);
+        }
+        return linuxAppIcon(app);
+    }
+
+    @Nullable
+    private Drawable linuxAppIcon(@Nullable com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
+        if (app != null) {
+            java.io.File file = com.termux.app.x11.LinuxAppIcons.find(app);
+            Drawable icon = file == null ? null
+                : com.termux.app.x11.LinuxAppIcons.load(context.getResources(), file);
+            if (icon != null) return icon;
+        }
+        return androidx.core.content.ContextCompat.getDrawable(context, com.termux.R.drawable.ic_symbol_terminal);
+    }
+
+    /**
+     * The Linux apps in the prefix and in every installed distro container, when the display is
+     * switched on and the user wants them listed. They
+     * are catalogue entries like any other — ranked, pinnable, searchable — under the reserved
+     * package {@link com.termux.app.x11.X11Apps#PACKAGE}; a tap runs them on the display.
+     */
+    private void addLinuxApps(@NonNull Snapshot snapshot) {
+        linuxAppsById = Collections.emptyMap();
+        if (!com.termux.BuildConfig.X11_SERVER) return;
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
+        if (prefs == null || !prefs.isX11DisplayEnabled() || !prefs.isX11DrawerAppsEnabled()) return;
+        Map<String, com.termux.app.x11.LinuxAppCatalog.LinuxApp> byId = new HashMap<>();
+        for (com.termux.app.x11.LinuxAppCatalog.LinuxApp app
+                : com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots())) {
+            byId.put(app.id, app);
+            AppRef ref = com.termux.app.x11.X11Apps.ref(app.id);
+            if (snapshot.byId.containsKey(ref.stableId())) continue;
+            iconStore.prime(ref, linuxAppIcon(app));
+            LauncherAppEntry entry = new LauncherAppEntry(ref, app.name, null, false,
+                ApplicationInfo.CATEGORY_UNDEFINED, 0L);
+            snapshot.apps.add(entry);
+            snapshot.byId.put(ref.stableId(), entry);
+            char key = normalizeLetter(app.name.isEmpty() ? '#' : app.name.charAt(0));
+            List<LauncherAppEntry> bucket = snapshot.letterBuckets.get(key);
+            if (bucket == null) {
+                bucket = new ArrayList<>();
+                snapshot.letterBuckets.put(key, bucket);
+            }
+            bucket.add(entry);
+        }
+        linuxAppsById = byId;
     }
 
     /**
@@ -78,6 +158,24 @@ public final class LauncherAppDataProvider {
     @NonNull
     public LauncherIconStore icons() {
         return iconStore;
+    }
+
+    /**
+     * The icon-pack configuration now in force, as a token that changes whenever the treatment
+     * does. Every cache of treated artwork keys on it — the store here, and the rendered-icon
+     * caches that live with their surfaces — so a pack switch cannot serve a render made under the
+     * previous pack. Read from the packages once and held until an invalidation.
+     */
+    @NonNull
+    public synchronized String iconPackIdentity() {
+        if (iconPackIdentity == null) {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
+            iconPackIdentity = preferences == null ? "" : iconPackRepository.activeIconPackIdentity(
+                preferences.getAppLauncherIconPackPackage(),
+                preferences.getAppLauncherPinnedIconPackPackage());
+            iconStore.setIconPackIdentity(iconPackIdentity);
+        }
+        return iconPackIdentity;
     }
 
     /**
@@ -117,6 +215,7 @@ public final class LauncherAppDataProvider {
 
     public synchronized void invalidate() {
         refreshGeneration++;
+        iconPackIdentity = null;
         loading = false;
         loaded = false;
         refreshing = false;
@@ -127,6 +226,58 @@ public final class LauncherAppDataProvider {
         letterBuckets.clear();
         cachedLastUpdateByPackage.clear();
         pendingRefreshCallbacks.clear();
+    }
+
+    /**
+     * Everything an icon-pack change makes stale, in one call: the catalogue, the raw artwork
+     * store, the parsed pack resources, and — through {@link IconArtworkListener} — the
+     * rendered-icon caches that live with the surfaces drawing them.
+     *
+     * <p>This exists because {@link #invalidate()} alone resets catalogue state and nothing else,
+     * while the settings screen that changes the pack has only the provider to talk to. The dock
+     * therefore kept drawing the previous pack until some unrelated gesture rebound its rows.
+     */
+    public void invalidateIconArtwork() {
+        iconStore.invalidateAll();
+        iconResolver.clearCache();
+        iconPackRepository.clearCache();
+        invalidate();
+        mainHandler.post(this::notifyIconArtworkInvalidated);
+    }
+
+    /**
+     * Something holding renders made from this provider's artwork — a dock row, a drawer — that
+     * has to be told when the artwork behind them changed. Registered weakly: a surface that has
+     * gone away is not a reason to keep it alive, and the provider outlives every view.
+     */
+    public interface IconArtworkListener {
+        void onIconArtworkInvalidated();
+    }
+
+    public synchronized void addIconArtworkListener(@NonNull IconArtworkListener listener) {
+        for (WeakReference<IconArtworkListener> held : artworkListeners) {
+            if (held.get() == listener) return;
+        }
+        artworkListeners.add(new WeakReference<>(listener));
+    }
+
+    public synchronized void removeIconArtworkListener(@NonNull IconArtworkListener listener) {
+        for (int i = artworkListeners.size() - 1; i >= 0; i--) {
+            IconArtworkListener held = artworkListeners.get(i).get();
+            if (held == null || held == listener) artworkListeners.remove(i);
+        }
+    }
+
+    private void notifyIconArtworkInvalidated() {
+        List<IconArtworkListener> live = new ArrayList<>();
+        synchronized (this) {
+            for (int i = artworkListeners.size() - 1; i >= 0; i--) {
+                IconArtworkListener held = artworkListeners.get(i).get();
+                if (held == null) artworkListeners.remove(i);
+                else live.add(held);
+            }
+        }
+        for (IconArtworkListener listener : live) listener.onIconArtworkInvalidated();
     }
 
     public synchronized boolean hasLoadedApps() {
@@ -255,13 +406,38 @@ public final class LauncherAppDataProvider {
         refreshing = false;
     }
 
+    /**
+     * The one store behind {@link #getAllApps()}'s filtering — shared rather than re-created, so
+     * a settings screen that edits it and this always-live provider never disagree. See the
+     * store's own class comment.
+     */
+    @NonNull
+    public LauncherHiddenAppsStore hiddenApps() {
+        return hiddenAppsStore;
+    }
+
     @NonNull
     public synchronized List<LauncherAppEntry> getAllApps() {
-        return cachedApps;
+        return visibleOnly(cachedApps);
     }
 
     @NonNull
     public List<LauncherAppEntry> getAllAppsBlocking() {
+        return visibleOnly(ensureLoadedBlocking());
+    }
+
+    /**
+     * Every app the catalogue holds, hidden ones included — for the settings screen that lists
+     * every drawer app so a hidden one can be found again and un-hidden. Every other caller wants
+     * {@link #getAllAppsBlocking()} instead, which leaves hidden apps out.
+     */
+    @NonNull
+    public List<LauncherAppEntry> getAllAppsIncludingHiddenBlocking() {
+        return ensureLoadedBlocking();
+    }
+
+    @NonNull
+    private List<LauncherAppEntry> ensureLoadedBlocking() {
         synchronized (this) {
             if (loaded) {
                 return cachedApps;
@@ -273,6 +449,34 @@ public final class LauncherAppDataProvider {
             applySnapshotLocked(snapshot);
             return cachedApps;
         }
+    }
+
+    /**
+     * Drops hidden apps from a list the catalogue produced. Left out entirely: {@link #findByRef},
+     * {@link #findFirstByPackage} and {@link #findDefaultByPackage}, which a pin, a folder member
+     * or a terminal "open <package>" command still needs to resolve after the app it names is
+     * hidden — hiding removes an app from discovery, not from what already points at it.
+     */
+    @NonNull
+    private List<LauncherAppEntry> visibleOnly(@NonNull List<LauncherAppEntry> apps) {
+        if (apps.isEmpty() || hiddenAppsStore.isEmpty()) return apps;
+        return filterHidden(apps, hiddenAppsStore.hiddenStableIds());
+    }
+
+    /**
+     * The filter itself, kept pure and static so it is testable against a hand-built list —
+     * including a Linux app's container-qualified {@code AppRef} — without a package-manager
+     * scan. Matches by {@link AppRef#stableId()}, the same id pins, folders and rankings key on.
+     */
+    @NonNull
+    static List<LauncherAppEntry> filterHidden(@NonNull List<LauncherAppEntry> apps,
+                                               @NonNull Set<String> hiddenStableIds) {
+        if (apps.isEmpty() || hiddenStableIds.isEmpty()) return apps;
+        List<LauncherAppEntry> visible = new ArrayList<>(apps.size());
+        for (LauncherAppEntry entry : apps) {
+            if (!hiddenStableIds.contains(entry.appRef.stableId())) visible.add(entry);
+        }
+        return visible;
     }
 
     @Nullable
@@ -299,7 +503,7 @@ public final class LauncherAppDataProvider {
     @NonNull
     public synchronized List<LauncherAppEntry> getAppsForLetter(char letter) {
         List<LauncherAppEntry> bucket = letterBuckets.get(normalizeLetter(letter));
-        return bucket == null ? Collections.emptyList() : bucket;
+        return bucket == null ? Collections.emptyList() : visibleOnly(bucket);
     }
 
     private void dispatchRefreshCallbacksLocked() {
@@ -382,6 +586,7 @@ public final class LauncherAppDataProvider {
         }
         addProfileApps(snapshot, packageManager, defaultComponentsByPackage,
             previousById, changedPackages);
+        addLinuxApps(snapshot);
         return snapshot;
     }
 

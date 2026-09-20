@@ -9,6 +9,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.drawer.AppDrawerCategoryAssignment.Source;
 import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.x11.X11Apps;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,8 +25,9 @@ import java.util.Set;
 
 /**
  * Deterministic classification pipeline plus the two local synthetic overlays. Per entry the
- * precedence is: user override, curated force, platform category, curated fill, default system
- * role, scored offline heuristics, then OTHER. Everything is offline and package-level.
+ * precedence is: user override, Linux app identity, curated force, platform category, curated
+ * fill, default system role, scored offline heuristics, then OTHER. Everything is offline and
+ * package-level.
  */
 public final class AppDrawerCategoryClassifier {
     public static final long RECENT_WINDOW_MS = 30L * 24L * 60L * 60L * 1000L;
@@ -189,6 +191,11 @@ public final class AppDrawerCategoryClassifier {
             if (user != null && !user.synthetic)
                 return new AppDrawerCategoryAssignment(user, Source.USER, 1f);
         }
+        // Package identity, not a guess: every x11:linux entry belongs together regardless of
+        // what its name or label scores against the heuristics below.
+        if (X11Apps.isLinuxApp(entry.appRef))
+            return new AppDrawerCategoryAssignment(AppDrawerCategory.LINUX_APPS,
+                Source.LINUX_APP, 1f);
         AppDrawerCategory forced = curated.forcedCategoryForPackage(packageName);
         if (forced != null)
             return new AppDrawerCategoryAssignment(forced, Source.CURATED_FORCE, 1f);

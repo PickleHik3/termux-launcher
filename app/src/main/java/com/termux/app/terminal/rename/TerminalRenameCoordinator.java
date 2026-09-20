@@ -11,6 +11,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.TerminalNamePolicy;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 
@@ -82,12 +83,13 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
     private static final float EDGE_MARGIN_DP = 10f;
 
     @NonNull private final Host host;
-    @NonNull private final InlineRenameController controller = new InlineRenameController();
+    @NonNull private final InlineRenameController controller;
     @Nullable private TerminalRenameChipView chip;
     @Nullable private TerminalRenameTarget target;
 
-    public TerminalRenameCoordinator(@NonNull Host host) {
+    public TerminalRenameCoordinator(@NonNull Host host, @NonNull ClipboardText clipboardSource) {
         this.host = host;
+        this.controller = new InlineRenameController(clipboardSource);
     }
 
     public boolean isActive() {

@@ -19,37 +19,50 @@
         <item name="android:letterSpacing">-0.02</item>
     </style>
 
-    <!-- One segment of the surface editor's two style pills. Tighter than a stock outlined button
-         on every axis the card is short of: no vertical inset, a 34dp bar, 11.5sp text that
-         autosizes down rather than truncating, and no minimum width, so three segments still fit
-         beside two on one row at a large font scale. -->
-    <style name="Widget.Termux.SurfaceEditor.Segment" parent="Widget.Material3.Button.OutlinedButton">
+    <!-- One segment of an editor-shell toggle group, in both editors. Tighter than a stock
+         outlined button on every axis the card is short of: no vertical inset, no minimum width,
+         and text that autosizes down rather than truncating. The bar stands at 44dp inside a 48dp
+         row — the shipped 30dp was under the platform touch floor. -->
+    <style name="Widget.Termux.EditorShell.Segment" parent="Widget.Material3.Button.OutlinedButton">
         <item name="android:layout_width">0dp</item>
         <!-- A fixed height, not wrap_content: appcompat switches auto-sizing off entirely when
              either dimension wraps, and auto-sizing is what keeps "Floating" whole at a large font
              scale in a segment this narrow. -->
-        <item name="android:layout_height">30dp</item>
+        <item name="android:layout_height">44dp</item>
         <item name="android:layout_weight">1</item>
         <item name="android:insetTop">0dp</item>
         <item name="android:insetBottom">0dp</item>
         <item name="android:minWidth">0dp</item>
         <item name="android:minHeight">0dp</item>
         <!-- Material3's outlined button ships 24dp of horizontal padding, set as left/right; both
-             pairs have to go or a five-letter label has ~48dp less room than the segment looks. -->
-        <item name="android:paddingLeft">2dp</item>
-        <item name="android:paddingRight">2dp</item>
-        <item name="android:paddingStart">2dp</item>
-        <item name="android:paddingEnd">2dp</item>
+             pairs have to go or a five-letter label has ~48dp less room than the segment looks.
+             6dp is what a segment at the shell's width can afford and the 2dp it replaces was
+             compensation for a segment that was too narrow to begin with. -->
+        <item name="android:paddingLeft">6dp</item>
+        <item name="android:paddingRight">6dp</item>
+        <item name="android:paddingStart">6dp</item>
+        <item name="android:paddingEnd">6dp</item>
         <item name="android:maxLines">1</item>
         <item name="android:ellipsize">end</item>
-        <item name="android:textSize">11.5sp</item>
+        <item name="android:textSize">12sp</item>
         <item name="android:letterSpacing">0</item>
         <item name="android:textAllCaps">false</item>
         <item name="autoSizeTextType">uniform</item>
-        <item name="autoSizeMinTextSize">8sp</item>
-        <item name="autoSizeMaxTextSize">11.5sp</item>
+        <item name="autoSizeMinTextSize">9sp</item>
+        <item name="autoSizeMaxTextSize">12sp</item>
         <item name="autoSizeStepGranularity">0.5sp</item>
         <item name="iconPadding">0dp</item>
+    </style>
+
+    <!-- The editor body's scroller. Applied as a theme overlay rather than a style, because the
+         Appearance editor's scroller is a ScrollView and the Layout editor's is a NestedScrollView
+         and only one of them has a constructor that takes a style. Both editors draw the scrollbar
+         always: it is what says how much more there is, and a body capped short of its last rows
+         with no scrollbar reads as the whole list. -->
+    <style name="ThemeOverlay.Termux.EditorShellScroller" parent="">
+        <item name="android:scrollbarSize">3dp</item>
+        <item name="android:scrollbarThumbVertical">@drawable/editor_shell_scrollbar_thumb</item>
+        <item name="android:scrollbarTrackVertical">@drawable/editor_shell_scrollbar_track</item>
     </style>
 
     <style name="SettingsSegmentLabel">

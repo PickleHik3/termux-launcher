@@ -6,10 +6,12 @@ import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 
 import org.json.JSONObject;
+import org.json.JSONArray;
 import org.junit.Test;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.ArrayList;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -83,29 +85,27 @@ public class TaiModelCatalogPreferencesFragmentTest {
     }
 
     @Test
-    public void sortForDisplay_ordersRecommendedFirstThenSmallest() {
+    public void sortForDisplay_prioritizesDownloadedAndDefaultWithoutRecommendations() {
+        List<TaiModelCatalog.CatalogEntry> entries = new ArrayList<>(TaiModelCatalog.entries().values());
+        String installed = "qwen2.5-coder-7b-instruct-mnn";
+        String active = "qwen2.5-3b-instruct-mnn";
         List<TaiModelCatalog.CatalogEntry> sorted = TaiModelCatalogPreferencesFragment.sortForDisplay(
-            TaiModelCatalogPreferencesFragment.filterEntries(TaiModelCatalog.entries().values(),
-                TaiModelCatalogPreferencesFragment.BackendFilter.ALL, ""));
+            entries, new java.util.HashSet<>(java.util.Arrays.asList(installed, active)),
+            new JSONArray(), active, "downloaded");
+        assertEquals(active, sorted.get(0).modelId);
+        assertEquals(installed, sorted.get(1).modelId);
+        assertEquals(entries.size(), sorted.size());
+    }
 
-        assertEquals(TaiModelCatalog.entries().size(), sorted.size());
-
-        // Recommended models are grouped at the front.
-        int firstNonRecommended = sorted.size();
-        for (int i = 0; i < sorted.size(); i++) {
-            if (!sorted.get(i).recommended) {
-                firstNonRecommended = i;
-                break;
-            }
-        }
-        assertTrue("at least one recommended model should sort first", firstNonRecommended > 0);
-        for (int i = firstNonRecommended; i < sorted.size(); i++) {
-            assertFalse(sorted.get(i).recommended);
-        }
-
-        // Within each partition the download size is non-decreasing.
-        assertNonDecreasingSizes(sorted.subList(0, firstNonRecommended));
-        assertNonDecreasingSizes(sorted.subList(firstNonRecommended, sorted.size()));
+    @Test
+    public void explicitNameAndSizeSortIgnoreRecommendations() {
+        List<TaiModelCatalog.CatalogEntry> entries = new ArrayList<>(TaiModelCatalog.entries().values());
+        List<TaiModelCatalog.CatalogEntry> sorted = TaiModelCatalogPreferencesFragment.sortForDisplay(
+            entries, Collections.emptySet(), new JSONArray(), "", "name");
+        for (int i = 1; i < sorted.size(); i++)
+            assertTrue(sorted.get(i - 1).displayName.compareToIgnoreCase(sorted.get(i).displayName) <= 0);
+        assertNonDecreasingSizes(TaiModelCatalogPreferencesFragment.sortForDisplay(
+            entries, Collections.emptySet(), new JSONArray(), "", "size"));
     }
 
     private void assertNonDecreasingSizes(List<TaiModelCatalog.CatalogEntry> entries) {

@@ -3,6 +3,8 @@ package com.termux.app.terminal.io;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.extrakeys.ExtraKeyColorRole;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -23,12 +25,17 @@ import java.util.List;
  */
 public final class ExtraKeysLayoutModel {
 
-    /** One button: a key or a macro, an optional display override, an optional swipe-up key. */
+    /**
+     * One button: a key or a macro, an optional display override, an optional swipe-up key, and an
+     * optional Material colour role for the cap.
+     */
     public static final class Key {
         @NonNull public String key;
         public boolean macro;
         @Nullable public String display;
         @Nullable public Key popup;
+        /** The cap's colour role, or null to leave the key with the row's own styling. */
+        @Nullable public ExtraKeyColorRole color;
 
         public Key(@NonNull String key) {
             this.key = key;
@@ -36,15 +43,21 @@ public final class ExtraKeysLayoutModel {
 
         public Key(@NonNull String key, boolean macro, @Nullable String display,
                    @Nullable Key popup) {
+            this(key, macro, display, popup, null);
+        }
+
+        public Key(@NonNull String key, boolean macro, @Nullable String display,
+                   @Nullable Key popup, @Nullable ExtraKeyColorRole color) {
             this.key = key;
             this.macro = macro;
             this.display = display;
             this.popup = popup;
+            this.color = color;
         }
 
         @NonNull
         public Key copy() {
-            return new Key(key, macro, display, popup == null ? null : popup.copy());
+            return new Key(key, macro, display, popup == null ? null : popup.copy(), color);
         }
 
         /** What the editor shows for this key when no explicit display is set. */
@@ -97,13 +110,14 @@ public final class ExtraKeysLayoutModel {
             JSONObject object = (JSONObject) element;
             String macro = object.optString("macro", null);
             String key = object.optString("key", null);
+            ExtraKeyColorRole color = ExtraKeyColorRole.fromToken(object.optString("color", null));
             if (macro != null && !macro.isEmpty()) {
                 return new Key(macro, true, emptyToNull(object.optString("display", null)),
-                    parseKey(object.opt("popup")));
+                    parseKey(object.opt("popup")), color);
             }
             if (key == null || key.isEmpty()) return null;
             return new Key(key, false, emptyToNull(object.optString("display", null)),
-                parseKey(object.opt("popup")));
+                parseKey(object.opt("popup")), color);
         }
         String literal = String.valueOf(element);
         return literal.isEmpty() ? null : new Key(literal);
@@ -190,17 +204,62 @@ public final class ExtraKeysLayoutModel {
 
     @NonNull
     private static Object serializeKey(@NonNull Key key) {
-        // A plain key with no display override and no popup is written as the bare string the
-        // hand-written files use — the editor should not turn a readable row into object soup.
-        if (!key.macro && key.display == null && key.popup == null) return key.key;
+        // A plain key with no display override, no popup and no colour is written as the bare
+        // string the hand-written files use — the editor should not turn a readable row into
+        // object soup.
+        if (!key.macro && key.display == null && key.popup == null && key.color == null)
+            return key.key;
         JSONObject object = new JSONObject();
         try {
             object.put(key.macro ? "macro" : "key", key.key);
             if (key.display != null) object.put("display", key.display);
+            if (key.color != null) object.put("color", key.color.token);
             if (key.popup != null) object.put("popup", serializeKey(key.popup));
         } catch (JSONException ignored) {
             return key.key;
         }
         return object;
+    }
+
+    /**
+     * Paints keys by their position in the page, counting across the rows in the order they are
+     * drawn. That flat index is what the live row hands back — its children are built in the same
+     * order — so the Appearance editor can colour the key the user actually tapped without the row
+     * and the stored page having to agree on anything else. A null value clears a key's colour, and
+     * an index past the end of the page is ignored.
+     *
+     * @return whether any key's colour actually moved.
+     */
+    public boolean applyColorsByIndex(@NonNull java.util.Map<Integer, ExtraKeyColorRole> colors) {
+        if (colors.isEmpty()) return false;
+        boolean moved = false;
+        int index = 0;
+        for (List<Key> row : rows) {
+            for (Key key : row) {
+                if (colors.containsKey(index)) {
+                    ExtraKeyColorRole wanted = colors.get(index);
+                    if (key.color != wanted) {
+                        key.color = wanted;
+                        moved = true;
+                    }
+                }
+                index++;
+            }
+        }
+        return moved;
+    }
+
+    /** Every key's colour by the same flat index {@link #applyColorsByIndex} writes. */
+    @NonNull
+    public java.util.Map<Integer, ExtraKeyColorRole> colorsByIndex() {
+        java.util.Map<Integer, ExtraKeyColorRole> colors = new java.util.LinkedHashMap<>();
+        int index = 0;
+        for (List<Key> row : rows) {
+            for (Key key : row) {
+                if (key.color != null) colors.put(index, key.color);
+                index++;
+            }
+        }
+        return colors;
     }
 }

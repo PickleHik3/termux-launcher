@@ -411,6 +411,109 @@ public class KittyImageStoreTest extends TestCase {
             KittyImageStore.frameCount(incoming));
     }
 
+    /**
+     * The pixel generation is what lets a renderer replay a row showing an animation instead of
+     * recording it again, so it has to move on every change to the pixels a placeholder would draw
+     * and hold still otherwise. A stamp that fails to move freezes a cell on screen; one that
+     * moves for nothing gives back the whole saving.
+     */
+    public void testPixelGenerationMovesForEveryChangeToTheDisplayedPixels() {
+        KittyImageStore store = new KittyImageStore(new KittyImageStore.FrameBudget());
+        KittyImageStore.Entry entry = animatedEntry(store, 2, 100);
+        entry.animationState = KittyImageStore.ANIMATION_RUNNING;
+        entry.frameShownAtUptime = 1000;
+
+        long stamp = entry.pixelGeneration;
+        assertTrue("a stored image always has a stamp", stamp > 0);
+
+        assertFalse(KittyImageStore.advanceAnimation(entry, 1050));
+        assertEquals("a tick that flips nothing changes nothing", stamp, entry.pixelGeneration);
+
+        assertTrue(KittyImageStore.advanceAnimation(entry, 1100));
+        assertTrue("a frame flip moves it", entry.pixelGeneration > stamp);
+        stamp = entry.pixelGeneration;
+
+        KittyImageStore.setFrameGap(entry, 2, 50);
+        assertEquals("re-timing an animation does not repaint it", stamp, entry.pixelGeneration);
+        store.addFrame(entry, null, 16, 100);
+        assertEquals("appending a frame does not change the one on display",
+            stamp, entry.pixelGeneration);
+
+        store.replaceFrameBitmap(entry, 2, null, 16);
+        assertTrue("frame data landing moves it", entry.pixelGeneration > stamp);
+        stamp = entry.pixelGeneration;
+
+        assertTrue(store.removeFrame(entry, 2));
+        assertTrue("deleting a frame renumbers the rest, so it moves", entry.pixelGeneration > stamp);
+        stamp = entry.pixelGeneration;
+
+        store.foldOneFrame(entry);
+        assertTrue("thinning renumbers the rest too", entry.pixelGeneration > stamp);
+        stamp = entry.pixelGeneration;
+
+        store.dropFrames(entry);
+        assertTrue("falling back to the root frame moves it", entry.pixelGeneration > stamp);
+        stamp = entry.pixelGeneration;
+
+        store.putVirtualPlacement(entry,
+            new KittyImageStore.VirtualPlacement(7, 0, 0, 2, 2, 1, 1));
+        assertTrue("a placement's crop is half of what a cell draws", entry.pixelGeneration > stamp);
+        stamp = entry.pixelGeneration;
+
+        assertEquals(1, KittyImageStore.removeVirtualPlacements(entry, 7));
+        assertTrue("and taking it away is the other half", entry.pixelGeneration > stamp);
+        stamp = entry.pixelGeneration;
+        assertEquals(0, KittyImageStore.removeVirtualPlacements(entry, 7));
+        assertEquals("removing nothing repaints nothing", stamp, entry.pixelGeneration);
+    }
+
+    public void testCatchUpStampsOnlyWhenTheDisplayedFrameActuallyMoved() {
+        KittyImageStore store = new KittyImageStore(new KittyImageStore.FrameBudget());
+        KittyImageStore.Entry entry = animatedEntry(store, 2, 100);
+        entry.animationState = KittyImageStore.ANIMATION_RUNNING;
+        entry.frameShownAtUptime = 1000;
+
+        long stamp = entry.pixelGeneration;
+        assertFalse(KittyImageStore.catchUpAnimation(entry, 1000));
+        assertEquals("no elapsed time, no repaint", stamp, entry.pixelGeneration);
+
+        assertTrue(KittyImageStore.catchUpAnimation(entry, 1250));
+        assertTrue(entry.pixelGeneration > stamp);
+        stamp = entry.pixelGeneration;
+
+        assertFalse("a whole cycle lands back on the same frame",
+            KittyImageStore.catchUpAnimation(entry, 1550));
+        assertEquals(stamp, entry.pixelGeneration);
+    }
+
+    /**
+     * The renderer remembers a stamp against an image id, and the client owns its ids: a delete
+     * followed by a fresh transmission must not hand the new image a stamp the old one was already
+     * seen with, or the cell showing it stops updating.
+     */
+    public void testAGoneImageStampsZeroAndAReplacementNeverReusesAStamp() {
+        KittyImageStore store = new KittyImageStore(new KittyImageStore.FrameBudget());
+        store.reserve(3, 0, 2, 2, 16);
+        long first = store.generationOf(3);
+        assertTrue(first > 0);
+
+        store.remove(3);
+        assertEquals("a deleted image draws nothing, and says so", 0, store.generationOf(3));
+
+        store.reserve(3, 0, 2, 2, 16);
+        assertTrue("the same id transmitted again is a different image",
+            store.generationOf(3) > first);
+        long second = store.generationOf(3);
+
+        store.reserve(3, 0, 4, 4, 64);
+        assertTrue("and so is a replacement in place", store.generationOf(3) > second);
+
+        store.clear();
+        assertEquals(0, store.generationOf(3));
+        assertEquals("an id that was never stored is indistinguishable from a gone one",
+            0, store.generationOf(999));
+    }
+
     public void testReclaimFrameBudgetRefusesWhatCannotFitAtAll() {
         KittyImageStore store = new KittyImageStore(new KittyImageStore.FrameBudget());
         KittyImageStore.Entry entry = animatedEntry(store, 1, 1, 100, 16);

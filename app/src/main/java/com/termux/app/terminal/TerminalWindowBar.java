@@ -5,18 +5,14 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.os.SystemClock;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
 import android.text.TextUtils;
-import android.text.style.ForegroundColorSpan;
-import android.text.style.ReplacementSpan;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -67,8 +63,39 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         void onCreateWindow();
     }
 
+    /**
+     * The × revealed on the selected chip was tapped. The bar has no idea what a window is — the
+     * host closes the one this index stands for, and asks first if it has to.
+     */
+    public interface OnWindowCloseRequestedListener {
+        void onWindowCloseRequested(int index);
+    }
+
+    /**
+     * A chip was tapped, whatever the tap went on to mean.
+     *
+     * <p>Separate from {@link OnWindowSelectedListener}, which only hears the taps that change
+     * which window is current: the tap that asks the selected chip for its close button is spent
+     * on the reveal and never reaches that one. Anything that cares about the gesture rather than
+     * about the outcome listens here.
+     */
+    public interface OnChipTappedListener {
+        void onWindowChipTapped(int index);
+    }
+
+    /**
+     * The chip strip has run out of scroll and the finger keeps going. The surplus distance is
+     * streamed to the host so "scroll to the last chip, keep pulling, and the page beside the
+     * terminal slides in" is one continuous gesture.
+     */
     public interface OnEdgeOverswipeListener {
-        void onEdgeOverswipeRequested(boolean collapsed);
+        /** @return true to take the stream; false leaves the strip's own scrolling alone */
+        boolean onEdgeOverswipeBegin();
+        /** @param dxPx surplus travel since the hand-over, positive to the right */
+        void onEdgeOverswipe(float dxPx);
+        /** @param velocityPxPerSec horizontal release velocity, positive to the right */
+        void onEdgeOverswipeEnd(float velocityPxPerSec);
+        void onEdgeOverswipeCancel();
     }
 
     /** Visual label plus a spoken label that does not expose Nerd Font private-use glyphs. */
@@ -90,6 +117,14 @@ public final class TerminalWindowBar extends HorizontalScrollView {
          */
         public final boolean done;
         /**
+         * Whether that command failed, as its shell reported the status (OSC 133;D). The tick
+         * becomes a cross in the attention colour, so a window the user was not watching says
+         * whether the work succeeded and not only that it ended. False whenever no status was
+         * reported: a shell without integration cannot tell success from failure, and guessing is
+         * worse than the plain tick.
+         */
+        public final boolean doneFailed;
+        /**
          * What the shell itself reports about how far along it is, when it does: 0-100 for a
          * percentage, {@link #NO_PERCENTAGE} when it is working without one (or reports nothing).
          * Only read while {@link #busy}.
@@ -97,6 +132,19 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         public final int progress;
         /** Whether the reported progress is in its error state, so the ring can say so. */
         public final boolean progressError;
+        /**
+         * What an AI coding agent in this window is doing, rolled up over its panes, or null when
+         * none of them is running one. Drawn as the status dot in front of the label; independent
+         * of every other mark, since an agent can be working in one pane while another rings.
+         */
+        @Nullable public final AgentStatus.State agentState;
+        /**
+         * The app's own mark for a Display-place window: its desktop icon reduced to a
+         * single-colour silhouette, which the chip tints like the process glyph. Null everywhere
+         * else, and for a window whose {@code WM_CLASS} matches no installed app — the chip then
+         * draws its generic glyph.
+         */
+        @Nullable public final Bitmap icon;
 
         public static final int NO_PERCENTAGE = -1;
 
@@ -120,6 +168,27 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
         public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
                           boolean attention, int progress, boolean progressError, boolean done) {
+            this(label, spokenLabel, busy, attention, progress, progressError, done, false);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError, boolean done,
+                          boolean doneFailed) {
+            this(label, spokenLabel, busy, attention, progress, progressError, done, doneFailed,
+                null);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError, boolean done,
+                          boolean doneFailed, @Nullable AgentStatus.State agentState) {
+            this(label, spokenLabel, busy, attention, progress, progressError, done, doneFailed,
+                agentState, null);
+        }
+
+        public WindowItem(@NonNull String label, @NonNull String spokenLabel, boolean busy,
+                          boolean attention, int progress, boolean progressError, boolean done,
+                          boolean doneFailed, @Nullable AgentStatus.State agentState,
+                          @Nullable Bitmap icon) {
             this.label = label;
             this.spokenLabel = spokenLabel;
             this.busy = busy;
@@ -127,6 +196,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             this.progress = progress;
             this.progressError = progressError;
             this.done = done;
+            this.doneFailed = doneFailed;
+            this.agentState = agentState;
+            this.icon = icon;
         }
 
         /**
@@ -137,53 +209,177 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         @NonNull
         public WindowItem withBusy(boolean busy) {
             return busy == this.busy ? this
-                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done);
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed, agentState, icon);
         }
 
         @NonNull
         public WindowItem withAttention(boolean attention) {
             return attention == this.attention ? this
-                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done);
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed, agentState, icon);
         }
 
         @NonNull
         public WindowItem withDone(boolean done) {
-            return done == this.done ? this
-                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done);
+            return withDone(done, done && doneFailed);
+        }
+
+        /** @param failed the finished command's own verdict; only meaningful while {@code done}. */
+        @NonNull
+        public WindowItem withDone(boolean done, boolean failed) {
+            return done == this.done && failed == this.doneFailed ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    failed, agentState, icon);
         }
 
         /** The shell's own progress report; {@link #NO_PERCENTAGE} for indeterminate. */
         @NonNull
         public WindowItem withProgress(int progress, boolean progressError) {
             return progress == this.progress && progressError == this.progressError ? this
-                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done);
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed, agentState, icon);
+        }
+
+        /** The rolled-up agent reading for this window's panes; null removes the dot. */
+        @NonNull
+        public WindowItem withAgentState(@Nullable AgentStatus.State agentState) {
+            return agentState == this.agentState ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed, agentState, icon);
+        }
+
+        /**
+         * The app icon a Display window's chip wears; null draws the generic glyph. A copy rather
+         * than another constructor argument, so the item can be built from the window list before
+         * the icon has been resolved off the main thread and re-attached when it arrives.
+         */
+        @NonNull
+        public WindowItem withIcon(@Nullable Bitmap icon) {
+            return icon == this.icon ? this
+                : new WindowItem(label, spokenLabel, busy, attention, progress, progressError, done,
+                    doneFailed, agentState, icon);
         }
 
         /** Whether the two would draw the same marks. Labels are compared separately. */
         boolean sameActivity(@NonNull WindowItem other) {
             return busy == other.busy && attention == other.attention && done == other.done
-                && progress == other.progress && progressError == other.progressError;
+                && doneFailed == other.doneFailed
+                && progress == other.progress && progressError == other.progressError
+                && agentState == other.agentState && icon == other.icon;
+        }
+
+        /**
+         * Value equality over everything a chip draws or speaks, so a list of these is a cheap
+         * content key: a view that is handed the same windows again can tell it has nothing to do
+         * without knowing what any of the fields mean. Labels plus {@link #sameActivity}, which
+         * together cover every field.
+         *
+         * <p>The icon is compared by identity, exactly as {@code sameActivity} does: the resolver
+         * hands back the same bitmap while nothing has moved, and comparing a few hundred kilobytes
+         * of pixels on a path that runs several times a second would cost more than the rebuild it
+         * is meant to save.
+         */
+        @Override
+        public boolean equals(@Nullable Object other) {
+            if (this == other) return true;
+            if (!(other instanceof WindowItem)) return false;
+            WindowItem that = (WindowItem) other;
+            return label.equals(that.label) && spokenLabel.equals(that.spokenLabel)
+                && sameActivity(that);
+        }
+
+        @Override
+        public int hashCode() {
+            // The icon is left out deliberately: equal items always hash equal, and two items that
+            // differ only by bitmap identity are rare enough not to be worth an identity hash.
+            int hash = label.hashCode();
+            hash = 31 * hash + spokenLabel.hashCode();
+            hash = 31 * hash + (busy ? 1 : 0);
+            hash = 31 * hash + (attention ? 1 : 0);
+            hash = 31 * hash + (done ? 1 : 0);
+            hash = 31 * hash + (doneFailed ? 1 : 0);
+            hash = 31 * hash + progress;
+            hash = 31 * hash + (progressError ? 1 : 0);
+            hash = 31 * hash + (agentState == null ? 0 : agentState.hashCode());
+            return hash;
         }
     }
 
-    /** nf-fa-bell, the mark a window that rang gets after its label. */
-    static final String BELL_GLYPH = "\uf0f3";
-    /** nf-fa-check, the mark a window whose command finished unseen gets after its label. */
-    static final String DONE_GLYPH = "\uf00c";
+    /**
+     * The one word a user reads for an agent's state, here and in the sessions browser. Product
+     * copy: "Working", "Needs you", "Idle" — never the mechanism behind the reading.
+     */
+    @Nullable
+    public static String agentStateWord(@NonNull Context context,
+                                        @Nullable AgentStatus.State state) {
+        if (state == null) return null;
+        switch (state) {
+            case WORKING: return context.getString(R.string.termux_agent_state_working);
+            case BLOCKED: return context.getString(R.string.termux_agent_state_blocked);
+            default: return context.getString(R.string.termux_agent_state_idle);
+        }
+    }
+
+    /**
+     * The × the selected chip grows on its trailing side, in dp, and the target a thumb gets for
+     * it through the status row's touch delegate.
+     */
+    private static final float CLOSE_SEGMENT_DP = ChipWatermarkGeometry.CLOSE_SEGMENT_DP;
+    private static final float CLOSE_TARGET_DP = 24f;
+    /** The hairline before the × keeps this much of the selected outline's alpha. */
+    private static final float CLOSE_DIVIDER_ALPHA = .45f;
 
     private final SelectionStrip mTabs;
+
+    /** Live chip strip, excluding the separate create button. */
+    public View chipStripView() { return mTabs; }
+
     @Nullable private OnWindowSelectedListener mSelectionListener;
+    @Nullable private OnChipTappedListener mChipTapListener;
     @Nullable private OnCreateWindowListener mCreateListener;
+    @Nullable private OnWindowCloseRequestedListener mCloseListener;
     @Nullable private OnEdgeOverswipeListener mEdgeOverswipeListener;
+    /** Which chip is offering its ×, and for how much longer. */
+    private final ChipRevealPolicy mReveal = new ChipRevealPolicy();
+    /**
+     * The × itself. Built at the first reveal and kept from then on, hidden between reveals rather
+     * than added and removed: a chip row that gains and loses a child on every tap cannot be
+     * reused across a refresh, and a rebuilt row loses the selection slide.
+     */
+    @Nullable private AppCompatImageButton mCloseButton;
+    @Nullable private Runnable mRevealTimeout;
+    /** The × opening or closing its segment of the chip; null while it is at rest. */
+    @Nullable private ValueAnimator mCloseRevealAnimator;
+    /** Whether the status row's touch delegate is the one this bar put there. */
+    private boolean mOwnsTouchDelegate;
     private final int mTouchSlop;
-    private final float mOverswipeThresholdPx;
-    private boolean mStatusBarCollapsed;
     private boolean mGestureHorizontal;
     private boolean mGestureRejected;
     private float mTouchDownX;
     private float mTouchDownY;
     private float mLastTouchX;
+    /** Signed travel the strip could not spend on its own scroll, since the DOWN. */
     private float mOverswipePx;
+    /** One-way latch: once the surplus is the host's, the strip stops scrolling for this stream. */
+    private boolean mOverswipeOwned;
+    /**
+     * Where the strip stood at the DOWN. A finger that scrolled the chips at all keeps them for
+     * the rest of its stream: running into the last window is not a wish to change place. Only a
+     * strip with nothing to scroll, or one pulled past the edge it already rests at, hands the
+     * finger to the wall.
+     */
+    private int mScrollXAtDown;
+    private boolean mStripScrolled;
+    /** The DOWN time of the stream being tracked, so a DOWN seen twice is set up once. */
+    private long mStreamDownTime = -1L;
+    /**
+     * The host took the wall away mid-overswipe. The rest of this stream belongs to nobody: not
+     * streamed to the host, not spent on the chips either — a finger that was dragging the wall
+     * must not suddenly scroll the strip under itself.
+     */
+    private boolean mOverswipeInterrupted;
+    @Nullable private android.view.VelocityTracker mOverswipeVelocity;
     private int mSelectedIndex = -1;
     @NonNull private List<WindowItem> mItems = new ArrayList<>();
     private Typeface mTerminalTypeface = Typeface.MONOSPACE;
@@ -197,16 +393,45 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private int mUnselectedStrokeColor;
     private int mSelectedFillColor;
     private int mSelectedStrokeColor;
+    private int mGlyphColor;
+    private int mUnselectedHaloColor;
+    private int mSelectedHaloColor;
+    private int mGroundColor;
     private int mBusyColor;
     private int mAttentionColor;
+    private int mDoneColor;
+    @Nullable private Integer mPlaceAccent;
+    /**
+     * Who says what this bar is standing on, or null when nothing can measure it — a preview, a
+     * test, a bar the activity has not dressed yet. Null keeps the authored palette exactly as it
+     * was: every measured colour here is additive.
+     */
+    @Nullable private com.termux.app.chrome.ChromeInk mChromeInk;
+    /** The band as last measured, or null while nothing has been. */
+    @Nullable private WindowChipInk.Palette mGlassPalette;
+    /** The sample generation and the band rect {@link #mGlassPalette} was measured for. */
+    private int mGlassGeneration = -1;
+    @NonNull private final android.graphics.Rect mGlassBandRect = new android.graphics.Rect();
+    @NonNull private final android.graphics.Rect mGlassMeasuredRect = new android.graphics.Rect();
+    /** Whether the strip ends with the plus that opens a new window. */
+    private boolean mCreateButtonShown = true;
     @Nullable private ValueAnimator mSelectionAnimator;
-    @Nullable private ValueAnimator mBusyAnimator;
+    /**
+     * The clock the turning arcs redraw on. A timer rather than a {@link ValueAnimator}: an
+     * animator asks the Choreographer for a callback every vsync for as long as any shell is
+     * working, which on a 120 Hz panel kept the whole launcher drawing at 120 fps for one thin
+     * ring. The arc's angle comes from the clock either way, so the tick only decides how many
+     * positions it visits.
+     */
+    @Nullable private Runnable mSmoothTick;
     /**
      * Window visibility as last reported, rather than read from getWindowVisibility(): the framework
      * dispatches this during attach, and reading it keeps the animator honest without depending on
      * a ViewRootImpl the view may not have yet.
      */
     private boolean mWindowVisible = true;
+    /** The chip whose fresh × should be scrolled into view on the next layout pass. */
+    private int mPendingRevealScroll = ChipRevealPolicy.NONE;
     private boolean mAttached;
 
     public TerminalWindowBar(Context context, AttributeSet attrs) {
@@ -217,7 +442,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         setClipChildren(true);
         setOverScrollMode(OVER_SCROLL_NEVER);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mOverswipeThresholdPx = dp(48);
         // The parent already supplies the intended gap after the session indicator. A second
         // leading inset here made that gap look like trailing padding owned by the session chip.
         setPaddingRelative(0, dp(2), dp(5), dp(2));
@@ -239,65 +463,164 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mCreateListener = listener;
     }
 
+    public void setOnWindowCloseRequestedListener(@Nullable OnWindowCloseRequestedListener listener) {
+        mCloseListener = listener;
+    }
+
+    /** Whether the strip offers the plus; a place with nothing to add leaves it out. */
+    public void setCreateButtonShown(boolean shown) {
+        if (mCreateButtonShown == shown) return;
+        mCreateButtonShown = shown;
+        for (int i = mTabs.getChildCount() - 1; i >= 0; i--) {
+            View child = mTabs.getChildAt(i);
+            if (child != mCloseButton && child instanceof AppCompatImageButton) mTabs.removeViewAt(i);
+        }
+        if (shown) addCreateButton(mItems.isEmpty());
+    }
+
+    /**
+     * The plus at the end of the strip, or null when this place is not offering one. Same test the
+     * strip uses to take it away again, so the two can never disagree about which child it is.
+     */
+    @Nullable
+    public View createWindowButtonView() {
+        if (!mCreateButtonShown) return null;
+        for (int i = mTabs.getChildCount() - 1; i >= 0; i--) {
+            View child = mTabs.getChildAt(i);
+            if (child != mCloseButton && child instanceof AppCompatImageButton) return child;
+        }
+        return null;
+    }
+
     public void setOnEdgeOverswipeListener(@Nullable OnEdgeOverswipeListener listener) {
         mEdgeOverswipeListener = listener;
     }
 
-    public void setStatusBarCollapsed(boolean collapsed) {
-        mStatusBarCollapsed = collapsed;
+    /** The wall moved on without this finger; the overswipe ends here, with no end or cancel. */
+    public void cancelOverswipe() {
+        if (!mOverswipeOwned) return;
+        mOverswipeOwned = false;
+        mOverswipeInterrupted = true;
+        mOverswipePx = 0f;
+    }
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent event) {
+        // A finger that lands on a pill gives the pill its DOWN; the strip only meets the stream
+        // when it intercepts a sideways move. Its bookkeeping has to start at the DOWN either way.
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) beginStream(event);
+        return super.onInterceptTouchEvent(event);
+    }
+
+    /** Reset everything a finger's stream carries; once per DOWN, whichever path sees it first. */
+    private void beginStream(MotionEvent event) {
+        if (mStreamDownTime == event.getDownTime()) return;
+        mStreamDownTime = event.getDownTime();
+        mTouchDownX = mLastTouchX = event.getX();
+        mTouchDownY = event.getY();
+        mOverswipePx = 0f;
+        mGestureHorizontal = false;
+        mGestureRejected = false;
+        mOverswipeOwned = false;
+        mOverswipeInterrupted = false;
+        mScrollXAtDown = getScrollX();
+        mStripScrolled = false;
+        mReveal.onTouchDown();
+        // A finger that lands anywhere but on the chip offering its × puts it away — including the
+        // one that is on its way to the plus, or to the bar's empty end. The × itself lives inside
+        // the chip's own bounds, so the tap that closes a window survives this.
+        if (!isInsideRevealedChip(event)) {
+            mReveal.onTouchElsewhere();
+            applyReveal();
+        }
+        if (mOverswipeVelocity == null) {
+            mOverswipeVelocity = android.view.VelocityTracker.obtain();
+        }
+        mOverswipeVelocity.clear();
+        mOverswipeVelocity.addMovement(event);
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
-            mTouchDownX = mLastTouchX = event.getX();
-            mTouchDownY = event.getY();
-            mOverswipePx = 0f;
-            mGestureHorizontal = false;
-            mGestureRejected = false;
-            if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+            beginStream(event);
             return super.onTouchEvent(event);
         }
         if (action == MotionEvent.ACTION_MOVE) {
+            if (mOverswipeVelocity != null) mOverswipeVelocity.addMovement(event);
             float dx = event.getX() - mLastTouchX;
             float totalX = event.getX() - mTouchDownX;
             float totalY = event.getY() - mTouchDownY;
             if (!mGestureHorizontal && !mGestureRejected) {
                 if (Math.abs(totalY) > mTouchSlop && Math.abs(totalY) >= Math.abs(totalX)) {
                     mGestureRejected = true;
+                    // The status bar's pull. Like a chip scroll it is a drag, not a tap, so it
+                    // neither reveals a × nor leaves one behind when the finger lifts.
+                    mReveal.onScrollStarted();
+                    applyReveal();
                 } else if (Math.abs(totalX) > mTouchSlop
                     && Math.abs(totalX) > Math.abs(totalY) * 1.2f) {
                     mGestureHorizontal = true;
-                }
-            }
-            int before = getScrollX();
-            boolean handled = super.onTouchEvent(event);
-            int consumed = Math.abs(getScrollX() - before);
-            if (mGestureHorizontal && !mGestureRejected) {
-                boolean outward = mStatusBarCollapsed ? dx > 0f : dx < 0f;
-                boolean atEdge = mStatusBarCollapsed
-                    ? !canScrollHorizontally(-1) : !canScrollHorizontally(1);
-                if (!outward) {
-                    // Reversal always cancels the extra-distance request; ordinary scrolling stays.
-                    mOverswipePx = 0f;
-                } else if (atEdge) {
-                    mOverswipePx += Math.max(0f, Math.abs(dx) - consumed);
+                    mReveal.onScrollStarted();
+                    applyReveal();
                 }
             }
             mLastTouchX = event.getX();
+            if (mOverswipeInterrupted) return true;
+            if (mOverswipeOwned) {
+                // The surplus is the host's for the rest of this stream: the chips hold still
+                // rather than scrolling back under a finger that is now dragging the wall.
+                mOverswipePx += dx;
+                if (mEdgeOverswipeListener != null) mEdgeOverswipeListener.onEdgeOverswipe(mOverswipePx);
+                return true;
+            }
+            int before = getScrollX();
+            boolean handled = super.onTouchEvent(event);
+            if (getScrollX() != mScrollXAtDown) mStripScrolled = true;
+            // Signed: dragging left scrolls right, so what the strip spent cancels the travel out.
+            float surplus = dx + (getScrollX() - before);
+            if (mGestureHorizontal && !mGestureRejected && !mStripScrolled
+                && Math.abs(surplus) > 0f) {
+                mOverswipePx += surplus;
+                if (Math.abs(mOverswipePx) > mTouchSlop && mEdgeOverswipeListener != null
+                    && mEdgeOverswipeListener.onEdgeOverswipeBegin()) {
+                    mOverswipeOwned = true;
+                    // The slop that proved the intent is not travel, but whatever the finger moved
+                    // beyond it is: a coarse stream can cover much of the bar in its first move,
+                    // and starting the host from rest threw that distance away.
+                    mOverswipePx -= Math.copySign(mTouchSlop, mOverswipePx);
+                    mEdgeOverswipeListener.onEdgeOverswipe(mOverswipePx);
+                }
+            }
             return handled;
         }
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-            boolean commit = action == MotionEvent.ACTION_UP
-                && mGestureHorizontal && mOverswipePx >= mOverswipeThresholdPx;
-            boolean handled = super.onTouchEvent(event);
+            boolean owned = mOverswipeOwned;
+            float velocity = 0f;
+            if (mOverswipeVelocity != null) {
+                mOverswipeVelocity.computeCurrentVelocity(1000);
+                velocity = mOverswipeVelocity.getXVelocity();
+                mOverswipeVelocity.recycle();
+                mOverswipeVelocity = null;
+            }
+            boolean interrupted = mOverswipeInterrupted;
+            boolean handled = !interrupted && super.onTouchEvent(event);
             if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
+            mStreamDownTime = -1L;
             mOverswipePx = 0f;
             mGestureHorizontal = false;
             mGestureRejected = false;
-            if (commit && mEdgeOverswipeListener != null) {
-                mEdgeOverswipeListener.onEdgeOverswipeRequested(!mStatusBarCollapsed);
+            mOverswipeOwned = false;
+            mOverswipeInterrupted = false;
+            if (interrupted) return true;
+            if (owned && mEdgeOverswipeListener != null) {
+                if (action == MotionEvent.ACTION_UP) {
+                    mEdgeOverswipeListener.onEdgeOverswipeEnd(velocity);
+                } else {
+                    mEdgeOverswipeListener.onEdgeOverswipeCancel();
+                }
                 return true;
             }
             return handled;
@@ -326,10 +649,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         if (!typefaceChanged && selectedIndex == mSelectedIndex && sameItems(mItems, items)
             && sameActivity(mItems, items)) return;
         int previousSelected = mSelectedIndex;
+        // A × belongs to one window of one list. A different list, or the same list with the
+        // selection somewhere else, is no longer the row it was revealed on.
+        if (!sameItems(mItems, items)) mReveal.onItemsChanged();
+        else if (selectedIndex != mSelectedIndex) mReveal.onSelectionChanged();
         // sameItems deliberately still compares labels only, so starting a command keeps
         // canReuseTabs true: re-inflating the pill row would also kill the selection slide.
         boolean canReuseTabs = !typefaceChanged && sameItems(mItems, items)
-            && mTabs.getChildCount() == items.size() + 1;
+            && mTabs.getChildCount()
+                == items.size() + (mCreateButtonShown ? 1 : 0) + closeButtonChildCount();
         mSelectedIndex = selectedIndex;
         mItems = new ArrayList<>(items);
         updatePalette();
@@ -343,6 +671,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 mTabs.snapSelection(selectedIndex);
                 applyStableTabSelection();
             }
+            applyReveal();
             scrollSelectedIntoView(selectedIndex);
             return;
         }
@@ -354,21 +683,215 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             WindowItem item = items.get(i);
             boolean selected = i == selectedIndex;
             TextView tab = createTab(item, selected);
-            tab.setOnClickListener(v -> {
-                if (mSelectionListener != null) mSelectionListener.onWindowSelected(index);
-            });
+            tab.setOnClickListener(v -> onChipTapped(index));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LayoutParams.WRAP_CONTENT, LayoutParams.MATCH_PARENT);
             if (i > 0) params.setMarginStart(dp(3));
             mTabs.addView(tab, params);
         }
-        addCreateButton(items.isEmpty());
+        if (mCreateButtonShown) addCreateButton(items.isEmpty());
         mTabs.setWindowCount(items.size());
         updateBusyAnimator();
         applyTabContentDescriptions();
         mTabs.snapSelection(selectedIndex);
         applyStableTabSelection();
+        applyReveal();
         scrollSelectedIntoView(selectedIndex);
+    }
+
+    /**
+     * A chip was tapped. The first tap on any chip selects it, as it always has; a tap on the chip
+     * that is already selected asks for its × instead, and a second one takes it back.
+     */
+    private void onChipTapped(int index) {
+        if (mChipTapListener != null) mChipTapListener.onWindowChipTapped(index);
+        boolean spentOnTheClose =
+            mReveal.onChipTap(index, mSelectedIndex, SystemClock.uptimeMillis());
+        applyReveal();
+        if (spentOnTheClose) return;
+        if (mSelectionListener != null) mSelectionListener.onWindowSelected(index);
+    }
+
+    /** Whether the × is currently a child of the strip, revealed or waiting hidden. */
+    private int closeButtonChildCount() {
+        return mCloseButton != null && mCloseButton.getParent() == mTabs ? 1 : 0;
+    }
+
+    /** Whether {@code event} landed on the chip that is offering its ×, the × included. */
+    private boolean isInsideRevealedChip(@NonNull MotionEvent event) {
+        int index = mReveal.revealedIndex();
+        if (index < 0 || index >= mItems.size() || index >= mTabs.getChildCount()) return false;
+        float x = event.getX() + getScrollX() - mTabs.getLeft();
+        return mTabs.isInsideChipWithClose(index, x);
+    }
+
+    /** Put the × where the policy says it belongs, and arm the timer that takes it away again. */
+    private void applyReveal() {
+        if (mRevealTimeout != null) {
+            removeCallbacks(mRevealTimeout);
+            mRevealTimeout = null;
+        }
+        int index = mReveal.revealedIndex();
+        if (index < 0 || index >= mItems.size()) {
+            if (mTabs.closeTarget() != ChipRevealPolicy.NONE
+                || (mCloseButton != null && mCloseButton.getVisibility() != GONE)) {
+                cancelCloseReveal();
+                mTabs.setCloseTarget(ChipRevealPolicy.NONE);
+                mTabs.setCloseRevealFraction(0f);
+                if (mCloseButton != null) mCloseButton.setVisibility(GONE);
+                mTabs.requestLayout();
+            }
+            updateCloseTouchDelegate();
+            return;
+        }
+        AppCompatImageButton close = ensureCloseButton();
+        close.setContentDescription(getResources().getString(
+            R.string.termux_window_tab_close_content_description, mItems.get(index).spokenLabel));
+        boolean fresh = mTabs.closeTarget() != index || close.getVisibility() != VISIBLE;
+        close.setVisibility(VISIBLE);
+        mTabs.setCloseTarget(index);
+        mTabs.requestLayout();
+        if (fresh) {
+            startCloseReveal();
+            // Scrolled from onLayout, once the strip has been measured with the × in it.
+            mPendingRevealScroll = index;
+        }
+        mRevealTimeout = () -> {
+            mRevealTimeout = null;
+            if (mReveal.onTimeout(SystemClock.uptimeMillis())) applyReveal();
+        };
+        postDelayed(mRevealTimeout, Math.max(0L, mReveal.hideAt() - SystemClock.uptimeMillis()));
+    }
+
+    /**
+     * The × opens as a segment of the chip itself rather than a lid over its trailing end: the chip
+     * grows, its neighbours are pushed along, and the selection highlight follows the wider shape.
+     * Only the segment's own pixels move — {@link SelectionStrip} measures the full width from the
+     * moment the × is asked for and offsets the row by hand — so nothing above the bar is laid out
+     * again on any of the 180 ms.
+     */
+    private void startCloseReveal() {
+        cancelCloseReveal();
+        if (!mAttached || !mWindowVisible) {
+            mTabs.setCloseRevealFraction(1f);
+            updateCloseTouchDelegate();
+            return;
+        }
+        mTabs.setCloseRevealFraction(0f);
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(ChipWatermarkGeometry.CLOSE_REVEAL_MS);
+        animator.setInterpolator(settleInterpolator());
+        // The delegate is set once the segment has arrived rather than per frame: a thumb cannot
+        // reach for a target that is still opening, and a Rect a frame is allocation for nothing.
+        animator.addUpdateListener(
+            value -> mTabs.setCloseRevealFraction((Float) value.getAnimatedValue()));
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (mCloseRevealAnimator == animation) mCloseRevealAnimator = null;
+                updateCloseTouchDelegate();
+            }
+        });
+        mCloseRevealAnimator = animator;
+        animator.start();
+    }
+
+    private void cancelCloseReveal() {
+        if (mCloseRevealAnimator == null) return;
+        mCloseRevealAnimator.cancel();
+        mCloseRevealAnimator = null;
+    }
+
+    /**
+     * The × is 24dp wide but only as tall as the chip it sits in, on a row that is 24dp itself.
+     * The status row lends it the rest through a touch delegate, so the thumb target is square
+     * without the control drawing any bigger.
+     */
+    private void updateCloseTouchDelegate() {
+        View row = statusRow();
+        if (!(row instanceof android.view.ViewGroup)) return;
+        AppCompatImageButton close = mCloseButton;
+        if (close == null || close.getVisibility() != VISIBLE || close.getWidth() <= 0) {
+            if (mOwnsTouchDelegate) {
+                row.setTouchDelegate(null);
+                mOwnsTouchDelegate = false;
+            }
+            return;
+        }
+        android.graphics.Rect bounds =
+            new android.graphics.Rect(0, 0, close.getWidth(), close.getHeight());
+        ((android.view.ViewGroup) row).offsetDescendantRectToMyCoords(close, bounds);
+        int target = dp(CLOSE_TARGET_DP);
+        bounds.inset(-Math.max(0, target - bounds.width()) / 2,
+            -Math.max(0, target - bounds.height()) / 2);
+        row.setTouchDelegate(new android.view.TouchDelegate(bounds, close));
+        mOwnsTouchDelegate = true;
+    }
+
+    /** The status row this bar stands in, or the nearest ancestor that can hold the delegate. */
+    @Nullable
+    private View statusRow() {
+        View candidate = null;
+        android.view.ViewParent parent = getParent();
+        while (parent instanceof View) {
+            View view = (View) parent;
+            if (candidate == null) candidate = view;
+            if (view.getId() == R.id.terminal_status_row) return view;
+            parent = view.getParent();
+        }
+        return candidate;
+    }
+
+    /**
+     * The × is a measured segment of the selected chip: it takes room of its own, behind a hairline
+     * divider, and the chips after it move along rather than being covered. It is built once and
+     * kept, hidden between reveals — a chip row that gains and loses a child on every tap cannot be
+     * reused across a refresh, and a rebuilt row loses the selection slide.
+     */
+    @NonNull
+    private AppCompatImageButton ensureCloseButton() {
+        AppCompatImageButton close = mCloseButton;
+        if (close == null) {
+            close = new AppCompatImageButton(getContext());
+            close.setImageResource(R.drawable.ic_status_bar_close_window);
+            close.setScaleType(ImageView.ScaleType.CENTER);
+            close.setPadding(0, 0, 0, 0);
+            // Clickable and focusable on purpose: the status bar's gesture treats a clickable
+            // descendant of this row as child-owned, so a finger on the × can never start an
+            // expand or a collapse instead of closing the window.
+            close.setClickable(true);
+            close.setFocusable(true);
+            close.setOnClickListener(v -> {
+                int target = mReveal.revealedIndex();
+                mReveal.hide();
+                applyReveal();
+                if (target >= 0 && mCloseListener != null) {
+                    mCloseListener.onWindowCloseRequested(target);
+                }
+            });
+            mCloseButton = close;
+        }
+        if (close.getParent() != mTabs) {
+            if (close.getParent() instanceof android.view.ViewGroup) {
+                ((android.view.ViewGroup) close.getParent()).removeView(close);
+            }
+            // Zero width in the strip's own flow: the segment is measured and placed by
+            // SelectionStrip, which is also what keeps every chip's index where it was.
+            mTabs.addView(close, new LinearLayout.LayoutParams(0, LayoutParams.MATCH_PARENT));
+        }
+        mTabs.setCloseSegment(close, dp(CLOSE_SEGMENT_DP),
+            dp(ChipWatermarkGeometry.CLOSE_DIVIDER_DP));
+        applyCloseButtonStyle(close);
+        return close;
+    }
+
+    /**
+     * The × takes the selected chip's own fill: it is part of that chip now, not a lid over it, so
+     * it wants no surface of its own — the highlight the strip draws already runs the whole width,
+     * and the hairline in front of it is what says where the title ends.
+     */
+    private void applyCloseButtonStyle(@NonNull AppCompatImageButton close) {
+        close.setBackground(null);
+        ImageViewCompat.setImageTintList(close, ColorStateList.valueOf(mSelectedTextColor));
     }
 
     /**
@@ -385,14 +908,20 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 item.spokenLabel);
             if (item.attention) description += " · "
                 + getResources().getString(R.string.termux_window_tab_attention_content_description);
-            else if (item.done) description += " · "
-                + getResources().getString(R.string.termux_window_tab_done_content_description);
+            else if (item.done) description += " · " + getResources().getString(item.doneFailed
+                ? R.string.termux_window_tab_failed_content_description
+                : R.string.termux_window_tab_done_content_description);
             if (item.busy) {
                 description += " · " + getResources().getString(
                     R.string.termux_window_tab_busy_content_description);
                 if (item.progress != WindowItem.NO_PERCENTAGE) description += ", " + getResources()
                     .getString(R.string.termux_window_tab_progress_content_description, item.progress);
             }
+            // The agent sentence rides on the description rather than on spokenLabel itself: the
+            // label is what sameItems compares, so changing it as the agent's state moved would
+            // re-inflate the whole pill row and kill the selection slide.
+            String agent = agentStateWord(getContext(), item.agentState);
+            if (agent != null) description += " · " + agent + ".";
             mTabs.getChildAt(i).setContentDescription(description);
         }
     }
@@ -411,48 +940,179 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             Object shown = child.getTag(R.id.terminal_window_tab_state);
             if (!force && shown instanceof WindowItem && ((WindowItem) shown).sameActivity(item)
                 && ((WindowItem) shown).label.equals(item.label)) continue;
-            ((TextView) child).setText(tabText(item));
+            if (!(shown instanceof WindowItem) || !((WindowItem) shown).label.equals(item.label)) {
+                ((TextView) child).setText(tabText(item));
+            }
+            applyChipWatermark((TextView) child, item, i == mSelectedIndex ? 1f : 0f);
             child.setTag(R.id.terminal_window_tab_state, item);
         }
         updateBusyAnimator();
     }
 
     /**
-     * The pill's text with its marks. Windows Terminal is the model for the ring — the tab's icon
-     * gives way to a progress ring while the shell works — and a workspace manager's agent badges
-     * for the rest: a bell after the title once the shell has rung or asked, a tick once a command
-     * finished unseen. Here the icon is the leading Nerd Font process glyph, so the ring is a span
-     * over that glyph and the badge is appended.
+     * The pill's text: the window's title, and nothing else. Every indicator the label used to
+     * spend characters on — the process glyph, the ring, the bell, the tick, the agent dot — is
+     * drawn by {@link ChipWatermarkDrawable} behind and around the title instead, so nine
+     * characters of a directory are nine characters of a directory.
+     *
+     * <p>The Nerd Font spans stay: a window the user named can carry an icon of its own inside the
+     * title, and it has to be drawn by a face that has it.
      */
     @NonNull
     private CharSequence tabText(@NonNull WindowItem item) {
-        Context context = getContext();
-        String label = item.label;
+        String title = titleOf(item.label);
+        return TerminalLabelSymbolSpans.apply(
+            com.termux.shared.termux.font.NerdFontSpans.span(getContext(), title), mSymbolMaps);
+    }
+
+    /** The label without the process glyph the factories put in front of it. */
+    @NonNull
+    static String titleOf(@NonNull String label) {
         int glyphEnd = leadingGlyphEnd(label);
-        // A label with no glyph of its own (a bare user name) still gets a ring: a placeholder run
-        // is prepended for the span to replace, so a working window always looks like one.
-        if (item.busy && glyphEnd == 0) {
-            label = "\u25cf " + label;
-            glyphEnd = 1;
+        if (glyphEnd == 0) return label;
+        return glyphEnd < label.length() ? label.substring(glyphEnd + 1) : "";
+    }
+
+    /** The process glyph the watermark draws, or null for a label that carries none. */
+    @Nullable
+    static String glyphOf(@NonNull String label) {
+        int glyphEnd = leadingGlyphEnd(label);
+        return glyphEnd == 0 ? null : label.substring(0, glyphEnd);
+    }
+
+    /**
+     * The one dot the chip carries, on its top-trailing corner.
+     *
+     * <p>A pane running an agent is read from the agent, because the agent is the better witness.
+     * The generic layer underneath cannot tell a Codex that has finished its turn from one that is
+     * asking a question — both ring the bell — so on those panes its bell means the turn ended and
+     * the mark is a tick, while only {@code BLOCKED} is allowed to say the window wants the user.
+     * Working says nothing here at all: the ring is already saying it.
+     *
+     * <p>An ordinary shell keeps the rules it always had, where a bell is the news and outranks a
+     * command that merely ended.
+     */
+    @NonNull
+    static ChipWatermarkDrawable.Mark markFor(@NonNull WindowItem item) {
+        if (item.agentState != null) {
+            if (item.agentState == AgentStatus.State.BLOCKED) {
+                return ChipWatermarkDrawable.Mark.ATTENTION;
+            }
+            if (item.agentState == AgentStatus.State.WORKING) {
+                return ChipWatermarkDrawable.Mark.NONE;
+            }
+            if (!item.attention && !item.done) return ChipWatermarkDrawable.Mark.NONE;
+            return item.doneFailed ? ChipWatermarkDrawable.Mark.FAILED
+                : ChipWatermarkDrawable.Mark.DONE;
         }
-        // One trailing mark at a time: a window that is asking is not finished.
-        String mark = item.attention ? BELL_GLYPH : item.done ? DONE_GLYPH : null;
-        if (mark != null) label = label + " " + mark;
-        CharSequence spanned = TerminalLabelSymbolSpans.apply(
-            com.termux.shared.termux.font.NerdFontSpans.span(context, label), mSymbolMaps);
-        if (!item.busy && mark == null) return spanned;
-        SpannableStringBuilder text = new SpannableStringBuilder(spanned);
-        if (item.busy) {
-            text.setSpan(new ProgressRingSpan(item.progressError ? mAttentionColor : mBusyColor,
-                    item.progress, dp(1.25f), mLazyMode),
-                0, glyphEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (item.attention) return ChipWatermarkDrawable.Mark.ATTENTION;
+        if (item.done) {
+            return item.doneFailed ? ChipWatermarkDrawable.Mark.FAILED
+                : ChipWatermarkDrawable.Mark.DONE;
         }
-        if (mark != null) {
-            text.setSpan(new ForegroundColorSpan(item.attention ? mAttentionColor : mBusyColor),
-                text.length() - mark.length(), text.length(),
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return ChipWatermarkDrawable.Mark.NONE;
+    }
+
+    /**
+     * Whether the chip's outline is drawing the ring — the one thing that says work is happening.
+     *
+     * <p>On a pane running an agent the agent's own report drives it, not the CPU heuristic: the
+     * two were reporting the same fact in two places, and the agent is right more often — it still
+     * says it is working through a pause the heuristic would read as finished.
+     */
+    private static boolean showsRing(@NonNull WindowItem item) {
+        if (item.agentState != null) return item.agentState == AgentStatus.State.WORKING;
+        return item.busy;
+    }
+
+    /**
+     * Finished in the done colour, everything else in the attention colour. A failure shares that
+     * colour with a window asking for the user and is told apart by being drawn hollow: both are
+     * news you have to act on, and neither should be mistaken for the other.
+     */
+    private int markColor(@NonNull ChipWatermarkDrawable.Mark mark) {
+        return mark == ChipWatermarkDrawable.Mark.DONE ? mDoneColor : mAttentionColor;
+    }
+
+    /**
+     * Everything the chip draws that is not its title: the fill and outline, the process glyph (or
+     * the window's own icon) watermarked behind the text, the ring while a shell works, and the two
+     * corner dots. One drawable per pill, reused — the pills themselves are reused across a
+     * refresh, and a new background on every state change would cost a layout pass each time.
+     */
+    private void applyChipWatermark(@NonNull TextView tab, @NonNull WindowItem item,
+                                    float selection) {
+        ChipWatermarkDrawable chip = watermarkOf(tab);
+        chip.setSurface(mStatusBarRadiusPx, dp(ChipWatermarkGeometry.OUTLINE_WIDTH_DP),
+            mUnselectedFillColor, mUnselectedStrokeColor);
+        chip.setRtl(getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+        String glyph = glyphOf(item.label);
+        chip.setGlyph(glyph, glyph == null ? null : watermarkFace(glyph));
+        chip.setIcon(item.icon);
+        chip.setGlyphColor(mGlyphColor);
+        chip.setSelection(selection);
+        applyTitleHalo(tab, selection);
+        chip.setActivity(showsRing(item), item.progress,
+            item.progressError ? mAttentionColor : mBusyColor, mLazyMode);
+        ChipWatermarkDrawable.Mark mark = markFor(item);
+        chip.setMark(mark, markColor(mark), mGroundColor);
+    }
+
+    /**
+     * The soft halo under a title, in the fill of the chip it stands on: the glyph runs behind the
+     * first letters now, and without this they sit in it rather than on it. The two fills differ,
+     * so the halo travels with the selection exactly as the text colour does.
+     */
+    private void applyTitleHalo(@NonNull TextView tab, float selection) {
+        float fraction = selection < 0f ? 0f : selection > 1f ? 1f : selection;
+        tab.setShadowLayer(dpF(ChipWatermarkGeometry.TITLE_HALO_DP), 0f, 0f,
+            ColorUtils.blendARGB(mUnselectedHaloColor, mSelectedHaloColor, fraction));
+    }
+
+    /** Every pill's watermark at once, after a palette, radius or face change. */
+    private void applyChipWatermarks() {
+        for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
+            View child = mTabs.getChildAt(i);
+            if (child instanceof TextView) {
+                applyChipWatermark((TextView) child, mItems.get(i), i == mSelectedIndex ? 1f : 0f);
+            }
         }
-        return text;
+    }
+
+    @NonNull
+    private ChipWatermarkDrawable watermarkOf(@NonNull TextView tab) {
+        android.graphics.drawable.Drawable background = tab.getBackground();
+        if (background instanceof ChipWatermarkDrawable) return (ChipWatermarkDrawable) background;
+        ChipWatermarkDrawable chip =
+            new ChipWatermarkDrawable(getResources().getDisplayMetrics().density);
+        tab.setBackground(chip);
+        return chip;
+    }
+
+    /**
+     * The face that has the watermark's code point, resolved exactly as the label's own icons are:
+     * a configured symbol_map first, the bundled symbols face behind it, and the terminal's regular
+     * face as the last resort. A watermark drawn by a face without the glyph is tofu behind the
+     * title, which is worse than no watermark at all — but the bundled face carries the whole Nerd
+     * set, so that only happens where it failed to load.
+     */
+    @Nullable
+    private Typeface watermarkFace(@NonNull String glyph) {
+        if (glyph.isEmpty()) return null;
+        Typeface mapped = TerminalLabelSymbolSpans.faceFor(mSymbolMaps, glyph.codePointAt(0));
+        if (mapped != null) return mapped;
+        Typeface bundled = com.termux.shared.termux.font.NerdFontSpans.typeface(getContext());
+        return bundled != null ? bundled : mTerminalTypeface;
+    }
+
+    /** For tests: the drawable one chip is wearing, or null before the row is populated. */
+    @Nullable
+    @androidx.annotation.VisibleForTesting
+    ChipWatermarkDrawable chipWatermarkAt(int index) {
+        if (index < 0 || index >= mTabs.getChildCount()) return null;
+        android.graphics.drawable.Drawable background = mTabs.getChildAt(index).getBackground();
+        return background instanceof ChipWatermarkDrawable ? (ChipWatermarkDrawable) background
+            : null;
     }
 
     /**
@@ -465,15 +1125,25 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         int type = Character.getType(codePoint);
         if (type != Character.PRIVATE_USE) return 0;
         int end = Character.charCount(codePoint);
-        return end < label.length() && label.charAt(end) == ' ' ? end : 0;
+        // A label that is the glyph alone - a process its icon names - is all slot.
+        if (end == label.length()) return end;
+        return label.charAt(end) == ' ' ? end : 0;
     }
 
-    /** Whether any pill is drawing the turning arc, which is the only mark that needs frames. */
+    /** Whether any pill is drawing a mark that moves, which is all the clock below exists for. */
     private boolean hasIndeterminateWindow() {
         for (WindowItem item : mItems) {
-            if (item.busy && item.progress == WindowItem.NO_PERCENTAGE) return true;
+            if (needsClock(item)) return true;
         }
         return false;
+    }
+
+    /**
+     * The turning arc is the only mark that needs frames; a percentage ring and every status dot
+     * are as static as the label.
+     */
+    private static boolean needsClock(@NonNull WindowItem item) {
+        return showsRing(item) && item.progress == WindowItem.NO_PERCENTAGE;
     }
 
     /**
@@ -494,8 +1164,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     /**
      * One clock for the whole bar rather than one per pill: setWindows's removeAllViews() then has
      * nothing to clean up, and every ring turns in phase. It only invalidates the pills that carry
-     * a turning arc; a percentage ring and a bell are as static as the label. Smooth mode drives it
-     * from an animator, lazy mode from a slow tick.
+     * a turning arc; a percentage ring and a bell are as static as the label. Both modes drive it
+     * from a timer — smooth mode at about 30 a second, lazy mode at eight stops a turn.
      *
      * <p>Deliberately not folded into mSelectionAnimator. Both only invalidate, so they compose;
      * sharing one animator would stall the activity indication for the length of every window switch.
@@ -504,21 +1174,23 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         boolean wanted = hasIndeterminateWindow() && mAttached && mWindowVisible;
         boolean smooth = wanted && !mLazyMode;
         boolean stepped = wanted && mLazyMode;
-        if (!smooth && mBusyAnimator != null) {
-            mBusyAnimator.cancel();
-            mBusyAnimator = null;
+        if (!smooth && mSmoothTick != null) {
+            removeCallbacks(mSmoothTick);
+            mSmoothTick = null;
         }
         if (!stepped && mLazyTick != null) {
             removeCallbacks(mLazyTick);
             mLazyTick = null;
         }
-        if (smooth && mBusyAnimator == null) {
-            mBusyAnimator = ValueAnimator.ofFloat(0f, 1f);
-            mBusyAnimator.setDuration(WindowActivityRing.SPIN_MS);
-            mBusyAnimator.setRepeatCount(ValueAnimator.INFINITE);
-            mBusyAnimator.setInterpolator(new android.view.animation.LinearInterpolator());
-            mBusyAnimator.addUpdateListener(animation -> invalidateTurningRings());
-            mBusyAnimator.start();
+        if (smooth && mSmoothTick == null) {
+            mSmoothTick = new Runnable() {
+                @Override public void run() {
+                    if (mSmoothTick != this) return;
+                    invalidateTurningRings();
+                    postDelayed(this, WindowActivityRing.SMOOTH_TICK_MS);
+                }
+            };
+            postDelayed(mSmoothTick, WindowActivityRing.SMOOTH_TICK_MS);
         }
         if (stepped && mLazyTick == null) {
             mLazyTick = new Runnable() {
@@ -532,11 +1204,28 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         }
     }
 
+    /**
+     * For tests: how many times the turning rings have been asked to redraw since the row was
+     * built. The one number that says whether the ring is on the vsync clock or on its own.
+     */
+    @androidx.annotation.VisibleForTesting int mRingRedraws;
+
     private void invalidateTurningRings() {
+        mRingRedraws++;
         for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
-            WindowItem item = mItems.get(i);
-            if (item.busy && item.progress == WindowItem.NO_PERCENTAGE)
-                mTabs.getChildAt(i).invalidate();
+            if (needsClock(mItems.get(i))) mTabs.getChildAt(i).invalidate();
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        // The × moves with the row it is in; its borrowed thumb target has to move with it.
+        updateCloseTouchDelegate();
+        if (mPendingRevealScroll != ChipRevealPolicy.NONE) {
+            int index = mPendingRevealScroll;
+            mPendingRevealScroll = ChipRevealPolicy.NONE;
+            scrollRevealedIntoView(index);
         }
     }
 
@@ -550,14 +1239,27 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     @Override
     protected void onDetachedFromWindow() {
         mAttached = false;
-        if (mBusyAnimator != null) {
-            mBusyAnimator.cancel();
-            mBusyAnimator = null;
+        if (mSmoothTick != null) {
+            removeCallbacks(mSmoothTick);
+            mSmoothTick = null;
         }
         if (mLazyTick != null) {
             removeCallbacks(mLazyTick);
             mLazyTick = null;
         }
+        // A stream that was under way when the view left the window never gets its UP; the
+        // tracker goes back to the pool and the latch does not survive into the next attach.
+        if (mOverswipeVelocity != null) {
+            mOverswipeVelocity.recycle();
+            mOverswipeVelocity = null;
+        }
+        mOverswipeOwned = false;
+        mOverswipeInterrupted = false;
+        mOverswipePx = 0f;
+        cancelCloseReveal();
+        // A × is a four-second offer, not a state: a row that left the window comes back without it.
+        mReveal.hide();
+        applyReveal();
         super.onDetachedFromWindow();
     }
 
@@ -568,10 +1270,39 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         updateBusyAnimator();
     }
 
+    /** For tests: the × a chip is offering right now, or null while no chip is offering one. */
+    @Nullable
+    @androidx.annotation.VisibleForTesting
+    public View revealedCloseView() {
+        return closeButtonView();
+    }
+
+    /**
+     * The close button a chip is offering right now, or null while no chip is offering one.
+     *
+     * <p>It is a child of the strip only between the tap that asks for it and the timeout that
+     * takes it away, so a caller that wants to point at it has to ask again every time it draws.
+     */
+    @Nullable
+    public View closeButtonView() {
+        return mCloseButton != null && mCloseButton.getVisibility() == VISIBLE ? mCloseButton : null;
+    }
+
+    /** Told about every chip tap, including the one spent on revealing the close button. */
+    public void setOnChipTappedListener(@Nullable OnChipTappedListener listener) {
+        mChipTapListener = listener;
+    }
+
+    /** For tests: the surface the selected chip is standing on, × segment included. */
+    @androidx.annotation.VisibleForTesting
+    boolean selectionHighlightBounds(@NonNull RectF output) {
+        return mTabs.copyCurrentHighlightBounds(output);
+    }
+
     /** For tests: whether a working window's ring is turning right now, smoothly or in steps. */
     @androidx.annotation.VisibleForTesting
     public boolean isBusyAnimationRunning() {
-        return (mBusyAnimator != null && mBusyAnimator.isStarted()) || mLazyTick != null;
+        return mSmoothTick != null || mLazyTick != null;
     }
 
     private TextView createTab(@NonNull WindowItem item, boolean selected) {
@@ -581,8 +1312,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         tab.setMinWidth(0);
         tab.setMaxWidth(dp(104));
         // A half-dp on each side is visible at modern phone densities without making the compact
-        // window row feel loose.
-        tab.setPadding(dp(3.5f), 0, dp(3.5f), 0);
+        // window row feel loose; the leading side carries the title's nudge past the glyph too.
+        tab.setPaddingRelative(dp(3.5f) + dp(ChipWatermarkGeometry.TITLE_NUDGE_DP), 0,
+            dp(3.5f), 0);
         tab.setSingleLine(true);
         tab.setIncludeFontPadding(false);
         tab.setTextAlignment(TEXT_ALIGNMENT_CENTER);
@@ -595,7 +1327,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         tab.setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
         tab.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
         tab.setTypeface(mTerminalTypeface, selected ? Typeface.BOLD : Typeface.NORMAL);
-        tab.setBackground(buildUnselectedChip());
+        // Never narrower than the watermark behind it: a window whose whole label is its process
+        // icon has no title left to size the chip, and a sliver of a glyph reads as damage.
+        tab.setMinWidth(dp(ChipWatermarkGeometry.GLYPH_SIZE_DP)
+            + dp(ChipWatermarkGeometry.TITLE_NUDGE_DP) + dp(3.5f) * 2);
+        applyChipWatermark(tab, item, selected ? 1f : 0f);
         tab.setSelected(selected);
         tab.setFocusable(true);
         return tab;
@@ -603,13 +1339,13 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     private void addCreateButton(boolean firstItem) {
         Context context = getContext();
-        int tertiary = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorTertiary,
-            ContextCompat.getColor(context, R.color.termux_primary));
+        // The plus is the place's too: the same accent as the chips beside it, a little quieter.
+        int accent = mPlaceAccent != null ? mPlaceAccent
+            : MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
+                ContextCompat.getColor(context, R.color.termux_primary));
         AppCompatImageButton add = new AppCompatImageButton(context);
         add.setImageResource(R.drawable.ic_status_bar_add_window);
-        ImageViewCompat.setImageTintList(add, ColorStateList.valueOf(
-            ColorUtils.setAlphaComponent(tertiary, 184)));
+        ImageViewCompat.setImageTintList(add, ColorStateList.valueOf(plusTint(accent)));
         add.setScaleType(ImageView.ScaleType.CENTER);
         add.setBackground(null);
         add.setPadding(0, 0, 0, 0);
@@ -623,7 +1359,11 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     private void animateSelectionSlide(int previousSelected, int selectedIndex) {
-        if (previousSelected < 0 || previousSelected >= mItems.size()
+        // A pane switch driven through the pane API can now land while the bar's window is not
+        // visible (the Activity is stopped, not destroyed; see TerminalActionDispatcher). Same
+        // reasoning as updateBusyAnimator: an invisible window still delivers frame callbacks, so
+        // an ungated animator here would spend real frames sliding a highlight nobody can see.
+        if (!mWindowVisible || previousSelected < 0 || previousSelected >= mItems.size()
             || selectedIndex < 0 || selectedIndex >= mItems.size()) {
             mTabs.snapSelection(selectedIndex);
             applyStableTabSelection();
@@ -666,13 +1406,46 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mSelectionAnimator.start();
     }
 
+    /**
+     * The × takes precedence over the row's resting scroll: a chip near the trailing end grows
+     * into room the bar does not have (the stats cluster owns the rest of the status row), so the
+     * strip slides just far enough for the whole segment to sit inside the viewport. Runs after
+     * the layout pass that measured the × into the strip, so the scroll range already reaches it.
+     */
+    private void scrollRevealedIntoView(int index) {
+        if (mTabs.closeTarget() != index || index < 0 || index >= mTabs.getChildCount()) return;
+        View chip = mTabs.getChildAt(index);
+        int margin = dp(5);
+        int viewport = getWidth() - getPaddingLeft() - getPaddingRight();
+        if (viewport <= 0 || chip.getWidth() <= 0) return;
+        int extent = mTabs.closeExtentPx();
+        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        int left = rtl ? chip.getLeft() - extent : chip.getLeft();
+        int right = rtl ? chip.getRight() : chip.getRight() + extent;
+        int target = getScrollX();
+        if (right + margin > target + viewport) target = right + margin - viewport;
+        if (left - margin < target) target = left - margin;
+        // When the chip and its × are wider than the viewport, the × wins: it is the thing the
+        // thumb is reaching for.
+        if (right + margin > target + viewport) target = right + margin - viewport;
+        int maxScroll = Math.max(0, mTabs.getWidth() + getPaddingLeft() + getPaddingRight()
+            - getWidth());
+        target = Math.max(0, Math.min(target, maxScroll));
+        if (target == getScrollX()) return;
+        if (mAttached && mWindowVisible) animateScrollTo(target);
+        else scrollTo(target, 0);
+    }
+
     private void scrollSelectedIntoView(int selectedIndex) {
         if (selectedIndex < 0 || selectedIndex >= mTabs.getChildCount()) return;
         post(() -> {
             View selected = mTabs.getChildAt(selectedIndex);
             int target = Math.max(0, selected.getLeft() - dp(5));
             if (target == getScrollX()) return;
-            animateScrollTo(target);
+            // Same reasoning as animateSelectionSlide: an invisible window still gets animated,
+            // it just never shows it, so skip straight to the end state while nobody can see it.
+            if (mWindowVisible) animateScrollTo(target);
+            else scrollTo(target, 0);
         });
     }
 
@@ -701,6 +1474,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             tab.setSelected(selected);
             tab.setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
             tab.setTypeface(mTerminalTypeface, selected ? Typeface.BOLD : Typeface.NORMAL);
+            applyTitleHalo(tab, selected ? 1f : 0f);
+            ChipWatermarkDrawable chip = chipWatermarkAt(i);
+            if (chip != null) chip.setSelection(selected ? 1f : 0f);
             tab.setAlpha(1f);
             tab.setTranslationX(0f);
         }
@@ -710,27 +1486,203 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
             TextView tab = (TextView) mTabs.getChildAt(i);
             tab.setSelected(i == selectedIndex);
+            ChipWatermarkDrawable chip = chipWatermarkAt(i);
             if (i == previousSelected) {
                 tab.setTextColor(ColorUtils.blendARGB(
                     mSelectedTextColor, mUnselectedTextColor, progress));
                 tab.setTypeface(mTerminalTypeface, Typeface.BOLD);
+                applyTitleHalo(tab, 1f - progress);
+                if (chip != null) chip.setSelection(1f - progress);
             } else if (i == selectedIndex) {
                 tab.setTextColor(ColorUtils.blendARGB(
                     mUnselectedTextColor, mSelectedTextColor, progress));
                 tab.setTypeface(mTerminalTypeface, Typeface.BOLD);
+                applyTitleHalo(tab, progress);
+                if (chip != null) chip.setSelection(progress);
             } else {
                 tab.setTextColor(mUnselectedTextColor);
                 tab.setTypeface(mTerminalTypeface, Typeface.NORMAL);
+                applyTitleHalo(tab, 0f);
+                if (chip != null) chip.setSelection(0f);
             }
             tab.setAlpha(1f);
             tab.setTranslationX(0f);
         }
     }
 
+    /**
+     * The colour of the place whose chips these are — the wall's Widgets, Terminal and Display
+     * each have one — for the selected chip's fill and stroke. Null is the theme's primary.
+     */
+    public void setPlaceAccent(@Nullable Integer accent) {
+        if (accent == null ? mPlaceAccent == null : accent.equals(mPlaceAccent)) return;
+        mPlaceAccent = accent;
+        updatePalette();
+        for (int i = 0; i < mTabs.getChildCount(); i++) {
+            View child = mTabs.getChildAt(i);
+            if (child == mCloseButton) {
+                applyCloseButtonStyle(mCloseButton);
+            } else if (child instanceof TextView) {
+                ((TextView) child).setTextColor(child.isSelected()
+                    ? mSelectedTextColor : mUnselectedTextColor);
+            } else if (child instanceof AppCompatImageButton) {
+                int tint = accent != null ? accent
+                    : MaterialColors.getColor(getContext(), com.termux.shared.R.attr.termuxColorPrimary,
+                        ContextCompat.getColor(getContext(), R.color.termux_primary));
+                ImageViewCompat.setImageTintList((AppCompatImageButton) child,
+                    ColorStateList.valueOf(plusTint(tint)));
+            }
+        }
+        applyChipWatermarks();
+        invalidate();
+    }
+
+    /**
+     * Who can say what this bar is standing on.
+     *
+     * <p>The chips are drawn on glass, and the role colours they were dressed in are authored
+     * against an opaque card: over the wallpaper the user reported, the label composited to 1.03:1
+     * of the band it stood on. Given this, every colour is derived from the band as measured
+     * instead — see {@link WindowChipInk}. Given null, nothing is measured and the bar keeps the
+     * authored palette exactly as it was.</p>
+     */
+    public void setChromeInk(@Nullable com.termux.app.chrome.ChromeInk ink) {
+        if (mChromeInk == ink) return;
+        mChromeInk = ink;
+        mGlassPalette = null;
+        mGlassGeneration = -1;
+        mGlassMeasuredRect.setEmpty();
+        updatePalette();
+        reapplyLabelInk();
+        invalidate();
+    }
+
+    /** The band as last measured; null until something could measure it. For tests. */
+    @Nullable
+    public WindowChipInk.Palette glassPalette() {
+        return mGlassPalette;
+    }
+
+    /**
+     * The band under the chips, measured once and remembered until the measurement could move.
+     *
+     * <p>{@link com.termux.app.chrome.ChromeInk#onGlass} is called here and nowhere else in this
+     * view: a band carries one veil, so asking twice in a frame — at two targets, or from two
+     * pieces of the same bar — would let the last caller decide it. The strictest tier the bar
+     * carries is its labels, so that is the tier the band is resolved at, and every other ink the
+     * chips need is derived from the surface it left.</p>
+     *
+     * @return null when nothing can be measured yet: no chrome attached, or a band whose view has
+     *     not been laid out. Both heal on a later frame through {@link #syncGlassPalette()}.
+     */
+    @Nullable
+    private WindowChipInk.Palette measureBand(int accent) {
+        if (mChromeInk == null) {
+            mGlassPalette = null;
+            return null;
+        }
+        if (!mChromeInk.bandRect(com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR,
+            mGlassBandRect)) {
+            mGlassPalette = null;
+            mGlassGeneration = -1;
+            mGlassMeasuredRect.setEmpty();
+            return null;
+        }
+        Context context = getContext();
+        int onSurface = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnSurface,
+            ContextCompat.getColor(context, R.color.termux_on_surface));
+        int surfaceBase = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfaceBase,
+            ContextCompat.getColor(context, R.color.termux_surface_base));
+        com.termux.app.chrome.OnGlass.Resolution resolved = mChromeInk.onGlass(
+            com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR, mGlassBandRect,
+            WindowChipInk.neutralSeed(onSurface, surfaceBase, false),
+            WindowChipInk.neutralSeed(onSurface, surfaceBase, true),
+            com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+        // Read after the resolve, never before: the band's own vote is cast inside onGlass, and a
+        // polarity read before it would be answering for a chrome that had not seen this band.
+        boolean pale =
+            mChromeInk.polarity() == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK;
+        int neutral = WindowChipInk.neutralSeed(onSurface, surfaceBase, pale);
+        // A window-label poll re-dresses the whole bar; the tone walks behind a palette are not
+        // worth repeating for an answer that cannot have changed.
+        if (mGlassPalette == null
+            || !mGlassPalette.matches(resolved.surface, pale, neutral, accent)) {
+            mGlassPalette = WindowChipInk.resolve(resolved.surface, pale, neutral, accent);
+        }
+        mGlassGeneration = mChromeInk.backdrops().generation();
+        mGlassMeasuredRect.set(mGlassBandRect);
+        return mGlassPalette;
+    }
+
+    /**
+     * Re-measures the band when the measurement could have moved — the wallpaper, the palette or
+     * the mode changed (a new sample generation), or the band itself moved on screen.
+     *
+     * <p>Driven from the draw pass rather than from a callback because that is where a band that
+     * could not be read yet heals: {@link com.termux.app.chrome.GlassBackdropCache} answers an
+     * unreadable band from the mode's nominal glass and bumps its generation when a real sample
+     * lands, and a bar whose background view had not been laid out simply asks again. Two int
+     * comparisons and a rect comparison per frame; the measurement itself runs on a change.</p>
+     */
+    private void syncGlassPalette() {
+        if (mChromeInk == null) return;
+        if (!mChromeInk.bandRect(com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR,
+            mGlassBandRect)) {
+            // Nothing to measure against. Costs nothing to keep asking, and re-dressing the bar on
+            // every frame because a view is not laid out yet would.
+            if (mGlassPalette == null) return;
+            updatePalette();
+            reapplyLabelInk();
+            return;
+        }
+        if (mChromeInk.backdrops().generation() == mGlassGeneration
+            && mGlassMeasuredRect.equals(mGlassBandRect)) {
+            return;
+        }
+        updatePalette();
+        reapplyLabelInk();
+    }
+
+    /**
+     * The labels' colour after a re-measure, and nothing else: a selection slide owns the alpha and
+     * the travel of every chip while it runs, and this can land in the middle of one.
+     */
+    private void reapplyLabelInk() {
+        if (mSelectionAnimator != null && mSelectionAnimator.isRunning()) return;
+        for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
+            View child = mTabs.getChildAt(i);
+            if (!(child instanceof TextView)) continue;
+            boolean selected = i == mSelectedIndex;
+            ((TextView) child).setTextColor(selected ? mSelectedTextColor : mUnselectedTextColor);
+            applyTitleHalo((TextView) child, selected ? 1f : 0f);
+        }
+        if (mCloseButton != null) applyCloseButtonStyle(mCloseButton);
+    }
+
+    @Override
+    protected void dispatchDraw(@NonNull Canvas canvas) {
+        syncGlassPalette();
+        super.dispatchDraw(canvas);
+    }
+
+    /** The plus that opens a window: the place's accent, an icon, so the icon tier. */
+    private int plusTint(int accent) {
+        WindowChipInk.Palette glass = mGlassPalette;
+        if (glass == null || mChromeInk == null) {
+            return ColorUtils.setAlphaComponent(accent, 184);
+        }
+        return WindowChipInk.towardPolarity(glass.band, accent,
+            mChromeInk.polarity() == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK,
+            com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
+    }
+
     private void updatePalette() {
         Context context = getContext();
-        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
-            ContextCompat.getColor(context, R.color.termux_primary));
+        int primary = mPlaceAccent != null ? mPlaceAccent
+            : MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
+                ContextCompat.getColor(context, R.color.termux_primary));
         int onSurface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(context, R.color.termux_on_surface));
         int onSurfaceVariant = MaterialColors.getColor(context,
@@ -739,15 +1691,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         int secondary = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorSecondary,
             ContextCompat.getColor(context, R.color.termux_secondary));
-        mSelectedTextColor = onSurface;
-        mUnselectedTextColor = ColorUtils.setAlphaComponent(
-            ColorUtils.blendARGB(onSurfaceVariant, secondary, .18f), 148);
-        mUnselectedFillColor = ColorUtils.setAlphaComponent(secondary, 16);
-        mUnselectedStrokeColor = ColorUtils.setAlphaComponent(secondary, 34);
-        mSelectedFillColor = ColorUtils.setAlphaComponent(primary, 58);
-        mSelectedStrokeColor = ColorUtils.setAlphaComponent(primary, 112);
-        mTabs.setHighlightStyle(mSelectedFillColor, mSelectedStrokeColor,
-            mStatusBarRadiusPx, dp(1));
         // Tertiary for the ring, like the row's other "something is happening" accents. Error for
         // the bell and a failed progress report: it is the one Material role that is warm in every
         // generated palette, and a window waiting on the user has to be findable without reading
@@ -757,98 +1700,73 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mAttentionColor = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorError,
             ContextCompat.getColor(context, R.color.termux_error));
-    }
+        // Material has no success role, and the busy accent cannot stand in for one: a chip that
+        // has finished must not be the colour of a chip that is still going.
+        mDoneColor = ContextCompat.getColor(context, R.color.termux_chip_done);
 
-    /**
-     * The progress ring, drawn in the run the process glyph occupies so the label does not move
-     * when a window starts working. Reads the clock at draw time: the bar's one clock invalidates
-     * the pills that carry a turning arc, and this draws whatever angle the moment calls for, so
-     * nothing is stored per frame and a stopped clock simply leaves the arc where it was.
-     */
-    private static final class ProgressRingSpan extends ReplacementSpan {
-        /** Faint full circle under a percentage ring, so 0% is still visibly a ring. */
-        private static final int TRACK_ALPHA = 56;
-        /** Ring diameter as a share of the text's ascent-to-descent height. */
-        private static final float DIAMETER_FRACTION = 0.78f;
-
-        private final int mColor;
-        private final int mProgress;
-        private final float mStrokePx;
-        /** Lazy mode: the arc jumps between {@link WindowActivityRing#LAZY_STEPS} stops. */
-        private final boolean mStepped;
-        private final RectF mBounds = new RectF();
-
-        ProgressRingSpan(int color, int progress, float strokePx, boolean stepped) {
-            mColor = color;
-            mProgress = progress;
-            mStrokePx = strokePx;
-            mStepped = stepped;
+        WindowChipInk.Palette glass = measureBand(primary);
+        if (glass == null) {
+            // Nothing can say what the bar stands on: the authored palette, unchanged. These are
+            // the numbers the app drew with before the light-mode round, so a preview or a test
+            // sees exactly what it always saw and no band is guessed at.
+            mSelectedTextColor = onSurface;
+            mUnselectedTextColor = ColorUtils.setAlphaComponent(
+                ColorUtils.blendARGB(onSurfaceVariant, secondary, .18f), 148);
+            mUnselectedFillColor = ColorUtils.setAlphaComponent(secondary, 16);
+            mUnselectedStrokeColor = ColorUtils.setAlphaComponent(secondary, 34);
+            mSelectedFillColor = ColorUtils.setAlphaComponent(primary, 58);
+            mSelectedStrokeColor = ColorUtils.setAlphaComponent(primary, 112);
+            // The watermark is the place's accent, never the label's colour: sharing the title's
+            // colour is what buried the glyph under it on the phone. Only its alpha moves with the
+            // selection — 30% at rest, 52% on the chip the user is in.
+            mGlyphColor = primary;
+            // The halo the title is drawn over, one per fill: near-opaque, so letters read against
+            // the glyph running behind them.
+            mUnselectedHaloColor = ChipWatermarkGeometry.haloColor(mUnselectedFillColor);
+            mSelectedHaloColor = ChipWatermarkGeometry.haloColor(mSelectedFillColor);
+            // The ground a corner dot is haloed against: the panel the row itself stands on, so a
+            // dot over the watermark still reads as a dot.
+            mGroundColor = ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
+                com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                ContextCompat.getColor(context, R.color.termux_surface_panel_high)), 255);
+        } else {
+            // The band was measured, so every colour is derived from what is really under it. The
+            // alphas that used to be authored here are gone: 16/255 of termux_secondary over the
+            // reporting device's wallpaper composited to 1.01:1 of the band, and the label at 148
+            // to 1.03:1 — which is the bug the user saw as "the chip is simply not there".
+            mSelectedTextColor = glass.selectedLabel;
+            mUnselectedTextColor = glass.restingLabel;
+            mUnselectedFillColor = glass.restingFill;
+            mUnselectedStrokeColor = glass.restingStroke;
+            mSelectedFillColor = glass.selectedFill;
+            mSelectedStrokeColor = glass.selectedStroke;
+            mGlyphColor = glass.glyph;
+            mUnselectedHaloColor = glass.restingHalo;
+            mSelectedHaloColor = glass.selectedHalo;
+            // The dot's halo is the chip it sits on, not the panel the row would stand on if it
+            // stood on a panel: over glass that panel colour is not on screen anywhere.
+            mGroundColor = glass.dotGround;
+            // The marks ride the outline and each is the only carrier of its own fact, so they
+            // take the outline's tier rather than the label's.
+            boolean pale = mChromeInk != null
+                && mChromeInk.polarity() == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK;
+            mBusyColor = WindowChipInk.towardPolarity(glass.band, mBusyColor, pale,
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
+            mAttentionColor = WindowChipInk.towardPolarity(glass.band, mAttentionColor, pale,
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
+            mDoneColor = WindowChipInk.towardPolarity(glass.band, mDoneColor, pale,
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
         }
-
-        @Override
-        public int getSize(@NonNull Paint paint, CharSequence text, int start, int end,
-                           @Nullable Paint.FontMetricsInt fm) {
-            // At least as wide as the glyph it replaces, so the rest of the label stays put; wider
-            // when a single narrow cell could not hold a ring anyone can read.
-            float glyphWidth = paint.measureText(text, start, end);
-            return Math.round(Math.max(glyphWidth, diameter(paint) + mStrokePx * 2f));
-        }
-
-        private float diameter(@NonNull Paint paint) {
-            return (paint.descent() - paint.ascent()) * DIAMETER_FRACTION;
-        }
-
-        @Override
-        public void draw(@NonNull Canvas canvas, CharSequence text, int start, int end, float x,
-                         int top, int y, int bottom, @NonNull Paint paint) {
-            float width = getSize(paint, text, start, end, null);
-            float diameter = diameter(paint) - mStrokePx;
-            float cx = x + width / 2f;
-            float cy = y + (paint.ascent() + paint.descent()) / 2f;
-            mBounds.set(cx - diameter / 2f, cy - diameter / 2f, cx + diameter / 2f, cy + diameter / 2f);
-
-            int color = paint.getColor();
-            Paint.Style style = paint.getStyle();
-            float strokeWidth = paint.getStrokeWidth();
-            Paint.Cap cap = paint.getStrokeCap();
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(mStrokePx);
-            paint.setStrokeCap(Paint.Cap.ROUND);
-            if (mProgress == WindowItem.NO_PERCENTAGE) {
-                float phase = WindowActivityRing.phase(SystemClock.uptimeMillis());
-                if (mStepped) phase = WindowActivityRing.steppedPhase(phase, WindowActivityRing.LAZY_STEPS);
-                paint.setColor(mColor);
-                canvas.drawArc(mBounds, WindowActivityRing.indeterminateStartDeg(phase),
-                    WindowActivityRing.INDETERMINATE_SWEEP_DEG, false, paint);
-            } else {
-                paint.setColor(ColorUtils.setAlphaComponent(mColor, TRACK_ALPHA));
-                canvas.drawOval(mBounds, paint);
-                paint.setColor(mColor);
-                float sweep = WindowActivityRing.determinateSweepDeg(mProgress);
-                if (sweep > 0f) canvas.drawArc(mBounds, WindowActivityRing.START_DEG, sweep, false, paint);
-            }
-            paint.setColor(color);
-            paint.setStyle(style);
-            paint.setStrokeWidth(strokeWidth);
-            paint.setStrokeCap(cap);
-        }
+        mTabs.setHighlightStyle(mSelectedFillColor, mSelectedStrokeColor,
+            mStatusBarRadiusPx, dp(1));
+        applyChipWatermarks();
     }
 
     private void applyTabSurfaceStyle() {
-        for (int i = 0; i < mItems.size() && i < mTabs.getChildCount(); i++) {
-            mTabs.getChildAt(i).setBackground(buildUnselectedChip());
-        }
         applyActivityStates(true);
         applyStableTabSelection();
+        if (mCloseButton != null) applyCloseButtonStyle(mCloseButton);
         mTabs.invalidate();
-    }
-
-    private GradientDrawable buildUnselectedChip() {
-        GradientDrawable chip = new GradientDrawable();
-        chip.setCornerRadius(mStatusBarRadiusPx);
-        chip.setColor(mUnselectedFillColor);
-        chip.setStroke(dp(1), mUnselectedStrokeColor);
-        return chip;
     }
 
     private static RectF lerp(@NonNull RectF start, @NonNull RectF end, float progress) {
@@ -859,23 +1777,148 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             start.bottom + (end.bottom - start.bottom) * progress);
     }
 
-    /** Draws one selected surface beneath the pills so it can travel without moving their labels. */
+    /**
+     * Draws one selected surface beneath the pills so it can travel without moving their labels,
+     * and owns the × the selected chip grows on its trailing side.
+     */
     private static final class SelectionStrip extends LinearLayout {
 
         private final Paint mFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint mDividerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF mAnimatedHighlight = new RectF();
         private final RectF mDrawBounds = new RectF();
         private int mWindowCount;
         private int mSelection = -1;
         private boolean mHasAnimatedHighlight;
         private float mCornerRadius;
+        /** The chip whose trailing side carries the ×, or {@link ChipRevealPolicy#NONE}. */
+        private int mCloseIndex = ChipRevealPolicy.NONE;
+        @Nullable private View mCloseSegment;
+        /** The segment's width once it has finished opening, and how far open it is now. */
+        private int mCloseFullWidthPx;
+        private int mCloseDividerPx;
+        private float mCloseFraction;
+        /** How far the chips after the segment are currently pushed, so an offset never doubles. */
+        private int mAppliedShiftPx;
 
         SelectionStrip(@NonNull Context context) {
             super(context);
             setWillNotDraw(false);
             mFillPaint.setStyle(Paint.Style.FILL);
             mStrokePaint.setStyle(Paint.Style.STROKE);
+            mDividerPaint.setStyle(Paint.Style.FILL);
+        }
+
+        void setCloseSegment(@Nullable View segment, int fullWidthPx, int dividerPx) {
+            mCloseSegment = segment;
+            mCloseFullWidthPx = Math.max(0, fullWidthPx);
+            mCloseDividerPx = Math.max(0, dividerPx);
+        }
+
+        void setCloseTarget(int index) {
+            if (mCloseIndex == index) return;
+            // Undone against the chip that carried it, before the index that identifies those
+            // neighbours moves: an offset left behind is a row that never returns to its own width.
+            if (mAppliedShiftPx != 0) {
+                offsetFollowers(-mAppliedShiftPx);
+                mAppliedShiftPx = 0;
+            }
+            mCloseIndex = index;
+        }
+
+        int closeTarget() {
+            return mCloseIndex;
+        }
+
+        /** How far open the × stands, 0 to 1. Moves pixels only: the measure is already final. */
+        void setCloseRevealFraction(float fraction) {
+            float clamped = fraction < 0f ? 0f : fraction > 1f ? 1f : fraction;
+            if (mCloseFraction == clamped) return;
+            mCloseFraction = clamped;
+            placeCloseSegment();
+            invalidate();
+        }
+
+        /** The room the × takes in the row, whether or not it has finished opening into it. */
+        private int closeExtentPx() {
+            return hasCloseSegment() ? mCloseFullWidthPx : 0;
+        }
+
+        private boolean hasCloseSegment() {
+            View segment = mCloseSegment;
+            return segment != null && segment.getVisibility() != GONE && segment.getParent() == this
+                && mCloseIndex >= 0 && mCloseIndex < mWindowCount && mCloseIndex < getChildCount();
+        }
+
+        /** Whether {@code x}, in this strip's own coordinates, is on a chip or on its ×. */
+        boolean isInsideChipWithClose(int index, float x) {
+            if (index < 0 || index >= getChildCount()) return false;
+            View chip = getChildAt(index);
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            int shift = index == mCloseIndex ? currentShiftPx() : 0;
+            float left = rtl ? chip.getLeft() - shift : chip.getLeft();
+            float right = rtl ? chip.getRight() : chip.getRight() + shift;
+            return x >= left && x < right;
+        }
+
+        private int currentShiftPx() {
+            return hasCloseSegment()
+                ? ChipWatermarkGeometry.closeSegmentWidthPx(mCloseFraction, mCloseFullWidthPx) : 0;
+        }
+
+        @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            int extra = closeExtentPx();
+            if (extra <= 0) return;
+            // The segment is a zero-width child in the flow, so the row has to be told about the
+            // room it takes. Counted in full from the first frame: the scroll extents then hold
+            // still while it opens, and only the segment's own pixels move.
+            setMeasuredDimension(getMeasuredWidth() + extra, getMeasuredHeight());
+        }
+
+        @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
+            super.onLayout(changed, l, t, r, b);
+            mAppliedShiftPx = 0;
+            placeCloseSegment();
+        }
+
+        /**
+         * Opens the gap after the chip that asked for the ×, pushes the chips behind it along, and
+         * gives the segment the gap. Offsets rather than a layout pass: a 180 ms open that walked
+         * the whole activity's layout every frame is exactly the per-frame work the row cannot
+         * afford.
+         */
+        private void placeCloseSegment() {
+            View segment = mCloseSegment;
+            if (segment == null || segment.getParent() != this) return;
+            int shift = currentShiftPx();
+            if (!hasCloseSegment()) {
+                if (mAppliedShiftPx != 0) offsetFollowers(-mAppliedShiftPx);
+                mAppliedShiftPx = 0;
+                segment.layout(0, 0, 0, 0);
+                return;
+            }
+            offsetFollowers(shift - mAppliedShiftPx);
+            mAppliedShiftPx = shift;
+            View chip = getChildAt(mCloseIndex);
+            int height = getHeight();
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            int left = rtl ? chip.getLeft() - shift : chip.getRight();
+            segment.measure(MeasureSpec.makeMeasureSpec(shift, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+            segment.layout(left, 0, left + shift, height);
+        }
+
+        /** Every child laid out after the chip carrying the ×, the create button included. */
+        private void offsetFollowers(int dx) {
+            if (dx == 0) return;
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            for (int i = mCloseIndex + 1; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child == mCloseSegment) continue;
+                child.offsetLeftAndRight(rtl ? -dx : dx);
+            }
         }
 
         void setWindowCount(int windowCount) {
@@ -886,6 +1929,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                                float strokeWidth) {
             mFillPaint.setColor(fillColor);
             mStrokePaint.setColor(strokeColor);
+            // Softer than the outline: it separates the title from the ×, it does not frame it.
+            mDividerPaint.setColor(ColorUtils.setAlphaComponent(strokeColor,
+                Math.round(android.graphics.Color.alpha(strokeColor) * CLOSE_DIVIDER_ALPHA)));
             mStrokePaint.setStrokeWidth(strokeWidth);
             mCornerRadius = Math.max(0f, cornerRadius);
             invalidate();
@@ -911,11 +1957,17 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             return copyChildBounds(mSelection, output);
         }
 
+        /** A chip's bounds, grown over the × while it is the one carrying it. */
         boolean copyChildBounds(int index, @NonNull RectF output) {
             if (index < 0 || index >= mWindowCount || index >= getChildCount()) return false;
             View child = getChildAt(index);
             if (child.getWidth() <= 0 || child.getHeight() <= 0) return false;
             output.set(child.getLeft(), child.getTop(), child.getRight(), child.getBottom());
+            if (index == mCloseIndex && hasCloseSegment()) {
+                int shift = currentShiftPx();
+                if (getLayoutDirection() == LAYOUT_DIRECTION_RTL) output.left -= shift;
+                else output.right += shift;
+            }
             return true;
         }
 
@@ -936,7 +1988,22 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 canvas.drawRoundRect(bounds, mCornerRadius, mCornerRadius, mFillPaint);
                 canvas.drawRoundRect(bounds, mCornerRadius, mCornerRadius, mStrokePaint);
             }
+            drawCloseDivider(canvas);
             super.dispatchDraw(canvas);
+        }
+
+        /** The hairline the × stands behind, in the selected chip's own stroke colour. */
+        private void drawCloseDivider(@NonNull Canvas canvas) {
+            if (mCloseDividerPx <= 0 || !hasCloseSegment()) return;
+            int shift = currentShiftPx();
+            if (shift <= 0) return;
+            View chip = getChildAt(mCloseIndex);
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            // Where the title ends and the × begins, not where the chip now ends.
+            float x = rtl ? chip.getLeft() - mCloseDividerPx : chip.getRight();
+            float inset = chip.getHeight() * .2f;
+            canvas.drawRect(x, chip.getTop() + inset, x + mCloseDividerPx,
+                chip.getBottom() - inset, mDividerPaint);
         }
     }
 
@@ -1022,7 +2089,27 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     public static WindowItem itemForResolved(@Nullable String processName,
                                              @NonNull String displayText,
                                              @NonNull String spokenLabel) {
-        return new WindowItem(processGlyph(processName) + " " + displayText, spokenLabel);
+        String glyph = processGlyph(processName);
+        return new WindowItem(displayText.isEmpty() ? glyph : glyph + " " + displayText,
+            spokenLabel);
+    }
+
+    /**
+     * The window-bar policy for a pane whose foreground the resolver identified: the open file for
+     * an editor, otherwise the process name itself — always as visible text, even when
+     * {@code processName}'s own glyph already depicts it. That "always" matters once a pane starts
+     * working: {@link #tabText} only ever replaces the leading glyph run with the progress ring, so
+     * a pill whose only content was that glyph (pacman mid-update, say) went blank but for a
+     * spinning ring the moment it became busy, with nothing left beside the ring to read.
+     */
+    @NonNull
+    public static WindowItem itemForForegroundProcess(@NonNull String processName,
+                                                       @Nullable String openFile) {
+        if (openFile != null) {
+            return itemForResolved(processName, truncateFile(openFile),
+                processName + " editing " + openFile);
+        }
+        return itemForResolved(processName, truncateProcess(processName), processName);
     }
 
     /** Terminal editors whose foreground presence means "show the open file, not the process". */
@@ -1057,9 +2144,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return directoryName(cwd, null);
     }
 
+    /**
+     * The most a pill's text runs to. The row is a phone's status bar: a pill carries one short
+     * item - the open file, the process, the directory - and the glyph in its slot says the rest.
+     */
+    static final int LABEL_MAX_CHARS = 9;
+
     @NonNull
     public static String truncateProcess(@NonNull String process) {
-        return middleEllipsize(process, 12);
+        return middleEllipsize(process, LABEL_MAX_CHARS);
     }
 
     /**
@@ -1069,7 +2162,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      */
     @NonNull
     public static String truncateFile(@NonNull String name) {
-        int maxChars = 13;
+        int maxChars = LABEL_MAX_CHARS;
         String cleaned = name;
         if (cleaned.length() <= maxChars) return cleaned;
         int dot = cleaned.lastIndexOf('.');
@@ -1083,41 +2176,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return base.substring(0, head) + "…" + ext;
     }
 
+    /** The chip glyph for {@code process}; the table lives in {@link ProcessGlyphs}. */
     @NonNull
     private static String processGlyph(@Nullable String process) {
-        if (process == null) return glyph(0xE795);               // dev-terminal
-        switch (process) {
-            case "fish": return glyph(0xF023A);                // md-fish
-            case "pacman": return glyph(0xF0BAF);              // md-pac-man
-            case "ssh": return glyph(0xF08C0);                 // md-ssh
-            case "tmux": return glyph(0xEBC8);                 // cod-terminal-tmux
-            case "bash":
-            case "sh":
-            case "zsh": return glyph(0xF1183);                 // md-bash
-            case "python":
-            case "python3": return glyph(0xE73C);              // dev-python
-            case "node":
-            case "nodejs": return glyph(0xE719);               // dev-nodejs
-            case "docker": return glyph(0xE7B0);               // dev-docker
-            case "vim":
-            case "vi": return glyph(0xE7C5);                   // dev-vim
-            case "nvim":
-            case "neovim": return glyph(0xE6AE);               // custom-neovim
-            case "nano":
-            case "micro":
-            case "ne":
-            case "joe":
-            case "vis":
-            case "ed": return glyph(0xF0F6);                   // md-file-document-edit
-            case "emacs":
-            case "emacsclient": return glyph(0xE632);          // custom-emacs
-            case "hx":
-            case "helix":
-            case "kak":
-            case "kakoune": return glyph(0xEB0E);              // cod-edit
-            case "git": return glyph(0xE702);                  // dev-git
-            default: return glyph(0xE795);                       // dev-terminal
-        }
+        return ProcessGlyphs.forProcess(process);
     }
 
     /** Public so a named tab can keep the process glyph the derived label would have picked. */
@@ -1154,7 +2216,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         int slash = path.lastIndexOf('/');
         String leaf = slash >= 0 ? path.substring(slash + 1) : path;
         if (leaf.isEmpty()) leaf = "/";
-        return middleEllipsize(leaf, 12);
+        return middleEllipsize(leaf, LABEL_MAX_CHARS);
     }
 
     @NonNull
@@ -1183,5 +2245,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
 
     private int dp(float value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    /** A blur radius is not a layout distance: rounding 1.5dp to whole pixels coarsens the halo. */
+    private float dpF(float value) {
+        return value * getResources().getDisplayMetrics().density;
     }
 }

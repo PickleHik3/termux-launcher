@@ -28,6 +28,48 @@ import java.util.Properties;
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class TerminalPaletteSourceTest {
 
+    /**
+     * The background day/night push (D2) starts from an exported role palette, not from a terminal
+     * one: it has to strip the {@code terminal_} prefix and drop noctalia's aliases, or the first
+     * {@code terminal_normal_black} throws out of {@code updateWith} and the sessions keep the
+     * palette the wallpaper wore before the flip.
+     */
+    @Test
+    public void theExportedPaletteYieldsTheTerminalColoursAlone() {
+        Properties exported = new Properties();
+        exported.setProperty("primary", "#4080C0");
+        exported.setProperty("mode", "dark");
+        exported.setProperty("contrast_level", "default");
+        exported.setProperty("terminal_foreground", "#FFFFFF");
+        exported.setProperty("terminal_background", "#000000");
+        exported.setProperty("terminal_cursor", "#FF0000");
+        exported.setProperty("terminal_color0", "#101010");
+        exported.setProperty("terminal_color15", "#EEEEEE");
+        exported.setProperty("terminal_normal_black", "#101010");
+        exported.setProperty("terminal_bright_white", "#EEEEEE");
+        exported.setProperty("terminal_selection_bg", "#222222");
+        exported.setProperty("terminal_cursor_text", "#000000");
+
+        Properties terminal = TermuxTerminalSessionActivityClient.terminalColorsOf(exported);
+
+        assertEquals(5, terminal.size());
+        assertEquals("#FFFFFF", terminal.getProperty("foreground"));
+        assertEquals("#101010", terminal.getProperty("color0"));
+        assertNull(terminal.getProperty("normal_black"));
+        assertNull(terminal.getProperty("primary"));
+        assertNull(terminal.getProperty("mode"));
+        // The real consumer, which throws on anything it does not recognise.
+        new com.termux.terminal.TerminalColorScheme().updateWith(terminal);
+    }
+
+    /** A palette with nothing terminal in it is not an empty palette to push, it is no push. */
+    @Test
+    public void anExportWithoutTerminalKeysYieldsNothing() {
+        Properties exported = new Properties();
+        exported.setProperty("primary", "#4080C0");
+        assertTrue(TermuxTerminalSessionActivityClient.terminalColorsOf(exported).isEmpty());
+    }
+
     @Test
     public void colourKeysSurvive() {
         Properties props = new Properties();

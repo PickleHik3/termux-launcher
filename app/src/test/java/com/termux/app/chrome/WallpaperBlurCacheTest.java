@@ -59,29 +59,39 @@ public class WallpaperBlurCacheTest {
 
     @Test
     public void theLeastRecentlyUsedRadiusIsEvictedAtTheCap() {
-        cache.obtain(4, wallpaperFrame);
-        cache.obtain(8, wallpaperFrame);
-        cache.obtain(12, wallpaperFrame);
+        for (int radius : new int[] {4, 8, 12, 16, 20, 24}) cache.obtain(radius, wallpaperFrame);
         assertEquals(WallpaperBlurCache.MAX_CACHED_WALLPAPER_BLUR_RADII, cache.residentRadiiCount());
 
         // Touch the oldest so recency, not insertion order, decides what goes.
         cache.obtain(4, wallpaperFrame);
-        cache.obtain(16, wallpaperFrame);
+        cache.obtain(28, wallpaperFrame);
 
         assertEquals(WallpaperBlurCache.MAX_CACHED_WALLPAPER_BLUR_RADII, cache.residentRadiiCount());
         assertFalse("the least recently used radius should be gone", cache.hasRadius(8));
-        assertTrue(cache.hasRadius(4));
-        assertTrue(cache.hasRadius(12));
-        assertTrue(cache.hasRadius(16));
+        for (int radius : new int[] {4, 12, 16, 20, 24, 28}) assertTrue(cache.hasRadius(radius));
+    }
+
+    @Test
+    public void theByteBudgetEvictsBeforeTheRadiusCapDoes() {
+        Bitmap probe = cache.obtain(4, wallpaperFrame);
+        long frameBytes = probe.getAllocationByteCount();
+        // Room for one frame and a half: the second frame in must push the first out.
+        WallpaperBlurCache budgeted = new WallpaperBlurCache(source, null, frameBytes * 3 / 2);
+
+        budgeted.obtain(4, wallpaperFrame);
+        budgeted.obtain(8, wallpaperFrame);
+
+        assertEquals(1, budgeted.residentRadiiCount());
+        assertFalse(budgeted.hasRadius(4));
+        assertTrue("the frame just cut always stays, however large", budgeted.hasRadius(8));
+        assertTrue(budgeted.residentBytes() <= frameBytes * 3 / 2);
     }
 
     @Test
     public void anEvictedFrameSomeViewIsStillDrawingIsDroppedWithoutRecycling() {
         Bitmap doomed = cache.obtain(8, wallpaperFrame);
         source.inUse.add(doomed);
-        cache.obtain(12, wallpaperFrame);
-        cache.obtain(16, wallpaperFrame);
-        cache.obtain(20, wallpaperFrame);
+        for (int radius : new int[] {12, 16, 20, 24, 28, 32}) cache.obtain(radius, wallpaperFrame);
 
         assertFalse(cache.hasRadius(8));
         assertFalse("recycling a frame a view holds crashes its next draw", doomed.isRecycled());

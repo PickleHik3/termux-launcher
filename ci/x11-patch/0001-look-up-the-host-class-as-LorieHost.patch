@@ -1,0 +1,34 @@
+Look the display view's host class up as LorieHost, not MainActivity.
+
+The JNI surface names the host class and the LorieView field that holds it, and neither is
+type-checked by anything: the server calls FindClassOrDie("com/termux/x11/MainActivity") and reads
+`activity` as that type. The launcher has no such activity — the display is a page of the pane
+wall, not a fullscreen single-instance activity — so the Java side cannot satisfy this without
+keeping a class called MainActivity that is not one. Renaming the two string literals is the
+smaller lie. `clientConnectedStateChanged()` and the view's `resetIme()` keep their names and
+signatures, so this is a rename and nothing else.
+
+See x11-server/UPSTREAM.md.
+
+diff --git a/lorie/src/main/cpp/lorie/activity.cpp b/lorie/src/main/cpp/lorie/activity.cpp
+index d1e1e47..60efced 100644
+--- a/lorie/src/main/cpp/lorie/activity.cpp
++++ b/lorie/src/main/cpp/lorie/activity.cpp
+@@ -141,7 +141,7 @@ static jlong nativeInit(JNIEnv *env, jobject thiz) {
+         CharBuffer.self = FindClassOrDie(env,  "java/nio/CharBuffer");
+         CharBuffer.toString = FindMethodOrDie(env, CharBuffer.self, "toString", "()Ljava/lang/String;", JNI_FALSE);
+ 
+-        MainActivity.self = FindClassOrDie(env,  "com/termux/x11/MainActivity");
++        MainActivity.self = FindClassOrDie(env,  "com/termux/x11/LorieHost");
+         MainActivity.clientConnectedStateChanged = FindMethodOrDie(env, MainActivity.self, "clientConnectedStateChanged", "()V", JNI_FALSE);
+         MainActivity.resetIme = FindMethodOrDie(env, env->GetObjectClass(thiz), "resetIme", "()V", JNI_FALSE);
+     }
+@@ -159,7 +159,7 @@ LorieViewResources::LorieViewResources(JNIEnv *callerEnv, jobject view) {
+     vm->AttachCurrentThread(&env, nullptr);
+     thiz = env->NewGlobalRef(view);
+ 
+-    jfieldID activityField = env->GetFieldID(env->GetObjectClass(view), "activity", "Lcom/termux/x11/MainActivity;");
++    jfieldID activityField = env->GetFieldID(env->GetObjectClass(view), "activity", "Lcom/termux/x11/LorieHost;");
+     jobject a = env->GetObjectField(view, activityField);
+     if (a)
+         activity = env->NewGlobalRef(a);

@@ -9,49 +9,73 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-/** Plain JUnit with fakes for both interfaces: no Android types are involved in the escalation. */
+/** Plain JUnit with fakes for every interface: no Android types are involved in the escalation. */
 public class ShellTerminatorTest {
 
     private static final int SIGHUP = 1;
     private static final int SIGKILL = 9;
 
     @Test
-    public void hangsUpTheWholeGroupFirst() {
-        // The negative pid is the whole point: a SIGKILL to the shell alone left `sleep 300 &`
-        // reparented to init and still running.
+    public void hangsUpEveryGroupInTheSession() {
+        // fish gives `tty-clock` (foreground) and `sleep 300 &` (background) groups of their own; a
+        // signal to the shell's group 4321 alone reached neither.
         Sender sender = new Sender();
         FakeScheduler scheduler = new FakeScheduler();
+        FakeTable table = new FakeTable(4321, 5000, 5100);
 
-        ShellTerminator.terminate(4321, SIGHUP, SIGKILL, sender, scheduler, () -> 4321);
+        ShellTerminator.terminate(4321, SIGHUP, SIGKILL, sender, scheduler, table, () -> 4321);
 
-        assertEquals(Arrays.asList("-4321:1"), sender.sent);
+        assertEquals(Arrays.asList("-4321:1", "-5000:1", "-5100:1"), sender.sent);
     }
 
     @Test
-    public void escalatesToAGroupKillWhenTheShellIgnoresTheHangup() {
+    public void killsWhatTheSessionStillHoldsAfterTheShellExitedOnTheHangup() {
+        // The common case on the phone: the shell honours the hangup and exits, the curses program in
+        // its own group swallows it. The old guard "leader still alive" skipped exactly this kill.
         Sender sender = new Sender();
         FakeScheduler scheduler = new FakeScheduler();
-
-        ShellTerminator.terminate(4321, SIGHUP, SIGKILL, sender, scheduler, () -> 4321);
-        assertEquals(1, scheduler.delays.size());
-        assertEquals(ShellTerminator.ESCALATION_DELAY_MS, (long) scheduler.delays.get(0));
-        scheduler.runAll();
-
-        assertEquals(Arrays.asList("-4321:1", "-4321:9"), sender.sent);
-    }
-
-    @Test
-    public void skipsTheKillOnceTheShellHasBeenReaped() {
-        // Guarding on the leader still being alive is also what makes this pid-reuse-safe: while the
-        // leader lives, process group 4321 is unambiguously this job's.
-        Sender sender = new Sender();
-        FakeScheduler scheduler = new FakeScheduler();
+        FakeTable table = new FakeTable(4321, 5000);
         int[] livePid = {4321};
 
-        ShellTerminator.terminate(4321, SIGHUP, SIGKILL, sender, scheduler, () -> livePid[0]);
-        livePid[0] = -1;   // cleanupResources ran between the hangup and the escalation
+        ShellTerminator.terminate(4321, SIGHUP, SIGKILL, sender, scheduler, table, () -> livePid[0]);
+        assertEquals(Arrays.asList((long) ShellTerminator.ESCALATION_DELAY_MS), scheduler.delays);
+        livePid[0] = -1;              // cleanupResources ran
+        table.groups = new int[]{5000};
         scheduler.runAll();
 
+        assertEquals(Arrays.asList("-4321:1", "-5000:1", "-5000:9"), sender.sent);
+    }
+
+    @Test
+    public void sendsNoKillWhenTheHangupEmptiedTheSession() {
+        Sender sender = new Sender();
+        FakeScheduler scheduler = new FakeScheduler();
+        FakeTable table = new FakeTable(4321, 5000);
+
+        ShellTerminator.terminate(4321, SIGHUP, SIGKILL, sender, scheduler, table, () -> -1);
+        table.groups = new int[0];
+        scheduler.runAll();
+
+        assertEquals(Arrays.asList("-4321:1", "-5000:1"), sender.sent);
+    }
+
+    @Test
+    public void fallsBackToTheLeaderGroupWhenTheTableIsUnreadable() {
+        // Without /proc this is the previous behaviour: the leader's group, escalation guarded on
+        // the leader still being alive.
+        Sender sender = new Sender();
+        FakeScheduler scheduler = new FakeScheduler();
+        FakeTable table = new FakeTable((int[]) null);
+        int[] livePid = {4321};
+
+        ShellTerminator.terminate(4321, SIGHUP, SIGKILL, sender, scheduler, table, () -> livePid[0]);
+        scheduler.runAll();
+        assertEquals(Arrays.asList("-4321:1", "-4321:9"), sender.sent);
+
+        sender.sent.clear();
+        ShellTerminator.terminate(4321, SIGHUP, SIGKILL, sender, scheduler, table, () -> livePid[0]);
+        livePid[0] = -1;
+        scheduler.runAll();
         assertEquals(Arrays.asList("-4321:1"), sender.sent);
     }
 
@@ -62,7 +86,7 @@ public class ShellTerminatorTest {
         sender.rejectNegative = true;
         FakeScheduler scheduler = new FakeScheduler();
 
-        ShellTerminator.terminate(4321, SIGHUP, SIGKILL, sender, scheduler, () -> 4321);
+        ShellTerminator.terminate(4321, SIGHUP, SIGKILL, sender, scheduler, new FakeTable(4321), () -> 4321);
 
         assertEquals(Arrays.asList("-4321:1", "4321:1"), sender.sent);
         assertTrue(scheduler.delays.isEmpty());
@@ -72,9 +96,10 @@ public class ShellTerminatorTest {
     public void ignoresAShellThatWasNeverRunning() {
         Sender sender = new Sender();
         FakeScheduler scheduler = new FakeScheduler();
+        FakeTable table = new FakeTable(4321);
 
-        ShellTerminator.terminate(0, SIGHUP, SIGKILL, sender, scheduler, () -> 0);
-        ShellTerminator.terminate(-1, SIGHUP, SIGKILL, sender, scheduler, () -> -1);
+        ShellTerminator.terminate(0, SIGHUP, SIGKILL, sender, scheduler, table, () -> 0);
+        ShellTerminator.terminate(-1, SIGHUP, SIGKILL, sender, scheduler, table, () -> -1);
 
         assertTrue(sender.sent.isEmpty());
         assertTrue(scheduler.delays.isEmpty());
@@ -88,6 +113,14 @@ public class ShellTerminatorTest {
             sent.add(pid + ":" + signal);
             return !(rejectNegative && pid < 0);
         }
+    }
+
+    private static final class FakeTable implements ShellTerminator.ProcessTable {
+        int[] groups;
+
+        FakeTable(int... groups) { this.groups = groups; }
+
+        @Override public int[] processGroupsInSession(int sid) { return groups; }
     }
 
     private static final class FakeScheduler implements ShellTerminator.Scheduler {

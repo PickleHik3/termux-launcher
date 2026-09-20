@@ -17,6 +17,8 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 
 import com.termux.R;
+import com.termux.app.chrome.ChromeShade;
+import com.termux.app.chrome.OnGlass;
 
 import java.util.List;
 
@@ -42,8 +44,14 @@ final class WidgetPaneMenu {
         shell.setPadding(pad, pad, pad, pad);
         GradientDrawable background = new GradientDrawable();
         background.setCornerRadius(14f * density);
-        background.setColor(0xE6202124);
-        background.setStroke(Math.max(1, Math.round(1.25f * density)), 0x3DFFFFFF);
+        // The menu is a panel: it flips whole, and its rim and rows are read off the panel rather
+        // than off the chrome around it.
+        int plate = ChromeShade.plate(0xE6202124, 0xE6F8F9FA);
+        int surface = ChromeShade.plateSurface(plate, ChromeShade.nominalGlass());
+        int ink = ChromeShade.onPlate(plate, ChromeShade.nominalGlass(), OnGlass.TARGET_BODY_TEXT);
+        background.setColor(plate);
+        background.setStroke(Math.max(1, Math.round(1.25f * density)),
+            ChromeShade.inPlate(0x3DFFFFFF, surface, ChromeShade.TARGET_RIM));
         shell.setBackground(background);
         shell.setClipToOutline(true);
 
@@ -52,7 +60,7 @@ final class WidgetPaneMenu {
             TextView row = new TextView(context);
             row.setText(titleFor(context, item));
             row.setContentDescription(row.getText());
-            row.setTextColor(Color.WHITE);
+            row.setTextColor(ink);
             row.setTextSize(14f);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setMinHeight(Math.round(44f * density));

@@ -1,0 +1,165 @@
+Name the core glyph cursors, the way libXcursor names themed ones.
+
+0002 gives the host the name of the cursor under the pointer, which is how the Display page knows
+a tap landed on a text field. It only works for clients that load their cursors from an Xcursor
+theme: libXcursor is what calls XFixesSetCursorName, and `CursorRec.name` has no other writer. A
+prefix with no `share/icons/*/cursors` — a plain Termux install — leaves GTK, Qt and Firefox on
+the core font cursors of `XCreateFontCursor`, which the core protocol gives nowhere to put a name,
+so every tap reaches the host as "(no name)" and the keyboard never follows the caret.
+
+The name is not really missing, though: it is the glyph index. Glyph N of the "cursor" font is the
+shape `XC_<name> == N` of `X11/cursorfont.h`, and libXcursor's theme names are that same list. So
+the server names them itself — `left_ptr`, `xterm`, `hand2`, byte for byte what a themed client
+would have set — and the existing 0002 path carries them to the host unchanged. No Java change is
+needed: the names arrive through `LorieView.onCursorNameChanged`, which already exists.
+
+Where the hook lives. The obvious place is dix's `AllocGlyphCursor`, and a hunk there does apply —
+`git apply` at the checkout root writes into a submodule's working tree happily enough (tested on
+`xserver/dix/cursor.c`). It is still the wrong place: `xserver` is one of sixteen pinned
+freedesktop submodules, and termux-x11's own CMake patches it at configure time
+(`lorie/src/main/cpp/patches/xserver.patch`, applied with `patch -N`), so a hunk of ours would be
+a second, uncontrolled edit of a tree that is re-fetched on every submodule bump and that
+`x11-server/UPSTREAM.md` does not track. Instead lorie's own `InitOutput.c` wraps
+`ProcVector[X_CreateGlyphCursor]` from `InitOutput`, and names the cursor after upstream's handler
+has created it, found with `dixLookupResourceByType(..., stuff->cid, RT_CURSOR, ...)`. Byte-swapped
+clients come through the same entry (`SProcCreateGlyphCursor` tail-calls `ProcVector`), and
+ProcVector is not rebuilt per server generation, hence the idempotence check.
+
+What it will and will not name. Only an even glyph below `XC_num_glyphs` of a font whose `FONT`
+property is the literal "cursor" — the one core font with no XLFD name, and the cheapest honest
+test that the glyphs really are the standard shapes; a client drawing cursors from a font of its
+own keeps its own meaning. Odd glyphs are those shapes' masks. A cursor that already carries a
+valid name is left alone, so `XFixesSetCursorName` always wins.
+
+Applies after 0001 and 0002; it edits the same file 0002 does, below the block 0002 adds.
+
+See x11-server/UPSTREAM.md.
+
+diff --git a/lorie/src/main/cpp/lorie/InitOutput.c b/lorie/src/main/cpp/lorie/InitOutput.c
+--- a/lorie/src/main/cpp/lorie/InitOutput.c
++++ b/lorie/src/main/cpp/lorie/InitOutput.c
+@@ -38,6 +38,11 @@
+ #include "exa.h"
+ #include "drm_fourcc.h"
+ 
++#include <X11/Xatom.h>
++#include <X11/Xproto.h>
++#include "dixstruct.h"
++#include "dixfontstr.h"
++#include "resource.h"
+ #include "lorie.h"
+ 
+ #define DRM_FORMAT_MOD_LINEAR 0
+@@ -211,6 +216,104 @@
+     lorieSendCursorName(lorieCursorName);
+ }
+ 
++/*
++ * Core glyph cursors have no name, so the server gives them one.
++ *
++ * lorieUpdateCursorName above is the host's only hint that the pointer sits over a text field,
++ * and CursorRec.name is filled by exactly one thing: XFixes' SetCursorName, which libXcursor
++ * calls for cursors it loads from a theme. A client without an Xcursor theme - GTK and Firefox
++ * in a bare Termux prefix - takes the core font cursors instead (XCreateFontCursor, i.e.
++ * CreateGlyphCursor over the "cursor" font), and those reach the host unnamed, so the keyboard
++ * never follows a caret. But the glyph index is the name: glyph N of the cursor font is the
++ * shape XC_<name> == N of X11/cursorfont.h, which is where libXcursor's theme names come from
++ * too. Naming them here gives the host the same "xterm"/"left_ptr" it would get from a themed
++ * client, with no theme installed.
++ *
++ * It wraps the dispatch entry rather than naming the cursor in dix's AllocGlyphCursor because
++ * everything under xserver/ is a pinned freedesktop submodule which CMake already patches on its
++ * own (patches/xserver.patch, applied with `patch -N` at configure time): a hunk of ours in there
++ * would be a second, uncontrolled edit of a tree that is re-fetched on every submodule bump. One
++ * dispatch entry in lorie's own file is the smaller thing to carry.
++ */
++
++// Cursor font shape names, indexed by glyph / 2: XC_X_cursor == 0 ... XC_xterm == 152
++// (X11/cursorfont.h). Odd glyphs are those shapes' masks and name nothing.
++static const char* const lorieCursorShapeNames[] = {
++    "X_cursor", "arrow", "based_arrow_down", "based_arrow_up", "boat", "bogosity",
++    "bottom_left_corner", "bottom_right_corner", "bottom_side", "bottom_tee", "box_spiral",
++    "center_ptr", "circle", "clock", "coffee_mug", "cross", "cross_reverse", "crosshair",
++    "diamond_cross", "dot", "dotbox", "double_arrow", "draft_large", "draft_small", "draped_box",
++    "exchange", "fleur", "gobbler", "gumby", "hand1", "hand2", "heart", "icon", "iron_cross",
++    "left_ptr", "left_side", "left_tee", "leftbutton", "ll_angle", "lr_angle", "man",
++    "middlebutton", "mouse", "pencil", "pirate", "plus", "question_arrow", "right_ptr",
++    "right_side", "right_tee", "rightbutton", "rtl_logo", "sailboat", "sb_down_arrow",
++    "sb_h_double_arrow", "sb_left_arrow", "sb_right_arrow", "sb_up_arrow", "sb_v_double_arrow",
++    "shuttle", "sizing", "spider", "spraycan", "star", "target", "tcross", "top_left_arrow",
++    "top_left_corner", "top_right_corner", "top_side", "top_tee", "trek", "ul_angle", "umbrella",
++    "ur_angle", "watch", "xterm",
++};
++
++/*
++ * The cursor font is the one font of the core protocol with no XLFD name: its FONT property is
++ * the literal "cursor" (xorg-fonts-misc's cursor.pcf.gz). Comparing that property is cheaper
++ * than comparing glyphs, and it keeps a client that draws its own cursors from some other font
++ * out of the table above.
++ */
++static Bool lorieIsCursorFont(FontPtr pFont) {
++    for (int i = 0; i < pFont->info.nprops; i++) {
++        const char* name;
++
++        if (pFont->info.props[i].name != (long) XA_FONT || !pFont->info.isStringProp[i])
++            continue;
++
++        name = ValidAtom((Atom) pFont->info.props[i].value) ? NameForAtom((Atom) pFont->info.props[i].value) : NULL;
++        return name && !strcasecmp(name, "cursor");
++    }
++
++    return FALSE;
++}
++
++static int (*lorieProcCreateGlyphCursorNext)(ClientPtr) = NULL;
++
++static int lorieProcCreateGlyphCursor(ClientPtr client) {
++    REQUEST(xCreateGlyphCursorReq);
++    CursorPtr pCurs;
++    FontPtr pFont;
++    const char* name;
++    unsigned shape;
++    // Upstream first, so the request is length-checked and the cursor exists before we look at
++    // either; `stuff` still points at this request's buffer afterwards.
++    int rc = lorieProcCreateGlyphCursorNext(client);
++
++    if (rc != Success)
++        return rc;
++
++    shape = stuff->sourceChar;
++    if (shape % 2 || shape / 2 >= ARRAY_SIZE(lorieCursorShapeNames))
++        return rc;
++    if (dixLookupResourceByType((void**) &pCurs, stuff->cid, RT_CURSOR, client, DixSetAttrAccess) != Success)
++        return rc;
++    if (ValidAtom(pCurs->name)) // a client that named its own cursor knows better
++        return rc;
++    if (dixLookupResourceByType((void**) &pFont, stuff->source, RT_FONT, client, DixReadAccess) != Success)
++        return rc;
++    if (!lorieIsCursorFont(pFont))
++        return rc;
++
++    name = lorieCursorShapeNames[shape / 2];
++    pCurs->name = MakeAtom(name, strlen(name), TRUE);
++    return rc;
++}
++
++// Called from InitOutput; ProcVector survives a server reset, hence the idempotence check.
++static void lorieNameGlyphCursors(void) {
++    if (ProcVector[X_CreateGlyphCursor] == lorieProcCreateGlyphCursor)
++        return;
++
++    lorieProcCreateGlyphCursorNext = ProcVector[X_CreateGlyphCursor];
++    ProcVector[X_CreateGlyphCursor] = lorieProcCreateGlyphCursor;
++}
++
+ void lorieActivityConnected(void) {
+     pvfb->state->drawRequested = pvfb->state->cursor.updated = true;
+     lorieSendSharedServerState(pvfb->stateFd);
+@@ -856,6 +959,7 @@
+     rendererTestCapabilities(&pvfb->root.legacyDrawing, &pvfb->gpuPresentDisabled);
+     xorgGlxCreateVendor();
+     lorieInitClipboard();
++    lorieNameGlyphCursors();
+ 
+     if (-1 == AddScreen(lorieScreenInit, argc, argv)) {
+         FatalError("Couldn't add screen\n");

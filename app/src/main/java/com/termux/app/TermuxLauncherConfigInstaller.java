@@ -52,6 +52,7 @@ final class TermuxLauncherConfigInstaller {
         "README.md",
         "termux-launcher-bindings.conf",
         "fonts.conf",
+        "kitty.conf",
         "keyboard-layout.xml",
         PROPERTIES_FILE_NAME
     };

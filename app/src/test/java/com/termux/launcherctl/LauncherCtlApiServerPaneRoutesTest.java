@@ -18,6 +18,8 @@ public class LauncherCtlApiServerPaneRoutesTest {
         assertEquals("pane.close", LauncherCtlApiServer.paneToolFor("POST", "/v1/panes/abc-1/close"));
         assertEquals("pane.write", LauncherCtlApiServer.paneToolFor("POST", "/v1/panes/abc-1/write"));
         assertEquals("pane.read", LauncherCtlApiServer.paneToolFor("GET", "/v1/panes/abc-1/text"));
+        assertEquals("agent.status", LauncherCtlApiServer.paneToolFor("POST", "/v1/panes/abc-1/agent"));
+        assertNull(LauncherCtlApiServer.paneToolFor("GET", "/v1/panes/abc-1/agent"));
         assertNull(LauncherCtlApiServer.paneToolFor("GET", "/v1/panes/abc-1/write"));
         assertNull(LauncherCtlApiServer.paneToolFor("POST", "/v1/panes/abc-1/kill"));
         assertNull(LauncherCtlApiServer.paneToolFor("POST", "/v1/panes//focus"));
@@ -27,9 +29,19 @@ public class LauncherCtlApiServerPaneRoutesTest {
     }
 
     @Test
+    public void keyboardRoutes_mapToTheirActions() {
+        assertEquals("keyboard.show", LauncherCtlApiServer.keyboardToolFor("POST", "/v1/keyboard/show"));
+        assertEquals("keyboard.hide", LauncherCtlApiServer.keyboardToolFor("POST", "/v1/keyboard/hide"));
+        assertNull(LauncherCtlApiServer.keyboardToolFor("GET", "/v1/keyboard/show"));
+        assertNull(LauncherCtlApiServer.keyboardToolFor("POST", "/v1/keyboard/toggle"));
+        assertNull(LauncherCtlApiServer.keyboardToolFor("POST", "/v1/keyboard/"));
+    }
+
+    @Test
     public void rateLimitKey_sharesOneBucketPerPaneAction() {
         assertEquals("POST:/v1/panes/*/write", LauncherCtlApiServer.rateLimitKey("POST", "/v1/panes/abc/write"));
         assertEquals("GET:/v1/panes/*/text", LauncherCtlApiServer.rateLimitKey("GET", "/v1/panes/xyz/text"));
+        assertEquals("POST:/v1/panes/*/agent", LauncherCtlApiServer.rateLimitKey("POST", "/v1/panes/abc/agent"));
         assertEquals("GET:/v1/panes", LauncherCtlApiServer.rateLimitKey("GET", "/v1/panes"));
         assertEquals("POST:/v1/apps/launch", LauncherCtlApiServer.rateLimitKey("POST", "/v1/apps/launch"));
     }

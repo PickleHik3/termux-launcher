@@ -46,12 +46,12 @@ import org.json.JSONObject;
 import juloo.keyboard2.KeyValue;
 import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.termux.TermuxUtils;
-import com.termux.shared.termux.data.TermuxUrlUtils;
 import com.termux.shared.view.KeyboardUtils;
 import com.termux.shared.view.ViewUtils;
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
+import com.termux.terminal.UrlDetector;
 import com.termux.view.TerminalView;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -155,6 +155,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (view != null) {
             view.setKeepScreenOn(mHost.preferences().shouldKeepScreenOn());
             applyCursorTrailPolicy(view);
+            applyUrlUnderlinePolicy(view);
         }
     }
 
@@ -176,6 +177,22 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     /**
+     * Mark the URLs a tap would open. Touch has no hover, so the mark is the tap target's only
+     * affordance; it follows the same preference as the tap, and takes the theme's accent so it
+     * reads as interactive against any text colour.
+     */
+    public void applyUrlUnderlinePolicy(TerminalView view) {
+        if (view == null)
+            return;
+        int color = 0;
+        if (mHost.properties().shouldOpenTerminalTranscriptURLOnClick()) {
+            color = com.google.android.material.color.MaterialColors.getColor(mContext,
+                com.google.android.material.R.attr.colorPrimary, 0);
+        }
+        view.setUrlUnderlineColor(color);
+    }
+
+    /**
      * Should be called when the activity's onStart() is called
      */
     public void onStart() {
@@ -194,6 +211,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     public void onResume() {
         setSoftKeyboardState(true, mHost.isActivityRecreated());
         applyCursorTrailPolicy(mHost.focusedView());
+        applyUrlUnderlinePolicy(mHost.focusedView());
         mTerminalCursorBlinkerStateAlreadySet = false;
         if (mHost.focusedView().mEmulator != null) {
             // Start terminal cursor blinking if enabled
@@ -330,8 +348,6 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public void copyModeChanged(boolean copyMode) {
-        // Disable drawer while copying.
-        mHost.setDrawerLocked(copyMode);
         // Selection handles and a floating Copy button are the whole interface, and neither says
         // what the keys do or how to get out; the legend does.
         mHost.showTerminalModeHint(copyMode ? TerminalModeHintCard.Mode.SELECTION : null);
@@ -403,10 +419,34 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * committed text would be guesswork, so the registry binds simply do not fire
      * from such a keyboard.
      */
+    /**
+     * The launcher's own chord space, for a surface that has taken the keyboard away from the
+     * terminal — the wall's Display page, where an X client owns every ordinary key.
+     *
+     * <p>The rule is deliberately narrow: only a stroke holding <em>both</em> Ctrl and Alt is
+     * the launcher's, and only when it resolves to a binding. Every default binding lives in
+     * that space, so the ways back out of the display always work, while X keeps the whole
+     * ordinary keyboard — Ctrl+C, Alt+Tab, the function keys — and its own Ctrl+Alt chords too:
+     * a desktop's Ctrl+Alt+T or Ctrl+Alt+arrow is not the launcher's to swallow just because the
+     * terminal historically swallowed unbound Ctrl+Alt strokes.
+     */
+    public boolean consumeLauncherChord(@NonNull KeyEvent e) {
+        if (!e.isCtrlPressed() || !e.isAltPressed()) return false;
+        return handleRegistryKeybinds(e, false);
+    }
+
     private boolean handleRegistryKeybinds(KeyEvent e) {
+        return handleRegistryKeybinds(e, true);
+    }
+
+    /**
+     * @param swallowUnbound whether an unbound Ctrl+Alt stroke is consumed anyway — the terminal's
+     *                       historical contract — or left to whoever is behind the launcher
+     */
+    private boolean handleRegistryKeybinds(KeyEvent e, boolean swallowUnbound) {
         TerminalKeyBindingResolver resolver = TerminalKeyBindingResolver.getInstance();
         if (mHost.properties().areHardwareKeyboardShortcutsDisabled()) {
-            if (resolver.cancelPendingSequence()) clearPendingKeyChordUi();
+            if (resolver.cancelPendingSequence()) clearPendingKeyChordNotice();
             return false;
         }
 
@@ -453,7 +493,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.NONE) {
             // Preserve the historical Termux contract: unmatched Ctrl+Alt strokes
             // are swallowed while hardware shortcuts are enabled.
-            return e.isAltPressed() && e.isCtrlPressed();
+            return swallowUnbound && e.isAltPressed() && e.isCtrlPressed();
         }
         if (step.kind == TerminalKeyBindingResolver.Step.Kind.PASSTHROUGH)
             return false;
@@ -470,10 +510,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             // "waiting for key" chip would be a second, smaller copy of it. It stays only as the
             // fallback for when the legend cannot be shown at all.
             if (!mHost.isKeybindHintPopupVisible())
-                mHost.keyChordUi().show(step.pendingSequence);
+                AppNotice.sticky(mContext, mContext.getString(R.string.terminal_key_chord_pending,
+                    TerminalKeyBindingResolver.displaySequence(step.pendingSequence)));
             return true;
         }
-        clearPendingKeyChordUi();
+        clearPendingKeyChordNotice();
         // Both endings retire the legend at once: a stroke that ran, and a stroke that turned out
         // not to be bound. Only letting the prefix go keeps the lingering fade.
         mHost.onKeybindHintConsumed();
@@ -489,10 +530,16 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (inspector != null)
             inspector.recordBinding(match == null ? null : match.stroke, match == null ? null : match.toolName);
         if (match == null)
-            return true; // unbound Ctrl+Alt stroke: swallowed, as before
+            return swallowUnbound; // unbound Ctrl+Alt stroke: swallowed, as before
 
         boolean handled = runMatch(resolver, dispatcher, match);
-        if (handled) mHost.keyChordUi().showAction(match.stroke, bindingDisplayName(match));
+        // Several actions change nothing visible on their own - a rename prompt on a pane already
+        // named, a layout cycle between two similar layouts - and without the read-out the stroke
+        // and a dead key look the same.
+        if (handled)
+            AppNotice.readout(mContext, mContext.getString(R.string.terminal_key_binding_ran,
+                TerminalKeyBindingResolver.displaySequence(match.stroke),
+                bindingDisplayName(match)));
         resolver.afterMatch(match);
         refreshKeyModeUi(resolver);
         return handled;
@@ -572,8 +619,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     + " failed: " + message);
                 // Say so on screen too: a swallowed stroke that logs and shows nothing is how a
                 // broken binding passes for an unbound one.
-                mHost.keyChordUi().showFailure(match.stroke,
-                    message.isEmpty() ? action.value : message);
+                AppNotice.refusal(mContext, mContext.getString(R.string.terminal_key_binding_failed,
+                    TerminalKeyBindingResolver.displaySequence(match.stroke),
+                    message.isEmpty() ? action.value : message));
                 handled = true;
                 continue;
             }
@@ -605,12 +653,12 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     private void cancelPendingKeyChord() {
         TerminalKeyBindingResolver.getInstance().cancelPendingSequence();
-        clearPendingKeyChordUi();
+        clearPendingKeyChordNotice();
     }
 
-    private void clearPendingKeyChordUi() {
+    private void clearPendingKeyChordNotice() {
         mKeyChordHandler.removeCallbacks(mKeyChordTimeout);
-        mHost.keyChordUi().hide();
+        AppNotice.clearSticky(mContext);
         if (mPendingSequencePrefix != null) {
             mPendingSequencePrefix = null;
             refreshKeybindHints();
@@ -634,10 +682,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         mKeyChordHandler.removeCallbacks(mKeyModeTimeout);
         String mode = resolver.getCurrentMode();
         if (mode.isEmpty()) {
-            mHost.keyChordUi().hide();
+            AppNotice.clearSticky(mContext);
             return;
         }
-        mHost.keyChordUi().showMode(mode);
+        AppNotice.sticky(mContext, mContext.getString(R.string.terminal_key_mode_active, mode));
         long timeout = resolver.getCurrentModeTimeoutMillis();
         if (timeout > 0) mKeyChordHandler.postDelayed(mKeyModeTimeout, timeout);
     }
@@ -741,7 +789,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public void onShowNotice(CharSequence text) {
-        AppNotice.show(mContext, AppNoticeItem.Kind.SUCCESS, "⧉", text, null, false);
+        AppNotice.confirm(mContext, "⧉", text);
     }
 
     @Override
@@ -941,6 +989,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * drawer or extra keys, or with ctrl+alt+k hardware keyboard shortcut.
      */
     public void onToggleSoftKeyboardRequest() {
+        // On the Display place with mouse mode on, the keyboard and the touchpad share one frame:
+        // this key swaps which of them holds it rather than taking the frame away.
+        if (mHost.toggleDisplayFrameKeyboard()) return;
         if (isInAppKeyboardEnabled()) {
             mInAppKeyboardController.toggle(ToggleReason.KEYBOARD_ACTION);
             suppressSystemImeForInAppKeyboard();
@@ -1219,38 +1270,26 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     /**
-     * The URL under a tap, or null. The word at the tap is the usual answer; but a URL wrapped by a
-     * multiplexer pane is two words on two rows, so the rows around the tap are read together and a
-     * whole address that contains the tapped word wins over the fragment — from either half.
+     * The URL under a tap, or null: the address whose underlined cells include the tapped one, so
+     * what opens is exactly what the screen marked as openable.
      */
     @Nullable
-    private static String urlAtTap(@NonNull com.termux.terminal.TerminalEmulator term,
-                                   int column, int row) {
-        com.termux.terminal.TerminalBuffer screen = term.getScreen();
-        String word = screen.getWordAtLocation(column, row);
-        String cleaned = word.replaceAll("^[|\u2502\u2503\u2551\u258c\u2590\u258f\u2595\u2591\u2592\u2593\u2588]+|[|\u2502\u2503\u2551\u258c\u2590\u258f\u2595\u2591\u2592\u2593\u2588]+$", "");
-        if (cleaned.length() >= 3) {
-            int first = Math.max(-screen.getActiveTranscriptRows(), row - 2);
-            int last = Math.min(term.mRows - 1, row + 2);
-            String rows = screen.getSelectedText(0, first, term.mColumns, last, true, true);
-            for (CharSequence candidate : TermuxUrlUtils.extractUrls(rows)) {
-                String url = candidate.toString();
-                if (url.contains(cleaned) && url.indexOf('\n') < 0) {
-                    // Prefer a joined address over the fragment a single row holds.
-                    if (!url.equals(cleaned) || TermuxUrlUtils.extractUrls(cleaned).isEmpty()) return url;
-                }
-            }
-        }
-        LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(word);
-        return urlSet.isEmpty() ? null : urlSet.iterator().next().toString();
+    private static String urlAtTap(@NonNull TerminalEmulator term, int column, int row) {
+        UrlDetector.UrlSpan span = UrlDetector.at(term.getScreen(), column, row);
+        return span == null ? null : span.url;
     }
 
     public void showUrlSelection() {
         TerminalSession session = mHost.currentSession();
         if (session == null)
             return;
-        String text = ShellUtils.getTerminalSessionTranscriptText(session, true, true);
-        LinkedHashSet<CharSequence> urlSet = TermuxUrlUtils.extractUrls(text);
+        TerminalEmulator emulator = session.getEmulator();
+        if (emulator == null)
+            return;
+        com.termux.terminal.TerminalBuffer screen = emulator.getScreen();
+        LinkedHashSet<CharSequence> urlSet = new LinkedHashSet<>();
+        for (UrlDetector.UrlSpan span : UrlDetector.find(screen, -screen.getActiveTranscriptRows(), emulator.mRows - 1))
+            urlSet.add(span.url);
         TerminalSheetController sheet = mHost.sheetController();
         String title = mContext.getString(R.string.action_select_url);
         if (urlSet.isEmpty()) {

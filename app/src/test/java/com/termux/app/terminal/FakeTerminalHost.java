@@ -6,12 +6,12 @@ import android.graphics.PointF;
 import android.view.KeyEvent;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.ListView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxService;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
@@ -69,6 +69,8 @@ class FakeTerminalHost implements TerminalHost {
     // Activity state
     boolean alive = true;
     boolean visible = true;
+    /** Whether the wall lets the terminal place be seen; false means another place is at rest. */
+    boolean terminalPlaceOnScreen = true;
     boolean splitPanesEnabled = true;
     boolean activityRecreated;
     boolean onResumeAfterOnCreate;
@@ -77,9 +79,10 @@ class FakeTerminalHost implements TerminalHost {
     @Nullable TerminalSession currentSession;
     @Nullable TerminalView focusedView;
     final List<TerminalView> paneViews = new ArrayList<>();
+    /** Split panes: the view showing each session, consulted before {@link #focusedView}. */
+    final Map<TerminalSession, TerminalView> sessionViews = new LinkedHashMap<>();
     boolean hasToolbar = true;
     boolean terminalViewSelected;
-    boolean drawerLocked;
     int toolbarToggles;
     int flushDockRequests;
     int paneFontSize;
@@ -97,6 +100,8 @@ class FakeTerminalHost implements TerminalHost {
     boolean killFocusedPaneResult = true;
     boolean applyPaneLayoutResult = true;
     boolean cyclePaneLayoutResult = true;
+    @Nullable String lastWallPage;
+    boolean goToWallPageResult = true;
     boolean equalizePaneLayoutResult = true;
     boolean rotatePaneLayoutResult = true;
     boolean moveFocusedPaneToEdgeResult = true;
@@ -148,7 +153,7 @@ class FakeTerminalHost implements TerminalHost {
     @Nullable PointF lastActionSheetAnchor;
     @Nullable String lastActionHint;
     final List<String> toasts = new ArrayList<>();
-    final List<String> sessionSwitchIndicators = new ArrayList<>();
+    final List<String> terminalNotices = new ArrayList<>();
 
     // Shells
     @Nullable TermuxService service;
@@ -185,7 +190,6 @@ class FakeTerminalHost implements TerminalHost {
         final Map<TerminalSession, String> names = new LinkedHashMap<>();
         @Nullable TerminalSession currentTabPrimary;
         int currentNumber;
-        @Nullable ListView listView;
 
         @Override public int count() {
             return rows.size();
@@ -214,10 +218,6 @@ class FakeTerminalHost implements TerminalHost {
 
         @Override @Nullable public String nameOf(@Nullable TerminalSession shell) {
             return names.get(shell);
-        }
-
-        @Override @Nullable public ListView listView() {
-            return listView;
         }
     }
 
@@ -249,10 +249,6 @@ class FakeTerminalHost implements TerminalHost {
 
     @Override public void setRootViewLoggingEnabled(boolean enabled) {
         record("setRootViewLoggingEnabled");
-    }
-
-    @Override public void setDrawerLocked(boolean locked) {
-        drawerLocked = locked;
     }
 
     /** The legend the terminal is currently showing, or null while no mode is up. */
@@ -323,6 +319,38 @@ class FakeTerminalHost implements TerminalHost {
         return inAppKeyboardLayout;
     }
 
+    /** The place's keyboard type, as a real store would hold it for one place and orientation. */
+    KeyboardForm keyboardForm = KeyboardForm.DOCKED;
+    /** False makes the write fail the way an activity with no preferences yet does. */
+    boolean keyboardFormWritable = true;
+    boolean inAppKeyboardShown;
+
+    @NonNull
+    @Override public KeyboardForm keyboardForm() {
+        return keyboardForm;
+    }
+
+    @Override public boolean setKeyboardForm(@NonNull KeyboardForm form) {
+        record("setKeyboardForm:" + form.storageValue());
+        if (!keyboardFormWritable) return false;
+        keyboardForm = form;
+        return true;
+    }
+
+    @Override public boolean showInAppKeyboard(boolean fromFocus) {
+        record("showInAppKeyboard:" + (fromFocus ? "focus" : "manual"));
+        if (!inAppKeyboardEnabled && !displayTakesSystemKeyboard) return false;
+        inAppKeyboardShown = true;
+        return true;
+    }
+
+    @Override public boolean hideInAppKeyboard(boolean fromFocus) {
+        record("hideInAppKeyboard:" + (fromFocus ? "focus" : "manual"));
+        if (!inAppKeyboardEnabled && !displayTakesSystemKeyboard) return false;
+        inAppKeyboardShown = false;
+        return true;
+    }
+
     @Override public void runOnUiThread(@NonNull Runnable runnable) {
         runnable.run();
     }
@@ -389,20 +417,6 @@ class FakeTerminalHost implements TerminalHost {
 
     @Override public void setHardwareKeybindHintPrefix(@Nullable String prefix, boolean shift) {
         record("setHardwareKeybindHintPrefix");
-    }
-
-    @Override @NonNull public KeyChordUi keyChordUi() {
-        return new KeyChordUi() {
-            @Override public void show(@NonNull String normalizedSequence) {}
-
-            @Override public void showMode(@NonNull String mode) {}
-
-            @Override public void showAction(@NonNull String stroke, @NonNull String name) {}
-
-            @Override public void showFailure(@NonNull String stroke, @NonNull String message) {}
-
-            @Override public void hide() {}
-        };
     }
 
     @Override public void playKeyChordCancelledSound() {
@@ -482,6 +496,10 @@ class FakeTerminalHost implements TerminalHost {
         return visible;
     }
 
+    @Override public boolean isTerminalPlaceOnScreen() {
+        return terminalPlaceOnScreen;
+    }
+
     @Override public void showTerminalActionHint(@NonNull String toolName) {
         record("showTerminalActionHint");
         lastActionHint = toolName;
@@ -490,7 +508,10 @@ class FakeTerminalHost implements TerminalHost {
     // --- Panes and views ---
 
     @Override @Nullable public TerminalView viewForSession(@Nullable TerminalSession session) {
-        return session != null && session == currentSession ? focusedView : null;
+        if (session == null) return null;
+        TerminalView mapped = sessionViews.get(session);
+        if (mapped != null) return mapped;
+        return session == currentSession ? focusedView : null;
     }
 
     @Override @NonNull public List<TerminalView> paneViews() {
@@ -531,6 +552,12 @@ class FakeTerminalHost implements TerminalHost {
         record("applyPaneLayout");
         lastLayout = layout;
         return applyPaneLayoutResult;
+    }
+
+    @Override public boolean goToWallPage(@NonNull String page) {
+        record("goToWallPage");
+        lastWallPage = page;
+        return goToWallPageResult;
     }
 
     @Override public boolean cyclePaneLayout() {
@@ -580,9 +607,10 @@ class FakeTerminalHost implements TerminalHost {
         clearedShellAttentionPids.add(shellPid);
     }
 
-    @Override public void showSessionSwitchIndicator(@Nullable String text) {
-        record("showSessionSwitchIndicator");
-        sessionSwitchIndicators.add(text);
+    @Override public void showTerminalNotice(@Nullable String text,
+            @NonNull com.termux.app.notice.AppNoticeItem.Hold hold) {
+        record("showTerminalNotice");
+        terminalNotices.add(text);
     }
 
     @Override public void syncBackgroundProcessStack() {
@@ -719,14 +747,6 @@ class FakeTerminalHost implements TerminalHost {
         return beginTerminalRenameResult;
     }
 
-    @Override public void openDrawer() {
-        record("openDrawer");
-    }
-
-    @Override public void closeDrawers() {
-        record("closeDrawers");
-    }
-
     // --- Workspaces ---
 
     @Override @NonNull public TerminalWorkspace saveWorkspace(@NonNull String requestedName,
@@ -815,6 +835,10 @@ class FakeTerminalHost implements TerminalHost {
         record("openSettings");
     }
 
+    @Override public void showHelpOverlay() {
+        record("showHelpOverlay");
+    }
+
     @Override public void openLookAndFeel() {
         record("openLookAndFeel");
     }
@@ -829,6 +853,25 @@ class FakeTerminalHost implements TerminalHost {
 
     @Override public void showExtraKeysRowEditor() {
         record("showExtraKeysRowEditor");
+    }
+
+    boolean mouseMode;
+    @Override public boolean toggleMouseMode() {
+        record("toggleMouseMode");
+        mouseMode = !mouseMode;
+        return mouseMode;
+    }
+
+    /** No Display place here, so the keyboard key is never the touchpad frame's. */
+    @Override public boolean toggleDisplayFrameKeyboard() {
+        return false;
+    }
+
+    /** Set when the Display place is standing there typed into with the phone's own keyboard. */
+    boolean displayTakesSystemKeyboard;
+
+    @Override public boolean displayTakesSystemKeyboard() {
+        return displayTakesSystemKeyboard;
     }
 
     @Override public boolean toggleKeyInspector() {

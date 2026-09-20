@@ -5,6 +5,7 @@ import android.os.Build;
 import android.view.KeyEvent;
 import android.widget.LinearLayout;
 
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.terminal.TerminalSession;
 
 import org.json.JSONObject;
@@ -64,6 +65,8 @@ public class TerminalActionDispatcherTest {
             "workspace.save", "workspace.load", "workspace.list", "workspace.delete",
             "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge",
             "pane.next_layout", "pane.toggle_float",
+            "keyboard.cycle_layout", "keyboard.select_layout",
+            "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide",
             "pane.open", "pane.list", "pane.focus", "pane.close", "pane.write", "pane.read", "pane.split"};
         for (String name : handled) {
             assertTrue(name, TerminalActionDispatcher.handles(name));
@@ -110,12 +113,196 @@ public class TerminalActionDispatcherTest {
             "app.open_settings", "app.open_look_and_feel", "app.open_apps_bar",
             "workspace.save", "workspace.load", "workspace.list", "workspace.delete",
             "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge",
-            "pane.next_layout", "pane.toggle_float"};
+            "pane.next_layout", "pane.toggle_float",
+            "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide"};
         for (String name : tools) {
             JSONObject result = dispatcher.execute(name, new JSONObject());
             assertFalse(name, result.getBoolean("ok"));
             assertEquals(name, 409, result.getInt("_statusCode"));
         }
+    }
+
+    // --- Keyboard type and visibility ---
+
+    @Test
+    public void cycleFormWalksTheRingAndReportsWhereItCameFrom() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+
+        JSONObject forward = dispatcher.execute("keyboard.cycle_form", new JSONObject());
+        assertTrue(forward.getBoolean("ok"));
+        assertEquals("floating", forward.getString("form"));
+        assertEquals("docked", forward.getString("previousForm"));
+        assertEquals(KeyboardForm.FLOATING, host.keyboardForm);
+
+        assertEquals("split",
+            dispatcher.execute("keyboard.cycle_form", new JSONObject()).getString("form"));
+        assertEquals("docked",
+            dispatcher.execute("keyboard.cycle_form", new JSONObject()).getString("form"));
+    }
+
+    @Test
+    public void cycleFormGoesBackwardOnRequestAndRefusesAnythingElse() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+
+        JSONObject backward = dispatcher.execute("keyboard.cycle_form",
+            new JSONObject().put("direction", "backward"));
+        assertEquals("split", backward.getString("form"));
+        assertEquals(KeyboardForm.SPLIT, host.keyboardForm);
+
+        JSONObject bad = dispatcher.execute("keyboard.cycle_form",
+            new JSONObject().put("direction", "sideways"));
+        assertFalse(bad.getBoolean("ok"));
+        assertEquals(400, bad.getInt("_statusCode"));
+        // The refused call left the type where it was.
+        assertEquals(KeyboardForm.SPLIT, host.keyboardForm);
+    }
+
+    @Test
+    public void setFormTakesTheThreeTypesAndNothingElse() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+
+        for (String form : new String[]{"docked", "floating", "split"}) {
+            JSONObject result = dispatcher.execute("keyboard.set_form",
+                new JSONObject().put("form", form));
+            assertTrue(form, result.getBoolean("ok"));
+            assertEquals(form, form, result.getString("form"));
+        }
+
+        JSONObject missing = dispatcher.execute("keyboard.set_form", new JSONObject());
+        assertEquals(400, missing.getInt("_statusCode"));
+        JSONObject unknown = dispatcher.execute("keyboard.set_form",
+            new JSONObject().put("form", "tiny"));
+        assertEquals(400, unknown.getInt("_statusCode"));
+        assertEquals("bad_request", unknown.getString("error"));
+    }
+
+    @Test
+    public void theFormToolsNeedTheInAppKeyboard() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = false;
+
+        for (String tool : new String[]{"keyboard.cycle_form", "keyboard.show", "keyboard.hide"}) {
+            JSONObject result = dispatcher.execute(tool, new JSONObject());
+            assertFalse(tool, result.getBoolean("ok"));
+            assertEquals(tool, 409, result.getInt("_statusCode"));
+        }
+        JSONObject set = dispatcher.execute("keyboard.set_form",
+            new JSONObject().put("form", "floating"));
+        assertEquals(409, set.getInt("_statusCode"));
+        assertEquals(KeyboardForm.DOCKED, host.keyboardForm);
+    }
+
+    @Test
+    public void aFormThatCannotBeStoredIsAnErrorRatherThanASilentNoop() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+        host.keyboardFormWritable = false;
+
+        JSONObject result = dispatcher.execute("keyboard.set_form",
+            new JSONObject().put("form", "split"));
+        assertFalse(result.getBoolean("ok"));
+        assertEquals(503, result.getInt("_statusCode"));
+    }
+
+    @Test
+    public void showAndHideCarryTheirSourceThroughToTheKeyboard() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+
+        JSONObject shown = dispatcher.execute("keyboard.show", new JSONObject());
+        assertTrue(shown.getBoolean("ok"));
+        assertEquals("manual", shown.getString("source"));
+        assertTrue(shown.getBoolean("keyboardShown"));
+        assertTrue(host.inAppKeyboardShown);
+        assertTrue(host.calls.contains("showInAppKeyboard:manual"));
+
+        JSONObject hidden = dispatcher.execute("keyboard.hide",
+            new JSONObject().put("source", "focus"));
+        assertTrue(hidden.getBoolean("ok"));
+        assertEquals("focus", hidden.getString("source"));
+        assertFalse(hidden.getBoolean("keyboardShown"));
+        assertFalse(host.inAppKeyboardShown);
+        assertTrue(host.calls.contains("hideInAppKeyboard:focus"));
+    }
+
+    /**
+     * The Display place typed into with the phone's own keyboard has a keyboard to show even
+     * where the launcher's own is switched off, so the 409 above is not the answer there.
+     */
+    @Test
+    public void showAndHideAnswerOnTheDisplayPlaceWithoutTheInAppKeyboard() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = false;
+        host.displayTakesSystemKeyboard = true;
+
+        JSONObject shown = dispatcher.execute("keyboard.show", new JSONObject());
+        assertTrue(shown.getBoolean("ok"));
+        assertTrue(shown.getBoolean("keyboardShown"));
+        assertTrue(host.calls.contains("showInAppKeyboard:manual"));
+
+        JSONObject hidden = dispatcher.execute("keyboard.hide", new JSONObject());
+        assertTrue(hidden.getBoolean("ok"));
+        assertFalse(hidden.getBoolean("keyboardShown"));
+        assertTrue(host.calls.contains("hideInAppKeyboard:manual"));
+    }
+
+    /** The form tools are the in-app keyboard's own and stay refused there. */
+    @Test
+    public void theFormToolsStayRefusedOnTheDisplayPlace() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = false;
+        host.displayTakesSystemKeyboard = true;
+
+        JSONObject cycled = dispatcher.execute("keyboard.cycle_form", new JSONObject());
+        assertEquals(409, cycled.getInt("_statusCode"));
+        JSONObject set = dispatcher.execute("keyboard.set_form",
+            new JSONObject().put("form", "floating"));
+        assertEquals(409, set.getInt("_statusCode"));
+    }
+
+    @Test
+    public void anUnknownSourceIsRefused() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+
+        JSONObject result = dispatcher.execute("keyboard.show",
+            new JSONObject().put("source", "telepathy"));
+        assertFalse(result.getBoolean("ok"));
+        assertEquals(400, result.getInt("_statusCode"));
+        assertFalse(host.inAppKeyboardShown);
+    }
+
+    /**
+     * Neither show nor hide is background-safe: putting a keyboard on a screen nobody is looking
+     * at is exactly the hidden-UI work the visibility gate exists to refuse.
+     */
+    @Test
+    public void showAndHideRefuseAStoppedActivity() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+        host.visible = false;
+
+        for (String tool : new String[]{"keyboard.show", "keyboard.hide", "keyboard.cycle_form",
+                "keyboard.set_form"}) {
+            JSONObject result = dispatcher.execute(tool, new JSONObject().put("form", "floating"));
+            assertFalse(tool, result.getBoolean("ok"));
+            assertEquals(tool, 409, result.getInt("_statusCode"));
+            assertEquals(tool, "activity_not_running", result.getString("error"));
+        }
+        assertFalse(host.inAppKeyboardShown);
+    }
+
+    /** The palette marks the row for the type in use, and reads it from here. */
+    @Test
+    public void theDispatcherReportsTheFormAndFallsBackToDockedWhileDetached() throws Exception {
+        assertEquals(KeyboardForm.DOCKED, dispatcher.keyboardForm());
+
+        FakeTerminalHost host = attach();
+        host.keyboardForm = KeyboardForm.SPLIT;
+        assertEquals(KeyboardForm.SPLIT, dispatcher.keyboardForm());
     }
 
     @Test
@@ -155,6 +342,67 @@ public class TerminalActionDispatcherTest {
         assertTrue(current.called("openSettings"));
     }
 
+    // --- Stopped (alive, not visible) vs. destroyed: the real lifecycle boundary ---
+
+    /**
+     * Regression: a plain {@code onStop()} (the user switched apps; the terminal is still alive,
+     * just not on screen) must not block the pane routes an agent drives through launcherctl —
+     * only a destroyed/finishing Activity may.
+     */
+    @Test
+    public void aStoppedButAliveHostStillRunsBackgroundSafePaneTools() throws Exception {
+        FakeTerminalHost host = attach();
+        host.visible = false;
+
+        assertTrue(dispatcher.isAttached());
+        JSONObject result = dispatcher.execute("pane.list", new JSONObject());
+        assertTrue(result.toString(), result.getBoolean("ok"));
+        assertEquals(0, result.getJSONArray("windows").length());
+    }
+
+    /**
+     * Every other terminal tool touches on-screen chrome directly, so a stopped-but-alive host
+     * must still refuse them — attachment surviving {@code onStop()} must not silently widen what
+     * an agent can do while the user is elsewhere.
+     */
+    @Test
+    public void aStoppedButAliveHostStillRefusesForegroundOnlyTools() throws Exception {
+        FakeTerminalHost host = attach();
+        host.visible = false;
+
+        JSONObject result = dispatcher.execute("app.open_settings", new JSONObject());
+        assertEquals(409, result.getInt("_statusCode"));
+        assertEquals("activity_not_running", result.getString("error"));
+        assertFalse(host.called("openSettings"));
+        // No hint toast either: nothing to show while nobody is looking.
+        assertFalse(host.called("showTerminalActionHint"));
+    }
+
+    /**
+     * A destroyed/finishing host answers 409 for a background-safe tool exactly as it does for
+     * every other one — {@code backgroundSafe} only relaxes the visibility requirement, never the
+     * liveness one.
+     */
+    @Test
+    public void aDestroyedHostRefusesBackgroundSafeToolsToo() throws Exception {
+        FakeTerminalHost host = attach();
+        host.visible = false;
+        host.alive = false;
+
+        JSONObject result = dispatcher.execute("pane.list", new JSONObject());
+        assertEquals(409, result.getInt("_statusCode"));
+        assertEquals("activity_not_running", result.getString("error"));
+    }
+
+    /** A visible host shows its action hint exactly as before; only the stopped case suppresses it. */
+    @Test
+    public void aVisibleHostStillShowsItsActionHint() throws Exception {
+        FakeTerminalHost host = attach();
+
+        assertTrue(dispatcher.execute("app.open_settings", new JSONObject()).getBoolean("ok"));
+        assertTrue(host.called("showTerminalActionHint"));
+    }
+
     // --- Availability context ---
 
     @Test
@@ -190,8 +438,8 @@ public class TerminalActionDispatcherTest {
             {"app.open_look_and_feel", "openLookAndFeel"},
             {"app.open_apps_bar", "openAppsBar"},
             {"app.command_palette", "showCommandPalette"},
-            {"app.open_drawer", "openDrawer"},
-            {"app.close_drawer", "closeDrawers"},
+            // The retired sessions drawer's own binding, kept pointed at its replacement.
+            {"app.open_drawer", "showSessionBrowser"},
             {"appearance.set_wallpaper", "openWallpaperPicker"},
             {"appearance.surface_editor", "openSurfaceEditor"},
             {"extrakeys.edit", "showExtraKeysRowEditor"},
@@ -389,6 +637,29 @@ public class TerminalActionDispatcherTest {
             assertEquals(layout, layout, result.getString("layout"));
             assertEquals(layout, layout, host.lastLayout);
         }
+    }
+
+    @Test
+    public void wallGoTakesAPageNameOrADirection() throws Exception {
+        FakeTerminalHost host = attach();
+
+        assertEquals(400, dispatcher.execute("wall.go", new JSONObject()).getInt("_statusCode"));
+        assertFalse(host.called("goToWallPage"));
+
+        for (String page : new String[]{"widgets", "terminal", "display", "left", "right"}) {
+            JSONObject result = dispatcher.execute("wall.go", new JSONObject().put("page", page));
+            assertEquals(page, page, result.getString("page"));
+            assertEquals(page, page, host.lastWallPage);
+        }
+    }
+
+    @Test
+    public void wallGoToAPageThisInstallHasNotIsABadRequest() throws Exception {
+        FakeTerminalHost host = attach();
+        host.goToWallPageResult = false;
+        JSONObject result = dispatcher.execute("wall.go", new JSONObject().put("page", "display"));
+        assertEquals(400, result.getInt("_statusCode"));
+        assertTrue(host.called("goToWallPage"));
     }
 
     @Test

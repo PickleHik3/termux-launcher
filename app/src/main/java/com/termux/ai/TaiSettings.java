@@ -448,6 +448,7 @@ public final class TaiSettings {
     private static ParameterSchema createLiteRtParameterSchema() {
         LinkedHashMap<String, ParameterSpec> specs = new LinkedHashMap<>();
         put(specs, ParameterSpec.integer(FIELD_MAX_TOKENS, "4000", 4000, 2000, 32000));
+        put(specs, ParameterSpec.integer(FIELD_CONTEXT_WINDOW, "4096", 4096, 1024, 32_768));
         put(specs, ParameterSpec.integer(FIELD_TOP_K, "64", 64, 5, 100));
         put(specs, ParameterSpec.decimal(FIELD_TOP_P, "0.95", 0.95d, 0.0d, 1.0d));
         put(specs, ParameterSpec.decimal(FIELD_TEMPERATURE, "1.00", 1.0d, 0.0d, 2.0d));
@@ -461,7 +462,7 @@ public final class TaiSettings {
     private static ParameterSchema createMnnParameterSchema() {
         LinkedHashMap<String, ParameterSpec> specs = new LinkedHashMap<>();
         put(specs, ParameterSpec.option(FIELD_ACCELERATOR, "Auto", "Auto", new String[] {"Auto", "CPU", "OpenCL"}));
-        put(specs, ParameterSpec.integer(FIELD_CONTEXT_WINDOW, "4096", 4096, 1024, 8192));
+        put(specs, ParameterSpec.integer(FIELD_CONTEXT_WINDOW, "4096", 4096, 1024, 32_768));
         put(specs, ParameterSpec.integer(FIELD_THREAD_COUNT, "4", 4, 1, 16));
         put(specs, ParameterSpec.option(FIELD_PRECISION, "low", "low", new String[] {"low", "normal", "high"}));
         put(specs, ParameterSpec.option(FIELD_MEMORY_MODE, "low", "low", new String[] {"low", "normal", "high"}));

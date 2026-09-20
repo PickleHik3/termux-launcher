@@ -12,9 +12,39 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import juloo.keyboard2.KeyValue;
+
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class FolderRenameInputRoutingTest {
+
+    @Test public void pasteAndPasteAsPlainTextInsertTheClipboardTextSanitizedToOneLine() {
+        Host host = new Host(LauncherConfigRepository.MutationResult.APPLIED);
+        FolderRenameController controller = new FolderRenameController(() -> "one\r\ntwo");
+        controller.begin(1, "f", "", host);
+
+        assertTrue(controller.interceptKeyValue(
+            KeyValue.getKeyByName("paste"), false, false, false));
+        assertEquals("one two", controller.model().text());
+
+        controller.begin(1, "f", "", host);
+        assertTrue(controller.interceptKeyValue(
+            KeyValue.getKeyByName("pasteAsPlainText"), false, false, false));
+        assertEquals("one two", controller.model().text());
+    }
+
+    /** Copy and select-all in the draft stay unhandled: swallowed, and the draft untouched. */
+    @Test public void copyAndSelectAllAreSwallowedWithoutEffect() {
+        Host host = new Host(LauncherConfigRepository.MutationResult.APPLIED);
+        FolderRenameController controller = new FolderRenameController();
+        controller.begin(1, "f", "Old", host);
+
+        assertTrue(controller.interceptKeyValue(
+            KeyValue.getKeyByName("copy"), false, false, false));
+        assertTrue(controller.interceptKeyValue(
+            KeyValue.getKeyByName("selectAll"), false, false, false));
+        assertEquals("Old", controller.model().text());
+    }
     @Test public void focuslessViewNeverClaimsEditorOrInputConnection() {
         FolderRenameTitleView view = new FolderRenameTitleView(RuntimeEnvironment.getApplication());
         assertFalse(view.onCheckIsTextEditor());

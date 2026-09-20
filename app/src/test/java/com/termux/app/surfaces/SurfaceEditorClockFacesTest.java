@@ -7,6 +7,7 @@ import android.os.Build;
 import androidx.test.core.app.ApplicationProvider;
 
 import com.termux.R;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -42,6 +43,35 @@ public class SurfaceEditorClockFacesTest {
         assertEquals("no face may be listed twice in the picker",
             SurfaceEditorController.CLOCK_STYLES.length,
             new HashSet<>(Arrays.asList(SurfaceEditorController.CLOCK_STYLES)).size());
+    }
+
+    @Test
+    public void picker_offersEveryPositionTheSettingsListDoes() {
+        Set<String> settingsValues = new HashSet<>(Arrays.asList(
+            TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_LEFT,
+            TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER,
+            TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT));
+        assertEquals("the editor's position row and the settings pill must offer the same values",
+            settingsValues, new HashSet<>(Arrays.asList(SurfaceEditorController.CLOCK_ALIGNMENTS)));
+        assertEquals("no position may be listed twice",
+            SurfaceEditorController.CLOCK_ALIGNMENTS.length,
+            new HashSet<>(Arrays.asList(SurfaceEditorController.CLOCK_ALIGNMENTS)).size());
+        assertEquals("the default position must be one the row offers",
+            true, settingsValues.contains(
+                TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT));
+    }
+
+    @Test
+    public void everyPositionHasItsOwnName() {
+        Context context = ApplicationProvider.getApplicationContext();
+        Set<String> names = new HashSet<>();
+        for (String alignment : SurfaceEditorController.CLOCK_ALIGNMENTS) {
+            String name = context.getString(
+                SurfaceEditorController.clockAlignmentLabel(alignment));
+            assertFalse("position " + alignment + " has no name", name.trim().isEmpty());
+            assertTrue("position " + alignment + " shares its name with another",
+                names.add(name));
+        }
     }
 
     @Test

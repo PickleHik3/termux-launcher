@@ -56,6 +56,9 @@ import java.io.FileInputStream;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.IntConsumer;
 
 /**
  * A service holding a list of {@link TermuxSession} in {@link TermuxShellManager#mTermuxSessions} and background {@link AppShell}
@@ -90,6 +93,13 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      * Note that the service may often outlive the activity, so need to clear this reference.
      */
     private TermuxTerminalSessionActivityClient mTermuxTerminalSessionActivityClient;
+
+    /**
+     * Every activity client currently attached, so a second activity instance (a launch on another
+     * display) coming and going hands the sessions back to the first instead of to nobody.
+     */
+    private final com.termux.app.terminal.TerminalSessionClientRoster<TermuxTerminalSessionActivityClient>
+        mActivityClientRoster = new com.termux.app.terminal.TerminalSessionClientRoster<>();
 
     /**
      * The basic implementation of the {@link TerminalSessionClient} interface to be used by {@link TerminalSession}
@@ -130,6 +140,15 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         mShellManager = TermuxShellManager.getShellManager();
         runStartForeground();
         SystemEventReceiver.registerPackageUpdateEvents(this);
+        autostartEmbeddedDisplay();
+    }
+
+    /** The "Start the display with the launcher" opt-in: a background task, as if typed. */
+    private void autostartEmbeddedDisplay() {
+        String[] argv = com.termux.app.x11.X11Autostart.commandToRun(this);
+        if (argv == null) return;
+        createTermuxTask(argv[0], java.util.Arrays.copyOfRange(argv, 1, argv.length), null,
+            TermuxConstants.TERMUX_HOME_DIR_PATH);
     }
 
     @SuppressLint("Wakelock")
@@ -198,9 +217,10 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         Logger.logVerbose(LOG_TAG, "onUnbind");
         // Since we cannot rely on {@link TermuxActivity.onDestroy()} to always complete,
         // we unset clients here as well if it failed, so that we do not leave service and session
-        // clients with references to the activity.
-        if (mTermuxTerminalSessionActivityClient != null)
-            unsetTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
+        // clients with references to the activity. onUnbind means the last activity is gone, so
+        // every attached client goes.
+        for (TermuxTerminalSessionActivityClient client : detachAllActivityClients())
+            unsetTermuxTerminalSessionClient(client);
         return false;
     }
 
@@ -561,6 +581,20 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
     }
 
     /**
+     * Callers that want a {@link AppShell}'s exit code without racing its worker thread's write to
+     * {@link ExecutionCommand#resultData}: {@link #onAppShellExited} already reads it safely, since
+     * {@code mHandler.post} carrying it here is a real happens-before edge the writing thread
+     * crosses; a listener registered here is called from inside that same posted block, on this
+     * same main thread, instead of polling the raw field from an unrelated timer.
+     */
+    private final Map<AppShell, IntConsumer> mAppShellExitListeners = new ConcurrentHashMap<>();
+
+    /** Registers {@code onExit} to be told {@code shell}'s exit code; see {@link #mAppShellExitListeners}. */
+    public void notifyOnAppShellExit(@NonNull AppShell shell, @NonNull IntConsumer onExit) {
+        mAppShellExitListeners.put(shell, onExit);
+    }
+
+    /**
      * Callback received when a TermuxTask finishes.
      */
     @Override
@@ -573,6 +607,9 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
                 if (executionCommand != null && executionCommand.isPluginExecutionCommand)
                     TermuxPluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
                 mShellManager.mTermuxTasks.remove(termuxTask);
+                IntConsumer exitListener = mAppShellExitListeners.remove(termuxTask);
+                if (exitListener != null && executionCommand != null && executionCommand.resultData.exitCode != null)
+                    exitListener.accept(executionCommand.resultData.exitCode);
             }
             updateNotification();
         });
@@ -649,18 +686,24 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             return null;
         }
         newTermuxSession.getTerminalSession().setBoldWithBright(mProperties.shouldDrawBoldTextWithBrightColors());
+        boolean firstSession = mShellManager.mTermuxSessions.isEmpty();
         mShellManager.mTermuxSessions.add(newTermuxSession);
         // Remove the execution command from the pending plugin execution commands list since it has
         // now been processed
         if (executionCommand.isPluginExecutionCommand)
             mShellManager.mPendingPluginExecutionCommands.remove(executionCommand);
-        // Notify {@link TermuxSessionsListViewController} that sessions list has been updated if
-        // activity in is foreground
+        // Notify the activity that the sessions list has been updated if it is in the foreground
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.termuxSessionListNotifyUpdated();
         updateNotification();
+        // The first session may arrive before the activity has styled itself (upstream's case, a
+        // service started ahead of its activity), so it still asks for a styling pass. Every later
+        // shell — a split, a new window, a restored workspace — inherits the styling already on
+        // screen: its pane view is configured by the pane host and its emulator takes the current
+        // colour scheme. Broadcasting for those re-inflated the extra keys, the keyboard and the
+        // accessory chrome (~300 ms of main thread) right under the split's reveal animation.
         // No need to recreate the activity since it likely just started and theme should already have applied
-        TermuxActivity.updateTermuxActivityStyling(this, false);
+        if (firstSession) TermuxActivity.updateTermuxActivityStyling(this, false);
         return newTermuxSession;
     }
 
@@ -718,8 +761,8 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
             if (executionCommand != null && executionCommand.isPluginExecutionCommand)
                 TermuxPluginUtils.processPluginExecutionCommandResult(this, LOG_TAG, executionCommand);
             mShellManager.mTermuxSessions.remove(termuxSession);
-            // Notify {@link TermuxSessionsListViewController} that sessions list has been updated if
-            // activity in is foreground
+            // Notify the activity that the sessions list has been updated if it is in the
+            // foreground
             if (mTermuxTerminalSessionActivityClient != null)
                 mTermuxTerminalSessionActivityClient.termuxSessionListNotifyUpdated();
         }
@@ -823,8 +866,20 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      * implements the {@link TerminalSessionClient} interface.
      */
     public synchronized void setTermuxTerminalSessionClient(TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient) {
-        mTermuxTerminalSessionActivityClient = termuxTerminalSessionActivityClient;
-        for (int i = 0; i < mShellManager.mTermuxSessions.size(); i++) mShellManager.mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(mTermuxTerminalSessionActivityClient);
+        mActivityClientRoster.attach(termuxTerminalSessionActivityClient);
+        applyActivityClient(termuxTerminalSessionActivityClient);
+    }
+
+    /** Point every session at {@code client}, or at the headless service client when null. */
+    private void applyActivityClient(@Nullable TermuxTerminalSessionActivityClient client) {
+        mTermuxTerminalSessionActivityClient = client;
+        TermuxTerminalSessionClientBase target = client != null ? client : mTermuxTerminalSessionServiceClient;
+        for (int i = 0; i < mShellManager.mTermuxSessions.size(); i++) mShellManager.mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(target);
+        if (client == null) mVisibleSessionCount = -1;
+    }
+
+    private synchronized List<TermuxTerminalSessionActivityClient> detachAllActivityClients() {
+        return mActivityClientRoster.detachAll();
     }
 
     /**
@@ -833,11 +888,12 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
      * clients do not hold an activity references.
      */
     public synchronized void unsetTermuxTerminalSessionClient(TermuxTerminalSessionActivityClient termuxTerminalSessionActivityClient) {
-        if (mTermuxTerminalSessionActivityClient != termuxTerminalSessionActivityClient)
-            return;
-        for (int i = 0; i < mShellManager.mTermuxSessions.size(); i++) mShellManager.mTermuxSessions.get(i).getTerminalSession().updateTerminalSessionClient(mTermuxTerminalSessionServiceClient);
-        mTermuxTerminalSessionActivityClient = null;
-        mVisibleSessionCount = -1;
+        boolean wasCurrent = mTermuxTerminalSessionActivityClient == termuxTerminalSessionActivityClient;
+        TermuxTerminalSessionActivityClient next = mActivityClientRoster.detach(termuxTerminalSessionActivityClient);
+        // A departing non-current client (a second instance that never took over) changes nothing;
+        // a departing current one hands the sessions to whoever attached before it, or to nobody.
+        if (wasCurrent || next != mTermuxTerminalSessionActivityClient)
+            applyActivityClient(next);
     }
 
     /**

@@ -168,4 +168,66 @@
         <item>litert-lm</item>
         <item>mnn-llm</item>
     </string-array>
+    <string-array name="x11_runtime_badge_entries">
+        <item>Termux X11</item>
+        <item>Arch Linux</item>
+        <item>Ubuntu</item>
+        <item>Debian</item>
+        <item>Fedora</item>
+    </string-array>
+    <string-array name="x11_runtime_badge_values">
+        <item>termux</item>
+        <item>arch</item>
+        <item>ubuntu</item>
+        <item>debian</item>
+        <item>fedora</item>
+    </string-array>
+    <string-array name="x11_touch_mode_entries">
+        <item>Trackpad</item>
+        <item>Touchscreen</item>
+        <item>Direct touch</item>
+    </string-array>
+    <string-array name="x11_touch_mode_values">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+    </string-array>
+    <string-array name="x11_filtering_entries">
+        <item>Smooth</item>
+        <item>Sharp</item>
+    </string-array>
+    <string-array name="x11_filtering_values">
+        <item>bilinear</item>
+        <item>nearest</item>
+    </string-array>
+    <string-array name="x11_resolution_mode_entries">
+        <item>Same as the screen</item>
+        <item>Scaled</item>
+        <item>Fixed size</item>
+        <item>Custom size</item>
+    </string-array>
+    <string-array name="x11_resolution_mode_values">
+        <item>native</item>
+        <item>scaled</item>
+        <item>exact</item>
+        <item>custom</item>
+    </string-array>
+    <string-array name="gui_apps_route_entries">
+        <item>Termux\'s own apps</item>
+        <item>A full Linux inside</item>
+    </string-array>
+    <string-array name="gui_apps_route_values">
+        <item>x11</item>
+        <item>distro</item>
+    </string-array>
+    <string-array name="gui_apps_distro_entries">
+        <item>Debian (recommended)</item>
+        <item>Ubuntu</item>
+        <item>Arch Linux</item>
+    </string-array>
+    <string-array name="gui_apps_distro_values">
+        <item>debian</item>
+        <item>ubuntu</item>
+        <item>arch</item>
+    </string-array>
 </resources>

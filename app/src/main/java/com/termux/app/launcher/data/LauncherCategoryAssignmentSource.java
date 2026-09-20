@@ -5,6 +5,8 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.launcher.drawer.AppDrawerCategory;
 import com.termux.app.launcher.drawer.AppDrawerCategoryClassifier;
+import com.termux.app.x11.X11Apps;
+import com.termux.shared.logger.Logger;
 
 import java.io.File;
 import java.io.IOException;
@@ -24,6 +26,8 @@ import java.io.IOException;
  */
 public final class LauncherCategoryAssignmentSource
     implements AppDrawerCategoryClassifier.OverrideLookup {
+
+    private static final String LOG_TAG = "LauncherCategoryAssignmentSource";
 
     @NonNull private final LauncherCategoryOverrideStore overrides;
     @NonNull private final File categoryFile;
@@ -48,6 +52,12 @@ public final class LauncherCategoryAssignmentSource
     public AppDrawerCategory categoryForPackage(@NonNull String packageName) {
         AppDrawerCategory dragged = resolve(overrides.get(packageName));
         if (dragged != null) return dragged;
+        // x11:linux (X11Apps.PACKAGE) is the one package every Linux app shares; a bare line for it
+        // in the file is never a person's choice, only a categoriser run that had to guess one
+        // category for every Linux app at once (or a stale hand edit copying that mistake). The file
+        // answers for nothing here so it self-heals with no user action; an explicit drag above still
+        // wins, unaffected by this check.
+        if (X11Apps.PACKAGE.equals(packageName)) return null;
         LauncherCategoryFile file = file();
         if (file == null) return null;
         return resolve(file.categoryForPackage(packageName));
@@ -78,6 +88,14 @@ public final class LauncherCategoryAssignmentSource
         }
         try {
             parsed = LauncherCategoryFile.parse(categoryFile);
+            // Logged once per file change, not per classify() call: this is read for every Linux
+            // app on every drawer rebuild, and the file's own mtime/length cache above already
+            // limits how often parsing (and so this check) actually runs.
+            if (parsed.categoryForPackage(X11Apps.PACKAGE) != null) {
+                Logger.logWarn(LOG_TAG, categoryFile.getAbsolutePath()
+                    + " assigns the reserved package " + X11Apps.PACKAGE
+                    + " to a category; ignoring it, since it names every Linux app at once, not one.");
+            }
         } catch (IOException ignored) {
             // A half-written or unreadable file is not a reason to forget what the user assigned:
             // keep the last good parse and try again once the file changes.

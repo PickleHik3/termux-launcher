@@ -21,6 +21,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
@@ -97,6 +98,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         final java.util.LinkedHashSet<String> capabilities = new java.util.LinkedHashSet<>();
         // Ordered like Gallery model configs: the first compatible accelerator is the default.
         final java.util.LinkedHashSet<String> compatibleAccelerators = new java.util.LinkedHashSet<>();
+        TaiModelProfile customProfile;
         String defaultAccelerator = "cpu";
         boolean acceleratorSelectionExplicit;
 
@@ -127,13 +129,35 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
     private final ActivityResultLauncher<String[]> modelPicker = registerForActivityResult(
         new ActivityResultContracts.OpenDocument(),
         this::onModelDocumentSelected);
-    private ImportDraft pendingImportDraft;
     @Nullable private volatile JSONObject lastRuntimeStatus;
     private final ExecutorService runtimeActionExecutor = Executors.newFixedThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "tai-settings-runtime");
         thread.setDaemon(true);
         return thread;
     });
+    private ImportDraft pendingImportDraft;
+    private final ActivityResultLauncher<Uri> modelFolderPicker = registerForActivityResult(
+        new ActivityResultContracts.OpenDocumentTree(), uri -> {
+            ImportDraft draft = pendingImportDraft;
+            pendingImportDraft = null;
+            Context context = getContext();
+            if (uri == null || draft == null || context == null) return;
+            runtimeActionExecutor.execute(() -> {
+                String error = null;
+                try {
+                    JSONObject result = new TaiModelImporter(context, new TaiModelStore(context))
+                        .importMnnDirectory(uri, draft.modelId, draft.capabilities);
+                    if (!result.optBoolean("ok")) error = result.optString("message");
+                } catch (Exception e) { error = e.getMessage(); }
+                String message = error;
+                handler.post(() -> {
+                    if (getContext() == null) return;
+                    if (message == null) AppNotice.show(context, R.string.termux_ai_model_imported, false);
+                    else AppNotice.show(context, message, true);
+                    refreshTaiPage(context);
+                });
+            });
+        });
     private final Runnable refreshRuntimeRunnable = new Runnable() {
         @Override
         public void run() {
@@ -201,7 +225,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         EditText input = buildDialogEditText(context, preference.getText(), InputType.TYPE_CLASS_TEXT, true);
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_general_prompt_title)
-            .setView(wrapDialogView(context, null, input))
+            .setView(dialogScroll(context, wrapDialogView(context, null, input)))
             .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) ->
                 preference.setText(input.getText().toString()))
             .setNegativeButton(android.R.string.cancel, null)
@@ -473,7 +497,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
 
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_endpoint_access_title)
-            .setView(layout)
+            .setView(dialogScroll(context, layout))
             .setPositiveButton(android.R.string.ok, null)
             .show();
     }
@@ -547,6 +571,17 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             input.setSelection(value.length());
         }
         return input;
+    }
+
+    /**
+     * Wraps dialog content so the button bar stays reachable. AlertDialog scrolls its message text
+     * but never a custom view, so a tall layout — the import flow stacks seventeen rows — pushes
+     * the buttons off the bottom of the screen. Content that already fits is unaffected.
+     */
+    private ScrollView dialogScroll(Context context, View content) {
+        ScrollView scroll = new ScrollView(context);
+        scroll.addView(content);
+        return scroll;
     }
 
     private LinearLayout wrapDialogView(Context context, CharSequence header, View input) {
@@ -681,7 +716,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
 
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_mnn_custom_download_title)
-            .setView(layout)
+            .setView(dialogScroll(context, layout))
             .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) -> {
                 String url = input.getText().toString().trim();
                 if (!url.startsWith("https://")) {
@@ -978,7 +1013,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
 
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_huggingface_token_title)
-            .setView(layout)
+            .setView(dialogScroll(context, layout))
             .setPositiveButton(android.R.string.ok, (dialog, which) -> {
                 context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
                     .edit()
@@ -1318,7 +1353,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
         if (model != null && TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend) && !capabilities.mnnSupported) {
             String reason = capabilities.mnnUnsupportedReason;
-            AppNotice.show(context, reason == null ? getString(R.string.termux_ai_mnn_runtime_pending) : reason, true);
+            AppNotice.show(context, reason == null ? context.getString(R.string.termux_ai_mnn_runtime_pending) : reason, true);
             return;
         }
         SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
@@ -1441,6 +1476,19 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         layout.setOrientation(LinearLayout.VERTICAL);
         int padding = (int) (20 * context.getResources().getDisplayMetrics().density);
         layout.setPadding(padding, 0, padding, 0);
+
+        // The dialog's own message, carried inside the scrolled view rather than passed to
+        // setMessage(). AlertDialogLayout only gives one panel the height left over from the
+        // buttons, and a dialog holding both a message and a custom view has two, so it falls back
+        // to plain LinearLayout measurement — which let this flow's seventeen rows push Import and
+        // Cancel off the bottom of the screen. One panel, and the buttons stay put.
+        TextView dialogMessage = new TextView(context);
+        dialogMessage.setText(R.string.termux_ai_model_import_dialog_message);
+        dialogMessage.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        dialogMessage.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
+        dialogMessage.setPadding(0, 0, 0, Math.round(
+            12 * context.getResources().getDisplayMetrics().density));
+        layout.addView(dialogMessage);
 
         // Backend is auto-detected: a Hugging Face URL resolves to LiteRT or MNN from the repo's
         // files; a local file is always a LiteRT package. No manual toggle.
@@ -1570,6 +1618,12 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             @Override public void afterTextChanged(android.text.Editable s) {}
         });
 
+        Button profileButton = new Button(context);
+        profileButton.setText(R.string.termux_ai_import_profile);
+        profileButton.setOnClickListener(v -> TaiImportProfileDialog.show(context, importRuntimeProfile(draft),
+            profile -> draft.customProfile = profile));
+        layout.addView(profileButton);
+
         EditText modelIdInput = new EditText(context);
         modelIdInput.setSingleLine(true);
         modelIdInput.setHint(R.string.termux_ai_model_import_id_hint);
@@ -1584,8 +1638,8 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         tokenLine.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorPrimary));
         Runnable refreshTokenLine = () -> tokenLine.setText(
             new TaiSettings(context).getHuggingFaceToken().trim().isEmpty()
-                ? getString(R.string.termux_ai_model_import_token_unset)
-                : getString(R.string.termux_ai_model_import_token_set));
+                ? context.getString(R.string.termux_ai_model_import_token_unset)
+                : context.getString(R.string.termux_ai_model_import_token_set));
         refreshTokenLine.run();
         tokenLine.setOnClickListener(v -> promptHuggingFaceToken(context, refreshTokenLine));
         layout.addView(tokenLine);
@@ -1618,14 +1672,23 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             draft.compatibleAccelerators.add("cpu");
         };
 
+        Button folder = new Button(context);
+        folder.setText(R.string.termux_ai_import_folder);
+        layout.addView(folder);
         androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_model_import_dialog_title)
-            .setMessage(R.string.termux_ai_model_import_dialog_message)
-            .setView(layout)
+            .setView(dialogScroll(context, layout))
             .setPositiveButton(R.string.termux_ai_model_import_verify_action, null)
             .setNeutralButton(R.string.termux_ai_model_import_choose_file, null)
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+        folder.setOnClickListener(v -> {
+            draft.modelId = modelIdInput.getText().toString().trim();
+            captureModalities.run();
+            pendingImportDraft = draft;
+            modelFolderPicker.launch(null);
+            dialog.dismiss();
+        });
         Button positive = dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE);
         positive.setOnClickListener(view -> {
             draft.backend = IMPORT_BACKEND_LITERT; // local files are LiteRT; URLs auto-detect downstream
@@ -1733,10 +1796,11 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 0.95d, 1.0d, 3, TaiModelProfile.SOURCE_LITERT_COMMUNITY,
                 TaiModelProfile.THINKING_ALWAYS, "<think>", "</think>");
         }
+        if (draft.customProfile != null) defaults = draft.customProfile;
         return new TaiModelProfile(accelerators, defaults.defaultMaxTokens, defaults.defaultTopK,
             defaults.defaultTopP, defaults.defaultTemperature, defaults.minDeviceMemoryInGb,
-            "import-dialog-selection", defaults.thinkingMode, defaults.thinkingChannelStart,
-            defaults.thinkingChannelEnd);
+            draft.customProfile == null ? "import-dialog-selection" : "user-artifact-profile",
+            defaults.thinkingMode, defaults.thinkingChannelStart, defaults.thinkingChannelEnd, defaults.maxContextTokens);
     }
 
     private CharSequence importSelectionText(Context context, ImportDraft draft) {
@@ -1756,12 +1820,12 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         input.setText(new TaiSettings(context).getHuggingFaceToken());
         input.setSelectAllOnFocus(true);
         LinearLayout layout = wrapDialogView(context,
-            getString(R.string.termux_ai_huggingface_token_dialog_message), input);
+            context.getString(R.string.termux_ai_huggingface_token_dialog_message), input);
         layout.addView(buildTokenHintView(context, R.string.termux_ai_huggingface_token_permissions_hint));
         layout.addView(buildTokenHintView(context, R.string.termux_ai_huggingface_token_gated_hint));
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_huggingface_token_title)
-            .setView(layout)
+            .setView(dialogScroll(context, layout))
             .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) -> {
                 new TaiSettings(context).setHuggingFaceToken(input.getText().toString().trim());
                 if (onSaved != null) onSaved.run();
@@ -1803,6 +1867,10 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void startHuggingFaceImport(Context context, ImportDraft draft) {
+        startHuggingFaceImport(context, draft, false);
+    }
+
+    private void startHuggingFaceImport(Context context, ImportDraft draft, boolean selected) {
         String modelId = TaiModelImporter.sanitizeModelId(draft.modelId == null || draft.modelId.trim().isEmpty()
             ? deriveModelIdFromUrl(draft.hfUrl) : draft.modelId);
         if (modelId.isEmpty()) {
@@ -1816,6 +1884,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                 request.put("modelId", modelId);
                 request.put("displayName", modelId);
                 request.put("url", draft.hfUrl);
+                request.put("previewOnly", !selected);
                 request.put("acceptedTerms", true);
                 // Backend/format are auto-detected by downloadModel from the resolved file.
                 JSONArray capabilities = new JSONArray();
@@ -1836,11 +1905,27 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
                     AppNotice.show(currentContext, R.string.termux_ai_model_download_started, false);
                     handler.removeCallbacks(refreshRuntimeRunnable);
                     handler.postDelayed(refreshRuntimeRunnable, 1000L);
+                } else if (finalResult != null && "artifact_selection_required".equals(finalResult.optString("error"))) {
+                    JSONArray choices = finalResult.optJSONArray("candidates");
+                    if (choices == null || choices.length() == 0) return;
+                    String[] labels = new String[choices.length()];
+                    for (int i = 0; i < choices.length(); i++) {
+                        JSONObject choice = choices.optJSONObject(i);
+                        labels[i] = choice.optString("file") + "\n" + formatBytes(choice.optLong("sizeBytes", 0));
+                    }
+                    new MaterialAlertDialogBuilder(currentContext)
+                        .setTitle(R.string.termux_ai_import_choose_variant)
+                        .setItems(labels, (dialog, which) -> {
+                            JSONObject choice = choices.optJSONObject(which);
+                            draft.hfUrl = choice.optString("url");
+                            startHuggingFaceImport(currentContext, draft, true);
+                        })
+                        .setNegativeButton(android.R.string.cancel, null).show();
                 } else if (finalResult != null && "gated_model_requires_auth".equals(finalResult.optString("error"))) {
                     // Gated/private repo: prompt for a token, then retry the same import.
                     new MaterialAlertDialogBuilder(currentContext)
                         .setTitle(R.string.termux_ai_huggingface_token_title)
-                        .setMessage(finalResult.optString("message", getString(R.string.termux_ai_model_import_gated_message)))
+                        .setMessage(finalResult.optString("message", currentContext.getString(R.string.termux_ai_model_import_gated_message)))
                         .setPositiveButton(R.string.termux_ai_huggingface_token_title,
                             (d, w) -> promptHuggingFaceToken(currentContext, () -> {
                                 draft.hfToken = new TaiSettings(currentContext).getHuggingFaceToken();

@@ -31,6 +31,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.termux.R;
 import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
+import com.termux.app.chrome.ChromeShade;
 import com.termux.app.launcher.drawer.AppDrawerCategoryTouchRegions.Part;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
 
@@ -196,8 +197,10 @@ public final class AppDrawerCategoryView extends ViewGroup
             new GradientDrawable();
         ring.setShape(GradientDrawable.OVAL);
         ring.setColor(Color.TRANSPARENT);
+        // The chevron's ring is the collapse target's only edge, so it follows what the drawer is
+        // standing on rather than staying white light over a light band.
         ring.setStroke(Math.max(1, Math.round(
-            getResources().getDisplayMetrics().density)), 0x2EFFFFFF);
+            getResources().getDisplayMetrics().density)), ChromeShade.rim(0x2EFFFFFF));
         collapseChevron.setBackground(ring);
         collapseChevron.setClickable(true);
         collapseChevron.setVisibility(INVISIBLE);

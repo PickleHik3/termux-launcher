@@ -72,8 +72,15 @@ Use this language; it is what the code and the developer use.
 - **Base** — the shared surface values every slot inherits until a property is *detached*.
 - **Docked / Floating** — the two dock styles (formerly Default / Rounded; labels changed, stored
   values did not). Docked is flush and square at rest; Floating is a card already rounded at rest.
-- **surface editor** — the one-page overlay that edits all of the above
-  (`app/surfaces/SurfaceEditorController`). Also reachable by deep link.
+- **Appearance editor** — the overlay that edits a place's surfaces: glass, opacity, blur, grain,
+  corners, side gap, palette (`app/surfaces/SurfaceEditorController`, class name kept for now).
+  Entered from the corner tab or the long-press menu; exits straight back to the live place.
+- **Layout editor** — the overlay that edits where a place's elements sit and how big they are, on
+  the miniature, one orientation at a time with a toggle to the other
+  (`app/layouteditor/LayoutEditorController`). Entered from the corner tab, the long-press menu, or
+  Settings → Layout.
+- **corner tab** — the small control strip revealed by pressing a pane or page corner; carries the
+  Appearance and Layout buttons on every place, alongside the place's own actions.
 - **pane** — one terminal view in a split; **chrome** — everything the launcher draws around it.
 - **the seams / Host interfaces** — `TerminalHost`, `SurfaceEditorController.Host`,
   `ChromeRenderer` and friends: the deep modules extracted out of `TermuxActivity`.
@@ -137,10 +144,11 @@ everywhere else. Before calling a change done, walk this list and say which entr
   - `app/` — `TermuxActivity` (the shell everything hangs off), `SuggestionBarView`, service,
     installer, dock/glass rendering views.
   - `app/terminal/` — terminal hosting, clients, panes, find/copy modes, `inappkeyboard/`.
-  - `app/surfaces/` — the surface editor, inheritance row table, presets, materials, outlines.
+  - `app/surfaces/` — the Appearance editor, inheritance row table, presets, materials, outlines.
+  - `app/layouteditor/` — the Layout editor: the miniature, the orientation toggle, the size rows.
   - `app/launcher/` — app catalogue, icons, paging, popups, A–Z scrub, notifications.
   - `app/chrome/`, `app/dock/`, `app/statusbar/`, `app/notice/`, `app/theme/`, `app/settings/`,
-    `app/onboarding/` — the named chrome subsystems.
+    `app/tour/` — the named chrome subsystems.
   - `ai/`, `launcherctl/`, `privileged/`, `filepicker/` — the non-terminal side features.
 - `terminal-emulator/` — escape-sequence parsing, buffers, kitty graphics, sixel. Upstream-shaped.
 - `terminal-view/` — the `TerminalView` widget and input handling.
@@ -233,7 +241,7 @@ These were settled deliberately. Raise them if you think they are wrong; do not 
 - **Negative / concave corner radius was proposed and fully dropped.** Do not reintroduce it.
 - **The Sessions sidebar is legacy.** It loses its purpose with split tabs and its edge-swipe
   fights the keyboard's. No Sessions tab in the editor, no dot tab badges.
-- **The surface editor commits only on Done.** It rests as the outlines plus a floating
+- **The Appearance editor commits only on Done.** It rests as the outlines plus a floating
   palette/✓ pill; the card is raised by the palette (shared layer) or by touching a surface, and its
   ✕ only puts the card down. Back puts an open card down first; from the resting state it routes
   through the unsaved-changes dialog. Dirtiness is a comparison against the snapshot taken on entry.
@@ -244,7 +252,7 @@ These were settled deliberately. Raise them if you think they are wrong; do not 
 - **Shipped defaults are pinned for existing installs.** `adoptShippedSurfaceDefaults()` treats a
   store holding nothing but `log_level` as a fresh install; anything else gets the pre-shipped
   values pinned into keys it never set, *before* the inheritance fold.
-- **The surface editor collapses the status pane on entry.** A status-pane control therefore cannot
+- **The Appearance editor collapses the status pane on entry.** A status-pane control therefore cannot
   rely on the live pane — it must draw its own preview in its row.
 - **`SettingsLayoutUtils.applyItemLayout` overwrites every preference's layout.** A preference with
   its own layout must be added to the exemption list or it renders as a plain row.
@@ -355,3 +363,17 @@ Editions are a section, not a file. The notes for a version are one document:
   documents are gitignored on purpose.
 - The merged commit is the implementation record. Do not leave a second checklist behind in the
   repo after the work lands.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `PickleHik3/termux-launcher`; every `gh` call passes `-R`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default labels, unchanged. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.

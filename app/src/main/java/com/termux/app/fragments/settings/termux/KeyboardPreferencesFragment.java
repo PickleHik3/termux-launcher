@@ -2,16 +2,12 @@ package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.preference.ListPreference;
 import androidx.preference.MultiSelectListPreference;
 import androidx.preference.Preference;
@@ -23,23 +19,24 @@ import com.termux.R;
 import com.termux.app.TermuxActivity;
 import com.termux.app.settings.TermuxPropertiesFile;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
+import com.termux.app.place.PlaceLayoutStore;
+import com.termux.app.place.PlaceOrientation;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardExtraKeys;
-import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.app.terminal.inappkeyboard.TapCorrectionController;
 import com.termux.app.terminal.inappkeyboard.TapModelStore;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboardLayoutLoader;
+import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -49,12 +46,17 @@ import java.util.Set;
 
 import juloo.keyboard2.KeyboardData;
 
-/** Standalone settings page for the built-in terminal keyboard. */
+/**
+ * Standalone settings page for the built-in terminal keyboard: input method, layouts, typing, and
+ * feedback. The keyboard's look (theme, colors, typeface, bottom padding, and the "Customize
+ * keyboard appearance" surface entry) moved to the Look page, since it is edited alongside the
+ * launcher's other visual choices there.
+ */
 @Keep
 public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
-    private static final String KEY_FONT = "in_app_keyboard_font";
     private static final String KEY_EXTRA_KEYS = "in_app_keyboard_extra_keys";
+    static final String KEY_KEYBOARD_FORM = "in_app_keyboard_form";
     private static final String KEY_CREDITS_GITHUB = "keyboard_credits_github";
     private static final String KEY_CREDITS_PLAY = "keyboard_credits_play";
     private static final String KEY_DOCS_LAYOUTS = "keyboard_docs_layouts";
@@ -70,17 +72,12 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String DOCS_KEYS_URL =
         "https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Possible-key-values.md";
 
-    private static final String FONT_DIR_NAME = "inapp-keyboard";
-    private static final String FONT_FILE_NAME = "label-font.ttf";
-
-    private ActivityResultLauncher<String[]> mFontPickerLauncher;
-
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        mFontPickerLauncher = registerForActivityResult(
-            new ActivityResultContracts.OpenDocument(), this::onFontPicked);
-    }
+    /** The same three types the Layout page offers, under the same labels. */
+    private static final String[] KEYBOARD_FORM_VALUES = {"docked", "floating", "split"};
+    private static final int[] KEYBOARD_FORM_LABELS = {
+        R.string.settings_layout_keyboard_form_docked,
+        R.string.settings_layout_keyboard_form_floating,
+        R.string.settings_layout_keyboard_form_split};
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -92,17 +89,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         store.forgetTermuxProperties();
         preferenceManager.setPreferenceDataStore(store);
         setPreferencesFromResource(R.xml.termux_keyboard_preferences, rootKey);
-        refreshThemeEntries();
-
-        Preference customizeSurface = findPreference("customize_keyboard_surface");
-        if (customizeSurface != null) customizeSurface.setOnPreferenceClickListener(preference -> {
-            Intent intent = new Intent(context, TermuxActivity.class);
-            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
-            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR_SECTION, "keyboard");
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
-            return true;
-        });
 
         ListPreference inputMethodPreference = findPreference("keyboard_input_method");
         if (inputMethodPreference != null) {
@@ -113,14 +99,9 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             });
         }
 
-        Preference fontPreference = findPreference(KEY_FONT);
-        if (fontPreference != null) {
-            updateFontPreferenceSummary(fontPreference);
-            fontPreference.setOnPreferenceClickListener(preference -> {
-                onFontPreferenceClicked();
-                return true;
-            });
-        }
+        SegmentedPillPreference keyboardForm = findPreference(KEY_KEYBOARD_FORM);
+        if (keyboardForm != null)
+            keyboardForm.setSegments(KEYBOARD_FORM_VALUES, KEYBOARD_FORM_LABELS);
 
         MultiSelectListPreference extraKeysPreference = findPreference(KEY_EXTRA_KEYS);
         if (extraKeysPreference != null)
@@ -196,11 +177,11 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void updateBuiltInKeyboardRows(boolean enabled) {
-        Preference appearance = findPreference("keyboard_appearance");
         Preference layout = findPreference("keyboard_layout");
+        Preference shapes = findPreference("keyboard_shapes");
         Preference feedback = findPreference("keyboard_feedback");
-        if (appearance != null) appearance.setEnabled(enabled);
         if (layout != null) layout.setEnabled(enabled);
+        if (shapes != null) shapes.setEnabled(enabled);
         if (feedback != null) feedback.setEnabled(enabled);
     }
 
@@ -213,33 +194,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         // The file may have been hand-edited while the screen was away.
         if (getContext() != null)
             KeyboardPreferencesDataStore.getInstance(getContext()).forgetTermuxProperties();
-        refreshThemeEntries();
-    }
-
-    private void refreshThemeEntries() {
-        Context context = getContext();
-        ListPreference preference = findPreference("in_app_keyboard_theme");
-        if (context == null || preference == null) return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        if (preferences == null) return;
-        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
-            preferences.getInAppKeyboardColorScheme());
-        String importedId = scheme.getImportedThemeId();
-        if (importedId.isEmpty()) {
-            preference.setEntries(R.array.termux_in_app_keyboard_theme_entries);
-            preference.setEntryValues(R.array.termux_in_app_keyboard_theme_values);
-            if ("custom".equals(preferences.getInAppKeyboardTheme()))
-                preferences.setInAppKeyboardTheme("system");
-        } else {
-            preference.setEntries(new CharSequence[] {
-                getString(R.string.termux_in_app_keyboard_theme_system),
-                getString(R.string.termux_in_app_keyboard_theme_light),
-                getString(R.string.termux_in_app_keyboard_theme_dark),
-                getString(R.string.termux_in_app_keyboard_theme_imported, importedId)
-            });
-            preference.setEntryValues(new CharSequence[] {"system", "light", "dark", "custom"});
-        }
-        preference.setValue(preferences.getInAppKeyboardTheme());
     }
 
     private void bindLinkPreference(@NonNull String key, @NonNull String url) {
@@ -295,6 +249,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             case "f12_placeholder": return "F12";
             case "menu": return "Menu";
             case "scroll_lock": return "Scroll Lock";
+            case InAppKeyboardExtraKeys.KEY_CYCLE_KEYBOARD_FORM: return "Next keyboard type";
             default:
                 if (name.startsWith("accent_"))
                     return "Dead key: " + name.substring("accent_".length()).replace('_', ' ');
@@ -302,112 +257,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         }
     }
 
-    private void onFontPreferenceClicked() {
-        Context context = getContext();
-        if (context == null)
-            return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        if (preferences == null)
-            return;
-        if (preferences.getInAppKeyboardFontPath().isEmpty()) {
-            launchFontPicker();
-            return;
-        }
-        new MaterialAlertDialogBuilder(requireActivity())
-            .setTitle(R.string.termux_in_app_keyboard_font_title)
-            .setItems(new CharSequence[]{
-                getString(R.string.termux_in_app_keyboard_font_pick),
-                getString(R.string.termux_in_app_keyboard_font_reset)
-            }, (dialog, which) -> {
-                if (which == 0) {
-                    launchFontPicker();
-                } else {
-                    clearCustomFont();
-                }
-            })
-            .show();
-    }
-
-    private void launchFontPicker() {
-        // SAF mime coverage for ttf/otf across providers; octet-stream catches
-        // file managers that don't map font extensions.
-        mFontPickerLauncher.launch(new String[]{
-            "font/ttf", "font/otf", "font/*",
-            "application/x-font-ttf", "application/x-font-otf",
-            "application/octet-stream"
-        });
-    }
-
-    private void onFontPicked(@Nullable Uri uri) {
-        Context context = getContext();
-        if (uri == null || context == null)
-            return;
-        File fontDir = new File(context.getFilesDir(), FONT_DIR_NAME);
-        File fontFile = new File(fontDir, FONT_FILE_NAME);
-        File stagedFile = new File(fontDir, FONT_FILE_NAME + ".tmp");
-        try {
-            if (!fontDir.isDirectory() && !fontDir.mkdirs())
-                throw new java.io.IOException("Cannot create " + fontDir);
-            try (InputStream in = context.getContentResolver().openInputStream(uri);
-                 OutputStream out = new FileOutputStream(stagedFile)) {
-                if (in == null)
-                    throw new java.io.IOException("Cannot open " + uri);
-                byte[] buffer = new byte[8192];
-                int read;
-                while ((read = in.read(buffer)) != -1)
-                    out.write(buffer, 0, read);
-            }
-            // createFromFile returns DEFAULT (or throws) when the bytes are not a usable font.
-            Typeface typeface = Typeface.createFromFile(stagedFile);
-            if (typeface == null || Typeface.DEFAULT.equals(typeface))
-                throw new java.io.IOException("Unreadable font " + uri);
-            if (!stagedFile.renameTo(fontFile))
-                throw new java.io.IOException("Cannot replace " + fontFile);
-            TermuxAppSharedPreferences preferences =
-                TermuxAppSharedPreferences.build(context, true);
-            if (preferences != null)
-                preferences.setInAppKeyboardFontPath(fontFile.getAbsolutePath());
-        } catch (Exception e) {
-            //noinspection ResultOfMethodCallIgnored
-            stagedFile.delete();
-            AppNotice.show(context, R.string.termux_in_app_keyboard_font_error, false);
-        }
-        Preference fontPreference = findPreference(KEY_FONT);
-        if (fontPreference != null)
-            updateFontPreferenceSummary(fontPreference);
-    }
-
-    private void clearCustomFont() {
-        Context context = getContext();
-        if (context == null)
-            return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        if (preferences != null) {
-            String path = preferences.getInAppKeyboardFontPath();
-            preferences.setInAppKeyboardFontPath("");
-            if (!path.isEmpty()) {
-                //noinspection ResultOfMethodCallIgnored
-                new File(path).delete();
-            }
-        }
-        Preference fontPreference = findPreference(KEY_FONT);
-        if (fontPreference != null)
-            updateFontPreferenceSummary(fontPreference);
-    }
-
-    private void updateFontPreferenceSummary(@NonNull Preference fontPreference) {
-        Context context = getContext();
-        if (context == null)
-            return;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
-        String path = preferences == null ? "" : preferences.getInAppKeyboardFontPath();
-        if (path.isEmpty() || !new File(path).isFile()) {
-            fontPreference.setSummary(R.string.termux_in_app_keyboard_font_summary_default);
-        } else {
-            fontPreference.setSummary(getString(
-                R.string.termux_in_app_keyboard_font_summary_custom, new File(path).getName()));
-        }
-    }
 }
 
 class KeyboardPreferencesDataStore extends PreferenceDataStore {
@@ -421,6 +270,9 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
      */
     @Nullable private Properties mTermuxProperties;
 
+    /** Where every place keeps its keyboard type. Built on first use, since most rows never ask. */
+    @Nullable private PlaceLayoutStore mPlaces;
+
     private static KeyboardPreferencesDataStore mInstance;
 
     private KeyboardPreferencesDataStore(Context context) {
@@ -429,10 +281,24 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
     }
 
     public static synchronized KeyboardPreferencesDataStore getInstance(Context context) {
-        if (mInstance == null) {
-            mInstance = new KeyboardPreferencesDataStore(context);
+        Context application = context.getApplicationContext();
+        // One process has one application, so this only rebuilds under a test that made another.
+        if (mInstance == null || mInstance.mContext != application) {
+            mInstance = new KeyboardPreferencesDataStore(application);
         }
         return mInstance;
+    }
+
+    @Nullable
+    private PlaceLayoutStore places() {
+        if (mPlaces == null && mPreferences != null) mPlaces = new PlaceLayoutStore(mPreferences);
+        return mPlaces;
+    }
+
+    /** The orientation the phone is being held in, which is the one this page's row writes. */
+    @NonNull
+    private PlaceOrientation orientation() {
+        return PlaceOrientation.of(mContext.getResources().getConfiguration());
     }
 
     @NonNull
@@ -467,11 +333,6 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setInAppKeyboardTapCorrectionEnabled(value);
                 TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
                 break;
-            case "app_launcher_extra_keys_row_enabled":
-                mPreferences.setAppLauncherExtraKeysRowEnabled(value);
-                TermuxActivity.requestTermuxActivityStylingOnNextResume(
-                    mContext, false);
-                break;
             case "extra_keys_text_all_caps":
                 // A property, not a preference: the row reads it from termux.properties, so this
                 // writes there and the styling reload picks it up like any hand edit would.
@@ -501,8 +362,6 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isInAppKeyboardKeySoundEnabled();
             case "in_app_keyboard_tap_correction":
                 return mPreferences.isInAppKeyboardTapCorrectionEnabled();
-            case "app_launcher_extra_keys_row_enabled":
-                return mPreferences.isAppLauncherExtraKeysRowEnabled();
             case "extra_keys_text_all_caps": {
                 String stored = termuxProperties()
                     .getProperty(TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS);
@@ -517,9 +376,26 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
 
     @Override
     public void putInt(String key, int value) {
-        if (mPreferences == null || !"in_app_keyboard_bottom_padding".equals(key))
+        if (mPreferences == null || key == null)
             return;
-        mPreferences.setInAppKeyboardBottomPadding(value);
+        switch (key) {
+            case "in_app_keyboard_bottom_padding":
+                putKeyboardChin(value);
+                break;
+            // The shape sliders are percentages on screen and fractions in the store, and each is
+            // remembered for the orientation the phone is being held in.
+            case "in_app_keyboard_floating_width":
+                mPreferences.setInAppKeyboardFloatingWidthScale(value / 100f);
+                break;
+            case "in_app_keyboard_floating_height":
+                mPreferences.setInAppKeyboardFloatingHeightScale(value / 100f);
+                break;
+            case "in_app_keyboard_split_gap":
+                mPreferences.setInAppKeyboardSplitGapFraction(value / 100f);
+                break;
+            default:
+                return;
+        }
         // The keyboard is laid out by the activity, not by this screen, so the change lands when
         // the user goes back to it — the same route the extra-keys row toggle takes.
         TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
@@ -527,9 +403,20 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
 
     @Override
     public int getInt(String key, int defValue) {
-        if (mPreferences == null || !"in_app_keyboard_bottom_padding".equals(key))
+        if (mPreferences == null || key == null)
             return defValue;
-        return mPreferences.getInAppKeyboardBottomPadding();
+        switch (key) {
+            case "in_app_keyboard_bottom_padding":
+                return keyboardChin();
+            case "in_app_keyboard_floating_width":
+                return Math.round(mPreferences.getInAppKeyboardFloatingWidthScale() * 100f);
+            case "in_app_keyboard_floating_height":
+                return Math.round(mPreferences.getInAppKeyboardFloatingHeightScale() * 100f);
+            case "in_app_keyboard_split_gap":
+                return Math.round(mPreferences.getInAppKeyboardSplitGapFraction() * 100f);
+            default:
+                return defValue;
+        }
     }
 
     @Override
@@ -545,9 +432,68 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "in_app_keyboard_theme":
                 mPreferences.setInAppKeyboardTheme(value);
                 break;
+            case KeyboardPreferencesFragment.KEY_KEYBOARD_FORM:
+                putKeyboardForm(value);
+                break;
             default:
                 break;
         }
+    }
+
+    /**
+     * The air under the last key row, for every place at once in the orientation the phone is in.
+     * Like the keyboard type below it, the allowance belongs to a place and an orientation now;
+     * this row is the blunt one, for a user fitting the keys to their phone's chin rather than to
+     * one screen.
+     */
+    private void putKeyboardChin(int dp) {
+        PlaceLayoutStore places = places();
+        if (places == null) return;
+        PlaceOrientation orientation = orientation();
+        for (PaneWallPage place : PaneWallPage.values())
+            places.setKeyboardChinDp(place, orientation, dp);
+    }
+
+    /** The allowance the places agree on, or the terminal's where they have been set apart. */
+    private int keyboardChin() {
+        PlaceLayoutStore places = places();
+        if (places == null) return 0;
+        return places.keyboardChinDp(PaneWallPage.TERMINAL, orientation());
+    }
+
+    /**
+     * The keyboard type, for every place at once in the orientation the phone is in. The Layout
+     * page is where one place is given a type of its own; this row is the blunt one, for a user
+     * who wants the same keyboard wherever they are.
+     */
+    private void putKeyboardForm(@Nullable String value) {
+        PlaceLayoutStore places = places();
+        if (places == null) return;
+        KeyboardForm form = KeyboardForm.parse(value, KeyboardForm.DOCKED);
+        PlaceOrientation orientation = orientation();
+        boolean changed = false;
+        for (PaneWallPage place : PaneWallPage.values()) {
+            if (places.keyboardForm(place, orientation) == form) continue;
+            places.setKeyboardForm(place, orientation, form);
+            changed = true;
+        }
+        // The keyboard is arranged by the activity, so the change lands on the way back to it.
+        if (changed) TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
+    }
+
+    /** The type every place agrees on, or nothing at all when they do not. */
+    @NonNull
+    private String keyboardForm() {
+        PlaceLayoutStore places = places();
+        if (places == null) return KeyboardForm.DOCKED.storageValue();
+        PlaceOrientation orientation = orientation();
+        KeyboardForm shared = null;
+        for (PaneWallPage place : PaneWallPage.values()) {
+            KeyboardForm form = places.keyboardForm(place, orientation);
+            if (shared == null) shared = form;
+            else if (shared != form) return SegmentedPillPreference.VALUE_NONE;
+        }
+        return shared == null ? KeyboardForm.DOCKED.storageValue() : shared.storageValue();
     }
 
     @Override
@@ -561,6 +507,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isSoftKeyboardEnabled() ? "android" : "none";
             case "in_app_keyboard_theme":
                 return mPreferences.getInAppKeyboardTheme();
+            case KeyboardPreferencesFragment.KEY_KEYBOARD_FORM:
+                return keyboardForm();
             default:
                 return defValue;
         }

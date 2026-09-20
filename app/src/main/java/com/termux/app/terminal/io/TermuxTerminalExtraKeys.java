@@ -1,10 +1,9 @@
 package com.termux.app.terminal.io;
 
 import android.annotation.SuppressLint;
-import android.view.Gravity;
 import android.view.View;
 import androidx.annotation.NonNull;
-import androidx.drawerlayout.widget.DrawerLayout;
+import androidx.annotation.Nullable;
 import com.termux.app.TermuxActivity;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
 import com.termux.app.terminal.TermuxTerminalViewClient;
@@ -15,6 +14,7 @@ import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.settings.properties.TermuxSharedProperties;
 import com.termux.shared.termux.terminal.io.TerminalExtraKeys;
 import com.termux.view.TerminalView;
+import juloo.keyboard2.KeyValue;
 import org.json.JSONException;
 
 public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
@@ -99,20 +99,19 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
     @SuppressLint("RtlHardcoded")
     @Override
     public void onTerminalExtraKeyButtonClick(View view, String key, boolean ctrlDown, boolean altDown, boolean shiftDown, boolean fnDown) {
-        if (key != null)
+        // A key that moves the wall needs no readout: the place arriving is the announcement, and
+        // the readout would borrow the alphabet row's slot for the length of the slide.
+        if (key != null && !announcesItself(key))
             mActivity.showExtraKeyPressReadout(pressReadoutLabel(key, ctrlDown, altDown, shiftDown, fnDown));
         if ("KEYBOARD".equals(key)) {
             if (mTermuxTerminalViewClient != null)
                 mTermuxTerminalViewClient.onToggleSoftKeyboardRequest();
         } else if ("DRAWER".equals(key)) {
-            DrawerLayout drawerLayout = mActivity.getDrawer();
-            if (drawerLayout.isDrawerOpen(Gravity.LEFT))
-                drawerLayout.closeDrawer(Gravity.LEFT);
-            else
-                drawerLayout.openDrawer(Gravity.LEFT);
+            // The drawer this key pulls out is the sessions drawer; the name is what existing
+            // extra-keys rows already carry, so it stays.
+            com.termux.app.terminal.TerminalSessionBrowser.toggle(mActivity);
         } else if ("PASTE".equals(key)) {
-            if (mTermuxTerminalSessionActivityClient != null)
-                mTermuxTerminalSessionActivityClient.onPasteTextFromClipboard(null);
+            pasteWhereTheKeyboardPastes(mActivity);
         } else if ("SCROLL".equals(key)) {
             TerminalView terminalView = mActivity.getTerminalView();
             if (terminalView != null && terminalView.mEmulator != null)
@@ -120,12 +119,45 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
         } else if (key != null && key.startsWith(LAUNCHER_TOOL_KEY_PREFIX)) {
             runLauncherToolKey(key.substring(LAUNCHER_TOOL_KEY_PREFIX.length()));
         } else {
+            // The column stands beside the display too: Esc, Tab, the arrows and the rest go
+            // wherever the keyboard's keys go, and only an unclaimed key types into the terminal.
+            KeyValue value = key == null ? null : keyValueFor(key);
+            if (value != null && mActivity.offerToInAppKeyboardInterceptor(value, ctrlDown,
+                    altDown, shiftDown))
+                return;
             super.onTerminalExtraKeyButtonClick(view, key, ctrlDown, altDown, shiftDown, fnDown);
         }
     }
 
+    /**
+     * The extra key as the in-app keyboard would have produced it: a named key by its key code,
+     * a single character as a character (so a held Ctrl still makes a chord of it), anything
+     * longer as text.
+     */
+    @Nullable
+    static KeyValue keyValueFor(@NonNull String key) {
+        Integer keyCode = ExtraKeysConstants.PRIMARY_KEY_CODES_FOR_STRINGS.get(key);
+        if (keyCode != null) return KeyValue.keyeventKey(key, keyCode, 0);
+        if (key.isEmpty()) return null;
+        if (key.length() == 1) return KeyValue.makeCharKey(key.charAt(0));
+        return KeyValue.makeStringKey(key);
+    }
+
+    /**
+     * The row's paste key goes wherever the keyboard's paste key goes: into the display while it
+     * is showing, into an overlay that has claimed typing, into the terminal otherwise. Pasting
+     * straight into the terminal from here wrote behind whatever the user was looking at.
+     */
+    static void pasteWhereTheKeyboardPastes(@NonNull TermuxActivity activity) {
+        if (activity.pasteThroughInAppKeyboard())
+            return;
+        TermuxTerminalSessionActivityClient client = activity.getTermuxTerminalSessionClient();
+        if (client != null)
+            client.onPasteTextFromClipboard(null);
+    }
+
     /** Extra-keys entries prefixed with this run a registry tool instead of sending keys. */
-    static final String LAUNCHER_TOOL_KEY_PREFIX = "tool:";
+    public static final String LAUNCHER_TOOL_KEY_PREFIX = "tool:";
 
     /**
      * What the A-Z row readout names for a press: latched modifiers spelled out before the key,
@@ -149,6 +181,16 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
         if (shiftDown) label.append("SHIFT ");
         if (fnDown) label.append("FN ");
         return label.append(key).toString();
+    }
+
+    /** Tools whose effect is its own readout: the wall's places and mouse mode, which chips itself. */
+    private static boolean announcesItself(@NonNull String key) {
+        if (!key.startsWith(LAUNCHER_TOOL_KEY_PREFIX)) return false;
+        String spec = key.substring(LAUNCHER_TOOL_KEY_PREFIX.length());
+        int colon = spec.indexOf(':');
+        String toolName = colon > 0 ? spec.substring(0, colon) : spec;
+        return toolName.startsWith("wall.")
+            || com.termux.launcherctl.LauncherToolRegistry.TOOL_MOUSE_TOGGLE.equals(toolName);
     }
 
     /**

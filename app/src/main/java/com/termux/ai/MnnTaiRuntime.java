@@ -40,6 +40,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
     private String statusMessage = "MNN runtime is unloaded.";
     private String loadedModelId;
     private String loadedModelPath;
+    /** The loaded package's chat template has a {@code tools} branch; see {@link #chatTemplateSupportsTools}. */
+    private boolean loadedTemplateSupportsTools;
     private TaiRuntimeOptions loadedOptions;
     private long loadedAtMs;
     private long lastUsedAtMs;
@@ -238,6 +240,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
             session = initialized;
             loadedModelId = modelSpec.id;
             loadedModelPath = config.getAbsolutePath();
+            loadedTemplateSupportsTools = chatTemplateSupportsTools(config);
             loadedOptions = options;
             loadedAtMs = System.currentTimeMillis();
             lastUsedAtMs = loadedAtMs;
@@ -279,7 +282,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
             if (generating) return errorLocked(409, "generation_active", "A MNN generation is already running. Cancel it or wait for it to finish.");
             activeSession = session;
             if (activeSession == null) return errorLocked(409, "model_not_loaded", "Load the downloaded MNN model first.");
-            applyRuntimeOptionsLocked(activeSession, options);
+            applyRequestConfigLocked(activeSession, options, request);
             generationId = beginGenerationLocked();
             startedAt = activeGenerationStartedAtMs;
         }
@@ -334,7 +337,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
         }
         response = OpenAiStopSequences.truncate(response, request.stopSequences).text;
         JSONArray toolCalls = parseToolCalls(response, generationId);
-        if (toolCalls.length() == 0) appendRequiredFallbackToolCall(request, response, generationId, toolCalls);
+        // No synthesized calls: when a required or named tool choice yields no parsable call, the
+        // request fails closed below instead of inventing arguments from the user's text.
         JSONObject toolChoiceError = validateRequiredToolChoice(request.toolChoice, request.toolDefinitions, toolCalls);
         if (toolChoiceError != null) return toolChoiceError;
         String responseText = toolCalls.length() > 0
@@ -441,12 +445,69 @@ public final class MnnTaiRuntime implements TaiRuntime {
         return null;
     }
 
-    private void applyRuntimeOptionsLocked(@NonNull LlmSession activeSession, @NonNull TaiRuntimeOptions options) {
+    private void applyRequestConfigLocked(
+        @NonNull LlmSession activeSession,
+        @NonNull TaiRuntimeOptions options,
+        @NonNull TaiChatRequest request
+    ) {
         if (options.maxTokens != null) activeSession.updateMaxNewTokens(options.maxTokens);
         try {
-            JSONObject overrides = overridesJson(options);
-            if (overrides.length() > 0) activeSession.updateConfig(overrides.toString());
+            JSONObject config = requestConfigJson(options, request, loadedTemplateSupportsTools);
+            if (config.length() > 0) activeSession.updateConfig(config.toString());
         } catch (JSONException ignored) {
+        }
+    }
+
+    /**
+     * Per-request MNN config: the runtime option overrides plus, for models whose exported chat
+     * template has a tools branch, the OpenAI function definitions as the Jinja {@code tools}
+     * variable. MNN merges config objects deeply, so the key is written on every request —
+     * {@code null} when the request has no tools — or a previous request's tools would linger in
+     * the template context.
+     */
+    @NonNull
+    static JSONObject requestConfigJson(
+        @NonNull TaiRuntimeOptions options,
+        @NonNull TaiChatRequest request,
+        boolean templateSupportsTools
+    ) throws JSONException {
+        JSONObject json = overridesJson(options);
+        if (!templateSupportsTools) return json;
+        JSONArray tools = templateTools(request);
+        JSONObject jinja = json.optJSONObject("jinja");
+        if (jinja == null) jinja = new JSONObject();
+        JSONObject context = jinja.optJSONObject("context");
+        if (context == null) context = new JSONObject();
+        context.put("tools", tools == null ? JSONObject.NULL : tools);
+        jinja.put("context", context);
+        json.put("jinja", jinja);
+        return json;
+    }
+
+    /** The request's function definitions when the model should see them, else {@code null}. */
+    @Nullable
+    static JSONArray templateTools(@NonNull TaiChatRequest request) {
+        if (request.toolDefinitions.length() == 0 || "none".equals(String.valueOf(request.toolChoice))) return null;
+        return request.toolDefinitions;
+    }
+
+    /**
+     * Whether the MNN package's exported chat template (llm_config.json, {@code jinja.chat_template})
+     * renders a {@code tools} variable. Such models get their own tool prompt and structured
+     * tool-call history through the template; the others get TAI's Hermes-style prompt fallback.
+     */
+    static boolean chatTemplateSupportsTools(@NonNull File config) {
+        try {
+            JSONObject json = readJsonFile(config);
+            File modelDir = config.getParentFile();
+            if (modelDir == null) return false;
+            File llmConfig = new File(modelDir, json.optString("llm_config", "llm_config.json"));
+            if (!llmConfig.isFile()) return false;
+            JSONObject jinja = readJsonFile(llmConfig).optJSONObject("jinja");
+            String template = jinja == null ? "" : jinja.optString("chat_template", "");
+            return template.contains("tools");
+        } catch (Exception e) {
+            return false;
         }
     }
 
@@ -503,6 +564,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         session = null;
         loadedModelId = null;
         loadedModelPath = null;
+        loadedTemplateSupportsTools = false;
         loadedOptions = null;
         loadedAtMs = 0L;
         lastUsedAtMs = 0L;
@@ -511,11 +573,23 @@ public final class MnnTaiRuntime implements TaiRuntime {
 
     @NonNull
     private List<Pair<String, String>> mnnHistory(@NonNull TaiChatRequest request) {
+        return mnnHistory(request, loadedTemplateSupportsTools);
+    }
+
+    /**
+     * @param nativeTools the loaded model's chat template renders tools itself: the tool
+     *                    definitions travel in the Jinja context (see
+     *                    {@link #requestConfigJson}), assistant tool calls are passed as structured
+     *                    messages through MNN's {@code "json"} history role, and tool results are
+     *                    passed raw for the template's own {@code <tool_response>} wrapping.
+     */
+    @NonNull
+    List<Pair<String, String>> mnnHistory(@NonNull TaiChatRequest request, boolean nativeTools) {
         ArrayList<Pair<String, String>> history = new ArrayList<>();
-        String systemPrompt = mnnSystemPrompt(request);
+        String systemPrompt = mnnSystemPrompt(request, nativeTools);
         if (!systemPrompt.trim().isEmpty()) history.add(new Pair<>("system", systemPrompt));
         if (request.messagesJson.length() > 0) {
-            appendOpenAiHistory(history, request.messagesJson);
+            appendOpenAiHistory(history, request.messagesJson, nativeTools);
             return history;
         }
         for (Message message : request.initialMessages) history.add(new Pair<>(mnnRole(message), textFromMessage(message)));
@@ -525,7 +599,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
 
     private void appendOpenAiHistory(
         @NonNull ArrayList<Pair<String, String>> history,
-        @NonNull JSONArray messages
+        @NonNull JSONArray messages,
+        boolean nativeTools
     ) {
         for (int i = 0; i < messages.length(); i++) {
             JSONObject source = messages.optJSONObject(i);
@@ -534,11 +609,56 @@ public final class MnnTaiRuntime implements TaiRuntime {
             if ("system".equals(role) || "developer".equals(role)) continue;
             String content = openAiContentText(source.opt("content"));
             if ("assistant".equals(role) && source.has("tool_calls")) {
+                if (nativeTools) {
+                    String structured = structuredAssistantMessage(content, source.optJSONArray("tool_calls"));
+                    if (structured != null) {
+                        history.add(new Pair<>("json", structured));
+                        continue;
+                    }
+                }
                 content = appendAssistantToolCalls(content, source.optJSONArray("tool_calls"));
-            } else if ("tool".equals(role)) {
+            } else if ("tool".equals(role) && !nativeTools) {
                 content = "<tool_response>\n" + content + "\n</tool_response>";
             }
             history.add(new Pair<>(role, content));
+        }
+    }
+
+    /**
+     * An assistant message with OpenAI tool calls as the JSON object a tools-aware chat template
+     * expects: {@code arguments} decoded to an object so {@code tool_call.arguments | tojson}
+     * renders it, and never-null {@code content}. {@code null} when no call is usable.
+     */
+    @Nullable
+    static String structuredAssistantMessage(@NonNull String content, @Nullable JSONArray toolCalls) {
+        if (toolCalls == null || toolCalls.length() == 0) return null;
+        try {
+            JSONArray calls = new JSONArray();
+            for (int i = 0; i < toolCalls.length(); i++) {
+                JSONObject call = toolCalls.optJSONObject(i);
+                JSONObject function = call == null ? null : call.optJSONObject("function");
+                String name = function == null ? "" : function.optString("name", "");
+                if (name.isEmpty()) continue;
+                Object arguments = function.opt("arguments");
+                JSONObject argumentsObject;
+                if (arguments instanceof JSONObject) {
+                    argumentsObject = (JSONObject) arguments;
+                } else {
+                    String argumentsText = arguments == null || JSONObject.NULL.equals(arguments) ? "" : String.valueOf(arguments).trim();
+                    argumentsObject = argumentsText.isEmpty() ? new JSONObject() : new JSONObject(argumentsText);
+                }
+                calls.put(new JSONObject()
+                    .put("type", "function")
+                    .put("function", new JSONObject().put("name", name).put("arguments", argumentsObject)));
+            }
+            if (calls.length() == 0) return null;
+            return new JSONObject()
+                .put("role", "assistant")
+                .put("content", content)
+                .put("tool_calls", calls)
+                .toString();
+        } catch (JSONException e) {
+            return null;
         }
     }
 
@@ -568,7 +688,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
-    private String mnnSystemPrompt(@NonNull TaiChatRequest request) {
+    private String mnnSystemPrompt(@NonNull TaiChatRequest request, boolean nativeTools) {
         StringBuilder prompt = new StringBuilder(request.systemPrompt == null ? "" : request.systemPrompt.trim());
         if (request.messagesJson.length() > 0) {
             StringBuilder openAiSystemPrompt = new StringBuilder();
@@ -594,6 +714,12 @@ public final class MnnTaiRuntime implements TaiRuntime {
         if (request.toolDefinitions.length() == 0 || "none".equals(String.valueOf(request.toolChoice))) {
             return prompt.toString();
         }
+        if (nativeTools) {
+            // The model's own template renders the tool catalogue and call format; only the
+            // tool-choice policy, which no chat template models, is added as an instruction.
+            appendToolChoiceInstruction(prompt, request.toolChoice);
+            return prompt.toString();
+        }
         if (prompt.length() > 0) prompt.append("\n\n");
         prompt.append("# Tools\n\n")
             .append("You may call one or more functions to assist with the user query.\n")
@@ -609,15 +735,22 @@ public final class MnnTaiRuntime implements TaiRuntime {
             .append("{\"name\":\"function_name\",\"arguments\":{\"argument\":\"value\"}}\n")
             .append("</tool_call>\n")
             .append("Do not answer in prose when a tool call is required.");
-        Object choice = request.toolChoice;
+        appendToolChoiceInstruction(prompt, request.toolChoice);
+        return prompt.toString();
+    }
+
+    private static void appendToolChoiceInstruction(@NonNull StringBuilder prompt, @Nullable Object choice) {
         if ("required".equals(String.valueOf(choice))) {
-            prompt.append("\nYou must call one of the provided tools.");
+            if (prompt.length() > 0) prompt.append('\n');
+            prompt.append("You must call one of the provided tools.");
         } else if (choice instanceof JSONObject) {
             JSONObject function = ((JSONObject) choice).optJSONObject("function");
             String name = function == null ? "" : function.optString("name", "");
-            if (!name.isEmpty()) prompt.append("\nYou must call the tool named ").append(name).append('.');
+            if (!name.isEmpty()) {
+                if (prompt.length() > 0) prompt.append('\n');
+                prompt.append("You must call the tool named ").append(name).append('.');
+            }
         }
-        return prompt.toString();
     }
 
     @NonNull
@@ -874,163 +1007,6 @@ public final class MnnTaiRuntime implements TaiRuntime {
         }
     }
 
-    private void appendRequiredFallbackToolCall(
-        @NonNull TaiChatRequest request,
-        @NonNull String response,
-        @NonNull String generationId,
-        @NonNull JSONArray calls
-    ) {
-        if (request.toolDefinitions.length() == 0 || request.toolChoice == null
-            || JSONObject.NULL.equals(request.toolChoice)
-            || "auto".equals(String.valueOf(request.toolChoice))
-            || "none".equals(String.valueOf(request.toolChoice))) {
-            return;
-        }
-        JSONObject function = requiredFunctionSchema(request);
-        if (function == null) return;
-        String name = function.optString("name", "");
-        if (name.isEmpty()) return;
-        try {
-            JSONObject callFunction = new JSONObject();
-            callFunction.put("name", name);
-            callFunction.put("arguments", inferredToolArguments(function, lastUserText(request), response).toString());
-            JSONObject call = new JSONObject();
-            call.put("id", generationId + "-call-" + (calls.length() + 1));
-            call.put("type", "function");
-            call.put("function", callFunction);
-            calls.put(call);
-        } catch (JSONException ignored) {
-        }
-    }
-
-    @Nullable
-    private JSONObject requiredFunctionSchema(@NonNull TaiChatRequest request) {
-        String requiredName = "";
-        if (request.toolChoice instanceof JSONObject) {
-            JSONObject function = ((JSONObject) request.toolChoice).optJSONObject("function");
-            requiredName = function == null ? "" : function.optString("name", "");
-        }
-        for (int i = 0; i < request.toolDefinitions.length(); i++) {
-            JSONObject tool = request.toolDefinitions.optJSONObject(i);
-            JSONObject function = tool == null ? null : tool.optJSONObject("function");
-            if (function == null) continue;
-            if (requiredName.isEmpty() || requiredName.equals(function.optString("name", ""))) return function;
-        }
-        return null;
-    }
-
-    @NonNull
-    private JSONObject inferredToolArguments(
-        @NonNull JSONObject function,
-        @NonNull String userText,
-        @NonNull String modelResponse
-    ) throws JSONException {
-        JSONObject arguments = new JSONObject();
-        JSONObject parameters = function.optJSONObject("parameters");
-        JSONObject properties = parameters == null ? null : parameters.optJSONObject("properties");
-        JSONArray required = parameters == null ? null : parameters.optJSONArray("required");
-        if (required == null || required.length() == 0 || properties == null) return arguments;
-        for (int i = 0; i < required.length(); i++) {
-            String key = required.optString(i, "");
-            if (key.isEmpty()) continue;
-            JSONObject property = properties.optJSONObject(key);
-            String type = property == null ? "string" : property.optString("type", "string");
-            if ("integer".equals(type)) {
-                arguments.put(key, inferredInteger(userText));
-            } else if ("number".equals(type)) {
-                arguments.put(key, inferredNumber(userText));
-            } else if ("boolean".equals(type)) {
-                arguments.put(key, inferredBoolean(userText, key));
-            } else if ("array".equals(type)) {
-                arguments.put(key, new JSONArray());
-            } else if ("object".equals(type)) {
-                arguments.put(key, new JSONObject());
-            } else {
-                arguments.put(key, inferredString(userText, modelResponse, key, required.length() == 1));
-            }
-        }
-        return arguments;
-    }
-
-    @NonNull
-    private String lastUserText(@NonNull TaiChatRequest request) {
-        if (request.messagesJson.length() > 0) {
-            for (int i = request.messagesJson.length() - 1; i >= 0; i--) {
-                JSONObject message = request.messagesJson.optJSONObject(i);
-                if (message != null && "user".equals(message.optString("role", "user"))) {
-                    return openAiContentText(message.opt("content"));
-                }
-            }
-        }
-        return textFromMessage(request.message);
-    }
-
-    @NonNull
-    private String inferredString(
-        @NonNull String userText,
-        @NonNull String modelResponse,
-        @NonNull String key,
-        boolean onlyRequired
-    ) {
-        String value = extractAfterKey(userText, key);
-        if (value.isEmpty() && isLocationKey(key)) value = extractLocation(userText);
-        if (value.isEmpty() && onlyRequired) value = cleanupArgumentText(userText);
-        if (value.isEmpty()) value = cleanupArgumentText(modelResponse);
-        return value;
-    }
-
-    @NonNull
-    private String extractAfterKey(@NonNull String text, @NonNull String key) {
-        String lower = text.toLowerCase(Locale.ROOT);
-        String normalizedKey = key.toLowerCase(Locale.ROOT).replace('_', ' ');
-        int index = lower.indexOf(normalizedKey);
-        if (index < 0) return "";
-        return cleanupArgumentText(text.substring(index + normalizedKey.length()));
-    }
-
-    @NonNull
-    private String extractLocation(@NonNull String text) {
-        String lower = text.toLowerCase(Locale.ROOT);
-        for (String marker : new String[] {" in ", " for ", " at ", " near "}) {
-            int index = lower.lastIndexOf(marker);
-            if (index >= 0) return cleanupArgumentText(text.substring(index + marker.length()));
-        }
-        return "";
-    }
-
-    private boolean isLocationKey(@NonNull String key) {
-        String normalized = key.toLowerCase(Locale.ROOT);
-        return normalized.contains("city") || normalized.contains("location")
-            || normalized.contains("place") || normalized.contains("address");
-    }
-
-    @NonNull
-    private String cleanupArgumentText(@NonNull String text) {
-        String value = text.replaceAll("(?i)\\b(use|call|return|only|tool|function|get_weather)\\b", " ")
-            .replaceAll("[{}<>\\[\\]\"]", " ")
-            .replaceAll("(?i)\\bwith\\b", " ")
-            .replaceAll("(?i)\\bthe\\b", " ")
-            .replaceAll("\\s+", " ")
-            .trim();
-        value = value.replaceAll("^[,:;\\-?!.\\s]+", "").replaceAll("[,:;\\-?!.\\s]+$", "");
-        return value;
-    }
-
-    private int inferredInteger(@NonNull String text) {
-        Matcher matcher = Pattern.compile("-?\\d+").matcher(text);
-        return matcher.find() ? Integer.parseInt(matcher.group()) : 0;
-    }
-
-    private double inferredNumber(@NonNull String text) {
-        Matcher matcher = Pattern.compile("-?\\d+(?:\\.\\d+)?").matcher(text);
-        return matcher.find() ? Double.parseDouble(matcher.group()) : 0.0d;
-    }
-
-    private boolean inferredBoolean(@NonNull String text, @NonNull String key) {
-        String lower = text.toLowerCase(Locale.ROOT);
-        return lower.contains(key.toLowerCase(Locale.ROOT)) || lower.contains("true") || lower.contains("yes");
-    }
-
     @NonNull
     private String stripToolCallBlocks(@NonNull String response) {
         return response.replaceAll("(?s)<tool_call>.*?</tool_call>", "");
@@ -1121,7 +1097,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
-    private JSONObject overridesJson(@NonNull TaiRuntimeOptions options) throws JSONException {
+    private static JSONObject overridesJson(@NonNull TaiRuntimeOptions options) throws JSONException {
         JSONObject json = new JSONObject();
         if (hasExplicitAccelerator(options)) json.put("backend_type", backendName(options));
         if (options.threadCount != null) json.put("thread_num", Math.max(1, options.threadCount));
@@ -1136,7 +1112,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         return json;
     }
 
-    private void applyThinkingOverride(@NonNull JSONObject json, @Nullable Boolean thinkingEnabled) throws JSONException {
+    private static void applyThinkingOverride(@NonNull JSONObject json, @Nullable Boolean thinkingEnabled) throws JSONException {
         if (thinkingEnabled == null) return;
         JSONObject jinja = json.optJSONObject("jinja");
         if (jinja == null) jinja = new JSONObject();
@@ -1170,14 +1146,14 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
-    private String backendName(@Nullable TaiRuntimeOptions options) {
+    private static String backendName(@Nullable TaiRuntimeOptions options) {
         String accelerator = options == null ? null : options.accelerator;
         if (accelerator == null || accelerator.trim().isEmpty() || "auto".equalsIgnoreCase(accelerator)) return "cpu";
         if ("opencl".equalsIgnoreCase(accelerator) || "gpu".equalsIgnoreCase(accelerator)) return "opencl";
         return "cpu";
     }
 
-    private boolean hasExplicitAccelerator(@NonNull TaiRuntimeOptions options) {
+    private static boolean hasExplicitAccelerator(@NonNull TaiRuntimeOptions options) {
         return options.accelerator != null
             && !options.accelerator.trim().isEmpty()
             && !"auto".equalsIgnoreCase(options.accelerator);
@@ -1189,7 +1165,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
-    private String mnnMode(@Nullable String value, @NonNull String fallback) {
+    private static String mnnMode(@Nullable String value, @NonNull String fallback) {
         if (value == null || value.trim().isEmpty() || "auto".equalsIgnoreCase(value)) return fallback;
         String normalized = value.trim().toLowerCase(Locale.ROOT);
         if ("normal".equals(normalized) || "high".equals(normalized) || "low".equals(normalized)) return normalized;
@@ -1217,7 +1193,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
-    private JSONObject readJsonFile(@NonNull File file) throws JSONException {
+    private static JSONObject readJsonFile(@NonNull File file) throws JSONException {
         try (BufferedInputStream input = new BufferedInputStream(new FileInputStream(file));
              ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] buffer = new byte[8192];
@@ -1301,7 +1277,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
-    private String message(@NonNull Throwable throwable) {
+    private static String message(@NonNull Throwable throwable) {
         String message = throwable.getMessage();
         return message == null || message.trim().isEmpty() ? throwable.getClass().getSimpleName() : message;
     }

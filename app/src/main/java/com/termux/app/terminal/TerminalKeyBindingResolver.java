@@ -39,6 +39,16 @@ import java.util.Map;
  * Resolution picks the first binding whose condition holds. Two claims on the same
  * stroke with overlapping conditions are a real conflict: the first registration
  * wins and the clash is recorded in {@link #getConflicts()}.
+ *
+ * <h2>Precedence when another surface owns the keyboard</h2>
+ *
+ * The terminal reaches this resolver through its own view client, so a surface that has taken
+ * focus away from the terminal — the wall's Display page, where an X client is being typed into —
+ * would otherwise lose every binding. Such a surface offers its keys to
+ * {@code TermuxTerminalViewClient#consumeLauncherChord} first, which claims <em>only</em> strokes
+ * holding both Ctrl and Alt. That is the launcher's own chord space and where every default
+ * binding lives, so the ways back out always work; everything else, Ctrl+C and Alt+Tab and the
+ * function keys included, belongs to whatever is running on that surface.
  */
 public final class TerminalKeyBindingResolver {
 
@@ -702,6 +712,30 @@ public final class TerminalKeyBindingResolver {
      * board can name each drawn key the way a binding suffix would.
      */
     @Nullable
+    /**
+     * A normalized sequence as it is shown to the user: {@code ctrl+alt+space>p} reads
+     * {@code Ctrl+Alt+Space  ›  P}. Lives beside the parsing it is the inverse of, rather than in
+     * whichever surface happens to be displaying it.
+     */
+    @NonNull
+    public static String displaySequence(@NonNull String normalizedSequence) {
+        StringBuilder result = new StringBuilder();
+        for (String stroke : normalizedSequence.split(">")) {
+            if (result.length() > 0) result.append("  ›  ");
+            String[] pieces = stroke.split("\\+");
+            for (int i = 0; i < pieces.length; i++) {
+                if (i > 0) result.append('+');
+                String piece = pieces[i];
+                if (piece.length() == 1) {
+                    result.append(piece.toUpperCase(java.util.Locale.US));
+                } else {
+                    result.append(Character.toUpperCase(piece.charAt(0))).append(piece.substring(1));
+                }
+            }
+        }
+        return result.toString();
+    }
+
     public static String keyToken(int keyCode) {
         if (keyCode >= KeyEvent.KEYCODE_A && keyCode <= KeyEvent.KEYCODE_Z) {
             return String.valueOf((char) ('a' + (keyCode - KeyEvent.KEYCODE_A)));

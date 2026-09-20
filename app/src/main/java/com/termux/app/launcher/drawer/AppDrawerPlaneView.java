@@ -16,7 +16,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.DockGlassRendering;
-import com.termux.app.GlassRimRenderer;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
 
 /**
@@ -101,7 +100,6 @@ public final class AppDrawerPlaneView extends FrameLayout {
     @NonNull private Frame mFrame = new Frame(0f, 0f, 0f, 0f);
     private float mRadiusPx;
     private float mProgress;
-    private final GlassRimRenderer mRim;
     @Nullable private Drawable mGlassSurface;
     @Nullable private Callbacks mCallbacks;
     @Nullable private CloseDragGate mCloseDragGate;
@@ -115,7 +113,6 @@ public final class AppDrawerPlaneView extends FrameLayout {
     public AppDrawerPlaneView(@NonNull Context context) {
         super(context);
         mTouchSlopPx = ViewConfiguration.get(context).getScaledTouchSlop();
-        mRim = new GlassRimRenderer(getResources().getDisplayMetrics().density);
         setWillNotDraw(false);
         setClipToOutline(true);
         setOutlineProvider(new ViewOutlineProvider() {
@@ -225,11 +222,8 @@ public final class AppDrawerPlaneView extends FrameLayout {
         if (surface == null || mSlabBounds.width() <= 0 || mSlabBounds.height() <= 0) return;
         surface.setBounds(mSlabBounds);
         surface.draw(canvas);
-        // Rim over the slab: shimmer while the transition is live, settled hairline at rest.
-        // Drawn on the outward-rounded slab bounds so the inward outline clip trims it flush.
-        float shimmerPhase = mProgress < 1f ? mProgress : -1f;
-        mRim.draw(canvas, mSlabBounds.left, mSlabBounds.top, mSlabBounds.right,
-            mSlabBounds.bottom, mRadiusPx, shimmerPhase, 0.4f + 0.6f * mProgress);
+        // No rim: the drawer stopped being a floating glass pane, and the hairline that outlined
+        // that pane survived as a thin line down both edges of the full-bleed plane.
     }
 
     // ------------------------------------------------------------------ touch

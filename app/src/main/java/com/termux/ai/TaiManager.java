@@ -48,6 +48,8 @@ public final class TaiManager {
     @Nullable private TaiRuntime runtime;
     @Nullable private final TaiRuntimeServiceClient runtimeClient;
     private final boolean runtimeProcess;
+    /** Total device RAM, detected once; {@code -1} until first use, {@code 0} when unknown. */
+    private volatile long deviceMemoryBytes = -1L;
 
     public interface OpenAiStreamSink {
         void onEvent(@NonNull JSONObject event) throws IOException;
@@ -306,9 +308,10 @@ public final class TaiManager {
         if (modelId.isEmpty()) return error(400, "bad_request", "Missing model id");
         if (url.isEmpty()) return error(400, "bad_request", "Missing download URL");
         String token = request.optString("huggingFaceToken", settings.getHuggingFaceToken());
+        JSONObject selectedArtifact = null;
         // Accept a bare repo URL: auto-detect the backend and resolve to the package entry file
         // (config.json / .litertlm) so the user never picks a backend or hunts the HF file list.
-        if (!url.contains("/resolve/")) {
+        if (TaiHuggingFace.parse(url) != null) {
             TaiModelDownloader.HfResolve resolved = modelDownloader.resolveHuggingFaceEntry(url, token);
             if (resolved.authRequired) {
                 JSONObject gated = error(403, "gated_model_requires_auth",
@@ -317,11 +320,24 @@ public final class TaiManager {
                 gated.put("huggingFaceTokenBundled", false);
                 return gated;
             }
+            if (resolved.candidates.length() > 1 || request.optBoolean("previewOnly", false)
+                && resolved.candidates.length() > 0) {
+                JSONObject choices = error(409, "artifact_selection_required", "Choose a model file to download.");
+                choices.put("candidates", resolved.candidates);
+                return choices;
+            }
             if (resolved.url.isEmpty()) {
                 return error(400, "hf_resolve_failed", "Could not find a downloadable model file in that Hugging Face repo. "
                     + "Paste the repo URL (e.g. https://huggingface.co/taobao-mnn/Qwen2.5-VL-3B-Instruct-MNN) or a direct .../resolve/main/<file> URL.");
             }
             url = resolved.url;
+            selectedArtifact = resolved.candidates.optJSONObject(0);
+        }
+        if (selectedArtifact != null) {
+            String required = selectedArtifact.optString("minimumRuntimeVersion", "");
+            if (!required.isEmpty() && !TaiArtifactCompatibility.versionAtLeast(com.termux.BuildConfig.LITERT_LM_VERSION, required))
+                return error(400, "runtime_update_required", "This model file needs LiteRT-LM " + required
+                    + " or later. This app includes " + com.termux.BuildConfig.LITERT_LM_VERSION + ".");
         }
         LinkedHashSet<String> capabilities = capabilitiesFromRequest(request, modelId, url);
         TaiModelProfile runtimeProfile = null;
@@ -339,7 +355,8 @@ public final class TaiManager {
             request.optString("license", "User accepted provider terms externally"),
             capabilities,
             token,
-            runtimeProfile
+            runtimeProfile,
+            selectedArtifact
         );
         data.put("downloadsRequireExplicitUserAction", true);
         data.put("huggingFaceTokenBundled", false);
@@ -898,11 +915,13 @@ public final class TaiManager {
         LinkedHashMap<String, TaiModelSpec> availableModels = new LinkedHashMap<>();
         availableModels.putAll(modelStore.getDownloadedReadableModels());
         availableModels.putAll(modelStore.getInstalledUserModels());
-        for (TaiModelSpec spec : availableModels.values()) {
-            if (TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && !mnnSupported) continue;
+        for (TaiModelSpec stored : availableModels.values()) {
+            if (TaiModelSpec.BACKEND_MNN_LLM.equals(stored.backend) && !mnnSupported) continue;
             // Management can retain imported packages whose backend is not executable yet, but
             // generation discovery must publish only models with at least one runnable endpoint.
-            if (spec.endpointCapabilities.isEmpty()) continue;
+            if (stored.endpointCapabilities.isEmpty()) continue;
+            TaiModelSpec spec = TaiContextWindowPolicy.apply(stored, device.memoryBytes,
+                settings.getRuntimeOptions(stored).contextWindow);
             // Advertise multimodal LiteRT models as separate modality-scoped ids (chat / -vision /
             // -audio), matching Edge Gallery's per-task loading. See TaiModelVariants.
             for (TaiModelSpec variant : TaiModelVariants.expand(spec,
@@ -990,6 +1009,8 @@ public final class TaiManager {
             item.put("_capabilities_verified", capabilitiesVerified);
             item.put("_capability_source", capabilitiesVerified ? "catalog"
                 : model.optString("capabilitySource", "import_or_user_metadata"));
+            // Declared by the publisher/importer until a device probe exists; never implied by provenance.
+            item.put("_capability_verification", model.optString("capabilityVerification", "declared"));
             JSONArray sourceCapabilities = model.optJSONArray("sourceCapabilities");
             JSONArray declaredEndpointCapabilities = model.optJSONArray("endpointCapabilities");
             JSONArray capabilities = declaredEndpointCapabilities == null ? model.optJSONArray("capabilities") : declaredEndpointCapabilities;
@@ -1342,11 +1363,30 @@ public final class TaiManager {
         // are reached through "-vision"/"-audio". Combined/Both: the canonical id loads every
         // enabled modality at once.
         if (direct != null) {
-            return TaiModelStore.EXPOSURE_SPLIT.equals(modelStore.getExposure(direct.id))
+            return withDeviceContextWindow(TaiModelStore.EXPOSURE_SPLIT.equals(modelStore.getExposure(direct.id))
                 ? TaiModelVariants.chatScopedOrSelf(direct)
-                : direct;
+                : direct);
         }
-        return TaiModelVariants.resolve(migratedId, this::lookupBaseModel);
+        return withDeviceContextWindow(TaiModelVariants.resolve(migratedId, this::lookupBaseModel));
+    }
+
+    /**
+     * Stored specs carry the catalog's conservative context floor. Everything that loads or
+     * advertises a model goes through here so the runtime budget, the tool-compatibility gate and
+     * {@code /v1/models} all see the same device-sized window (see {@link TaiContextWindowPolicy}).
+     */
+    @Nullable
+    private TaiModelSpec withDeviceContextWindow(@Nullable TaiModelSpec spec) {
+        if (spec == null) return null;
+        return TaiContextWindowPolicy.apply(spec, deviceMemoryBytes(), settings.getRuntimeOptions(spec).contextWindow);
+    }
+
+    private long deviceMemoryBytes() {
+        long cached = deviceMemoryBytes;
+        if (cached >= 0L) return cached;
+        long detected = TaiDeviceCapabilities.detect(appContext).memoryBytes;
+        deviceMemoryBytes = Math.max(0L, detected);
+        return deviceMemoryBytes;
     }
 
     @Nullable
@@ -1733,8 +1773,11 @@ public final class TaiManager {
             && finalMessage.getRole() != com.google.ai.edge.litertlm.Role.TOOL) {
             throw new JSONException("The final chat message must have role user or tool");
         }
+        // Reusable: the runtime keeps the conversation alive across stateless OpenAI requests when
+        // the new transcript continues the previous one, so a chat client's next turn prefills
+        // only the new message instead of the whole history (see TaiConversationTranscript).
         return new OpenAiChatRequest(new TaiChatRequest(
-            systemPrompt, conversationMessages, finalMessage, tools, false,
+            systemPrompt, conversationMessages, finalMessage, tools, true,
             messages, toolsJson, request.opt("tool_choice"), OpenAiStopSequences.fromRequest(request)));
     }
 

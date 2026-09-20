@@ -5,6 +5,7 @@ import android.view.KeyEvent;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.CommandPaletteSoftKeyDecision;
 import com.termux.app.terminal.FocuslessKeyIntake;
 
@@ -28,6 +29,14 @@ public final class InlineRenameController extends FocuslessKeyIntake {
     @Nullable private Host host;
     @Nullable private InlineRenameModel model;
     private boolean active;
+
+    public InlineRenameController() {
+        super();
+    }
+
+    public InlineRenameController(@NonNull ClipboardText clipboardSource) {
+        super(clipboardSource);
+    }
 
     public boolean begin(@Nullable String initial, int maxCodePoints, @NonNull Host host) {
         if (active) cancel();

@@ -23,6 +23,13 @@ public final class InAppKeyboardExtraKeys {
 
     private InAppKeyboardExtraKeys() {}
 
+    /**
+     * The launcher action offered in the catalogue beside the keyboard's own keys: it steps the
+     * keyboard between docked, floating and split. A {@code tool:} name resolves through
+     * {@link KeyValue#getKeyByName} like any other, so nothing here is special-cased for it.
+     */
+    public static final String KEY_CYCLE_KEYBOARD_FORM = "tool:keyboard.cycle_form";
+
     /** Key names selectable by the user, in settings-display order. */
     private static final String[] EXTRA_KEYS = {
         "tab",
@@ -74,6 +81,7 @@ public final class InAppKeyboardExtraKeys {
         "accent_double_aigu",
         "accent_slash",
         "accent_bar",
+        KEY_CYCLE_KEYBOARD_FORM,
     };
 
     /** The selectable key names in canonical (display) order. */
@@ -117,6 +125,8 @@ public final class InAppKeyboardExtraKeys {
         switch (name) {
             case "f11_placeholder": return "F11";
             case "f12_placeholder": return "F12";
+            // A tool key's own glyph says nothing about which tool it is.
+            case KEY_CYCLE_KEYBOARD_FORM: return "Keyboard type";
         }
         KeyValue kv = KeyValue.getKeyByName(name);
         String label = kv == null ? null : kv.getString();

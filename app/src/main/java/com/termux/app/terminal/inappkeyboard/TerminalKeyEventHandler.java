@@ -61,8 +61,17 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
         // resolves to an empty corner); upstream's handler tolerates null the same way.
         if (value == null)
             return;
-        if (value.getKind() == KeyValue.Kind.Slider)
-            dispatchSlider(value.getSlider(), 1, mModifiers, true);
+        if (value.getKind() != KeyValue.Kind.Slider)
+            return;
+        // The slider's first tick is offered to the interceptor like every later one, or the
+        // display's text field would move by the rest of the swipe while the shell behind it
+        // took the first step.
+        KeyValueInterceptor interceptor = mInterceptor;
+        if (interceptor != null && interceptor.interceptKeyValue(
+            KeyValue.sliderKey(value.getSlider(), 1),
+            mModifiers.isCtrl(), mModifiers.isAlt(), mModifiers.isShift()))
+            return;
+        dispatchSlider(value.getSlider(), 1, mModifiers, true);
     }
 
     @Override
@@ -99,6 +108,26 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     /** Installs the overlay interceptor, or clears it with {@code null}. */
     public void setKeyValueInterceptor(@Nullable KeyValueInterceptor interceptor) {
         mInterceptor = interceptor;
+    }
+
+    /**
+     * Act on one value as though a key of the keyboard had produced it, held modifiers and all:
+     * the interceptor gets first refusal, then the terminal. It is how a control outside the
+     * keyboard — the extra-keys row's paste key — lands where the keyboard's own key would.
+     */
+    public void dispatchKeyValue(@NonNull KeyValue value) {
+        dispatch(value, mModifiers);
+    }
+
+    /**
+     * Offer a value to whatever is intercepting typing — the Display place, an overlay — and
+     * say whether it was claimed. Nothing reaches the terminal from here: a caller with its own
+     * terminal path (the extra-keys column, voice typing) keeps it for the unclaimed case.
+     */
+    public boolean offerToInterceptor(@NonNull KeyValue value, boolean ctrl, boolean alt,
+                                      boolean shift) {
+        KeyValueInterceptor interceptor = mInterceptor;
+        return interceptor != null && interceptor.interceptKeyValue(value, ctrl, alt, shift);
     }
 
     /** Cancel asynchronous macro output, for hide, detach, layout, or session lifecycle changes. */
@@ -270,7 +299,7 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     private void dispatchEvent(KeyValue.Event event, TerminalModifiers modifiers) {
         switch (event) {
             case CONFIG:
-                mHostActions.openKeyboardSettings();
+                mHostActions.openLauncherSettings();
                 break;
             case SWITCH_TEXT:
                 mHostActions.requestTextLayout();

@@ -55,6 +55,38 @@ public class FocuslessKeyIntakeTest {
     }
 
     @Test
+    public void pasteAndPasteAsPlainTextInsertTheClipboardTextSanitizedToOneLine() {
+        Recorder intake = new Recorder(() -> "line one\r\nline two");
+        intake.active = true;
+        assertTrue(intake.interceptKeyValue(KeyValue.getKeyByName("paste"), false, false, false));
+        assertTrue(intake.interceptKeyValue(
+            KeyValue.getKeyByName("pasteAsPlainText"), false, false, false));
+        assertEquals(List.of("text line one line two", "text line one line two"), intake.edits);
+    }
+
+    @Test
+    public void pasteWithNothingOnTheClipboardInsertsNothingButIsStillSwallowed() {
+        Recorder intake = new Recorder(() -> null);
+        intake.active = true;
+        assertTrue(intake.interceptKeyValue(KeyValue.getKeyByName("paste"), false, false, false));
+        assertTrue(intake.edits.isEmpty());
+    }
+
+    /** Copy, cut, select-all, undo and redo stay unhandled: swallowed, never typed or acted on. */
+    @Test
+    public void editingKeysOutsidePasteAreSwallowedWithoutEffect() {
+        Recorder intake = new Recorder(() -> "should never be read");
+        intake.active = true;
+        assertTrue(intake.interceptKeyValue(KeyValue.getKeyByName("copy"), false, false, false));
+        assertTrue(intake.interceptKeyValue(KeyValue.getKeyByName("cut"), false, false, false));
+        assertTrue(
+            intake.interceptKeyValue(KeyValue.getKeyByName("selectAll"), false, false, false));
+        assertTrue(intake.interceptKeyValue(KeyValue.getKeyByName("undo"), false, false, false));
+        assertTrue(intake.interceptKeyValue(KeyValue.getKeyByName("redo"), false, false, false));
+        assertTrue(intake.edits.isEmpty());
+    }
+
+    @Test
     public void hardwareChordsReportTheLetterBesideItsModifiers() {
         Recorder intake = new Recorder();
         intake.active = true;
@@ -76,6 +108,9 @@ public class FocuslessKeyIntakeTest {
     private static final class Recorder extends FocuslessKeyIntake {
         boolean active;
         final List<String> edits = new ArrayList<>();
+
+        Recorder() { super(); }
+        Recorder(ClipboardText clipboardSource) { super(clipboardSource); }
 
         @Override public boolean isActive() { return active; }
 

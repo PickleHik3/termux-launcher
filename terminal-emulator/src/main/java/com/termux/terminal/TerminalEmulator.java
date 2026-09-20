@@ -1,10 +1,10 @@
 package com.termux.terminal;
 
 import android.graphics.Bitmap;
-import android.util.Base64;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Objects;
@@ -271,6 +271,20 @@ public final class TerminalEmulator {
      */
     private static final int DECSET_BIT_RECTANGULAR_CHANGEATTRIBUTE = 1 << 12;
 
+    /**
+     * DECSET 2031 - color preference notifications, as in kitty and Contour. While the mode is set
+     * the terminal reports, unasked, whenever its default background flips between dark and light,
+     * so that a program can restyle itself with the terminal instead of guessing from $COLORFGBG.
+     */
+    private static final int DECSET_BIT_COLOR_PREFERENCE_NOTIFICATIONS = 1 << 13;
+
+    /**
+     * The dark/light class of the default background as it was last reported under mode 2031. It is
+     * primed when the mode is enabled, so that only a later flip produces a report and a color
+     * change that keeps the class produces none.
+     */
+    private boolean mLastReportedDark;
+
     private String mTitle;
 
     private final Stack<String> mTitleStack = new Stack<>();
@@ -360,6 +374,9 @@ public final class TerminalEmulator {
     private final TerminalOutput mSession;
 
     private final KittyGraphicsProtocol mKittyGraphics;
+
+    /** See {@link #getKittyPlacementGeneration()}. */
+    private long mKittyPlacementGeneration;
 
     TerminalSessionClient mClient;
 
@@ -718,6 +735,8 @@ public final class TerminalEmulator {
                 return DECSET_BIT_MOUSE_PROTOCOL_SGR;
             case 2004:
                 return DECSET_BIT_BRACKETED_PASTE_MODE;
+            case 2031:
+                return DECSET_BIT_COLOR_PREFERENCE_NOTIFICATIONS;
             default:
                 return -1;
         }
@@ -899,6 +918,23 @@ public final class TerminalEmulator {
         this.mCursorBlinkState = cursorBlinkState;
     }
 
+    /**
+     * Whether copying a selection that includes a wrapped row trims that row's trailing padding
+     * spaces the same way an unwrapped row is trimmed. Consulted by both {@link #mMainBuffer} and
+     * {@link #mAltBuffer}, which hold no preferences access of their own; the app pushes the
+     * "Trim trailing spaces on wrapped lines" setting here on every new session and again whenever
+     * the preference changes.
+     */
+    public void setTrimWrappedTrailingSpaces(boolean trimWrappedTrailingSpaces) {
+        mMainBuffer.setTrimWrappedTrailingSpaces(trimWrappedTrailingSpaces);
+        mAltBuffer.setTrimWrappedTrailingSpaces(trimWrappedTrailingSpaces);
+    }
+
+    /** @see #setTrimWrappedTrailingSpaces(boolean) */
+    public boolean isTrimWrappedTrailingSpaces() {
+        return mMainBuffer.isTrimWrappedTrailingSpaces();
+    }
+
     public boolean isKeypadApplicationMode() {
         return isDecsetInternalBitSet(DECSET_BIT_APPLICATION_KEYPAD);
     }
@@ -939,6 +975,10 @@ public final class TerminalEmulator {
      * @param length the number of bytes in the array to process
      */
     public void append(byte[] buffer, int length) {
+        // The app pushes a new palette by resetting the emulator's colors directly rather than
+        // through an escape sequence, so a mode 2031 report can fall due between two sequences.
+        // Noticing it here costs a flag test per pty read while the mode is off, which it usually is.
+        notifyColorPreferenceIfChanged();
         int i = 0;
         while (i < length) {
             // The kitty payload fast path: hand whole runs of plain ASCII to the streaming decoder
@@ -1906,6 +1946,11 @@ public final class TerminalEmulator {
                         // Extended Cursor Position (DECXCPR - http://www.vt100.net/docs/vt510-rm/DECXCPR). Page=1.
                         mSession.write(String.format(Locale.US, "\033[?%d;%d;1R", mCursorRow + 1, mCursorCol + 1));
                         break;
+                    case 996:
+                        // Color preference query, answered whether or not mode 2031 is set:
+                        // "CSI ? 997 ; 1 n" for a dark default background, ";2" for a light one.
+                        mSession.write(colorPreferenceReport(isDefaultBackgroundDark()));
+                        break;
                     default:
                         finishSequence();
                         return;
@@ -2085,6 +2130,12 @@ public final class TerminalEmulator {
                 }
             case 2004:
                 // Bracketed paste mode - setting bit is enough.
+                break;
+            case 2031:
+                // Color preference notifications. Enabling primes the remembered class so that the
+                // first flip after this point is reported and the current state is not re-announced.
+                if (setting)
+                    mLastReportedDark = isDefaultBackgroundDark();
                 break;
             default:
                 unknownParameter(externalBit);
@@ -3196,6 +3247,11 @@ public final class TerminalEmulator {
                         // Leave the exit code unknown rather than failing the sequence.
                     }
                 }
+                // The command is over, so any progress it reported is over with it. A program that
+                // is killed, or that simply forgets the closing "OSC 9;4;0", would otherwise leave
+                // its window's pill turning a progress ring for work that has finished.
+                mProgressState = PROGRESS_STATE_NONE;
+                mProgressValue = 0;
                 break;
             default:
                 if (LOG_ESCAPE_SEQUENCES)
@@ -3253,8 +3309,15 @@ public final class TerminalEmulator {
                                 unknownSequence(b);
                                 return;
                             } else {
-                                mColors.tryParseColor(colorIndex, textParameter.substring(parsingPairStart, i));
-                                mSession.onColorsChanged();
+                                String indexedColorSpec = textParameter.substring(parsingPairStart, i);
+                                if ("?".equals(indexedColorSpec)) {
+                                    // Report the color in the same form xterm does, so that the reply
+                                    // can be fed straight back as a set.
+                                    mSession.write("\033]4;" + colorIndex + ";" + rgbColorSpec(mColors.mCurrentColors[colorIndex]) + bellOrStringTerminator);
+                                } else {
+                                    mColors.tryParseColor(colorIndex, indexedColorSpec);
+                                    mSession.onColorsChanged();
+                                }
                                 colorIndex = -1;
                                 parsingPairStart = -1;
                             }
@@ -3286,14 +3349,11 @@ public final class TerminalEmulator {
                             String colorSpec = textParameter.substring(lastSemiIndex, charIndex);
                             if ("?".equals(colorSpec)) {
                                 // Report current color in the same format xterm and gnome-terminal does.
-                                int rgb = mColors.mCurrentColors[specialIndex];
-                                int r = (65535 * ((rgb & 0x00FF0000) >> 16)) / 255;
-                                int g = (65535 * ((rgb & 0x0000FF00) >> 8)) / 255;
-                                int b = (65535 * ((rgb & 0x000000FF))) / 255;
-                                mSession.write("\033]" + value + ";rgb:" + String.format(Locale.US, "%04x", r) + "/" + String.format(Locale.US, "%04x", g) + "/" + String.format(Locale.US, "%04x", b) + bellOrStringTerminator);
+                                mSession.write("\033]" + value + ";" + rgbColorSpec(mColors.mCurrentColors[specialIndex]) + bellOrStringTerminator);
                             } else {
                                 mColors.tryParseColor(specialIndex, colorSpec);
                                 mSession.onColorsChanged();
+                                notifyColorPreferenceIfChanged();
                             }
                             specialIndex++;
                             if (endOfInput || (specialIndex > TextStyle.COLOR_INDEX_CURSOR) || ++charIndex >= textParameter.length())
@@ -3309,14 +3369,26 @@ public final class TerminalEmulator {
             8:
                 setCurrentHyperlink(textParameter);
                 break;
-            case // Manipulate Selection Data. Skip the optional first selection parameter(s).
+            case // Manipulate Selection Data: "$selection;$base64" writes, "$selection;?" queries.
             52:
-                int startIndex = textParameter.indexOf(";") + 1;
-                try {
-                    String clipboardText = new String(Base64.decode(textParameter.substring(startIndex), Base64.DEFAULT), StandardCharsets.UTF_8);
-                    mSession.onCopyTextToClipboard(clipboardText);
-                } catch (Exception e) {
-                    Logger.logError(mClient, LOG_TAG, "OSC Manipulate selection, invalid string '" + textParameter + "'");
+                int selectionEnd = textParameter.indexOf(";");
+                String clipboardSelection = selectionEnd < 0 ? "" : textParameter.substring(0, selectionEnd);
+                if (clipboardSelection.isEmpty()) clipboardSelection = "c";
+                String clipboardPayload = selectionEnd < 0 ? textParameter : textParameter.substring(selectionEnd + 1);
+                if ("?".equals(clipboardPayload)) {
+                    // A waiting program must not be left hanging: answer empty rather than nothing
+                    // when there is no client, the setting is off, or the clipboard is unset.
+                    String clipboardText = mSession.onReadTextFromClipboard();
+                    String encoded = (clipboardText == null || clipboardText.isEmpty()) ? "" :
+                        Base64.getEncoder().encodeToString(clipboardText.getBytes(StandardCharsets.UTF_8));
+                    mSession.write("\033]52;" + clipboardSelection + ";" + encoded + bellOrStringTerminator);
+                } else {
+                    try {
+                        String clipboardText = new String(Base64.getMimeDecoder().decode(clipboardPayload), StandardCharsets.UTF_8);
+                        mSession.onCopyTextToClipboard(clipboardText);
+                    } catch (Exception e) {
+                        Logger.logError(mClient, LOG_TAG, "OSC Manipulate selection, invalid string '" + textParameter + "'");
+                    }
                 }
                 break;
             case // Shell integration marks: "133;A" prompt, "133;B" command, "133;C" output, "133;D[;code]" done.
@@ -3331,6 +3403,7 @@ public final class TerminalEmulator {
                 if (textParameter.isEmpty()) {
                     mColors.reset();
                     mSession.onColorsChanged();
+                    notifyColorPreferenceIfChanged();
                 } else {
                     int lastIndex = 0;
                     for (int charIndex = 0; ; charIndex++) {
@@ -3340,6 +3413,7 @@ public final class TerminalEmulator {
                                 int colorToReset = Integer.parseInt(textParameter.substring(lastIndex, charIndex));
                                 mColors.reset(colorToReset);
                                 mSession.onColorsChanged();
+                                notifyColorPreferenceIfChanged();
                                 if (endOfInput)
                                     break;
                                 charIndex++;
@@ -3359,6 +3433,7 @@ public final class TerminalEmulator {
             112:
                 mColors.reset(TextStyle.COLOR_INDEX_FOREGROUND + (value - 110));
                 mSession.onColorsChanged();
+                notifyColorPreferenceIfChanged();
                 break;
             case // Reset highlight color.
             119:
@@ -4132,6 +4207,7 @@ public final class TerminalEmulator {
         mUtf8Index = mUtf8ToFollow = 0;
         mColors.reset();
         mSession.onColorsChanged();
+        mLastReportedDark = isDefaultBackgroundDark();
         ESC_P_escape = false;
         ESC_P_sixel = false;
         mOscStringMaxLength = MAX_STRING_SEQUENCE_LENGTH;
@@ -4151,6 +4227,64 @@ public final class TerminalEmulator {
         mExtraCursorTextColor.type = mExtraCursorTextColor.value = 0;
     }
 
+    /**
+     * Whether the current default background counts as dark, by the WCAG relative luminance of its
+     * sRGB components: kitty derives the same binary answer from the background and never reports
+     * "unknown".
+     */
+    private boolean isDefaultBackgroundDark() {
+        return relativeLuminance(mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND]) < 0.5;
+    }
+
+    static double relativeLuminance(int color) {
+        double r = linearizeSrgbComponent((color >> 16) & 0xFF);
+        double g = linearizeSrgbComponent((color >> 8) & 0xFF);
+        double b = linearizeSrgbComponent(color & 0xFF);
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+
+    private static double linearizeSrgbComponent(int component) {
+        double c = component / 255.0;
+        return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+
+    /** The color preference report, "CSI ? 997 ; 1 n" for dark and "CSI ? 997 ; 2 n" for light. */
+    private static String colorPreferenceReport(boolean dark) {
+        return "\033[?997;" + (dark ? 1 : 2) + "n";
+    }
+
+    /**
+     * Report a dark/light flip of the default background to the program, once per flip, but only
+     * while mode 2031 is set. A color change that keeps the class is silent.
+     */
+    private void notifyColorPreferenceIfChanged() {
+        if (!isDecsetInternalBitSet(DECSET_BIT_COLOR_PREFERENCE_NOTIFICATIONS))
+            return;
+        boolean dark = isDefaultBackgroundDark();
+        if (dark == mLastReportedDark)
+            return;
+        mLastReportedDark = dark;
+        mSession.write(colorPreferenceReport(dark));
+    }
+
+    /**
+     * Reload the default palette after the app changed the color scheme, reporting the flip to a
+     * program that asked for mode 2031. The app has no other way into the emulator's colors.
+     */
+    public void resetColorsToScheme() {
+        mColors.reset();
+        mSession.onColorsChanged();
+        notifyColorPreferenceIfChanged();
+    }
+
+    /** Formats a color as xterm's "rgb:RRRR/GGGG/BBBB", 16 bits per channel. */
+    private static String rgbColorSpec(int color) {
+        int r = (65535 * ((color & 0x00FF0000) >> 16)) / 255;
+        int g = (65535 * ((color & 0x0000FF00) >> 8)) / 255;
+        int b = (65535 * ((color & 0x000000FF))) / 255;
+        return String.format(Locale.US, "rgb:%04x/%04x/%04x", r, g, b);
+    }
+
     private void resetGraphemeTracking() {
         mGraphemeClusterer.reset();
         mLastGraphemeRow = mLastGraphemeColumn = -1;
@@ -4166,6 +4300,30 @@ public final class TerminalEmulator {
     public boolean getKittyImagePlaceholder(long imageId, long placementId,
                                             KittyImagePlaceholder out) {
         return mKittyGraphics.getPlaceholder(imageId, placementId, out);
+    }
+
+    /**
+     * The pixel generation of a stored kitty image — see {@link KittyImagePlaceholder#generation}
+     * — without resolving a placement. 0 when there is no such image, so a renderer that asked
+     * about an id whose image had not arrived yet sees the answer move when it does.
+     */
+    public long getKittyImageGeneration(long imageId) {
+        return mKittyGraphics.imageGeneration(imageId);
+    }
+
+    /**
+     * Bumped whenever an animation frame flip replaces the pixels of a placed kitty image in
+     * place. Placements are drawn from {@link TerminalBuffer#getSixelBitmap}, keyed by a cell
+     * style that does not move when the bitmap behind it is swapped, so this is the only thing a
+     * renderer can compare for a row holding bitmap cells. Sixel and iTerm images never move it:
+     * their pixels are written once, so a row showing one is recorded once.
+     */
+    public long getKittyPlacementGeneration() {
+        return mKittyPlacementGeneration;
+    }
+
+    void noteKittyPlacementPixelsReplaced() {
+        mKittyPlacementGeneration++;
     }
 
     boolean hasKittyVirtualPlacement(long imageId, long placementId) {
@@ -4232,6 +4390,12 @@ public final class TerminalEmulator {
     boolean isKittyImageOnScreen(long imageId) {
         if (mTopRowProvider == null) return true;
         return mScreen.hasKittyImageInRows(imageId, mTopRowProvider.topRow(), mRows);
+    }
+
+    /** Whether any U+10EEEE cell is in view, the coarse test for placeholder-displayed images. */
+    boolean isAnyKittyPlaceholderCellOnScreen() {
+        if (mTopRowProvider == null) return true;
+        return mScreen.hasKittyPlaceholderCellInRows(mTopRowProvider.topRow(), mRows);
     }
 
     /**

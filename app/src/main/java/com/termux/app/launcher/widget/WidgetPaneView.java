@@ -22,7 +22,7 @@ import com.termux.R;
 
 import java.util.List;
 
-/** Fixed middle-body UI; it has no authority over FULL or terminal geometry. */
+/** The widget grid's own body, a page of the pane wall; it has no authority over the wall or the terminal's geometry. */
 public final class WidgetPaneView extends FrameLayout {
     public interface Listener {
         /** The horizontal page swipe committed; the coordinator re-renders onto this page. */
@@ -59,7 +59,6 @@ public final class WidgetPaneView extends FrameLayout {
 
     public WidgetPaneView(@NonNull Context context) {
         super(context); setId(R.id.widget_pane); setClipChildren(true); setClipToPadding(true);
-        setVisibility(INVISIBLE);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         // Provider text inputs may take focus; the pane and its hosts never keep it themselves.
         setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
@@ -104,6 +103,14 @@ public final class WidgetPaneView extends FrameLayout {
     }
     public void setReducedMotion(boolean value) { reducedMotion = value; }
     @NonNull public WidgetGridView grid() { return grid; }
+
+    /**
+     * A pane corner may still claim the finger that is down, so nothing in the grid runs a long
+     * press of its own until it cannot. The page's frame decides that on the landing point and
+     * says so here; two long presses on one finger is the bug this closes, where a hold in a
+     * corner opened the corner tab and the grid's menu on top of it.
+     */
+    public void setHoldExempt(boolean exempt) { grid.setHoldExempt(exempt); }
     @NonNull public WidgetPickerSheetView picker() { return picker; }
     public boolean onBackPressed() {
         if (!picker.isOpen()) return false;
@@ -129,6 +136,16 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     public boolean widgetEditActive() { return editOverlay != null && editOverlay.isShowing(); }
+
+    /**
+     * Whether a point, in this view's coordinates, is on the widget edit chrome. The page's frame
+     * asks before it takes a tap for its own border band: a top-row widget's remove chip sits
+     * inside that band, and without this the page swallowed the press and the widget could not be
+     * removed.
+     */
+    public boolean widgetEditWantsPoint(float x, float y) {
+        return editOverlay != null && editOverlay.isShowing() && editOverlay.wantsPoint(x, y);
+    }
 
     private WidgetEditOverlayView editOverlay;
 
@@ -173,18 +190,11 @@ public final class WidgetPaneView extends FrameLayout {
         notice.setText(message); notice.setContentDescription(message); notice.setVisibility(VISIBLE);
         notice.removeCallbacks(hideNotice); notice.postDelayed(hideNotice, 3500);
     }
-    public void setFullProgress(float progress) {
-        setVisibility(progress >= 0.999f ? VISIBLE : INVISIBLE);
-    }
-    public void setFullState(float progress, boolean settled) {
-        setVisibility(settled && progress >= 0.999f ? VISIBLE : INVISIBLE);
-    }
 
     // ---- Horizontal page swipe -------------------------------------------------------------
-    // The status pane's vertical pull is arbitrated above this view (StatusBarSwipeLayout claims
-    // vertical slop first and cancels children). This intercept mirrors that policy on the other
-    // axis: it claims a stream only when horizontal travel wins the slop race, so a vertical
-    // drag is never stolen from the pull-up and a widget tap is never consumed.
+    // The wall's own sideways drag is arbitrated above this page, from the status bar. This
+    // intercept claims a stream only when horizontal travel wins the slop race inside the grid,
+    // so the grid's own pages move without stealing a vertical scroll or a widget tap.
 
     @Override public boolean onInterceptTouchEvent(@NonNull MotionEvent event) {
         switch (event.getActionMasked()) {
@@ -344,7 +354,12 @@ public final class WidgetPaneView extends FrameLayout {
             float x = (getWidth() - total) / 2f + radius;
             float y = getHeight() / 2f;
             for (int page = 0; page < pageCount; page++) {
-                paint.setColor(page == currentPage ? 0xE6FFFFFF : 0x4DFFFFFF);
+                // The dots are chrome over the wall, so they follow the chrome's polarity: white
+                // light on the dark band, shadow on the light one, where white dots are no dots.
+                paint.setColor(page == currentPage
+                    ? com.termux.app.chrome.ChromeShade.structural(0xE6FFFFFF,
+                        com.termux.app.chrome.ChromeShade.TARGET_RIM)
+                    : com.termux.app.chrome.ChromeShade.fill(0x4DFFFFFF));
                 canvas.drawCircle(x, y, radius, paint);
                 x += step;
             }

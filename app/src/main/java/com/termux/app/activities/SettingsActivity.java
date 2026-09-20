@@ -7,6 +7,7 @@ import android.text.TextUtils;
 import android.view.View;
 import android.view.Window;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
@@ -40,6 +41,15 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
     public static final String EXTRA_INITIAL_TITLE_RES = "settings_initial_title_res";
     public static final String EXTRA_OPEN_TAI_SETTINGS = "open_tai_settings";
 
+    /**
+     * Which place a per-place settings page should open on, as its tool name ("widgets"), and
+     * which of its rows to bring into view. Both are handed to the initial fragment as arguments,
+     * so a page that can be deep-linked reads them like any other fragment argument and a page
+     * that cannot simply ignores them - no bespoke Intent per caller.
+     */
+    public static final String EXTRA_INITIAL_PLACE = "settings_initial_place";
+    public static final String EXTRA_SCROLL_TO_KEY = "settings_scroll_to_key";
+
     public static Intent createFragmentIntent(@NonNull Context context, @NonNull Class<? extends Fragment> fragmentClass, int titleResId) {
         Intent intent = new Intent(context, SettingsActivity.class);
         intent.putExtra(EXTRA_INITIAL_FRAGMENT, fragmentClass.getName());
@@ -47,6 +57,32 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             intent.putExtra(EXTRA_INITIAL_TITLE_RES, titleResId);
         }
         return intent;
+    }
+
+    /** The same Intent, opened on one place and scrolled to one of its rows. */
+    public static Intent createFragmentIntent(@NonNull Context context,
+                                              @NonNull Class<? extends Fragment> fragmentClass,
+                                              int titleResId, @Nullable String place,
+                                              @Nullable String scrollToKey) {
+        Intent intent = createFragmentIntent(context, fragmentClass, titleResId);
+        if (place != null) intent.putExtra(EXTRA_INITIAL_PLACE, place);
+        if (scrollToKey != null) intent.putExtra(EXTRA_SCROLL_TO_KEY, scrollToKey);
+        return intent;
+    }
+
+    /**
+     * The deep-link arguments an Intent carries, or null when it carries none. Read by the
+     * initial fragment; nothing else in the Intent reaches it.
+     */
+    @Nullable
+    static Bundle deepLinkArguments(@NonNull Intent intent) {
+        String place = intent.getStringExtra(EXTRA_INITIAL_PLACE);
+        String scrollToKey = intent.getStringExtra(EXTRA_SCROLL_TO_KEY);
+        if (place == null && scrollToKey == null) return null;
+        Bundle arguments = new Bundle();
+        if (place != null) arguments.putString(EXTRA_INITIAL_PLACE, place);
+        if (scrollToKey != null) arguments.putString(EXTRA_SCROLL_TO_KEY, scrollToKey);
+        return arguments;
     }
 
     @Override
@@ -177,8 +213,11 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 Logger.logWarn(LOG_TAG, "Refusing to open non-settings fragment: " + fragmentClassName);
                 return new RootPreferencesFragment();
             }
-            return getSupportFragmentManager().getFragmentFactory()
+            Fragment fragment = getSupportFragmentManager().getFragmentFactory()
                 .instantiate(getClassLoader(), fragmentClassName);
+            Bundle arguments = deepLinkArguments(getIntent());
+            if (arguments != null) fragment.setArguments(arguments);
+            return fragment;
         } catch (ClassNotFoundException e) {
             // A Settings task, shortcut, or rebroadcast Intent may outlive an in-place APK upgrade.
             // Fragment class names carried by that old Intent are not guaranteed to exist in the
@@ -237,12 +276,18 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
          */
         private static final Map<String, int[]> CHILD_XML_RESOURCES = new HashMap<>();
         static {
+            CHILD_XML_RESOURCES.put("layout", new int[]{
+                R.xml.layout_preferences});
             CHILD_XML_RESOURCES.put("appearance", new int[]{
                 R.xml.termux_style_preferences, R.xml.termux_fonts_preferences});
-            CHILD_XML_RESOURCES.put("terminal_status", new int[]{
-                R.xml.terminal_status_preferences});
+            CHILD_XML_RESOURCES.put("terminal", new int[]{
+                R.xml.terminal_preferences});
+            CHILD_XML_RESOURCES.put("status_bar", new int[]{
+                R.xml.status_bar_preferences});
             CHILD_XML_RESOURCES.put("keyboard_input", new int[]{
                 R.xml.termux_keyboard_preferences});
+            CHILD_XML_RESOURCES.put("display", new int[]{
+                R.xml.x11_display_preferences});
             CHILD_XML_RESOURCES.put("launcher_apps", new int[]{
                 R.xml.launcher_preferences});
             CHILD_XML_RESOURCES.put("services_permissions", new int[]{
@@ -279,6 +324,9 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             if (context == null)
                 return;
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
+            // A build made without the X server has no display to set up.
+            Preference display = findPreference("display");
+            if (display != null && !com.termux.BuildConfig.X11_SERVER) display.setVisible(false);
             SettingsLayoutUtils.applyRootLayout(this);
             configureSearch();
         }

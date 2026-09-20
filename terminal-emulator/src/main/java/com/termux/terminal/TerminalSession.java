@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.os.Handler;
 import android.os.Message;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
@@ -42,7 +43,12 @@ public final class TerminalSession extends TerminalOutput {
 
     private static final int MSG_PROCESS_EXITED = 4;
 
-    public final String mHandle = UUID.randomUUID().toString();
+    /**
+     * Stable id for this pane, used by everything outside the emulator that has to name one. It is
+     * accepted from the caller so the same value can be exported into the shell's own environment,
+     * which is created before this object is.
+     */
+    public final String mHandle;
 
     TerminalEmulator mEmulator;
 
@@ -116,6 +122,11 @@ public final class TerminalSession extends TerminalOutput {
     private static final String LOG_TAG = "TerminalSession";
 
     public TerminalSession(String shellPath, String cwd, String[] args, String[] env, Integer transcriptRows, TerminalSessionClient client) {
+        this(shellPath, cwd, args, env, transcriptRows, client, null);
+    }
+
+    public TerminalSession(String shellPath, String cwd, String[] args, String[] env, Integer transcriptRows, TerminalSessionClient client, String handle) {
+        this.mHandle = handle == null || handle.isEmpty() ? UUID.randomUUID().toString() : handle;
         this.mShellPath = shellPath;
         this.mCwd = cwd;
         this.mArgs = args;
@@ -312,15 +323,19 @@ public final class TerminalSession extends TerminalOutput {
         notifyScreenUpdate();
     }
 
+    private static final ShellTerminator.ProcessTable PROCESS_TABLE = new ProcSessionTable();
+
     /**
-     * Finish this terminal session by hanging up the shell's whole process group, then killing it if
-     * it is still there.
+     * Finish this terminal session by hanging up every process group in the shell's session, then
+     * killing whatever the session still holds.
      *
-     * <p>Signalling the group rather than the single pid is what stops a pane's background jobs
-     * outliving it: the native child setsid()s before opening the slave pty, so its pid is its own
-     * group leader and every descendant inherits the group. All six kill sites funnel through here
-     * and every one of them wants group semantics — including TermuxSession.killIfExecuting, whose
-     * background RunCommand shells are setsid'd the same way — so no call site changes.
+     * <p>The session, not the shell's process group, is what covers a pane's jobs: an interactive
+     * shell with job control gives every foreground and background job a group of its own, so a
+     * group signal reached none of them. The native child setsid()s before opening the slave pty,
+     * so the session id is the shell's pid and every descendant keeps it. All six kill sites funnel
+     * through here and every one of them wants these semantics — including
+     * TermuxSession.killIfExecuting, whose background RunCommand shells are setsid'd the same way —
+     * so no call site changes.
      *
      * <p>Safe from MSG_PROCESS_EXITED, the UI and TermuxService alike: the escalation is posted to
      * the main looper, and mShellPid is set to -1 by cleanupResources on that same thread.
@@ -328,7 +343,7 @@ public final class TerminalSession extends TerminalOutput {
     public void finishIfRunning() {
         if (!isRunning()) return;
         ShellTerminator.terminate(mShellPid, OsConstants.SIGHUP, OsConstants.SIGKILL,
-            this::sendSignal, mMainThreadHandler::postDelayed, () -> mShellPid);
+            this::sendSignal, mMainThreadHandler::postDelayed, PROCESS_TABLE, () -> mShellPid);
     }
 
     private boolean sendSignal(int pid, int signal) {
@@ -390,6 +405,11 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     @Override
+    public String onReadTextFromClipboard() {
+        return mClient.onReadTextFromClipboard(this);
+    }
+
+    @Override
     public void onBell() {
         mClient.onBell(this);
     }
@@ -413,13 +433,16 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     @Override
+    public void onScreenChanged() {
+        notifyScreenUpdate();
+    }
+
+    @Override
     public void postTerminalUpdateDelayed(Runnable update, long delayMillis) {
-        // The runnable posted is a wrapper, so the caller's own runnable is used as the message
-        // token — that is what makes the post withdrawable by identity below.
-        mMainThreadHandler.postAtTime(() -> {
-            update.run();
-            notifyScreenUpdate();
-        }, update, SystemClock.uptimeMillis() + delayMillis);
+        // The runnable is also its own message token, which is what makes the post withdrawable
+        // by identity below. Nothing is notified here: an animation tick asks for its own redraw,
+        // and only when a frame someone can see actually moved.
+        mMainThreadHandler.postAtTime(update, update, SystemClock.uptimeMillis() + delayMillis);
     }
 
     @Override
@@ -482,7 +505,15 @@ public final class TerminalSession extends TerminalOutput {
         public void handleMessage(Message msg) {
             int bytesRead = mProcessToTerminalIOQueue.read(mReceiveBuffer, false);
             if (bytesRead > 0) {
-                mEmulator.append(mReceiveBuffer, bytesRead);
+                // Named in system traces so the parsing's share of the UI thread can be read next
+                // to Terminal.render and the frame clock: this is the emulator's only entry point
+                // for shell output, and it runs on the main thread by design.
+                Trace.beginSection("Terminal.append");
+                try {
+                    mEmulator.append(mReceiveBuffer, bytesRead);
+                } finally {
+                    Trace.endSection();
+                }
                 notifyScreenUpdate();
             }
             if (msg.what == MSG_PROCESS_EXITED) {

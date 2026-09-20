@@ -76,6 +76,8 @@ public final class LauncherToolRegistry {
     public static final String CATEGORY_CLIPBOARD = "clipboard";
     public static final String CATEGORY_APPEARANCE = "appearance";
     public static final String CATEGORY_APP = "app";
+    /** The pane wall's places: Widgets, Terminal, Display. */
+    public static final String CATEGORY_WALL = "wall";
     /** Installed Android apps, contributed by the palette rather than by tools. */
     public static final String CATEGORY_APPS = "apps";
 
@@ -261,6 +263,7 @@ public final class LauncherToolRegistry {
                 TOOL_PANE_SPLIT_VERTICAL, TOOL_PANE_SPLIT_HORIZONTAL,
                 TOOL_PANE_KILL_FOCUSED, TOOL_PANE_EQUALIZE, TOOL_PANE_ROTATE,
                 TOOL_PANE_MOVE_TO_EDGE, TOOL_PANE_TOGGLE_FLOAT, TOOL_PANE_RESIZE,
+                TOOL_WALL_GO,
                 TOOL_PANE_FOCUS_DIRECTION,
                 TOOL_WINDOW_NEW, TOOL_WINDOW_CLOSE, TOOL_WINDOW_NEXT, TOOL_WINDOW_PREVIOUS,
                 TOOL_SESSION_NEW, TOOL_SESSION_NEXT, TOOL_SESSION_PREVIOUS,
@@ -387,6 +390,12 @@ public final class LauncherToolRegistry {
     public static final String TOOL_PANE_ROTATE = "pane.rotate";
     public static final String TOOL_PANE_MOVE_TO_EDGE = "pane.move_to_edge";
     public static final String TOOL_PANE_NEXT_LAYOUT = "pane.next_layout";
+    /** The pane wall: move between the terminal and the places beside it. */
+    public static final String TOOL_WALL_GO = "wall.go";
+    public static final String TOOL_WALL_WIDGETS = "wall.widgets";
+    public static final String TOOL_WALL_TERMINAL = "wall.terminal";
+    public static final String TOOL_WALL_DISPLAY = "wall.display";
+    public static final String TOOL_MOUSE_TOGGLE = "mouse.toggle";
     public static final String TOOL_PANE_TOGGLE_FLOAT = "pane.toggle_float";
     public static final String TOOL_PANE_OPEN = "pane.open";
     public static final String TOOL_PANE_LIST = "pane.list";
@@ -408,6 +417,11 @@ public final class LauncherToolRegistry {
     public static final String TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD = "terminal.toggle_soft_keyboard";
     public static final String TOOL_KEYBOARD_CYCLE_LAYOUT = "keyboard.cycle_layout";
     public static final String TOOL_KEYBOARD_SELECT_LAYOUT = "keyboard.select_layout";
+    /** The keyboard's shape — docked, floating, split — for the place and orientation on screen. */
+    public static final String TOOL_KEYBOARD_CYCLE_FORM = "keyboard.cycle_form";
+    public static final String TOOL_KEYBOARD_SET_FORM = "keyboard.set_form";
+    public static final String TOOL_KEYBOARD_SHOW = "keyboard.show";
+    public static final String TOOL_KEYBOARD_HIDE = "keyboard.hide";
     public static final String TOOL_TERMINAL_TOGGLE_TOOLBAR = "terminal.toggle_toolbar";
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
@@ -431,6 +445,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_APPEARANCE_TOGGLE_CURSOR_TRAIL = "appearance.toggle_cursor_trail";
     public static final String TOOL_APPEARANCE_SURFACE_EDITOR = "appearance.surface_editor";
     public static final String TOOL_APP_OPEN_SETTINGS = "app.open_settings";
+    public static final String TOOL_APP_OPEN_HELP = "app.open_help";
     public static final String TOOL_APP_OPEN_LOOK_AND_FEEL = "app.open_look_and_feel";
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
@@ -574,15 +589,18 @@ public final class LauncherToolRegistry {
             ToolRisk.HIGH, true, ToolExecutor.TERMINAL,
             CATEGORY_PANE, R.string.tool_pane_kill_focused, R.string.tool_desc_pane_kill_focused,
             Collections.singletonList(Binding.of("ctrl+alt+w", BindingCondition.SPLITS_ON)), REQUIRES_SESSION);
-        // The palette cannot prompt for a preset or edge. Keep those two parameterized actions
-        // agent/CLI-only; equalize and clockwise rotate remain directly useful palette actions.
-        add(map, TOOL_PANE_LAYOUT,
+        // A preset, a page and an edge are all one enum argument, and both surfaces that bind an
+        // action — the palette and the extra-keys picker — now offer a row per value instead of
+        // asking the user to type one, so these three are as bindable as an argument-free action.
+        addUi(map, TOOL_PANE_LAYOUT,
             "Arrange the current window using an automatic pane layout.",
             schemaObject()
                 .withEnum("layout", new String[]{"stack", "grid", "dwindle", "tall", "fat", "horizontal", "vertical"},
                     true, "grid")
                 .build(),
-            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_layout, R.string.tool_desc_pane_layout, null,
+            REQUIRES_SPLITS);
         addUi(map, TOOL_PANE_EQUALIZE,
             "Reset every divider in the current window to an equal ratio.",
             schemaEmpty(),
@@ -597,12 +615,45 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_PANE, R.string.tool_pane_rotate, R.string.tool_desc_pane_rotate, null,
             REQUIRES_SPLITS);
-        add(map, TOOL_PANE_MOVE_TO_EDGE,
+        // Offered as a row per page, which is also the only way to reach the relative moves:
+        // "left" and "right" have no tool of their own.
+        addUi(map, TOOL_WALL_GO,
+            "Show one of the pane wall's places: the widget grid, the terminal, or the display.",
+            schemaObject()
+                .withEnum("page", new String[]{"widgets", "terminal", "display", "left", "right"},
+                    true, "terminal")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WALL, R.string.tool_wall_go, R.string.tool_desc_wall_go, null);
+        // One tool per place, with nothing to ask: these are what a finger binds — a key on the
+        // extra-keys row or the in-app keyboard, a chord, a palette row — where wall.go's page
+        // argument is what a script passes.
+        addUi(map, TOOL_WALL_WIDGETS,
+            "Show the pane wall's Widgets place.",
+            schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WALL, R.string.tool_wall_widgets, R.string.tool_desc_wall_widgets, null);
+        addUi(map, TOOL_WALL_TERMINAL,
+            "Show the pane wall's Terminal place.",
+            schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WALL, R.string.tool_wall_terminal, R.string.tool_desc_wall_terminal, null);
+        addUi(map, TOOL_WALL_DISPLAY,
+            "Show the pane wall's Display place.",
+            schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_WALL, R.string.tool_wall_display, R.string.tool_desc_wall_display, null);
+        // The mouse key: bindable on the row, the in-app keyboard and a chord. In the terminal
+        // it makes every touch the mouse; on the Display place it swaps the keyboard for a touchpad.
+        addUi(map, TOOL_MOUSE_TOGGLE,
+            "Turn mouse mode on or off: touches become mouse clicks and drags in the terminal, and a touchpad takes the keyboard's place on the display.",
+            schemaEmpty(), ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_mouse_toggle, R.string.tool_desc_mouse_toggle, null);
+        addUi(map, TOOL_PANE_MOVE_TO_EDGE,
             "Move the focused pane to an outer edge of the current window.",
             schemaObject()
                 .withEnum("edge", new String[]{"left", "right", "up", "down"}, true, "left")
                 .build(),
-            ToolRisk.LOW, false, ToolExecutor.TERMINAL);
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_move_to_edge, R.string.tool_desc_pane_move_to_edge,
+            null, REQUIRES_SPLITS);
         // The pane API for agents and scripts (`launcherctl pane …`, /v1/panes). Not in the palette:
         // every one of them takes an argument the palette cannot ask for, and they exist so a
         // process in a shell can show its work in a pane of its own, not for a finger.
@@ -678,7 +729,7 @@ public final class LauncherToolRegistry {
             ToolRisk.HIGH, true, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_close, R.string.tool_desc_window_close, Collections.singletonList(Binding.of("ctrl+alt+x", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_WINDOW_NEXT,
-            "Switch to the next window in the current session.",
+            "Switch to the next window in the current session, or to the next app on the Display place.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_next, R.string.tool_desc_window_next,
@@ -686,7 +737,7 @@ public final class LauncherToolRegistry {
                 Binding.of("ctrl+alt+]", BindingCondition.SPLITS_ON),
                 Binding.of("ctrl+alt+right", BindingCondition.SPLITS_ON)), REQUIRES_SPLITS);
         addUi(map, TOOL_WINDOW_PREVIOUS,
-            "Switch to the previous window in the current session.",
+            "Switch to the previous window in the current session, or to the previous app on the Display place.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_WINDOW, R.string.tool_window_previous, R.string.tool_desc_window_previous,
@@ -769,6 +820,45 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_KEYBOARD, R.string.tool_keyboard_select_layout,
             R.string.tool_desc_keyboard_select_layout, null, REQUIRES_IN_APP_KEYBOARD);
+        // The keyboard's shape, as opposed to its layout. Unbound by default for the same reason
+        // the layout cycle is: it spends a Ctrl+Alt letter on a choice most installs make once,
+        // and the key is offered on the extra-keys row and the in-app keyboard for the installs
+        // that switch often.
+        addUi(map, TOOL_KEYBOARD_CYCLE_FORM,
+            "Move the keyboard to the next type: docked, floating, split.",
+            schemaObject()
+                .withEnum("direction", new String[]{"forward", "backward"}, false, "forward")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_cycle_form,
+            R.string.tool_desc_keyboard_cycle_form, null, REQUIRES_IN_APP_KEYBOARD);
+        addUi(map, TOOL_KEYBOARD_SET_FORM,
+            "Set the keyboard type for the place and orientation on screen.",
+            schemaObject()
+                .withEnum("form", new String[]{"docked", "floating", "split"}, true, "docked")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_set_form,
+            R.string.tool_desc_keyboard_set_form, null, REQUIRES_IN_APP_KEYBOARD);
+        // Open and close, as opposed to terminal.toggle_soft_keyboard's one key for both: a
+        // policy that hears "a text field took focus" has to be able to say which it means, and
+        // the source says whether a person or a focus signal asked.
+        addUi(map, TOOL_KEYBOARD_SHOW,
+            "Show the on-screen keyboard.",
+            schemaObject()
+                .withEnum("source", new String[]{"manual", "focus"}, false, "manual")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_show, R.string.tool_desc_keyboard_show,
+            null, REQUIRES_IN_APP_KEYBOARD);
+        addUi(map, TOOL_KEYBOARD_HIDE,
+            "Hide the on-screen keyboard.",
+            schemaObject()
+                .withEnum("source", new String[]{"manual", "focus"}, false, "manual")
+                .build(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_hide, R.string.tool_desc_keyboard_hide,
+            null, REQUIRES_IN_APP_KEYBOARD);
         addUi(map, TOOL_TERMINAL_TOGGLE_TOOLBAR,
             "Show or hide the dock.",
             schemaEmpty(),
@@ -928,16 +1018,16 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_TERMINAL, R.string.tool_terminal_action_sheet, R.string.tool_desc_terminal_action_sheet,
             Binding.all("ctrl+alt+m"), REQUIRES_SESSION);
-        // Ctrl+Alt+left/right reach the drawer only with split panes off; with them
+        // Ctrl+Alt+left/right reach the sessions browser only with split panes off; with them
         // on the multiplexer claims the arrows for pane focus.
         addUi(map, TOOL_APP_OPEN_DRAWER,
-            "Open the sessions drawer.",
+            "Open the sessions browser.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_APP, R.string.tool_app_open_drawer, R.string.tool_desc_app_open_drawer,
             Collections.singletonList(Binding.of("ctrl+alt+right", BindingCondition.SPLITS_OFF)));
         addUi(map, TOOL_APP_CLOSE_DRAWER,
-            "Close the sessions drawer.",
+            "Close the sessions browser.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_APP, R.string.tool_app_close_drawer, R.string.tool_desc_app_close_drawer,
@@ -945,7 +1035,7 @@ public final class LauncherToolRegistry {
         // The digit strokes supply the index, so this needs no palette entry of its
         // own; the resolver derives the argument from the key.
         addUi(map, TOOL_SESSION_ACTIVATE_BY_INDEX,
-            "Switch to a session by its one-based position in the drawer.",
+            "Switch to a session by its one-based position in the session list.",
             schemaObject()
                 .withInteger("index", "Zero-based session index", 0, 64, 0, true)
                 .build(),
@@ -1042,6 +1132,11 @@ public final class LauncherToolRegistry {
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_APP, R.string.tool_app_open_settings, R.string.tool_desc_app_open_settings, null);
+        addUi(map, TOOL_APP_OPEN_HELP,
+            "Open help for the place the wall is on.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_APP, R.string.tool_app_open_help, R.string.tool_desc_app_open_help, null);
         addUi(map, TOOL_APP_OPEN_LOOK_AND_FEEL,
             "Open the look and feel settings.",
             schemaEmpty(),
