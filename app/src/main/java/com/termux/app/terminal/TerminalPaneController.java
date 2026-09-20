@@ -2816,6 +2816,10 @@ public class TerminalPaneController {
             if (!PaneGlass.apply(mSurfaceStyle, frame, backdrop, radiusPx))
                 releasePanePlank(frame);
         }
+        // The corner tab is cut from the same glass as the pane it grows out of, and re-dressed
+        // in the same pass, so a new frost frame reaches the tab as it reaches the slabs.
+        if (mInteractionOverlay != null)
+            PaneGlass.dressTab(mSurfaceStyle, mInteractionOverlay.controlsView());
         // The clip that keeps the terminal's rectangular cell backgrounds from poking past the
         // slab's corners is part of the pane's shape, which updateActiveBorders owns for every
         // pane, glass or not — it runs on every render, and this does not.
@@ -3245,7 +3249,6 @@ public class TerminalPaneController {
                 frame.bounds.set(pane);
                 frame.radiusPx = controlCornerRadiusPx();
                 frame.borderPx = controlBorderStrokePx();
-                frame.fillColor = controlFillColor();
                 return true;
             });
             applyControlActions();
@@ -3932,10 +3935,6 @@ public class TerminalPaneController {
          * and the tab keeps the theme's panel colour, which is what holds the buttons off the
          * terminal underneath.
          */
-        private int controlFillColor() {
-            return paneGlassActive() && mSurfaceStyle != null
-                ? mSurfaceStyle.paneGlassTintColor() : 0;
-        }
 
         @Override
         protected void onDraw(Canvas canvas) {

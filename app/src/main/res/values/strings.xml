@@ -677,14 +677,19 @@
     <string name="msg_wallpaper_read_permission">The status bar, dock and keyboard blur your wallpaper. Allow storage access to turn the blur on.</string>
     <string name="action_wallpaper_read_permission_allow">Allow</string>
     <string name="action_wallpaper_read_permission_dismiss">Not now</string>
-    <string name="title_display_enable_permission">Turn on the Linux display</string>
-    <string name="msg_display_enable_permission">Run graphical Linux apps on the Display page. You can change this later in Settings.</string>
-    <string name="action_display_enable_permission_allow">Turn on</string>
-    <string name="action_display_enable_permission_dismiss">Not now</string>
-    <string name="title_weather_location_permission">Weather needs a rough location</string>
-    <string name="msg_weather_location_permission">The status bar can show the temperature where you are. It asks for coarse location only — city-level, never a precise fix — and the lookup runs only while the weather widget is switched on. Decline and everything else works exactly the same.</string>
-    <string name="action_weather_location_permission_allow">Allow</string>
-    <string name="action_weather_location_permission_dismiss">Not now</string>
+    <!-- The one card a fresh install opens on, in place of the three dialogs it used to chain. -->
+    <string name="first_run_permissions_title">Before you start</string>
+    <string name="first_run_permissions_intro">Turn on what you want. You can change any of this later in Settings.</string>
+    <string name="first_run_permissions_wallpaper_title">Wallpaper</string>
+    <string name="first_run_permissions_wallpaper_copy">Lets the launcher colour itself after your wallpaper.</string>
+    <string name="first_run_permissions_weather_title">Weather</string>
+    <string name="first_run_permissions_weather_copy">Shows the weather for where you are in the status bar.</string>
+    <string name="first_run_permissions_display_title">Linux display</string>
+    <string name="first_run_permissions_display_copy">Runs graphical Linux apps beside the terminal.</string>
+    <string name="first_run_permissions_allow">Allow</string>
+    <string name="first_run_permissions_allowed">Allowed</string>
+    <string name="first_run_permissions_denied">Not allowed</string>
+    <string name="first_run_permissions_continue">Continue</string>
     <string name="status_widget_needs_shizuku_title">Shizuku isn\'t connected</string>
     <string name="status_widget_needs_shizuku_message">%1$s reads far better with the privileged backend: per-core CPU, detailed memory and the top-process list all come from it. Without it the CPU figure is a best-effort /proc estimate that some ROMs refuse outright, and the widget can end up blank. Set Shizuku up, or turn the widget on anyway and take the unprivileged reading.</string>
     <string name="status_widget_needs_shizuku_guide">Read the guide</string>

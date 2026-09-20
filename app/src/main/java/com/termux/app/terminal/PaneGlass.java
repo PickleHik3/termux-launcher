@@ -72,6 +72,26 @@ public final class PaneGlass {
     }
 
     /**
+     * Hand a frame's corner tab the app's wallpaper blur, so the tab is glass wherever it comes
+     * out. The tab's material is its own fixed recipe — the blur under a panel scrim — and
+     * follows none of the frame's tint, grain or radius; this passes only the shared frame and
+     * its filter, or nothing while the app has no frame. Runs wherever {@link #apply} runs, so a
+     * frost refresh reaches the tab in the same pass as the slab.
+     */
+    public static void dressTab(@Nullable PaneSurfaceStyle style,
+                                @Nullable com.termux.app.wall.PaneControlsView tab) {
+        if (tab == null) return;
+        if (style == null) {
+            tab.setPaneGlass(null, EMPTY_RECT, null);
+            return;
+        }
+        tab.setPaneGlass(style.paneGlassBlurFrame(), style.paneGlassBlurFrameRect(),
+            style.paneGlassFrostFilter());
+    }
+
+    private static final android.graphics.Rect EMPTY_RECT = new android.graphics.Rect();
+
+    /**
      * Keep a slab aimed at the wallpaper as its frame moves. A frame moves for reasons that never
      * redraw it (a sibling's divider drag, a float being dragged, the host resizing under the
      * keyboard, a wall page sliding), and the frost is positioned in screen space, so every move

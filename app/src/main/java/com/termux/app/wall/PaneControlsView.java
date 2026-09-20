@@ -2,11 +2,17 @@ package com.termux.app.wall;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
@@ -51,6 +57,18 @@ import java.util.List;
  * it names, in the overlay's own coordinates.
  */
 public final class PaneControlsView extends View {
+
+    /**
+     * The tab's one material, the same on every screen: the theme's panel colour as a scrim,
+     * over the app's shared wallpaper blur when it has one. Two strengths, both fixed — the tab
+     * does not follow the page's own tint, blur or grain. Following them put a pane's film grain
+     * on a 40dp tab, where it read as static (pong, 2026-09-20), and a pane's faint tint left the
+     * buttons on bare terminal text.
+     */
+    /** The scrim's alpha, out of 255, over the wallpaper blur: enough to read on any picture. */
+    public static final int SCRIM_ON_FROST_ALPHA = 184;
+    /** The scrim's alpha, out of 255, standing alone: what the tab was always filled with. */
+    public static final int SCRIM_ALPHA = 232;
 
     /** Told which button was run; the ids are the page's own. */
     public interface Listener {
@@ -136,12 +154,6 @@ public final class PaneControlsView extends View {
         public float radiusPx;
         /** The border it paints — the line the tab lines up inside, 0 when it paints none. */
         public float borderPx;
-        /**
-         * What its interior is tinted with, so the tab fills itself the same way and reads as the
-         * frame grown rather than as a panel laid over it. Transparent when the frame has no tint
-         * of its own, and then the tab falls back to the theme's panel colour.
-         */
-        public int fillColor;
     }
 
     /** Where the tab's frame is now; asked afresh every time the tab is laid out or drawn. */
@@ -175,8 +187,19 @@ public final class PaneControlsView extends View {
     private float mPaneRadiusPx;
     /** The border the page paints — the line the tab lines up inside, 0 when it paints none. */
     private float mPaneBorderPx;
-    /** The tint the page's own interior wears; transparent falls back to the theme's panel. */
-    private int mPaneFillColor;
+    /**
+     * The tab's glass: the app's shared pre-blurred wallpaper frame, shown through the tab's
+     * shape at the tab's position on screen, under the scrim. Null while the app has no blur
+     * frame, and the scrim then stands alone.
+     */
+    @Nullable private Bitmap mFrostFrame;
+    @Nullable private BitmapShader mFrostShader;
+    private final Paint mFrostPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    private final Matrix mFrostMatrix = new Matrix();
+    private final Rect mFrostRect = new Rect();
+    private final int[] mLocation = new int[2];
+    private final int[] mRootLocation = new int[2];
+    @Nullable private ColorFilter mFrostFilter;
     /** Scratch for the tab's path points; never allocated per frame. */
     private final float[] mPathPoints = new float[CornerTabGeometry.PATH_POINTS * 2];
     /** The corner it comes out of; {@link CornerZones#NONE} until a page or the default says. */
@@ -225,15 +248,33 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * What the page's interior is tinted with. The tab fills itself with the same colour at the
-     * same alpha, so it reads as the frame having grown rather than as a panel laid over it; a page
-     * that has no tint of its own passes 0 and the tab falls back to the theme's panel colour,
-     * which is what a page with no glass has always shown.
+     * The blur the tab shows through its scrim: the app's shared pre-blurred wallpaper frame
+     * ({@code frameRect} says where it lies on screen) and the frost's vibrancy filter. Pass a
+     * null frame while the app has none — blur off, or no still picture — and the scrim stands
+     * alone. Compared by identity, as the pane's own slab does: a re-dress with what the tab
+     * already wears costs nothing.
      */
-    public void setPaneFill(int color) {
-        if (mPaneFillColor == color) return;
-        mPaneFillColor = color;
+    public void setPaneGlass(@Nullable Bitmap frame, @NonNull Rect frameRect,
+                             @Nullable ColorFilter frostFilter) {
+        Bitmap live = frame != null && !frame.isRecycled() ? frame : null;
+        if (live == mFrostFrame && mFrostFilter == frostFilter && mFrostRect.equals(frameRect)) {
+            return;
+        }
+        mFrostFrame = live;
+        // CLAMP and a shader, as every other glass surface here draws the same frame: it does not
+        // always reach the screen's full width, and a plain drawBitmap left a sharp strip.
+        mFrostShader = live == null
+            ? null : new BitmapShader(live, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        mFrostPaint.setShader(mFrostShader);
+        mFrostPaint.setColorFilter(frostFilter);
+        mFrostFilter = frostFilter;
+        mFrostRect.set(frameRect);
         invalidate();
+    }
+
+    /** True while the tab shows the wallpaper blur under its scrim. */
+    public boolean hasPaneGlass() {
+        return mFrostShader != null;
     }
 
     /**
@@ -264,7 +305,6 @@ public final class PaneControlsView extends View {
         mBounds.set(mFrame.bounds);
         mPaneRadiusPx = Math.max(0f, mFrame.radiusPx);
         mPaneBorderPx = Math.max(0f, mFrame.borderPx);
-        mPaneFillColor = mFrame.fillColor;
         return mBounds.width() > 0f && mBounds.height() > 0f;
     }
 
@@ -499,9 +539,7 @@ public final class PaneControlsView extends View {
         // The fill runs a hair past the edge and is trimmed there by the clip, so no anti-aliased
         // seam opens up between the tab and the border it comes out from behind.
         CornerTabGeometry.buildTabFill(corner(), mClip, mTab, radius, dp(1), mPathPoints, mPath);
-        mPaint.setStyle(Paint.Style.FILL);
-        mPaint.setColor(fillColor(surface));
-        canvas.drawPath(mPath, mPaint);
+        drawMaterial(canvas, surface);
 
         // One line around frame and tab together: the frame's own stroke is the tab's outer edge,
         // so all the tab draws is the boundary it shares with the page's interior. Drawing its
@@ -538,15 +576,71 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * What the tab fills itself with: the page's own interior tint at its own alpha, so the tab is
-     * the frame grown rather than a panel over it. A page that answers no tint — no glass, or none
-     * asked for — keeps the theme's panel colour the tab has always used, which is what stands
-     * between the buttons and an opaque terminal underneath.
+     * The tab's material, inside {@link #mPath}: the app's wallpaper blur at this tab's place
+     * on screen under the panel scrim, or the scrim alone, stronger, when there is no blur. One
+     * recipe for every screen — a terminal pane, the Display page, the Widgets page — so the
+     * buttons read the same wherever the corner is.
      */
-    private int fillColor(int surface) {
-        int fill = Color.alpha(mPaneFillColor) > 0 ? mPaneFillColor
-            : ColorUtils.setAlphaComponent(surface, 232);
-        return ColorUtils.setAlphaComponent(fill, Math.round(Color.alpha(fill) * mProgress));
+    private void drawMaterial(@NonNull Canvas canvas, int surface) {
+        int save = canvas.save();
+        canvas.clipPath(mPath);
+        boolean frosted = mFrostFrame != null && !mFrostFrame.isRecycled() && mFrostShader != null;
+        if (frosted) {
+            aimFrost();
+            mFrostPaint.setAlpha(Math.round(255f * mProgress));
+            canvas.drawRect(mTab.left - dp(1), mTab.top - dp(1), mTab.right + dp(1),
+                mTab.bottom + dp(1), mFrostPaint);
+        }
+        mPaint.setStyle(Paint.Style.FILL);
+        mPaint.setColor(scaleAlpha(ColorUtils.setAlphaComponent(surface,
+            frosted ? SCRIM_ON_FROST_ALPHA : SCRIM_ALPHA)));
+        canvas.drawRect(mClip, mPaint);
+        canvas.restoreToCount(save);
+    }
+
+    /** The colour at its own alpha scaled by the slide, so the material fades in with the tab. */
+    private int scaleAlpha(int color) {
+        return ColorUtils.setAlphaComponent(color, Math.round(Color.alpha(color) * mProgress));
+    }
+
+    /**
+     * Point the frost shader at the wallpaper under this view. Recomputed on every draw: the tab
+     * is out only briefly and the overlay it lives in moves under the keyboard, so caching by
+     * position buys nothing here and risks a stale aim.
+     */
+    private void aimFrost() {
+        if (mFrostFrame == null || mFrostShader == null) return;
+        layoutOriginOnScreen(mLocation);
+        float scaleX = mFrostRect.width() / (float) Math.max(1, mFrostFrame.getWidth());
+        float scaleY = mFrostRect.height() / (float) Math.max(1, mFrostFrame.getHeight());
+        mFrostMatrix.reset();
+        mFrostMatrix.setScale(scaleX, scaleY);
+        mFrostMatrix.postTranslate(mFrostRect.left - mLocation[0], mFrostRect.top - mLocation[1]);
+        mFrostShader.setLocalMatrix(mFrostMatrix);
+    }
+
+    /**
+     * This view's position on screen as laid out, ignoring every transform on the way up — the
+     * same anchor the pane's own slab uses, so the tab's frost lines up with the slab it grows
+     * out of while the pane tilts or slides under a finger.
+     */
+    private void layoutOriginOnScreen(@NonNull int[] out) {
+        float x = 0f;
+        float y = 0f;
+        View view = this;
+        while (true) {
+            x += view.getLeft();
+            y += view.getTop();
+            android.view.ViewParent parent = view.getParent();
+            if (!(parent instanceof View)) break;
+            View parentView = (View) parent;
+            x -= parentView.getScrollX();
+            y -= parentView.getScrollY();
+            view = parentView;
+        }
+        view.getLocationOnScreen(mRootLocation);
+        out[0] = Math.round(x) + mRootLocation[0];
+        out[1] = Math.round(y) + mRootLocation[1];
     }
 
     private void drawText(@NonNull Canvas canvas, @NonNull RectF button, @NonNull Action action,

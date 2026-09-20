@@ -1316,6 +1316,16 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_FIRST_RUN_CHAIN_DONE = false;
 
         /**
+         * Whether the first-run permissions card has been shown and answered. An install that
+         * already went through the old chain of dialogs sees the card once, and only while
+         * something on it is still ungranted; after Continue it is never offered again.
+         */
+        public static final String KEY_FIRST_RUN_PERMISSIONS_CARD_SEEN =
+            "first_run_permissions_card_seen";
+
+        public static final boolean DEFAULT_VALUE_FIRST_RUN_PERMISSIONS_CARD_SEEN = false;
+
+        /**
          * The version of the first-boot tour the user has been through, or 0. Versioned rather
          * than a flag so a later run can be offered to someone who saw an earlier one; an install
          * that already has a launcher on it is never shown a run it did not opt into.

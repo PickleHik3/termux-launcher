@@ -43,8 +43,6 @@ public class PaneControlsViewRenderTest {
     private static final int HEIGHT = 340;
     /** The wall behind the pane: nothing of the frame or the tab is this colour. */
     private static final int BEHIND = 0xFF101010;
-    /** The pane's own glass tint, which the tab fills itself with. */
-    private static final int TINT = 0x99204058;
     private static final float RADIUS = 12f;
     private static final float BORDER = 2f;
     /** How far a channel may drift before two colours are different colours. */
@@ -74,7 +72,7 @@ public class PaneControlsViewRenderTest {
             RectF inner = new RectF();
             CornerTabGeometry.innerBounds(PANE, BORDER, inner);
             float arc = CornerTabGeometry.innerRadiusPx(RADIUS, BORDER);
-            int expected = ColorUtils.compositeColors(TINT, BEHIND);
+            int expected = tabFill();
 
             // The body of the tab: from the frame's own edge to a hair short of the tab's own
             // line, clear of both arcs — the frame's, which rounds the tab's outer corner, and the
@@ -115,7 +113,7 @@ public class PaneControlsViewRenderTest {
             view(corner).tabBounds(tab);
             RectF inner = new RectF();
             CornerTabGeometry.innerBounds(PANE, BORDER, inner);
-            int expected = ColorUtils.compositeColors(TINT, BEHIND);
+            int expected = tabFill();
             boolean left = CornerZones.isLeft(corner);
             // Across the tab, halfway down it: past the frame's corner arc, on the straight run.
             int row = Math.round((tab.top + tab.bottom) / 2f);
@@ -153,7 +151,7 @@ public class PaneControlsViewRenderTest {
             boolean left = CornerZones.isLeft(corner);
             boolean top = CornerZones.isTop(corner);
             float topY = top ? tab.bottom : tab.top;
-            int fillComposite = ColorUtils.compositeColors(TINT, BEHIND);
+            int fillComposite = tabFill();
             int x = Math.round(left ? tab.left + 3f : tab.right - 3f);
             // The row fully inside the tab's own fill, adjacent to the join line: the fill runs
             // from the join up to the frame edge for a top corner, so that is the row just above
@@ -189,7 +187,15 @@ public class PaneControlsViewRenderTest {
 
     /** The tab, out at one corner of {@link #PANE}, laid out over the whole bitmap. */
     private PaneControlsView view(int corner) {
+        return view(corner, null);
+    }
+
+    /** As above, with the app's blur frame chosen; the frame covers the whole bitmap. */
+    private PaneControlsView view(int corner, Bitmap frost) {
         PaneControlsView view = new PaneControlsView(mContext);
+        if (frost != null) {
+            view.setPaneGlass(frost, new android.graphics.Rect(0, 0, WIDTH, HEIGHT), null);
+        }
         // Marks that draw nothing: the buttons' own glyphs are painted in the same colour as the
         // frame's stroke, and this test is about the line around the tab, not what is in it.
         view.setActions(
@@ -199,7 +205,6 @@ public class PaneControlsViewRenderTest {
             frame.bounds.set(PANE);
             frame.radiusPx = RADIUS;
             frame.borderPx = BORDER;
-            frame.fillColor = TINT;
             return true;
         });
         view.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
@@ -207,6 +212,57 @@ public class PaneControlsViewRenderTest {
         view.layout(0, 0, WIDTH, HEIGHT);
         view.showNow(corner);
         return view;
+    }
+
+    /** What a tab with no blur is filled with: the theme's panel scrim, alone, over the wall. */
+    private int tabFill() {
+        return ColorUtils.compositeColors(
+            ColorUtils.setAlphaComponent(panel(), PaneControlsView.SCRIM_ALPHA), BEHIND);
+    }
+
+    private int panel() {
+        return MaterialColors.getColor(mContext, com.termux.shared.R.attr.termuxColorSurfacePanel,
+            androidx.core.content.ContextCompat.getColor(mContext, R.color.termux_surface_panel));
+    }
+
+    /** Whatever the page wears, a tab with no blur is close to opaque over what is under it. */
+    @Test
+    public void theTabIsNeverSeeThrough() {
+        PaneControlsView view = view(CornerZones.TOP_RIGHT, null);
+        Bitmap bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+        view.draw(new Canvas(bitmap));
+        RectF tab = new RectF();
+        view.tabBounds(tab);
+        int pixel = bitmap.getPixel(Math.round(tab.centerX()), Math.round(tab.centerY()));
+        assertTrue("the tab is see-through: " + hex(pixel),
+            Color.alpha(pixel) >= PaneControlsView.SCRIM_ALPHA);
+    }
+
+    /**
+     * With the app's wallpaper blur handed in, the tab shows it under the scrim, at the tab's own
+     * place on screen, and nothing of it leaks past the tab.
+     */
+    @Test
+    public void theBlurShowsThroughTheScrimInsideTheTabOnly() {
+        final int frostColor = 0xFF3060A0;
+        Bitmap frost = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+        frost.eraseColor(frostColor);
+        PaneControlsView view = view(CornerZones.TOP_RIGHT, frost);
+        Bitmap bitmap = Bitmap.createBitmap(WIDTH, HEIGHT, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        canvas.drawColor(BEHIND);
+        view.draw(canvas);
+        RectF tab = new RectF();
+        view.tabBounds(tab);
+        int pixel = bitmap.getPixel(Math.round(tab.centerX()), Math.round(tab.centerY()));
+        int expected = ColorUtils.compositeColors(
+            ColorUtils.setAlphaComponent(panel(), PaneControlsView.SCRIM_ON_FROST_ALPHA), frostColor);
+        assertTrue("the tab is not the blur under the scrim: " + hex(pixel) + " for "
+            + hex(expected), near(pixel, expected));
+        assertTrue("the scrim alone would look the same: the blur is not showing",
+            far(pixel, tabFill()));
+        int outside = bitmap.getPixel(Math.round(tab.left) - 6, Math.round(tab.bottom) + 6);
+        assertTrue("blur leaked past the tab: " + hex(outside), near(outside, BEHIND));
     }
 
     private static boolean near(int pixel, int expected) {

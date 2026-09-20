@@ -54,14 +54,15 @@ public class GuiAppsSetupTest {
     }
 
     @Test public void theX11RouteWithNothingTickedIsJustTheRepository() {
-        assertEquals("pkg install -y x11-repo", command(Route.X11_REPO, Distro.DEBIAN, NONE));
+        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config",
+            command(Route.X11_REPO, Distro.DEBIAN, NONE));
     }
 
     @Test public void theX11RouteInstallsOnlyWhatIsTicked() {
         String command = command(Route.X11_REPO, Distro.DEBIAN,
             EnumSet.of(StarterApp.TEXT_EDITOR));
 
-        assertEquals("pkg install -y x11-repo && pkg install -y mousepad", command);
+        assertEquals("pkg install -y x11-repo && pkg install -y xkeyboard-config mousepad", command);
     }
 
     @Test public void theX11RouteIgnoresTheDistroChoice() {
@@ -79,6 +80,7 @@ public class GuiAppsSetupTest {
 
             assertTrue(distro.name(), command.contains(
                 "command -v proot-distro >/dev/null 2>&1 || pkg install -y proot-distro"));
+            assertTrue(command.contains("pkg install -y xkeyboard-config"));
             assertTrue(distro.name(), command.contains(
                 "[ -d \"$PREFIX/var/lib/proot-distro/containers/" + distro.alias
                     + "/rootfs\" ] || proot-distro install " + distro.alias));
