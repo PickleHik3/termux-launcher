@@ -20,6 +20,7 @@ import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.notice.AppNotice;
+import com.termux.app.x11.DistroSetupStore;
 import com.termux.app.x11.GuiAppsSetup;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.TermuxConstants;
@@ -115,10 +116,27 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
         Context appContext = context.getApplicationContext();
         ShareUtils.copyTextToClipboard(appContext,
             getString(R.string.settings_gui_apps_clipboard_label), command(), null);
+        rememberTheOfferWasAnswered(appContext);
         Activity activity = getActivity();
         if (activity != null) activity.finish();
         handler.postDelayed(
             () -> AppNotice.show(appContext, R.string.settings_gui_apps_copied), NOTICE_DELAY_MS);
+    }
+
+    /**
+     * Copying is what answers the Display place's offer, so the place stops making it.
+     *
+     * <p>It is recorded here rather than when the screen opened: coming this far is the user
+     * having what they came for, and someone who looked at the screen and backed out of it should
+     * still be offered it. The situation is read fresh, so a change to it since the offer was made
+     * is what gets remembered, and any later change is a new situation and is offered once more.
+     */
+    private void rememberTheOfferWasAnswered(@NonNull Context appContext) {
+        try {
+            DistroSetupStore.dismissCurrent(appContext);
+        } catch (RuntimeException e) {
+            // Nothing the user asked for depends on this; the command is already on the clipboard.
+        }
     }
 
     /** What the screen currently adds up to. */

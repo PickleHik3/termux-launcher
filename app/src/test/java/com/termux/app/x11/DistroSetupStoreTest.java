@@ -110,6 +110,40 @@ public class DistroSetupStoreTest {
         assertTrue(DistroSetupStore.shouldOffer(DistroSetup.read(containers), store.dismissed(), true));
     }
 
+    // --- what answers the offer --------------------------------------------------------------
+
+    @Test public void copyingTheCommandIsWhatTakesTheOfferAway() throws IOException {
+        File containers = containersWith("debian", true, false);
+        assertTrue(DistroSetupStore.shouldOffer(DistroSetup.read(containers), store.dismissed(), true));
+
+        // What the Get GUI apps screen does the moment the command reaches the clipboard.
+        DistroSetupStore.dismissCurrent(context, containers);
+
+        assertEquals("debian|user,fonts", store.dismissed());
+        assertFalse(DistroSetupStore.shouldOffer(DistroSetup.read(containers), store.dismissed(), true));
+    }
+
+    @Test public void merelyOpeningTheScreenLeavesTheOfferWhereItWas() throws IOException {
+        File containers = containersWith("debian", true, false);
+
+        // Opening the screen records nothing, so a user who backs out of it is offered again.
+        assertEquals("", store.dismissed());
+        assertTrue(DistroSetupStore.shouldOffer(DistroSetup.read(containers), store.dismissed(), true));
+    }
+
+    @Test public void copyingRecordsTheSituationAsItIsNotAsItWasOffered() throws IOException {
+        File containers = containersWith("debian", true, false);
+
+        // The account appears between the offer being made and the command being copied.
+        File passwd = new File(containers, "debian/rootfs/etc/passwd");
+        passwd.getParentFile().mkdirs();
+        Files.write(passwd.toPath(), "user:x:1000:1000::/home/user:/bin/sh\n"
+            .getBytes(StandardCharsets.UTF_8));
+        DistroSetupStore.dismissCurrent(context, containers);
+
+        assertEquals("debian|fonts", store.dismissed());
+    }
+
     @Test public void finishingHalfTheJobByHandIsANewSituation() throws IOException {
         File containers = containersWith("debian", true, false);
         store.dismiss(DistroSetup.read(containers));

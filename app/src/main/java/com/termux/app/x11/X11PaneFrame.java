@@ -684,16 +684,14 @@ public final class X11PaneFrame extends PaneContentFrame {
      * The offer's own tap: the Get GUI apps screen in Settings, which is where every choice about
      * this now lives.
      *
-     * <p>The tap is also what the offer is remembered by. It is the only "not now" left on the
-     * place — the screen it opens does its work through the clipboard and a terminal, so nothing
-     * comes back here to say how it went — and a home screen that kept asking after it had already
-     * shown the user the screen would just be nagging. Settings is the way back, and any change to
-     * the situation (a container appearing, an account created by hand) is a different situation
-     * and is offered once more.
+     * <p>Opening the screen is deliberately <em>not</em> remembered as an answer. A user who looks
+     * at it and comes back without copying anything has done nothing about their Linux, and an
+     * offer that vanished on the way to the screen would have taken itself away at the one moment
+     * it was still needed. The screen records the dismissal itself when the command is copied,
+     * which is the moment the user actually has what the offer was for.
      */
     private void openDistroSetup() {
         try {
-            new DistroSetupStore(getContext()).dismiss(DistroSetup.read());
             getContext().startActivity(GuiAppsSetupPreferencesFragment.intent(getContext())
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (RuntimeException e) {
