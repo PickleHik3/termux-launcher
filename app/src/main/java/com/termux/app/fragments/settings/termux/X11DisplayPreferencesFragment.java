@@ -52,6 +52,13 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
     private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override
+    public void onResume() {
+        super.onResume();
+        // Child screens (GUI apps) retitle the activity; take it back when they pop.
+        if (getActivity() != null) getActivity().setTitle(R.string.settings_destination_display);
+    }
+
+    @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         Context context = getContext();
         if (context == null) return;

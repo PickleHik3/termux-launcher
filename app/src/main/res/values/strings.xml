@@ -317,10 +317,11 @@
     <string name="settings_x11_drawer_apps_summary">List installed Linux apps beside your Android apps; tapping one opens it on the display.</string>
     <string name="settings_x11_distro_setup_title">Set up Linux apps</string>
     <string name="settings_x11_distro_setup_summary">Install Linux, an account in it, and a few apps to start with.</string>
-    <string name="settings_x11_hidden_apps_title">Hidden Linux apps</string>
-    <string name="settings_x11_hidden_apps_summary">Choose which Linux apps to leave out of the app drawer.</string>
-    <string name="settings_x11_hidden_apps_loading">Loading your Linux apps…</string>
-    <string name="settings_x11_hidden_apps_empty">No Linux apps to show yet.</string>
+    <string name="settings_x11_hidden_apps_title">GUI apps</string>
+    <string name="settings_x11_hidden_apps_summary">Choose which Linux GUI apps appear in the app drawer.</string>
+    <string name="settings_x11_hidden_apps_hint">Uncheck an app to hide it from the app drawer.</string>
+    <string name="settings_x11_hidden_apps_loading">Loading your GUI apps…</string>
+    <string name="settings_x11_hidden_apps_empty">No GUI apps to show yet.</string>
     <string name="settings_x11_runtime_badge_title">Display badge</string>
     <string name="settings_x11_runtime_badge_summary">The mark on the Display place\'s badge in the status bar.</string>
     <string name="settings_x11_window_manager_title">Window manager</string>

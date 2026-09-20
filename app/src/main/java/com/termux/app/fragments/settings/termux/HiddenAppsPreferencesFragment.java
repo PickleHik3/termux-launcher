@@ -10,7 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
 import androidx.preference.PreferenceScreen;
-import androidx.preference.SwitchPreferenceCompat;
+import androidx.preference.CheckBoxPreference;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
@@ -103,6 +103,12 @@ public final class HiddenAppsPreferencesFragment extends MaterialPreferenceFragm
         if (screen == null) return;
         screen.removeAll();
 
+        Preference hint = new Preference(screen.getContext());
+        hint.setKey("hidden_apps_hint");
+        hint.setSummary(R.string.settings_x11_hidden_apps_hint);
+        hint.setSelectable(false);
+        screen.addPreference(hint);
+
         if (apps.isEmpty()) {
             Preference empty = new Preference(screen.getContext());
             empty.setKey("hidden_apps_empty");
@@ -115,7 +121,7 @@ public final class HiddenAppsPreferencesFragment extends MaterialPreferenceFragm
         LauncherHiddenAppsStore hiddenApps = LauncherAppDataProvider.getInstance(appContext).hiddenApps();
         for (LauncherAppEntry app : apps) {
             String stableId = app.appRef.stableId();
-            SwitchPreferenceCompat row = new SwitchPreferenceCompat(screen.getContext());
+            CheckBoxPreference row = new CheckBoxPreference(screen.getContext());
             row.setKey("hidden_app:" + stableId);
             row.setPersistent(false);
             row.setTitle(app.label);
