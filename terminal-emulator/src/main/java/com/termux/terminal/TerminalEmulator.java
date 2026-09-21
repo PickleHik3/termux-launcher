@@ -1,6 +1,7 @@
 package com.termux.terminal;
 
 import android.graphics.Bitmap;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -180,6 +181,9 @@ public final class TerminalEmulator {
     /** ESC seen while in {@link #ESC_APC_IGNORE}. */
     private static final int ESC_APC_IGNORE_ESCAPE = 30;
 
+    /** Escape processing: "CSI parameters #", the color stack's XTPUSHCOLORS/XTPOPCOLORS/XTREPORTCOLORS. */
+    private static final int ESC_CSI_HASH = 31;
+
     /** The number of parameter arguments including colon separated sub-parameters. */
     static final int MAX_ESCAPE_PARAMETERS = 32;
 
@@ -284,6 +288,41 @@ public final class TerminalEmulator {
      * change that keeps the class produces none.
      */
     private boolean mLastReportedDark;
+
+    /**
+     * DECSET 2026 - synchronized output, as in kitty, iTerm2 and Contour. While the mode is set the
+     * screen the client sees is the one from before the mode was set: the emulator keeps parsing,
+     * but no screen update is delivered, so a program that repaints in several writes shows one
+     * finished frame instead of a half-drawn one.
+     */
+    private static final int DECSET_BIT_SYNCHRONIZED_UPDATE = 1 << 14;
+
+    /**
+     * DECSET 2048 - in-band resize notifications, as in kitty. While the mode is set every resize
+     * tells the program its new size in rows, columns and pixels, so it need not race SIGWINCH with
+     * a size query.
+     */
+    private static final int DECSET_BIT_IN_BAND_RESIZE_NOTIFICATIONS = 1 << 15;
+
+    /**
+     * How long a synchronized update may hold the screen. The hold is a promise the program has to
+     * keep, and a program that dies, blocks or simply forgets between "begin" and "end" would
+     * otherwise freeze the pane for good; after this long the held frame is delivered and the mode
+     * is treated as ended, which is the bounded hold kitty applies for the same reason.
+     */
+    static final long SYNCHRONIZED_UPDATE_TIMEOUT_MILLIS = 150;
+
+    /** Overridable so tests need not sleep for {@link #SYNCHRONIZED_UPDATE_TIMEOUT_MILLIS}. */
+    private long mSynchronizedUpdateTimeoutMillis = SYNCHRONIZED_UPDATE_TIMEOUT_MILLIS;
+
+    /** Wall-clock time at which the current synchronized update stops holding the screen. */
+    private long mSynchronizedUpdateDeadline;
+
+    /**
+     * The directory the shell last reported with OSC 7, or null if it never did. Only a
+     * {@code file://} URI for this machine is accepted, and its path is percent-decoded.
+     */
+    private String mReportedWorkingDirectory;
 
     private String mTitle;
 
@@ -735,8 +774,12 @@ public final class TerminalEmulator {
                 return DECSET_BIT_MOUSE_PROTOCOL_SGR;
             case 2004:
                 return DECSET_BIT_BRACKETED_PASTE_MODE;
+            case 2026:
+                return DECSET_BIT_SYNCHRONIZED_UPDATE;
             case 2031:
                 return DECSET_BIT_COLOR_PREFERENCE_NOTIFICATIONS;
+            case 2048:
+                return DECSET_BIT_IN_BAND_RESIZE_NOTIFICATIONS;
             default:
                 return -1;
         }
@@ -815,10 +858,15 @@ public final class TerminalEmulator {
 
     public void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
                        boolean keepCursorAtBottom) {
+        boolean cellSizeChanged = mCellWidthPixels != cellWidthPixels || mCellHeightPixels != cellHeightPixels;
         this.mCellWidthPixels = cellWidthPixels;
         this.mCellHeightPixels = cellHeightPixels;
 
         if (mRows == rows && mColumns == columns) {
+            // A font size change moves the pixel size without moving the grid, and mode 2048 reports
+            // pixels too, so it is still a resize as far as the program is concerned.
+            if (cellSizeChanged)
+                sendInBandResizeReport();
             return;
         } else if (columns < 2 || rows < 2) {
             throw new IllegalArgumentException("rows=" + rows + ", columns=" + columns);
@@ -846,6 +894,122 @@ public final class TerminalEmulator {
             mRightMargin = mColumns;
         }
         resizeScreen(keepCursorAtBottom);
+        sendInBandResizeReport();
+    }
+
+    /**
+     * Tell the program its new size, if it asked for that with mode 2048: "CSI 48 ; rows ; columns ;
+     * height ; width t", where the two pixel figures are those of the whole text area, the same ones
+     * XTWINOPS 14 reports.
+     */
+    private void sendInBandResizeReport() {
+        if (!isDecsetInternalBitSet(DECSET_BIT_IN_BAND_RESIZE_NOTIFICATIONS))
+            return;
+        mSession.write(String.format(Locale.US, "\033[48;%d;%d;%d;%dt",
+            mRows, mColumns, mRows * mCellHeightPixels, mColumns * mCellWidthPixels));
+    }
+
+    /**
+     * Whether a synchronized update (mode 2026) is holding screen updates back from the client right
+     * now. A hold whose timeout has passed ends here, so the caller that asks is also the one that
+     * unfreezes the screen — there is no separate expiry path to keep in step with this one.
+     */
+    public boolean isScreenUpdateHeld() {
+        if (!isDecsetInternalBitSet(DECSET_BIT_SYNCHRONIZED_UPDATE))
+            return false;
+        if (System.currentTimeMillis() >= mSynchronizedUpdateDeadline) {
+            setDecsetinternalBit(DECSET_BIT_SYNCHRONIZED_UPDATE, false);
+            mSynchronizedUpdateDeadline = 0;
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Milliseconds until the current hold ends by itself, for a client that wants to wake up then.
+     * Zero when nothing is held.
+     */
+    public long screenUpdateHoldRemainingMillis() {
+        if (!isScreenUpdateHeld())
+            return 0;
+        return Math.max(0, mSynchronizedUpdateDeadline - System.currentTimeMillis());
+    }
+
+    /** Visible for tests, which must not sleep out a real 150 ms hold. */
+    void setSynchronizedUpdateTimeoutMillisForTests(long timeoutMillis) {
+        mSynchronizedUpdateTimeoutMillis = timeoutMillis;
+    }
+
+    /**
+     * The directory the shell last reported with OSC 7, or null if it never did. The launcher opens
+     * a new pane here rather than reading /proc, which only ever knew the shell's own directory and
+     * not, for instance, where an ssh session or a subshell had got to.
+     */
+    public String getReportedWorkingDirectory() {
+        return mReportedWorkingDirectory;
+    }
+
+    /**
+     * Take the directory from an OSC 7 "file://host/path" report. Anything else — another scheme,
+     * another machine's host, an undecodable path — leaves the remembered directory alone, since a
+     * pane opening in the wrong place is worse than one opening in the default place.
+     */
+    private void setReportedWorkingDirectory(String uri) {
+        if (uri == null || uri.isEmpty()) {
+            mReportedWorkingDirectory = null;
+            return;
+        }
+        if (!uri.regionMatches(true, 0, "file://", 0, 7)) {
+            Logger.logWarn(mClient, LOG_TAG, "Ignoring OSC 7 with a non-file URI");
+            return;
+        }
+        String hostAndPath = uri.substring(7);
+        int pathStart = hostAndPath.indexOf('/');
+        if (pathStart < 0) {
+            Logger.logWarn(mClient, LOG_TAG, "Ignoring OSC 7 without a path");
+            return;
+        }
+        String host = hostAndPath.substring(0, pathStart);
+        if (!(host.isEmpty() || host.equalsIgnoreCase("localhost"))) {
+            // A remote shell's directory does not exist on this device.
+            Logger.logWarn(mClient, LOG_TAG, "Ignoring OSC 7 for another host");
+            return;
+        }
+        String path = percentDecode(hostAndPath.substring(pathStart));
+        if (path != null && !path.isEmpty())
+            mReportedWorkingDirectory = path;
+    }
+
+    /**
+     * Percent-decode a URI path into a file path. Unlike URLDecoder this leaves "+" alone, which in
+     * a path is a plus sign and not a space, and it rejects a malformed escape rather than guessing.
+     */
+    private static String percentDecode(String path) {
+        if (path.indexOf('%') < 0)
+            return path;
+        ByteArrayOutputStream decoded = new ByteArrayOutputStream(path.length());
+        for (int i = 0; i < path.length(); i++) {
+            char c = path.charAt(i);
+            if (c == '%') {
+                if (i + 2 >= path.length())
+                    return null;
+                int hi = Character.digit(path.charAt(i + 1), 16);
+                int lo = Character.digit(path.charAt(i + 2), 16);
+                if (hi < 0 || lo < 0)
+                    return null;
+                decoded.write((hi << 4) | lo);
+                i += 2;
+            } else if (c < 0x80) {
+                decoded.write(c);
+            } else {
+                // Already-literal non-ASCII, kept whole so a surrogate pair survives the round trip.
+                int codePoint = path.codePointAt(i);
+                byte[] utf8 = new String(Character.toChars(codePoint)).getBytes(StandardCharsets.UTF_8);
+                decoded.write(utf8, 0, utf8.length);
+                i += Character.charCount(codePoint) - 1;
+            }
+        }
+        return new String(decoded.toByteArray(), StandardCharsets.UTF_8);
     }
 
     private void resizeScreen() {
@@ -1231,6 +1395,9 @@ public final class TerminalEmulator {
                     case ESC_CSI_EQUAL:
                         doCsiEqual(b);
                         break;
+                    case ESC_CSI_HASH:
+                        doCsiHash(b);
+                        break;
                     case ESC_CSI_LESSTHAN:
                         doCsiLessThan(b);
                         break;
@@ -1431,6 +1598,10 @@ public final class TerminalEmulator {
                             if (mode == 47 || mode == 1047 || mode == 1049) {
                                 // This state is carried by mScreen pointer.
                                 value = (mScreen == mAltBuffer) ? 1 : 2;
+                            } else if (mode == 2026) {
+                                // A hold that ran past its timeout has already ended, whether or not
+                                // the program got around to resetting the mode; report what is true.
+                                value = isScreenUpdateHeld() ? 1 : 2;
                             } else {
                                 int internalBit = mapDecSetBitToInternalBit(mode);
                                 if (internalBit != -1) {
@@ -2131,11 +2302,27 @@ public final class TerminalEmulator {
             case 2004:
                 // Bracketed paste mode - setting bit is enough.
                 break;
+            case 2026:
+                // Synchronized output. Setting it starts the hold and arms its timeout; resetting it
+                // ends the hold and hands the client the one update the whole frame is worth.
+                if (setting) {
+                    mSynchronizedUpdateDeadline = System.currentTimeMillis() + mSynchronizedUpdateTimeoutMillis;
+                } else {
+                    mSynchronizedUpdateDeadline = 0;
+                    mSession.onScreenChanged();
+                }
+                break;
             case 2031:
                 // Color preference notifications. Enabling primes the remembered class so that the
                 // first flip after this point is reported and the current state is not re-announced.
                 if (setting)
                     mLastReportedDark = isDefaultBackgroundDark();
+                break;
+            case 2048:
+                // In-band resize notifications. Enabling reports the current size at once, so a
+                // program that just asked does not have to wait for a resize to learn it.
+                if (setting)
+                    sendInBandResizeReport();
                 break;
             default:
                 unknownParameter(externalBit);
@@ -2150,6 +2337,36 @@ public final class TerminalEmulator {
      * this parameter byte are ignored as before.
      * </p>
      */
+    /**
+     * Process byte while in the {@link #ESC_CSI_HASH} escape state, "ESC [ ... #": the xterm color
+     * stack, which a program uses to borrow the palette and hand it back.
+     *
+     * <ul>
+     * <li>{@code CSI Ps # P} — XTPUSHCOLORS, save the palette, optionally into a given slot.</li>
+     * <li>{@code CSI Ps # Q} — XTPOPCOLORS, restore it.</li>
+     * <li>{@code CSI # R} — XTREPORTCOLORS, answer "CSI ? index ; count # Q".</li>
+     * </ul>
+     */
+    private void doCsiHash(int b) {
+        switch(b) {
+            case 'P':
+                mColors.pushPalette(getArg0(0));
+                break;
+            case 'Q':
+                if (mColors.popPalette(getArg0(0))) {
+                    mSession.onColorsChanged();
+                    notifyColorPreferenceIfChanged();
+                }
+                break;
+            case 'R':
+                mSession.write(String.format(Locale.US, "\033[?%d;%d#Q",
+                    mColors.getColorStackIndex(), mColors.getColorStackCount()));
+                break;
+            default:
+                parseArg(b);
+        }
+    }
+
     private void doCsiEqual(int b) {
         switch(b) {
             case 'u':
@@ -2602,6 +2819,9 @@ public final class TerminalEmulator {
                 break;
             case '$':
                 continueSequence(ESC_CSI_DOLLAR);
+                break;
+            case '#':
+                continueSequence(ESC_CSI_HASH);
                 break;
             case '*':
                 continueSequence(ESC_CSI_ARGS_ASTERIX);
@@ -3365,6 +3585,10 @@ public final class TerminalEmulator {
                     }
                 }
                 break;
+            case // The shell reporting its directory: "7;file://$host/$path".
+            7:
+                setReportedWorkingDirectory(textParameter);
+                break;
             case // Semantic hyperlink: "8;$params;$uri". An empty $uri closes the current link.
             8:
                 setCurrentHyperlink(textParameter);
@@ -3837,6 +4061,7 @@ public final class TerminalEmulator {
             case ESC_CSI_UNSUPPORTED_INTERMEDIATE_BYTE:
             case ESC_CSI_EQUAL:
             case ESC_CSI_LESSTHAN:
+            case ESC_CSI_HASH:
                 return true;
             default:
                 return false;
@@ -4205,6 +4430,8 @@ public final class TerminalEmulator {
         mSavedDecSetFlags = mSavedStateMain.mSavedDecFlags = mSavedStateAlt.mSavedDecFlags = mCurrentDecSetFlags;
         // XXX: Should we set terminal driver back to IUTF8 with termios?
         mUtf8Index = mUtf8ToFollow = 0;
+        mSynchronizedUpdateDeadline = 0;
+        mColors.clearStack();
         mColors.reset();
         mSession.onColorsChanged();
         mLastReportedDark = isDefaultBackgroundDark();

@@ -658,6 +658,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     public void addNewSession(boolean isFailSafe, String sessionName) {
         TerminalSession currentSession = mHost.currentSession();
+        // getCwd() answers with the shell's own OSC 7 report when it has one, so a new pane opens
+        // where the user is rather than where /proc last saw the session's process.
         String workingDirectory = currentSession == null
             ? mHost.properties().getDefaultWorkingDirectory()
             : currentSession.getCwd();
