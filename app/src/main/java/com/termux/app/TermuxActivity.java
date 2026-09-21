@@ -2147,6 +2147,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.Properties properties = com.termux.app.settings.TermuxPropertiesFile.load(this);
         String pageOne = properties.getProperty(
             com.termux.shared.termux.settings.properties.TermuxPropertyConstants.KEY_EXTRA_KEYS);
+        if (!ExtraKeysDefaultOffer.isCustomRow(pageOne)) {
+            // Nothing to offer: they already have the shipped row. Remember that, so a fresh
+            // install never reads the properties file for this again.
+            mPreferences.setExtraKeysDefaultOffered(true);
+            return;
+        }
         if (!ExtraKeysDefaultOffer.shouldOffer(pageOne, false, tourInTheWay)) return;
         String pageTwo = properties.getProperty(
             com.termux.shared.termux.settings.properties.TermuxPropertyConstants.KEY_EXTRA_KEYS2);
