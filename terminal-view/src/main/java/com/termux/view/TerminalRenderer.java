@@ -1439,7 +1439,8 @@ public final class TerminalRenderer {
                     && blankIndex < charsUsedInLine
                     && isExpansionBlank(line[blankIndex])
                     && lineObject.getDisplayWidthAt(blankIndex) == 1
-                    && cursorX != column + expandedColumns
+                    && !(cursorX >= 0 && column + expandedColumns >= cursorX
+                        && column + expandedColumns < cursorX + cursorColumns)
                     && !(column + expandedColumns >= selx1
                         && column + expandedColumns <= selx2)
                     && blankCellPaintsAlike(style,

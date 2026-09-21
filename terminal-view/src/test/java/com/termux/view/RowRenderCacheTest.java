@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 import com.termux.terminal.KittyUnicodePlaceholder;
 import com.termux.terminal.StyleFixtures;
 import com.termux.terminal.TerminalRow;
+import com.termux.terminal.TextSizeFixtures;
 import com.termux.terminal.TextStyle;
 
 import org.junit.Before;
@@ -61,9 +62,12 @@ public class RowRenderCacheTest {
         for (int i = 0; i < ROWS; i++) {
             final boolean onCursorRow = i == cursorRow;
             recorded[i] = mCache.rowChanged(i, mRows[i], COLUMNS,
-                onCursorRow ? cursorColumn : -1, 0, CURSOR_COLOR,
+                onCursorRow ? cursorColumn : -1, 1, true, 0, CURSOR_COLOR,
                 selectionStart, selectionEnd, 0);
         }
+        // Exactly what the render loop does between comparing and recording: D4 B folds the rows a
+        // block spans into one answer.
+        mCache.spreadTextBlockGroups(recorded);
         return recorded;
     }
 
@@ -160,14 +164,15 @@ public class RowRenderCacheTest {
         mCache.beginFrame(mEmulator, ROWS, COLUMNS, mTopRow, 0, 0f, false, 0, false, false,
             mPalette, 1080, 600, ROWS);
         for (int i = 0; i < ROWS; i++)
-            mCache.rowChanged(i, mRows[i], COLUMNS, i == 1 ? 2 : -1, 0, CURSOR_COLOR, -1, -1, 0);
+            mCache.rowChanged(i, mRows[i], COLUMNS, i == 1 ? 2 : -1, 1, true, 0, CURSOR_COLOR,
+                -1, -1, 0);
 
         mCache.beginFrame(mEmulator, ROWS, COLUMNS, mTopRow, 0, 0f, false, 0, false, false,
             mPalette, 1080, 600, ROWS);
         boolean[] recorded = new boolean[ROWS];
         for (int i = 0; i < ROWS; i++)
-            recorded[i] = mCache.rowChanged(i, mRows[i], COLUMNS, i == 1 ? 2 : -1, 1, CURSOR_COLOR,
-                -1, -1, 0);
+            recorded[i] = mCache.rowChanged(i, mRows[i], COLUMNS, i == 1 ? 2 : -1, 1, true, 1,
+                CURSOR_COLOR, -1, -1, 0);
 
         assertOnly(1, recorded);
     }
@@ -405,12 +410,12 @@ public class RowRenderCacheTest {
         mCache.beginFrame(mEmulator, ROWS, COLUMNS, mTopRow, 0, 4f, false, 0, false, false,
             mPalette, 1080, 600, ROWS);
         for (int i = 0; i < ROWS; i++)
-            assertTrue(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 0, CURSOR_COLOR, -1, -1, 0));
+            assertTrue(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 1, true, 0, CURSOR_COLOR, -1, -1, 0));
 
         mCache.beginFrame(mEmulator, ROWS, COLUMNS, mTopRow, 0, 4f, false, 0, false, false,
             mPalette, 1080, 600, ROWS);
         for (int i = 0; i < ROWS; i++)
-            assertFalse(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 0, CURSOR_COLOR, -1, -1, 0));
+            assertFalse(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 1, true, 0, CURSOR_COLOR, -1, -1, 0));
     }
 
     @Test
@@ -420,7 +425,7 @@ public class RowRenderCacheTest {
         mCache.beginFrame(new Object(), ROWS, COLUMNS, mTopRow, 0, 0f, false, 0, false, false,
             mPalette, 1080, 600, ROWS);
         for (int i = 0; i < ROWS; i++)
-            assertTrue(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 0, CURSOR_COLOR, -1, -1, 0));
+            assertTrue(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 1, true, 0, CURSOR_COLOR, -1, -1, 0));
     }
 
     @Test
@@ -430,8 +435,117 @@ public class RowRenderCacheTest {
         mCache.beginFrame(mEmulator, ROWS, COLUMNS, mTopRow, 0, 0f, false, 0, false, false,
             mPalette, 1080, 600, ROWS - 1);
         for (int i = 0; i < ROWS - 1; i++)
-            assertTrue(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 0, CURSOR_COLOR, -1, -1, 0));
+            assertTrue(mCache.rowChanged(i, mRows[i], COLUMNS, -1, 1, true, 0, CURSOR_COLOR, -1, -1, 0));
 
         assertAll(frame());
+    }
+
+    // --- kitty text sizing (OSC 66): D4 B, the rows a block spans are one cached layer ---
+
+    /** A plain two-row block at rows 0 and 1, columns 0 and 1. */
+    private void markTwoRowBlock() {
+        TextSizeFixtures.markBlock(mRows, 0, 0, TextSizeFixtures.record(2, 1));
+    }
+
+    @Test
+    public void aNewBlockRecordsTheRowsItCovers() {
+        frame();
+        markTwoRowBlock();
+
+        boolean[] recorded = frame();
+        assertTrue(recorded[0]);
+        assertTrue(recorded[1]);
+        assertFalse(recorded[2]);
+        assertNone(frame());
+    }
+
+    @Test
+    public void aChangeUnderABlockRecordsTheRowThatDrawsIt() {
+        markTwoRowBlock();
+        frame();
+
+        // The second row of the block moves; the block's own ink lives in the first row's node.
+        mRows[1].setChar(5, 'x', 0L);
+
+        boolean[] recorded = frame();
+        assertTrue("the row that draws the block must be recorded again", recorded[0]);
+        assertTrue(recorded[1]);
+        assertFalse("a row outside the block must be left alone", recorded[2]);
+    }
+
+    @Test
+    public void aChangeInTheAnchorRowRecordsTheWholeBlock() {
+        markTwoRowBlock();
+        frame();
+
+        mRows[0].setChar(6, 'y', 0L);
+
+        boolean[] recorded = frame();
+        assertTrue(recorded[0]);
+        assertTrue(recorded[1]);
+        assertFalse(recorded[2]);
+    }
+
+    @Test
+    public void aBlockLeavesRowsAroundItOnTheirOwn() {
+        markTwoRowBlock();
+        frame();
+
+        mRows[2].setChar(0, 'z', 0L);
+
+        assertOnly(2, frame());
+    }
+
+    @Test
+    public void aDemotedBlockKeepsOneRowNodes() {
+        // Demoted: one row, not scaled, but every field still reads back.
+        TextSizeFixtures.markBlock(mRows, 0, 0, TextSizeFixtures.record(2, 1, 0, 0, 0, 0, true));
+        frame();
+
+        mRows[1].setChar(0, 'q', 0L);
+
+        assertOnly(1, frame());
+    }
+
+    @Test
+    public void aSizeRecordThatChangesWithoutTheTextRecordsTheRow() {
+        TextSizeFixtures.mark(mRows[2], 0, TextSizeFixtures.record(3, 2), 0, 0);
+        frame();
+
+        // Same cell, same text, same style — a different block.
+        TextSizeFixtures.mark(mRows[2], 0, TextSizeFixtures.record(3, 2, 1, 2, 2, 1, false), 0, 0);
+
+        assertOnly(2, frame());
+        assertNone(frame());
+    }
+
+    @Test
+    public void aSizeRecordThatGoesAwayRecordsTheRow() {
+        TextSizeFixtures.mark(mRows[2], 0, TextSizeFixtures.record(2, 1), 0, 0);
+        frame();
+
+        TextSizeFixtures.clear(mRows[2], 0);
+
+        assertOnly(2, frame());
+        assertNone(frame());
+    }
+
+    @Test
+    public void theCursorGrowingOverABlockRecordsTheRowsItReaches() {
+        markTwoRowBlock();
+        frame();
+
+        // The cursor now covers the block: both of its rows are told, and both have to be drawn.
+        mCache.beginFrame(mEmulator, ROWS, COLUMNS, mTopRow, 0, 0f, false, 0, false, false,
+            mPalette, 1080, 600, ROWS);
+        boolean[] recorded = new boolean[ROWS];
+        for (int i = 0; i < ROWS; i++)
+            recorded[i] = mCache.rowChanged(i, mRows[i], COLUMNS, i < 2 ? 0 : -1, i < 2 ? 2 : 1,
+                i == 1, 0, CURSOR_COLOR, -1, -1, 0);
+        mCache.spreadTextBlockGroups(recorded);
+
+        assertTrue(recorded[0]);
+        assertTrue(recorded[1]);
+        assertFalse(recorded[2]);
     }
 }
