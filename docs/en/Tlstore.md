@@ -158,32 +158,6 @@ off — `tlstore update` is how it gets new versions. Once it is installed, sign
 claude
 ```
 
-## References
-
-`fastfetch`, `kitten`, `sigye`, and the musl loader are built by the launcher's maintainer rather
-than coming from Termux's own packages or npm. The binaries themselves are published at
-[PickleHik3/termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries),
-which is what `tlstore install` downloads and checks against a pinned digest. The recipes that
-build them from upstream source — with whatever patches are applied — live in this repository
-under [`recipes/cross`](../../recipes/cross) and [`recipes/termux`](../../recipes/termux); run one
-yourself to reproduce a binary and compare it against what tlstore installed.
-
-Everything else in the store is unmodified: `claude-code` comes straight from npm, and the
-packages behind `fish-shell` (`fish`, `eza`, `zoxide`, `oh-my-posh`) come straight from Termux's
-own package repository.
-
-## For maintainers
-
-The catalog that `tlstore` reads (`app/src/main/assets/tlstore/catalog.tsv`) is generated — never
-hand-edit it. To add or change an item:
-
-1. Edit `scripts/tlstore/items.tsv`, the hand-maintained item list.
-2. Run `scripts/tlstore/build-catalog.sh <path to termux-launcher-binaries/SHA256SUMS>` to compute
-   digests, bump the serial, and write `catalog.tsv`. A plain `http(s)` source is downloaded once
-   to hash it, so that step needs the network; it must name a tag or a commit, never a branch.
-3. Run `scripts/tlstore/sign.sh` to sign it (it also signs the `tlstore` script itself).
-4. Commit all three: `items.tsv`, `catalog.tsv`, and `catalog.tsv.minisig`.
-
 ## On official Termux
 
 Termux Launcher puts tlstore in place for you, but you do not need the launcher to use it — on
@@ -249,3 +223,29 @@ ssh and carries nothing, from the file the app writes each time it starts. Set `
 For maintainers: the option is `host=launcher`, `host=termux`, or a comma list; an item without it
 is offered everywhere. `min-launcher=X.Y.Z` hides an item from launchers older than that version,
 and is ignored where there is no launcher to compare against.
+
+## References
+
+`fastfetch`, `kitten`, `sigye`, and the musl loader are built by the launcher's maintainer rather
+than coming from Termux's own packages or npm. The binaries themselves are published at
+[PickleHik3/termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries),
+which is what `tlstore install` downloads and checks against a pinned digest. The recipes that
+build them from upstream source — with whatever patches are applied — live in this repository
+under [`recipes/cross`](../../recipes/cross) and [`recipes/termux`](../../recipes/termux); run one
+yourself to reproduce a binary and compare it against what tlstore installed.
+
+Everything else in the store is unmodified: `claude-code` comes straight from npm, and the
+packages behind `fish-shell` (`fish`, `eza`, `zoxide`, `oh-my-posh`) come straight from Termux's
+own package repository.
+
+## For maintainers
+
+The catalog that `tlstore` reads (`app/src/main/assets/tlstore/catalog.tsv`) is generated — never
+hand-edit it. To add or change an item:
+
+1. Edit `scripts/tlstore/items.tsv`, the hand-maintained item list.
+2. Run `scripts/tlstore/build-catalog.sh <path to termux-launcher-binaries/SHA256SUMS>` to compute
+   digests, bump the serial, and write `catalog.tsv`. A plain `http(s)` source is downloaded once
+   to hash it, so that step needs the network; it must name a tag or a commit, never a branch.
+3. Run `scripts/tlstore/sign.sh` to sign it (it also signs the `tlstore` script itself).
+4. Commit all three: `items.tsv`, `catalog.tsv`, and `catalog.tsv.minisig`.

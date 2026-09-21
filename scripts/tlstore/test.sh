@@ -861,10 +861,22 @@ else
     SKIP=$((SKIP + 1))
 fi
 
+echo "== installer suite (scripts/tlstore/test-install.sh)"
+ti_out="$("$repo/scripts/tlstore/test-install.sh" "$@" 2>&1)"
+echo "$ti_out" | sed 's/^/   /' | tail -3
+ti_line="$(echo "$ti_out" | grep '^passed ' | tail -1)"
+if [ -n "$ti_line" ]; then
+    read -r _ ti_p _ ti_f _ ti_s <<<"${ti_line//,/}"
+    PASS=$((PASS + ti_p)); FAIL=$((FAIL + ti_f)); SKIP=$((SKIP + ti_s))
+    [ "$ti_f" = 0 ] || FAILED_NAMES+=("test-install.sh")
+else
+    FAIL=$((FAIL + 1)); FAILED_NAMES+=("test-install.sh did not finish")
+fi
+
 echo
 if command -v shellcheck >/dev/null 2>&1; then
     echo "== shellcheck -s sh"
-    if shellcheck -s sh "$TLSTORE"; then
+    if shellcheck -s sh "$TLSTORE" "$repo/scripts/tlstore/install.sh"; then
         echo "   clean"
     else
         FAIL=$((FAIL + 1))

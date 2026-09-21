@@ -293,7 +293,9 @@ against the fetched key (TLS + GitHub is the trust root, the same as any curl-pi
 stop on any failure; write `$PREFIX/bin/tlstore` (keeps the `# written by termux-launcher` marker
 so the app takes the file over if the launcher is installed later), symlinks `tl`/`tls` only when
 those names are free, `$STORE_DIR/{catalog.tsv,trusted.pub}` and `$STORE_DIR/.standalone`
-containing the raw base URL; removes a stale `.installed`. Ends with the doctor line and
+containing the raw base URL. When the launcher is already there (`TERM_PROGRAM=termux-launcher` or
+`.installed` present) it says so and changes nothing; a `tlstore` it did not write is refused unless
+`-y`. Ends with the doctor line and
 `tlstore browse`'s name.
 
 Self-update: on a standalone install (`.standalone` present, `.installed` absent) `tlstore update`
