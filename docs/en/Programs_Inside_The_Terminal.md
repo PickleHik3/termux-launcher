@@ -18,9 +18,7 @@ Every shell gets these on top of the stock Termux environment:
 
 `TERM` stays `xterm-256color`; the `terminal-term` property can switch it to `xterm-kitty` (see
 [Kitty protocols](Terminal_Kitty_Protocols.md#terminal-identity-and-detection)). XTVERSION answers
-`termux-launcher(<version>)`. Tools that only trust `TERM_PROGRAM=kitty` for pictures, such as Neovim
-0.12 image plugins, need `export TERM_PROGRAM=kitty` in the shell rc; the terminal answers the kitty
-graphics query itself, so a real probe works without it.
+`termux-launcher(<version>)`. A tool that only trusts `TERM_PROGRAM=kitty` for pictures needs that value for its own process; the recipes are in [Telling a TUI it is in kitty](Terminal_Kitty_Protocols.md#telling-a-tui-it-is-in-kitty).
 
 ## Two things that bite
 

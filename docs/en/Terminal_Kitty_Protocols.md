@@ -32,6 +32,46 @@ XTVERSION reports `termux-launcher(version)`. XTSMGRAPHICS reports the Sixel col
 geometry for the current screen. Capability detectors such as chafa and notcurses can therefore pick
 a supported renderer instead of relying on a conservative terminal-name fallback.
 
+### Telling a TUI it is in kitty
+
+Some programs skip the probe and only switch on their kitty features when the environment says
+`TERM_PROGRAM=kitty`. Neovim 0.12 image plugins such as md-render.nvim and image.nvim are the common
+case: they read the variable, find `termux-launcher`, and draw nothing. The terminal speaks the
+protocols anyway, so the fix is to tell those programs what they want to hear.
+
+Per program, which keeps the rest of the shell honest:
+
+```sh
+TERM_PROGRAM=kitty nvim README.md        # bash, zsh, fish 3.1+
+```
+
+As an alias or abbreviation so you never type it:
+
+```sh
+alias nn='TERM_PROGRAM=kitty nvim'                 # bash or zsh, in ~/.bashrc or ~/.zshrc
+abbr -a nn "TERM_PROGRAM=kitty nvim"               # fish, in ~/.config/fish/conf.d/*.fish
+```
+
+For every program, in the shell rc:
+
+```sh
+export TERM_PROGRAM=kitty
+```
+
+What changes and what does not:
+
+- Programs that gate pictures or the keyboard protocol on the variable start using them. Both work
+  here.
+- The XTVERSION reply stays `termux-launcher(version)`, so features that check the real terminal
+  version, such as kitty's text sizing in md-render.nvim, stay off. Nothing pretends to be a kitty
+  release it is not.
+- `TERM_PROGRAM_VERSION` still carries the launcher's version; a program that reads both will see a
+  kitty name with a non-kitty version. That is the one inconsistency this setting introduces.
+- Neovim 0.13 and newer sends the graphics query instead of reading the variable, and the terminal
+  answers it. Once your Neovim is 0.13 the variable is only there for older tools.
+
+The in-app Help has the same one-line recipe under **Pictures in the terminal**.
+
 ## Kitty keyboard protocol
 
 Supported negotiation includes:
