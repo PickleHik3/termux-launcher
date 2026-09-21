@@ -27,6 +27,8 @@ public class TourRunTest {
     private static final TourRun.RunContext GUEST = new TourRun.RunContext(false, true);
     /** A phone this launcher is the home app of, with the keyboard down. */
     private static final TourRun.RunContext HOME = new TourRun.RunContext(true, false);
+    /** Someone updating who has a row of keys of their own and has not been asked about it. */
+    private static final TourRun.RunContext OWN_ROW = new TourRun.RunContext(false, true, true);
 
     private static TourStep step(String id) {
         return step(GUEST, id);
@@ -40,7 +42,11 @@ public class TourRunTest {
     }
 
     private static int indexOf(String id) {
-        List<TourStep> steps = TourRun.steps(GUEST);
+        return indexOf(GUEST, id);
+    }
+
+    private static int indexOf(TourRun.RunContext context, String id) {
+        List<TourStep> steps = TourRun.steps(context);
         for (int i = 0; i < steps.size(); i++)
             if (steps.get(i).id.equals(id)) return i;
         throw new AssertionError("no card " + id + " in the run");
@@ -48,9 +54,9 @@ public class TourRunTest {
 
     @Test
     public void theRunIsTheFiveLessonsTheHomeQuestionAndTheClosingCardInOrder() {
-        assertEquals(7, TourRun.steps(GUEST).size());
-        String[] order = {TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEYBOARD,
-            TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING};
+        assertEquals(8, TourRun.steps(GUEST).size());
+        String[] order = {TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEY_ROW,
+            TourRun.KEYBOARD, TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING};
         for (int i = 0; i < order.length; i++)
             assertEquals("card " + i, order[i], TourRun.steps(GUEST).get(i).id);
     }
@@ -266,6 +272,39 @@ public class TourRunTest {
     }
 
     @Test
+    public void theKeyRowQuestionIsAskedOfSomeoneWithARowOfTheirOwnRightBeforeTheKeyboardLesson() {
+        TourStep card = step(OWN_ROW, TourRun.KEY_ROW);
+        assertEquals(TourStep.Kind.CHOICE, card.kind);
+        assertTrue(card.isChoiceCard());
+        assertEquals(0, card.signalCount());
+        assertEquals(TourTargets.NONE, card.targetIdAt(0));
+        assertEquals(Arrays.asList(TourAction.SWITCH_KEY_ROW, TourAction.KEEP_KEY_ROW),
+            card.actions());
+        assertTrue("the card shows the row it is offering", card.hasImage());
+        assertTrue("the card carries the shell the run's read cards wear", card.hasTitle());
+        List<TourStep> steps = TourRun.steps(OWN_ROW);
+        int keyRow = indexOf(OWN_ROW, TourRun.KEY_ROW);
+        assertEquals(TourRun.FIND_APPS, steps.get(keyRow - 1).id);
+        assertEquals(TourRun.KEYBOARD, steps.get(keyRow + 1).id);
+    }
+
+    @Test
+    public void everyoneElseWalksPastTheKeyRowQuestionWithoutLosingACardNumber() {
+        TourStep card = step(GUEST, TourRun.KEY_ROW);
+        assertEquals(Arrays.asList(TourAction.CONTINUE), card.actions());
+        assertFalse("nothing to show someone who is not being asked", card.hasImage());
+        assertFalse(card.hasTitle());
+        assertEquals(indexOf(GUEST, TourRun.KEY_ROW), indexOf(OWN_ROW, TourRun.KEY_ROW));
+        assertEquals(TourRun.steps(GUEST).size(), TourRun.steps(OWN_ROW).size());
+    }
+
+    @Test
+    public void theKeyRowQuestionIsNotALesson() {
+        assertFalse(TourRun.lessons().contains(TourRun.KEY_ROW));
+        assertNotEquals(TourStep.Kind.LESSON, step(OWN_ROW, TourRun.KEY_ROW).kind);
+    }
+
+    @Test
     public void theClosingCardEndsOnItsOwnActionAlone() {
         TourStep closing = step(TourRun.CLOSING);
         assertEquals(TourStep.Kind.CLOSING, closing.kind);
@@ -326,6 +365,7 @@ public class TourRunTest {
     public void everyLessonIsTaughtOnTheTerminalAndTheLastTwoCardsReadAnywhere() {
         for (String id : TourRun.lessons())
             assertTrue(id + " should be taught on the terminal", step(id).taughtOnTheTerminal());
+        assertFalse(step(TourRun.KEY_ROW).taughtOnTheTerminal());
         assertFalse(step(TourRun.HOME_CHOICE).taughtOnTheTerminal());
         assertFalse(step(TourRun.CLOSING).taughtOnTheTerminal());
     }
@@ -337,7 +377,7 @@ public class TourRunTest {
             steps.remove(0);
             throw new AssertionError("the run should not be editable");
         } catch (UnsupportedOperationException expected) {
-            assertEquals(7, TourRun.steps(GUEST).size());
+            assertEquals(8, TourRun.steps(GUEST).size());
         }
     }
 }

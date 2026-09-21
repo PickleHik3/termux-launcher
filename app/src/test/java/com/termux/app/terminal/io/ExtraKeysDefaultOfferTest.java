@@ -79,6 +79,21 @@ public class ExtraKeysDefaultOfferTest {
         assertTrue(ExtraKeysDefaultOffer.hasPreviousRow(CUSTOM_ROW));
     }
 
+    /**
+     * The keyboard lesson of the first-launch run points at the key that shows and hides the
+     * keyboard, which the shipped row opens with and a row of the user's own usually has not.
+     */
+    @Test
+    public void onlyARowWithTheKeyboardKeyOnItHasOne() {
+        assertTrue(ExtraKeysDefaultOffer.hasKeyboardKey(
+            TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS));
+        assertFalse(ExtraKeysDefaultOffer.hasKeyboardKey(CUSTOM_ROW));
+        assertFalse(ExtraKeysDefaultOffer.hasKeyboardKey(null));
+        assertFalse(ExtraKeysDefaultOffer.hasKeyboardKey(""));
+        assertTrue("a hand-written file says the same key its own way",
+            ExtraKeysDefaultOffer.hasKeyboardKey("[['ESC',{key: keyboard, display: 'k'}]]"));
+    }
+
     /** What the card saves is what the editor reads back: the row survives the round trip. */
     @Test
     public void theSavedRowStillParses() {
