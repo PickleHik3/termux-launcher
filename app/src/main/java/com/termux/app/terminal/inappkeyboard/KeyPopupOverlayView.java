@@ -7,15 +7,14 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.RadialGradient;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.SparseArray;
 import android.view.View;
-import android.view.animation.DecelerateInterpolator;
 import android.view.animation.Interpolator;
 import android.view.animation.PathInterpolator;
 
@@ -24,83 +23,59 @@ import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
 /**
- * The floating glyph shown above the key under the user's finger.
+ * The single glyph shown just above the key under the user's finger.
  *
- * <p>One view draws everything: the veil over the whole surface, and one containerless popup per
- * finger — a haloed outline of the character that would be committed, with the key's configured
- * alternates orbiting it and the targeted one lit and flung outward. There are no child views and
- * no layout pass: positions are worked out by {@link KeyPopupGeometry} when something changes, not
- * once a frame, and every animation has an end, so the view costs nothing while a finger rests.
+ * <p>One view draws everything: per finger, one filled character — the value that would be
+ * committed right now — in the theme's accent, anchored over the cap. Nothing else. No veil, no
+ * ring of alternates, no halo, no sub-label. A short grace period after the finger lands decides
+ * between a tap and a swipe, so fast typing never flashes a glyph, and a swipe replaces the glyph
+ * in place rather than lighting a second one beside it.
+ *
+ * <p>There are no child views and no layout pass: positions are worked out by
+ * {@link KeyPopupGeometry} when something changes, not once a frame, and every animation has an
+ * end, so the view costs nothing while a finger rests.
  *
  * <p>It never takes a touch. The keyboard underneath keeps the whole gesture, and the exit
  * animation runs after the key has already been sent.
  */
 public final class KeyPopupOverlayView extends View {
 
-    /** Enter: opacity and a scale that overshoots a little, about the anchor. */
-    private static final long ENTER_MS = 170L;
-    /** Exit: the popup swells and fades once the key is on its way. */
-    private static final long EXIT_MS = 145L;
-    /** An alternate sliding out to the target position, or back. */
-    private static final long RING_MS = 160L;
-    /** How much of the ring transition the colour and opacity take. */
-    private static final float RING_COLOR_FRACTION = 90f / 160f;
-    /** The veil fading in and out with the first and last popup. */
-    private static final long DIM_MS = 110L;
+    /** How long the glyph waits, so a swipe shows its target instead of the centre value first. */
+    static final long SHOW_DELAY_MS = 50L;
+    /** Enter: opacity and a short rise to the anchor. */
+    private static final long ENTER_MS = 120L;
+    /** Exit: opacity and a shorter rise past the anchor, once the key is on its way. */
+    private static final long EXIT_MS = 100L;
+    /** A swipe target replacing the glyph in place. */
+    private static final long SWAP_MS = 60L;
     /** Reduced motion keeps every state change, just none of the travel. */
     private static final long INSTANT_MS = 1L;
 
-    private static final float ENTER_FROM_SCALE = 0.72f;
-    private static final float EXIT_TO_SCALE = 1.28f;
-    private static final float EXIT_FROM_ALPHA = 0.9f;
+    private static final float ENTER_RISE_DP = 4f;
+    private static final float EXIT_RISE_DP = 3f;
+    private static final float SHADOW_RADIUS_DP = 4f;
+    private static final float SHADOW_DY_DP = 1f;
+    /** Slack round the glyph's box when asking for a repaint: the shadow and the rise. */
+    private static final float INVALIDATE_PAD_DP = 10f;
 
-    private static final float HALO_INNER_ALPHA = 0.20f;
-    private static final float HALO_MID_ALPHA = 0.09f;
-    private static final float GLYPH_GLOW_ALPHA = 0.50f;
-    private static final float GLYPH_GLOW_RADIUS_DP = 15f;
-    private static final float TARGET_GLOW_ALPHA = 0.80f;
-    private static final float TARGET_GLOW_RADIUS_DP = 14f;
-    private static final float SUB_LABEL_SIZE_DP = 8f;
-    private static final float SUB_LABEL_GAP_DP = 3f;
-    private static final float SUB_LABEL_TRACKING = 0.14f;
-    /** Half the line box of the centre glyph, for placing the sub-label under it. */
-    private static final float GLYPH_HALF_LINE = 0.58f;
+    private final Interpolator mEnterInterpolator = new PathInterpolator(0.4f, 0f, 0.2f, 1f);
+    private final Interpolator mExitInterpolator = new PathInterpolator(0.4f, 0f, 1f, 1f);
 
-    private final Interpolator mEnterInterpolator = new PathInterpolator(0.2f, 1.6f, 0.45f, 1f);
-    private final Interpolator mRingInterpolator = new PathInterpolator(0.2f, 1.5f, 0.45f, 1f);
-    private final Interpolator mExitInterpolator = new DecelerateInterpolator();
-
-    private final Paint mDimPaint = new Paint();
-    /** The keyboard's own rectangle in this view's coordinates; the veil covers it and fades out above it. */
-    private final RectF mVeilBounds = new RectF();
-    private final Paint mVeilFadePaint = new Paint();
-    @Nullable private android.graphics.LinearGradient mVeilFade;
-    private float mVeilFadeTop = Float.NaN;
-    private int mVeilFadeColor;
-    /** How far above the keyboard the veil fades to nothing: room for a top-row popup and its ring. */
-    private static final float VEIL_FADE_DP = 132f;
-    private final Paint mHaloPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mRingPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mSubPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mMeasurePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Handler mHandler = new Handler(Looper.getMainLooper());
 
     /** Live popups, one per finger, plus the ones on their way out. */
     private final SparseArray<Popup> mPopups = new SparseArray<>();
     private final java.util.ArrayList<Popup> mExiting = new java.util.ArrayList<>(2);
 
-    /** Halo shaders, one per distinct radius: four label tiers at most. */
-    private final SparseArray<RadialGradient> mHaloShaders = new SparseArray<>();
     /** Weighted faces, one per (face, weight) pair actually asked for. */
     private final SparseArray<Typeface> mFaces = new SparseArray<>();
 
     private KeyPopupPalette mPalette;
     @Nullable private Typeface mLabelFont;
     @Nullable private Typeface mKeyFont;
-    private float mRingRadiusPx;
     private boolean mReducedMotion;
-
-    private float mDimProgress;
-    @Nullable private ValueAnimator mDimAnimator;
 
     private final Rect mInvalidateRect = new Rect();
 
@@ -110,15 +85,8 @@ public final class KeyPopupOverlayView extends View {
         setClickable(false);
         setFocusable(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        float density = context.getResources().getDisplayMetrics().density;
-        mRingRadiusPx = KeyPopupGeometry.RING_RADIUS_DP * density;
         mPalette = KeyPopupPalette.resolve(context);
-        mGlyphPaint.setStyle(Paint.Style.STROKE);
-        mRingPaint.setStyle(Paint.Style.FILL);
-        mRingPaint.setTextAlign(Paint.Align.CENTER);
-        mSubPaint.setStyle(Paint.Style.FILL);
-        mSubPaint.setTextAlign(Paint.Align.CENTER);
-        mSubPaint.setLetterSpacing(SUB_LABEL_TRACKING);
+        mGlyphPaint.setStyle(Paint.Style.FILL);
         mGlyphPaint.setTextAlign(Paint.Align.CENTER);
     }
 
@@ -130,22 +98,8 @@ public final class KeyPopupOverlayView extends View {
 
     // ------------------------------------------------------------------ host API
 
-    /**
-     * Where the keyboard sits in this view. The veil dims that surface only, with a soft fade
-     * above it, so the terminal, status bar and dock stay lit while a key is down.
-     */
-    public void setVeilBounds(@NonNull RectF keyboardBounds) {
-        if (mVeilBounds.equals(keyboardBounds)) return;
-        mVeilBounds.set(keyboardBounds);
-        mVeilFade = null;
-        if (mDimProgress > 0f) invalidate();
-    }
-
-    @NonNull RectF veilBounds() { return new RectF(mVeilBounds); }
-
     public void setPalette(@NonNull KeyPopupPalette palette) {
         mPalette = palette;
-        mHaloShaders.clear();
         if (hasAnything()) invalidate();
     }
 
@@ -160,11 +114,6 @@ public final class KeyPopupOverlayView extends View {
         mReducedMotion = reduced;
     }
 
-    /** Orbit radius of the alternates, in px; exposed for device tuning. */
-    public void setRingRadiusPx(float radiusPx) {
-        mRingRadiusPx = radiusPx;
-    }
-
     private float density() {
         return getResources().getDisplayMetrics().density;
     }
@@ -176,289 +125,144 @@ public final class KeyPopupOverlayView extends View {
     // ------------------------------------------------------------------ popups
 
     /**
-     * Show the popup for one finger.
+     * A finger went down on a key. Nothing is drawn yet: the glyph appears
+     * {@link #SHOW_DELAY_MS} later, or sooner with the swipe's own value if the finger has moved
+     * onto one by then, or never at all if the finger is already up.
      *
      * @param keyBounds the cap the finger is on, in this view's coordinates
-     * @param clampLeft left edge the popup must stay inside, in this view's coordinates
-     * @param clampRight right edge the popup must stay inside
+     * @param clampLeft left edge the glyph must stay inside, in this view's coordinates
+     * @param clampRight right edge the glyph must stay inside
      */
     public void show(int pointerId, @NonNull RectF keyBounds, float clampLeft, float clampRight,
-                     @NonNull String label, boolean labelKeyFont, @NonNull String[] ringLabels,
-                     @NonNull boolean[] ringKeyFont, boolean modifier) {
+                     @NonNull String label, boolean labelKeyFont) {
         Popup existing = mPopups.get(pointerId);
         if (existing != null) retire(existing);
-        Popup popup = new Popup(pointerId, new RectF(keyBounds), clampLeft, clampRight,
-            ringLabels, ringKeyFont, modifier);
-        popup.label = label;
-        popup.labelKeyFont = labelKeyFont;
-        popup.layout();
+        Popup popup = new Popup(pointerId, new RectF(keyBounds), clampLeft, clampRight);
+        popup.setLabel(label, labelKeyFont);
         mPopups.put(pointerId, popup);
-        popup.startEnter();
-        raiseDim();
-        invalidatePopup(popup);
+        popup.scheduleAppear();
     }
 
-    /** The finger moved onto another value; {@code slot} is -1 for the key's own character. */
+    /**
+     * The finger moved onto another value; {@code slot} is -1 for the key's own character. The
+     * glyph is replaced in place — the value it had never stays visible beside the new one.
+     */
     public void target(int pointerId, @NonNull String label, boolean labelKeyFont, int slot) {
         Popup popup = mPopups.get(pointerId);
         if (popup == null) return;
         if (popup.slot == slot && label.equals(popup.label)) return;
+        popup.slot = slot;
+        if (popup.pending) {
+            // The swipe beat the grace period: the target is the first thing ever drawn.
+            popup.cancelTimer();
+            popup.setLabel(label, labelKeyFont);
+            popup.appear();
+            return;
+        }
         Rect before = new Rect();
         popup.bounds(before);
-        popup.previousSlot = popup.slot;
-        popup.slot = slot;
-        popup.label = label;
-        popup.labelKeyFont = labelKeyFont;
-        popup.layout();
-        popup.startRing();
+        popup.swapTo(label, labelKeyFont);
         popup.bounds(mInvalidateRect);
         mInvalidateRect.union(before);
         invalidate(mInvalidateRect);
     }
 
-    /** A latchable key latched or unlatched under the finger. */
-    public void latch(int pointerId, boolean latched) {
-        Popup popup = mPopups.get(pointerId);
-        if (popup == null || popup.latched == latched) return;
-        popup.latched = latched;
-        invalidatePopup(popup);
-    }
-
-    /** The finger is up. The popup swells and fades; the key it sent is already gone. */
+    /** The finger is up. The glyph fades and lifts; the key it sent is already gone. */
     public void hide(int pointerId) {
         Popup popup = mPopups.get(pointerId);
         if (popup == null) return;
         mPopups.remove(pointerId);
+        if (popup.pending) {
+            // A tap shorter than the grace period: nothing was ever drawn, so nothing goes away.
+            popup.cancelTimer();
+            popup.cancelAnimators();
+            return;
+        }
         mExiting.add(popup);
         popup.startExit();
-        lowerDimIfIdle();
         invalidatePopup(popup);
     }
 
     /** Every popup goes at once, without an exit: a cancel, a layout swap, a teardown. */
     public void hideAll() {
         boolean had = hasAnything();
-        for (int i = 0; i < mPopups.size(); i++) mPopups.valueAt(i).cancelAnimators();
+        for (int i = 0; i < mPopups.size(); i++) mPopups.valueAt(i).stop();
         mPopups.clear();
-        for (Popup popup : mExiting) popup.cancelAnimators();
+        for (Popup popup : mExiting) popup.stop();
         mExiting.clear();
-        lowerDimIfIdle();
         if (had) invalidate();
     }
 
     private void retire(@NonNull Popup popup) {
-        popup.cancelAnimators();
+        popup.stop();
         mPopups.remove(popup.pointerId);
     }
 
-    /** Whether a finger currently has a popup up, ignoring the ones fading out. */
+    /** Whether a finger's glyph is actually on screen; a popup still inside its grace period is not. */
     public boolean hasActivePopups() {
-        return mPopups.size() > 0;
+        for (int i = 0; i < mPopups.size(); i++)
+            if (!mPopups.valueAt(i).pending) return true;
+        return false;
     }
 
-    /** How far the veil has come up, 0 when it is not there at all. */
+    /** Whether a finger is down but its glyph has not been drawn yet. */
     @androidx.annotation.VisibleForTesting
-    float dimProgress() {
-        return mDimProgress;
+    boolean hasPendingPopups() {
+        for (int i = 0; i < mPopups.size(); i++)
+            if (mPopups.valueAt(i).pending) return true;
+        return false;
     }
 
     private boolean hasAnything() {
         return mPopups.size() > 0 || !mExiting.isEmpty();
     }
 
-    // ------------------------------------------------------------------ the veil
-
-    private void raiseDim() {
-        animateDim(1f);
-    }
-
-    private void lowerDimIfIdle() {
-        if (!hasAnything()) animateDim(0f);
-    }
-
-    private void animateDim(float to) {
-        if (mDimAnimator != null) {
-            mDimAnimator.cancel();
-            mDimAnimator = null;
-        }
-        if (mDimProgress == to) return;
-        ValueAnimator animator = ValueAnimator.ofFloat(mDimProgress, to);
-        animator.setDuration(duration(DIM_MS));
-        animator.addUpdateListener(a -> {
-            mDimProgress = (Float) a.getAnimatedValue();
-            invalidate();
-        });
-        animator.addListener(new AnimatorListenerAdapter() {
-            @Override public void onAnimationEnd(Animator a) {
-                mDimProgress = to;
-                mDimAnimator = null;
-                invalidate();
-            }
-        });
-        mDimAnimator = animator;
-        animator.start();
-    }
-
     // ------------------------------------------------------------------ drawing
 
     @Override
     protected void onDraw(Canvas canvas) {
-        if (mDimProgress > 0f) {
-            mDimPaint.setColor(mPalette.dim);
-            mDimPaint.setAlpha(Math.round(Color.alpha(mPalette.dim) * mDimProgress));
-            if (mVeilBounds.isEmpty()) {
-                canvas.drawRect(0f, 0f, getWidth(), getHeight(), mDimPaint);
-            } else {
-                canvas.drawRect(mVeilBounds.left, mVeilBounds.top, mVeilBounds.right,
-                    Math.max(mVeilBounds.bottom, getHeight()), mDimPaint);
-                drawVeilFade(canvas);
-            }
-        }
         for (int i = 0; i < mPopups.size(); i++) drawPopup(canvas, mPopups.valueAt(i));
         for (int i = 0; i < mExiting.size(); i++) drawPopup(canvas, mExiting.get(i));
     }
 
-    /** The veil's soft upper edge: full strength at the keyboard's top, gone one fade-height above. */
-    private void drawVeilFade(@NonNull Canvas canvas) {
-        float fade = VEIL_FADE_DP * density();
-        float top = mVeilBounds.top;
-        if (mVeilFade == null || mVeilFadeTop != top || mVeilFadeColor != mPalette.dim) {
-            int solid = mPalette.dim;
-            int clear = solid & 0x00FFFFFF;
-            mVeilFade = new android.graphics.LinearGradient(0f, top - fade, 0f, top, clear, solid,
-                android.graphics.Shader.TileMode.CLAMP);
-            mVeilFadeTop = top;
-            mVeilFadeColor = solid;
-            mVeilFadePaint.setShader(mVeilFade);
-        }
-        mVeilFadePaint.setAlpha(Math.round(255 * mDimProgress));
-        canvas.drawRect(mVeilBounds.left, top - fade, mVeilBounds.right, top, mVeilFadePaint);
-    }
-
     private void drawPopup(@NonNull Canvas canvas, @NonNull Popup popup) {
-        if (popup.metrics == null) return;
+        if (popup.pending || popup.metrics == null) return;
         float alpha = popup.alpha();
         if (alpha <= 0f) return;
         float density = density();
-        float scale = popup.scale();
-        int save = canvas.save();
-        canvas.scale(scale, scale, popup.anchorX, popup.anchorY);
-
-        drawHalo(canvas, popup, alpha);
-        drawCentreGlyph(canvas, popup, alpha, density);
-        if (popup.modifier) drawSubLabel(canvas, popup, alpha, density);
-        drawRing(canvas, popup, alpha, density);
-
-        canvas.restoreToCount(save);
+        float dy = popup.translateYPx(density);
+        float swap = popup.swap;
+        if (popup.previousLabel != null && swap < 1f) {
+            drawGlyph(canvas, popup, popup.previousLabel, popup.previousLabelKeyFont,
+                popup.previousMetrics, alpha * (1f - swap), dy, density);
+        }
+        drawGlyph(canvas, popup, popup.label, popup.labelKeyFont, popup.metrics,
+            alpha * (popup.previousLabel == null ? 1f : swap), dy, density);
     }
 
-    private void drawHalo(@NonNull Canvas canvas, @NonNull Popup popup, float alpha) {
-        RadialGradient shader = haloShader(popup.haloRadiusPx);
-        if (shader == null) return;
-        mHaloPaint.setShader(shader);
-        mHaloPaint.setAlpha(Math.round(255f * alpha));
-        int save = canvas.save();
-        canvas.translate(popup.anchorX, popup.anchorY);
-        canvas.drawCircle(0f, 0f, popup.haloRadiusPx, mHaloPaint);
-        canvas.restoreToCount(save);
-        mHaloPaint.setShader(null);
-    }
-
-    @Nullable
-    private RadialGradient haloShader(float radiusPx) {
-        int key = Math.round(radiusPx);
-        if (key <= 0) return null;
-        RadialGradient cached = mHaloShaders.get(key);
-        if (cached != null) return cached;
-        int inner = KeyPopupPalette.withAlpha(mPalette.primary, HALO_INNER_ALPHA * mPalette.glow);
-        int mid = KeyPopupPalette.withAlpha(mPalette.primary, HALO_MID_ALPHA * mPalette.glow);
-        int outer = ColorUtils.setAlphaComponent(mPalette.primary, 0);
-        RadialGradient shader = new RadialGradient(0f, 0f, key,
-            new int[] {inner, mid, outer}, new float[] {0f, 0.34f, 0.70f}, Shader.TileMode.CLAMP);
-        // Four label tiers is the whole range; a layout swap or a palette change clears it.
-        if (mHaloShaders.size() > 8) mHaloShaders.clear();
-        mHaloShaders.put(key, shader);
-        return shader;
-    }
-
-    private void drawCentreGlyph(@NonNull Canvas canvas, @NonNull Popup popup, float alpha,
-                                 float density) {
+    private void drawGlyph(@NonNull Canvas canvas, @NonNull Popup popup, @NonNull String label,
+                           boolean labelKeyFont, @NonNull KeyPopupGeometry.Metrics metrics,
+                           float alpha, float dy, float density) {
+        if (alpha <= 0f) return;
         Paint paint = mGlyphPaint;
-        paint.setTypeface(faceFor(popup.labelKeyFont, popup.metrics.monospace && !usesLabelFont(popup.label), popup.metrics.weight));
-        paint.setTextSize(popup.metrics.glyphSizePx);
-        paint.setStrokeWidth(popup.metrics.strokeWidthPx);
-        int ink = popup.slot >= 0 ? mPalette.primary : mPalette.glyphStroke;
-        paint.setColor(ink);
-        paint.setAlpha(Math.round(Color.alpha(ink) * alpha));
-        paint.setShadowLayer(GLYPH_GLOW_RADIUS_DP * density, 0f, 0f,
-            KeyPopupPalette.withAlpha(mPalette.primary, GLYPH_GLOW_ALPHA * mPalette.glow * alpha));
-        float baseline = popup.anchorY - (paint.ascent() + paint.descent()) / 2f;
-        canvas.drawText(popup.label, popup.anchorX, baseline, paint);
+        paint.setTypeface(faceFor(labelKeyFont, metrics.monospace && !usesLabelFont(label),
+            metrics.weight));
+        paint.setTextSize(metrics.glyphSizePx);
+        paint.setColor(mPalette.primary);
+        paint.setAlpha(Math.round(Color.alpha(mPalette.primary) * alpha));
+        paint.setShadowLayer(SHADOW_RADIUS_DP * density, 0f, SHADOW_DY_DP * density,
+            ColorUtils.setAlphaComponent(mPalette.shadow,
+                Math.round(Color.alpha(mPalette.shadow) * alpha)));
+        float baseline = popup.anchorY + dy - (paint.ascent() + paint.descent()) / 2f;
+        canvas.drawText(label, popup.anchorX, baseline, paint);
         paint.clearShadowLayer();
     }
 
-    private void drawSubLabel(@NonNull Canvas canvas, @NonNull Popup popup, float alpha,
-                              float density) {
-        Paint paint = mSubPaint;
-        paint.setTypeface(faceFor(false, true, 500));
-        paint.setTextSize(SUB_LABEL_SIZE_DP * density);
-        int ink = popup.latched ? mPalette.primary : mPalette.subLabel;
-        paint.setColor(ink);
-        paint.setAlpha(Math.round(Color.alpha(ink) * alpha));
-        float top = popup.anchorY + popup.metrics.glyphSizePx * GLYPH_HALF_LINE
-            + SUB_LABEL_GAP_DP * density;
-        canvas.drawText(popup.latched ? "LATCH" : "HELD", popup.anchorX, top - paint.ascent(), paint);
-    }
-
-    private void drawRing(@NonNull Canvas canvas, @NonNull Popup popup, float alpha,
-                          float density) {
-        String[] labels = popup.ringLabels;
-        float travel = popup.ringProgress(mRingInterpolator);
-        float tint = Math.min(1f, popup.rawRingProgress() / RING_COLOR_FRACTION);
-        for (int slot = 1; slot < labels.length; slot++) {
-            String label = labels[slot];
-            if (label == null) continue;
-            boolean wasTarget = slot == popup.previousSlot;
-            boolean isTarget = slot == popup.slot;
-            float radius = lerp(popup.orbit[slot][wasTarget ? 1 : 0],
-                popup.orbit[slot][isTarget ? 1 : 0], travel);
-            float scale = lerp(wasTarget ? KeyPopupGeometry.TARGET_SCALE : 1f,
-                isTarget ? KeyPopupGeometry.TARGET_SCALE : 1f, travel);
-            float glyphAlpha = lerp(slotAlpha(popup.previousSlot, slot, wasTarget),
-                slotAlpha(popup.slot, slot, isTarget), tint) * alpha;
-            if (glyphAlpha <= 0f) continue;
-            int ink = isTarget ? mPalette.primary : mPalette.ringIdle;
-            Paint paint = mRingPaint;
-            paint.setTypeface(faceFor(popup.ringKeyFont[slot], !usesLabelFont(label), 500));
-            paint.setTextSize(KeyPopupGeometry.ringGlyphSizePx(label, density) * scale);
-            paint.setColor(ink);
-            paint.setAlpha(Math.round(Color.alpha(ink) * glyphAlpha));
-            if (isTarget)
-                paint.setShadowLayer(TARGET_GLOW_RADIUS_DP * density, 0f, 0f,
-                    KeyPopupPalette.withAlpha(mPalette.primary,
-                        TARGET_GLOW_ALPHA * mPalette.glow * glyphAlpha));
-            float cx = popup.anchorX + KeyPopupGeometry.DIRECTION_X[slot] * radius;
-            float cy = popup.anchorY + KeyPopupGeometry.DIRECTION_Y[slot] * radius;
-            canvas.drawText(label, cx, cy - (paint.ascent() + paint.descent()) / 2f, paint);
-            if (isTarget) paint.clearShadowLayer();
-        }
-    }
-
-    /** An alternate is full strength until a direction is targeted; then only the target is. */
-    private static float slotAlpha(int targetSlot, int slot, boolean isTarget) {
-        if (targetSlot < 0) return 1f;
-        return isTarget ? 1f : KeyPopupGeometry.NON_TARGET_ALPHA;
-    }
-
-    /**
-     * The face one glyph is drawn in. Cached: at most six combinations exist, and resolving a
-     * weighted face on every frame of a ring animation is allocation the draw path does not need.
-     */
     /**
      * Whether a label has to be drawn with the keyboard's own label font rather than the plain
      * monospace face. Launcher tool slots (the space bar's window and session swipes, the palette)
      * are Nerd Font glyphs in the private-use planes; the caps draw them with the label font, and
-     * monospace has no such glyphs, so they came out as boxes in the ring.
+     * monospace has no such glyphs, so they would come out as boxes.
      */
     static boolean usesLabelFont(@Nullable String label) {
         if (label == null) return false;
@@ -470,6 +274,10 @@ public final class KeyPopupOverlayView extends View {
         return false;
     }
 
+    /**
+     * The face one glyph is drawn in. Cached: at most six combinations exist, and resolving a
+     * weighted face on every frame of a crossfade is allocation the draw path does not need.
+     */
     private Typeface faceFor(boolean keyFont, boolean monospace, int weight) {
         int cacheKey = (keyFont ? 1024 : 0) | (monospace ? 2048 : 0) | weight;
         Typeface cached = mFaces.get(cacheKey);
@@ -480,6 +288,15 @@ public final class KeyPopupOverlayView extends View {
             ? Typeface.create(base, weight, false) : base;
         mFaces.put(cacheKey, face);
         return face;
+    }
+
+    /** Half the width the label actually paints, so the clamp is measured, not guessed. */
+    private float halfWidthPx(@NonNull String label, boolean labelKeyFont,
+                              @NonNull KeyPopupGeometry.Metrics metrics) {
+        mMeasurePaint.setTypeface(faceFor(labelKeyFont,
+            metrics.monospace && !usesLabelFont(label), metrics.weight));
+        mMeasurePaint.setTextSize(metrics.glyphSizePx);
+        return mMeasurePaint.measureText(label) / 2f;
     }
 
     private static float lerp(float from, float to, float t) {
@@ -497,78 +314,99 @@ public final class KeyPopupOverlayView extends View {
 
     // ------------------------------------------------------------------ one finger's popup
 
-    /** Per-pointer state. Geometry is recomputed when something changes, never per frame. */
+    /** Per-pointer state. Geometry is recomputed when the label changes, never per frame. */
     private final class Popup {
         final int pointerId;
         final RectF keyBounds;
         final float clampLeft;
         final float clampRight;
-        final String[] ringLabels;
-        final boolean[] ringKeyFont;
-        final boolean modifier;
 
         String label = "";
         boolean labelKeyFont;
         int slot = -1;
-        int previousSlot = -1;
-        boolean latched;
+        /** The glyph being crossfaded out, or null when nothing is. */
+        @Nullable String previousLabel;
+        boolean previousLabelKeyFont;
+        @Nullable KeyPopupGeometry.Metrics previousMetrics;
+        float previousHalfWidthPx;
+
+        /** True while the grace period is still running and nothing has been drawn. */
+        boolean pending = true;
 
         KeyPopupGeometry.Metrics metrics;
         float anchorX;
         float anchorY;
-        float haloRadiusPx;
-        /** Per slot: [0] at rest, [1] when it is the target. */
-        final float[][] orbit = new float[9][2];
+        float halfWidthPx;
 
         float enter;
         float exit;
-        float ring = 1f;
+        float swap = 1f;
         boolean exiting;
         @Nullable ValueAnimator enterAnimator;
-        @Nullable ValueAnimator ringAnimator;
+        @Nullable ValueAnimator swapAnimator;
         @Nullable ValueAnimator exitAnimator;
+        /** The grace-period timer's task; posted on down, dropped on a swipe, a lift or a reset. */
+        private final Runnable appearTask = () -> {
+            if (pending) appear();
+        };
 
-        Popup(int pointerId, RectF keyBounds, float clampLeft, float clampRight,
-              String[] ringLabels, boolean[] ringKeyFont, boolean modifier) {
+        Popup(int pointerId, RectF keyBounds, float clampLeft, float clampRight) {
             this.pointerId = pointerId;
             this.keyBounds = keyBounds;
             this.clampLeft = clampLeft;
             this.clampRight = clampRight;
-            this.ringLabels = ringLabels;
-            this.ringKeyFont = ringKeyFont;
-            this.modifier = modifier;
+        }
+
+        void setLabel(@NonNull String newLabel, boolean keyFont) {
+            label = newLabel;
+            labelKeyFont = keyFont;
+            layout();
         }
 
         void layout() {
             float density = density();
             metrics = KeyPopupGeometry.metricsFor(label, density);
-            boolean wideRing = KeyPopupGeometry.hasWideRing(ringLabels);
-            float side = KeyPopupGeometry.sideExtentPx(metrics, mRingRadiusPx, wideRing, density);
-            float below = KeyPopupGeometry.belowPx(metrics, mRingRadiusPx, modifier, density);
-            float above = KeyPopupGeometry.abovePx(metrics, mRingRadiusPx, density);
-            anchorX = KeyPopupGeometry.anchorX(keyBounds.centerX(), side, clampLeft, clampRight,
-                density);
-            anchorY = KeyPopupGeometry.anchorY(keyBounds.top, below, above, 0f, density);
-            haloRadiusPx = KeyPopupGeometry.haloRadiusPx(metrics, mRingRadiusPx);
-            for (int i = 1; i < ringLabels.length; i++) {
-                if (ringLabels[i] == null) continue;
-                orbit[i][0] = KeyPopupGeometry.orbitRadiusPx(metrics, mRingRadiusPx, ringLabels[i],
-                    false, density);
-                orbit[i][1] = KeyPopupGeometry.orbitRadiusPx(metrics, mRingRadiusPx, ringLabels[i],
-                    true, density);
-            }
+            halfWidthPx = halfWidthPx(label, labelKeyFont, metrics);
+            anchorX = KeyPopupGeometry.anchorX(keyBounds.centerX(), halfWidthPx, clampLeft,
+                clampRight, density);
+            anchorY = KeyPopupGeometry.anchorY(keyBounds.top, metrics.glyphSizePx, 0f, density);
         }
 
-        void startEnter() {
+        /** Wait out the grace period before anything is drawn. */
+        void scheduleAppear() {
+            pending = true;
+            mHandler.postDelayed(appearTask, SHOW_DELAY_MS);
+        }
+
+        void cancelTimer() {
+            mHandler.removeCallbacks(appearTask);
+            pending = false;
+        }
+
+        /** The glyph is drawn from now on; it fades and rises into its anchor. */
+        void appear() {
+            cancelTimer();
+            previousLabel = null;
+            previousMetrics = null;
+            swap = 1f;
             enter = 0f;
             enterAnimator = run(enterAnimator, ENTER_MS, value -> enter = value, () -> enter = 1f);
+            invalidatePopup(this);
         }
 
-        void startRing() {
-            ring = 0f;
-            ringAnimator = run(ringAnimator, RING_MS, value -> ring = value, () -> {
-                ring = 1f;
-                previousSlot = slot;
+        /** A swipe target takes the glyph's place: a crossfade at the same anchor. */
+        void swapTo(@NonNull String newLabel, boolean keyFont) {
+            previousLabel = label;
+            previousLabelKeyFont = labelKeyFont;
+            previousMetrics = metrics;
+            previousHalfWidthPx = halfWidthPx;
+            setLabel(newLabel, keyFont);
+            swap = 0f;
+            swapAnimator = run(swapAnimator, SWAP_MS, value -> swap = value, () -> {
+                swap = 1f;
+                previousLabel = null;
+                previousMetrics = null;
+                previousHalfWidthPx = 0f;
             });
         }
 
@@ -578,7 +416,6 @@ public final class KeyPopupOverlayView extends View {
             exitAnimator = run(exitAnimator, EXIT_MS, value -> exit = value, () -> {
                 exit = 1f;
                 mExiting.remove(Popup.this);
-                lowerDimIfIdle();
                 invalidatePopup(Popup.this);
             });
         }
@@ -605,37 +442,39 @@ public final class KeyPopupOverlayView extends View {
 
         void cancelAnimators() {
             if (enterAnimator != null) enterAnimator.cancel();
-            if (ringAnimator != null) ringAnimator.cancel();
+            if (swapAnimator != null) swapAnimator.cancel();
             if (exitAnimator != null) exitAnimator.cancel();
-            enterAnimator = ringAnimator = exitAnimator = null;
+            enterAnimator = swapAnimator = exitAnimator = null;
+        }
+
+        /** Everything this popup could still do, undone. */
+        void stop() {
+            mHandler.removeCallbacks(appearTask);
+            pending = false;
+            cancelAnimators();
         }
 
         float alpha() {
-            if (exiting) return EXIT_FROM_ALPHA * (1f - mExitInterpolator.getInterpolation(exit));
+            if (exiting) return clamp01(1f - mExitInterpolator.getInterpolation(exit));
             return clamp01(mEnterInterpolator.getInterpolation(enter));
         }
 
-        float scale() {
+        /** The short travel into the anchor on the way in, and past it on the way out. */
+        float translateYPx(float density) {
             if (exiting)
-                return lerp(1f, EXIT_TO_SCALE, mExitInterpolator.getInterpolation(exit));
-            return lerp(ENTER_FROM_SCALE, 1f, mEnterInterpolator.getInterpolation(enter));
+                return lerp(0f, -EXIT_RISE_DP * density, mExitInterpolator.getInterpolation(exit));
+            return lerp(ENTER_RISE_DP * density, 0f, mEnterInterpolator.getInterpolation(enter));
         }
 
-        float rawRingProgress() {
-            return ring;
-        }
-
-        float ringProgress(Interpolator interpolator) {
-            return interpolator.getInterpolation(ring);
-        }
-
-        /** The box this popup can paint into, grown for the overshoot, the swell and the glow. */
+        /** The box this popup can paint into, grown for the shadow and the travel. */
         void bounds(Rect out) {
-            float reach = Math.max(haloRadiusPx, mRingRadiusPx + metrics.halfWidthPx)
-                + 40f * density();
-            reach *= EXIT_TO_SCALE;
-            out.set((int) Math.floor(anchorX - reach), (int) Math.floor(anchorY - reach),
-                (int) Math.ceil(anchorX + reach), (int) Math.ceil(anchorY + reach));
+            float pad = INVALIDATE_PAD_DP * density();
+            float half = Math.max(halfWidthPx, previousHalfWidthPx) + pad;
+            float glyph = Math.max(metrics.glyphSizePx,
+                previousMetrics == null ? 0f : previousMetrics.glyphSizePx);
+            float vertical = glyph + pad;
+            out.set((int) Math.floor(anchorX - half), (int) Math.floor(anchorY - vertical),
+                (int) Math.ceil(anchorX + half), (int) Math.ceil(anchorY + vertical));
         }
     }
 
