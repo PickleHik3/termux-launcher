@@ -169,8 +169,12 @@ public final class TerminalRow {
         return mTextSizes != null;
     }
 
-    /** The packed text sizing record of a cell, or zero when the cell is a plain one. */
-    int getTextSizeRecord(int column) {
+    /**
+     * The packed text sizing record of a cell, or zero when the cell is a plain one. Public so a
+     * cache can compare one int instead of every accessor; the fields are read through the
+     * {@code getText*} accessors rather than by unpacking this.
+     */
+    public int getTextSizeRecord(int column) {
         return (mTextSizes == null || column < 0 || column >= mColumns) ? 0 : mTextSizes[column];
     }
 
