@@ -175,14 +175,6 @@ run the command above again. If you install Termux Launcher later, the app quiet
 keeping tlstore up to date. If you already have the launcher, running this command does nothing —
 it already provides tlstore.
 
-Anything a user should not choose directly gets `hidden=1` in its options; anything needed only
-while installing goes in `build=`. A file in this repository is pinned to a tag or the commit that
-last changed it, so the catalog and the payload can never drift apart.
-
-An item whose payload differs per launcher edition (a build linked against one edition's prefix, an
-edition-specific binary) gets one row per edition, sharing a name but each with its own source and
-digest — never one row trying to serve every edition.
-
 ## Browsing
 
 `tlstore browse` opens the whole store in one view: the items on the left (or above, on a narrow
@@ -249,3 +241,11 @@ hand-edit it. To add or change an item:
    to hash it, so that step needs the network; it must name a tag or a commit, never a branch.
 3. Run `scripts/tlstore/sign.sh` to sign it (it also signs the `tlstore` script itself).
 4. Commit all three: `items.tsv`, `catalog.tsv`, and `catalog.tsv.minisig`.
+
+Anything a user should not choose directly gets `hidden=1` in its options; anything needed only
+while installing goes in `build=`. A file in this repository is pinned to a tag or the commit that
+last changed it, so the catalog and the payload can never drift apart.
+
+An item whose payload differs per launcher edition (a build linked against one edition's prefix, an
+edition-specific binary) gets one row per edition, sharing a name but each with its own source and
+digest — never one row trying to serve every edition.
