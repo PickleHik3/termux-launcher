@@ -258,6 +258,12 @@ public final class WidgetPaneView extends FrameLayout {
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (!pagingTracking || pagingDragging) break;
+                if (widgetEditActive()) {
+                    // A hold turned this press into a widget drag after the page had started
+                    // watching it; the drag owns the rest of the gesture, sideways included.
+                    pagingTracking = false;
+                    break;
+                }
                 if (pagingVelocity != null) pagingVelocity.addMovement(event);
                 float dx = event.getX() - pagingDownX;
                 float dy = event.getY() - pagingDownY;

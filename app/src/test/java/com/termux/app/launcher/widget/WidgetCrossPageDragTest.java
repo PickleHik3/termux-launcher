@@ -70,6 +70,33 @@ public class WidgetCrossPageDragTest {
         assertEquals("the session never ended", List.of(true), fixture.announced);
     }
 
+    @Test public void aHoldThatBecomesADragIsNotStolenByThePageSwipe() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
+        fixture.repository.trimSparePages();
+        fixture.renderAndLayout();
+        assertEquals("two pages, so the page watches every press for a swipe",
+            2, fixture.repository.pageCount());
+        Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
+        // The whole gesture goes in at the pane, the way the screen delivers it.
+        long downTime = android.os.SystemClock.uptimeMillis();
+        fixture.paneEvent(MotionEvent.ACTION_DOWN, home.centerX(), home.centerY(), downTime, 0L);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(
+            android.view.ViewConfiguration.getLongPressTimeout() + 100, TimeUnit.MILLISECONDS);
+        assertTrue("the hold opened the edit session", fixture.pane.widgetEditActive());
+        fixture.paneEvent(MotionEvent.ACTION_MOVE, home.centerX() + home.width(),
+            home.centerY(), downTime, 60L);
+        fixture.paneEvent(MotionEvent.ACTION_MOVE, home.centerX() + home.width() + 4,
+            home.centerY(), downTime, 80L);
+        assertNotNull("the sideways move is the drag's, not a page swipe: a landing ghost shows",
+            fixture.pane.widgetEditOverlay().ghostBounds());
+        fixture.paneEvent(MotionEvent.ACTION_UP, home.centerX() + home.width() + 4,
+            home.centerY(), downTime, 100L);
+        assertTrue("and the drop moved the widget sideways instead of turning the page",
+            fixture.repository.get(1).cell.left >= 1);
+        assertEquals(0, fixture.controller.currentPage());
+    }
+
     @Test public void leavingTheBandStopsThePageTurning() {
         Fixture fixture = new Fixture();
         fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
@@ -232,6 +259,11 @@ public class WidgetCrossPageDragTest {
             dispatch(MotionEvent.ACTION_UP, raw(paneX), y, 40L);
         }
 
+        void paneEvent(int action, float x, float y, long downTime, long offset) {
+            MotionEvent event = MotionEvent.obtain(downTime, downTime + offset, action, x, y, 0);
+            pane.dispatchTouchEvent(event);
+            event.recycle();
+        }
         private void dispatch(int action, float x, float y, long time) {
             MotionEvent event = MotionEvent.obtain(0L, time, action, x, y, 0);
             pane.widgetEditOverlay().dispatchTouchEvent(event);
