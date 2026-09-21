@@ -23,7 +23,8 @@
 #                       terminal (the test suite pipes them in)
 #   TLSTORE_HOST        launcher|termux — which app the store is running in,
 #                       when the detection below should not have the last word
-#   TLSTORE_RAW_BASE    where a standalone install looks for a newer tlstore
+#   TLSTORE_RAW_BASE    the top of the repository a standalone install reads,
+#                       the paths below it being the ones in this tree
 #                       (default the raw main URL; tests point it at file://)
 #   TLSTORE_FZF         the fzf command (tests point it at a name that is not
 #                       there, to take the path for people without fzf)
@@ -90,13 +91,15 @@ FZF="${TLSTORE_FZF:-fzf}"
 LAUNCHER_RAW="https://raw.githubusercontent.com/PickleHik3/termux-launcher"
 BINARIES_RAW="https://raw.githubusercontent.com/PickleHik3/termux-launcher-binaries"
 
-# Where a hand-installed tlstore looks for a newer one: the address the
-# installer wrote down, unless the environment says otherwise.
+# The top of the repository a hand-installed tlstore reads: the address the
+# installer wrote down, unless the environment says otherwise. Everything under
+# it sits where it sits in this tree.
 RAW_BASE="${TLSTORE_RAW_BASE:-}"
 if [ -z "$RAW_BASE" ] && [ -f "$STANDALONE_MARK" ]; then
     RAW_BASE=$(head -1 "$STANDALONE_MARK" 2>/dev/null || true)
 fi
-[ -n "$RAW_BASE" ] || RAW_BASE="$LAUNCHER_RAW/main/app/src/main/assets/tlstore"
+[ -n "$RAW_BASE" ] || RAW_BASE="$LAUNCHER_RAW/main"
+STORE_PATH="app/src/main/assets/tlstore"
 
 ASSUME_YES="${TLSTORE_ASSUME_YES:-0}"
 [ "$ASSUME_YES" = 1 ] || ASSUME_YES=0
@@ -1678,8 +1681,8 @@ self_update() {
     mkdir -p "$CACHE_DIR"
     su_new="$CACHE_DIR/tlstore.new"
     su_sig="$CACHE_DIR/tlstore.new.minisig"
-    if ! curl -fsL -o "$su_new" "$RAW_BASE/tlstore" 2>/dev/null ||
-       ! curl -fsL -o "$su_sig" "$RAW_BASE/tlstore.minisig" 2>/dev/null; then
+    if ! curl -fsL -o "$su_new" "$RAW_BASE/$STORE_PATH/tlstore" 2>/dev/null ||
+       ! curl -fsL -o "$su_sig" "$RAW_BASE/$STORE_PATH/tlstore.minisig" 2>/dev/null; then
         rm -f "$su_new" "$su_sig"
         return 0
     fi

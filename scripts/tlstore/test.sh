@@ -36,8 +36,9 @@
 #                            full-screen view cannot run; pointing this at a
 #                            name that is not there tests what people without
 #                            fzf get instead.
-#   TLSTORE_RAW_BASE       — where a hand-installed tlstore looks for a newer
-#                            one; the suite points it at a file:// tree.
+#   TLSTORE_RAW_BASE       — the top of the repository a hand-installed tlstore
+#                            reads; the suite points it at a file:// tree laid
+#                            out the way this one is.
 # The catalog signature tests need minisign. Without it they are skipped, and
 # the suite says so instead of passing quietly.
 
@@ -639,15 +640,18 @@ y
     # --- keeping tlstore itself current, when it was installed by hand ---
     if [ "$HAVE_MINISIGN" = 1 ]; then
         store="$TPREFIX/libexec/termux-launcher/tlstore"
-        mkdir -p "$FX/selfnew" "$FX/selfsame" "$FX/selfbad"
-        sed 's/^TLSTORE_VERSION=.*/TLSTORE_VERSION=9.9/' "$TLSTORE" > "$FX/selfnew/tlstore"
-        printf '# the newer one\n' >> "$FX/selfnew/tlstore"
-        cp "$TLSTORE" "$FX/selfsame/tlstore"
-        cp "$FX/selfnew/tlstore" "$FX/selfbad/tlstore"
+        # Each base is the top of a repository, laid out the way this one is.
+        storepath="app/src/main/assets/tlstore"
+        mkdir -p "$FX/selfnew/$storepath" "$FX/selfsame/$storepath" "$FX/selfbad/$storepath"
+        sed 's/^TLSTORE_VERSION=.*/TLSTORE_VERSION=9.9/' "$TLSTORE" > "$FX/selfnew/$storepath/tlstore"
+        printf '# the newer one\n' >> "$FX/selfnew/$storepath/tlstore"
+        cp "$TLSTORE" "$FX/selfsame/$storepath/tlstore"
+        cp "$FX/selfnew/$storepath/tlstore" "$FX/selfbad/$storepath/tlstore"
         for d in selfnew selfsame selfbad; do
-            minisign -S -s "$ROOT/key.sec" -x "$FX/$d/tlstore.minisig" -m "$FX/$d/tlstore" >/dev/null 2>&1
+            minisign -S -s "$ROOT/key.sec" -x "$FX/$d/$storepath/tlstore.minisig" \
+                -m "$FX/$d/$storepath/tlstore" >/dev/null 2>&1
         done
-        printf '# nudged after signing\n' >> "$FX/selfbad/tlstore"
+        printf '# nudged after signing\n' >> "$FX/selfbad/$storepath/tlstore"
 
         cp "$TLSTORE" "$TPREFIX/bin/tlstore"
         printf 'file://%s\n' "$FX/selfnew" > "$store/.standalone"
