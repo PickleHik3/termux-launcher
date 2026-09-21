@@ -233,6 +233,44 @@ public class X11CliInstallerTest {
         assertEquals(inside + "echo tried every profile\n", text(installer.gpuSetupScript()));
     }
 
+    /**
+     * The X server ships only its built-in {@code fixed} and {@code cursor}, and an old core-font
+     * client quits when it cannot find the font it asked for by name. nixpkgs puts every font
+     * package in a store entry of its own, so the path is gathered when the server starts.
+     */
+    @Test public void theNixServerScriptGathersAFontPathOutOfTheStore() throws IOException {
+        File prefix = new File(temp.getRoot(), "usr");
+        nixProfile(prefix);
+
+        installer.install();
+
+        String server = text(installer.serverScript());
+        // Where current nixpkgs puts them (font-misc-misc), and where the old xorg.* set did.
+        for (String dir : new String[]{"misc", "75dpi", "100dpi", "TTF", "Type1", "cyrillic"}) {
+            assertTrue(dir, server.contains("/nix/store/*/share/fonts/X11/" + dir));
+            assertTrue(dir, server.contains("/nix/store/*/lib/X11/fonts/" + dir));
+        }
+        assertTrue("a derivation is not a font package",
+            server.contains("case \"$dir\" in *.drv/*) continue ;; esac"));
+        assertTrue("the server reads the index, so a directory without one is not a font dir",
+            server.contains("[ -f \"$dir/fonts.dir\" ] || continue"));
+        assertTrue("no font package at all leaves the server started as it always was",
+            server.contains("[ -z \"$TERMUX_X11_FONT_PATH\" ] || set -- -fp "
+                + "\"$TERMUX_X11_FONT_PATH\" \"$@\""));
+        assertTrue("the process still shows the arguments the user asked for",
+            server.contains("--nice-name=\"$TERMUX_X11_NICE_NAME\""));
+    }
+
+    /** Termux keeps its fonts where the server already looks, and its script says nothing new. */
+    @Test public void theTermuxServerScriptHasNoFontPathOfItsOwn() throws IOException {
+        installer.install();
+
+        String server = text(installer.serverScript());
+        assertFalse(server.contains("-fp"));
+        assertFalse(server.contains("TERMUX_X11_FONT_PATH"));
+        assertTrue(server.contains("--nice-name=\"termux-x11 com.termux.test $*\""));
+    }
+
     /** Android's own shell has no {@code trap -p}, and must not be made to complain about it. */
     @Test public void theNotifyProbeSaysNothingOnAShellWithoutTrapP() {
         assertTrue(X11CliInstaller.serverScript("com.termux.test", "/system/bin/sh")

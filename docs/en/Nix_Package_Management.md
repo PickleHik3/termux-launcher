@@ -402,6 +402,7 @@ Add the app, and `xkeyboard-config` alongside it:
 environment.packages = with pkgs; [
   xterm
   xkeyboard-config   # the display server will not start without it
+  font-misc-misc     # only for older X programs — see below
 ];
 ```
 
@@ -423,6 +424,33 @@ keeps its start button hidden, because the X server exits on startup
 without that keyboard data. It is data rather than a program, so it does
 not show up on `PATH` and there is nothing to run — the launcher finds it
 in the store and points the server at it after each switch.
+
+### Fonts for older X programs
+
+`xterm`, `xclock`, `xeyes` and their relatives ask the display server for
+a font by name — `-misc-fixed-medium-r-semicondensed--13-…` and the like
+— and quit with `cannot load font` when the server has none. The server
+carries only its own built-in `fixed` and `cursor`, so one package makes
+the difference:
+
+```nix
+font-misc-misc
+```
+
+Switch, and the launcher hands the server that store path the next time
+it starts one. **GTK and Qt apps need none of this** — they draw their
+own text — so skip it unless something refuses to open with a font
+complaint.
+
+Add `font-misc-misc` on its own. `font-cursor-misc` looks like its
+companion and cannot go beside it: both ship a `misc/fonts.dir`, and a
+switch with the two of them fails on the collision. The cursor font is
+built into the server, so nothing is missing without it.
+
+`xterm` has a way around it of its own: `xterm -fa Monospace` asks for a
+modern Xft font instead of a server one, and works without either
+package. Put it in the `Exec=` line of your own `.desktop` file if you
+would rather not install fonts.
 
 A few notes:
 

@@ -43,7 +43,7 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 10;
+    @VisibleForTesting static final int VERSION = 11;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -253,8 +253,10 @@ public final class X11CliInstaller {
             }
             // The server is exec'd by the launcher, from Android's side; the other two are run
             // by the user from inside the environment. On nix those are two different shells.
-            writeAtomically(serverScript(), bytes(serverScript(applicationId, hostShellPath())),
-                true, true);
+            File prefixDir = binDir.getParentFile();
+            boolean nix = prefixDir != null && NixProfile.isNix(prefixDir);
+            writeAtomically(serverScript(),
+                bytes(serverScript(applicationId, hostShellPath(), nix)), true, true);
             writeAtomically(preferenceScript(),
                 bytes(preferenceScript(applicationId, prefixShellPath())), true, true);
             writeAtomically(gpuSetupScript(), bytes(withPrefixShebang(readText(GPU_SETUP_ASSET))), true, true);
@@ -319,6 +321,37 @@ public final class X11CliInstaller {
      */
     @NonNull
     static String serverScript(@NonNull String applicationId, @NonNull String shell) {
+        return serverScript(applicationId, shell, false);
+    }
+
+    /**
+     * Where a font package puts its directories inside its store entry. Current nixpkgs
+     * ({@code font-misc-misc}) uses {@code share/fonts/X11}; the older {@code xorg.*} packages
+     * used {@code lib/X11/fonts}, and a store can hold both at once.
+     */
+    private static final String[] NIX_FONT_ROOTS = {"share/fonts/X11", "lib/X11/fonts"};
+
+    /**
+     * The font directories a nix store can hold, under each of {@link #NIX_FONT_ROOTS}. The X
+     * server ships only its own built-in {@code fixed} and {@code cursor}, and an old core-font
+     * client — xterm above all — asks for a real one by name and quits when the server has no
+     * font path to look it up in. Termux's prefix keeps its fonts where the server already looks;
+     * nixpkgs puts each font package in its own store entry, so the path has to be gathered when
+     * the server starts, after whichever switch put them there.
+     */
+    private static final String[] NIX_FONT_DIRS =
+        {"misc", "75dpi", "100dpi", "TTF", "Type1", "cyrillic"};
+
+    /**
+     * {@link #serverScript(String)} with the shell spelled out, and — for nix — a font path
+     * gathered out of the store. See {@link NixProfile#hostShell} for the shell: the nix
+     * edition's prefix has no {@code bash}, and its own {@code sh} is a store link an
+     * {@code execve} from Android cannot follow, so a script whose shebang names either does not
+     * run at all, which is a display that never starts.
+     */
+    @NonNull
+    static String serverScript(@NonNull String applicationId, @NonNull String shell,
+                               boolean nixFontPath) {
         return "#!" + shell + "\n"
             + MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
             + "if [ ! -e /system/bin/getprop ] || [ ! -e /system/bin/app_process ]; then\n"
@@ -342,8 +375,41 @@ public final class X11CliInstaller {
             // Android's mksh has no `trap -p` and says so on stderr; the answer is the same
             // either way (no handler, no notification), so only the complaint is silenced.
             + "[ -n \"$(trap -p USR1 2>/dev/null)\" ] && export TERMUX_X11_NOTIFY_PARENT=1\n"
+            + (nixFontPath ? nixFontPathBlock(applicationId) : "")
             + "exec /system/bin/app_process -Xnoimage-dex2oat / "
-            + "--nice-name=\"termux-x11 " + applicationId + " $*\" com.termux.x11.Loader \"$@\"\n";
+            + "--nice-name=\"" + (nixFontPath ? "$TERMUX_X11_NICE_NAME"
+                : "termux-x11 " + applicationId + " $*")
+            + "\" com.termux.x11.Loader \"$@\"\n";
+    }
+
+    /**
+     * The lines that build {@code -fp} out of whatever font packages this phone's nix store has,
+     * at the moment the server starts — a switch adds and removes them, and each lands in a store
+     * entry of its own name, so there is nothing to write down once.
+     *
+     * <p>An unmatched glob stays literal in a POSIX shell, so a store with no font package at all
+     * simply tests a handful of paths that hold no {@code fonts.dir} and ends with an empty list,
+     * and the server is started exactly as it was before. A directory is only worth naming when
+     * it has that index in it: the server reads the index, not the files. The name the process
+     * shows is taken before the flag is prepended, so it stays the arguments the user asked for.
+     */
+    @NonNull
+    private static String nixFontPathBlock(@NonNull String applicationId) {
+        StringBuilder globs = new StringBuilder();
+        for (String root : NIX_FONT_ROOTS) {
+            for (String dir : NIX_FONT_DIRS) {
+                globs.append(' ').append(PREFIX).append("/nix/store/*/").append(root).append('/')
+                    .append(dir);
+            }
+        }
+        return "TERMUX_X11_FONT_PATH=\"\"\n"
+            + "for dir in" + globs + "; do\n"
+            + "  case \"$dir\" in *.drv/*) continue ;; esac\n"
+            + "  [ -f \"$dir/fonts.dir\" ] || continue\n"
+            + "  TERMUX_X11_FONT_PATH=\"${TERMUX_X11_FONT_PATH:+$TERMUX_X11_FONT_PATH,}$dir\"\n"
+            + "done\n"
+            + "TERMUX_X11_NICE_NAME=\"termux-x11 " + applicationId + " $*\"\n"
+            + "[ -z \"$TERMUX_X11_FONT_PATH\" ] || set -- -fp \"$TERMUX_X11_FONT_PATH\" \"$@\"\n";
     }
 
     /**
