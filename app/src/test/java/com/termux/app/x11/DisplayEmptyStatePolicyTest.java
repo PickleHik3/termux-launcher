@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.R;
+import com.termux.app.tour.TourEdition;
 import com.termux.app.x11.DisplayEmptyStatePolicy.State;
 
 import org.junit.Test;
@@ -72,5 +73,55 @@ public class DisplayEmptyStatePolicyTest {
         assertFalse(DisplayEmptyStatePolicy.decide(true, false).resting());
         assertFalse(DisplayEmptyStatePolicy.decide(false, true).resting());
         assertFalse(DisplayEmptyStatePolicy.decide(false, false).resting());
+    }
+
+    /** The two-argument overload is exactly the Termux edition's answer. */
+    @Test public void theTwoArgumentOverloadIsTheTermuxEdition() {
+        for (boolean enabled : new boolean[] {true, false}) {
+            for (boolean hasKeyboardData : new boolean[] {true, false}) {
+                State plain = DisplayEmptyStatePolicy.decide(enabled, hasKeyboardData);
+                State termux = DisplayEmptyStatePolicy.decide(enabled, hasKeyboardData,
+                    TourEdition.TERMUX);
+                assertEquals(plain.messageRes, termux.messageRes);
+                assertEquals(plain.startVisible, termux.startVisible);
+            }
+        }
+    }
+
+    /**
+     * Nix has no {@code pkg} at all, so the missing-package advice cannot be followed there and
+     * the whole feature assumes a Termux prefix nix does not have. Enabled or not, its own state
+     * names the display as simply not available yet, with nothing to start and no guide to read.
+     */
+    @Test public void nixNamesTheDisplayAsUnavailableRatherThanNamingAPackage() {
+        State withData = DisplayEmptyStatePolicy.decide(true, true, TourEdition.NIX);
+        assertEquals(R.string.termux_x11_unavailable_nix, withData.messageRes);
+        assertFalse("nothing for nix to start", withData.startVisible);
+        assertFalse(withData.guideVisible());
+        assertFalse(withData.resting());
+
+        State withoutData = DisplayEmptyStatePolicy.decide(true, false, TourEdition.NIX);
+        assertEquals(R.string.termux_x11_unavailable_nix, withoutData.messageRes);
+        assertFalse(withoutData.startVisible);
+        assertFalse(withoutData.guideVisible());
+    }
+
+    @Test public void nixStillSaysTheSettingIsOffWhenItIs() {
+        State off = DisplayEmptyStatePolicy.decide(false, false, TourEdition.NIX);
+        assertEquals(R.string.termux_x11_display_off, off.messageRes);
+        assertTrue(off.startVisible);
+    }
+
+    @Test public void vajReadsTheSameAsTermux() {
+        for (boolean enabled : new boolean[] {true, false}) {
+            for (boolean hasKeyboardData : new boolean[] {true, false}) {
+                State vaj = DisplayEmptyStatePolicy.decide(enabled, hasKeyboardData,
+                    TourEdition.VAJ);
+                State termux = DisplayEmptyStatePolicy.decide(enabled, hasKeyboardData,
+                    TourEdition.TERMUX);
+                assertEquals(termux.messageRes, vaj.messageRes);
+                assertEquals(termux.startVisible, vaj.startVisible);
+            }
+        }
     }
 }

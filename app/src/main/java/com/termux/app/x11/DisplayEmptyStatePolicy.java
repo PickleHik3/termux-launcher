@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.StringRes;
 
 import com.termux.R;
+import com.termux.app.tour.TourEdition;
 
 /**
  * What the Display page's empty state says while no server is running: the plain "nothing
@@ -17,6 +18,12 @@ import com.termux.R;
  * boolean: this class does no I/O of its own, which is what lets a test flip "installed" without a
  * real prefix and is why the caller must re-run the probe itself on every arrival at the place —
  * this policy only ever answers for the reading it is given.
+ *
+ * <p>The nix edition has no {@code pkg} at all, so the missing-package advice above cannot be
+ * followed there and the whole feature assumes a Termux prefix it does not have. Rather than
+ * naming a package nix can never install, {@link #decide(boolean, boolean, TourEdition)} answers
+ * with a message that just says the display is not there yet, and hides both the start control
+ * and the guide route.
  */
 public final class DisplayEmptyStatePolicy {
 
@@ -58,13 +65,32 @@ public final class DisplayEmptyStatePolicy {
     private DisplayEmptyStatePolicy() {}
 
     /**
+     * The Termux edition's answer. Kept for the callers that have no edition of their own to
+     * hand in yet; {@link #decide(boolean, boolean, TourEdition)} is what a Display place calls.
+     *
      * @param enabled         the Linux display setting
      * @param hasKeyboardData whether {@code xkeyboard-config}'s files are in the prefix, computed
      *                        outside this method
      */
     @NonNull
     public static State decide(boolean enabled, boolean hasKeyboardData) {
+        return decide(enabled, hasKeyboardData, TourEdition.TERMUX);
+    }
+
+    /**
+     * @param enabled         the Linux display setting
+     * @param hasKeyboardData whether {@code xkeyboard-config}'s files are in the prefix, computed
+     *                        outside this method; ignored for the nix edition, which has no
+     *                        {@code pkg} to have installed it with
+     * @param edition         which edition is asking; only nix reads differently
+     */
+    @NonNull
+    public static State decide(boolean enabled, boolean hasKeyboardData,
+                                @NonNull TourEdition edition) {
         if (!enabled) return new State(R.string.termux_x11_display_off, true);
+        if (edition == TourEdition.NIX) {
+            return new State(R.string.termux_x11_unavailable_nix, false);
+        }
         if (!hasKeyboardData) return new State(R.string.termux_x11_needs_keyboard_data, false);
         return new State(R.string.termux_x11_no_display, true);
     }

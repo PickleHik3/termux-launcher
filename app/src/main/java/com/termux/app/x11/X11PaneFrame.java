@@ -20,6 +20,7 @@ import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
 import com.termux.app.terminal.PaneRim;
 import com.termux.app.terminal.PaneSurfaceStyle;
+import com.termux.app.tour.TourEdition;
 import com.termux.app.wall.PaneControlsView;
 import com.termux.view.HoldTiming;
 import com.termux.x11.LorieView;
@@ -641,8 +642,8 @@ public final class X11PaneFrame extends PaneContentFrame {
      * running-state change — never a hot path.
      */
     private void applyEmptyState() {
-        DisplayEmptyStatePolicy.State state =
-            DisplayEmptyStatePolicy.decide(mEnabled, X11CliInstaller.hasKeyboardData());
+        DisplayEmptyStatePolicy.State state = DisplayEmptyStatePolicy.decide(mEnabled,
+            X11CliInstaller.hasKeyboardData(), TourEdition.of(getContext().getPackageName()));
         View message = findViewById(R.id.x11_pane_empty_message);
         if (message instanceof android.widget.TextView) {
             ((android.widget.TextView) message).setText(state.messageRes);

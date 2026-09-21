@@ -261,6 +261,7 @@
     <string name="widget_picker_no_space">No room for a %1$d × %2$d widget on this %3$d × %4$d page. You can make the grid bigger in Settings.</string>
     <string name="termux_x11_no_display">No display is running.</string>
     <string name="termux_x11_needs_keyboard_data">The display needs the xkeyboard-config package installed before it can start.</string>
+    <string name="termux_x11_unavailable_nix">The Linux display is not available in this edition yet.</string>
     <string name="termux_x11_read_guide">Read the guide</string>
     <string name="termux_x11_start_display">Start display</string>
     <string name="termux_x11_display_off">The Linux display is switched off.</string>
@@ -1894,6 +1895,7 @@
     <string name="tour_closing_customize_copy">Hold any pane corner to open the guide or customize Termux Launcher.</string>
     <string name="tour_closing_extras_heading">Launcher extras</string>
     <string name="tour_closing_extras_copy">Use tlstore to install terminal goodies such as fastfetch with GIF support, the sigye clock, Claude Code and kitten, kitty\'s companion tool.</string>
+    <string name="tour_closing_extras_copy_nix">Extra tools come from nixpkgs too: add fastfetch, sigye or kitten to home.nix.</string>
     <string name="tour_closing_gui_apps_heading">GUI apps</string>
     <string name="tour_closing_gui_apps_copy">Settings \u2192 Display \u2192 Get GUI apps sets up graphical Linux apps that open from the app drawer.</string>
     <string name="tour_closing_gui_apps_copy_nix">Graphical apps come from nixpkgs: add them to home.nix and run nix-on-droid switch.</string>

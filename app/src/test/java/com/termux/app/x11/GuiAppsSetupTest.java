@@ -247,9 +247,12 @@ public class GuiAppsSetupTest {
         assertEquals(Route.X11_REPO, GuiAppsSetup.defaultRoute(TourEdition.TERMUX));
     }
 
-    @Test public void vajOffersOnlyTheDistroRoute() {
-        assertEquals(Arrays.asList(Route.DISTRO), GuiAppsSetup.routesFor(TourEdition.VAJ));
-        assertEquals(Route.DISTRO, GuiAppsSetup.defaultRoute(TourEdition.VAJ));
+    @Test public void vajOffersBothRoutesLikeTermux() {
+        // Reversed 2026-09-21: repo.pathayam.xyz now carries xkeyboard-config and the x11 apps,
+        // so VAJ's X11 route works there too.
+        assertEquals(Arrays.asList(Route.X11_REPO, Route.DISTRO),
+            GuiAppsSetup.routesFor(TourEdition.VAJ));
+        assertEquals(Route.X11_REPO, GuiAppsSetup.defaultRoute(TourEdition.VAJ));
     }
 
     @Test public void nixOffersNoRoute() {
@@ -257,6 +260,41 @@ public class GuiAppsSetupTest {
         // way this class builds no command for.
         assertTrue(GuiAppsSetup.routesFor(TourEdition.NIX).isEmpty());
         assertEquals(null, GuiAppsSetup.defaultRoute(TourEdition.NIX));
+    }
+
+    // --- VAJ's edition-aware X11 command --------------------------------------------------------
+
+    @Test public void vajsX11CommandHasNoSeparateRepoStepAndDefaultsToPcmanfmAndMousepad() {
+        String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
+            GuiAppsSetup.defaultStarters(), TourEdition.VAJ);
+
+        assertEquals("pkg install -y xkeyboard-config pcmanfm mousepad", command);
+    }
+
+    @Test public void vajsX11CommandAddsTheTerminalWhenTicked() {
+        Set<StarterApp> starters = EnumSet.copyOf(GuiAppsSetup.defaultStarters());
+        starters.add(StarterApp.TERMINAL);
+        String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, starters,
+            TourEdition.VAJ);
+
+        assertEquals("pkg install -y xkeyboard-config pcmanfm mousepad xfce4-terminal", command);
+    }
+
+    @Test public void vajsX11CommandDropsTheBrowserEvenWhenTicked() {
+        String command = GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN,
+            EnumSet.of(StarterApp.BROWSER), TourEdition.VAJ);
+
+        // VAJ ships no browser at all; ticking it adds nothing to the command.
+        assertEquals("pkg install -y xkeyboard-config", command);
+        assertFalse(command.contains("firefox"));
+    }
+
+    @Test public void termuxsX11CommandIsUnchangedByTheEditionAwareOverload() {
+        assertEquals(GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL),
+            GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
+        assertEquals("pkg install -y x11-repo && pkg install -y "
+                + "xkeyboard-config firefox pcmanfm mousepad xfce4-terminal",
+            GuiAppsSetup.command(Route.X11_REPO, Distro.DEBIAN, ALL, TourEdition.TERMUX));
     }
 
     @Test public void anUnknownStoredChoiceFallsBackToTheRecommendedOne() {
