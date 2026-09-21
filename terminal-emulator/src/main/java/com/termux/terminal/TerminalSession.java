@@ -491,6 +491,13 @@ public final class TerminalSession extends TerminalOutput {
      * Returns the shell's working directory or null if it was unavailable.
      */
     public String getCwd() {
+        // What the shell says beats what /proc knows: OSC 7 follows a subshell, and /proc only ever
+        // knew the session's own process. It is trusted only while it still names a folder on this
+        // device, so a stale or invented report falls through to the reading below.
+        String reported = getReportedWorkingDirectory();
+        if (reported != null && new File(reported).isDirectory()) {
+            return reported;
+        }
         if (mShellPid < 1) {
             return null;
         }
