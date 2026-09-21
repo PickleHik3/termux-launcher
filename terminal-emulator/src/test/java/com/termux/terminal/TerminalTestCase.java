@@ -61,6 +61,30 @@ public abstract class TerminalTestCase extends TestCase {
             return clipboardContents;
         }
 
+		/** Whole OSC 99 requests handed over, in the order they finished. */
+		public final List<KittyNotification> kittyNotifications = new ArrayList<>();
+
+		/** Names of notifications the program asked to take down again. */
+		public final List<String> kittyNotificationCloses = new ArrayList<>();
+
+		/** Every pointer shape asked for by OSC 22; null means "the terminal's own". */
+		public final List<String> pointerShapes = new ArrayList<>();
+
+		@Override
+		public void onKittyNotification(KittyNotification notification) {
+			kittyNotifications.add(notification);
+		}
+
+		@Override
+		public void onKittyNotificationClose(String id) {
+			kittyNotificationCloses.add(id);
+		}
+
+		@Override
+		public void onPointerShapeChanged(String shape) {
+			pointerShapes.add(shape);
+		}
+
 		@Override
 		public void onBell() {
 			bellsRung++;

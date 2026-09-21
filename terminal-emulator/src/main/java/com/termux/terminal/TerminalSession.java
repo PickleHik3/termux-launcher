@@ -420,6 +420,36 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     @Override
+    public void onKittyNotification(KittyNotification notification) {
+        mClient.onKittyNotification(this, notification);
+    }
+
+    @Override
+    public void onKittyNotificationClose(String id) {
+        mClient.onKittyNotificationClose(this, id);
+    }
+
+    @Override
+    public void onPointerShapeChanged(String shape) {
+        mClient.onPointerShapeChanged(this, shape);
+    }
+
+    /**
+     * The user tapped a notification this shell put up, or its button number. Answers the program
+     * when it asked to be told.
+     */
+    public void notificationActivated(String id, int button) {
+        TerminalEmulator emulator = getEmulator();
+        if (emulator != null) emulator.kittyNotificationActivated(id, button);
+    }
+
+    /** A notification this shell put up went away without being tapped. */
+    public void notificationClosed(String id) {
+        TerminalEmulator emulator = getEmulator();
+        if (emulator != null) emulator.kittyNotificationClosed(id);
+    }
+
+    @Override
     public void onColorsChanged() {
         mClient.onColorsChanged(this);
     }
