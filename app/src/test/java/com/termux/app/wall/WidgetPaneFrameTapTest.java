@@ -53,11 +53,11 @@ public class WidgetPaneFrameTapTest {
     private static final int HEIGHT = 800;
     /** The square each corner keeps, the same one a terminal pane holds. */
     private static final float CORNER_DP = CornerZones.PANE_SIZE_DP;
-    /** The tab: four 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
-    private static final float TAB_WIDTH_DP = 154f;
+    /** The resting tab: five 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
+    private static final float TAB_WIDTH_DP = 192f;
     private static final float TAB_INSET_DP = 0f;
-    /** The middle of the gap between the pencil and the sliders. */
-    private static final float TAB_SPLIT_DP = 39f;
+    /** One button and the gap after it. */
+    private static final float TAB_STEP_DP = 38f;
 
     /** What the page asked the launcher for, in order, over a 4 x 5 grid. */
     private static class Calls implements WidgetPaneFrame.Host {
@@ -107,22 +107,31 @@ public class WidgetPaneFrameTapTest {
         return activity.getResources().getDisplayMetrics().density;
     }
 
+    /** The middle of the nth button of the resting tab, counting from its leading edge. */
+    private static float buttonX(Activity activity, int index) {
+        float density = density(activity);
+        return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density
+            + (5f + 15f + index * TAB_STEP_DP) * density;
+    }
+
     /** The first button: the edit pencil. */
     private static float pencilX(Activity activity) {
-        float density = density(activity);
-        return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + (TAB_SPLIT_DP - 8f) * density;
+        return buttonX(activity, 0);
     }
 
-    /** The second button: the sliders that open Appearance. */
+    /** The second: the plus that adds a page. */
+    private static float plusX(Activity activity) {
+        return buttonX(activity, 1);
+    }
+
+    /** The third button: the sliders that open Appearance. */
     private static float slidersX(Activity activity) {
-        float density = density(activity);
-        return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + (TAB_SPLIT_DP + 8f) * density;
+        return buttonX(activity, 2);
     }
 
-    /** The third button: the grid that opens Layout, one button and gap further along. */
+    /** The fourth button: the grid that opens Layout, one button and gap further along. */
     private static float layoutX(Activity activity) {
-        float density = density(activity);
-        return WIDTH - (TAB_INSET_DP + TAB_WIDTH_DP) * density + 96f * density;
+        return buttonX(activity, 3);
     }
 
     private static float tabCentreY(Activity activity) {
@@ -449,6 +458,34 @@ public class WidgetPaneFrameTapTest {
         tap(page, layoutX(activity), bounds.centerY());
         assertEquals(Arrays.asList("appearance", "layout"), calls.log);
         assertFalse(page.isControlsTabShown());
+    }
+
+    /**
+     * The + between the pencil and the sliders: another widgets page. Like the tick and the cross
+     * it is the grid's own coordinator that answers it, so the page's host hears nothing.
+     */
+    @Test
+    public void theTabCarriesAPlusThatAddsAPage() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = page(activity);
+        Calls calls = new Calls();
+        page.setHost(calls);
+        List<String> pages = new ArrayList<>();
+        WidgetPaneView pane = page.findViewById(R.id.widget_pane);
+        pane.setListener(new WidgetPaneView.Listener() {
+            @Override public void onPageChangeRequested(int index) { }
+            @Override public void onWidgetAddPage() { pages.add("add page"); }
+        }, item -> { });
+
+        holdCorner(page);
+        RectF button = new RectF();
+        assertTrue("the plus is on the resting tab", page.addPageButtonBounds(button));
+        assertEquals("where the second button sits", plusX(activity), button.centerX(), 2f);
+        tap(page, button.centerX(), button.centerY());
+
+        assertEquals(Collections.singletonList("add page"), pages);
+        assertEquals("the page's host hears nothing about it", Collections.emptyList(), calls.log);
+        assertFalse("and the tab goes away behind it", page.isControlsTabShown());
     }
 
     private static void tapHelp(WidgetPaneFrame page, Activity activity) {

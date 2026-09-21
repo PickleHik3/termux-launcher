@@ -38,8 +38,8 @@ import com.termux.view.HoldTiming;
  * keeps its app-widget host views across the move.
  *
  * <p>A <em>hold</em> on one of the page's four corners drops the same tab the Display page's
- * corners drop, with the page's own buttons: the pencil that starts editing the widgets, and the
- * two doors every place carries — Appearance and Layout.
+ * corners drop, with the page's own buttons: the pencil that starts editing the widgets, the plus
+ * that adds a page, and the two doors every place carries — Appearance and Layout.
  * It comes out of the corner that was touched, so the tab lands under the thumb that asked for it.
  * While a widget is being edited those buttons are replaced by the grid's size, which opens the
  * wheels that change it. Everything between the corners is the widgets': a grid that reaches the
@@ -74,6 +74,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private static final int ACTION_COMMIT = 6;
     /** The cross: put it back the way it was. */
     private static final int ACTION_DISCARD = 7;
+    /** The plus: another widgets page, which the pane turns to. */
+    private static final int ACTION_ADD_PAGE = 8;
 
     private final PaneRim mRim = new PaneRim();
     @Nullable private PaneGlassBackdropView mGlass;
@@ -185,6 +187,12 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     }
     private final android.graphics.RectF mHelpButtonBounds = new android.graphics.RectF();
 
+    /** Where the plus sits on the resting tab; false when the tab is not out. */
+    @androidx.annotation.VisibleForTesting
+    boolean addPageButtonBounds(@NonNull RectF out) {
+        return mControls != null && mControls.actionBounds(ACTION_ADD_PAGE, out);
+    }
+
     /** Where the tick or the cross sits on the editing tab; false when neither is out. */
     @androidx.annotation.VisibleForTesting
     boolean editExitButtonBounds(boolean keep, @NonNull RectF out) {
@@ -200,6 +208,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private void applyRestingActions() {
         if (mControls == null) return;
         mControls.setActions(PaneControlsView.Action.glyph(ACTION_EDIT, CornerTabGlyphs.EDIT),
+            PaneControlsView.Action.drawn(ACTION_ADD_PAGE, WidgetPaneFrame::drawPlusMark),
             PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
             PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
@@ -231,6 +240,15 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             cx + 5f * density, cy - 4f * density, paint);
     }
 
+    /** The plus, drawn in the same family: another widgets page. */
+    private static void drawPlusMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                     @NonNull Paint paint, float density) {
+        float cx = button.centerX();
+        float cy = button.centerY();
+        canvas.drawLine(cx - 5f * density, cy, cx + 5f * density, cy, paint);
+        canvas.drawLine(cx, cy - 5f * density, cx, cy + 5f * density, paint);
+    }
+
     private static void drawCrossMark(@NonNull Canvas canvas, @NonNull RectF button,
                                       @NonNull Paint paint, float density) {
         float cx = button.centerX();
@@ -250,6 +268,12 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         else pane.discardWidgetEdit();
     }
 
+    /** The plus, which the grid's own coordinator answers, as the tick and the cross are. */
+    private void runAddWidgetPage() {
+        if (!(mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView)) return;
+        ((com.termux.app.launcher.widget.WidgetPaneView) mGrid).addWidgetPage();
+    }
+
     private void runControl(int id) {
         if (id == ACTION_GRID_SIZE) {
             openGridSizePopup();
@@ -257,6 +281,11 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         }
         if (id == ACTION_COMMIT || id == ACTION_DISCARD) {
             runWidgetEditExit(id == ACTION_COMMIT);
+            return;
+        }
+        if (id == ACTION_ADD_PAGE) {
+            runAddWidgetPage();
+            dismissControls();
             return;
         }
         if (mHost == null) return;
