@@ -37,9 +37,11 @@ import java.util.Set;
  * <h3>Package names</h3>
  *
  * Checked against the live indexes on 2026-09-20: Termux's {@code x11} repository for route one,
- * Debian trixie, Ubuntu noble and Arch's own package search for route two. A name that is wrong
- * is a command that stops halfway with the user watching, so they are written down here rather
- * than guessed at per distro.
+ * Debian trixie, Ubuntu noble and Arch's own package search for route two. VAJ's own apt
+ * repository (repo.pathayam.xyz) was checked separately on 2026-09-21 and uses the same package
+ * names as Termux's {@code x11} repository, minus a browser, which it does not carry. A name
+ * that is wrong is a command that stops halfway with the user watching, so they are written down
+ * here rather than guessed at per distro.
  */
 public final class GuiAppsSetup {
 
@@ -82,16 +84,19 @@ public final class GuiAppsSetup {
     /**
      * The routes {@code edition} offers on the "Get GUI apps" screen, in menu order.
      *
-     * <p>Decision D1 (user, 2026-09-20): the VAJ edition sticks to the distro route only — its
-     * user does not want to build X11 apps for it, and every route it does offer must actually
-     * work there. Decision (user, 2026-09-20): the nix edition offers neither route — graphical
-     * apps there come from nixpkgs and {@code home.nix}, a third way this class does not build a
-     * command for, so an empty list here is what tells the screen to show neither a route choice
-     * nor a command to copy.
+     * <p>Decision D1 (user, 2026-09-20), reversed (user, 2026-09-21): VAJ's own apt repository
+     * (repo.pathayam.xyz, aarch64) now carries {@code xkeyboard-config}, {@code pcmanfm},
+     * {@code mousepad}, {@code thunar} and {@code xfce4-terminal}, so its X11 route works there
+     * after all and is offered again alongside the distro route — see
+     * {@link #command(Route, Distro, Set, TourEdition)} for the two things that route drops for
+     * VAJ (the separate {@code x11-repo} step, which that repo has no equivalent of, and the
+     * browser, which it ships none of). Decision (user, 2026-09-20): the nix edition offers
+     * neither route — graphical apps there come from nixpkgs and {@code home.nix}, a third way
+     * this class does not build a command for, so an empty list here is what tells the screen to
+     * show neither a route choice nor a command to copy.
      */
     @NonNull
     public static List<Route> routesFor(@NonNull TourEdition edition) {
-        if (edition == TourEdition.VAJ) return Collections.singletonList(Route.DISTRO);
         if (edition == TourEdition.NIX) return Collections.emptyList();
         return Collections.unmodifiableList(Arrays.asList(Route.X11_REPO, Route.DISTRO));
     }
@@ -246,8 +251,9 @@ public final class GuiAppsSetup {
     }
 
     /**
-     * The command for {@code route}. One string, ready for the clipboard, ending without a
-     * newline so the user's own Enter is what starts it.
+     * The Termux edition's command for {@code route}. Kept for callers with no edition of their
+     * own to hand in yet; {@link #command(Route, Distro, Set, TourEdition)} is what the "Get GUI
+     * apps" screen calls.
      *
      * @param distro   which Linux to put inside; ignored by {@link Route#X11_REPO}
      * @param starters the apps the user ticked, in menu order however they were given
@@ -255,25 +261,47 @@ public final class GuiAppsSetup {
     @NonNull
     public static String command(@NonNull Route route, @NonNull Distro distro,
                                  @NonNull Set<StarterApp> starters) {
-        return route == Route.X11_REPO ? x11Command(starters) : distroCommand(distro, starters);
+        return command(route, distro, starters, TourEdition.TERMUX);
     }
 
     /**
-     * Two installs, chained: the repository first, because the apps are not in the index until it
-     * is there. With nothing ticked it is just the repository, which is still a sensible thing to
-     * hand someone who wants to pick their own apps afterwards.
+     * The command for {@code route}. One string, ready for the clipboard, ending without a
+     * newline so the user's own Enter is what starts it.
+     *
+     * @param distro   which Linux to put inside; ignored by {@link Route#X11_REPO}
+     * @param starters the apps the user ticked, in menu order however they were given
+     * @param edition  only changes {@link Route#X11_REPO}: VAJ's apt repository has no separate
+     *                 {@code x11-repo} to add and ships no browser
      */
     @NonNull
-    private static String x11Command(@NonNull Set<StarterApp> starters) {
-        String base = "pkg install -y x11-repo";
+    public static String command(@NonNull Route route, @NonNull Distro distro,
+                                 @NonNull Set<StarterApp> starters, @NonNull TourEdition edition) {
+        return route == Route.X11_REPO
+            ? x11Command(starters, edition) : distroCommand(distro, starters);
+    }
+
+    /**
+     * Termux: two installs, chained — the repository first, because the apps are not in the
+     * index until it is there. VAJ: everything is already in one repository, its apps are packaged
+     * there under the same names, and it ships no browser at all, so a ticked
+     * {@link StarterApp#BROWSER} is silently dropped rather than naming a package that does not
+     * exist. With nothing ticked it is just the keyboard data (plus, for Termux, the repository),
+     * which is still a sensible thing to hand someone who wants to pick their own apps afterwards.
+     */
+    @NonNull
+    private static String x11Command(@NonNull Set<StarterApp> starters,
+                                     @NonNull TourEdition edition) {
+        boolean vaj = edition == TourEdition.VAJ;
         List<String> packages = new ArrayList<>();
         // The display itself needs the keyboard data before it can start; it rides along with
         // whatever apps were ticked, so a fresh install gets a display that starts.
         packages.add(KEYBOARD_DATA_PACKAGE);
         for (StarterApp app : StarterApp.values()) {
+            if (vaj && app == StarterApp.BROWSER) continue;
             if (starters.contains(app)) packages.add(termuxPackageFor(app));
         }
-        return base + " && pkg install -y " + join(packages);
+        String install = "pkg install -y " + join(packages);
+        return vaj ? install : "pkg install -y x11-repo && " + install;
     }
 
     /**
