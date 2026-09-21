@@ -49,21 +49,21 @@ public final class KeyPopupOverlayView extends View {
      * lands and lifts in 20-100 ms; without this floor a popup was on screen for two or three
      * frames, or not at all, and read as flicker with uneven lengths from key to key.
      */
-    static final long MIN_VISIBLE_MS = 200L;
+    static final long MIN_VISIBLE_MS = 180L;
     /** Enter: opacity and a short rise to the anchor. */
-    private static final long ENTER_MS = 180L;
+    private static final long ENTER_MS = 130L;
     /** Exit: opacity and a shorter rise past the anchor, once the key is on its way. */
-    private static final long EXIT_MS = 160L;
+    private static final long EXIT_MS = 140L;
     /** A swipe target replacing the glyph in place. */
     private static final long SWAP_MS = 60L;
     /** Reduced motion keeps every state change, just none of the travel. */
     private static final long INSTANT_MS = 1L;
 
     /** How far the glyph travels on past its resting place while it fades out. */
-    private static final float EXIT_RISE_DP = 14f;
-    private static final float ENTER_FROM_SCALE = 0.7f;
-    private static final float EXIT_TO_SCALE = 0.85f;
-    private static final float SHADOW_RADIUS_DP = 4f;
+    private static final float EXIT_RISE_DP = 10f;
+    private static final float ENTER_FROM_SCALE = 0.82f;
+    private static final float EXIT_TO_SCALE = 0.9f;
+    private static final float SHADOW_RADIUS_DP = 3f;
     private static final float SHADOW_DY_DP = 1f;
     /** Slack round the glyph's box when asking for a repaint: the shadow and the rise. */
     private static final float INVALIDATE_PAD_DP = 10f;
@@ -149,6 +149,16 @@ public final class KeyPopupOverlayView extends View {
                      @NonNull String label, boolean labelKeyFont) {
         Popup existing = mPopups.get(pointerId);
         if (existing != null) retire(existing);
+        // A repeat on the same key replaces the glyph still finishing its stay there, instead of
+        // stacking a second one on top of it.
+        for (int i = mExiting.size() - 1; i >= 0; i--) {
+            Popup leaving = mExiting.get(i);
+            if (leaving.keyBounds.equals(keyBounds)) {
+                leaving.stop();
+                mExiting.remove(i);
+                invalidatePopup(leaving);
+            }
+        }
         Popup popup = new Popup(pointerId, new RectF(keyBounds), clampLeft, clampRight);
         popup.setLabel(label, labelKeyFont);
         mPopups.put(pointerId, popup);
@@ -492,7 +502,7 @@ public final class KeyPopupOverlayView extends View {
         float alpha() {
             if (exiting) return clamp01(1f - mExitInterpolator.getInterpolation(exit));
             // Solid by the time it is half-way up, so the rise reads as a shape, not a fade.
-            return clamp01(mEnterInterpolator.getInterpolation(enter) * 1.8f);
+            return clamp01(mEnterInterpolator.getInterpolation(enter) * 1.5f);
         }
 
         float scale() {
@@ -504,7 +514,8 @@ public final class KeyPopupOverlayView extends View {
         float translateYPx(float density) {
             if (exiting)
                 return lerp(0f, -EXIT_RISE_DP * density, mExitInterpolator.getInterpolation(exit));
-            float fromCap = keyBounds.centerY() - anchorY;
+            // From the cap's top edge, so the glyph never crosses the key's own label on the way up.
+            float fromCap = keyBounds.top - anchorY;
             return lerp(fromCap, 0f, mEnterInterpolator.getInterpolation(enter));
         }
 

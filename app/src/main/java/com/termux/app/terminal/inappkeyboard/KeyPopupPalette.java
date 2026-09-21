@@ -29,7 +29,7 @@ public final class KeyPopupPalette {
     }
 
     /** How strongly the shadow carries, so the glyph separates without glowing. */
-    private static final float SHADOW_ALPHA = 0.60f;
+    private static final float SHADOW_ALPHA = 0.45f;
 
     @NonNull
     public static KeyPopupPalette resolve(@NonNull Context context) {

@@ -51,7 +51,7 @@ public class KeyPopupPaletteTest {
             com.google.android.material.R.attr.colorSurfaceContainerLowest,
             MaterialColors.getColor(context, com.google.android.material.R.attr.colorSurface, 0));
         assertEquals(rgb(lowest), rgb(palette.shadow));
-        assertEquals(153, Color.alpha(palette.shadow));
+        assertEquals(115, Color.alpha(palette.shadow));
     }
 
     @Test
