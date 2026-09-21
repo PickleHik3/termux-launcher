@@ -400,7 +400,8 @@ Add the app, and `xkeyboard-config` alongside it:
 
 ```nix
 environment.packages = with pkgs; [
-  xterm
+  xfce.mousepad      # a text editor with a window
+  feh                # an image viewer
   xkeyboard-config   # the display server will not start without it
   font-misc-misc     # only for older X programs — see below
 ];
@@ -418,6 +419,21 @@ apps**, with the name and icon the package itself ships. Tap it: the
 display starts if it is not already up, and the app opens on it. Nothing
 is written to a file and there is no command to run in the terminal.
 
+### What does not work yet
+
+Two things to know before you pick an app:
+
+- **Programs that drop privileges do not start.** `xterm` is the one
+  everybody tries first, and it opens, connects and then quits with
+  `spawn: setuid() failed`. Android refuses that call inside an app's own
+  processes, and the nixpkgs build does not give it up the way Termux's
+  does. There is nothing to configure around it. For a terminal window on
+  the display, use a GTK or Qt one instead — `xfce.xfce4-terminal` works.
+- **Windows open unmanaged.** There is no window manager on this edition
+  yet, so a window arrives where the app puts it, with no title bar and
+  nothing to move or resize it by. Apps that open one full-size window
+  are the comfortable ones for now.
+
 `xkeyboard-config` is a one-time thing, and it is the whole of the
 display's setup. Until it is installed the Display place says so and
 keeps its start button hidden, because the X server exits on startup
@@ -427,8 +443,8 @@ in the store and points the server at it after each switch.
 
 ### Fonts for older X programs
 
-`xterm`, `xclock`, `xeyes` and their relatives ask the display server for
-a font by name — `-misc-fixed-medium-r-semicondensed--13-…` and the like
+`xclock`, `xeyes`, `xmessage` and their relatives ask the display server
+for a font by name — `-misc-fixed-medium-r-semicondensed--13-…` and the like
 — and quit with `cannot load font` when the server has none. The server
 carries only its own built-in `fixed` and `cursor`, so one package makes
 the difference:
@@ -447,10 +463,10 @@ companion and cannot go beside it: both ship a `misc/fonts.dir`, and a
 switch with the two of them fails on the collision. The cursor font is
 built into the server, so nothing is missing without it.
 
-`xterm` has a way around it of its own: `xterm -fa Monospace` asks for a
-modern Xft font instead of a server one, and works without either
-package. Put it in the `Exec=` line of your own `.desktop` file if you
-would rather not install fonts.
+An old program with a way around it of its own — a flag asking for a
+modern Xft font instead of a server one — can say so in the `Exec=` line
+of a `.desktop` file you write yourself, and then needs no font package
+at all.
 
 A few notes:
 

@@ -287,7 +287,7 @@
     <string name="settings_gui_apps_copy_summary">Then paste it into the terminal and press Enter.</string>
     <string name="settings_gui_apps_clipboard_label">Get GUI apps</string>
     <string name="settings_gui_apps_copied">Command copied. Paste it into the terminal and press Enter.</string>
-    <string name="settings_gui_apps_nix_card">Add an app such as xterm and xkeyboard-config to home.nix, run nix-on-droid switch, and it appears in the app drawer.</string>
+    <string name="settings_gui_apps_nix_card">Add an app such as xfce.mousepad and xkeyboard-config to home.nix, run nix-on-droid switch, and it appears in the app drawer.</string>
     <string name="settings_gui_apps_nix_docs">Read the docs</string>
     <string name="settings_x11_display_title">Display</string>
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
