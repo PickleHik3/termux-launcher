@@ -19,11 +19,9 @@ import com.termux.app.tour.TourEdition;
  * real prefix and is why the caller must re-run the probe itself on every arrival at the place —
  * this policy only ever answers for the reading it is given.
  *
- * <p>The nix edition has no {@code pkg} at all, so the missing-package advice above cannot be
- * followed there and the whole feature assumes a Termux prefix it does not have. Rather than
- * naming a package nix can never install, {@link #decide(boolean, boolean, TourEdition)} answers
- * with a message that just says the display is not there yet, and hides both the start control
- * and the guide route.
+ * <p>The nix edition installs that data the same way it installs everything else — named in
+ * {@code home.nix} and switched in — so it gets the same two states, with a message that says it
+ * in nix's own words instead of naming a {@code pkg} command that edition does not have.
  */
 public final class DisplayEmptyStatePolicy {
 
@@ -42,7 +40,8 @@ public final class DisplayEmptyStatePolicy {
          * something to read about setting one up, and so the only one the guide route is out for.
          */
         public boolean guideVisible() {
-            return messageRes == R.string.termux_x11_needs_keyboard_data;
+            return messageRes == R.string.termux_x11_needs_keyboard_data
+                || messageRes == R.string.termux_x11_needs_keyboard_data_nix;
         }
 
         /**
@@ -79,19 +78,20 @@ public final class DisplayEmptyStatePolicy {
 
     /**
      * @param enabled         the Linux display setting
-     * @param hasKeyboardData whether {@code xkeyboard-config}'s files are in the prefix, computed
-     *                        outside this method; ignored for the nix edition, which has no
-     *                        {@code pkg} to have installed it with
-     * @param edition         which edition is asking; only nix reads differently
+     * @param hasKeyboardData whether the XKB files are in the prefix, computed outside this
+     *                        method — on nix by way of the link
+     *                        {@link X11CliInstaller#linkKeyboardData()} keeps into the store
+     * @param edition         which edition is asking; only the missing-data message differs
      */
     @NonNull
     public static State decide(boolean enabled, boolean hasKeyboardData,
                                 @NonNull TourEdition edition) {
         if (!enabled) return new State(R.string.termux_x11_display_off, true);
-        if (edition == TourEdition.NIX) {
-            return new State(R.string.termux_x11_unavailable_nix, false);
+        if (!hasKeyboardData) {
+            return new State(edition == TourEdition.NIX
+                ? R.string.termux_x11_needs_keyboard_data_nix
+                : R.string.termux_x11_needs_keyboard_data, false);
         }
-        if (!hasKeyboardData) return new State(R.string.termux_x11_needs_keyboard_data, false);
         return new State(R.string.termux_x11_no_display, true);
     }
 }

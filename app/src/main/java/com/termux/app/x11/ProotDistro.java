@@ -59,35 +59,79 @@ public final class ProotDistro {
      */
     public static final class Container {
 
+        /** Which kind of tree an app's files sit in; everything that differs follows from it. */
+        public enum Kind {
+            /** The launcher's own prefix, and the only one there was before containers. */
+            PREFIX,
+            /** One {@code proot-distro} container: a whole distro filesystem. */
+            DISTRO,
+            /** The nix edition's profile: a tree of store links, resolved by {@link NixProfile}. */
+            NIX
+        }
+
         /** The prefix: the launcher's own Linux, and the only one there was before containers. */
         @NonNull public static final Container PREFIX =
             new Container("", new File(TermuxConstants.TERMUX_PREFIX_DIR_PATH), "", "");
 
-        /** The container's name, as {@code proot-distro} knows it; empty for the prefix. */
+        /** The container's name, as {@code proot-distro} knows it; empty for the prefix and nix. */
         @NonNull public final String name;
-        /** The prefix directory, or the container's {@code rootfs}. */
+        /**
+         * The prefix directory, the container's {@code rootfs}, or — for nix — the prefix again,
+         * since that is what every {@code /nix/…} path is rewritten against.
+         */
         @NonNull public final File root;
-        /** The user a login runs as; empty for the prefix. */
+        /** The user a login runs as; empty for the prefix and nix. */
         @NonNull public final String user;
-        /** That user's home inside the container, absolute there; empty for the prefix. */
+        /** That user's home inside the container, absolute there; empty for the prefix and nix. */
         @NonNull public final String home;
+        /** Which of the three this is. */
+        @NonNull public final Kind kind;
+        /** For {@link Kind#NIX}, the resolved profile directory; null otherwise. */
+        @Nullable public final File profile;
 
         Container(@NonNull String name, @NonNull File root, @NonNull String user,
                   @NonNull String home) {
+            this(name.isEmpty() ? Kind.PREFIX : Kind.DISTRO, name, root, user, home, null);
+        }
+
+        private Container(@NonNull Kind kind, @NonNull String name, @NonNull File root,
+                          @NonNull String user, @NonNull String home, @Nullable File profile) {
+            this.kind = kind;
             this.name = name;
             this.root = root;
             this.user = user;
             this.home = home;
+            this.profile = profile;
+        }
+
+        /**
+         * The nix edition's profile as a container. Its name is empty, so a nix app's id is the
+         * bare desktop-file name a prefix app's has always been: on that edition the profile is
+         * the only place apps come from, and there is nothing for a qualifier to tell apart.
+         */
+        @NonNull
+        public static Container nix(@NonNull File prefixDir, @NonNull File profileDir) {
+            return new Container(Kind.NIX, "", prefixDir, "", "", profileDir);
         }
 
         public boolean isPrefix() {
-            return name.isEmpty();
+            return kind == Kind.PREFIX;
         }
 
         /** Where this one keeps its desktop files, most general first. */
         @NonNull
         public List<File> applicationDirs() {
             List<File> dirs = new ArrayList<>(3);
+            if (kind == Kind.NIX) {
+                if (profile != null) dirs.add(under(profile, "share/applications"));
+                // Anything hand-written, or put there by a home-manager activation rather than by
+                // a package: an ordinary directory in the user's home, no store links involved.
+                File files = root.getParentFile();
+                if (files != null) {
+                    dirs.add(new File(files, "home/.local/share/applications"));
+                }
+                return dirs;
+            }
             if (isPrefix()) {
                 dirs.add(new File(root, "share/applications"));
                 dirs.add(new File(root, "local/share/applications"));
@@ -101,24 +145,62 @@ public final class ProotDistro {
 
         /**
          * The directory {@code share/icons} and {@code share/pixmaps} sit under. A container's
-         * are inside its {@code /usr}; the prefix is already that directory.
+         * are inside its {@code /usr}; the prefix is already that directory; nix's are inside the
+         * profile, reached through {@link #under} because any component of the way there can be a
+         * store link.
          */
         @NonNull
         public File iconPrefix() {
+            if (kind == Kind.NIX) return profile != null ? profile : root;
             return isPrefix() ? root : new File(root, "usr");
         }
 
         /**
          * A path a desktop file states absolutely, resolved. Inside a container such a path is
-         * absolute in the container's world, so it is re-rooted; the prefix's desktop files
-         * already name real paths.
+         * absolute in the container's world, so it is re-rooted; inside nix it is a path in the
+         * proot's world, which {@link NixProfile#rewrite} maps and {@link NixProfile#resolve}
+         * follows; the prefix's desktop files already name real paths.
          */
         @NonNull
         public File inside(@NonNull String absolutePath) {
+            if (kind == Kind.NIX) {
+                return NixProfile.resolve(root, NixProfile.rewrite(root, absolutePath));
+            }
             if (isPrefix()) return new File(absolutePath);
             String relative = absolutePath.startsWith("/") ? absolutePath.substring(1) : absolutePath;
             return new File(root, relative);
         }
+
+        /**
+         * {@code relative} under {@code base}, as a reader of this container's files must walk it.
+         * Plain path joining everywhere but nix, where every component is followed and rewritten.
+         */
+        @NonNull
+        public File under(@NonNull File base, @NonNull String relative) {
+            return kind == Kind.NIX ? NixProfile.under(root, base, relative)
+                : new File(base, relative);
+        }
+
+        /**
+         * The file to actually open for {@code file}. A nix profile's entries are themselves links
+         * into the store, dangling from Android's side until they are rewritten, so a desktop file
+         * found by listing a directory is not yet a file that can be read.
+         */
+        @NonNull
+        public File readable(@NonNull File file) {
+            return kind == Kind.NIX ? NixProfile.resolve(root, file) : file;
+        }
+    }
+
+    /**
+     * The nix profile of the running edition as a container, or null on an edition that has none.
+     * Read afresh every time: the profile points somewhere else after every switch.
+     */
+    @Nullable
+    public static Container nixProfile() {
+        File prefixDir = NixProfile.prefixDir();
+        File profile = NixProfile.profile(prefixDir);
+        return profile == null ? null : Container.nix(prefixDir, profile);
     }
 
     /** The containers directory for the running prefix. */
@@ -310,6 +392,13 @@ public final class ProotDistro {
     @NonNull
     public static String loginCommand(@NonNull Container container, @NonNull String command) {
         if (container.isPrefix()) return command;
+        // Nix has no proot-distro and no second filesystem: $PREFIX/bin/login is the one way into
+        // the environment where a store path and the profile's PATH mean anything, and it passes
+        // the environment through, so DISPLAY and the rest are already there.
+        if (container.kind == Container.Kind.NIX) {
+            return new File(container.root, "bin/login").getPath() + " sh -c "
+                + singleQuote(command);
+        }
         StringBuilder line = new StringBuilder("proot-distro login ");
         line.append(container.name);
         line.append(" -u ").append(container.user.isEmpty() ? "root" : container.user);

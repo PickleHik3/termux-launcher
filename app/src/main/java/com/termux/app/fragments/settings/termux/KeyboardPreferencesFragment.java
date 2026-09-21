@@ -329,6 +329,9 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "in_app_keyboard_key_sound_enabled":
                 mPreferences.setInAppKeyboardKeySoundEnabled(value);
                 break;
+            case "in_app_keyboard_key_popup":
+                mPreferences.setInAppKeyboardKeyPopupEnabled(value);
+                break;
             case "in_app_keyboard_tap_correction":
                 mPreferences.setInAppKeyboardTapCorrectionEnabled(value);
                 TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
@@ -360,6 +363,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isInAppKeyboardHapticsEnabled();
             case "in_app_keyboard_key_sound_enabled":
                 return mPreferences.isInAppKeyboardKeySoundEnabled();
+            case "in_app_keyboard_key_popup":
+                return mPreferences.isInAppKeyboardKeyPopupEnabled();
             case "in_app_keyboard_tap_correction":
                 return mPreferences.isInAppKeyboardTapCorrectionEnabled();
             case "extra_keys_text_all_caps": {

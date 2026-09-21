@@ -27,6 +27,10 @@ public final class WidgetPaneView extends FrameLayout {
     public interface Listener {
         /** The horizontal page swipe committed; the coordinator re-renders onto this page. */
         void onPageChangeRequested(int page);
+        /** The tick on the page's border tab: keep the layout and close edit mode. */
+        default void onWidgetEditCommit() { }
+        /** The cross: put the layout back as it was when edit mode opened, and close. */
+        default void onWidgetEditDiscard() { }
     }
 
     /** Fraction of the pane width a released drag must cross to commit a page switch. */
@@ -135,6 +139,49 @@ public final class WidgetPaneView extends FrameLayout {
         if (editOverlay != null) editOverlay.hide();
     }
 
+    /**
+     * Where a widget crossing between pages is drawn. Lazily created like the edit chrome, and
+     * kept under it so the snap ghost on the page below the finger is never hidden by the widget
+     * the finger is carrying.
+     */
+    @NonNull public WidgetDragLayerView widgetDragLayer() {
+        if (dragLayer == null) {
+            dragLayer = new WidgetDragLayerView(getContext());
+            dragLayer.setId(R.id.widget_drag_layer);
+            addView(dragLayer, new LayoutParams(LayoutParams.MATCH_PARENT,
+                LayoutParams.MATCH_PARENT));
+        }
+        if (editOverlay != null && indexOfChild(editOverlay) != getChildCount() - 1) {
+            editOverlay.bringToFront();
+        }
+        return dragLayer;
+    }
+
+    /** Lets go of anything the drag layer is carrying; nothing to do when it was never made. */
+    public void releaseWidgetDragLayer() {
+        if (dragLayer != null) dragLayer.drop(null, false);
+    }
+
+    @Nullable private WidgetDragLayerView dragLayer;
+
+    /**
+     * Slides the page that has just been rendered in from one side, exactly as a committed swipe
+     * does: a widget dragged into the edge band turns the page, and the turn has to read as the
+     * same movement the finger already knows.
+     */
+    public void slideInFrom(int direction) {
+        enterFromSide(direction, 0f);
+    }
+
+    /** The commit and discard buttons on the page's own border tab, relayed to the coordinator. */
+    public void commitWidgetEdit() {
+        if (listener != null) listener.onWidgetEditCommit();
+    }
+
+    public void discardWidgetEdit() {
+        if (listener != null) listener.onWidgetEditDiscard();
+    }
+
     public boolean widgetEditActive() { return editOverlay != null && editOverlay.isShowing(); }
 
     /**
@@ -211,6 +258,12 @@ public final class WidgetPaneView extends FrameLayout {
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (!pagingTracking || pagingDragging) break;
+                if (widgetEditActive()) {
+                    // A hold turned this press into a widget drag after the page had started
+                    // watching it; the drag owns the rest of the gesture, sideways included.
+                    pagingTracking = false;
+                    break;
+                }
                 if (pagingVelocity != null) pagingVelocity.addMovement(event);
                 float dx = event.getX() - pagingDownX;
                 float dy = event.getY() - pagingDownY;

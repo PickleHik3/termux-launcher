@@ -171,6 +171,31 @@ public class LinuxAppCatalogTest {
         org.junit.Assert.assertNotEquals(before, LinuxAppCatalog.signature(host(dir)));
     }
 
+    /**
+     * A directory that did not exist when the drawer last looked: writing the first desktop file
+     * by hand creates it and the file in one go, and the rescan on resume or on the drawer
+     * opening has only this number to tell it something happened.
+     */
+    @Test public void theSignatureChangesWhenAnAbsentDirectoryAppears() throws Exception {
+        File dir = new File(temp.getRoot(), "later/local/share/applications");
+        assertFalse("not there when the drawer last looked", dir.exists());
+        long before = LinuxAppCatalog.signature(host(dir));
+        assertEquals("and still not there", before, LinuxAppCatalog.signature(host(dir)));
+
+        write(dir, "probe.desktop",
+            "[Desktop Entry]\nType=Application\nName=Probe\nExec=probe\n");
+
+        long after = LinuxAppCatalog.signature(host(dir));
+        org.junit.Assert.assertNotEquals(before, after);
+        assertEquals(1, LinuxAppCatalog.scan(host(dir)).size());
+
+        // And an empty directory appearing is not the same reading as no directory either.
+        File empty = new File(temp.getRoot(), "empty/applications");
+        long absent = LinuxAppCatalog.signature(host(empty));
+        assertTrue(empty.mkdirs());
+        org.junit.Assert.assertNotEquals(absent, LinuxAppCatalog.signature(host(empty)));
+    }
+
     @Test public void iconFilesAreFoundInHicolorThenPixmaps() throws IOException {
         File prefix = temp.newFolder("usr");
         File big = new File(prefix, "share/icons/hicolor/128x128/apps"); big.mkdirs();

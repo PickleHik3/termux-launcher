@@ -7,6 +7,11 @@ command to run.
 
 Everything here was checked on a phone, against a Debian 13 container and `proot-distro` 5.8.0.
 
+**On the nix edition** none of this applies: there is no `proot-distro` and no apt repository, and
+graphical apps come from nixpkgs instead. Add the app and `xkeyboard-config` to your config, run
+`nix-on-droid switch`, and the drawer picks them up — see
+[Graphical apps](Nix_Package_Management.md#graphical-apps).
+
 ## Set it up in one go
 
 **Settings → Display → Apps → Get GUI apps** builds the command that does this. Choose where the

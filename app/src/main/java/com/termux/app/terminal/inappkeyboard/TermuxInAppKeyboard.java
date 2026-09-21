@@ -98,6 +98,7 @@ public final class TermuxInAppKeyboard {
 
     private TerminalKeyEventHandler mKeyEventHandler;
     private Keyboard2View mKeyboardView;
+    @Nullable private KeyPopupController mKeyPopup;
     private TerminalSession mAttachedSession;
     private KeyboardData mMainKeyboardData;
     private KeyboardData mNumericKeyboardData;
@@ -288,6 +289,7 @@ public final class TermuxInAppKeyboard {
             mLayoutLoader.close();
         mTapCorrection.flush();
         mLayoutExecutor.shutdown();
+        destroyKeyPopup();
         mKeyboardView = null;
         mKeyEventHandler = null;
         mMainKeyboardData = null;
@@ -324,7 +326,8 @@ public final class TermuxInAppKeyboard {
         resetInputPipeline();
         if (mKeyboardView != null) {
             mHost.detachKeyboardView();
-            mKeyboardView = null;
+            destroyKeyPopup();
+        mKeyboardView = null;
         }
         if (mVisible)
             showInternal();
@@ -370,6 +373,8 @@ public final class TermuxInAppKeyboard {
             // Settings may have toggled the feature or forgotten the learned taps.
             mTapCorrection.reload();
             mTapCorrection.setEnabled(mPreferences.isInAppKeyboardTapCorrectionEnabled());
+            if (mKeyPopup != null)
+                mKeyPopup.setEnabled(mPreferences.isInAppKeyboardKeyPopupEnabled());
             String extraKeys = mPreferences.getInAppKeyboardExtraKeys();
             if (!Objects.equals(mExtraKeysStoredValue, extraKeys)) {
                 mExtraKeysStoredValue = extraKeys;
@@ -1102,6 +1107,7 @@ public final class TermuxInAppKeyboard {
         resetInputPipeline();
 
         mHost.detachKeyboardView();
+        destroyKeyPopup();
         mKeyboardView = null;
         mKeyEventHandler = null;
 
@@ -1158,6 +1164,28 @@ public final class TermuxInAppKeyboard {
         applyKeyboardToView(getSelectedLayoutData());
         applyCustomColorScheme();
         mHost.attachKeyboardView(mKeyboardView);
+        ensureKeyPopup();
+    }
+
+    /**
+     * The pressed-key popup floats in the window's content view rather than in the keyboard's own
+     * container, so it is never clipped by it and its veil reaches the terminal output above.
+     */
+    private void ensureKeyPopup() {
+        if (mKeyPopup != null || mKeyboardView == null)
+            return;
+        android.view.ViewGroup host = KeyPopupController.findPopupHost(requireContainer());
+        if (host == null)
+            return;
+        mKeyPopup = new KeyPopupController(host, mKeyboardView);
+        mKeyPopup.setEnabled(mPreferences.isInAppKeyboardKeyPopupEnabled());
+    }
+
+    private void destroyKeyPopup() {
+        if (mKeyPopup == null)
+            return;
+        mKeyPopup.destroy();
+        mKeyPopup = null;
     }
 
     /**
@@ -1232,7 +1260,8 @@ public final class TermuxInAppKeyboard {
             // Config is immutable by design; rebuild the renderer for haptics/sound/font changes.
             resetInputPipeline();
             mHost.detachKeyboardView();
-            mKeyboardView = null;
+            destroyKeyPopup();
+        mKeyboardView = null;
             mKeyEventHandler = null;
             if (mVisible)
                 showInternal();
@@ -1252,6 +1281,7 @@ public final class TermuxInAppKeyboard {
         }
         mAppliedPaletteInputs = paletteInputs;
         mKeyboardView.setPalette(createPalette());
+        if (mKeyPopup != null) mKeyPopup.refresh();
         mAppliedPaletteSignature = InAppKeyboardPaletteFactory.signature(
             requireContainer().getContext());
         applyCustomColorScheme();
@@ -1302,6 +1332,7 @@ public final class TermuxInAppKeyboard {
         // Material roles while pinned and imported swatches keep their persisted colors.
         mKeyboardView.setPalette(createPalette());
         applyCustomColorScheme();
+        if (mKeyPopup != null) mKeyPopup.refresh();
         return true;
     }
 

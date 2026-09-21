@@ -10,6 +10,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -43,7 +44,7 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 8;
+    @VisibleForTesting static final int VERSION = 12;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -55,6 +56,11 @@ public final class X11CliInstaller {
     static final String PREFERENCE_SCRIPT_PATH = BIN_DIR + "/termux-x11-preference";
     /** The script that tries every GPU profile on this phone and keeps the best. */
     public static final String GPU_SETUP_SCRIPT_PATH = BIN_DIR + "/termux-x11-gpu-setup";
+    /**
+     * The nix edition's window-manager wrapper: the whole {@code login} line baked into a file so
+     * the server is handed one short path. Written only on nix — see {@link X11WindowManager}.
+     */
+    public static final String WM_SCRIPT_PATH = BIN_DIR + "/termux-x11-wm";
     static final String LOADER_PATH = LIBEXEC_DIR + "/loader.apk";
     /** openbox's configuration for the display: every window maximised, none decorated. */
     public static final String OPENBOX_RC_PATH = LIBEXEC_DIR + "/openbox-rc.xml";
@@ -91,22 +97,33 @@ public final class X11CliInstaller {
     @NonNull private final File libexecDir;
     @NonNull private final String applicationId;
     @NonNull private final AssetSource assets;
+    /** The window manager the user has configured, as the wrapper has to run it; may be empty. */
+    @NonNull private final String windowManager;
 
     @VisibleForTesting
     X11CliInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull String applicationId,
                     @NonNull AssetSource assets) {
+        this(binDir, libexecDir, applicationId, assets, "");
+    }
+
+    @VisibleForTesting
+    X11CliInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull String applicationId,
+                    @NonNull AssetSource assets, @NonNull String windowManager) {
         this.binDir = binDir;
         this.libexecDir = libexecDir;
         this.applicationId = applicationId;
         this.assets = assets;
+        this.windowManager = windowManager;
     }
 
     /** The installer for this launcher's own prefix. */
     @NonNull
     static X11CliInstaller forPrefix(@NonNull Context context) {
         Context app = context.getApplicationContext();
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app);
         return new X11CliInstaller(new File(BIN_DIR), new File(LIBEXEC_DIR), app.getPackageName(),
-            name -> app.getAssets().open(name));
+            name -> app.getAssets().open(name),
+            preferences == null ? "" : preferences.getX11WindowManager());
     }
 
     // ---- The static face the launcher uses -------------------------------------------------
@@ -152,6 +169,119 @@ public final class X11CliInstaller {
             || new File(prefixDir, "share/xkeyboard-config-2").isDirectory();
     }
 
+    /** The link {@link #linkKeyboardData} keeps, and the server script's first search path. */
+    @NonNull
+    private static File keyboardDataLink(@NonNull File prefixDir) {
+        return new File(prefixDir, "share/X11/xkb");
+    }
+
+    /**
+     * Whether what sits at {@link #keyboardDataLink} is the link this class made: a symlink whose
+     * own target — as written, not as resolved, since resolving a link somebody else made is
+     * exactly what must not decide this — is inside the nix store. A real directory there, and a
+     * symlink pointing anywhere else, are both somebody's own arrangement.
+     */
+    private static boolean isOurKeyboardDataLink(@NonNull File prefixDir) {
+        File link = keyboardDataLink(prefixDir);
+        if (!Files.isSymbolicLink(link.toPath())) return false;
+        try {
+            String target = Files.readSymbolicLink(link.toPath()).toString();
+            String store = new File(prefixDir, "nix/store").getPath();
+            return target.startsWith(store + "/");
+        } catch (IOException | RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
+     * On nix, point {@code $PREFIX/share/X11/xkb} at whichever store path holds this phone's
+     * {@code xkeyboard-config} right now, so the probe above and the server script's own search
+     * both find it where they already look.
+     *
+     * <p>Run on every install pass rather than once behind the version marker: a
+     * {@code nix-on-droid switch} rebuilds the package into a store path of a different name, and
+     * a link left pointing at the old one is a display that stops starting for no visible reason.
+     * A {@code share/X11/xkb} that is not a link of ours is somebody's own arrangement and is
+     * left exactly as it is.
+     *
+     * @return whether the link now points at the data
+     */
+    @VisibleForTesting
+    boolean linkKeyboardData() {
+        File prefixDir = binDir.getParentFile();
+        if (prefixDir == null || !NixProfile.isNix(prefixDir)) return false;
+        File data = NixProfile.keyboardData(prefixDir);
+        if (data == null) return false;
+        File link = keyboardDataLink(prefixDir);
+        try {
+            boolean isLink = Files.isSymbolicLink(link.toPath());
+            if (isLink && data.toPath().equals(Files.readSymbolicLink(link.toPath()))) return true;
+            // Anything there that is not this class's own link — a real directory, or a link
+            // somebody pointed somewhere of their own — stays exactly as they left it; only a
+            // link of ours is re-pointed, which is what a switch needs.
+            if (isLink && !isOurKeyboardDataLink(prefixDir)) return false;
+            if (!isLink && link.exists()) return link.isDirectory();
+            File parent = link.getParentFile();
+            if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+                throw new IOException("Failed to create " + parent);
+            }
+            if (isLink) Files.delete(link.toPath());
+            Files.createSymbolicLink(link.toPath(), data.toPath());
+            return true;
+        } catch (IOException | RuntimeException e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to link the keyboard data: " + e.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * On nix, write {@code $PREFIX/bin/termux-x11-wm}: the whole {@code login} line for the
+     * configured window manager, baked into a file the server can be handed by its short path.
+     *
+     * <p>Two facts make the wrapper the only way. The server execs {@code -xstartup} from
+     * Android's side, where a nix binary and the profile's {@code PATH} do not exist, so it has to
+     * go through {@code login}; and the server refuses any single argument past about 128
+     * characters, which that login line — with a configuration file path in it — is well beyond.
+     *
+     * <p>Rewritten on every pass rather than once behind the version marker, because the window
+     * manager is a setting: the file has to say what the user last chose. When nothing is
+     * configured, or its binary is not installed, any wrapper left from before is taken out, so
+     * {@link X11WindowManager#xstartup} finds nothing and the display starts without one.
+     *
+     * @return whether a wrapper is now in place
+     */
+    @VisibleForTesting
+    boolean writeWindowManagerScript() {
+        File prefixDir = binDir.getParentFile();
+        if (prefixDir == null || !NixProfile.isNix(prefixDir)) return false;
+        String command = X11WindowManager.command(windowManager, prefixDir);
+        File script = wmScript();
+        if (command == null) {
+            if (script.exists()) {
+                script.setWritable(true, true);
+                //noinspection ResultOfMethodCallIgnored
+                script.delete();
+            }
+            return false;
+        }
+        try {
+            writeAtomically(script, bytes(windowManagerScript(prefixDir, command)), true, true);
+            return true;
+        } catch (IOException e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to write the window-manager wrapper: "
+                + e.getMessage());
+            return false;
+        }
+    }
+
+    /** The wrapper's text: a login into the nix environment, and the window manager inside it. */
+    @NonNull
+    static String windowManagerScript(@NonNull File prefixDir, @NonNull String command) {
+        return "#!" + NixProfile.hostShell(prefixDir).getPath() + "\n"
+            + MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
+            + "exec " + new File(prefixDir, "bin/login").getPath() + " " + command + "\n";
+    }
+
     /** True once this launcher's own commands are in place. */
     public static boolean isInstalled(@NonNull Context context) {
         X11CliInstaller installer = forPrefix(context);
@@ -163,6 +293,7 @@ public final class X11CliInstaller {
     @NonNull File serverScript() { return new File(binDir, "termux-x11"); }
     @NonNull File preferenceScript() { return new File(binDir, "termux-x11-preference"); }
     @NonNull File gpuSetupScript() { return new File(binDir, "termux-x11-gpu-setup"); }
+    @NonNull File wmScript() { return new File(binDir, "termux-x11-wm"); }
     @NonNull File loaderFile() { return new File(libexecDir, "loader.apk"); }
     @NonNull File markerFile() { return new File(libexecDir, ".installed"); }
     @NonNull File openboxRc() { return new File(libexecDir, "openbox-rc.xml"); }
@@ -170,6 +301,8 @@ public final class X11CliInstaller {
     @NonNull
     Result install() {
         if (!binDir.isDirectory()) return Result.NO_PREFIX;
+        linkKeyboardData();
+        writeWindowManagerScript();
         String marker = MARKER_PREAMBLE + " v" + VERSION + " " + applicationId + "\n";
         if (marker.equals(read(markerFile()))) return Result.UP_TO_DATE;
         if (isForeignCommand()) {
@@ -185,8 +318,14 @@ public final class X11CliInstaller {
             try (InputStream in = assets.open(LOADER_ASSET)) {
                 writeAtomically(loaderFile(), in, false, false);
             }
-            writeAtomically(serverScript(), bytes(serverScript(applicationId)), true, true);
-            writeAtomically(preferenceScript(), bytes(preferenceScript(applicationId)), true, true);
+            // The server is exec'd by the launcher, from Android's side; the other two are run
+            // by the user from inside the environment. On nix those are two different shells.
+            File prefixDir = binDir.getParentFile();
+            boolean nix = prefixDir != null && NixProfile.isNix(prefixDir);
+            writeAtomically(serverScript(),
+                bytes(serverScript(applicationId, hostShellPath(), nix)), true, true);
+            writeAtomically(preferenceScript(),
+                bytes(preferenceScript(applicationId, prefixShellPath())), true, true);
             writeAtomically(gpuSetupScript(), bytes(withPrefixShebang(readText(GPU_SETUP_ASSET))), true, true);
             writeAtomically(openboxRc(), bytes(openboxRcContent()), true, false);
             writeAtomically(markerFile(), bytes(marker), true, false);
@@ -199,8 +338,17 @@ public final class X11CliInstaller {
 
     void uninstall() {
         if (isForeignCommand()) return;
+        File prefixDir = binDir.getParentFile();
+        if (prefixDir != null && isOurKeyboardDataLink(prefixDir)) {
+            File link = keyboardDataLink(prefixDir);
+            try {
+                Files.delete(link.toPath());
+            } catch (IOException e) {
+                Logger.logWarn(LOG_TAG, "Failed to remove " + link);
+            }
+        }
         for (File file : new File[]{serverScript(), preferenceScript(), gpuSetupScript(),
-                loaderFile(), openboxRc(), markerFile()}) {
+                wmScript(), loaderFile(), openboxRc(), markerFile()}) {
             if (!file.exists() && !Files.isSymbolicLink(file.toPath())) continue;
             file.setWritable(true, true);
             if (!file.delete()) {
@@ -229,7 +377,49 @@ public final class X11CliInstaller {
      */
     @NonNull
     static String serverScript(@NonNull String applicationId) {
-        return "#!" + BIN_DIR + "/bash\n"
+        return serverScript(applicationId, BIN_DIR + "/bash");
+    }
+
+    /**
+     * {@link #serverScript(String)} with the shell spelled out. The nix edition's prefix has no
+     * {@code bash} — it has the bootstrap's {@code sh} and nothing else — and a script whose
+     * shebang names a file that is not there does not run at all, which is a display that never
+     * starts. See {@link NixProfile#hostShell}.
+     */
+    @NonNull
+    static String serverScript(@NonNull String applicationId, @NonNull String shell) {
+        return serverScript(applicationId, shell, false);
+    }
+
+    /**
+     * Where a font package puts its directories inside its store entry. Current nixpkgs
+     * ({@code font-misc-misc}) uses {@code share/fonts/X11}; the older {@code xorg.*} packages
+     * used {@code lib/X11/fonts}, and a store can hold both at once.
+     */
+    private static final String[] NIX_FONT_ROOTS = {"share/fonts/X11", "lib/X11/fonts"};
+
+    /**
+     * The font directories a nix store can hold, under each of {@link #NIX_FONT_ROOTS}. The X
+     * server ships only its own built-in {@code fixed} and {@code cursor}, and an old core-font
+     * client — xterm above all — asks for a real one by name and quits when the server has no
+     * font path to look it up in. Termux's prefix keeps its fonts where the server already looks;
+     * nixpkgs puts each font package in its own store entry, so the path has to be gathered when
+     * the server starts, after whichever switch put them there.
+     */
+    private static final String[] NIX_FONT_DIRS =
+        {"misc", "75dpi", "100dpi", "TTF", "Type1", "cyrillic"};
+
+    /**
+     * {@link #serverScript(String)} with the shell spelled out, and — for nix — a font path
+     * gathered out of the store. See {@link NixProfile#hostShell} for the shell: the nix
+     * edition's prefix has no {@code bash}, and its own {@code sh} is a store link an
+     * {@code execve} from Android cannot follow, so a script whose shebang names either does not
+     * run at all, which is a display that never starts.
+     */
+    @NonNull
+    static String serverScript(@NonNull String applicationId, @NonNull String shell,
+                               boolean nixFontPath) {
+        return "#!" + shell + "\n"
             + MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
             + "if [ ! -e /system/bin/getprop ] || [ ! -e /system/bin/app_process ]; then\n"
             + "  echo \"This needs a standard Android system: the display server runs as an app process.\"\n"
@@ -249,9 +439,44 @@ public final class X11CliInstaller {
             + "[ -z \"${CLASSPATH+x}\" ] || export XSTARTUP_CLASSPATH=\"$CLASSPATH\"\n"
             + "export CLASSPATH=" + LOADER_PATH + "\n"
             + "unset LD_LIBRARY_PATH LD_PRELOAD\n"
-            + "[ -n \"$(trap -p USR1)\" ] && export TERMUX_X11_NOTIFY_PARENT=1\n"
+            // Android's mksh has no `trap -p` and says so on stderr; the answer is the same
+            // either way (no handler, no notification), so only the complaint is silenced.
+            + "[ -n \"$(trap -p USR1 2>/dev/null)\" ] && export TERMUX_X11_NOTIFY_PARENT=1\n"
+            + (nixFontPath ? nixFontPathBlock(applicationId) : "")
             + "exec /system/bin/app_process -Xnoimage-dex2oat / "
-            + "--nice-name=\"termux-x11 " + applicationId + " $*\" com.termux.x11.Loader \"$@\"\n";
+            + "--nice-name=\"" + (nixFontPath ? "$TERMUX_X11_NICE_NAME"
+                : "termux-x11 " + applicationId + " $*")
+            + "\" com.termux.x11.Loader \"$@\"\n";
+    }
+
+    /**
+     * The lines that build {@code -fp} out of whatever font packages this phone's nix store has,
+     * at the moment the server starts — a switch adds and removes them, and each lands in a store
+     * entry of its own name, so there is nothing to write down once.
+     *
+     * <p>An unmatched glob stays literal in a POSIX shell, so a store with no font package at all
+     * simply tests a handful of paths that hold no {@code fonts.dir} and ends with an empty list,
+     * and the server is started exactly as it was before. A directory is only worth naming when
+     * it has that index in it: the server reads the index, not the files. The name the process
+     * shows is taken before the flag is prepended, so it stays the arguments the user asked for.
+     */
+    @NonNull
+    private static String nixFontPathBlock(@NonNull String applicationId) {
+        StringBuilder globs = new StringBuilder();
+        for (String root : NIX_FONT_ROOTS) {
+            for (String dir : NIX_FONT_DIRS) {
+                globs.append(' ').append(PREFIX).append("/nix/store/*/").append(root).append('/')
+                    .append(dir);
+            }
+        }
+        return "TERMUX_X11_FONT_PATH=\"\"\n"
+            + "for dir in" + globs + "; do\n"
+            + "  case \"$dir\" in *.drv/*) continue ;; esac\n"
+            + "  [ -f \"$dir/fonts.dir\" ] || continue\n"
+            + "  TERMUX_X11_FONT_PATH=\"${TERMUX_X11_FONT_PATH:+$TERMUX_X11_FONT_PATH,}$dir\"\n"
+            + "done\n"
+            + "TERMUX_X11_NICE_NAME=\"termux-x11 " + applicationId + " $*\"\n"
+            + "[ -z \"$TERMUX_X11_FONT_PATH\" ] || set -- -fp \"$TERMUX_X11_FONT_PATH\" \"$@\"\n";
     }
 
     /**
@@ -261,7 +486,13 @@ public final class X11CliInstaller {
      */
     @NonNull
     static String preferenceScript(@NonNull String applicationId) {
-        return "#!" + BIN_DIR + "/bash\n"
+        return preferenceScript(applicationId, BIN_DIR + "/bash");
+    }
+
+    /** {@link #preferenceScript(String)} with the shell spelled out; see the server script's. */
+    @NonNull
+    static String preferenceScript(@NonNull String applicationId, @NonNull String shell) {
+        return "#!" + shell + "\n"
             + MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
             + "if [ ! -e /system/bin/app_process ]; then\n"
             + "  echo \"This needs a standard Android system: the display server runs as an app process.\"\n"
@@ -374,7 +605,23 @@ public final class X11CliInstaller {
         if (!script.startsWith("#!")) return script;
         int newline = script.indexOf('\n');
         if (newline < 0) return script;
-        return "#!" + new File(binDir, "bash").getPath() + script.substring(newline);
+        return "#!" + prefixShellPath() + script.substring(newline);
+    }
+
+    /** What the launcher execs itself: {@code bash} everywhere but nix, Android's shell there. */
+    @NonNull
+    private String hostShellPath() {
+        File prefixDir = binDir.getParentFile();
+        return prefixDir == null ? new File(binDir, "bash").getPath()
+            : NixProfile.hostShell(prefixDir).getPath();
+    }
+
+    /** What the user runs from inside: {@code bash} everywhere but nix, the prefix's sh there. */
+    @NonNull
+    private String prefixShellPath() {
+        File prefixDir = binDir.getParentFile();
+        return prefixDir == null ? new File(binDir, "bash").getPath()
+            : NixProfile.prefixShell(prefixDir).getPath();
     }
 
     @NonNull

@@ -1,5 +1,9 @@
 package com.termux.terminal;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 public class KittyGraphicsProtocolTest extends TerminalTestCase {
@@ -20,7 +24,7 @@ public class KittyGraphicsProtocolTest extends TerminalTestCase {
             "\033_Gi=1;EINVAL:invalid image data\033\\");
         assertEnteringStringGivesResponse("\033_Gi=2,a=q,t=d,f=7;AAAA\033\\",
             "\033_Gi=2;ENOSYS:unsupported image format\033\\");
-        assertEnteringStringGivesResponse("\033_Gi=3,a=q,t=f,f=100;AAAA\033\\",
+        assertEnteringStringGivesResponse("\033_Gi=3,a=q,t=s,f=100;AAAA\033\\",
             "\033_Gi=3;ENOSYS:unsupported transmission medium\033\\");
     }
 
@@ -480,6 +484,115 @@ public class KittyGraphicsProtocolTest extends TerminalTestCase {
         enterString("\033_Gi=21,a=t,q=2,f=24,s=2,v=2;" + base64(new byte[12]) + "\033\\");
         assertEnteringStringGivesResponse("\033_Gi=21,a=p,q=1,x=5\033\\",
             "\033_Gi=21;EINVAL:invalid source rectangle\033\\");
+    }
+
+    /**
+     * t=f: the payload is the base64 of a path and the pixels come from that file. Programs that
+     * render images from a plugin — md-render.nvim among them — never transmit inline, so a
+     * direct-only implementation shows them nothing at all.
+     */
+    public void testFileMediumReadsThePngNamedByItsPayloadAndKeepsTheFile() throws IOException {
+        File png = tempFile("tty-graphics-protocol-", ".png", pngHeader(2, 3));
+        enterString("\033_Gi=80,a=t,f=100,t=f;" + base64Path(png) + "\033\\");
+        assertEquals("a readable PNG is accepted silently", "", mOutput.getOutputAndClear());
+        // The reservation is synchronous, so the image resolves before its decode lands.
+        assertEnteringStringGivesResponse("\033_Gi=80,p=5,a=p,U=1,c=2,r=2\033\\",
+            "\033_Gi=80,p=5;OK\033\\");
+        assertTrue("t=f must never delete the client's file", png.exists());
+    }
+
+    /** t=t hands the file over: it is read once and deleted, as kitty does. */
+    public void testTemporaryFileMediumDeletesTheFileAfterReadingIt() throws IOException {
+        File png = tempFile("tty-graphics-protocol-", ".png", pngHeader(2, 2));
+        enterString("\033_Gi=81,a=t,f=100,t=t;" + base64Path(png) + "\033\\");
+        assertEquals("", mOutput.getOutputAndClear());
+        assertEnteringStringGivesResponse("\033_Gi=81,p=6,a=p,U=1,c=2,r=2\033\\",
+            "\033_Gi=81,p=6;OK\033\\");
+        assertFalse("a temporary file is consumed", png.exists());
+    }
+
+    /**
+     * Deleting what a client names is only safe under kitty's rule: the path must carry the
+     * protocol marker and live in a temporary directory. The rule is on the deletion, not on the
+     * read — a plugin that converts an image writes it to vim's own tempname, which carries no
+     * marker — so such a file is rendered and then left exactly where the client put it.
+     */
+    public void testTemporaryFileMediumKeepsAFileItMayNotDelete() throws IOException {
+        File outside = tempFile("nvim-converted-", ".png", pngHeader(2, 2));
+        enterString("\033_Gi=82,a=t,f=100,t=t;" + base64Path(outside) + "\033\\");
+        assertEquals("the image is still read", "", mOutput.getOutputAndClear());
+        assertEnteringStringGivesResponse("\033_Gi=82,p=9,a=p,U=1,c=2,r=2\033\\",
+            "\033_Gi=82,p=9;OK\033\\");
+        assertTrue("a path outside the deletable set is left alone", outside.exists());
+    }
+
+    public void testFileMediumAnswersEbadfForAFileItCannotRead() throws IOException {
+        File missing = tempFile("tty-graphics-protocol-", ".png", pngHeader(1, 1));
+        assertTrue(missing.delete());
+        assertEnteringStringGivesResponse("\033_Gi=85,a=t,f=100,t=f;" + base64Path(missing) + "\033\\",
+            "\033_Gi=85;EBADF:cannot read transmission file\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=86,a=t,f=100,t=f;\033\\",
+            "\033_Gi=86;EINVAL:file transmission requires a path\033\\");
+    }
+
+    /** O= and S= window the file: only those bytes are the image. */
+    public void testFileMediumHonoursOffsetAndSize() throws IOException {
+        byte[] padded = new byte[] {9, 9, 9, 9, 9, 0x11, 0x22, 0x33, 7, 7};
+        File raw = tempFile("tty-graphics-protocol-", ".rgb", padded);
+        enterString("\033_Gi=87,a=t,f=24,s=1,v=1,t=f,O=5,S=3;" + base64Path(raw) + "\033\\");
+        assertEquals("the window is exactly one RGB pixel", "", mOutput.getOutputAndClear());
+        assertEnteringStringGivesResponse("\033_Gi=87,p=7,a=p,U=1,c=1,r=1\033\\",
+            "\033_Gi=87,p=7;OK\033\\");
+        // A window that does not match s and v is reported exactly as a direct payload would be.
+        assertEnteringStringGivesResponse("\033_Gi=88,a=t,f=24,s=1,v=1,t=f,O=5,S=2;"
+                + base64Path(raw) + "\033\\",
+            "\033_Gi=88;EINVAL:pixel data does not match s and v\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=89,a=t,f=24,s=1,v=1,t=f,O=99;"
+                + base64Path(raw) + "\033\\",
+            "\033_Gi=89;EINVAL:file transmission window is empty\033\\");
+    }
+
+    /** The support probe may name a file too, and a probed temporary file is still consumed. */
+    public void testQueryAcceptsTheFileMediums() throws IOException {
+        File png = tempFile("tty-graphics-protocol-", ".png", pngHeader(2, 3));
+        assertEnteringStringGivesResponse("\033_Gi=90,a=q,f=100,t=f;" + base64Path(png) + "\033\\",
+            "\033_Gi=90;OK\033\\");
+        assertTrue(png.exists());
+        assertEnteringStringGivesResponse("\033_Gi=91,a=q,f=100,t=t;" + base64Path(png) + "\033\\",
+            "\033_Gi=91;OK\033\\");
+        assertFalse(png.exists());
+    }
+
+    /** Shared memory stays out: there is no POSIX shm segment to map in an Android app. */
+    public void testSharedMemoryMediumRemainsUnsupported() {
+        assertEnteringStringGivesResponse("\033_Gi=92,a=T,f=100,t=s;AAAA\033\\",
+            "\033_Gi=92;ENOSYS:unsupported transmission medium\033\\");
+        assertEnteringStringGivesResponse("\033_Gi=93,a=q,f=100,t=s;AAAA\033\\",
+            "\033_Gi=93;ENOSYS:unsupported transmission medium\033\\");
+    }
+
+    private static File tempFile(String prefix, String suffix, byte[] contents) throws IOException {
+        File file = File.createTempFile(prefix, suffix);
+        file.deleteOnExit();
+        try (FileOutputStream out = new FileOutputStream(file)) {
+            out.write(contents);
+        }
+        return file;
+    }
+
+    private static String base64Path(File file) throws IOException {
+        return base64(file.getCanonicalPath().getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** The 24 header bytes {@code pngDimensions} reads; enough to reserve and to fail a decode. */
+    private static byte[] pngHeader(int width, int height) {
+        byte[] header = new byte[24];
+        byte[] signature = new byte[] {(byte) 0x89, 'P', 'N', 'G', 13, 10, 26, 10};
+        System.arraycopy(signature, 0, header, 0, signature.length);
+        header[12] = 'I'; header[13] = 'H'; header[14] = 'D'; header[15] = 'R';
+        header[19] = (byte) width;
+        header[23] = (byte) height;
+        return header;
     }
 
     private static String base64(byte[] data) {

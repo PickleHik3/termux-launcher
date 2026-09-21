@@ -199,6 +199,25 @@ fails when the catalogue has gone stale.
   model itself lives in the launcher
   (`app/.../terminal/inappkeyboard/TapModel`, `TapModelStore`,
   `TapCorrectionController`); the module holds no learning logic.
+- Pressed-key popup hook (local addition): `Pointers.IPointerPreview` plus
+  `Pointers.setPreviewHandler`, a `slot` field on `Pointer`, and
+  `Keyboard2View.KeyPopupListener` / `KeyPopupInfo` / `setKeyPopupListener` /
+  `labelFont()` / the private `keyBoundsInView` and `popupLabel`. The host draws
+  a floating glyph above the key under each finger; the module only reports what
+  every live pointer holds. It reports from `Pointers` — the value that would be
+  committed on release, and which of the eight corners it came from — rather than
+  letting the host re-derive the gesture from the touch stream, so the popup can
+  never disagree with what the keyboard types. The design handoff describes its
+  own gesture model (a 13px dead zone and a dot product over the configured
+  directions); that model belongs to the prototype and is deliberately not
+  reimplemented. Nothing in this hook changes what a key commits: every callback
+  is fired beside an existing `IPointerEventHandler` call, never in place of one.
+  `getNearestKeyAtDirection` additionally records the corner it chose on the
+  pointer, and `apply_gesture` clears it for circle gestures, whose value comes
+  from no corner. The popup view, its geometry and its palette live in the
+  launcher (`app/.../terminal/inappkeyboard/KeyPopupOverlayView`,
+  `KeyPopupGeometry`, `KeyPopupPalette`, `KeyPopupController`); the module draws
+  none of it.
 - Logging, utilities, and haptics are reduced to the retained embedded needs.
 
 ## Refresh procedure

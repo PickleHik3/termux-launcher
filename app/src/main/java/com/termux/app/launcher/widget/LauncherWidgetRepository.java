@@ -144,6 +144,35 @@ public final class LauncherWidgetRepository {
     }
 
     /**
+     * Keeps exactly one empty page behind the last page that holds a widget: trailing empty pages
+     * past it go, and a layout that ends on a populated page gains one. That spare page is how a
+     * new page appears at all — a widget dropped on it leaves a fresh spare behind it — which is
+     * why nothing adds a page by hand any more.
+     *
+     * <p>Only the tail is touched. An empty page the user left in the middle of the run stays
+     * exactly where it is, and a layout with no widgets anywhere keeps its one page.
+     */
+    public synchronized boolean trimSparePages() {
+        int last = -1;
+        for (LauncherWidgetRecord record : records.values()) last = Math.max(last, record.page);
+        if (pending != null) last = Math.max(last, pending.page);
+        int target = Math.max(1, last + 2);
+        if (target == pageCount) return true;
+        return commitValidated(records, pending, grid, target, revision + 1);
+    }
+
+    /**
+     * How many pages there are, outright. Only a restore has any business with this — putting the
+     * layout back as it was when an edit session opened, page count and all; every other caller
+     * goes through {@link #trimSparePages()}, which derives the count from the widgets.
+     */
+    public synchronized boolean setPageCount(int count) {
+        if (count < 1) return false;
+        if (count == pageCount) return true;
+        return commitValidated(records, pending, grid, count, revision + 1);
+    }
+
+    /**
      * Removes one empty page and renumbers the pages after it. Refused for a populated page,
      * the last remaining page, or a page holding the pending reservation.
      */

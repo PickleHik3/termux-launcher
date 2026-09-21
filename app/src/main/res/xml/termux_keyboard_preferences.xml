@@ -108,6 +108,11 @@
             app:key="in_app_keyboard_key_sound_enabled"
             app:summary="@string/termux_in_app_keyboard_key_sound_summary"
             app:title="@string/settings_keypress_sound_title" />
+        <SwitchPreferenceCompat
+            app:key="in_app_keyboard_key_popup"
+            app:defaultValue="true"
+            app:summary="@string/termux_in_app_keyboard_key_popup_summary"
+            app:title="@string/settings_key_popup_title" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="keyboard_credits" app:title="@string/settings_keyboard_credits_header">

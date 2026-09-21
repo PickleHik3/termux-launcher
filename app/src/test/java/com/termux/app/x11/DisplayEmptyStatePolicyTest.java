@@ -89,21 +89,22 @@ public class DisplayEmptyStatePolicyTest {
     }
 
     /**
-     * Nix has no {@code pkg} at all, so the missing-package advice cannot be followed there and
-     * the whole feature assumes a Termux prefix nix does not have. Enabled or not, its own state
-     * names the display as simply not available yet, with nothing to start and no guide to read.
+     * Nix installs the keyboard data from its own config rather than with {@code pkg}, so the
+     * missing-data state is the same state with nix's own sentence — and once the data is there
+     * nix rests exactly like Termux, start button and all.
      */
-    @Test public void nixNamesTheDisplayAsUnavailableRatherThanNamingAPackage() {
-        State withData = DisplayEmptyStatePolicy.decide(true, true, TourEdition.NIX);
-        assertEquals(R.string.termux_x11_unavailable_nix, withData.messageRes);
-        assertFalse("nothing for nix to start", withData.startVisible);
-        assertFalse(withData.guideVisible());
-        assertFalse(withData.resting());
-
+    @Test public void nixNamesItsOwnWayToTheKeyboardDataAndOtherwiseReadsLikeTermux() {
         State withoutData = DisplayEmptyStatePolicy.decide(true, false, TourEdition.NIX);
-        assertEquals(R.string.termux_x11_unavailable_nix, withoutData.messageRes);
-        assertFalse(withoutData.startVisible);
-        assertFalse(withoutData.guideVisible());
+        assertEquals(R.string.termux_x11_needs_keyboard_data_nix, withoutData.messageRes);
+        assertFalse("nothing to start without the keyboard data", withoutData.startVisible);
+        assertTrue("there is something to read about it", withoutData.guideVisible());
+        assertFalse(withoutData.resting());
+
+        State withData = DisplayEmptyStatePolicy.decide(true, true, TourEdition.NIX);
+        assertEquals(R.string.termux_x11_no_display, withData.messageRes);
+        assertTrue(withData.startVisible);
+        assertTrue(withData.resting());
+        assertFalse(withData.guideVisible());
     }
 
     @Test public void nixStillSaysTheSettingIsOffWhenItIs() {

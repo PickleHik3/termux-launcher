@@ -1,6 +1,9 @@
 package com.termux.app.wall;
 
 import android.content.Context;
+import android.graphics.Canvas;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -67,6 +70,10 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private static final int ACTION_HELP = 3;
     private static final int ACTION_EDITOR = 4;
     private static final int ACTION_LAYOUT = 5;
+    /** The tick: keep what editing did. */
+    private static final int ACTION_COMMIT = 6;
+    /** The cross: put it back the way it was. */
+    private static final int ACTION_DISCARD = 7;
 
     private final PaneRim mRim = new PaneRim();
     @Nullable private PaneGlassBackdropView mGlass;
@@ -178,6 +185,13 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     }
     private final android.graphics.RectF mHelpButtonBounds = new android.graphics.RectF();
 
+    /** Where the tick or the cross sits on the editing tab; false when neither is out. */
+    @androidx.annotation.VisibleForTesting
+    boolean editExitButtonBounds(boolean keep, @NonNull RectF out) {
+        return mControls != null && mControls.actionBounds(keep ? ACTION_COMMIT : ACTION_DISCARD,
+            out);
+    }
+
     public void dismissControls() {
         dismissGridSizePopup();
         if (mControls != null) mControls.dismiss();
@@ -191,18 +205,58 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
     }
 
-    /** The read-out on the editing tab: the columns and rows the grid is showing. */
+    /**
+     * The editing tab: the grid's size, then the two ways out of the mode — the tick that keeps
+     * everything and the cross that puts the widgets back where the session found them.
+     */
     private void refreshGridSizeAction() {
         if (mControls == null || !mEditing || mHost == null) return;
         mControls.setActions(PaneControlsView.Action.label(ACTION_GRID_SIZE,
             getContext().getString(R.string.widget_grid_size_tab,
                 mHost.widgetGridColumns(), mHost.widgetGridRows())),
+            PaneControlsView.Action.drawn(ACTION_COMMIT, WidgetPaneFrame::drawTickMark),
+            PaneControlsView.Action.drawn(ACTION_DISCARD, WidgetPaneFrame::drawCrossMark,
+                PaneControlsView.TINT_ERROR),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
+    }
+
+    /** The tick, in the same hand-drawn family the panes' own close and maximise marks use. */
+    private static void drawTickMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                     @NonNull Paint paint, float density) {
+        float cx = button.centerX();
+        float cy = button.centerY();
+        canvas.drawLine(cx - 5f * density, cy - 0.5f * density,
+            cx - 1.5f * density, cy + 3.5f * density, paint);
+        canvas.drawLine(cx - 1.5f * density, cy + 3.5f * density,
+            cx + 5f * density, cy - 4f * density, paint);
+    }
+
+    private static void drawCrossMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                      @NonNull Paint paint, float density) {
+        float cx = button.centerX();
+        float cy = button.centerY();
+        canvas.drawLine(cx - 4f * density, cy - 4f * density,
+            cx + 4f * density, cy + 4f * density, paint);
+        canvas.drawLine(cx + 4f * density, cy - 4f * density,
+            cx - 4f * density, cy + 4f * density, paint);
+    }
+
+    /** The two ways out of editing, which the grid's own coordinator answers. */
+    private void runWidgetEditExit(boolean keep) {
+        if (!(mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView)) return;
+        com.termux.app.launcher.widget.WidgetPaneView pane =
+            (com.termux.app.launcher.widget.WidgetPaneView) mGrid;
+        if (keep) pane.commitWidgetEdit();
+        else pane.discardWidgetEdit();
     }
 
     private void runControl(int id) {
         if (id == ACTION_GRID_SIZE) {
             openGridSizePopup();
+            return;
+        }
+        if (id == ACTION_COMMIT || id == ACTION_DISCARD) {
+            runWidgetEditExit(id == ACTION_COMMIT);
             return;
         }
         if (mHost == null) return;

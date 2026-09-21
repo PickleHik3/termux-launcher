@@ -374,6 +374,42 @@ public class WidgetPaneFrameTapTest {
         assertEquals(Arrays.asList("edit", "appearance"), calls.log);
     }
 
+    /**
+     * The editing tab's two ways out: the tick keeps what editing did, the cross puts it back.
+     * Neither is the launcher's business - the grid's own coordinator answers both - so the page's
+     * host hears nothing.
+     */
+    @Test
+    public void theEditingTabCarriesATickAndACross() {
+        assertEquals(Collections.singletonList("keep"), tapEditExit(true));
+        assertEquals(Collections.singletonList("discard"), tapEditExit(false));
+    }
+
+    private static List<String> tapEditExit(boolean keep) {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = page(activity);
+        Calls calls = new Calls();
+        page.setHost(calls);
+        List<String> exits = new ArrayList<>();
+        WidgetPaneView pane = page.findViewById(R.id.widget_pane);
+        pane.setListener(new WidgetPaneView.Listener() {
+            @Override public void onPageChangeRequested(int page) { }
+            @Override public void onWidgetEditCommit() { exits.add("keep"); }
+            @Override public void onWidgetEditDiscard() { exits.add("discard"); }
+        }, item -> { });
+
+        page.applyWidgetEditing(true);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
+        RectF button = new RectF();
+        assertTrue("the tick and the cross are on the editing tab",
+            page.editExitButtonBounds(keep, button));
+        tap(page, button.centerX(), button.centerY());
+
+        assertEquals("the page's host hears nothing about either",
+            Collections.emptyList(), calls.log);
+        return exits;
+    }
+
     @Test
     public void helpStaysOnBothTheRestingAndEditingTabs() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
