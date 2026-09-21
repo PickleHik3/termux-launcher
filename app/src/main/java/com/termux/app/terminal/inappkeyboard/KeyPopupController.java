@@ -34,6 +34,7 @@ public final class KeyPopupController implements Keyboard2View.KeyPopupListener 
     private final int[] mKeyboardLocation = new int[2];
     private final int[] mOverlayLocation = new int[2];
     private final RectF mBounds = new RectF();
+    private final RectF mVeil = new RectF();
 
     private boolean mEnabled;
 
@@ -120,6 +121,8 @@ public final class KeyPopupController implements Keyboard2View.KeyPopupListener 
         float dy = mKeyboardLocation[1] - mOverlayLocation[1];
         mBounds.set(info.keyBounds);
         mBounds.offset(dx, dy);
+        mVeil.set(dx, dy, dx + mKeyboardView.getWidth(), dy + mKeyboardView.getHeight());
+        mOverlay.setVeilBounds(mVeil);
         mOverlay.show(pointerId, mBounds, dx, dx + mKeyboardView.getWidth(),
             info.label, info.labelKeyFont, info.ringLabels, info.ringKeyFont, info.latchable);
     }
