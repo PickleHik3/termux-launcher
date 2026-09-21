@@ -96,6 +96,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             @Override public void onWidgetEditDiscard() { discardEditSession(); }
         }, this::selectProvider);
         widgets.setListener(this);
+        // Pages saved before the spare-page rule, or left behind by a removed widget while the
+        // page was off screen, are brought level with it once here; changes keep it from then on.
+        widgets.repository().trimSparePages();
         render();
     }
 
