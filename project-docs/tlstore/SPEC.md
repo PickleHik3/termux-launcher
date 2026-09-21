@@ -76,7 +76,7 @@ Initial items: `fish`, `oh-my-posh`, `zoxide`, `eza`, `neovim`, `build-tools` (p
   minisign`; still none → refresh is off and the baseline is used, said in one line.
   `TLSTORE_CATALOG_URL` overrides the URL (tests use `file://`).
 - The signing key lives with the maintainer (`~/.config/vaj-apt/tlstore-minisign.key`), never in
-  a repo or an agent worktree. `scripts/tlstore/sign-catalog.sh` signs; the orchestrator runs it.
+  a repo or an agent worktree. `scripts/tlstore/sign.sh` signs; the orchestrator runs it.
 
 ## Commands
 
@@ -106,7 +106,7 @@ text, one line per action, product copy (no mechanism talk); errors start with `
 | P1 | `feat/tlstore-cli` | `app/src/main/assets/tlstore/tlstore`; `scripts/tlstore/{items.tsv,build-catalog.sh,test.sh}`; generated `catalog.tsv`; tests green under `sh`/`dash`/`busybox sh` on a Linux host with `file://` fixtures | opus | — |
 | P2 | `feat/tlstore-installer` | `app/src/main/java/com/termux/app/store/TlstoreInstaller.java`, hook in `TermuxActivity` beside the X11 installer call, `TlstoreInstallerTest`; assets read by name only | sonnet | — |
 | P3 | `feat/tlstore-docs` | `docs/en/Tlstore.md`, README section replacing the `setup-launcher` curl instructions, `setup-launcher` header pointing to tlstore, release-notes line | sonnet | P1 |
-| P4 | orchestrator | minisign key, `trusted.pub` asset, `sign-catalog.sh`, signed catalog on `dev`; queue `minisign` for the VAJ apt repo | — | P1 |
+| P4 | orchestrator | minisign key, `trusted.pub` asset, `sign.sh` (named `sign-catalog.sh` at the time), signed catalog on `dev`; queue `minisign` for the VAJ apt repo | — | P1 |
 | gate | — | debug APK on the emulator: tlstore written, `tlstore list/doctor` run; then pong by the developer | — | P1, P2 |
 
 ## As built (2026-09-06)

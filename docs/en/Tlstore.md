@@ -179,7 +179,7 @@ hand-edit it. To add or change an item:
 2. Run `scripts/tlstore/build-catalog.sh <path to termux-launcher-binaries/SHA256SUMS>` to compute
    digests, bump the serial, and write `catalog.tsv`. A plain `http(s)` source is downloaded once
    to hash it, so that step needs the network; it must name a tag or a commit, never a branch.
-3. Run `scripts/tlstore/sign-catalog.sh` to sign it.
+3. Run `scripts/tlstore/sign.sh` to sign it (it also signs the `tlstore` script itself).
 4. Commit all three: `items.tsv`, `catalog.tsv`, and `catalog.tsv.minisig`.
 
 Anything a user should not choose directly gets `hidden=1` in its options; anything needed only
