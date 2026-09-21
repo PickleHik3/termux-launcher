@@ -32,10 +32,9 @@ public class KeyPopupPaletteTest {
     }
 
     @Test
-    public void theGlyphIsTheThemesAccentAtFullStrength() {
+    public void theGlowIsTheThemesAccentAtFullStrength() {
         Context context = themed();
         KeyPopupPalette palette = KeyPopupPalette.resolve(context);
-
         int primary = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorPrimary, 0);
         assertEquals(primary | 0xFF000000, palette.primary);
@@ -43,40 +42,38 @@ public class KeyPopupPaletteTest {
     }
 
     @Test
-    public void theShadowIsTheLowestSurfaceAtTheDesignsOpacity() {
+    public void theGlyphIsTheThemesTextOnSurfaceLikeTheCapsLabels() {
         Context context = themed();
         KeyPopupPalette palette = KeyPopupPalette.resolve(context);
-
-        int lowest = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorSurfaceContainerLowest,
-            MaterialColors.getColor(context, com.google.android.material.R.attr.colorSurface, 0));
-        assertEquals(rgb(lowest), rgb(palette.shadow));
-        assertEquals(115, Color.alpha(palette.shadow));
+        int onSurface = MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSurface, 0);
+        assertEquals(onSurface | 0xFF000000, palette.ink);
+        assertEquals(255, Color.alpha(palette.ink));
     }
 
     @Test
     @Config(qualifiers = "night")
-    public void aDarkThemesShadowReadsAsGroundNotAsInk() {
-        assertShadowTracksTheGround();
+    public void aDarkThemesInkReadsAsTextNotAsGround() {
+        assertInkTracksTheText();
     }
 
     @Test
     @Config(qualifiers = "notnight")
-    public void aLightThemesShadowInvertsWithTheTheme() {
-        assertShadowTracksTheGround();
+    public void aLightThemesInkInvertsWithTheTheme() {
+        assertInkTracksTheText();
     }
 
     /** Whichever way the theme goes, the shadow is the surface's colour, not the text's. */
-    private void assertShadowTracksTheGround() {
+    private void assertInkTracksTheText() {
         Context context = themed();
         KeyPopupPalette palette = KeyPopupPalette.resolve(context);
         double surface = luminance(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurface, 0));
         double onSurface = luminance(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOnSurface, 0));
-        double shadow = luminance(palette.shadow);
-        assertTrue("the shadow is the ground the glyph is lifted off",
-            Math.abs(shadow - surface) < Math.abs(shadow - onSurface));
+        double ink = luminance(palette.ink);
+        assertTrue("the glyph is drawn in the text colour, opposite to the ground",
+            Math.abs(ink - onSurface) < Math.abs(ink - surface));
     }
 
     @Test

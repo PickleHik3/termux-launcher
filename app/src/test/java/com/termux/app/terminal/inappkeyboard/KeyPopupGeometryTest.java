@@ -14,34 +14,34 @@ public class KeyPopupGeometryTest {
     @Test
     public void theGlyphStepsDownThroughFourSizesAsTheLabelGrows() {
         KeyPopupGeometry.Metrics one = KeyPopupGeometry.metricsFor("a", 1f);
-        assertEquals(30f, one.glyphSizePx, EPS);
-        assertEquals(300, one.weight);
+        assertEquals(26f, one.glyphSizePx, EPS);
+        assertEquals(400, one.weight);
         assertFalse("a single character keeps the label face", one.monospace);
 
         KeyPopupGeometry.Metrics two = KeyPopupGeometry.metricsFor("->", 1f);
-        assertEquals(20f, two.glyphSizePx, EPS);
+        assertEquals(17f, two.glyphSizePx, EPS);
         assertEquals(400, two.weight);
-        assertTrue("everything wider than one character is monospace", two.monospace);
+        assertFalse("every tier keeps the keyboard's own label face", two.monospace);
 
         KeyPopupGeometry.Metrics four = KeyPopupGeometry.metricsFor("Ctrl", 1f);
-        assertEquals(14f, four.glyphSizePx, EPS);
-        assertEquals(500, four.weight);
+        assertEquals(13f, four.glyphSizePx, EPS);
+        assertEquals(400, four.weight);
 
         KeyPopupGeometry.Metrics many = KeyPopupGeometry.metricsFor("space", 1f);
-        assertEquals(12f, many.glyphSizePx, EPS);
-        assertEquals(500, many.weight);
+        assertEquals(11f, many.glyphSizePx, EPS);
+        assertEquals(400, many.weight);
     }
 
     @Test
     public void everySizeIsInDeviceIndependentPixels() {
-        assertEquals(30f * 3f, KeyPopupGeometry.metricsFor("a", 3f).glyphSizePx, EPS);
-        assertEquals(12f * 3f, KeyPopupGeometry.metricsFor("space", 3f).glyphSizePx, EPS);
+        assertEquals(26f * 3f, KeyPopupGeometry.metricsFor("a", 3f).glyphSizePx, EPS);
+        assertEquals(11f * 3f, KeyPopupGeometry.metricsFor("space", 3f).glyphSizePx, EPS);
     }
 
     @Test
     public void anEmptyOrMissingLabelIsSizedLikeASingleCharacter() {
-        assertEquals(30f, KeyPopupGeometry.metricsFor(null, 1f).glyphSizePx, EPS);
-        assertEquals(30f, KeyPopupGeometry.metricsFor("", 1f).glyphSizePx, EPS);
+        assertEquals(26f, KeyPopupGeometry.metricsFor(null, 1f).glyphSizePx, EPS);
+        assertEquals(26f, KeyPopupGeometry.metricsFor("", 1f).glyphSizePx, EPS);
     }
 
     @Test

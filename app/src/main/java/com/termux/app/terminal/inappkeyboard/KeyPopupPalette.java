@@ -18,32 +18,28 @@ import com.google.android.material.color.MaterialColors;
  */
 public final class KeyPopupPalette {
 
-    /** The glyph itself. */
+    /** The glow that wraps the glyph: the theme's accent. */
     @ColorInt public final int primary;
-    /** The soft shadow behind it, already carrying its own opacity. */
-    @ColorInt public final int shadow;
+    /** The glyph itself: the theme's text-on-surface colour, the same family as the caps' labels. */
+    @ColorInt public final int ink;
 
-    KeyPopupPalette(@ColorInt int primary, @ColorInt int shadow) {
+    KeyPopupPalette(@ColorInt int primary, @ColorInt int ink) {
         this.primary = primary;
-        this.shadow = shadow;
+        this.ink = ink;
     }
 
-    /** How strongly the shadow carries, so the glyph separates without glowing. */
-    private static final float SHADOW_ALPHA = 0.45f;
 
     @NonNull
     public static KeyPopupPalette resolve(@NonNull Context context) {
-        int surface = role(context, com.google.android.material.R.attr.colorSurface, 0xFF101010);
         int primary = role(context, com.google.android.material.R.attr.colorPrimary, 0xFFE9B308);
-        int lowest = role(context,
-            com.google.android.material.R.attr.colorSurfaceContainerLowest, surface);
-        return new KeyPopupPalette(opaque(primary), withAlpha(lowest, SHADOW_ALPHA));
+        int onSurface = role(context, com.google.android.material.R.attr.colorOnSurface, 0xFFF2EFE8);
+        return new KeyPopupPalette(opaque(primary), opaque(onSurface));
     }
 
     /** A signature that moves whenever either role above does. */
     public static int signature(@NonNull Context context) {
         KeyPopupPalette p = resolve(context);
-        return 31 * p.primary + p.shadow;
+        return 31 * p.primary + p.ink;
     }
 
     @ColorInt

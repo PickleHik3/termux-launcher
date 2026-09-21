@@ -19,14 +19,8 @@ Phase `feat/key-popup-minimal`, from `dev` at d7c3d7d3.
    6 dp above the cap's top edge — a 30 dp glyph is centred 21 dp above it, against v1's ~66 dp
    rise — and never above the top of the overlay. The overlay still lives in the activity's content
    view, so a top-row glyph floats over the terminal.
-4. **Sizes −35 %.** By label length: 1 character → 30 dp (weight 300, the keyboard's label face),
-   2 → 20 dp (400, monospace), 3–4 → 14 dp (500, monospace), 5+ → 12 dp (500, monospace). A
-   `FLAG_KEY_FONT` value still uses the keyboard's special font, and a private-use label still uses
-   the label font.
-5. **Solid colour, not outline.** The glyph is filled with `primary` from the Material theme; there
-   is no stroke. One soft shadow layer carries it over terminal text: 4 dp radius, 1 dp down,
-   `colorSurfaceContainerLowest` at 60 %. That role inverts with the theme on its own, so the
-   shadow is near-black on a dark theme and near-white on a light one. Nothing glows.
+4. **Sizes and typeface.** Label-length tiers: 1 char → 26 dp, 2 → 17 dp, 3–4 → 13 dp, 5+ → 11 dp, all in the keyboard's own label face (`Config.labelFont`, i.e. the user's custom font from Settings when set) with no synthesized weights and no monospace substitute, so the popup can never mismatch the caps. `FLAG_KEY_FONT` glyphs use the keyboard's special font, as on the caps.
+5. **Colour.** The glyph is filled with `onSurface` (the caps' own label family) and wrapped in a glow that follows the letterform: the same text drawn underneath with zero-offset soft shadows in `primary` — a wide faint pass (7 dp @ 28 %) for separation from the caps and a tight one (2.5 dp @ 70 %) for the edge. No disc, no box, no drop shadow.
 6. **Motion.** Enter 130 ms: the glyph rises out of the cap (from the cap's top edge to its anchor), scaling 0.82→1 and solid by half-way, on Material's emphasized-decelerate curve `(0.05, 0.7, 0.1, 1)`. Exit 140 ms after the stay: drifts 10 dp further up, scales to 0.9 and fades on emphasized-accelerate `(0.3, 0, 0.8, 0.15)`. Swipe crossfade 60 ms. Reduced motion → 1 ms.
 7. **Unchanged.** Per-pointer state, the exit running after the key is committed and never gating
    input, the `in_app_keyboard_key_popup` toggle and its copy, the palette refresh on a theme
