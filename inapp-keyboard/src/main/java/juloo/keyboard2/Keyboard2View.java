@@ -90,6 +90,11 @@ public class Keyboard2View extends View
   private String _lastPaintedKeyId;
   private float _launchWaveDensity;
   private final int[] _keyRectLocation = new int[2];
+
+  /** Host-drawn pressed-key popup, or null. Local addition, see UPSTREAM.md. */
+  private KeyPopupListener _keyPopupListener;
+  private final SparseArray<KeyPopupInfo> _keyPopups = new SparseArray<KeyPopupInfo>();
+  private final PointerPreview _pointerPreview = new PointerPreview();
   private final Paint _trailPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint _fxStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -915,6 +920,200 @@ public class Keyboard2View extends View
               Math.round(_keyRectLocation[1] + y),
               Math.round(_keyRectLocation[0] + x + keyW),
               Math.round(_keyRectLocation[1] + y + keyH));
+          return true;
+        }
+        x += _keyWidth * k.width;
+      }
+      y += row.height * _tc.row_height;
+    }
+    return false;
+  }
+
+  /**
+   * Lets a host draw a popup for the key under each finger. Local addition, see UPSTREAM.md.
+   *
+   * <p>The popup is driven by {@link Pointers}, not by a second reading of the gesture, so what
+   * it shows is by construction the value the keyboard would commit on release.
+   *
+   * @param listener the host's popup, or null to stop reporting
+   */
+  public void setKeyPopupListener(KeyPopupListener listener)
+  {
+    requireMainThread();
+    if (_keyPopupListener == listener)
+      return;
+    if (_keyPopupListener != null)
+      _keyPopupListener.onKeyPopupHideAll();
+    _keyPopups.clear();
+    _keyPopupListener = listener;
+    _pointers.setPreviewHandler(listener == null ? null : _pointerPreview);
+  }
+
+  /** The face ordinary labels are drawn in, so a popup's glyph matches its cap. */
+  public android.graphics.Typeface labelFont()
+  {
+    return _config.labelFont;
+  }
+
+  /** What a host needs to draw the popup for one pressed key. Immutable. */
+  public static final class KeyPopupInfo
+  {
+    /** Bounds of the drawn cap, in this view's coordinates. */
+    public final RectF keyBounds;
+    /** The centre glyph: what pressing the key right now would commit. */
+    public final String label;
+    /** Whether [label] needs the bundled key font rather than the label face. */
+    public final boolean labelKeyFont;
+    /** Indexed by corner 1..8 (nw, ne, sw, se, w, e, n, s); null where nothing is configured. */
+    public final String[] ringLabels;
+    public final boolean[] ringKeyFont;
+    /** Whether releasing without a swipe latches the key instead of committing it. */
+    public final boolean latchable;
+
+    KeyPopupInfo(RectF bounds, String label, boolean labelKeyFont, String[] ringLabels,
+        boolean[] ringKeyFont, boolean latchable)
+    {
+      this.keyBounds = bounds;
+      this.label = label;
+      this.labelKeyFont = labelKeyFont;
+      this.ringLabels = ringLabels;
+      this.ringKeyFont = ringKeyFont;
+      this.latchable = latchable;
+    }
+  }
+
+  /** Host side of {@link #setKeyPopupListener}. Every call is on the main thread. */
+  public interface KeyPopupListener
+  {
+    /** A finger went down on a key. */
+    void onKeyPopupShow(int pointerId, KeyPopupInfo info);
+
+    /** The finger moved onto another value: [slot] is the corner, -1 for the centre. */
+    void onKeyPopupTarget(int pointerId, String label, boolean labelKeyFont, int slot);
+
+    /** A latchable key latched or unlatched under the finger. */
+    void onKeyPopupLatch(int pointerId, boolean latched);
+
+    /** The finger left the screen; the key it committed has already been sent. */
+    void onKeyPopupHide(int pointerId);
+
+    /** Every popup goes at once: a cancel, a layout swap, the keyboard going away. */
+    void onKeyPopupHideAll();
+  }
+
+  /** Turns {@link Pointers}' value preview into popup geometry in view coordinates. */
+  private final class PointerPreview implements Pointers.IPointerPreview
+  {
+    @Override
+    public void onPreviewDown(int pointerId, KeyboardData.Key key, KeyValue value, int slot,
+        boolean latchable)
+    {
+      KeyPopupListener listener = _keyPopupListener;
+      if (listener == null || key == null)
+        return;
+      RectF bounds = new RectF();
+      if (!keyBoundsInView(key, bounds))
+        return;
+      String label = popupLabel(value);
+      if (label == null)
+        return;
+      String[] ringLabels = new String[9];
+      boolean[] ringKeyFont = new boolean[9];
+      for (int i = 1; i < 9; i++)
+      {
+        KeyValue kv = key.keys[i] == null ? null : modifyKey(key.keys[i], _mods);
+        ringLabels[i] = popupLabel(kv);
+        ringKeyFont[i] = kv != null && kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT);
+      }
+      KeyPopupInfo info = new KeyPopupInfo(bounds, label,
+          value.hasFlagsAny(KeyValue.FLAG_KEY_FONT), ringLabels, ringKeyFont, latchable);
+      _keyPopups.put(pointerId, info);
+      listener.onKeyPopupShow(pointerId, info);
+    }
+
+    @Override
+    public void onPreviewMoved(int pointerId, KeyValue value, int slot)
+    {
+      KeyPopupListener listener = _keyPopupListener;
+      if (listener == null || _keyPopups.get(pointerId) == null)
+        return;
+      String label = popupLabel(value);
+      if (label == null)
+        return;
+      listener.onKeyPopupTarget(pointerId, label,
+          value != null && value.hasFlagsAny(KeyValue.FLAG_KEY_FONT), slot);
+    }
+
+    @Override
+    public void onPreviewLatch(int pointerId, boolean latched)
+    {
+      KeyPopupListener listener = _keyPopupListener;
+      if (listener != null && _keyPopups.get(pointerId) != null)
+        listener.onKeyPopupLatch(pointerId, latched);
+    }
+
+    @Override
+    public void onPreviewUp(int pointerId)
+    {
+      KeyPopupListener listener = _keyPopupListener;
+      if (_keyPopups.get(pointerId) == null)
+        return;
+      _keyPopups.remove(pointerId);
+      if (listener != null)
+        listener.onKeyPopupHide(pointerId);
+    }
+
+    @Override
+    public void onPreviewReset()
+    {
+      KeyPopupListener listener = _keyPopupListener;
+      if (_keyPopups.size() == 0)
+        return;
+      _keyPopups.clear();
+      if (listener != null)
+        listener.onKeyPopupHideAll();
+    }
+  }
+
+  /** The label a popup shows for [kv], as the cap would draw it; null when there is none. */
+  private String popupLabel(KeyValue kv)
+  {
+    if (kv == null)
+      return null;
+    kv = shiftedKeyeventLabel(kv);
+    String label = kv.getString();
+    if (label == null || label.isEmpty())
+      return null;
+    // Same clamp the caps use, so a long macro reads the same in both places.
+    if (label.length() > 3 && kv.getKind() == KeyValue.Kind.String)
+      label = label.substring(0, 3);
+    return label;
+  }
+
+  /**
+   * Bounds of one key's drawn cap in this view's coordinates, matched by identity rather than by
+   * name: the caller already holds the key the pointer went down on. {@link #onDraw}'s own
+   * arithmetic.
+   *
+   * @return false when the key is not in the current layout or nothing is measured yet
+   */
+  private boolean keyBoundsInView(KeyboardData.Key key, RectF out)
+  {
+    if (_keyboard == null || _tc == null)
+      return false;
+    float y = getPaddingTop() + _tc.margin_top;
+    for (KeyboardData.Row row : _keyboard.rows)
+    {
+      y += row.shift * _tc.row_height;
+      float x = _marginLeft + _tc.margin_left;
+      float keyH = row.height * _tc.row_height - _tc.vertical_margin;
+      for (KeyboardData.Key k : row.keys)
+      {
+        x += k.shift * _keyWidth;
+        float keyW = _keyWidth * k.width - _tc.horizontal_margin;
+        if (k == key)
+        {
+          out.set(x, y, x + keyW, y + keyH);
           return true;
         }
         x += _keyWidth * k.width;

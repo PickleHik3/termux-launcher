@@ -703,6 +703,15 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_IN_APP_KEYBOARD_KEY_SOUND_ENABLED = false;
 
         /**
+         * Defines the key for whether a pressed key is shown floating above the finger, with the
+         * key's other characters around it.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_KEY_POPUP =
+            "in_app_keyboard_key_popup";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_KEY_POPUP = true;
+
+        /**
          * Defines the key for whether the built-in keyboard learns where the user's taps land
          * and nudges presses near a key boundary onto the key they usually mean. Off by
          * default: it is the home screen's keyboard, and the model is learned from the user's
