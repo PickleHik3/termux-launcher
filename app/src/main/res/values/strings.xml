@@ -11,10 +11,10 @@
     <string name="widget_add">Add widget</string>
     <string name="widget_empty_hint">Long-press to add widgets</string>
     <string name="widget_menu_edit_widgets">Edit widgets</string>
-    <string name="widget_menu_add_page">Add page</string>
     <string name="widget_menu_remove_page">Remove page</string>
     <string name="widget_unsupported">Widgets aren\'t supported on this device</string>
     <string name="widget_remove_failed">Widget couldn\'t be removed</string>
+    <string name="widget_no_room_on_page">No room on this page.</string>
     <string name="widget_picker_search_hint">Search widgets</string>
     <string name="widget_picker_no_matches">No widgets match that search.</string>
     <string name="widget_picker_app_expanded">expanded</string>
@@ -380,6 +380,7 @@
     </plurals>
     <string name="settings_haptic_feedback_title">Haptic feedback</string>
     <string name="settings_keypress_sound_title">Keypress sound</string>
+    <string name="settings_key_popup_title">Key popup</string>
     <string name="settings_keyboard_credits_header">Keyboard credits</string>
     <string name="settings_connected_services_header">Connected services</string>
     <string name="settings_tai_service_title">TAI · Termux AI</string>
@@ -986,6 +987,7 @@
                 </string-array>
                 <string name="termux_in_app_keyboard_haptics_summary">Gentle haptic tick for every key.</string>
                 <string name="termux_in_app_keyboard_key_sound_summary">Uses the system touch-sound volume.</string>
+                <string name="termux_in_app_keyboard_key_popup_summary">Shows the key you\'re pressing above your finger.</string>
                 <string name="termux_in_app_keyboard_font_title">Font</string>
                 <string name="termux_in_app_keyboard_font_summary_default">System default typeface.</string>
                 <string name="termux_in_app_keyboard_font_summary_custom">Custom font: %1$s</string>

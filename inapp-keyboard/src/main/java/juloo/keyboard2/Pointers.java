@@ -36,12 +36,20 @@ public final class Pointers implements Handler.Callback
   private ArrayList<Pointer> _ptrs = new ArrayList<Pointer>();
   private IPointerEventHandler _handler;
   private Config _config;
+  /** Observer of what each live pointer holds. Local addition, see UPSTREAM.md. */
+  private IPointerPreview _preview;
 
   public Pointers(IPointerEventHandler h, Config c)
   {
     _longpress_handler = new Handler(Looper.getMainLooper(), this);
     _handler = h;
     _config = c;
+  }
+
+  /** Watch what every live pointer holds. [null] removes the observer. */
+  void setPreviewHandler(IPointerPreview p)
+  {
+    _preview = p;
   }
 
   /** Return the list of modifiers currently activated. */
@@ -71,6 +79,8 @@ public final class Pointers implements Handler.Callback
   {
     _longpress_handler.removeCallbacksAndMessages(null);
     _ptrs.clear();
+    if (_preview != null)
+      _preview.onPreviewReset();
   }
 
   /** @deprecated Use [reset()]. */
@@ -165,6 +175,7 @@ public final class Pointers implements Handler.Callback
     {
       clearLatched();
       ptr.sliding.onTouchUp(ptr);
+      previewUp(pointerId);
       return;
     }
     stopLongPress(ptr);
@@ -184,6 +195,7 @@ public final class Pointers implements Handler.Callback
       else // Otherwise, unlatch
       {
         removePtr(latched);
+        previewLatch(pointerId, false);
         _handler.onPointerUp(ptr_value, ptr.modifiers);
       }
     }
@@ -194,6 +206,7 @@ public final class Pointers implements Handler.Callback
         clearLatched();
       ptr.flags |= FLAG_P_LATCHED;
       ptr.pointerId = -1;
+      previewLatch(pointerId, true);
       _handler.onPointerFlagsChanged(false);
     }
     else
@@ -202,6 +215,7 @@ public final class Pointers implements Handler.Callback
       removePtr(ptr);
       _handler.onPointerUp(ptr_value, ptr.modifiers);
     }
+    previewUp(pointerId);
   }
 
   public void onTouchCancel()
@@ -250,6 +264,9 @@ public final class Pointers implements Handler.Callback
     Pointer ptr = make_pointer(pointerId, key, value, x, y, mods);
     _ptrs.add(ptr);
     startLongPress(ptr);
+    if (_preview != null)
+      _preview.onPreviewDown(pointerId, key, value, -1,
+          (ptr.flags & FLAG_P_LATCHABLE) != 0);
     _handler.onPointerDown(value, false);
   }
 
@@ -312,6 +329,8 @@ public final class Pointers implements Handler.Callback
         // gestures without being interrupted by the slider.
         if (k.getKind() == KeyValue.Kind.Slider && Math.abs(i) >= 2)
           continue;
+        // Which of the eight corners the value came from, for the pressed-key popup.
+        ptr.slot = DIRECTION_TO_INDEX[d];
         return k;
       }
     }
@@ -345,13 +364,14 @@ public final class Pointers implements Handler.Callback
         return;
       // Gesture ended
       ptr.gesture.moved_to_center();
+      ptr.slot = -1;
       ptr.value = apply_gesture(ptr, ptr.gesture.get_gesture());
       // Flags describe the value, here as everywhere else. Zeroing them cost a modifier that
       // wandered off its centre and came back its latchability, so a fast Ctrl tap that rolled a
       // few pixels landed as a plain press: the latch never happened and the next key arrived
       // without Ctrl. Only a deliberate swipe should take a key's own behaviour away.
       ptr.flags = ptr.value == null ? 0 : pointer_flags_of_kv(ptr.value);
-
+      previewMoved(ptr);
     }
     else
     { // Pointer is on a quadrant.
@@ -375,6 +395,7 @@ public final class Pointers implements Handler.Callback
           // Start sliding mode
           if (new_value.getKind() == KeyValue.Kind.Slider)
             startSliding(ptr, x, y, dx, dy, new_value);
+          previewMoved(ptr);
           _handler.onPointerDown(new_value, true);
         }
 
@@ -390,6 +411,7 @@ public final class Pointers implements Handler.Callback
           ptr.value = apply_gesture(ptr, ptr.gesture.get_gesture());
           restartLongPress(ptr);
           ptr.flags = 0; // Special behaviors are ignored during a gesture.
+          previewMoved(ptr);
           _handler.onPointerFlagsChanged(true); // Vibrate
         }
       }
@@ -445,6 +467,7 @@ public final class Pointers implements Handler.Callback
   private void lockPointer(Pointer ptr, boolean shouldVibrate)
   {
     ptr.flags = (ptr.flags & ~FLAG_P_DOUBLE_TAP_LOCK) | FLAG_P_LOCKED;
+    previewLatch(ptr.pointerId, true);
     _handler.onPointerFlagsChanged(shouldVibrate);
   }
 
@@ -511,6 +534,7 @@ public final class Pointers implements Handler.Callback
     if (!kv.equals(ptr.value))
     {
       ptr.value = kv;
+      previewMoved(ptr);
       _handler.onPointerDown(kv, true);
       return;
     }
@@ -538,6 +562,26 @@ public final class Pointers implements Handler.Callback
     stopLongPress(ptr);
     ptr.flags |= FLAG_P_SLIDING;
     ptr.sliding = new Sliding(x, y, dirx, diry, kv.getSlider());
+  }
+
+  // Preview (local addition, see UPSTREAM.md)
+
+  private void previewMoved(Pointer ptr)
+  {
+    if (_preview != null && ptr.pointerId >= 0)
+      _preview.onPreviewMoved(ptr.pointerId, ptr.value, ptr.slot);
+  }
+
+  private void previewLatch(int pointerId, boolean latched)
+  {
+    if (_preview != null && pointerId >= 0)
+      _preview.onPreviewLatch(pointerId, latched);
+  }
+
+  private void previewUp(int pointerId)
+  {
+    if (_preview != null)
+      _preview.onPreviewUp(pointerId);
   }
 
   /** Return the [FLAG_P_*] flags that correspond to pressing [kv]. */
@@ -575,10 +619,12 @@ public final class Pointers implements Handler.Callback
               getNearestKeyAtDirection(ptr, ptr.gesture.current_direction()),
               KeyValue.Modifier.GESTURE);
       case Circle:
+        ptr.slot = -1;
         return
           modify_key_with_extra_modifier(ptr, ptr.key.keys[0],
               KeyValue.Modifier.GESTURE);
       case Anticircle:
+        ptr.slot = -1;
         return _handler.modifyKey(ptr.key.anticircle, ptr.modifiers);
     }
     return ptr.value; // Unreachable
@@ -621,6 +667,8 @@ public final class Pointers implements Handler.Callback
     public int timeoutWhat;
     /** [null] when not in sliding mode. */
     public Sliding sliding;
+    /** Which of the key's eight corners [value] came from, [-1] for the centre. */
+    public int slot;
 
     public Pointer(int p, KeyboardData.Key k, KeyValue v, float x, float y, Modifiers m, int f)
     {
@@ -628,6 +676,7 @@ public final class Pointers implements Handler.Callback
       key = k;
       gesture = null;
       value = v;
+      slot = -1;
       downX = x;
       downY = y;
       modifiers = m;
@@ -886,5 +935,35 @@ public final class Pointers implements Handler.Callback
 
     /** Key is repeating. */
     public void onPointerHold(KeyValue k, Modifiers mods);
+  }
+
+  /**
+   * What a live pointer currently holds, for a host-drawn pressed-key popup. Local addition,
+   * see UPSTREAM.md.
+   *
+   * <p>This is a read-only view of {@link Pointer}: it reports the value that would be committed
+   * if the finger left the screen now, so the popup can never disagree with what the keyboard
+   * actually types. Nothing here changes what a key commits.
+   */
+  public interface IPointerPreview
+  {
+    /**
+     * A pointer went down on [key]. [value] is what it holds, [slot] the corner that value came
+     * from ([-1] for the centre), [latchable] whether releasing without a swipe latches it.
+     */
+    void onPreviewDown(int pointerId, KeyboardData.Key key, KeyValue value, int slot,
+        boolean latchable);
+
+    /** The pointer swiped, rolled back to the centre, or long-pressed onto another value. */
+    void onPreviewMoved(int pointerId, KeyValue value, int slot);
+
+    /** A latchable pointer latched or unlatched. */
+    void onPreviewLatch(int pointerId, boolean latched);
+
+    /** The finger left the screen. The value it committed, if any, has already been sent. */
+    void onPreviewUp(int pointerId);
+
+    /** Every pointer is gone at once: a cancel, a layout change, a reset. */
+    void onPreviewReset();
   }
 }

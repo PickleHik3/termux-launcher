@@ -115,7 +115,6 @@ final class WidgetPaneMenu {
         switch (item) {
             case ADD_WIDGET: return context.getString(R.string.widget_add);
             case EDIT_WIDGETS: return context.getString(R.string.widget_menu_edit_widgets);
-            case ADD_PAGE: return context.getString(R.string.widget_menu_add_page);
             case REMOVE_PAGE: return context.getString(R.string.widget_menu_remove_page);
             default: return "";
         }

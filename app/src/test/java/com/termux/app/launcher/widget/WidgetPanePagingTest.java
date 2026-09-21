@@ -20,10 +20,11 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.S, application = Application.class)
 public class WidgetPanePagingTest {
-    @Test public void menuAddPageAppendsSwitchesAndRemoveReturns() {
+    @Test public void theSparePageIsWhereASwipeGoesAndRemoveGivesItBack() {
         Fixture fixture = new Fixture();
         assertEquals(0, fixture.controller.currentPage());
-        fixture.controller.menuAddPage();
+        assertEquals(1, fixture.repository.addPage());
+        fixture.controller.setCurrentPage(1);
         assertEquals(2, fixture.repository.pageCount());
         assertEquals(1, fixture.controller.currentPage());
         assertEquals(1, fixture.pane.currentPage());
@@ -34,9 +35,11 @@ public class WidgetPanePagingTest {
 
     @Test public void renderShowsOnlyTheCurrentPagesCellsAndFullCloseResetsToPageZero() {
         Fixture fixture = new Fixture();
-        fixture.controller.menuAddPage();
+        assertEquals(1, fixture.repository.addPage());
         assertTrue(fixture.repository.putRecord(record(1, new WidgetCellRect(0, 0, 1, 1), 0)));
         assertTrue(fixture.repository.putRecord(record(2, new WidgetCellRect(0, 0, 1, 1), 1)));
+        fixture.controller.onWidgetRepositoryChanged(
+            LauncherWidgetHostController.AddResult.IGNORED);
         fixture.controller.setCurrentPage(0);
         assertNotNull(fixture.pane.grid().cellForId(1));
         assertNull("page-1 widget must not render on page 0",
@@ -55,7 +58,7 @@ public class WidgetPanePagingTest {
         assertTrue(fixture.pane.picker().isOpen());
         fixture.pane.picker().closeImmediate();
 
-        fixture.controller.menuAddPage();
+        assertEquals(1, fixture.repository.addPage());
         fixture.platform.directBind = true;
         LauncherWidgetHostController.AddResult result = fixture.widgets.beginAdd(
             WidgetTestFixtures.info(false), new WidgetCellRect(0, 0, 1, 1), 1,
