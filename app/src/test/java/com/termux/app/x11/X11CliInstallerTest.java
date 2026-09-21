@@ -215,17 +215,28 @@ public class X11CliInstallerTest {
         return xkb;
     }
 
+    /**
+     * The server is exec'd by the launcher from Android's side, where a nix prefix's own
+     * {@code sh} is a store link that cannot be followed at all; the other two are run by the
+     * user from inside the environment, where it can.
+     */
     @Test public void aNixPrefixGetsScriptsItCanActuallyRun() throws IOException {
         File prefix = new File(temp.getRoot(), "usr");
         nixProfile(prefix);
 
         assertEquals(X11CliInstaller.Result.INSTALLED, installer.install());
 
-        String shebang = "#!" + new File(bin, "sh").getPath() + "\n";
-        assertTrue("no bash in a nix prefix to point the server script at",
-            text(installer.serverScript()).startsWith(shebang));
-        assertTrue(text(installer.preferenceScript()).startsWith(shebang));
-        assertEquals(shebang + "echo tried every profile\n", text(installer.gpuSetupScript()));
+        assertTrue("the launcher execs this one itself",
+            text(installer.serverScript()).startsWith("#!/system/bin/sh\n"));
+        String inside = "#!" + new File(bin, "sh").getPath() + "\n";
+        assertTrue(text(installer.preferenceScript()).startsWith(inside));
+        assertEquals(inside + "echo tried every profile\n", text(installer.gpuSetupScript()));
+    }
+
+    /** Android's own shell has no {@code trap -p}, and must not be made to complain about it. */
+    @Test public void theNotifyProbeSaysNothingOnAShellWithoutTrapP() {
+        assertTrue(X11CliInstaller.serverScript("com.termux.test", "/system/bin/sh")
+            .contains("$(trap -p USR1 2>/dev/null)"));
     }
 
     @Test public void theKeyboardDataIsLinkedOutOfTheStoreAndKeptCurrent() throws IOException {
@@ -275,6 +286,37 @@ public class X11CliInstallerTest {
         installer.uninstall();
         assertFalse(Files.isSymbolicLink(link.toPath()));
         assertFalse(link.exists());
+    }
+
+    /** A symlink at that path pointing anywhere but the store is not ours to take out. */
+    @Test public void someoneElsesSymlinkAtThatPathIsLeftAlone() throws IOException {
+        File prefix = new File(temp.getRoot(), "usr");
+        nixProfile(prefix);
+        xkeyboardConfig(prefix, "0amyq-xkeyboard-config-2.47");
+        File theirs = temp.newFolder("their-xkb");
+        File link = new File(prefix, "share/X11/xkb");
+        assertTrue(link.getParentFile().mkdirs());
+        Files.createSymbolicLink(link.toPath(), theirs.toPath());
+
+        installer.install();
+        installer.uninstall();
+
+        assertTrue("still theirs, still pointing where they put it",
+            Files.isSymbolicLink(link.toPath()));
+        assertEquals(theirs.toPath(), Files.readSymbolicLink(link.toPath()));
+    }
+
+    /** No xkeyboard-config installed yet: nothing to point at, so nothing is pointed anywhere. */
+    @Test public void withNoKeyboardDataInTheStoreNoLinkIsMade() throws IOException {
+        File prefix = new File(temp.getRoot(), "usr");
+        nixProfile(prefix);
+
+        assertEquals(X11CliInstaller.Result.INSTALLED, installer.install());
+
+        File link = new File(prefix, "share/X11/xkb");
+        assertFalse(Files.isSymbolicLink(link.toPath()));
+        assertFalse("nothing dangling where the server will look", link.exists());
+        assertFalse(X11CliInstaller.hasKeyboardData(prefix));
     }
 
     @Test public void aTermuxPrefixIsLeftExactlyAsItWas() throws IOException {

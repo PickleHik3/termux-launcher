@@ -110,6 +110,20 @@ public class NixProfileTest {
         assertEquals(env, NixProfile.profile(prefix()));
     }
 
+    /**
+     * A generation that has been garbage-collected, or a switch caught half way: the chain is
+     * whole and the last hop lands on nothing. That is no profile, not an empty one.
+     */
+    @Test public void aProfilePointingAtAStorePathThatIsGoneIsNoProfile() throws IOException {
+        File profiles = new File(prefix(), "nix/var/nix/profiles/per-user/nix-on-droid");
+        assertTrue(profiles.mkdirs());
+        link(new File(profiles, "profile-2-link"), "/nix/store/c7ly-user-environment");
+        link(new File(profiles, "profile"), "profile-2-link");
+
+        assertTrue("the link is there, which is all isNix reads", NixProfile.isNix(prefix()));
+        assertNull(NixProfile.profile(prefix()));
+    }
+
     @Test public void everyComponentOfAPathIsResolved() throws IOException {
         File env = nixTree();
         File path = store("sl25-nix-on-droid-path");
@@ -189,13 +203,24 @@ public class NixProfileTest {
         assertNull(NixProfile.keyboardData(prefix()));
     }
 
-    @Test public void onlyANixPrefixFallsBackToSh() throws IOException {
+    /**
+     * On nix the two shells are different ones. What the launcher execs has to be Android's,
+     * because the prefix's own {@code sh} is a store link nothing outside the proot can follow;
+     * what the user runs from inside is the prefix's, which resolves there and is really bash.
+     */
+    @Test public void nixSplitsTheHostShellFromThePrefixesOwn() throws IOException {
         File p = prefix();
-        // Not nix and no bash: still bash. A half-unpacked Termux bootstrap is not an sh prefix.
-        assertEquals(new File(p, "bin/bash"), NixProfile.scriptShell(p));
+        // Not nix and no bash: still bash, both ways. A half-unpacked Termux bootstrap is not an
+        // sh prefix, and answering something else would only hide it.
+        assertEquals(new File(p, "bin/bash"), NixProfile.hostShell(p));
+        assertEquals(new File(p, "bin/bash"), NixProfile.prefixShell(p));
+
         nixTree();
-        assertEquals(new File(p, "bin/sh"), NixProfile.scriptShell(p));
+        assertEquals(new File("/system/bin/sh"), NixProfile.hostShell(p));
+        assertEquals(new File(p, "bin/sh"), NixProfile.prefixShell(p));
+
         write(new File(p, "bin/bash"), "#!/bin/sh\n");
-        assertEquals(new File(p, "bin/bash"), NixProfile.scriptShell(p));
+        assertEquals(new File(p, "bin/bash"), NixProfile.hostShell(p));
+        assertEquals(new File(p, "bin/bash"), NixProfile.prefixShell(p));
     }
 }

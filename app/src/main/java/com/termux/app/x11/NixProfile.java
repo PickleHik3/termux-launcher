@@ -208,25 +208,47 @@ public final class NixProfile {
         return best;
     }
 
+    /** Android's own shell: the only interpreter every edition can be sure of from outside. */
+    private static final String SYSTEM_SHELL = "/system/bin/sh";
+
     /**
-     * The shell the launcher hands a script to. Termux's prefix has {@code bash} and always did;
-     * a nix prefix has only the bootstrap's {@code sh}, and a script started with a shebang
-     * naming a {@code bash} that is not there does not run at all.
+     * The interpreter for something the launcher itself execs, from Android's side of the fence.
      *
-     * <p>The fallback is nix's alone rather than "whatever is there": on a Termux prefix a
-     * missing {@code bash} means the bootstrap is half-unpacked, and answering {@code sh} to that
-     * would only trade one broken script for another, quieter one.
+     * <p>Termux's prefix has {@code bash} and always did. A nix prefix has neither: no
+     * {@code bash} at all, and its {@code bin/sh} is a symlink into the store — perfectly good
+     * inside the proot, and nothing an {@code execve} from Android can follow, so a script whose
+     * shebang names it fails to start with no output of its own ("Failed to execute new
+     * TermuxTask command", and nothing else). Android's shell is there in every case, and
+     * everything the launcher execs this way is either an Android binary itself (the display
+     * server is an {@code app_process}) or a wrapper that hands the real work straight to
+     * {@code $PREFIX/bin/login}, which is a {@code /system/bin/sh} script too.
+     *
+     * <p>Termux and VAJ keep the bash they have always had, missing or not: there a missing
+     * {@code bash} means the bootstrap is half-unpacked, and answering something else would only
+     * trade one broken script for a quieter one.
      */
     @NonNull
-    public static File scriptShell(@NonNull File prefixDir) {
+    public static File hostShell(@NonNull File prefixDir) {
+        File bash = new File(prefixDir, "bin/bash");
+        if (bash.isFile()) return bash;
+        return isNix(prefixDir) ? new File(SYSTEM_SHELL) : bash;
+    }
+
+    /** {@link #hostShell(File)} for the running edition. */
+    @NonNull
+    public static String hostShellPath() {
+        return hostShell(prefixDir()).getPath();
+    }
+
+    /**
+     * The interpreter for a script the user runs themselves, from inside the environment — where
+     * {@code $PREFIX/bin/sh} resolves like any other path and is, on nix, a real bash. Android's
+     * shell would be a downgrade there, and these scripts are written for bash.
+     */
+    @NonNull
+    public static File prefixShell(@NonNull File prefixDir) {
         File bash = new File(prefixDir, "bin/bash");
         if (bash.isFile()) return bash;
         return isNix(prefixDir) ? new File(prefixDir, "bin/sh") : bash;
-    }
-
-    /** {@link #scriptShell(File)} for the running edition. */
-    @NonNull
-    public static String scriptShellPath() {
-        return scriptShell(prefixDir()).getPath();
     }
 }

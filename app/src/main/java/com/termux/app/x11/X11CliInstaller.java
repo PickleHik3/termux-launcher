@@ -43,7 +43,7 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 9;
+    @VisibleForTesting static final int VERSION = 10;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -159,6 +159,24 @@ public final class X11CliInstaller {
     }
 
     /**
+     * Whether what sits at {@link #keyboardDataLink} is the link this class made: a symlink whose
+     * own target — as written, not as resolved, since resolving a link somebody else made is
+     * exactly what must not decide this — is inside the nix store. A real directory there, and a
+     * symlink pointing anywhere else, are both somebody's own arrangement.
+     */
+    private static boolean isOurKeyboardDataLink(@NonNull File prefixDir) {
+        File link = keyboardDataLink(prefixDir);
+        if (!Files.isSymbolicLink(link.toPath())) return false;
+        try {
+            String target = Files.readSymbolicLink(link.toPath()).toString();
+            String store = new File(prefixDir, "nix/store").getPath();
+            return target.startsWith(store + "/");
+        } catch (IOException | RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
      * On nix, point {@code $PREFIX/share/X11/xkb} at whichever store path holds this phone's
      * {@code xkeyboard-config} right now, so the probe above and the server script's own search
      * both find it where they already look.
@@ -181,6 +199,10 @@ public final class X11CliInstaller {
         try {
             boolean isLink = Files.isSymbolicLink(link.toPath());
             if (isLink && data.toPath().equals(Files.readSymbolicLink(link.toPath()))) return true;
+            // Anything there that is not this class's own link — a real directory, or a link
+            // somebody pointed somewhere of their own — stays exactly as they left it; only a
+            // link of ours is re-pointed, which is what a switch needs.
+            if (isLink && !isOurKeyboardDataLink(prefixDir)) return false;
             if (!isLink && link.exists()) return link.isDirectory();
             File parent = link.getParentFile();
             if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
@@ -229,10 +251,12 @@ public final class X11CliInstaller {
             try (InputStream in = assets.open(LOADER_ASSET)) {
                 writeAtomically(loaderFile(), in, false, false);
             }
-            String shell = shellPath();
-            writeAtomically(serverScript(), bytes(serverScript(applicationId, shell)), true, true);
-            writeAtomically(preferenceScript(), bytes(preferenceScript(applicationId, shell)), true,
-                true);
+            // The server is exec'd by the launcher, from Android's side; the other two are run
+            // by the user from inside the environment. On nix those are two different shells.
+            writeAtomically(serverScript(), bytes(serverScript(applicationId, hostShellPath())),
+                true, true);
+            writeAtomically(preferenceScript(),
+                bytes(preferenceScript(applicationId, prefixShellPath())), true, true);
             writeAtomically(gpuSetupScript(), bytes(withPrefixShebang(readText(GPU_SETUP_ASSET))), true, true);
             writeAtomically(openboxRc(), bytes(openboxRcContent()), true, false);
             writeAtomically(markerFile(), bytes(marker), true, false);
@@ -246,15 +270,12 @@ public final class X11CliInstaller {
     void uninstall() {
         if (isForeignCommand()) return;
         File prefixDir = binDir.getParentFile();
-        if (prefixDir != null) {
-            // Only ever the link this class made; a real directory there is somebody's own data.
+        if (prefixDir != null && isOurKeyboardDataLink(prefixDir)) {
             File link = keyboardDataLink(prefixDir);
-            if (Files.isSymbolicLink(link.toPath())) {
-                try {
-                    Files.delete(link.toPath());
-                } catch (IOException e) {
-                    Logger.logWarn(LOG_TAG, "Failed to remove " + link);
-                }
+            try {
+                Files.delete(link.toPath());
+            } catch (IOException e) {
+                Logger.logWarn(LOG_TAG, "Failed to remove " + link);
             }
         }
         for (File file : new File[]{serverScript(), preferenceScript(), gpuSetupScript(),
@@ -294,7 +315,7 @@ public final class X11CliInstaller {
      * {@link #serverScript(String)} with the shell spelled out. The nix edition's prefix has no
      * {@code bash} — it has the bootstrap's {@code sh} and nothing else — and a script whose
      * shebang names a file that is not there does not run at all, which is a display that never
-     * starts. See {@link NixProfile#scriptShell}.
+     * starts. See {@link NixProfile#hostShell}.
      */
     @NonNull
     static String serverScript(@NonNull String applicationId, @NonNull String shell) {
@@ -318,7 +339,9 @@ public final class X11CliInstaller {
             + "[ -z \"${CLASSPATH+x}\" ] || export XSTARTUP_CLASSPATH=\"$CLASSPATH\"\n"
             + "export CLASSPATH=" + LOADER_PATH + "\n"
             + "unset LD_LIBRARY_PATH LD_PRELOAD\n"
-            + "[ -n \"$(trap -p USR1)\" ] && export TERMUX_X11_NOTIFY_PARENT=1\n"
+            // Android's mksh has no `trap -p` and says so on stderr; the answer is the same
+            // either way (no handler, no notification), so only the complaint is silenced.
+            + "[ -n \"$(trap -p USR1 2>/dev/null)\" ] && export TERMUX_X11_NOTIFY_PARENT=1\n"
             + "exec /system/bin/app_process -Xnoimage-dex2oat / "
             + "--nice-name=\"termux-x11 " + applicationId + " $*\" com.termux.x11.Loader \"$@\"\n";
     }
@@ -449,15 +472,23 @@ public final class X11CliInstaller {
         if (!script.startsWith("#!")) return script;
         int newline = script.indexOf('\n');
         if (newline < 0) return script;
-        return "#!" + shellPath() + script.substring(newline);
+        return "#!" + prefixShellPath() + script.substring(newline);
     }
 
-    /** The shell this prefix actually has: {@code bash} everywhere but nix, {@code sh} there. */
+    /** What the launcher execs itself: {@code bash} everywhere but nix, Android's shell there. */
     @NonNull
-    private String shellPath() {
+    private String hostShellPath() {
         File prefixDir = binDir.getParentFile();
         return prefixDir == null ? new File(binDir, "bash").getPath()
-            : NixProfile.scriptShell(prefixDir).getPath();
+            : NixProfile.hostShell(prefixDir).getPath();
+    }
+
+    /** What the user runs from inside: {@code bash} everywhere but nix, the prefix's sh there. */
+    @NonNull
+    private String prefixShellPath() {
+        File prefixDir = binDir.getParentFile();
+        return prefixDir == null ? new File(binDir, "bash").getPath()
+            : NixProfile.prefixShell(prefixDir).getPath();
     }
 
     @NonNull
