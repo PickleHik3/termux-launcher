@@ -15199,8 +15199,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean runScript(@NonNull String script,
                         @NonNull com.termux.app.x11.X11LinuxAppRunner.ScriptExitListener onExit) {
                     if (mTermuxService == null) return false;
+                    // bash everywhere but the nix edition, which has none and whose own sh is a
+                    // store link Android cannot exec; there this is Android's shell, and the line
+                    // it runs hands the work to $PREFIX/bin/login.
                     com.termux.shared.shell.command.runner.app.AppShell shell =
-                        mTermuxService.createTermuxTask(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash",
+                        mTermuxService.createTermuxTask(com.termux.app.x11.NixProfile.hostShellPath(),
                             new String[]{"-c", script}, null, TermuxConstants.TERMUX_HOME_DIR_PATH);
                     if (shell == null) return false;
                     // TermuxService already reads the exit code safely inside the onAppShellExited

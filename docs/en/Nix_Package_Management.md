@@ -388,6 +388,105 @@ Roll back to the previous generation any time:
 nix-on-droid rollback
 ```
 
+## Graphical apps
+
+Graphical Linux apps work on this edition, and they arrive the same way
+everything else does: name them in the config and switch. There is no
+`pkg install`, no extra repository, and nothing to copy from the
+launcher's **Get GUI apps** screen — that screen builds a command for the
+Termux edition's two routes, neither of which exists here.
+
+Add the app, and `xkeyboard-config` alongside it:
+
+```nix
+environment.packages = with pkgs; [
+  xfce.mousepad      # a text editor with a window
+  feh                # an image viewer
+  xkeyboard-config   # the display server will not start without it
+  openbox            # gives windows their title bars — see below
+  font-misc-misc     # only for older X programs — see below
+];
+```
+
+```sh
+nix-on-droid switch --flake ~/.config/nix-on-droid
+```
+
+`home.nix`'s `home.packages` works just as well — both end up in the same
+profile, which is what the launcher reads.
+
+Come back to the launcher and the app is in the app drawer under **Linux
+apps**, with the name and icon the package itself ships. Tap it: the
+display starts if it is not already up, and the app opens on it. Nothing
+is written to a file and there is no command to run in the terminal.
+
+### What does not work yet
+
+Two things to know before you pick an app:
+
+- **Programs that drop privileges do not start.** `xterm` is the one
+  everybody tries first, and it opens, connects and then quits with
+  `spawn: setuid() failed`. Android refuses that call inside an app's own
+  processes, and the nixpkgs build does not give it up the way Termux's
+  does. There is nothing to configure around it. For a terminal window on
+  the display, use a GTK or Qt one instead — `xfce.xfce4-terminal` works.
+- **Windows open unmanaged until openbox is added.** Without a window
+  manager a window arrives where the app puts it, with no title bar and
+  nothing to move or resize it by. Add `openbox` and the launcher starts
+  it with the display for you — there is no command to run and no
+  configuration to write; it uses the launcher's own, which gives every
+  window the whole screen.
+
+`xkeyboard-config` is a one-time thing, and it is the whole of the
+display's setup. Until it is installed the Display place says so and
+keeps its start button hidden, because the X server exits on startup
+without that keyboard data. It is data rather than a program, so it does
+not show up on `PATH` and there is nothing to run — the launcher finds it
+in the store and points the server at it after each switch.
+
+### Fonts for older X programs
+
+`xclock`, `xeyes`, `xmessage` and their relatives ask the display server
+for a font by name — `-misc-fixed-medium-r-semicondensed--13-…` and the like
+— and quit with `cannot load font` when the server has none. The server
+carries only its own built-in `fixed` and `cursor`, so one package makes
+the difference:
+
+```nix
+font-misc-misc
+```
+
+Switch, and the launcher hands the server that store path the next time
+it starts one. **GTK and Qt apps need none of this** — they draw their
+own text — so skip it unless something refuses to open with a font
+complaint.
+
+Add `font-misc-misc` on its own. `font-cursor-misc` looks like its
+companion and cannot go beside it: both ship a `misc/fonts.dir`, and a
+switch with the two of them fails on the collision. The cursor font is
+built into the server, so nothing is missing without it.
+
+An old program with a way around it of its own — a flag asking for a
+modern Xft font instead of a server one — can say so in the `Exec=` line
+of a `.desktop` file you write yourself, and then needs no font package
+at all.
+
+A few notes:
+
+- **Enable the display first.** **Settings → Display → Linux display**
+  turns it on. The Display place is where the apps open.
+- **Every switch is picked up on its own.** The store path changes each
+  time; return to the launcher and the drawer is already right.
+- **Terminal programs with a menu entry** — `vim`, for instance, ships
+  one — open in a terminal pane instead of on the display. That is the
+  entry saying `Terminal=true`, and it is the same on every edition.
+- **A blank tile** means the package's icon is in a format the launcher
+  does not read. PNG and SVG are used; older X programs often ship XPM,
+  and get the default tile.
+- **Fonts.** A bare nixpkgs environment has none beyond what the app
+  itself carries. Add `dejavu_fonts` if an app comes up with boxes
+  instead of text.
+
 ## Housekeeping
 
 ```sh

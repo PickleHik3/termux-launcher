@@ -133,6 +133,8 @@ public final class LinuxAppCatalog {
     @NonNull
     public static List<Root> roots() {
         List<Root> roots = new ArrayList<>(rootsOf(ProotDistro.Container.PREFIX));
+        ProotDistro.Container nix = ProotDistro.nixProfile();
+        if (nix != null) roots.addAll(rootsOf(nix));
         for (ProotDistro.Container container : ProotDistro.installed()) {
             roots.addAll(rootsOf(container));
         }
@@ -195,12 +197,24 @@ public final class LinuxAppCatalog {
         long signature = 0L;
         for (Root root : roots) {
             signature = signature * 31 + root.container.name.hashCode();
-            signature = signature * 31 + root.dir.lastModified();
+            // The path itself, not only its contents: a nix switch leaves the same desktop files
+            // in a directory of a different name, and that new name is the whole of the news.
+            signature = signature * 31 + root.dir.getPath().hashCode();
             String[] names = root.dir.list();
-            signature = signature * 31 + (names == null ? -1 : names.length);
+            boolean present = names != null;
+            // A directory that is not there yet is a reading of its own, and is kept well apart
+            // from anything a real one can give back — `lastModified` answers 0 for an absent
+            // file, which an existing directory could in principle answer too. Every candidate
+            // directory is hashed whether or not it exists, so the one that appears when a user
+            // writes their first desktop file by hand moves this number.
+            signature = signature * 31 + (present ? root.dir.lastModified() : ABSENT);
+            signature = signature * 31 + (present ? names.length : ABSENT);
         }
         return signature;
     }
+
+    /** What an absent directory contributes: a value no reading of a real one can collide with. */
+    private static final long ABSENT = Long.MIN_VALUE / 2;
 
     /**
      * Read one desktop file. Null when it is not an application, asks not to be shown ({@code
@@ -214,7 +228,7 @@ public final class LinuxAppCatalog {
         String type = "", name = "", exec = "", icon = "", comment = "", tryExec = "";
         String startupWmClass = "";
         boolean noDisplay = false, hidden = false, terminal = false, inEntry = false;
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader(container.readable(file)))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
@@ -256,6 +270,12 @@ public final class LinuxAppCatalog {
                                             @NonNull String tryExec, @NonNull File desktopFile) {
         // Absolute inside a container means absolute in the container's world, not Android's.
         if (tryExec.startsWith("/")) return container.inside(tryExec).canExecute();
+        if (container.kind == ProotDistro.Container.Kind.NIX) {
+            // A bare name is resolved by the nix session's own PATH when the app runs; from here
+            // the profile's bin is where that PATH would find it.
+            File profile = container.profile;
+            return profile != null && container.under(profile, "bin/" + tryExec).canExecute();
+        }
         if (!container.isPrefix()) {
             return container.inside("/usr/bin/" + tryExec).canExecute()
                 || container.inside("/usr/local/bin/" + tryExec).canExecute();
