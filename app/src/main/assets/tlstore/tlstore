@@ -204,8 +204,8 @@ rows() {
             return 0
         }
         function vercmp(a, b,   na, nb, pa, pb, i, n, x, y) {
-            na = split(a, pa, /[.\-_]/)
-            nb = split(b, pb, /[.\-_]/)
+            na = split(a, pa, /[._-]/)
+            nb = split(b, pb, /[._-]/)
             n = (na > nb) ? na : nb
             for (i = 1; i <= n; i++) {
                 x = (i <= na) ? pa[i] + 0 : 0
@@ -1545,6 +1545,7 @@ browse_keys() {
 browse_pause() {
     say ""
     printf 'Press Enter to go back. '
+    # shellcheck disable=SC2034  # the answer itself does not matter
     read -r bp_answer || bp_answer=""
 }
 
@@ -1650,8 +1651,8 @@ cmd_browse() {
 version_newer() {
     awk -v a="$1" -v b="$2" '
         function vercmp(x, y,   nx, ny, px, py, i, n, p, q) {
-            nx = split(x, px, /[.\-_]/)
-            ny = split(y, py, /[.\-_]/)
+            nx = split(x, px, /[._-]/)
+            ny = split(y, py, /[._-]/)
             n = (nx > ny) ? nx : ny
             for (i = 1; i <= n; i++) {
                 p = (i <= nx) ? px[i] + 0 : 0
