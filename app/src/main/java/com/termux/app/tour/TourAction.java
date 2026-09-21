@@ -39,6 +39,11 @@ public enum TourAction {
     /** The welcome card's other answer: the run ends there and is not offered again. */
     NOT_NOW(R.string.tour_not_now),
 
+    /** The key-row card's yes: take this release's row of keys. */
+    SWITCH_KEY_ROW(R.string.extra_keys_default_offer_switch),
+    /** The same card's other answer: the row they already have stays. */
+    KEEP_KEY_ROW(R.string.extra_keys_default_offer_keep),
+
     /** The closing card's one action. */
     START_USING(R.string.tour_start_using),
 

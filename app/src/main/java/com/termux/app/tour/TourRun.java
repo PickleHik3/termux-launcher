@@ -7,7 +7,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The run, as data: five lessons, the home-screen question and the closing card.
+ * The run, as data: five lessons, two questions and the closing card.
  *
  * <p>The lessons teach the five things a newcomer cannot look up without them — where help is, how
  * to put their own apps in the dock, how to reach the rest of their Android apps, how to get the
@@ -29,6 +29,8 @@ public final class TourRun {
     public static final String PIN_APPS = "pin_apps";
     /** Find Android apps: the dock's drawer, an app, and the way back to the launcher. */
     public static final String FIND_APPS = "find_apps";
+    /** The key-row question, for someone who arrives with a row of keys of their own. */
+    public static final String KEY_ROW = "key_row";
     /** Control the keyboard: the keyboard button, both ways. */
     public static final String KEYBOARD = "keyboard";
     /** Find an action: the command palette, and something to find in it. */
@@ -57,9 +59,20 @@ public final class TourRun {
         /** Whether the keyboard is showing as the run is built. */
         public final boolean keyboardShown;
 
+        /**
+         * Whether this user arrives with a row of keys of their own, and has not been asked about
+         * this release's row yet. Only they are asked; everybody else walks past the card.
+         */
+        public final boolean hasOwnKeyRow;
+
         public RunContext(boolean launcherIsHome, boolean keyboardShown) {
+            this(launcherIsHome, keyboardShown, false);
+        }
+
+        public RunContext(boolean launcherIsHome, boolean keyboardShown, boolean hasOwnKeyRow) {
             this.launcherIsHome = launcherIsHome;
             this.keyboardShown = keyboardShown;
+            this.hasOwnKeyRow = hasOwnKeyRow;
         }
     }
 
@@ -78,8 +91,8 @@ public final class TourRun {
     /** The run, in order, for the phone described by {@code context}. */
     public static List<TourStep> steps(RunContext context) {
         return Collections.unmodifiableList(Arrays.asList(
-            findHelp(), pinApps(), findApps(context), keyboard(context), findAction(),
-            homeChoice(context), closing()));
+            findHelp(), pinApps(), findApps(context), keyRow(context), keyboard(context),
+            findAction(), homeChoice(context), closing()));
     }
 
     /** The lessons, in order: what practice and Back may name, and the migration maps to. */
@@ -139,6 +152,31 @@ public final class TourRun {
                 TourSignals.LAUNCHER_RESUMED},
             new TourGesture[] {TourGesture.DRAG_DOWN, TourGesture.TAP, TourGesture.TAP},
             false, false);
+    }
+
+    /**
+     * The key-row question, asked of the one person it is a question for: someone updating who
+     * long ago made a row of keys of their own. This release ships a different row, and a row
+     * they wrote replaces it for good, so they are asked once — and asked here, before the
+     * keyboard lesson, because that lesson points at a key of the shipped row.
+     *
+     * <p>Everyone else — a fresh install, and anyone who already types the shipped row — has
+     * nothing to decide, so the card is walked past exactly as the home-screen question is on a
+     * phone that is already set up. It stays one of the run's steps either way, so every stored
+     * card number means the card it has always meant.
+     */
+    private static TourStep keyRow(RunContext context) {
+        return new TourStep(KEY_ROW, TourStep.Kind.CHOICE,
+            context.hasOwnKeyRow ? R.string.tour_card_kicker : 0,
+            context.hasOwnKeyRow ? R.string.extra_keys_default_offer_title : 0,
+            context.hasOwnKeyRow ? R.drawable.tour_key_row : 0,
+            new int[] {R.string.tour_card_key_row},
+            new String[] {TourTargets.NONE}, new String[] {},
+            new TourGesture[] {TourGesture.NONE}, false, false,
+            context.hasOwnKeyRow
+                ? new TourAction[] {TourAction.SWITCH_KEY_ROW, TourAction.KEEP_KEY_ROW}
+                : new TourAction[] {TourAction.CONTINUE},
+            false, TourStep.Placement.AUTO);
     }
 
     /**

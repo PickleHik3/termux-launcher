@@ -1891,6 +1891,7 @@
     <string name="tour_card_keyboard_hold_terminal">A short hold, until the first buzz, sends mouse clicks and drags to apps in the terminal. A longer hold opens the text menu, the way plain Termux does.</string>
     <string name="tour_card_find_action_palette">Swipe up on the space bar to open the command palette.</string>
     <string name="tour_card_find_action_close">Search for anything, launch Android apps and reach Termux Launcher features. Tap outside the palette to close it.</string>
+    <string name="tour_card_key_row">This update brings a new row of keys under the terminal. Take it now, or keep the row you have. Either way the other row is in Settings, under Extra keys.</string>
     <string name="tour_card_home_choice">Use Termux as your home screen?</string>
     <string name="tour_card_home_choice_already">Termux is your home screen.</string>
     <string name="tour_card_resume_or_restart">Termux has a new, shorter introduction.</string>

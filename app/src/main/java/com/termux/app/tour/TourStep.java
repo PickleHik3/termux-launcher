@@ -77,6 +77,13 @@ public final class TourStep {
     /** String resource for the card's title, or 0 on a card that is one sentence. */
     public final int titleRes;
 
+    /**
+     * Drawable resource for a picture the card shows under its sentence, or 0 on a card with
+     * none. One card shows the user the thing it is asking about — the row of keys this release
+     * ships — because a row of keys is quicker looked at than described.
+     */
+    public final int imageRes;
+
     /** String resource for the card's sentence. */
     public final int copyRes;
 
@@ -226,6 +233,15 @@ public final class TourStep {
                     String[] targetIds, String[] signals, TourGesture[] gestures,
                     boolean topAnchored, boolean chordGlow, TourAction[] actions,
                     boolean endsShown, Placement placement) {
+        this(id, kind, kickerRes, titleRes, 0, copyLines, targetIds, signals, gestures,
+            topAnchored, chordGlow, actions, endsShown, placement);
+    }
+
+    /** The whole shape, for the one card that shows a picture of what it is asking about. */
+    public TourStep(String id, Kind kind, int kickerRes, int titleRes, int imageRes,
+                    int[] copyLines, String[] targetIds, String[] signals, TourGesture[] gestures,
+                    boolean topAnchored, boolean chordGlow, TourAction[] actions,
+                    boolean endsShown, Placement placement) {
         if (endsShown && signals.length == 0)
             throw new IllegalArgumentException("step " + id + " shows a stage it never reaches");
         if (endsShown && gestures.length <= signals.length)
@@ -239,6 +255,7 @@ public final class TourStep {
         this.id = id;
         this.kickerRes = kickerRes;
         this.titleRes = titleRes;
+        this.imageRes = imageRes;
         this.copyLines = copyLines.clone();
         this.copyRes = copyLines[0];
         this.secondLineRes = copyLines.length > 1 ? copyLines[1] : 0;
@@ -272,6 +289,11 @@ public final class TourStep {
     /** Whether this card carries a title above its sentence. */
     public boolean hasTitle() {
         return titleRes != 0;
+    }
+
+    /** Whether this card shows a picture under its sentence. */
+    public boolean hasImage() {
+        return imageRes != 0;
     }
 
     /** The buttons this card offers, in order. */

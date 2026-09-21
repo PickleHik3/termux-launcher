@@ -9,14 +9,17 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Outline;
 import android.graphics.Typeface;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -118,6 +121,8 @@ public final class TourOverlayView extends FrameLayout {
     /** The title, on the two cards that carry one. */
     private final TextView mTitle;
     private final TextView mCopy;
+    /** The picture under the sentence, on the one card that shows what it is asking about. */
+    private final ImageView mImage;
     private final ScrollView mBodyScroll;
     private final LinearLayout mSections;
     private final TextView mDocsLink;
@@ -213,6 +218,28 @@ public final class TourOverlayView extends FrameLayout {
         mCopy.setLineSpacing(dp(2), 1f);
         mCard.addView(mCopy, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        // The picture under the sentence, on the one card that shows the thing it is asking
+        // about: the row of keys this release ships. It takes the card's full width, keeps the
+        // strip's own proportions and is drawn as it was photographed — a tinted photograph of a
+        // key row is a photograph of a different key row.
+        mImage = new ImageView(context);
+        mImage.setAdjustViewBounds(true);
+        mImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        mImage.setVisibility(GONE);
+        mImage.setOutlineProvider(new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
+                    mDress.cornerRadiusPx(view.getHeight()));
+            }
+        });
+        mImage.setClipToOutline(true);
+        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        imageParams.topMargin = dp(10);
+        imageParams.bottomMargin = dp(2);
+        mCard.addView(mImage, imageParams);
 
         // The closing card's sections. Only that card has any, so the whole column is gone for
         // the other eight rather than empty, and it scrolls rather than growing off the screen:
@@ -365,6 +392,10 @@ public final class TourOverlayView extends FrameLayout {
         mCopy.setText(away ? R.string.tour_card_return_to_terminal : mStep.copyResAt(mStage));
         // The card asking the way back to the terminal is one sentence, whatever card it stands
         // for: a title over it would be a title over something the user is not being told.
+        boolean picture = !away && mStep.hasImage();
+        mImage.setVisibility(picture ? VISIBLE : GONE);
+        if (picture) mImage.setImageResource(mStep.imageRes);
+        else mImage.setImageDrawable(null);
         boolean shell = !away && mStep.hasTitle();
         mKicker.setVisibility(shell && mStep.kickerRes != 0 ? VISIBLE : GONE);
         if (shell && mStep.kickerRes != 0) mKicker.setText(mStep.kickerRes);

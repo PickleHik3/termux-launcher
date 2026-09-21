@@ -2208,8 +2208,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                          @Nullable String previousPageTwo) {
         if (mPreferences != null) {
             mPreferences.setExtraKeysDefaultOffered(true);
-            mPreferences.setPreviousExtraKeys(0, previousPageOne == null ? "" : previousPageOne.trim());
-            mPreferences.setPreviousExtraKeys(1, previousPageTwo == null ? "" : previousPageTwo.trim());
+            // Only a row of their own is worth keeping. The tour card can be reached a second
+            // time with Back, by which point the row on file is the shipped one, and saving that
+            // as "Before the update" would lose the row the first tap kept.
+            if (ExtraKeysDefaultOffer.isCustomRow(previousPageOne)) {
+                mPreferences.setPreviousExtraKeys(0,
+                    previousPageOne == null ? "" : previousPageOne.trim());
+                mPreferences.setPreviousExtraKeys(1,
+                    previousPageTwo == null ? "" : previousPageTwo.trim());
+            }
         }
         for (int page = 0; page < TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS.length
             && page < TermuxTerminalExtraKeys.PAGE_DEFAULT_VALUES.length; page++) {
@@ -2236,6 +2243,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFirstBootTour.setHomeHost(new FirstBootTour.HomeHost() {
                 @Override public boolean isLauncherHomeApp() { return isDefaultHomeApp(); }
                 @Override public void openHomeAppChooser() { openHomeLauncherChooser(); }
+            });
+            // The key-row card asks the one person it is a question for, inside the run, so the
+            // dialog below only ever reaches someone who turned the run down.
+            mFirstBootTour.setKeyRowHost(new FirstBootTour.KeyRowHost() {
+                @Override @Nullable public String ownKeyRow() {
+                    return com.termux.app.settings.TermuxPropertiesFile.load(TermuxActivity.this)
+                        .getProperty(com.termux.shared.termux.settings.properties
+                            .TermuxPropertyConstants.KEY_EXTRA_KEYS);
+                }
+
+                @Override public boolean keyRowAnswered() {
+                    return mPreferences != null && mPreferences.isExtraKeysDefaultOffered();
+                }
+
+                @Override public void switchToDefaultKeyRow() {
+                    java.util.Properties properties =
+                        com.termux.app.settings.TermuxPropertiesFile.load(TermuxActivity.this);
+                    takeDefaultExtraKeysRow(
+                        properties.getProperty(com.termux.shared.termux.settings.properties
+                            .TermuxPropertyConstants.KEY_EXTRA_KEYS),
+                        properties.getProperty(com.termux.shared.termux.settings.properties
+                            .TermuxPropertyConstants.KEY_EXTRA_KEYS2));
+                }
+
+                @Override public void keepOwnKeyRow() {
+                    if (mPreferences != null) mPreferences.setExtraKeysDefaultOffered(true);
+                }
             });
             // Every state signal is edge-triggered, so the run starts knowing where the chrome
             // rests and a card is never cleared by a state the user did not put it in — nor, as
