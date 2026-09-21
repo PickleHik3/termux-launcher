@@ -27,8 +27,9 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * A widget held against the pane's edge while it is being dragged turns the page under it, and the
- * drop lands it on whatever page it ended over. A page with no room for it refuses in red and
- * springs the widget home.
+ * drop lands it on whatever page it ended over. Past the last page it makes one, which the drop
+ * keeps and anything else takes away again. A page with no room for it refuses in red and springs
+ * the widget home.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.S, application = Application.class)
@@ -38,24 +39,27 @@ public class WidgetCrossPageDragTest {
     /** Comfortably past the 350 ms the edge band waits before it turns the page. */
     private static final long PAST_THE_EDGE_PAUSE_MS = 400L;
 
-    @Test public void holdingAWidgetAtTheEdgeTurnsThePageAndTheDropLandsItThere() {
+    @Test public void draggingPastTheLastPageMakesAPageAndTheDropKeepsIt() {
         Fixture fixture = new Fixture();
         fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
-        fixture.repository.trimSparePages();
+        // A second widget, so the page the first one leaves is not emptied by the drag.
+        fixture.put(2, new WidgetCellRect(3, 4, 4, 5), 0);
+        fixture.repository.trimEmptyPages();
         fixture.renderAndLayout();
         fixture.controller.menuEditWidgets();
         fixture.layout();
-        assertEquals(2, fixture.repository.pageCount());
+        assertEquals("one page, and nothing behind it", 1, fixture.repository.pageCount());
 
         Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
         fixture.down(home.centerX(), home.centerY());
         fixture.move(PANE_WIDTH - 5, home.centerY());
         fixture.settle();
 
-        assertEquals("the page turned under the finger", 1, fixture.controller.currentPage());
+        assertEquals("a page was made under the widget", 2, fixture.repository.pageCount());
+        assertEquals("and the pane turned onto it", 1, fixture.controller.currentPage());
         assertTrue("the widget is in the air, not on either page",
             fixture.pane.widgetDragLayer().isLifted());
-        assertNotNull("the target page shows where it would land",
+        assertNotNull("the new page shows where it would land",
             fixture.pane.widgetEditOverlay().ghostBounds());
         assertFalse(fixture.pane.widgetEditOverlay().ghostBlocked());
         assertTrue("the session is still the user's", fixture.pane.widgetEditActive());
@@ -64,16 +68,88 @@ public class WidgetCrossPageDragTest {
 
         assertEquals("the widget landed on the page it was carried to",
             1, fixture.repository.get(1).page);
-        assertEquals("and a fresh spare followed it", 3, fixture.repository.pageCount());
+        assertEquals("which is now a page like any other", 2, fixture.repository.pageCount());
         assertEquals(1, fixture.controller.currentPage());
         assertFalse(fixture.pane.widgetDragLayer().isLifted());
         assertEquals("the session never ended", List.of(true), fixture.announced);
     }
 
+    @Test public void aPageMadeByTheDragGoesAgainWhenTheWidgetIsCarriedBack() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
+        fixture.put(2, new WidgetCellRect(3, 4, 4, 5), 0);
+        fixture.repository.trimEmptyPages();
+        fixture.renderAndLayout();
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+
+        Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
+        fixture.down(home.centerX(), home.centerY());
+        fixture.move(PANE_WIDTH - 5, home.centerY());
+        fixture.settle();
+        assertEquals(2, fixture.repository.pageCount());
+
+        // Back to the page it came from, and dropped there.
+        fixture.move(5, home.centerY());
+        fixture.settle();
+        assertEquals(0, fixture.controller.currentPage());
+        fixture.up(5, home.centerY());
+
+        assertEquals("the widget is back on its own page", 0, fixture.repository.get(1).page);
+        assertEquals("and the page the drag made went with it",
+            1, fixture.repository.pageCount());
+        assertEquals(0, fixture.controller.currentPage());
+    }
+
+    @Test public void oneDragMakesAtMostOnePage() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
+        fixture.put(2, new WidgetCellRect(3, 4, 4, 5), 0);
+        fixture.repository.trimEmptyPages();
+        fixture.renderAndLayout();
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+
+        Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
+        fixture.down(home.centerX(), home.centerY());
+        // Held at the trailing edge long enough for three turns.
+        fixture.move(PANE_WIDTH - 5, home.centerY());
+        fixture.settle();
+        fixture.settle();
+        fixture.settle();
+
+        assertEquals("one page was made, not three", 2, fixture.repository.pageCount());
+        assertEquals(1, fixture.controller.currentPage());
+        fixture.up(PANE_WIDTH - 5, home.centerY());
+        assertEquals(1, fixture.repository.get(1).page);
+        assertEquals(2, fixture.repository.pageCount());
+    }
+
+    @Test public void theLeadingEdgeNeverMakesAPage() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
+        fixture.repository.trimEmptyPages();
+        fixture.renderAndLayout();
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+
+        Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
+        fixture.down(home.centerX(), home.centerY());
+        fixture.move(5, home.centerY());
+        fixture.settle();
+        fixture.settle();
+
+        assertEquals("nothing is made before the first page", 1, fixture.repository.pageCount());
+        assertEquals(0, fixture.controller.currentPage());
+        fixture.up(5, home.centerY());
+        assertEquals(0, fixture.repository.get(1).page);
+    }
+
     @Test public void aHoldThatBecomesADragIsNotStolenByThePageSwipe() {
         Fixture fixture = new Fixture();
         fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
-        fixture.repository.trimSparePages();
+        fixture.put(2, new WidgetCellRect(0, 0, 1, 1), 1);
+        fixture.repository.trimEmptyPages();
         fixture.renderAndLayout();
         assertEquals("two pages, so the page watches every press for a swipe",
             2, fixture.repository.pageCount());
@@ -100,7 +176,7 @@ public class WidgetCrossPageDragTest {
     @Test public void leavingTheBandStopsThePageTurning() {
         Fixture fixture = new Fixture();
         fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
-        fixture.repository.trimSparePages();
+        fixture.repository.trimEmptyPages();
         fixture.renderAndLayout();
         fixture.controller.menuEditWidgets();
         fixture.layout();
@@ -113,6 +189,7 @@ public class WidgetCrossPageDragTest {
 
         assertEquals("the finger left the band before the pause was up",
             0, fixture.controller.currentPage());
+        assertEquals("so no page was made either", 1, fixture.repository.pageCount());
         assertFalse(fixture.pane.widgetDragLayer().isLifted());
 
         fixture.up(PANE_WIDTH / 2, home.centerY());
@@ -124,7 +201,7 @@ public class WidgetCrossPageDragTest {
         fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
         // Page 1 is full to its last cell, so nothing can be put down on it.
         fixture.put(2, new WidgetCellRect(0, 0, 4, 5), 1);
-        fixture.repository.trimSparePages();
+        fixture.repository.trimEmptyPages();
         fixture.renderAndLayout();
         fixture.controller.setCurrentPage(0);
         fixture.controller.menuEditWidgets();
@@ -147,31 +224,12 @@ public class WidgetCrossPageDragTest {
         assertEquals("No room on this page.", fixture.noticeText());
     }
 
-    @Test public void theEdgeStopsAtTheLastPage() {
-        Fixture fixture = new Fixture();
-        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
-        fixture.repository.trimSparePages();
-        fixture.renderAndLayout();
-        fixture.controller.menuEditWidgets();
-        fixture.layout();
-
-        Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
-        fixture.down(home.centerX(), home.centerY());
-        // Held at the trailing edge long enough for three turns; there are only two pages.
-        fixture.move(PANE_WIDTH - 5, home.centerY());
-        fixture.settle();
-        fixture.settle();
-        fixture.settle();
-
-        assertEquals(1, fixture.controller.currentPage());
-        fixture.up(PANE_WIDTH - 5, home.centerY());
-        assertEquals(1, fixture.repository.get(1).page);
-    }
-
     @Test public void theLeadingEdgeCarriesAWidgetBackAPage() {
         Fixture fixture = new Fixture();
         fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 1);
-        fixture.repository.trimSparePages();
+        // The page it is carried onto keeps a widget of its own, so it is there to be carried to.
+        fixture.put(2, new WidgetCellRect(3, 4, 4, 5), 0);
+        fixture.repository.trimEmptyPages();
         fixture.renderAndLayout();
         fixture.controller.setCurrentPage(1);
         fixture.controller.menuEditWidgets();
@@ -185,8 +243,8 @@ public class WidgetCrossPageDragTest {
         fixture.up(5, home.centerY());
 
         assertEquals(0, fixture.repository.get(1).page);
-        assertEquals("the page it left was the last populated one, so the run shrank",
-            2, fixture.repository.pageCount());
+        assertEquals("the page it left had nothing else on it, so it went",
+            1, fixture.repository.pageCount());
     }
 
     private static final class Fixture {

@@ -94,11 +94,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             @Override public void onPageChangeRequested(int page) { setCurrentPage(page); }
             @Override public void onWidgetEditCommit() { commitEditSession(); }
             @Override public void onWidgetEditDiscard() { discardEditSession(); }
+            @Override public void onWidgetAddPage() { menuAddPage(); }
         }, this::selectProvider);
         widgets.setListener(this);
-        // Pages saved before the spare-page rule, or left behind by a removed widget while the
-        // page was off screen, are brought level with it once here; changes keep it from then on.
-        widgets.repository().trimSparePages();
+        // Pages saved before this rule, or left behind by a removed widget while the page was off
+        // screen, are brought level with it once here; changes keep it from then on.
+        widgets.repository().trimEmptyPages();
+        clampCurrentPage();
         render();
     }
 
@@ -136,6 +138,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (clamped == currentPage) return;
         currentPage = clamped;
         render();
+    }
+
+    /** A trim can take pages away from under the page on screen; it follows what is left. */
+    private void clampCurrentPage() {
+        currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));
     }
 
     /** Empty-surface long-press menu; the policy decides which rows this state offers. */
@@ -185,6 +192,20 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         if (first == null) return;
         beginEditSession(first.appWidgetId);
+    }
+
+    /**
+     * The + on the page's border tab. The new page is the user's own: it stays, empty, until they
+     * put something on it, and from then on it comes and goes with its widgets.
+     */
+    void menuAddPage() {
+        int appended = widgets.repository().addFreshPage();
+        if (appended < 0) {
+            pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
+            return;
+        }
+        currentPage = appended;
+        render();
     }
 
     void menuRemovePage() {
@@ -292,8 +313,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     @Override public void onWidgetRepositoryChanged(@NonNull LauncherWidgetHostController.AddResult result) {
-        // A widget arrived or left: the one empty page behind the last populated one follows.
-        widgets.repository().trimSparePages();
+        // A widget arrived or left: a page with nothing on it goes with it.
+        widgets.repository().trimEmptyPages();
+        clampCurrentPage();
         render();
         if (result == LauncherWidgetHostController.AddResult.REMOVE_FAILED) {
             pane.showNotice(pane.getContext().getString(R.string.widget_remove_failed));
@@ -322,6 +344,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         int edgeDirection;
         /** True once the widget has been taken out of the grid to cross pages. */
         boolean lifted;
+        /** The page this drag made past the end of the run, or -1: one drag makes at most one. */
+        int createdPage = -1;
         float lastRawX, lastRawY;
         /** Neighbours currently shown pushed aside, appWidgetId to the cell they preview. */
         @NonNull Map<Integer, WidgetCellRect> previewDisplaced = Collections.emptyMap();
@@ -349,9 +373,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private static final class EditSnapshot {
         @NonNull final List<LauncherWidgetRecord> records;
         final int pageCount;
-        EditSnapshot(@NonNull List<LauncherWidgetRecord> records, int pageCount) {
+        /** Which of those pages were the user's own empty ones, so the cross puts them back too. */
+        @NonNull final java.util.Set<Integer> freshPages;
+        EditSnapshot(@NonNull List<LauncherWidgetRecord> records, int pageCount,
+                     @NonNull java.util.Set<Integer> freshPages) {
             this.records = records;
             this.pageCount = pageCount;
+            this.freshPages = freshPages;
         }
     }
 
@@ -416,7 +444,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         // selecting another widget later is the same session and must not move that mark.
         if (editSnapshot == null) {
             editSnapshot = new EditSnapshot(widgets.repository().records(),
-                widgets.repository().pageCount());
+                widgets.repository().pageCount(), widgets.repository().freshPages());
         }
         AppWidgetProviderInfo info = widgets.providerInfo(appWidgetId);
         WidgetGridMetrics metrics = pane.grid().metrics();
@@ -504,7 +532,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (snapshot == null) return;
         LauncherWidgetRepository repository = widgets.repository();
         // Room for the pages the snapshot knew about before anything is put back on them.
-        repository.setPageCount(Math.max(repository.pageCount(), snapshot.pageCount));
+        repository.setPages(Math.max(repository.pageCount(), snapshot.pageCount),
+            snapshot.freshPages);
         List<LauncherWidgetRecord> batch = new ArrayList<>();
         for (LauncherWidgetRecord was : snapshot.records) {
             LauncherWidgetRecord now = repository.get(was.appWidgetId);
@@ -514,7 +543,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             }
         }
         if (!batch.isEmpty()) repository.putRecords(batch);
-        repository.setPageCount(snapshot.pageCount);
+        repository.setPages(snapshot.pageCount, snapshot.freshPages);
+        // A widget binned during the session does not come back, so the page it was the last thing
+        // on does not either: the restored count is trimmed to what the layout now holds.
+        repository.trimEmptyPages();
+        clampCurrentPage();
         render();
     }
 
@@ -538,6 +571,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.moveCandidate = null;
         edit.dragPage = record.page;
         edit.edgeDirection = 0;
+        edit.createdPage = -1;
         edit.lastRawX = rawX;
         edit.lastRawY = rawY;
         pane.removeCallbacks(edgeFlip);
@@ -597,8 +631,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     /**
      * A widget held against the pane's leading or trailing edge turns the page after a pause, and
-     * turns it again for as long as it is held there. Leaving the band stops it; so does the last
-     * page in that direction.
+     * turns it again for as long as it is held there. Leaving the band stops it; so does the first
+     * page going back. Past the last page there is one more turn: a page is made for the widget,
+     * and it is the drop that keeps it.
      */
     private void watchPageEdge(float rawX) {
         pane.getLocationOnScreen(paneLocation);
@@ -609,14 +644,22 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             if (x <= band) direction = -1;
             else if (x >= pane.getWidth() - band) direction = 1;
         }
-        if (direction != 0) {
-            int target = edit.dragPage + direction;
-            if (target < 0 || target >= widgets.repository().pageCount()) direction = 0;
-        }
+        if (direction != 0 && !canTurnTo(edit.dragPage + direction, direction)) direction = 0;
         if (direction == edit.edgeDirection) return;
         edit.edgeDirection = direction;
         pane.removeCallbacks(edgeFlip);
         if (direction != 0) pane.postDelayed(edgeFlip, EDGE_FLIP_DELAY_MS);
+    }
+
+    /**
+     * Whether the drag can turn onto that page: one that is there, or the one page past the end
+     * this drag is allowed to make. Never past the first page, and never a second new one.
+     */
+    private boolean canTurnTo(int target, int direction) {
+        if (target < 0) return false;
+        int pages = widgets.repository().pageCount();
+        if (target < pages) return true;
+        return direction > 0 && target == pages && edit.createdPage < 0;
     }
 
     /** The pause elapsed with the widget still in the band: the neighbouring page comes in. */
@@ -624,13 +667,22 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (edit == null || edit.edgeDirection == 0 || edit.dragStartBounds == null) return;
         int direction = edit.edgeDirection;
         int target = edit.dragPage + direction;
-        if (target < 0 || target >= widgets.repository().pageCount()) {
+        if (!canTurnTo(target, direction)) {
             edit.edgeDirection = 0;
             return;
         }
         LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
         if (record == null) return;
         if (!liftDraggedWidget(record)) { edit.edgeDirection = 0; return; }
+        // Past the last page: the page the widget is being carried onto is made here. It is an
+        // ordinary empty page, so the trim at the end of the drag takes it away again unless the
+        // widget is dropped on it.
+        if (target >= widgets.repository().pageCount()) {
+            int appended = widgets.repository().addPage();
+            if (appended < 0) { edit.edgeDirection = 0; return; }
+            edit.createdPage = appended;
+            target = appended;
+        }
         clearDisplacementPreview(false);
         edit.dragPage = target;
         currentPage = target;
@@ -740,7 +792,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.moveCandidate = null;
         edit.dragStartBounds = null;
         boolean crossed = record != null && target != record.page;
-        edit.dragPage = record == null ? currentPage : record.page;
         boolean committed = false;
         if (!canceled && record != null && candidate != null && candidate.valid
             && (crossed || !candidate.rect.equals(record.cell))) {
@@ -761,12 +812,21 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             }
         }
         int backwards = 0;
-        if (crossed && !committed) {
-            backwards = record.page > target ? 1 : -1;
-            currentPage = record.page;
-        }
-        if (committed) widgets.repository().trimSparePages();
+        if (crossed && !committed) backwards = record.page > target ? 1 : -1;
+        boolean created = edit.createdPage >= 0;
+        edit.createdPage = -1;
+        // The drag is over: a page it made and did not land on goes again, and so does a page the
+        // widget it carried away was the last thing on.
+        if (committed || created) widgets.repository().trimEmptyPages();
         if (committed || crossed) {
+            // The trim can have renumbered the pages under all this; the widget's own page is
+            // where the pane belongs, whether it landed there or was sent home.
+            LauncherWidgetRecord settled = widgets.repository().get(appWidgetId);
+            if (settled != null) currentPage = settled.page;
+        }
+        clampCurrentPage();
+        edit.dragPage = currentPage;
+        if (committed || crossed || created) {
             render();
             if (backwards != 0) pane.slideInFrom(backwards);
         } else {

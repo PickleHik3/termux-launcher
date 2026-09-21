@@ -19,6 +19,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -38,6 +39,8 @@ public final class LauncherWidgetRepository {
     @Nullable private WidgetAddTransaction pending;
     @NonNull private WidgetGridDefinition grid = WidgetGridDefinition.DEFAULT;
     private int pageCount = 1;
+    /** The pages added by hand that have not held a widget yet; empty, and still not trimmed. */
+    @NonNull private LinkedHashSet<Integer> freshPages = new LinkedHashSet<>();
     private long revision;
     private boolean migrationWritePending;
     private boolean readOnlyUnknownVersion;
@@ -138,38 +141,86 @@ public final class LauncherWidgetRepository {
 
     /** Appends an empty page after the last one; returns the new page index or -1 on failure. */
     public synchronized int addPage() {
-        int appended = pageCount;
-        return commitValidated(records, pending, grid, pageCount + 1, revision + 1)
-            ? appended : -1;
+        return appendPage(false);
     }
 
     /**
-     * Keeps exactly one empty page behind the last page that holds a widget: trailing empty pages
-     * past it go, and a layout that ends on a populated page gains one. That spare page is how a
-     * new page appears at all — a widget dropped on it leaves a fresh spare behind it — which is
-     * why nothing adds a page by hand any more.
-     *
-     * <p>Only the tail is touched. An empty page the user left in the middle of the run stays
-     * exactly where it is, and a layout with no widgets anywhere keeps its one page.
+     * Appends a page the user asked for by hand. It is <em>fresh</em>: empty as it is, it survives
+     * {@link #trimEmptyPages()} until a widget has been on it, so a page added on purpose does not
+     * vanish under the finger that asked for it. The moment a widget lands there the freshness is
+     * spent, and the page comes and goes with its widgets like every other.
      */
-    public synchronized boolean trimSparePages() {
-        int last = -1;
-        for (LauncherWidgetRecord record : records.values()) last = Math.max(last, record.page);
-        if (pending != null) last = Math.max(last, pending.page);
-        int target = Math.max(1, last + 2);
-        if (target == pageCount) return true;
-        return commitValidated(records, pending, grid, target, revision + 1);
+    public synchronized int addFreshPage() {
+        return appendPage(true);
+    }
+
+    private int appendPage(boolean fresh) {
+        int appended = pageCount;
+        LinkedHashSet<Integer> nextFresh = new LinkedHashSet<>(freshPages);
+        if (fresh) nextFresh.add(appended);
+        return commitValidated(records, pending, grid, pageCount + 1, nextFresh, revision + 1)
+            ? appended : -1;
+    }
+
+    /** The pages added by hand that have not held a widget yet. */
+    @NonNull public synchronized java.util.Set<Integer> freshPages() {
+        return Collections.unmodifiableSet(new LinkedHashSet<>(freshPages));
+    }
+
+    /**
+     * Removes every empty page — leading, middle or trailing — and renumbers what is left, the way
+     * {@link #removePage(int)} does for one. Two pages are kept although they hold nothing: the
+     * single page a layout with no widgets at all is left with, and a page added by hand that has
+     * not held a widget yet. The page a reservation is waiting on counts as held.
+     */
+    public synchronized boolean trimEmptyPages() {
+        boolean[] keep = new boolean[pageCount];
+        for (LauncherWidgetRecord record : records.values()) {
+            if (record.page >= 0 && record.page < pageCount) keep[record.page] = true;
+        }
+        if (pending != null && pending.page >= 0 && pending.page < pageCount) {
+            keep[pending.page] = true;
+        }
+        for (Integer page : freshPages) if (page >= 0 && page < pageCount) keep[page] = true;
+        int[] renumbered = new int[pageCount];
+        int kept = 0;
+        for (int page = 0; page < pageCount; page++) {
+            renumbered[page] = keep[page] ? kept++ : -1;
+        }
+        if (kept == pageCount) return true;
+        // Nothing to keep means nothing to renumber either: one empty page is what is left.
+        int target = Math.max(1, kept);
+        LinkedHashMap<Integer, LauncherWidgetRecord> next = new LinkedHashMap<>();
+        for (LauncherWidgetRecord record : records.values()) {
+            next.put(record.appWidgetId, record.withPage(renumbered[record.page]));
+        }
+        WidgetAddTransaction nextPending = pending == null ? null
+            : pending.withPage(renumbered[pending.page]);
+        LinkedHashSet<Integer> nextFresh = new LinkedHashSet<>();
+        for (Integer page : freshPages) {
+            if (page >= 0 && page < pageCount && renumbered[page] >= 0) {
+                nextFresh.add(renumbered[page]);
+            }
+        }
+        return commitValidated(next, nextPending, grid, target, nextFresh, revision + 1);
     }
 
     /**
      * How many pages there are, outright. Only a restore has any business with this — putting the
      * layout back as it was when an edit session opened, page count and all; every other caller
-     * goes through {@link #trimSparePages()}, which derives the count from the widgets.
+     * goes through {@link #trimEmptyPages()}, which derives the count from the widgets.
      */
     public synchronized boolean setPageCount(int count) {
+        return setPages(count, freshPages);
+    }
+
+    /** The same restore, putting back which of those pages were added by hand and still empty. */
+    public synchronized boolean setPages(int count, @NonNull Collection<Integer> fresh) {
         if (count < 1) return false;
-        if (count == pageCount) return true;
-        return commitValidated(records, pending, grid, count, revision + 1);
+        LinkedHashSet<Integer> nextFresh = new LinkedHashSet<>();
+        for (Integer page : fresh) if (page >= 0 && page < count) nextFresh.add(page);
+        if (count == pageCount && nextFresh.equals(freshPages)) return true;
+        return commitValidated(records, pending, grid, count, nextFresh, revision + 1);
     }
 
     /**
@@ -187,7 +238,12 @@ public final class LauncherWidgetRepository {
         }
         WidgetAddTransaction nextPending = pending != null && pending.page > page
             ? pending.withPage(pending.page - 1) : pending;
-        return commitValidated(next, nextPending, grid, pageCount - 1, revision + 1);
+        LinkedHashSet<Integer> nextFresh = new LinkedHashSet<>();
+        for (Integer fresh : freshPages) {
+            if (fresh == page) continue;
+            nextFresh.add(fresh > page ? fresh - 1 : fresh);
+        }
+        return commitValidated(next, nextPending, grid, pageCount - 1, nextFresh, revision + 1);
     }
 
     public synchronized boolean putRecord(@NonNull LauncherWidgetRecord record) {
@@ -317,23 +373,53 @@ public final class LauncherWidgetRepository {
     }
 
     @NonNull public synchronized String serialize() {
-        return encode(records, pending, grid, pageCount, revision);
+        return encode(records, pending, grid, pageCount, freshPages, revision);
     }
 
     private boolean commitValidated(Map<Integer, LauncherWidgetRecord> next,
                                     @Nullable WidgetAddTransaction nextPending,
                                     WidgetGridDefinition nextGrid, int nextPageCount,
                                     long nextRevision) {
+        return commitValidated(next, nextPending, nextGrid, nextPageCount, freshPages,
+            nextRevision);
+    }
+
+    private boolean commitValidated(Map<Integer, LauncherWidgetRecord> next,
+                                    @Nullable WidgetAddTransaction nextPending,
+                                    WidgetGridDefinition nextGrid, int nextPageCount,
+                                    @NonNull Collection<Integer> nextFresh, long nextRevision) {
         if (migrationWritePending || readOnlyUnknownVersion) return false;
         if (!validatePaged(nextGrid, next, nextPending, nextPageCount)) return false;
-        String encoded = encode(next, nextPending, nextGrid, nextPageCount, nextRevision);
+        LinkedHashSet<Integer> fresh = settledFresh(nextFresh, next, nextPageCount);
+        String encoded = encode(next, nextPending, nextGrid, nextPageCount, fresh, nextRevision);
         if (!storage.write(encoded)) return false;
         records = new LinkedHashMap<>(next);
         pending = nextPending;
         grid = nextGrid;
         pageCount = nextPageCount;
+        freshPages = fresh;
         revision = nextRevision;
         return true;
+    }
+
+    /**
+     * Freshness is spent the moment a widget is on the page: from then on it is an ordinary page,
+     * kept by its widgets and taken away with the last of them. A page that is no longer there
+     * drops out too.
+     */
+    private static LinkedHashSet<Integer> settledFresh(@NonNull Collection<Integer> fresh,
+                                                       Map<Integer, LauncherWidgetRecord> values,
+                                                       int pages) {
+        LinkedHashSet<Integer> settled = new LinkedHashSet<>();
+        for (Integer page : fresh) {
+            if (page == null || page < 0 || page >= pages) continue;
+            boolean held = false;
+            for (LauncherWidgetRecord record : values.values()) {
+                if (record.page == page) { held = true; break; }
+            }
+            if (!held) settled.add(page);
+        }
+        return settled;
     }
 
     /** Page-scoped snapshot validation: collisions only exist between records on one page. */
@@ -381,6 +467,9 @@ public final class LauncherWidgetRepository {
             pending = loadedPending;
             grid = loadedGrid;
             pageCount = loadedPages;
+            // A save written before hand-added pages existed simply has none of them.
+            freshPages = settledFresh(decodePages(root.optJSONArray("freshPages")), loaded,
+                loadedPages);
             revision = Math.max(0, root.optLong("revision", 0));
         } catch (JSONException | IllegalArgumentException ignored) {
             // Preserve an empty in-memory recovery target; never overwrite an unknown/corrupt value.
@@ -400,7 +489,7 @@ public final class LauncherWidgetRepository {
         grid = loadedGrid;
         pageCount = 1;
         revision = Math.max(0, root.optLong("revision", 0));
-        migrationWritePending = !storage.write(encode(loaded, loadedPending, loadedGrid, 1, revision));
+        migrationWritePending = !storage.write(encode(loaded, loadedPending, loadedGrid, 1, Collections.emptySet(), revision));
     }
 
     private void migrateV1(JSONObject root) throws JSONException {
@@ -430,7 +519,18 @@ public final class LauncherWidgetRepository {
         grid = migratedGrid;
         pageCount = 1;
         revision = 0;
-        migrationWritePending = !storage.write(encode(migrated, migratedPending, migratedGrid, 1, 0));
+        migrationWritePending = !storage.write(encode(migrated, migratedPending, migratedGrid, 1,
+            Collections.emptySet(), 0));
+    }
+
+    private static LinkedHashSet<Integer> decodePages(@Nullable JSONArray array) {
+        LinkedHashSet<Integer> pages = new LinkedHashSet<>();
+        if (array == null) return pages;
+        for (int i = 0; i < array.length(); i++) {
+            int page = array.optInt(i, -1);
+            if (page >= 0) pages.add(page);
+        }
+        return pages;
     }
 
     private static LinkedHashMap<Integer, LauncherWidgetRecord> decodeRecords(JSONObject root,
@@ -448,13 +548,21 @@ public final class LauncherWidgetRepository {
 
     private static String encode(Map<Integer, LauncherWidgetRecord> values,
                                  @Nullable WidgetAddTransaction transaction,
-                                 WidgetGridDefinition definition, int pages, long revision) {
+                                 WidgetGridDefinition definition, int pages,
+                                 @NonNull Collection<Integer> fresh, long revision) {
         try {
             JSONObject root = new JSONObject();
             root.put("version", SCHEMA_VERSION);
             root.put("revision", revision);
             root.put("grid", encodeGrid(definition));
             root.put("pages", Math.max(1, pages));
+            // Left out when there are none, so a save from a build without hand-added pages and a
+            // save with none of them left are the same payload.
+            if (!fresh.isEmpty()) {
+                JSONArray freshArray = new JSONArray();
+                for (Integer page : fresh) freshArray.put((int) page);
+                root.put("freshPages", freshArray);
+            }
             JSONArray array = new JSONArray();
             for (LauncherWidgetRecord record : values.values()) array.put(encodeRecord(record));
             root.put("records", array);

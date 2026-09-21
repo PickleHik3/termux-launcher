@@ -13,9 +13,8 @@ public final class WidgetPaneMenuPolicy {
 
     /**
      * Menu contents for the current pane state. An unsupported device gets no menu at all;
-     * REMOVE_PAGE appears only for an empty, removable page. Nothing adds a page here any more:
-     * the empty page kept behind the last populated one is the new page, and dropping a widget on
-     * it leaves another spare behind it.
+     * REMOVE_PAGE appears only for an empty, removable page. Nothing adds a page here: the + on
+     * the page's border tab does that, and so does carrying a widget past the last page.
      */
     @NonNull
     public static List<Item> itemsFor(boolean widgetsAvailable, int pageCount,
