@@ -59,6 +59,16 @@ public class KeyPopupControllerTest {
     }
 
     @Test
+    public void privateUseGlyphsTakeTheLabelFontAndPlainTextStaysMonospace() {
+        assertTrue("Nerd Font tool glyph (supplementary PUA)",
+            KeyPopupOverlayView.usesLabelFont("\uDB80\uDF33"));
+        assertTrue("BMP private-use glyph", KeyPopupOverlayView.usesLabelFont("\uE011"));
+        assertFalse(KeyPopupOverlayView.usesLabelFont("-"));
+        assertFalse(KeyPopupOverlayView.usesLabelFont("Esc"));
+        assertFalse(KeyPopupOverlayView.usesLabelFont(null));
+    }
+
+    @Test
     public void theOverlayIsNotInTheViewTreeUntilTheSettingTurnsItOn() {
         assertFalse(controller.isEnabled());
         assertNull("nothing is added while the setting is off", controller.overlay().getParent());

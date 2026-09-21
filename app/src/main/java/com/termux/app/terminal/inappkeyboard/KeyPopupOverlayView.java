@@ -71,6 +71,14 @@ public final class KeyPopupOverlayView extends View {
     private final Interpolator mExitInterpolator = new DecelerateInterpolator();
 
     private final Paint mDimPaint = new Paint();
+    /** The keyboard's own rectangle in this view's coordinates; the veil covers it and fades out above it. */
+    private final RectF mVeilBounds = new RectF();
+    private final Paint mVeilFadePaint = new Paint();
+    @Nullable private android.graphics.LinearGradient mVeilFade;
+    private float mVeilFadeTop = Float.NaN;
+    private int mVeilFadeColor;
+    /** How far above the keyboard the veil fades to nothing: room for a top-row popup and its ring. */
+    private static final float VEIL_FADE_DP = 132f;
     private final Paint mHaloPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mRingPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -121,6 +129,19 @@ public final class KeyPopupOverlayView extends View {
     }
 
     // ------------------------------------------------------------------ host API
+
+    /**
+     * Where the keyboard sits in this view. The veil dims that surface only, with a soft fade
+     * above it, so the terminal, status bar and dock stay lit while a key is down.
+     */
+    public void setVeilBounds(@NonNull RectF keyboardBounds) {
+        if (mVeilBounds.equals(keyboardBounds)) return;
+        mVeilBounds.set(keyboardBounds);
+        mVeilFade = null;
+        if (mDimProgress > 0f) invalidate();
+    }
+
+    @NonNull RectF veilBounds() { return new RectF(mVeilBounds); }
 
     public void setPalette(@NonNull KeyPopupPalette palette) {
         mPalette = palette;
@@ -285,10 +306,33 @@ public final class KeyPopupOverlayView extends View {
         if (mDimProgress > 0f) {
             mDimPaint.setColor(mPalette.dim);
             mDimPaint.setAlpha(Math.round(Color.alpha(mPalette.dim) * mDimProgress));
-            canvas.drawRect(0f, 0f, getWidth(), getHeight(), mDimPaint);
+            if (mVeilBounds.isEmpty()) {
+                canvas.drawRect(0f, 0f, getWidth(), getHeight(), mDimPaint);
+            } else {
+                canvas.drawRect(mVeilBounds.left, mVeilBounds.top, mVeilBounds.right,
+                    Math.max(mVeilBounds.bottom, getHeight()), mDimPaint);
+                drawVeilFade(canvas);
+            }
         }
         for (int i = 0; i < mPopups.size(); i++) drawPopup(canvas, mPopups.valueAt(i));
         for (int i = 0; i < mExiting.size(); i++) drawPopup(canvas, mExiting.get(i));
+    }
+
+    /** The veil's soft upper edge: full strength at the keyboard's top, gone one fade-height above. */
+    private void drawVeilFade(@NonNull Canvas canvas) {
+        float fade = VEIL_FADE_DP * density();
+        float top = mVeilBounds.top;
+        if (mVeilFade == null || mVeilFadeTop != top || mVeilFadeColor != mPalette.dim) {
+            int solid = mPalette.dim;
+            int clear = solid & 0x00FFFFFF;
+            mVeilFade = new android.graphics.LinearGradient(0f, top - fade, 0f, top, clear, solid,
+                android.graphics.Shader.TileMode.CLAMP);
+            mVeilFadeTop = top;
+            mVeilFadeColor = solid;
+            mVeilFadePaint.setShader(mVeilFade);
+        }
+        mVeilFadePaint.setAlpha(Math.round(255 * mDimProgress));
+        canvas.drawRect(mVeilBounds.left, top - fade, mVeilBounds.right, top, mVeilFadePaint);
     }
 
     private void drawPopup(@NonNull Canvas canvas, @NonNull Popup popup) {
@@ -340,7 +384,7 @@ public final class KeyPopupOverlayView extends View {
     private void drawCentreGlyph(@NonNull Canvas canvas, @NonNull Popup popup, float alpha,
                                  float density) {
         Paint paint = mGlyphPaint;
-        paint.setTypeface(faceFor(popup.labelKeyFont, popup.metrics.monospace, popup.metrics.weight));
+        paint.setTypeface(faceFor(popup.labelKeyFont, popup.metrics.monospace && !usesLabelFont(popup.label), popup.metrics.weight));
         paint.setTextSize(popup.metrics.glyphSizePx);
         paint.setStrokeWidth(popup.metrics.strokeWidthPx);
         int ink = popup.slot >= 0 ? mPalette.primary : mPalette.glyphStroke;
@@ -385,7 +429,7 @@ public final class KeyPopupOverlayView extends View {
             if (glyphAlpha <= 0f) continue;
             int ink = isTarget ? mPalette.primary : mPalette.ringIdle;
             Paint paint = mRingPaint;
-            paint.setTypeface(faceFor(popup.ringKeyFont[slot], true, 500));
+            paint.setTypeface(faceFor(popup.ringKeyFont[slot], !usesLabelFont(label), 500));
             paint.setTextSize(KeyPopupGeometry.ringGlyphSizePx(label, density) * scale);
             paint.setColor(ink);
             paint.setAlpha(Math.round(Color.alpha(ink) * glyphAlpha));
@@ -410,6 +454,22 @@ public final class KeyPopupOverlayView extends View {
      * The face one glyph is drawn in. Cached: at most six combinations exist, and resolving a
      * weighted face on every frame of a ring animation is allocation the draw path does not need.
      */
+    /**
+     * Whether a label has to be drawn with the keyboard's own label font rather than the plain
+     * monospace face. Launcher tool slots (the space bar's window and session swipes, the palette)
+     * are Nerd Font glyphs in the private-use planes; the caps draw them with the label font, and
+     * monospace has no such glyphs, so they came out as boxes in the ring.
+     */
+    static boolean usesLabelFont(@Nullable String label) {
+        if (label == null) return false;
+        for (int i = 0; i < label.length(); ) {
+            int cp = label.codePointAt(i);
+            if ((cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000) return true;
+            i += Character.charCount(cp);
+        }
+        return false;
+    }
+
     private Typeface faceFor(boolean keyFont, boolean monospace, int weight) {
         int cacheKey = (keyFont ? 1024 : 0) | (monospace ? 2048 : 0) | weight;
         Typeface cached = mFaces.get(cacheKey);
