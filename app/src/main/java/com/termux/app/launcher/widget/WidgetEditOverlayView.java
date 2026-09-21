@@ -61,6 +61,8 @@ public final class WidgetEditOverlayView extends View {
     private final Paint handleRingPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint ghostStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint ghostFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint blockedStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint blockedFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint chipPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint chipCrossPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint chipGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -68,6 +70,8 @@ public final class WidgetEditOverlayView extends View {
     private final Rect frame = new Rect();
     @NonNull private List<Outline> outlines = Collections.emptyList();
     @Nullable private Rect ghost;
+    /** Whether the ghost is somewhere the widget can actually land. */
+    private boolean ghostValid = true;
     private boolean frameVisible;
     private boolean dragging;
     private boolean horizontalResizable;
@@ -100,6 +104,14 @@ public final class WidgetEditOverlayView extends View {
         ghostStrokePaint.setColor(0xB3FFFFFF);
         ghostFillPaint.setStyle(Paint.Style.FILL);
         ghostFillPaint.setColor(0x1AFFFFFF);
+        // The same ghost in the colour of a refusal: this page has no room for the widget, so the
+        // drop will spring back. Red rather than simply hidden, because a ghost that vanishes over
+        // one page and reappears over the next reads as a glitch.
+        blockedStrokePaint.setStyle(Paint.Style.STROKE);
+        blockedStrokePaint.setStrokeWidth(dp(1.5f));
+        blockedStrokePaint.setColor(0xCCFF6B6B);
+        blockedFillPaint.setStyle(Paint.Style.FILL);
+        blockedFillPaint.setColor(0x33FF6B6B);
         chipPaint.setStyle(Paint.Style.FILL);
         chipPaint.setColor(0xE6202124);
         chipCrossPaint.setStyle(Paint.Style.STROKE);
@@ -139,6 +151,7 @@ public final class WidgetEditOverlayView extends View {
         frameVisible = true;
         dragging = false;
         ghost = null;
+        ghostValid = true;
         setVisibility(VISIBLE);
         invalidate();
     }
@@ -170,17 +183,34 @@ public final class WidgetEditOverlayView extends View {
     @NonNull public List<Outline> outlines() { return Collections.unmodifiableList(outlines); }
 
     public void setGhostBounds(@Nullable Rect bounds) {
+        setGhostBounds(bounds, true);
+    }
+
+    /**
+     * The snap target under the finger. {@code valid} false is the page saying it has no room:
+     * the ghost stays where the finger is and turns red, and the drop springs the widget back.
+     */
+    public void setGhostBounds(@Nullable Rect bounds, boolean valid) {
         ghost = bounds == null ? null : new Rect(bounds);
+        ghostValid = valid;
         invalidate();
     }
+
+    /** The snap target being shown, or null while none is. */
+    @Nullable public Rect ghostBounds() { return ghost == null ? null : new Rect(ghost); }
+
+    /** Whether the ghost on screen is the refusing one. */
+    public boolean ghostBlocked() { return ghost != null && !ghostValid; }
 
     @Override protected void onDraw(@NonNull Canvas canvas) {
         if (!frameVisible) return;
         if (ghost != null) {
             RectF ghostRect = new RectF(ghost);
             float radius = dp(14f);
-            canvas.drawRoundRect(ghostRect, radius, radius, ghostFillPaint);
-            canvas.drawRoundRect(ghostRect, radius, radius, ghostStrokePaint);
+            canvas.drawRoundRect(ghostRect, radius, radius,
+                ghostValid ? ghostFillPaint : blockedFillPaint);
+            canvas.drawRoundRect(ghostRect, radius, radius,
+                ghostValid ? ghostStrokePaint : blockedStrokePaint);
         }
         if (dragging) return;
         float radius = dp(14f);

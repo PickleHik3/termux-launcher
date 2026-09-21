@@ -85,6 +85,27 @@ public final class WidgetGridView extends ViewGroup {
         for (WidgetCellView cell : cells.values()) cell.setHoldExempt(exempt);
     }
 
+    /**
+     * The widget a finger is carrying to another page. Its cell stays attached through the flip,
+     * hidden and unplaced, because the gesture the user is still making is being delivered through
+     * that view: removing it with the page it left would cancel the drag mid-air. -1 for none.
+     */
+    private int dragPinnedId = -1;
+
+    public void setDragPinned(int appWidgetId) {
+        if (dragPinnedId == appWidgetId) return;
+        int released = dragPinnedId;
+        dragPinnedId = appWidgetId;
+        if (released < 0) return;
+        for (LauncherWidgetRecord record : records) {
+            if (record.appWidgetId == released) return; // it landed on the page showing now
+        }
+        WidgetCellView cell = cells.remove(released);
+        if (cell != null) removeView(cell);
+        committedSizes.remove(released);
+        deliveredSizes.remove(released);
+    }
+
     public void refresh(@NonNull WidgetGridDefinition grid,
                         @NonNull List<LauncherWidgetRecord> snapshot) {
         definition = grid;
@@ -132,6 +153,8 @@ public final class WidgetGridView extends ViewGroup {
             }
             if (cell.getChildCount() != 1 || cell.getChildAt(0) != content) cell.setContent(content);
         }
+        // The widget in the air belongs to no page while it crosses; its cell stays all the same.
+        if (dragPinnedId >= 0) live.add(dragPinnedId);
         ArrayList<Integer> stale = new ArrayList<>();
         for (Map.Entry<Integer, WidgetCellView> entry : cells.entrySet()) {
             if (!live.contains(entry.getKey())) {
