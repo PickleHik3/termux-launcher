@@ -303,6 +303,12 @@
             android:name=".app.launcher.data.LauncherCategoryPasteNotification$ActionReceiver"
             android:exported="false" />
 
+        <!-- A message a terminal program sent, swiped away. Not exported: only the shade's own
+             delete intent reaches it. -->
+        <receiver
+            android:name=".app.terminal.ShellNotifications$DismissReceiver"
+            android:exported="false" />
+
         <!-- A display server started by `termux-x11` announces itself here. Not exported and
              signature-permission guarded: a foreign app cannot hand the home screen a Binder. -->
         <receiver

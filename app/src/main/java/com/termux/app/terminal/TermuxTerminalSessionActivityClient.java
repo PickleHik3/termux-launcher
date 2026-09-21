@@ -448,6 +448,43 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
+     * A message with more to it than words: it can be named, replaced, taken down again, and
+     * marked urgent. That belongs in the phone's own notification shade, where the user reads it
+     * with the launcher put away and taps it to come back to the pane that sent it.
+     */
+    @Override
+    public void onKittyNotification(@NonNull TerminalSession session,
+                                    @NonNull com.termux.terminal.KittyNotification notification) {
+        mHost.noteShellAttention(session);
+        boolean visible = mHost.isVisible();
+        boolean inFront = session == mHost.currentSession();
+        if (!ShellNotifications.shouldShow(notification, visible, inFront))
+            return;
+        if (ShellNotifications.post(mContext, session, notification, visible, inFront) == null
+            && visible) {
+            // Nothing reached the shade — notifications are turned off for the launcher — so the
+            // message still gets the older in-app notice rather than being lost.
+            onNotification(session, notification.getTitle(), notification.getBody());
+        }
+    }
+
+    @Override
+    public void onKittyNotificationClose(@NonNull TerminalSession session, @NonNull String id) {
+        ShellNotifications.close(mContext, session, id);
+    }
+
+    /**
+     * A program asked for a mouse pointer shape. Only a mouse or trackpad has a pointer to change;
+     * the two touch ways of driving a mouse here draw nothing on screen, so there is nothing else
+     * to give the shape to.
+     */
+    @Override
+    public void onPointerShapeChanged(@NonNull TerminalSession session, @Nullable String shape) {
+        com.termux.view.TerminalView view = mHost.viewForSession(session);
+        if (view != null) view.setRequestedPointerShape(shape);
+    }
+
+    /**
      * A bell from a shell the user is not looking at gets a notice they can act on: it is drawn in
      * the attention accent, and tapping it goes to that pane or window.
      *
