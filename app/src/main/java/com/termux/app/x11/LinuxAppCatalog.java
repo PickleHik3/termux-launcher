@@ -200,12 +200,21 @@ public final class LinuxAppCatalog {
             // The path itself, not only its contents: a nix switch leaves the same desktop files
             // in a directory of a different name, and that new name is the whole of the news.
             signature = signature * 31 + root.dir.getPath().hashCode();
-            signature = signature * 31 + root.dir.lastModified();
             String[] names = root.dir.list();
-            signature = signature * 31 + (names == null ? -1 : names.length);
+            boolean present = names != null;
+            // A directory that is not there yet is a reading of its own, and is kept well apart
+            // from anything a real one can give back — `lastModified` answers 0 for an absent
+            // file, which an existing directory could in principle answer too. Every candidate
+            // directory is hashed whether or not it exists, so the one that appears when a user
+            // writes their first desktop file by hand moves this number.
+            signature = signature * 31 + (present ? root.dir.lastModified() : ABSENT);
+            signature = signature * 31 + (present ? names.length : ABSENT);
         }
         return signature;
     }
+
+    /** What an absent directory contributes: a value no reading of a real one can collide with. */
+    private static final long ABSENT = Long.MIN_VALUE / 2;
 
     /**
      * Read one desktop file. Null when it is not an application, asks not to be shown ({@code
