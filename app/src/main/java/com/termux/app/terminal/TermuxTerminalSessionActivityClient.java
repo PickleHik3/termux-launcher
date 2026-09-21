@@ -660,8 +660,24 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         TerminalSession currentSession = mHost.currentSession();
         String workingDirectory = currentSession == null
             ? mHost.properties().getDefaultWorkingDirectory()
-            : currentSession.getCwd();
+            : workingDirectoryOf(currentSession);
         addNewSessionAtWorkingDirectory(workingDirectory, isFailSafe, sessionName);
+    }
+
+    /**
+     * Where a new pane opened from this one should start.
+     *
+     * <p>The shell's own OSC 7 report comes first: it is where the user thinks they are, and it
+     * follows a subshell or a {@code cd} inside one, which /proc's view of the shell process does
+     * not. It is only trusted while it still names a directory on this device; anything else falls
+     * back to the /proc reading that has always been used.
+     */
+    @Nullable
+    private String workingDirectoryOf(@NonNull TerminalSession session) {
+        String reported = session.getReportedWorkingDirectory();
+        if (reported != null && new java.io.File(reported).isDirectory())
+            return reported;
+        return session.getCwd();
     }
 
     /** Create and select a fresh shell at an explicitly chosen CWD. Used by session cloning. */

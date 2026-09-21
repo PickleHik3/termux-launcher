@@ -71,6 +71,14 @@ public abstract class TerminalTestCase extends TestCase {
 			colorsChanged++;
 		}
 
+		/** How many times the emulator asked the client for a redraw of its own accord. */
+		public int screenChanges = 0;
+
+		@Override
+		public void onScreenChanged() {
+			screenChanges++;
+		}
+
         /**
          * Off-thread work posted back by the decode worker is queued instead of running inline: the
          * default would run it on the worker thread, racing the test thread's own emulator access.

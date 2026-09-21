@@ -310,10 +310,34 @@ public final class TerminalSession extends TerminalOutput {
 
     /**
      * Notify the {@link #mClient} that the screen has changed.
+     *
+     * <p>A synchronized update (private mode 2026) holds the notification back: the emulator keeps
+     * parsing, but the client goes on showing the frame from before the hold began, so a program
+     * repainting in several writes never shows half a frame. The hold is bounded — see
+     * {@link TerminalEmulator#SYNCHRONIZED_UPDATE_TIMEOUT_MILLIS} — and this is the only place that
+     * arms the wake-up for it, so a program that dies between "begin" and "end" cannot leave the
+     * pane frozen: the held frame is delivered when the deadline passes whether or not another byte
+     * ever arrives. Everything else the client hears about — the bell, the title, colors,
+     * notifications — goes its own way and is not held.
      */
     protected void notifyScreenUpdate() {
+        if (mEmulator != null && mEmulator.isScreenUpdateHeld()) {
+            // One wake-up per hold: re-posting on every write would push the deadline out forever.
+            mMainThreadHandler.removeCallbacks(mSynchronizedUpdateRelease);
+            mMainThreadHandler.postDelayed(mSynchronizedUpdateRelease,
+                mEmulator.screenUpdateHoldRemainingMillis() + 1);
+            return;
+        }
+        mMainThreadHandler.removeCallbacks(mSynchronizedUpdateRelease);
         mClient.onTextChanged(this);
     }
+
+    /**
+     * Deliver the frame a synchronized update has been holding, once its timeout has passed. Going
+     * back through {@link #notifyScreenUpdate()} keeps one path to the client: if the hold somehow
+     * still stands, this re-arms instead of painting.
+     */
+    private final Runnable mSynchronizedUpdateRelease = this::notifyScreenUpdate;
 
     /**
      * Reset state for terminal emulator state.
@@ -452,6 +476,15 @@ public final class TerminalSession extends TerminalOutput {
 
     public int getPid() {
         return mShellPid;
+    }
+
+    /**
+     * The directory the shell last reported with OSC 7, or null if it never did. It is the shell's
+     * own answer, so it follows the shell into places /proc cannot see, and it is null whenever the
+     * shell integration is not loaded — callers fall back to {@link #getCwd()}.
+     */
+    public String getReportedWorkingDirectory() {
+        return (mEmulator == null) ? null : mEmulator.getReportedWorkingDirectory();
     }
 
     /**
