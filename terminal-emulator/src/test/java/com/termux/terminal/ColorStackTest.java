@@ -59,6 +59,32 @@ public class ColorStackTest extends TerminalTestCase {
         assertEquals(before + 1, mOutput.colorsChanged);
     }
 
+    /**
+     * The case the feature exists for: a program borrows the palette and is killed before it can
+     * hand it back, so the user pops it themselves. The pop has to put every colour back <em>and</em>
+     * tell the client, because the rows already on screen are repainted only when the client hears
+     * that the palette moved — their text and styles have not changed at all.
+     */
+    public void testAPopAfterAKilledProgramRestoresAndRepaints() {
+        withTerminalSized(5, 3);
+        int originalOne = color(1);
+        int originalTwo = color(2);
+        enterString("\033[#P");
+        setColor(1, "#00FF00");
+        setColor(2, "#FF00FF");
+        assertEquals(0xFF00FF00, color(1));
+        assertEquals(0xFFFF00FF, color(2));
+
+        int changesBefore = mOutput.colorsChanged;
+        enterString("\033[#Q");
+
+        assertEquals("Every colour is back", originalOne, color(1));
+        assertEquals(originalTwo, color(2));
+        assertEquals("The client is told exactly once", changesBefore + 1, mOutput.colorsChanged);
+        // The stack is empty again, which is what XTREPORTCOLORS answers with.
+        assertEnteringStringGivesResponse("\033[#R", "\033[?0;0#Q");
+    }
+
     /** Popping an empty stack leaves the palette alone rather than clearing it. */
     public void testPopWithNothingPushedIsIgnored() {
         withTerminalSized(5, 3);
