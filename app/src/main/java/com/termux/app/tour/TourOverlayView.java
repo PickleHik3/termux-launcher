@@ -184,7 +184,7 @@ public final class TourOverlayView extends FrameLayout {
         mCard.setOrientation(LinearLayout.VERTICAL);
         mCard.setBackground(mDress.background(0));
         mCard.setElevation(0f);
-        mCard.setPadding(dp(14), dp(10), dp(14), dp(8));
+        mCard.setPadding(dp(14), dp(10), dp(14), dp(14));
         mCard.setClickable(false);
         mCard.setFocusable(false);
 
@@ -274,15 +274,13 @@ public final class TourOverlayView extends FrameLayout {
         mDocsLink = textButton(context, view -> {
             if (mCallbacks != null) mCallbacks.onTourDocsTapped();
         });
-        mDocsLink.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         mDocsLink.setVisibility(GONE);
-        mButtonRow.addView(mDocsLink, docsLinkParams());
+        addDocsLink();
 
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         buttonParams.gravity = Gravity.END;
-        buttonParams.topMargin = dp(2);
-        buttonParams.rightMargin = -dp(4);
+        buttonParams.topMargin = dp(8);
         mCard.addView(mButtonRow, buttonParams);
 
         addView(mCard, new FrameLayout.LayoutParams(
@@ -300,7 +298,9 @@ public final class TourOverlayView extends FrameLayout {
         // A TextView sits its text at the top; the action buttons are 48dp tall, so without this
         // the label rides the top edge and the rest of the box hangs empty beneath it.
         button.setGravity(Gravity.CENTER);
-        button.setPadding(dp(8), dp(6), dp(8), dp(6));
+        button.setPadding(dp(12), dp(6), dp(12), dp(6));
+        button.setMinHeight(dp(44f));
+        button.setMinWidth(dp(48f));
         button.setBackground(buttonBackground());
         button.setOnClickListener(onClick);
         return button;
@@ -888,17 +888,15 @@ public final class TourOverlayView extends FrameLayout {
             mActions.clear();
             mActions.addAll(actions);
             mButtonRow.removeAllViews();
-            mButtonRow.addView(mDocsLink, docsLinkParams());
+            addDocsLink();
             mActionButtons.clear();
             for (TourAction action : mActions) {
                 TextView button = textButton(getContext(), view -> onActionTapped(action));
                 button.setText(action.labelRes);
                 button.setContentDescription(getContext().getString(action.labelRes));
-                button.setMinHeight(dp(48f));
-                button.setMinWidth(dp(48f));
                 LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                params.leftMargin = dp(2f);
+                params.leftMargin = dp(8f);
                 mButtonRow.addView(button, params);
                 mActionButtons.add(button);
             }
@@ -906,11 +904,18 @@ public final class TourOverlayView extends FrameLayout {
         mButtonRow.setVisibility(mActions.isEmpty() ? GONE : VISIBLE);
     }
 
-    private static LinearLayout.LayoutParams docsLinkParams() {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        params.gravity = Gravity.CENTER_VERTICAL;
-        return params;
+    /**
+     * The docs link leads the row as a pill of its own size, and an empty spacer takes the
+     * slack, so the action buttons keep the trailing edge without the link stretching to meet
+     * them.
+     */
+    private void addDocsLink() {
+        LinearLayout.LayoutParams linkParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        linkParams.gravity = Gravity.CENTER_VERTICAL;
+        mButtonRow.addView(mDocsLink, linkParams);
+        View spacer = new View(getContext());
+        mButtonRow.addView(spacer, new LinearLayout.LayoutParams(0, 0, 1f));
     }
 
     private void onActionTapped(@NonNull TourAction action) {
