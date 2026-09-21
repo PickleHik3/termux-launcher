@@ -1,28 +1,23 @@
 # P2 text sizing renderer (feat/text-sizing-draw) - done
 
 ## Done
-- `TextBlockGeometry` (new): block rect, drawn size scale (s x n/d, 1 when demoted), v/h
-  alignment, baseline, and the cursor rect per row of a block. Pure maths, JVM-testable.
-- `TerminalRenderer`: block cells break the run and draw nothing; `drawRowTextBlocks` /
-  `drawTextBlock` draw each visible anchor once, clipped and aligned, with the block's own
-  decorations; cursor spans the block on both paths and in `drawExtraCursors` (D2); the node
-  record loop is now compare-all-then-record, for D4.
-- `RowRenderCache`: `captureTextSizes` (records + group reach) and `spreadTextBlockGroups`
-  (D4 B: the rows a block spans dirty and record together). `rowChanged` gained
-  `cursorColumns` / `cursorLastRow`.
-- `TextBlockSelection` + controller wiring: D5 snapping of both selection ends.
-- Tests: RowRenderCacheTest +8, TextSizingRenderTest (14), TextBlockSelectionTest (6).
-  View 138 -> 167, emulator 474, all green.
+- `TextBlockGeometry`: block rect, drawn size (s x n/d, 1 when demoted), v/h alignment, baseline,
+  per-row cursor rect, and `selectionCovers` / `cellSelected` - a block's cells take their fill
+  from the anchor cell, which is what highlights the rows under a tall block.
+- `TerminalRenderer`: block cells break the run; `drawRowTextBlocks` / `drawTextBlock` draw each
+  anchor clipped and aligned; cursor covers a block (D2) on both paths and for extra cursors;
+  record loop is compare-then-record for D4; a `Selection` holder replaces the per-row selx pair
+  in the background pass.
+- `RowRenderCache`: `captureTextSizes` (compares the public packed record) and
+  `spreadTextBlockGroups` (D4 B); rows carrying blocks also re-record whenever the selection moves.
+- `TextBlockSelection`: D5, one-row rule - both ends snap to their block's run on its anchor row,
+  put back in stream order over both blocks' corners. A block rectangle cannot be said in a
+  stream selection, so the rows underneath are the renderer's job, not the selection's.
 
 ## Next
-- Nothing here. Device check of a real `OSC 66 ; s=2` line is the round's gate.
+- Nothing here. Waydroid re-check of the long-press highlight and of copy is the round's gate.
 
 ## Gotchas
-- `TerminalRow.getTextSizeRecord` is package-private, so the cache rebuilds a comparable key from
-  the typed accessors (`RowRenderCache.textSizeKey`).
-- `terminal-view/build.gradle` gained `unitTests.returnDefaultValues` (as terminal-emulator has),
-  so a test can build a `TerminalBuffer` without SystemClock.
-- `getWordAtLocation` is an emulator fix; described in the report, not made here.
-
-## Merged from the model phase
-- f4cffebc: getWordAtLocation offsets on rows with blocks; getTextSizeRecord public.
+- Snapping an end down to a block's bottom right is what painted a band across the whole row and
+  copied every block on it: a two-row selection is a stream, not a rectangle.
+- Handles stay on the anchor row's cell edges; they are not moved to the block's bottom.

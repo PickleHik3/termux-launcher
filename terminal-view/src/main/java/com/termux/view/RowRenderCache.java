@@ -469,8 +469,8 @@ final class RowRenderCache {
      * above and below it. Only a row that carries a record pays for the walk, exactly as the
      * decoration and hyperlink tables do.
      *
-     * <p>The packed record is the emulator's own business, so what is compared here is rebuilt
-     * from the typed accessors: the cache only has to notice that a record moved, never read it.
+     * <p>What is compared is the packed record itself, one int per cell — the cache only has to
+     * notice that it moved, never read it; the typed accessors say what a record means.
      */
     private static boolean captureTextSizes(Row state, TerminalRow line, int columns) {
         final boolean has = line.hasTextSizes();
@@ -484,7 +484,7 @@ final class RowRenderCache {
                 changed = true;
             }
             for (int column = 0; column < columns; column++) {
-                final int record = textSizeKey(line, column);
+                final int record = line.getTextSizeRecord(column);
                 if (state.textSizes[column] != record) {
                     state.textSizes[column] = record;
                     changed = true;
@@ -501,22 +501,6 @@ final class RowRenderCache {
         state.blockRowsAbove = above;
         state.blockRowsBelow = below;
         return changed;
-    }
-
-    /** One comparable int per cell: zero for a plain one, every field of its record otherwise. */
-    private static int textSizeKey(TerminalRow line, int column) {
-        if (!line.isTextSizeCell(column)) return 0;
-        return 1
-            | (line.isTextSizeAnchor(column) ? 2 : 0)
-            | (line.isTextSizeDemoted(column) ? 4 : 0)
-            | (line.getTextScale(column) << 3)
-            | (line.getTextCellWidth(column) << 6)
-            | (line.getTextSizeOffsetX(column) << 9)
-            | (line.getTextSizeOffsetY(column) << 15)
-            | (line.getTextFractionNumerator(column) << 18)
-            | (line.getTextFractionDenominator(column) << 22)
-            | (line.getTextVerticalAlign(column) << 26)
-            | (line.getTextHorizontalAlign(column) << 28);
     }
 
     private static boolean captureHyperlinks(Row state, TerminalRow line, int columns) {

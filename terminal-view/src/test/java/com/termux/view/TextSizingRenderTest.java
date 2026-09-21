@@ -6,6 +6,8 @@ import static org.junit.Assert.assertTrue;
 
 import com.termux.terminal.KittyTextSizing;
 import com.termux.terminal.TerminalEmulator;
+import com.termux.terminal.TerminalRow;
+import com.termux.terminal.TextSizeFixtures;
 
 import org.junit.Test;
 
@@ -176,5 +178,81 @@ public class TextSizingRenderTest {
             30f, FONT_WIDTH, FONT_WIDTH / 4f, 76f, 100f, LINE_SPACING, true, rect));
         assertEquals(30f, rect[0], EPSILON);
         assertEquals(32.5f, rect[2], EPSILON);
+    }
+
+    // --- D5: the selection covers a block's anchor row, the fill covers all of its rows ---
+
+    private static final int BLOCK_ANCHOR_ROW = 4;
+
+    /** Two rows, standing in for the block's anchor row and the row under it. */
+    private static TerminalRow[] blockRows() {
+        TerminalRow[] rows = { new TerminalRow(8, 0L), new TerminalRow(8, 0L) };
+        // Two rows tall, two columns wide, at column 0.
+        TextSizeFixtures.markBlock(rows, 0, 0, TextSizeFixtures.record(2, 1));
+        return rows;
+    }
+
+    @Test
+    public void theFillOfASelectedBlockCoversEveryRowItSpans() {
+        final TerminalRow[] rows = blockRows();
+        // The selection the snap produces for a press on this block: its run on the anchor row.
+        final int y1 = BLOCK_ANCHOR_ROW, y2 = BLOCK_ANCHOR_ROW, x1 = 0, x2 = 1;
+
+        for (int column = 0; column < 2; column++) {
+            assertTrue("anchor row, column " + column, TextBlockGeometry.cellSelected(rows[0],
+                BLOCK_ANCHOR_ROW, column, y1, y2, x1, x2));
+            assertTrue("the row under it, column " + column,
+                TextBlockGeometry.cellSelected(rows[1], BLOCK_ANCHOR_ROW + 1, column,
+                    y1, y2, x1, x2));
+        }
+    }
+
+    @Test
+    public void nothingBesideTheBlockIsFilled() {
+        final TerminalRow[] rows = blockRows();
+        final int y1 = BLOCK_ANCHOR_ROW, y2 = BLOCK_ANCHOR_ROW, x1 = 0, x2 = 1;
+
+        // The selection stops at the block's last column on its own row, and the row under it is
+        // outside the selection altogether — only the block's own cells are filled there.
+        assertFalse(TextBlockGeometry.cellSelected(rows[0], BLOCK_ANCHOR_ROW, 5, y1, y2, x1, x2));
+        assertFalse(TextBlockGeometry.cellSelected(rows[1], BLOCK_ANCHOR_ROW + 1, 5,
+            y1, y2, x1, x2));
+    }
+
+    @Test
+    public void anUnselectedBlockIsNotFilledOnAnyOfItsRows() {
+        final TerminalRow[] rows = blockRows();
+        // A selection further down the screen, nowhere near the block.
+        final int y1 = 8, y2 = 8, x1 = 0, x2 = 3;
+
+        for (int column = 0; column < 2; column++) {
+            assertFalse(TextBlockGeometry.cellSelected(rows[0], BLOCK_ANCHOR_ROW, column,
+                y1, y2, x1, x2));
+            assertFalse(TextBlockGeometry.cellSelected(rows[1], BLOCK_ANCHOR_ROW + 1, column,
+                y1, y2, x1, x2));
+        }
+    }
+
+    @Test
+    public void aPlainRowFollowsTheOrdinaryStreamSelection() {
+        final TerminalRow plain = new TerminalRow(8, 0L);
+        // Rows 2..4, from column 5 of the first to column 3 of the last.
+        assertFalse(TextBlockGeometry.cellSelected(plain, 2, 4, 2, 4, 5, 3));
+        assertTrue(TextBlockGeometry.cellSelected(plain, 2, 5, 2, 4, 5, 3));
+        assertTrue(TextBlockGeometry.cellSelected(plain, 3, 0, 2, 4, 5, 3));
+        assertTrue(TextBlockGeometry.cellSelected(plain, 3, 7, 2, 4, 5, 3));
+        assertTrue(TextBlockGeometry.cellSelected(plain, 4, 3, 2, 4, 5, 3));
+        assertFalse(TextBlockGeometry.cellSelected(plain, 4, 4, 2, 4, 5, 3));
+        assertFalse(TextBlockGeometry.cellSelected(plain, 5, 0, 2, 4, 5, 3));
+    }
+
+    @Test
+    public void noSelectionCoversNothing() {
+        final TerminalRow[] rows = blockRows();
+        // What TerminalView passes when nothing is selected.
+        assertFalse(TextBlockGeometry.cellSelected(rows[0], BLOCK_ANCHOR_ROW, 0, -1, -1, -1, -1));
+        assertFalse(TextBlockGeometry.cellSelected(rows[1], BLOCK_ANCHOR_ROW + 1, 0,
+            -1, -1, -1, -1));
+        assertFalse(TextBlockGeometry.selectionCovers(-1, 0, -1, -1, -1, -1));
     }
 }

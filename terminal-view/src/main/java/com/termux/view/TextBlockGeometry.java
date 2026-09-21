@@ -2,6 +2,7 @@ package com.termux.view;
 
 import com.termux.terminal.KittyTextSizing;
 import com.termux.terminal.TerminalEmulator;
+import com.termux.terminal.TerminalRow;
 
 /**
  * Where a kitty text sizing block (OSC 66) lands on screen, and at what size its text is drawn.
@@ -31,6 +32,38 @@ final class TextBlockGeometry {
         if (numerator > 0 && denominator > 0)
             size = size * numerator / denominator;
         return size > 0f ? size : 1f;
+    }
+
+
+    /**
+     * Whether the selection stream covers one cell: the first row from its column onwards, whole
+     * rows after it, and the last row up to its column. Exactly what the per-row {@code selx}
+     * pair the renderer has always derived says, written once so a cell on another row can be
+     * asked about too.
+     */
+    static boolean selectionCovers(int row, int column, int selectionY1, int selectionY2,
+                                   int selectionX1, int selectionX2) {
+        if (row < selectionY1 || row > selectionY2) return false;
+        if (row == selectionY1 && column < selectionX1) return false;
+        return row != selectionY2 || column <= selectionX2;
+    }
+
+    /**
+     * Whether a cell is drawn selected. D5 makes a block one selection unit, and the selection
+     * itself only ever reaches the block's anchor row — a rectangle cannot be said in a stream —
+     * so every cell of a block takes its answer from the anchor. That is what fills the rows
+     * underneath an anchor whose block is taller than one row.
+     */
+    static boolean cellSelected(TerminalRow line, int externalRow, int column, int selectionY1,
+                                int selectionY2, int selectionX1, int selectionX2) {
+        int row = externalRow;
+        int anchorColumn = column;
+        if (line.hasTextSizes() && line.isTextSizeCell(column)) {
+            row -= line.getTextSizeOffsetY(column);
+            anchorColumn -= line.getTextSizeOffsetX(column);
+        }
+        return selectionCovers(row, anchorColumn, selectionY1, selectionY2, selectionX1,
+            selectionX2);
     }
 
     /** The left edge of a block, in the same coordinates a run's left edge is computed in. */

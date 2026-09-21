@@ -517,11 +517,20 @@ public final class TerminalRenderer {
     /** Which columns of the row being drawn the cursor covers; reused for the same reason. */
     private final CursorSpan mCursorSpan = new CursorSpan();
 
+    /** The frame's selection, so a cell can ask about a row other than its own; reused too. */
+    private final Selection mSelection = new Selection();
+
     /** Reused when a text sizing block's cursor rectangle is computed, for the same reason. */
     private final float[] mBlockCursorRect = new float[4];
 
     /** Which visible rows this frame has to record; grown to the visible row count and reused. */
     private boolean[] mChangedRows = new boolean[0];
+
+    /** The selection the cached rows were last recorded against; see {@link #recordAndReplayRows}. */
+    private int mCachedSelectionY1 = Integer.MIN_VALUE;
+    private int mCachedSelectionY2 = Integer.MIN_VALUE;
+    private int mCachedSelectionX1 = Integer.MIN_VALUE;
+    private int mCachedSelectionX2 = Integer.MIN_VALUE;
 
     private final Path mBoxPath = new Path();
 
@@ -886,6 +895,36 @@ public final class TerminalRenderer {
     }
 
     /**
+     * The whole frame's selection, in the stream form the rest of the view works in: from
+     * ({@code x1}, {@code y1}) to ({@code x2}, {@code y2}) inclusive. Held whole rather than cut
+     * into a per-row pair because a cell of a text sizing block is selected when its <em>anchor
+     * cell</em> is, and the anchor sits on another row.
+     */
+    private static final class Selection {
+        int y1 = -1;
+        int y2 = -1;
+        int x1 = -1;
+        int x2 = -1;
+
+        void set(int selectionY1, int selectionY2, int selectionX1, int selectionX2) {
+            y1 = selectionY1;
+            y2 = selectionY2;
+            x1 = selectionX1;
+            x2 = selectionX2;
+        }
+
+        /** Whether the cell at this row and column is drawn selected. */
+        boolean covers(TerminalRow line, int row, int column) {
+            return TextBlockGeometry.cellSelected(line, row, column, y1, y2, x1, x2);
+        }
+
+        /** Whether a block anchored at this cell is selected, and so drawn inverted. */
+        boolean coversAnchor(int row, int column) {
+            return TextBlockGeometry.selectionCovers(row, column, y1, y2, x1, x2);
+        }
+    }
+
+    /**
      * How far the cursor reaches across one row. Over a plain cell that is the one column it
      * stands on; over a cell of a text sizing block it is the block's full width, on every row the
      * block covers, because D2 grows the cursor to the whole block.
@@ -951,6 +990,8 @@ public final class TerminalRenderer {
         final TerminalBuffer.TextBlock cursorBlock =
             cursorVisible ? screen.getTextBlockAt(cursorRow, cursorCol) : null;
         final CursorSpan span = mCursorSpan;
+        final Selection selection = mSelection;
+        selection.set(selectionY1, selectionY2, selectionX1, selectionX2);
         float heightOffset = mFontLineSpacingAndAscent;
         // Backgrounds and the cursor block for every row are painted before any glyph, so a glyph
         // whose ink overhangs its cells — Nerd Font symbols routinely do — lands on top of a
@@ -960,16 +1001,10 @@ public final class TerminalRenderer {
         for (int row = topRow; row < endRow; row++) {
             heightOffset += mFontLineSpacing;
             cursorSpanFor(span, cursorBlock, row, cursorRow, cursorCol, cursorVisible);
-            int selx1 = -1, selx2 = -1;
-            if (row >= selectionY1 && row <= selectionY2) {
-                if (row == selectionY1)
-                    selx1 = selectionX1;
-                selx2 = (row == selectionY2) ? selectionX2 : mEmulator.mColumns;
-            }
             TerminalRow lineObject = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
             drawRowBackgroundAndCursor(canvas, lineObject, palette, heightOffset, columns,
                 span.column, span.columns, span.lastRow,
-                cursorShape, selx1, selx2, boldWithBright, reverseVideo, horizontalOffset,
+                cursorShape, selection, row, boldWithBright, reverseVideo, horizontalOffset,
                 palette[TextStyle.COLOR_INDEX_CURSOR]);
         }
         heightOffset = mFontLineSpacingAndAscent;
@@ -988,7 +1023,7 @@ public final class TerminalRenderer {
                 cursorVisible, cursorShape, selx1, selx2, boldWithBright, reverseVideo,
                 horizontalOffset, false, mUrlUnderlines.segmentsFor(row - topRow));
             drawRowTextBlocks(canvas, screen, lineObject, palette, heightOffset, row, topRow,
-                columns, span.column, span.columns, cursorShape, selx1, selx2, boldWithBright,
+                columns, span.column, span.columns, cursorShape, selection, boldWithBright,
                 reverseVideo, horizontalOffset);
         }
         drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
@@ -1064,9 +1099,21 @@ public final class TerminalRenderer {
         final TerminalBuffer.TextBlock cursorBlock =
             cursorVisible ? screen.getTextBlockAt(cursorRow, cursorCol) : null;
         final CursorSpan span = mCursorSpan;
+        final Selection selection = mSelection;
+        selection.set(selectionY1, selectionY2, selectionX1, selectionX2);
         // D4 B: the rows a block spans are one cached node, so every row is compared before any is
         // recorded — a change in a row under a block has to re-record the row that draws it.
         final boolean[] changedRows = changedRowsBuffer(visibleRows);
+        // A block's cells are filled from its anchor cell, which the selection may reach without
+        // touching the row the cell is on — and the anchor can even be above the top of the pane.
+        // So a row carrying a block is compared against the whole selection, not its own slice.
+        final boolean selectionMoved = mCachedSelectionY1 != selectionY1
+            || mCachedSelectionY2 != selectionY2 || mCachedSelectionX1 != selectionX1
+            || mCachedSelectionX2 != selectionX2;
+        mCachedSelectionY1 = selectionY1;
+        mCachedSelectionY2 = selectionY2;
+        mCachedSelectionX1 = selectionX1;
+        mCachedSelectionX2 = selectionX2;
         for (int index = 0; index < visibleRows; index++) {
             final int row = topRow + index;
             cursorSpanFor(span, cursorBlock, row, cursorRow, cursorCol, cursorVisible);
@@ -1080,7 +1127,8 @@ public final class TerminalRenderer {
                 screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
             changedRows[index] = mRowCache.rowChanged(index, lineObject, columns, span.column,
                 span.columns, span.lastRow, cursorShape, cursorColor, selx1, selx2,
-                mUrlUnderlines.keyFor(index));
+                mUrlUnderlines.keyFor(index))
+                || (selectionMoved && lineObject.hasTextSizes());
         }
         mRowCache.spreadTextBlockGroups(changedRows);
         for (int index = 0; index < visibleRows; index++) {
@@ -1138,8 +1186,8 @@ public final class TerminalRenderer {
             Canvas into = background.beginRecording(viewWidth, viewHeight);
             try {
                 drawRowBackgroundAndCursor(into, lineObject, palette, heightOffset, columns,
-                    cursorX, span.columns, span.lastRow, cursorShape, selx1, selx2, boldWithBright,
-                    reverseVideo, horizontalOffset, cursorColor);
+                    cursorX, span.columns, span.lastRow, cursorShape, selection, row,
+                    boldWithBright, reverseVideo, horizontalOffset, cursorColor);
             } finally {
                 background.endRecording();
             }
@@ -1152,7 +1200,7 @@ public final class TerminalRenderer {
                 // in the view's own coordinates and never clipped to their row, so the tall layer
                 // D4 asks for is this one node — which is why the whole group was dirtied above.
                 drawRowTextBlocks(into, screen, lineObject, palette, heightOffset, row, topRow,
-                    columns, cursorX, span.columns, cursorShape, selx1, selx2, boldWithBright,
+                    columns, cursorX, span.columns, cursorShape, selection, boldWithBright,
                     reverseVideo, horizontalOffset);
             } finally {
                 glyphs.endRecording();
@@ -1575,7 +1623,7 @@ public final class TerminalRenderer {
     private void drawRowTextBlocks(Canvas canvas, TerminalBuffer screen, TerminalRow lineObject,
                                    int[] palette, float y, int externalRow, int topRow,
                                    int columns, int cursorX, int cursorColumns, int cursorShape,
-                                   int selx1, int selx2, boolean boldWithBright,
+                                   Selection selection, boolean boldWithBright,
                                    boolean reverseVideo, float horizontalOffset) {
         if (!lineObject.hasTextSizes()) return;
         for (int column = 0; column < columns; column++) {
@@ -1586,8 +1634,8 @@ public final class TerminalRenderer {
             if (block.row != externalRow
                 && !(externalRow == topRow && block.row < topRow)) continue;
             final boolean insideCursor = cursorColumns > 1 && cursorX == block.column;
-            final boolean insideSelection = block.column <= selx2
-                && block.column + block.columns - 1 >= selx1;
+            // A block is one selection unit, so its anchor cell answers for all of it.
+            final boolean insideSelection = selection.coversAnchor(block.row, block.column);
             final boolean invert = reverseVideo || insideSelection
                 || (insideCursor
                     && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK);
@@ -2231,7 +2279,8 @@ public final class TerminalRenderer {
     private void drawRowBackgroundAndCursor(Canvas canvas, TerminalRow lineObject, int[] palette,
                                             float y, int columns, int cursorX, int cursorColumns,
                                             boolean cursorLastRow, int cursorShape,
-                                            int selx1, int selx2, boolean boldWithBright,
+                                            Selection selection, int externalRow,
+                                            boolean boldWithBright,
                                             boolean reverseVideo, float horizontalOffset,
                                             int cursorColor) {
         final char[] line = lineObject.mText;
@@ -2265,7 +2314,9 @@ public final class TerminalRenderer {
             final boolean insideCursor = cursorX >= 0
                 && ((column >= cursorX && column < cursorX + cursorColumns)
                     || (codePointWcWidth == 2 && cursorX == column + 1));
-            final boolean insideSelection = column >= selx1 && column <= selx2;
+            // A cell of a block is filled when its anchor is, which is how the rows under a tall
+            // block come to be highlighted at all: the selection itself never reaches them.
+            final boolean insideSelection = selection.covers(lineObject, externalRow, column);
             final boolean invertCursorTextColor = insideCursor
                 && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
             final int backColor = (int) resolveRunColors(style, palette, boldWithBright,
