@@ -11,6 +11,10 @@ import android.os.SystemClock;
 import androidx.annotation.Nullable;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -83,6 +87,9 @@ final class KittyGraphicsProtocol {
             case 'd': case 'q': case 'p': case 'a': case 'c':
                 return STREAM_BUFFER;
         }
+        // t=f/t=t carry a file path, not pixels: a handful of bytes the buffered path reads (and
+        // answers) whole, and t=s still has to reach its ENOSYS answer in uploadTargetFor.
+        if (command.medium != 'd') return STREAM_BUFFER;
         Upload target = uploadTargetFor(command);
         if (target == null) return STREAM_REJECT;
         streamUpload = target;
@@ -171,13 +178,7 @@ final class KittyGraphicsProtocol {
             return;
         }
         upload = null;
-        if (target.command.action == 'f') {
-            submitFrame(target.command, target.data.toByteArray());
-        } else if (target.command.format == 100) {
-            submitPng(target.command, target.data.toByteArray());
-        } else {
-            submitRaw(target.command, target.data.toByteArray());
-        }
+        dispatchCompleted(target);
     }
 
     /**
@@ -242,8 +243,8 @@ final class KittyGraphicsProtocol {
             reply(command, "EINVAL:U is only valid for display commands", true, false);
             return null;
         }
-        if (command.medium != 'd') {
-            reply(command, "ENOSYS:only direct transmission is supported", true, false);
+        if (!isSupportedMedium(command.medium)) {
+            reply(command, "ENOSYS:unsupported transmission medium", true, false);
             return null;
         }
         if (command.format != 100 && command.format != 24 && command.format != 32) {
@@ -335,17 +336,121 @@ final class KittyGraphicsProtocol {
             return;
         }
         upload = null;
+        dispatchCompleted(target);
+    }
+
+    /**
+     * A completed transmission's payload, dispatched to the right submit path. For t=f/t=t the
+     * bytes collected were a file path and the pixels come from that file instead.
+     */
+    private void dispatchCompleted(Upload target) {
+        byte[] transmitted = target.data.toByteArray();
+        if (target.command.medium != 'd') {
+            transmitted = readTransmissionFile(target.command, transmitted, false);
+            if (transmitted == null) return; // readTransmissionFile already answered.
+        }
         if (target.command.action == 'f') {
-            submitFrame(target.command, target.data.toByteArray());
+            submitFrame(target.command, transmitted);
         } else if (target.command.format == 100) {
-            submitPng(target.command, target.data.toByteArray());
+            submitPng(target.command, transmitted);
         } else {
-            submitRaw(target.command, target.data.toByteArray());
+            submitRaw(target.command, transmitted);
         }
     }
 
+    private static boolean isSupportedMedium(char medium) {
+        return medium == 'd' || medium == 'f' || medium == 't';
+    }
+
+    /**
+     * Resolve a file transmission ({@code t=f}, and {@code t=t} for a file the terminal consumes):
+     * the payload was the base64 of a path, and the pixel data is that file's contents windowed by
+     * {@code O=} (offset) and {@code S=} (size). Returns null after replying when the file cannot be
+     * used. Reading is synchronous, exactly as a direct payload's bytes arrive synchronously —
+     * nothing downstream can start without the PNG header — so it is held to a regular file and to
+     * the same {@link #MAX_TRANSMITTED_BYTES} ceiling: a FIFO or a device node would otherwise park
+     * the terminal thread forever on a read that never ends.
+     */
+    @Nullable
+    private byte[] readTransmissionFile(Command command, byte[] pathBytes, boolean always) {
+        String path = new String(pathBytes, StandardCharsets.UTF_8);
+        if (path.isEmpty()) {
+            reply(command, "EINVAL:file transmission requires a path", true, always);
+            return null;
+        }
+        File file;
+        try {
+            file = new File(path).getCanonicalFile();
+        } catch (IOException | SecurityException e) {
+            reply(command, "EBADF:cannot read transmission file", true, always);
+            return null;
+        }
+        // t=t hands the file over, but the restriction the spec puts on it is on the deletion, not
+        // on the read — a client that may name a path for t=f may name the same path for t=t. So an
+        // unsafe path is read and left alone rather than refused: only a file written for this
+        // protocol, in a temporary directory, is ever deleted.
+        boolean deletable = command.medium == 't' && isProtocolTempFile(file);
+        byte[] data = null;
+        String error = null;
+        try {
+            if (!file.isFile()) {
+                error = "EBADF:cannot read transmission file";
+            } else {
+                long length = file.length();
+                long offset = command.fileOffset;
+                long wanted = command.fileSize > 0
+                    ? Math.min((long) command.fileSize, Math.max(0, length - offset))
+                    : Math.max(0, length - offset);
+                if (offset < 0 || offset > length || wanted <= 0) {
+                    error = "EINVAL:file transmission window is empty";
+                } else if (wanted > MAX_TRANSMITTED_BYTES) {
+                    error = "ENOSPC:image exceeds transmission limit";
+                } else {
+                    data = new byte[(int) wanted];
+                    try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+                        input.seek(offset);
+                        input.readFully(data);
+                    }
+                }
+            }
+        } catch (IOException | RuntimeException | OutOfMemoryError e) {
+            data = null;
+            error = "EBADF:cannot read transmission file";
+        } finally {
+            // Deleted whether or not it could be read: the client handed the file over.
+            if (deletable) //noinspection ResultOfMethodCallIgnored
+                file.delete();
+        }
+        if (data == null) {
+            reply(command, error, true, always);
+            return null;
+        }
+        return data;
+    }
+
+    /**
+     * kitty only deletes a {@code t=t} file whose path carries the protocol marker and sits in a
+     * temporary directory. On Android the platform temporary
+     * directory is the package's own {@code files/usr/tmp} — what {@code $TMPDIR} points at inside
+     * the app's shell — so it counts alongside the desktop's {@code /tmp} and {@code /dev/shm}.
+     */
+    private static boolean isProtocolTempFile(File file) {
+        String path = file.getPath();
+        if (!path.contains("tty-graphics-protocol")) return false;
+        return isUnder(path, "/tmp") || isUnder(path, "/dev/shm")
+            || isUnder(path, System.getenv("TMPDIR"))
+            || isUnder(path, System.getProperty("java.io.tmpdir"))
+            || path.contains("/files/usr/tmp/");
+    }
+
+    private static boolean isUnder(String path, @Nullable String root) {
+        if (root == null || root.isEmpty()) return false;
+        String prefix = root.endsWith("/") ? root : root + "/";
+        return path.startsWith(prefix);
+    }
+
     private void handleQuery(Command command, String payload) {
-        if (command.medium != 'd') {
+        if (!isSupportedMedium(command.medium)) {
             reply(command, "ENOSYS:unsupported transmission medium", true, true);
             return;
         }
@@ -355,6 +460,12 @@ final class KittyGraphicsProtocol {
         } catch (IllegalArgumentException e) {
             reply(command, "EINVAL:invalid base64 payload", true, true);
             return;
+        }
+        if (command.medium != 'd') {
+            // A query names a file exactly as a transmission does — including the temp-file rule
+            // and the deletion, so a probing client leaves no scratch file behind.
+            decoded = readTransmissionFile(command, decoded, true);
+            if (decoded == null) return; // readTransmissionFile already answered.
         }
         if (command.compression != 0 && command.compression != 'z') {
             reply(command, "ENOSYS:unsupported compression", true, true);
@@ -1740,6 +1851,8 @@ final class KittyGraphicsProtocol {
         final int cellOffsetY;
         final int z;
         final int placeholder;
+        final int fileSize;
+        final int fileOffset;
 
         private Command(Map<Character, String> values) {
             this.values = values;
@@ -1766,6 +1879,9 @@ final class KittyGraphicsProtocol {
             cellOffsetY = integer(values, 'Y', 0);
             z = integer(values, 'z', 0);
             placeholder = integer(values, 'U', 0);
+            // t=f/t=t window into the named file: S bytes from offset O, 0 meaning "to the end".
+            fileSize = integer(values, 'S', 0);
+            fileOffset = integer(values, 'O', 0);
             if (quiet < 0 || quiet > 2) throw new IllegalArgumentException("invalid q value");
         }
 
