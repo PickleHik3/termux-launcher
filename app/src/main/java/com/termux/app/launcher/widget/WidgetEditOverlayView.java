@@ -175,6 +175,17 @@ public final class WidgetEditOverlayView extends View {
         invalidate();
     }
 
+    /**
+     * Hands this view back the drag it was holding. A page turning under a dragged widget takes
+     * the chrome down and puts it up again mid-gesture, and {@link #hide()} forgets what the
+     * stream was doing; without this the finger still on the screen moved nothing.
+     */
+    public void resumeMoveDrag() {
+        mode = Mode.MOVE;
+        dragging = true;
+        invalidate();
+    }
+
     public void setFrameBounds(@NonNull Rect bounds) { frame.set(bounds); invalidate(); }
 
     @NonNull public Rect frameBounds() { return new Rect(frame); }

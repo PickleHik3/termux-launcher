@@ -185,6 +185,13 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     }
     private final android.graphics.RectF mHelpButtonBounds = new android.graphics.RectF();
 
+    /** Where the tick or the cross sits on the editing tab; false when neither is out. */
+    @androidx.annotation.VisibleForTesting
+    boolean editExitButtonBounds(boolean keep, @NonNull RectF out) {
+        return mControls != null && mControls.actionBounds(keep ? ACTION_COMMIT : ACTION_DISCARD,
+            out);
+    }
+
     public void dismissControls() {
         dismissGridSizePopup();
         if (mControls != null) mControls.dismiss();

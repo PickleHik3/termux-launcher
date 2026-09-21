@@ -1,0 +1,251 @@
+package com.termux.app.launcher.widget;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
+
+import android.app.Activity;
+import android.app.Application;
+import android.graphics.Rect;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Looper;
+import android.view.MotionEvent;
+import android.view.View;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.Shadows;
+import org.robolectric.annotation.Config;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * A widget held against the pane's edge while it is being dragged turns the page under it, and the
+ * drop lands it on whatever page it ended over. A page with no room for it refuses in red and
+ * springs the widget home.
+ */
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = Build.VERSION_CODES.S, application = Application.class)
+public class WidgetCrossPageDragTest {
+    private static final int PANE_WIDTH = 600;
+    private static final int PANE_HEIGHT = 800;
+    /** Comfortably past the 350 ms the edge band waits before it turns the page. */
+    private static final long PAST_THE_EDGE_PAUSE_MS = 400L;
+
+    @Test public void holdingAWidgetAtTheEdgeTurnsThePageAndTheDropLandsItThere() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
+        fixture.repository.trimSparePages();
+        fixture.renderAndLayout();
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+        assertEquals(2, fixture.repository.pageCount());
+
+        Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
+        fixture.down(home.centerX(), home.centerY());
+        fixture.move(PANE_WIDTH - 5, home.centerY());
+        fixture.settle();
+
+        assertEquals("the page turned under the finger", 1, fixture.controller.currentPage());
+        assertTrue("the widget is in the air, not on either page",
+            fixture.pane.widgetDragLayer().isLifted());
+        assertNotNull("the target page shows where it would land",
+            fixture.pane.widgetEditOverlay().ghostBounds());
+        assertFalse(fixture.pane.widgetEditOverlay().ghostBlocked());
+        assertTrue("the session is still the user's", fixture.pane.widgetEditActive());
+
+        fixture.up(PANE_WIDTH - 5, home.centerY());
+
+        assertEquals("the widget landed on the page it was carried to",
+            1, fixture.repository.get(1).page);
+        assertEquals("and a fresh spare followed it", 3, fixture.repository.pageCount());
+        assertEquals(1, fixture.controller.currentPage());
+        assertFalse(fixture.pane.widgetDragLayer().isLifted());
+        assertEquals("the session never ended", List.of(true), fixture.announced);
+    }
+
+    @Test public void leavingTheBandStopsThePageTurning() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
+        fixture.repository.trimSparePages();
+        fixture.renderAndLayout();
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+
+        Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
+        fixture.down(home.centerX(), home.centerY());
+        fixture.move(PANE_WIDTH - 5, home.centerY());
+        fixture.move(PANE_WIDTH / 2, home.centerY());
+        fixture.settle();
+
+        assertEquals("the finger left the band before the pause was up",
+            0, fixture.controller.currentPage());
+        assertFalse(fixture.pane.widgetDragLayer().isLifted());
+
+        fixture.up(PANE_WIDTH / 2, home.centerY());
+        assertEquals(0, fixture.repository.get(1).page);
+    }
+
+    @Test public void aPageWithNoRoomRefusesInRedAndSendsTheWidgetHome() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
+        // Page 1 is full to its last cell, so nothing can be put down on it.
+        fixture.put(2, new WidgetCellRect(0, 0, 4, 5), 1);
+        fixture.repository.trimSparePages();
+        fixture.renderAndLayout();
+        fixture.controller.setCurrentPage(0);
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+
+        Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
+        fixture.down(home.centerX(), home.centerY());
+        fixture.move(PANE_WIDTH - 5, home.centerY());
+        fixture.settle();
+
+        assertEquals(1, fixture.controller.currentPage());
+        assertTrue("the ghost says the page has no room",
+            fixture.pane.widgetEditOverlay().ghostBlocked());
+
+        fixture.up(PANE_WIDTH - 5, home.centerY());
+
+        assertEquals("the widget stayed where it was", 0, fixture.repository.get(1).page);
+        assertEquals(new WidgetCellRect(0, 0, 1, 1), fixture.repository.get(1).cell);
+        assertEquals("and the page came back with it", 0, fixture.controller.currentPage());
+        assertEquals("No room on this page.", fixture.noticeText());
+    }
+
+    @Test public void theEdgeStopsAtTheLastPage() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
+        fixture.repository.trimSparePages();
+        fixture.renderAndLayout();
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+
+        Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
+        fixture.down(home.centerX(), home.centerY());
+        // Held at the trailing edge long enough for three turns; there are only two pages.
+        fixture.move(PANE_WIDTH - 5, home.centerY());
+        fixture.settle();
+        fixture.settle();
+        fixture.settle();
+
+        assertEquals(1, fixture.controller.currentPage());
+        fixture.up(PANE_WIDTH - 5, home.centerY());
+        assertEquals(1, fixture.repository.get(1).page);
+    }
+
+    @Test public void theLeadingEdgeCarriesAWidgetBackAPage() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 1);
+        fixture.repository.trimSparePages();
+        fixture.renderAndLayout();
+        fixture.controller.setCurrentPage(1);
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+
+        Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
+        fixture.down(home.centerX(), home.centerY());
+        fixture.move(5, home.centerY());
+        fixture.settle();
+        assertEquals(0, fixture.controller.currentPage());
+        fixture.up(5, home.centerY());
+
+        assertEquals(0, fixture.repository.get(1).page);
+        assertEquals("the page it left was the last populated one, so the run shrank",
+            2, fixture.repository.pageCount());
+    }
+
+    private static final class Fixture {
+        final Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        final LauncherWidgetRepository repository;
+        final LauncherWidgetHostController widgets;
+        final WidgetPaneView pane;
+        final WidgetPaneController controller;
+        final List<Boolean> announced = new ArrayList<>();
+        private final int[] paneLocation = new int[2];
+
+        Fixture() {
+            activity.setTheme(com.termux.R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+            repository = WidgetTestFixtures.repository();
+            WidgetTestFixtures.Platform platform = new WidgetTestFixtures.Platform(activity);
+            widgets = new LauncherWidgetHostController(activity, repository, platform);
+            pane = new WidgetPaneView(activity);
+            activity.setContentView(pane);
+            controller = new WidgetPaneController(pane, widgets, new WidgetPaneController.Host() {
+                @Override public boolean reducedMotion() { return true; }
+                @Override public boolean isWidgetSurfaceShowing() { return true; }
+                @Override public void captureWidgetSurfaceOrigin() { }
+                @Override public void restoreWidgetSurfaceOrigin() { }
+                @Override public void onWidgetEditSessionChanged(boolean editing) {
+                    announced.add(editing);
+                }
+            });
+        }
+
+        void put(int appWidgetId, WidgetCellRect cell, int page) {
+            while (repository.pageCount() <= page) assertTrue(repository.addPage() >= 0);
+            assertTrue(repository.putRecord(new LauncherWidgetRecord(appWidgetId,
+                WidgetTestFixtures.PROVIDER, 0, LauncherWidgetRecord.State.PROVIDER_MISSING,
+                cell, page, new Bundle(), null)));
+        }
+
+        void renderAndLayout() {
+            controller.onWidgetRepositoryChanged(
+                LauncherWidgetHostController.AddResult.IGNORED);
+            layout();
+        }
+
+        void layout() {
+            pane.measure(View.MeasureSpec.makeMeasureSpec(PANE_WIDTH, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(PANE_HEIGHT, View.MeasureSpec.EXACTLY));
+            pane.layout(0, 0, PANE_WIDTH, PANE_HEIGHT);
+        }
+
+        Rect paneBounds(WidgetCellRect cell) {
+            Rect bounds = pane.grid().metrics().boundsFor(cell);
+            bounds.offset(pane.grid().getLeft(), pane.grid().getTop());
+            return bounds;
+        }
+
+        /** The edge bands are measured off the pane, so the raw stream has to be too. */
+        private float raw(float paneX) {
+            pane.getLocationOnScreen(paneLocation);
+            return paneX + paneLocation[0];
+        }
+
+        void down(float x, float y) {
+            dispatch(MotionEvent.ACTION_DOWN, x, y, 0L);
+        }
+
+        void move(float paneX, float y) {
+            dispatch(MotionEvent.ACTION_MOVE, raw(paneX), y, 20L);
+        }
+
+        void up(float paneX, float y) {
+            dispatch(MotionEvent.ACTION_UP, raw(paneX), y, 40L);
+        }
+
+        private void dispatch(int action, float x, float y, long time) {
+            MotionEvent event = MotionEvent.obtain(0L, time, action, x, y, 0);
+            pane.widgetEditOverlay().dispatchTouchEvent(event);
+            event.recycle();
+        }
+
+        void settle() {
+            Shadows.shadowOf(Looper.getMainLooper())
+                .idleFor(PAST_THE_EDGE_PAUSE_MS, TimeUnit.MILLISECONDS);
+        }
+
+        String noticeText() {
+            android.widget.TextView notice = pane.findViewById(com.termux.R.id.widget_pane_notice);
+            return notice.getVisibility() == View.VISIBLE ? notice.getText().toString() : null;
+        }
+    }
+}

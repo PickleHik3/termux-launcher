@@ -100,7 +100,7 @@ keys row are the way back to the terminal without the status bar.
 | Widget grid | Exact-cell host for app widgets, non-scrolling | widgets take their own touches | fills the page | — |
 | Empty hint | "Add a widget" message | — | centred | — |
 | Page dots | More than one widget page | sideways swipe pages | bottom centre | — |
-| Long-press menu | Add widget · Edit widgets · Add page · Remove page | long-press empty grid | popup at the touch point | — |
+| Long-press menu | Add widget · Edit widgets · Remove page | long-press empty grid | popup at the touch point | — |
 | Page corners → tab | **Cog** (layout settings at the widget grid), **pencil** (edit widgets), **sliders** (Appearance for this place), **grid** (Layout for this place), **?** (help); while editing, a grid-size read-out and ? | hold a corner, then tap a button | any of the page's four corners | — |
 | Edit mode | Move widgets by whole cells, resize by edge handles | long-press a widget, drag; drag a handle | on the grid | — |
 | Status bar | Bare: no badge, no chips; stats centred and reversed | — | — | — |

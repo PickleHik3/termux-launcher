@@ -864,7 +864,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         WidgetEditOverlayView overlay = pane.widgetEditOverlay();
         overlay.setListener(overlayListener);
         overlay.show(new Rect(), false, false, editableOutlines(edit.appWidgetId), false);
-        overlay.setDragging(true);
+        overlay.resumeMoveDrag();
     }
 
     @NonNull private String messageFor(LauncherWidgetHostController.AddResult result) {
