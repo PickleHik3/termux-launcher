@@ -1,21 +1,20 @@
-# P1 text sizing model (feat/text-sizing-model)
+# P1 text sizing model (feat/text-sizing-model) - done
 
 ## Done
-- `KittyTextSizing.java`: OSC 66 parser, grapheme split, cell measuring/cutting, the packed record.
-- `TerminalRow`: `mTextSizes` side table + typed accessors; cleared by `clear`/`setChar`; `widenCell`
-  refuses sized cells; `setBlockAnchorChar` stores a whole block text in one cell.
+- `KittyTextSizing`: OSC 66 parser, grapheme split, cell measure/cut, the packed size record.
+- `TerminalRow`: `mTextSizes` side table + typed accessors; cleared by `clear`/`setChar`;
+  `widenCell` refuses sized cells; `setBlockAnchorChar` keeps a whole block text in one cell.
 - `TerminalBuffer`: `TextBlock`, `getTextBlockAt`, `getTextBlockText`, `writeTextBlock`,
-  `isAreaBlank`, `dropTextBlocksIn`; drops wired into `setChar`/`blockCopy`/`blockSet`/
-  `scrollDownOneLine`; D5 selection; D3 reflow replay with demote/promote.
+  `isAreaBlank`, `dropTextBlocksIn`, wired into `setChar`/`blockCopy`/`blockSet`/
+  `scrollDownOneLine`; D5 selection; D3 reflow with demote/promote.
 - `TerminalEmulator`: OSC 66 case, `doTextSizing`/`writeTextSizeBlock`, REP of a block.
-- `TerminalTestCase.assertInvariants` uses stored widths on rows with blocks.
-
-## In progress
-- Nothing.
+- `KittyTextSizingTest` (37 tests); `assertInvariants` uses stored widths on rows with blocks.
+- Suite: 474 tests green (437 before), terminal-view green.
 
 ## Next
-- `KittyTextSizingTest` covering every protocol rule; run `:terminal-emulator:testDebugUnitTest`.
+- Nothing here. P2 (renderer) builds on the contract in the final report.
 
 ## Gotchas
 - The anchor holds the whole text as one cluster at stored width 1; never use `WcWidth` on it.
 - Records are stamped after the text is written, or `setChar` would drop the block being written.
+- `getWordAtLocation`'s fixed-width column maths is off on rows that carry blocks.
