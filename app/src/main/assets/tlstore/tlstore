@@ -1559,7 +1559,7 @@ browse_view() {
     bf_list="$CACHE_DIR/browse.tsv"
     if [ "$(term_cols)" -lt 80 ]; then
         bf_preview="down:60%"
-        bf_header="Tab mark  Enter install  Ctrl-R remove  ? keys"
+        bf_header="Tab mark  Enter install  ? keys"
     else
         bf_preview="right:55%"
         bf_header="Tab mark   Enter install   Ctrl-R remove   Ctrl-U update   Ctrl-F list   ? keys"
