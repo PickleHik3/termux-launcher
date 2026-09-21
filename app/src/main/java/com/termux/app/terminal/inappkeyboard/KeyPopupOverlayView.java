@@ -63,8 +63,11 @@ public final class KeyPopupOverlayView extends View {
     private static final float EXIT_RISE_DP = 10f;
     private static final float ENTER_FROM_SCALE = 0.82f;
     private static final float EXIT_TO_SCALE = 0.9f;
-    private static final float SHADOW_RADIUS_DP = 3f;
-    private static final float SHADOW_DY_DP = 1f;
+    /** The glow that wraps the glyph: a wide faint pass and a tight brighter one, both in the accent. */
+    private static final float GLOW_OUTER_DP = 7f;
+    private static final float GLOW_OUTER_ALPHA = 0.28f;
+    private static final float GLOW_INNER_DP = 2.5f;
+    private static final float GLOW_INNER_ALPHA = 0.7f;
     /** Slack round the glyph's box when asking for a repaint: the shadow and the rise. */
     private static final float INVALIDATE_PAD_DP = 10f;
 
@@ -280,14 +283,22 @@ public final class KeyPopupOverlayView extends View {
         paint.setTypeface(faceFor(labelKeyFont, metrics.monospace && !usesLabelFont(label),
             metrics.weight));
         paint.setTextSize(metrics.glyphSizePx);
-        paint.setColor(mPalette.primary);
-        paint.setAlpha(Math.round(Color.alpha(mPalette.primary) * alpha));
-        paint.setShadowLayer(SHADOW_RADIUS_DP * density, 0f, SHADOW_DY_DP * density,
-            ColorUtils.setAlphaComponent(mPalette.shadow,
-                Math.round(Color.alpha(mPalette.shadow) * alpha)));
         float baseline = popup.anchorY + dy - (paint.ascent() + paint.descent()) / 2f;
+        // The glow follows the letterform: the same text, drawn once more underneath with a soft
+        // zero-offset shadow in the accent, so the light hugs the glyph rather than sitting in a
+        // disc behind it. Two passes: a wide faint one for separation from the caps, a tight one
+        // for the edge.
+        paint.setColor(Color.TRANSPARENT);
+        paint.setShadowLayer(GLOW_OUTER_DP * density, 0f, 0f,
+            ColorUtils.setAlphaComponent(mPalette.primary, Math.round(255f * GLOW_OUTER_ALPHA * alpha)));
+        canvas.drawText(label, popup.anchorX, baseline, paint);
+        paint.setShadowLayer(GLOW_INNER_DP * density, 0f, 0f,
+            ColorUtils.setAlphaComponent(mPalette.primary, Math.round(255f * GLOW_INNER_ALPHA * alpha)));
         canvas.drawText(label, popup.anchorX, baseline, paint);
         paint.clearShadowLayer();
+        paint.setColor(mPalette.ink);
+        paint.setAlpha(Math.round(Color.alpha(mPalette.ink) * alpha));
+        canvas.drawText(label, popup.anchorX, baseline, paint);
     }
 
     /**
@@ -314,10 +325,11 @@ public final class KeyPopupOverlayView extends View {
         int cacheKey = (keyFont ? 1024 : 0) | (monospace ? 2048 : 0) | weight;
         Typeface cached = mFaces.get(cacheKey);
         if (cached != null) return cached;
-        Typeface base = keyFont ? mKeyFont : (monospace ? Typeface.MONOSPACE : mLabelFont);
-        if (base == null) base = monospace ? Typeface.MONOSPACE : Typeface.DEFAULT;
-        Typeface face = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
-            ? Typeface.create(base, weight, false) : base;
+        // The keyboard's own label face as the caps draw it, never a synthesized weight or a
+        // substitute family: a custom font from Settings must look identical on the popup.
+        Typeface base = keyFont ? mKeyFont : mLabelFont;
+        if (base == null) base = Typeface.DEFAULT;
+        Typeface face = base;
         mFaces.put(cacheKey, face);
         return face;
     }

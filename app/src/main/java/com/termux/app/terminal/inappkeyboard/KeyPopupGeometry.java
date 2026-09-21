@@ -36,10 +36,12 @@ public final class KeyPopupGeometry {
     /** The four size tiers, by how many characters the label has. */
     public static Metrics metricsFor(String label, float density) {
         int n = label == null ? 0 : label.length();
-        if (n <= 1) return new Metrics(30f * density, 300, false);
-        if (n == 2) return new Metrics(20f * density, 400, true);
-        if (n <= 4) return new Metrics(14f * density, 500, true);
-        return new Metrics(12f * density, 500, true);
+        // Always the keyboard's own label face, so a custom font set in Settings shows in the
+        // popup exactly as it does on the caps; only the size steps with the label's length.
+        if (n <= 1) return new Metrics(26f * density, 400, false);
+        if (n == 2) return new Metrics(17f * density, 400, false);
+        if (n <= 4) return new Metrics(13f * density, 400, false);
+        return new Metrics(11f * density, 400, false);
     }
 
     /**
