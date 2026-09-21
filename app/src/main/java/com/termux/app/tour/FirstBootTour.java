@@ -205,6 +205,14 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mController.startIfNeeded();
     }
 
+    /**
+     * Whether the run is going or still waiting to be offered. Anything else that would put a card
+     * of its own up on the way in holds off while this is true, so the two never talk at once.
+     */
+    public boolean isRunPending() {
+        return mController.isOffered() || mController.isRunning();
+    }
+
     /** Starts the run from card one, whatever came before: what Replay will ask for. */
     public void restart() {
         if (waitForHelpToClose(this::restart)) return;

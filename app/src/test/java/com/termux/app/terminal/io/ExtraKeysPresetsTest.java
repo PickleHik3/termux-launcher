@@ -61,6 +61,32 @@ public class ExtraKeysPresetsTest {
         assertTrue(ExtraKeysPresets.presetsForPage(1).get(0).model().isEmpty());
     }
 
+    /** The undo for the row card: offered first, and only when there is something to undo to. */
+    @Test
+    public void theRowFromBeforeTheUpdateLeadsThePresetsWhenThereIsOne() {
+        List<ExtraKeysPresets.Preset> none = ExtraKeysPresets.presetsForPage(0, null);
+        assertEquals(4, none.size());
+        assertEquals(com.termux.R.string.settings_extra_keys_preset_launcher, none.get(0).titleRes);
+        assertEquals(none.size(), ExtraKeysPresets.presetsForPage(0).size());
+
+        List<ExtraKeysPresets.Preset> saved =
+            ExtraKeysPresets.presetsForPage(0, ExtraKeysPresets.CLASSIC_TERMUX);
+        assertEquals(5, saved.size());
+        assertEquals(com.termux.R.string.settings_extra_keys_preset_previous, saved.get(0).titleRes);
+        assertEquals(ExtraKeysPresets.CLASSIC_TERMUX, saved.get(0).pageValue);
+        assertEquals(ExtraKeysLayoutModel.parse(ExtraKeysPresets.CLASSIC_TERMUX).keyCount(),
+            saved.get(0).model().keyCount());
+    }
+
+    @Test
+    public void anEmptySavedRowIsNotOfferedBack() {
+        for (String nothing : new String[]{"", "   ", "[]", "[[]]"}) {
+            assertEquals("saved row " + nothing, 4,
+                ExtraKeysPresets.presetsForPage(0, nothing).size());
+            assertEquals(4, ExtraKeysPresets.presetsForPage(1, nothing).size());
+        }
+    }
+
     @Test
     public void modifiersAndRowControlsAreNamedKeys() {
         for (String name : ExtraKeysPresets.MODIFIER_KEYS) assertTrue(ExtraKeyActionLabels.isNamedKey(name));

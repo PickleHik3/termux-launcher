@@ -1339,6 +1339,27 @@ public final class TermuxPreferenceConstants {
          * than a flag so a later run can be offered to someone who saw an earlier one; an install
          * that already has a launcher on it is never shown a run it did not opt into.
          */
+        /**
+         * Whether the one-time card asking whether to take this release's key row has been
+         * answered. The trailing number is this release's asking: a later release that wants to
+         * ask again bumps it, and everyone is offered the new row once more.
+         */
+        public static final String KEY_EXTRA_KEYS_DEFAULT_OFFERED = "extra_keys_default_offered_1";
+
+        public static final boolean DEFAULT_VALUE_EXTRA_KEYS_DEFAULT_OFFERED = false;
+
+        /**
+         * The key row the user had before they accepted this release's row, one entry per toolbar
+         * page, so the editor can offer it back as a preset. Empty until the card is accepted; it
+         * survives applying the preset, which only fills the editor's draft.
+         */
+        public static final String[] KEY_PREVIOUS_EXTRA_KEYS = {
+            "previous_extra_keys",
+            "previous_extra_keys_2",
+        };
+
+        public static final String DEFAULT_VALUE_PREVIOUS_EXTRA_KEYS = "";
+
         public static final String KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION =
             "first_boot_tour_completed_version";
         public static final int DEFAULT_FIRST_BOOT_TOUR_COMPLETED_VERSION = 0;
