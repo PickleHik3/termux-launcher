@@ -208,6 +208,18 @@ public class X11CliInstallerTest {
             java.nio.file.Paths.get("profile-2-link"));
     }
 
+    /** An executable in the profile's bin, reached the way a merged nix profile reaches one. */
+    private File profileBin(File prefix, String name) throws IOException {
+        File real = new File(prefix, "nix/store/zzzz-" + name + "/bin/" + name);
+        assertTrue(real.getParentFile().mkdirs());
+        Files.write(real.toPath(), "#!/bin/sh\n".getBytes(StandardCharsets.UTF_8));
+        assertTrue(real.setExecutable(true));
+        File env = new File(prefix, "nix/store/c7ly-user-environment");
+        Files.createSymbolicLink(new File(env, "bin").toPath(),
+            java.nio.file.Paths.get("/nix/store/zzzz-" + name + "/bin"));
+        return real;
+    }
+
     /** An {@code xkeyboard-config} store entry, as a switch leaves one. */
     private File xkeyboardConfig(File prefix, String name) {
         File xkb = new File(prefix, "nix/store/" + name + "/share/X11/xkb");
@@ -357,11 +369,55 @@ public class X11CliInstallerTest {
         assertFalse(X11CliInstaller.hasKeyboardData(prefix));
     }
 
+    /**
+     * The server execs {@code -xstartup} from Android's side and refuses an argument past about
+     * 128 characters, so on nix the whole login line is baked into a wrapper and the argument is
+     * that one short path.
+     */
+    @Test public void aNixPrefixGetsAWindowManagerWrapperWithTheWholeLoginLineInIt()
+            throws IOException {
+        File prefix = new File(temp.getRoot(), "usr");
+        nixProfile(prefix);
+        File openbox = profileBin(prefix, "openbox");
+        installer = new X11CliInstaller(bin, libexec, "com.termux.test", assets(LOADER), "openbox");
+
+        assertEquals(X11CliInstaller.Result.INSTALLED, installer.install());
+
+        assertTrue(openbox.canExecute());
+        assertEquals("#!/system/bin/sh\n"
+                + X11CliInstaller.MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
+                + "exec " + new File(prefix, "bin/login").getPath() + " openbox --config-file "
+                + X11CliInstaller.OPENBOX_RC_PATH + "\n",
+            text(installer.wmScript()));
+        assertTrue(installer.wmScript().canExecute());
+        assertTrue("the whole point of the wrapper is that this path is short",
+            X11CliInstaller.WM_SCRIPT_PATH.length() < 128);
+    }
+
+    /** A window manager that is not installed, or none configured, leaves no wrapper behind. */
+    @Test public void aWrapperIsTakenOutAgainWhenThereIsNoWindowManagerToRun() throws IOException {
+        File prefix = new File(temp.getRoot(), "usr");
+        nixProfile(prefix);
+        profileBin(prefix, "openbox");
+        installer = new X11CliInstaller(bin, libexec, "com.termux.test", assets(LOADER), "openbox");
+        installer.install();
+        assertTrue(installer.wmScript().exists());
+
+        installer = new X11CliInstaller(bin, libexec, "com.termux.test", assets(LOADER), "");
+        installer.install();
+
+        assertFalse(installer.wmScript().exists());
+    }
+
     @Test public void aTermuxPrefixIsLeftExactlyAsItWas() throws IOException {
-        // No profile link, so nothing nix-shaped happens: the bash shebang and no xkb link.
+        // No profile link, so nothing nix-shaped happens: the bash shebang, no xkb link, and no
+        // wrapper — there the server is handed the window manager's own command line.
+        installer = new X11CliInstaller(bin, libexec, "com.termux.test", assets(LOADER), "openbox");
+
         assertEquals(X11CliInstaller.Result.INSTALLED, installer.install());
         assertTrue(text(installer.serverScript())
             .startsWith("#!" + new File(bin, "bash").getPath() + "\n"));
         assertFalse(new File(temp.getRoot(), "usr/share/X11/xkb").exists());
+        assertFalse(installer.wmScript().exists());
     }
 }

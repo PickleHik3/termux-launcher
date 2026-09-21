@@ -403,6 +403,7 @@ environment.packages = with pkgs; [
   xfce.mousepad      # a text editor with a window
   feh                # an image viewer
   xkeyboard-config   # the display server will not start without it
+  openbox            # gives windows their title bars — see below
   font-misc-misc     # only for older X programs — see below
 ];
 ```
@@ -429,10 +430,12 @@ Two things to know before you pick an app:
   processes, and the nixpkgs build does not give it up the way Termux's
   does. There is nothing to configure around it. For a terminal window on
   the display, use a GTK or Qt one instead — `xfce.xfce4-terminal` works.
-- **Windows open unmanaged.** There is no window manager on this edition
-  yet, so a window arrives where the app puts it, with no title bar and
-  nothing to move or resize it by. Apps that open one full-size window
-  are the comfortable ones for now.
+- **Windows open unmanaged until openbox is added.** Without a window
+  manager a window arrives where the app puts it, with no title bar and
+  nothing to move or resize it by. Add `openbox` and the launcher starts
+  it with the display for you — there is no command to run and no
+  configuration to write; it uses the launcher's own, which gives every
+  window the whole screen.
 
 `xkeyboard-config` is a one-time thing, and it is the whole of the
 display's setup. Until it is installed the Display place says so and

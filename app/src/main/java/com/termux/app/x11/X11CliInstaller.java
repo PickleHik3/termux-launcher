@@ -10,6 +10,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -43,7 +44,7 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 11;
+    @VisibleForTesting static final int VERSION = 12;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -55,6 +56,11 @@ public final class X11CliInstaller {
     static final String PREFERENCE_SCRIPT_PATH = BIN_DIR + "/termux-x11-preference";
     /** The script that tries every GPU profile on this phone and keeps the best. */
     public static final String GPU_SETUP_SCRIPT_PATH = BIN_DIR + "/termux-x11-gpu-setup";
+    /**
+     * The nix edition's window-manager wrapper: the whole {@code login} line baked into a file so
+     * the server is handed one short path. Written only on nix — see {@link X11WindowManager}.
+     */
+    public static final String WM_SCRIPT_PATH = BIN_DIR + "/termux-x11-wm";
     static final String LOADER_PATH = LIBEXEC_DIR + "/loader.apk";
     /** openbox's configuration for the display: every window maximised, none decorated. */
     public static final String OPENBOX_RC_PATH = LIBEXEC_DIR + "/openbox-rc.xml";
@@ -91,22 +97,33 @@ public final class X11CliInstaller {
     @NonNull private final File libexecDir;
     @NonNull private final String applicationId;
     @NonNull private final AssetSource assets;
+    /** The window manager the user has configured, as the wrapper has to run it; may be empty. */
+    @NonNull private final String windowManager;
 
     @VisibleForTesting
     X11CliInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull String applicationId,
                     @NonNull AssetSource assets) {
+        this(binDir, libexecDir, applicationId, assets, "");
+    }
+
+    @VisibleForTesting
+    X11CliInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull String applicationId,
+                    @NonNull AssetSource assets, @NonNull String windowManager) {
         this.binDir = binDir;
         this.libexecDir = libexecDir;
         this.applicationId = applicationId;
         this.assets = assets;
+        this.windowManager = windowManager;
     }
 
     /** The installer for this launcher's own prefix. */
     @NonNull
     static X11CliInstaller forPrefix(@NonNull Context context) {
         Context app = context.getApplicationContext();
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app);
         return new X11CliInstaller(new File(BIN_DIR), new File(LIBEXEC_DIR), app.getPackageName(),
-            name -> app.getAssets().open(name));
+            name -> app.getAssets().open(name),
+            preferences == null ? "" : preferences.getX11WindowManager());
     }
 
     // ---- The static face the launcher uses -------------------------------------------------
@@ -217,6 +234,54 @@ public final class X11CliInstaller {
         }
     }
 
+    /**
+     * On nix, write {@code $PREFIX/bin/termux-x11-wm}: the whole {@code login} line for the
+     * configured window manager, baked into a file the server can be handed by its short path.
+     *
+     * <p>Two facts make the wrapper the only way. The server execs {@code -xstartup} from
+     * Android's side, where a nix binary and the profile's {@code PATH} do not exist, so it has to
+     * go through {@code login}; and the server refuses any single argument past about 128
+     * characters, which that login line — with a configuration file path in it — is well beyond.
+     *
+     * <p>Rewritten on every pass rather than once behind the version marker, because the window
+     * manager is a setting: the file has to say what the user last chose. When nothing is
+     * configured, or its binary is not installed, any wrapper left from before is taken out, so
+     * {@link X11WindowManager#xstartup} finds nothing and the display starts without one.
+     *
+     * @return whether a wrapper is now in place
+     */
+    @VisibleForTesting
+    boolean writeWindowManagerScript() {
+        File prefixDir = binDir.getParentFile();
+        if (prefixDir == null || !NixProfile.isNix(prefixDir)) return false;
+        String command = X11WindowManager.command(windowManager, prefixDir);
+        File script = wmScript();
+        if (command == null) {
+            if (script.exists()) {
+                script.setWritable(true, true);
+                //noinspection ResultOfMethodCallIgnored
+                script.delete();
+            }
+            return false;
+        }
+        try {
+            writeAtomically(script, bytes(windowManagerScript(prefixDir, command)), true, true);
+            return true;
+        } catch (IOException e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to write the window-manager wrapper: "
+                + e.getMessage());
+            return false;
+        }
+    }
+
+    /** The wrapper's text: a login into the nix environment, and the window manager inside it. */
+    @NonNull
+    static String windowManagerScript(@NonNull File prefixDir, @NonNull String command) {
+        return "#!" + NixProfile.hostShell(prefixDir).getPath() + "\n"
+            + MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
+            + "exec " + new File(prefixDir, "bin/login").getPath() + " " + command + "\n";
+    }
+
     /** True once this launcher's own commands are in place. */
     public static boolean isInstalled(@NonNull Context context) {
         X11CliInstaller installer = forPrefix(context);
@@ -228,6 +293,7 @@ public final class X11CliInstaller {
     @NonNull File serverScript() { return new File(binDir, "termux-x11"); }
     @NonNull File preferenceScript() { return new File(binDir, "termux-x11-preference"); }
     @NonNull File gpuSetupScript() { return new File(binDir, "termux-x11-gpu-setup"); }
+    @NonNull File wmScript() { return new File(binDir, "termux-x11-wm"); }
     @NonNull File loaderFile() { return new File(libexecDir, "loader.apk"); }
     @NonNull File markerFile() { return new File(libexecDir, ".installed"); }
     @NonNull File openboxRc() { return new File(libexecDir, "openbox-rc.xml"); }
@@ -236,6 +302,7 @@ public final class X11CliInstaller {
     Result install() {
         if (!binDir.isDirectory()) return Result.NO_PREFIX;
         linkKeyboardData();
+        writeWindowManagerScript();
         String marker = MARKER_PREAMBLE + " v" + VERSION + " " + applicationId + "\n";
         if (marker.equals(read(markerFile()))) return Result.UP_TO_DATE;
         if (isForeignCommand()) {
@@ -281,7 +348,7 @@ public final class X11CliInstaller {
             }
         }
         for (File file : new File[]{serverScript(), preferenceScript(), gpuSetupScript(),
-                loaderFile(), openboxRc(), markerFile()}) {
+                wmScript(), loaderFile(), openboxRc(), markerFile()}) {
             if (!file.exists() && !Files.isSymbolicLink(file.toPath())) continue;
             file.setWritable(true, true);
             if (!file.delete()) {
