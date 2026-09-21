@@ -43,6 +43,7 @@ access; skip it if command-line tools do not need your shared files.
 - [Modern terminal power-user guide](Terminal_Modernization.md)
 - [Terminal fonts](Terminal_Fonts.md)
 - [Kitty protocols and terminal compatibility](Terminal_Kitty_Protocols.md)
+- [Programs and agents inside the terminal](Programs_Inside_The_Terminal.md) — the delta from stock Termux for scripts and AI agents running in a pane
 - [Install showcase tools](Building_Terminal_Showcase_Tools.md)
 - [Tlstore, the tool store](Tlstore.md)
 

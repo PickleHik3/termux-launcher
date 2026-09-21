@@ -115,7 +115,7 @@ changes.
 
 ## Current boundaries
 
-- Shared-memory and file-based Kitty transmissions are not implemented.
+- File (`t=f`) and temporary-file (`t=t`) transmissions are accepted; a `t=t` file is deleted only when its path carries `tty-graphics-protocol` and sits in a temporary directory. Shared-memory (`t=s`) transmission is not implemented: Android has no `shm_open`.
 - Unsupported or excessive requests return bounded protocol errors rather than consuming unbounded
   memory.
 - Image geometry follows terminal cells, so changing a pane's size or font metrics may cause the

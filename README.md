@@ -109,6 +109,7 @@ Its highly recommended that you use the in-app font picker (**Settings › Termi
 
 In-repo references:
 
+- [Programs and agents inside the terminal](docs/en/Programs_Inside_The_Terminal.md): **read this before assuming stock Termux behaviour** from a script or an AI agent running in a pane: the extra environment variables, the escape sequences the terminal accepts, `launcherctl`, and the one `am start` that must never be run.
 - [Local AI API](docs/en/LauncherCtl_API.md): OpenAI/Ollama-compatible localhost endpoint, app launch, model management, auth, and route tables.
 - [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
 - [Building showcase tools](docs/en/Building_Terminal_Showcase_Tools.md): reproducible recipes for Sigye and animated-Kitty Fastfetch, on device and cross-built.
