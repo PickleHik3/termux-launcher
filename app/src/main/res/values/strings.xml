@@ -699,6 +699,10 @@
     <string name="status_widget_needs_shizuku_enable_anyway">Enable anyway</string>
     <string name="notice_tap_to_open">tap to open</string>
     <string name="notice_shell_wants_attention">%1$s wants attention</string>
+    <string name="shell_notification_channel">Terminal messages</string>
+    <string name="shell_notification_channel_description">Messages sent to you by a program running in the terminal.</string>
+    <string name="shell_notification_channel_urgent">Urgent terminal messages</string>
+    <string name="shell_notification_channel_urgent_description">Messages a program in the terminal marks as urgent.</string>
     <string name="action_open_settings">Settings</string>
     <string name="action_appearance_editor">Appearance</string>
     <string name="action_layout_editor">Layout</string>
@@ -2113,6 +2117,13 @@
     <string name="help_topic_hierarchy_step2">Tap a window tab to switch window.</string>
     <string name="help_topic_hierarchy_step3">Switching leaves everything running; closing does not.</string>
     <string name="help_topic_hierarchy_aliases">session, window, pane, tab, hierarchy</string>
+    <string name="help_topic_pictures_title">Pictures in the terminal</string>
+    <string name="help_topic_pictures_summary">Some programs can draw pictures straight into a pane.</string>
+    <string name="help_topic_pictures_action">Neovim 0.12 needs one line in your shell startup file before it will.</string>
+    <string name="help_topic_pictures_step1">Add export TERM_PROGRAM=kitty to ~/.bashrc.</string>
+    <string name="help_topic_pictures_step2">Open a new pane so the line takes effect.</string>
+    <string name="help_topic_pictures_step3">Neovim 0.13 and later need nothing.</string>
+    <string name="help_topic_pictures_aliases">picture, pictures, image, images, photo, preview, neovim, nvim</string>
 
     <!-- Help centre: Keyboard and shortcuts. -->
     <string name="help_topic_keyboard_title">The keyboard</string>

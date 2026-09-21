@@ -414,6 +414,41 @@ public final class TerminalEmulator {
 
     private final KittyGraphicsProtocol mKittyGraphics;
 
+    /** Desktop notifications a program asked for with {@code OSC 99}. */
+    private final KittyNotifications mKittyNotifications = new KittyNotifications();
+
+    /**
+     * What a finished {@code OSC 99} request does: the whole notification goes to the client, and
+     * the answer to a query goes back down the pty to the program that asked.
+     */
+    private final KittyNotifications.Handler mKittyNotificationHandler = new KittyNotifications.Handler() {
+
+        @Override
+        public void show(KittyNotification notification) {
+            mSession.onKittyNotification(notification);
+        }
+
+        @Override
+        public void close(String id) {
+            mSession.onKittyNotificationClose(id);
+        }
+
+        @Override
+        public void write(String escapeSequence) {
+            mSession.write(escapeSequence);
+        }
+    };
+
+    /**
+     * The mouse pointer shape a program asked for with {@code OSC 22}, or null when it wants the
+     * terminal's own. The names are the CSS/X11 ones — {@code text}, {@code pointer},
+     * {@code wait}, {@code crosshair} and the rest.
+     */
+    private String mPointerShape;
+
+    /** Shapes set aside by {@code OSC 22 ; >}, newest last, so a program can put one back. */
+    private final ArrayList<String> mPointerShapeStack = new ArrayList<>();
+
     /** See {@link #getKittyPlacementGeneration()}. */
     private long mKittyPlacementGeneration;
 
@@ -3762,6 +3797,17 @@ public final class TerminalEmulator {
                     mSession.onNotification(null, textParameter);
                 }
                 break;
+            case 22:
+                // The mouse pointer shape a program wants while it is running: a text bar for an
+                // editor, a busy pointer for a long job, a hand over something to click.
+                setPointerShapeFromOsc(textParameter);
+                break;
+            case 99:
+                // The rich desktop notification. Unlike OSC 9 and OSC 777 this one carries a
+                // proper request — a name to replace or close it by, how urgent it is, whether
+                // the program wants to hear that the user tapped it — and it may arrive in pieces.
+                mKittyNotifications.handle(textParameter, mKittyNotificationHandler);
+                break;
             case 777: {
                 // rxvt-unicode's notification: 777;notify;title;body.
                 String[] parts = textParameter.split(";", 3);
@@ -3778,6 +3824,88 @@ public final class TerminalEmulator {
             mITermImage = null;
         }
         finishSequence();
+    }
+
+    /** How many pointer shapes a program may set aside at once with {@code OSC 22 ; >}. */
+    private static final int MAX_POINTER_SHAPE_STACK = 16;
+
+    /**
+     * {@code OSC 22} in its three forms: a plain name sets the shape, a leading {@code >} sets the
+     * current one aside first, and a leading {@code <} puts the last one back. An empty name asks
+     * for the terminal's own pointer again.
+     */
+    private void setPointerShapeFromOsc(String parameter) {
+        String request = parameter == null ? "" : parameter.trim();
+        if (request.startsWith(">")) {
+            if (mPointerShapeStack.size() < MAX_POINTER_SHAPE_STACK)
+                mPointerShapeStack.add(mPointerShape == null ? "" : mPointerShape);
+            String shape = normalizePointerShape(request.substring(1));
+            // ">" on its own only sets the current shape aside; it does not change it.
+            if (shape != null) setPointerShape(shape);
+            return;
+        }
+        if (request.startsWith("<")) {
+            int count = 1;
+            String rest = request.substring(1).trim();
+            if (!rest.isEmpty()) {
+                try {
+                    count = Math.max(1, Integer.parseInt(rest));
+                } catch (NumberFormatException e) {
+                    count = 1;
+                }
+            }
+            String restored = mPointerShape;
+            for (int i = 0; i < count && !mPointerShapeStack.isEmpty(); i++)
+                restored = mPointerShapeStack.remove(mPointerShapeStack.size() - 1);
+            setPointerShape(restored == null || restored.isEmpty() ? null : restored);
+            return;
+        }
+        setPointerShape(normalizePointerShape(request));
+    }
+
+    /** A shape name is a plain word; anything else is read as "give me the usual pointer". */
+    private static String normalizePointerShape(String name) {
+        if (name == null) return null;
+        String trimmed = name.trim();
+        if (trimmed.isEmpty() || trimmed.length() > 64) return null;
+        for (int i = 0; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            boolean plain = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                || (c >= '0' && c <= '9') || c == '-' || c == '_';
+            if (!plain) return null;
+        }
+        return trimmed.toLowerCase(Locale.US);
+    }
+
+    private void setPointerShape(String shape) {
+        if (Objects.equals(mPointerShape, shape)) return;
+        mPointerShape = shape;
+        mSession.onPointerShapeChanged(shape);
+    }
+
+    /**
+     * The mouse pointer shape the running program asked for, or null when it wants the terminal's
+     * own. See {@link #setPointerShapeFromOsc(String)}.
+     */
+    public String getPointerShape() {
+        return mPointerShape;
+    }
+
+    /**
+     * The user tapped a notification this terminal put up. Tells the program, when it asked to
+     * hear about it; {@code button} is 0 for the notification itself.
+     */
+    public void kittyNotificationActivated(String id, int button) {
+        if (id == null) return;
+        String report = mKittyNotifications.activated(id, button);
+        if (report != null) mSession.write(report);
+    }
+
+    /** A notification this terminal put up went away without being tapped. */
+    public void kittyNotificationClosed(String id) {
+        if (id == null) return;
+        String report = mKittyNotifications.closed(id);
+        if (report != null) mSession.write(report);
     }
 
     private void blockClear(int sx, int sy, int w) {
@@ -4449,6 +4577,9 @@ public final class TerminalEmulator {
         mIgnoreCrLfForOsc = false;
         mITermImage = null;
         mKittyGraphics.reset();
+        mKittyNotifications.reset();
+        mPointerShapeStack.clear();
+        setPointerShape(null);
         clearExtraCursors();
         mExtraCursorColor.type = mExtraCursorColor.value = 0;
         mExtraCursorTextColor.type = mExtraCursorTextColor.value = 0;

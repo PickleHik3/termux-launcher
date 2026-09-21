@@ -442,6 +442,60 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         else openHelpScreen(null, null);
     }
 
+    /** A message a terminal program sent, waiting for its shell to come up after a cold start. */
+    @Nullable private String mPendingNotificationTapSession;
+
+    @Nullable private String mPendingNotificationTapName;
+
+    private boolean mPendingNotificationTapFocus;
+
+    /**
+     * The user tapped a message a program in the terminal sent them. Take the message out of the
+     * shade, go back to the pane it came from, and let the program know it was read.
+     */
+    private void handleShellNotificationIntent(@Nullable Intent intent) {
+        if (intent == null) return;
+        String handle = intent.getStringExtra(
+            com.termux.app.terminal.ShellNotifications.EXTRA_SESSION_HANDLE);
+        if (handle == null || handle.isEmpty()) return;
+        com.termux.app.terminal.ShellNotifications.cancel(this, intent.getStringExtra(
+            com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_TAG));
+        mPendingNotificationTapSession = handle;
+        mPendingNotificationTapName = intent.getStringExtra(
+            com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_NAME);
+        mPendingNotificationTapFocus = intent.getBooleanExtra(
+            com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_FOCUS, true);
+        // The same intent is re-delivered after process death, and the message is long gone by
+        // then, so the extras are cleared as soon as they are read.
+        intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_SESSION_HANDLE);
+        intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_NAME);
+        intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_FOCUS);
+        intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_TAG);
+        deliverPendingShellNotificationTap();
+    }
+
+    /**
+     * Acts on a tapped message once the shells exist. On a cold start they do not yet, so this
+     * runs again when the service connects.
+     */
+    private void deliverPendingShellNotificationTap() {
+        final String handle = mPendingNotificationTapSession;
+        if (handle == null || mTermuxService == null) return;
+        final String name = mPendingNotificationTapName;
+        final boolean focus = mPendingNotificationTapFocus;
+        mPendingNotificationTapSession = null;
+        mPendingNotificationTapName = null;
+        final TerminalSession session = mTermuxService.getTerminalSessionForHandle(handle);
+        if (session == null) return;
+        Runnable go = () -> {
+            if (focus) activateSessionInPanes(session);
+            if (name != null && !name.isEmpty()) session.notificationActivated(name, 0);
+        };
+        View root = findViewById(android.R.id.content);
+        if (root != null) root.post(go);
+        else go.run();
+    }
+
     /** The phone's home-app setting, from the run's last question. */
     private void openHomeLauncherChooser() {
         HomeAppChooser.open(this);
@@ -1341,6 +1395,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             handleEditExtraKeysIntent(getIntent());
             handleShowHelpIntent(getIntent());
             handleHelpScreenActionIntent(getIntent());
+            handleShellNotificationIntent(getIntent());
         }
         FileReceiverActivity.updateFileReceiverActivityComponentsState(this);
         try {
@@ -1709,6 +1764,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         handleShowHelpIntent(intent);
         handleHelpScreenActionIntent(intent);
         handleReplayTourIntent(intent);
+        handleShellNotificationIntent(intent);
         if (isLauncherHomeIntent(intent)) {
             mLastLaunchWasLauncherEntry = true;
         }
@@ -6827,6 +6883,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Update the {@link TerminalSession} and {@link TerminalEmulator} clients.
         mTermuxService.setTermuxTerminalSessionClient(mTermuxTerminalSessionActivityClient);
         rebuildDrawerSessions();
+        // A message tapped in the shade while the launcher was away waits here for its shell.
+        deliverPendingShellNotificationTap();
     }
 
     /**
@@ -18235,6 +18293,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void configureAttachedPaneView(TerminalView view, TerminalSession session) {
             if (getPreferences() == null || view == null) return;
+            // A pane view built after a program asked for a mouse pointer shape must wear it too.
+            if (session != null && session.getEmulator() != null)
+                view.setRequestedPointerShape(session.getEmulator().getPointerShape());
             view.setTextSize(com.termux.app.terminal.TerminalPaneController
                 .isScratchpadShellName(session == null ? null : session.mSessionName)
                 ? getPreferences().getScratchpadFontSize()
