@@ -37,6 +37,29 @@ public interface TerminalSessionClient {
     default void onNotification(@NonNull TerminalSession session, String title, String body) {
     }
 
+    /**
+     * The program asked for the user with a whole notification request — a name to close or
+     * replace it by, how urgent it is, whether it wants to hear that the user tapped it.
+     *
+     * <p>The default passes the words on to {@link #onNotification}, so a client that only knows
+     * how to show a title and a body needs no change.
+     */
+    default void onKittyNotification(@NonNull TerminalSession session,
+                                     @NonNull KittyNotification notification) {
+        onNotification(session, notification.getTitle(), notification.getBody());
+    }
+
+    /** The program asked for the notification it named earlier to be taken down. */
+    default void onKittyNotificationClose(@NonNull TerminalSession session, @NonNull String id) {
+    }
+
+    /**
+     * The program asked for a mouse pointer shape, by its CSS/X11 name, or with null for the
+     * terminal's own again. The default has no pointer to change.
+     */
+    default void onPointerShapeChanged(@NonNull TerminalSession session, @Nullable String shape) {
+    }
+
     void onColorsChanged(@NonNull TerminalSession session);
 
     void onTerminalCursorStateChange(boolean state);

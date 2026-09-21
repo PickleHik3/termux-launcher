@@ -27,6 +27,7 @@ import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MotionEvent;
+import android.view.PointerIcon;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewTreeObserver;
@@ -50,6 +51,8 @@ import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TextStyle;
 import com.termux.view.textselection.TextSelectionCursorController;
+
+import java.util.Objects;
 
 /**
  * View displaying and interacting with a {@link TerminalSession}.
@@ -208,6 +211,9 @@ public final class TerminalView extends View {
      * it is on, and it all comes back when it is off.
      */
     private boolean mTouchMouseMode;
+
+    /** The pointer shape a running program asked for with OSC 22, or null for the usual one. */
+    @Nullable private String mRequestedPointerShape;
 
     /**
      * Set by the chrome above this view while a finger that landed in one of its pane corner
@@ -1242,6 +1248,105 @@ public final class TerminalView extends View {
 
     public boolean isTouchMouseMode() {
         return mTouchMouseMode;
+    }
+
+    /**
+     * The pointer a running program asked for — a text bar in an editor, a busy pointer for a long
+     * job — or null for the usual one.
+     *
+     * <p>Only a mouse or trackpad has a pointer to change. The two touch ways of driving a mouse
+     * here draw nothing on screen, so there is nothing for them to show.
+     */
+    public void setRequestedPointerShape(@Nullable String shape) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return;
+        if (Objects.equals(mRequestedPointerShape, shape)) return;
+        mRequestedPointerShape = shape;
+        setPointerIcon(shape == null ? null : PointerIcon.getSystemIcon(getContext(),
+            pointerIconType(shape)));
+    }
+
+    /** The pointer a running program last asked for, or null for the usual one. */
+    @Nullable
+    public String getRequestedPointerShape() {
+        return mRequestedPointerShape;
+    }
+
+    /**
+     * The CSS and X11 pointer names a program may ask for, mapped to what Android draws. Names
+     * Android has no pointer for fall back to the arrow rather than being refused.
+     */
+    private static int pointerIconType(@NonNull String shape) {
+        switch (shape) {
+            case "text":
+            case "xterm":
+            case "ibeam":
+                return PointerIcon.TYPE_TEXT;
+            case "vertical-text":
+                return PointerIcon.TYPE_VERTICAL_TEXT;
+            case "pointer":
+            case "hand":
+            case "hand2":
+            case "pointing-hand":
+                return PointerIcon.TYPE_HAND;
+            case "crosshair":
+            case "cross":
+                return PointerIcon.TYPE_CROSSHAIR;
+            case "wait":
+            case "watch":
+                return PointerIcon.TYPE_WAIT;
+            case "progress":
+            case "left-ptr-watch":
+                return PointerIcon.TYPE_CONTEXT_MENU;
+            case "help":
+            case "question-arrow":
+                return PointerIcon.TYPE_HELP;
+            case "move":
+            case "fleur":
+            case "all-scroll":
+                return PointerIcon.TYPE_ALL_SCROLL;
+            case "not-allowed":
+            case "no-drop":
+            case "forbidden":
+                return PointerIcon.TYPE_NO_DROP;
+            case "grab":
+            case "openhand":
+                return PointerIcon.TYPE_GRAB;
+            case "grabbing":
+            case "closedhand":
+                return PointerIcon.TYPE_GRABBING;
+            case "alias":
+                return PointerIcon.TYPE_ALIAS;
+            case "copy":
+                return PointerIcon.TYPE_COPY;
+            case "cell":
+                return PointerIcon.TYPE_CROSSHAIR;
+            case "zoom-in":
+                return PointerIcon.TYPE_ZOOM_IN;
+            case "zoom-out":
+                return PointerIcon.TYPE_ZOOM_OUT;
+            case "e-resize":
+            case "w-resize":
+            case "ew-resize":
+            case "col-resize":
+                return PointerIcon.TYPE_HORIZONTAL_DOUBLE_ARROW;
+            case "n-resize":
+            case "s-resize":
+            case "ns-resize":
+            case "row-resize":
+                return PointerIcon.TYPE_VERTICAL_DOUBLE_ARROW;
+            case "nwse-resize":
+            case "nw-resize":
+            case "se-resize":
+                return PointerIcon.TYPE_TOP_LEFT_DIAGONAL_DOUBLE_ARROW;
+            case "nesw-resize":
+            case "ne-resize":
+            case "sw-resize":
+                return PointerIcon.TYPE_TOP_RIGHT_DIAGONAL_DOUBLE_ARROW;
+            case "none":
+                return PointerIcon.TYPE_NULL;
+            default:
+                return PointerIcon.TYPE_ARROW;
+        }
     }
 
     /**

@@ -19,10 +19,97 @@ public final class TerminalColors {
     public final int[] mCurrentColors = new int[TextStyle.NUM_INDEXED_COLORS];
 
     /**
+     * How many palettes the color stack (XTPUSHCOLORS / XTPOPCOLORS) holds. xterm stores ten and so
+     * does this; a push past the last slot overwrites it rather than growing without bound, which is
+     * what keeps a program pushing in a loop from holding a palette per iteration.
+     */
+    public static final int MAX_COLOR_STACK_DEPTH = 10;
+
+    /** Saved palettes, slot 0 at the bottom. A null slot was never written. */
+    private final int[][] mColorStack = new int[MAX_COLOR_STACK_DEPTH][];
+
+    /** How many slots hold a palette, counted from the bottom. */
+    private int mColorStackCount;
+
+    /** The slot last pushed to or popped from, 1-based; 0 while the stack is empty. */
+    private int mColorStackIndex;
+
+    /**
      * Create a new instance with default colors from the theme.
      */
     public TerminalColors() {
         reset();
+    }
+
+    /**
+     * Save the whole palette — the 256 indexed colors plus the foreground, background and cursor
+     * colors — for a later {@link #popPalette(int)}.
+     *
+     * @param slot the 1-based stack position to write, or 0 to push onto the top of the stack.
+     */
+    public void pushPalette(int slot) {
+        int target;
+        if (slot >= 1 && slot <= MAX_COLOR_STACK_DEPTH) {
+            target = slot - 1;
+            mColorStackCount = Math.max(mColorStackCount, slot);
+        } else if (mColorStackCount < MAX_COLOR_STACK_DEPTH) {
+            target = mColorStackCount;
+            mColorStackCount++;
+        } else {
+            // Full: xterm overwrites the top entry rather than dropping the push.
+            target = MAX_COLOR_STACK_DEPTH - 1;
+        }
+        mColorStack[target] = mCurrentColors.clone();
+        mColorStackIndex = target + 1;
+    }
+
+    /**
+     * Restore a saved palette.
+     *
+     * @param slot the 1-based stack position to restore, or 0 to pop the top of the stack.
+     * @return true if any color actually changed, so the caller can skip telling the client about a
+     * pop that repainted nothing.
+     */
+    public boolean popPalette(int slot) {
+        int target;
+        if (slot >= 1 && slot <= MAX_COLOR_STACK_DEPTH) {
+            target = slot - 1;
+        } else if (mColorStackCount > 0) {
+            target = mColorStackCount - 1;
+        } else {
+            return false;
+        }
+        int[] saved = mColorStack[target];
+        mColorStackCount = target;
+        mColorStackIndex = mColorStackCount;
+        if (saved == null)
+            return false;
+        mColorStack[target] = null;
+        boolean changed = false;
+        for (int i = 0; i < TextStyle.NUM_INDEXED_COLORS; i++) {
+            if (mCurrentColors[i] != saved[i]) {
+                mCurrentColors[i] = saved[i];
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    /** The stack position last pushed or popped, for XTREPORTCOLORS. */
+    public int getColorStackIndex() {
+        return mColorStackIndex;
+    }
+
+    /** How many palettes the stack holds, for XTREPORTCOLORS. */
+    public int getColorStackCount() {
+        return mColorStackCount;
+    }
+
+    /** Drop every saved palette, as a full terminal reset does. */
+    public void clearStack() {
+        for (int i = 0; i < MAX_COLOR_STACK_DEPTH; i++) mColorStack[i] = null;
+        mColorStackCount = 0;
+        mColorStackIndex = 0;
     }
 
     /**

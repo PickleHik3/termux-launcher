@@ -72,22 +72,50 @@ public class WidgetEditSessionExitTest {
     @Test public void theCrossBringsAWidgetBackFromTheOtherPageAndRestoresTheCount() {
         Fixture fixture = new Fixture();
         fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
-        fixture.repository.trimSparePages();
+        fixture.put(2, new WidgetCellRect(3, 4, 4, 5), 0);
+        fixture.repository.trimEmptyPages();
         fixture.renderAndLayout();
         int pagesAtStart = fixture.repository.pageCount();
+        assertEquals(1, pagesAtStart);
         fixture.controller.menuEditWidgets();
         fixture.layout();
 
-        // The same crossing a finger makes, without the finger: the widget lands on page 1 and a
-        // fresh spare follows it.
+        // The same crossing a finger makes, without the finger: a page past the last one, and the
+        // widget carried onto it.
+        assertEquals(1, fixture.repository.addPage());
         assertTrue(fixture.repository.putRecord(fixture.repository.get(1).withPage(1)));
-        fixture.repository.trimSparePages();
-        assertEquals(3, fixture.repository.pageCount());
+        assertEquals(2, fixture.repository.pageCount());
 
         fixture.pane.discardWidgetEdit();
 
         assertEquals("the widget came back to its own page", 0, fixture.repository.get(1).page);
         assertEquals("and so did the page count", pagesAtStart, fixture.repository.pageCount());
+    }
+
+    /**
+     * A page the user added by hand is part of the layout the session found, so the cross puts it
+     * back as an empty page of theirs — not as an empty page the next trim takes away.
+     */
+    @Test public void theCrossPutsBackAPageAddedByHand() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
+        assertEquals(1, fixture.repository.addFreshPage());
+        fixture.renderAndLayout();
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+
+        // The widget is carried onto it, which spends its freshness.
+        assertTrue(fixture.repository.putRecord(fixture.repository.get(1).withPage(1)));
+        assertTrue(fixture.repository.freshPages().isEmpty());
+
+        fixture.pane.discardWidgetEdit();
+
+        assertEquals(0, fixture.repository.get(1).page);
+        assertEquals(2, fixture.repository.pageCount());
+        assertEquals("the empty page is the user's again",
+            java.util.Collections.singleton(1), fixture.repository.freshPages());
+        fixture.repository.trimEmptyPages();
+        assertEquals(2, fixture.repository.pageCount());
     }
 
     @Test public void backStillSaves() {
@@ -119,6 +147,23 @@ public class WidgetEditSessionExitTest {
 
         assertEquals(1, fixture.repository.records().size());
         assertEquals(new WidgetCellRect(0, 0, 1, 1), fixture.repository.get(1).cell);
+    }
+
+    /** And the page that widget was the last thing on does not come back with the count either. */
+    @Test public void theCrossDoesNotBringBackThePageABinnedWidgetOwned() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
+        fixture.put(2, new WidgetCellRect(0, 0, 1, 1), 1);
+        fixture.renderAndLayout();
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+        assertEquals(2, fixture.repository.pageCount());
+
+        assertTrue(fixture.repository.removeRecord(2));
+        fixture.pane.discardWidgetEdit();
+
+        assertEquals(1, fixture.repository.pageCount());
+        assertEquals(0, fixture.repository.get(1).page);
     }
 
     private static final class Fixture {

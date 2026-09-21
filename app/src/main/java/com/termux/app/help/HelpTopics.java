@@ -331,6 +331,12 @@ public final class HelpTopics {
             .related("windows", "panes").terms("session", "window", "pane")
             .aliases(R.string.help_topic_hierarchy_aliases)
             .doc("Launcher_Usage.md#understand-the-terminal-hierarchy"));
+        b.add(topic("pictures", Group.TERMINAL, R.string.help_topic_pictures_title,
+                R.string.help_topic_pictures_summary, R.string.help_topic_pictures_action)
+            .steps(R.string.help_topic_pictures_step1, R.string.help_topic_pictures_step2,
+                R.string.help_topic_pictures_step3)
+            .related("text_size").terms("pane")
+            .aliases(R.string.help_topic_pictures_aliases));
 
         // 4. Keyboard and shortcuts.
         b.add(topic("keyboard", Group.KEYBOARD, R.string.help_topic_keyboard_title,

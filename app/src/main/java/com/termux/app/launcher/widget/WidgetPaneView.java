@@ -31,6 +31,8 @@ public final class WidgetPaneView extends FrameLayout {
         default void onWidgetEditCommit() { }
         /** The cross: put the layout back as it was when edit mode opened, and close. */
         default void onWidgetEditDiscard() { }
+        /** The + on the page's border tab: another page, and the pane turns to it. */
+        default void onWidgetAddPage() { }
     }
 
     /** Fraction of the pane width a released drag must cross to commit a page switch. */
@@ -180,6 +182,11 @@ public final class WidgetPaneView extends FrameLayout {
 
     public void discardWidgetEdit() {
         if (listener != null) listener.onWidgetEditDiscard();
+    }
+
+    /** The + on the page's border tab, relayed the same way. */
+    public void addWidgetPage() {
+        if (listener != null) listener.onWidgetAddPage();
     }
 
     public boolean widgetEditActive() { return editOverlay != null && editOverlay.isShowing(); }

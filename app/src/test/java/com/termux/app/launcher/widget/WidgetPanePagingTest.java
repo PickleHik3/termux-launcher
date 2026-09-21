@@ -20,10 +20,11 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.S, application = Application.class)
 public class WidgetPanePagingTest {
-    @Test public void theSparePageIsWhereASwipeGoesAndRemoveGivesItBack() {
+    @Test public void theAddedPageIsWhereASwipeGoesAndRemoveGivesItBack() {
         Fixture fixture = new Fixture();
         assertEquals(0, fixture.controller.currentPage());
-        assertEquals(1, fixture.repository.addPage());
+        fixture.controller.menuAddPage();
+        assertEquals("the + turns to the page it added", 1, fixture.controller.currentPage());
         fixture.controller.setCurrentPage(1);
         assertEquals(2, fixture.repository.pageCount());
         assertEquals(1, fixture.controller.currentPage());
@@ -58,15 +59,17 @@ public class WidgetPanePagingTest {
         assertTrue(fixture.pane.picker().isOpen());
         fixture.pane.picker().closeImmediate();
 
+        // Page 0 holds a widget of its own, so the page the new one lands on keeps its number.
+        assertTrue(fixture.repository.putRecord(record(9, new WidgetCellRect(3, 4, 4, 5), 0)));
         assertEquals(1, fixture.repository.addPage());
         fixture.platform.directBind = true;
         LauncherWidgetHostController.AddResult result = fixture.widgets.beginAdd(
             WidgetTestFixtures.info(false), new WidgetCellRect(0, 0, 1, 1), 1,
             fixture.repository.revision(), new Bundle(), null);
         assertEquals(LauncherWidgetHostController.AddResult.READY, result);
-        assertEquals(1, fixture.repository.records().size());
+        assertEquals(2, fixture.repository.records().size());
         assertEquals("the reservation's page is durable end-to-end",
-            1, fixture.repository.records().get(0).page);
+            1, fixture.repository.records().get(1).page);
     }
 
     @Test public void cellRelaysProviderEditorFocusToTheHost() {

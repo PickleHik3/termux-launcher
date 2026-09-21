@@ -12,6 +12,10 @@ graphical apps come from nixpkgs instead. Add the app and `xkeyboard-config` to 
 `nix-on-droid switch`, and the drawer picks them up — see
 [Graphical apps](Nix_Package_Management.md#graphical-apps).
 
+**On the VAJ edition** the screen looks the same, with two differences: its own repository carries
+the graphical packages directly, so the Termux's own apps route needs no repository step and lists
+no browser (none is built for it), and the window manager is `pkg install openbox`.
+
 ## Set it up in one go
 
 **Settings → Display → Apps → Get GUI apps** builds the command that does this. Choose where the

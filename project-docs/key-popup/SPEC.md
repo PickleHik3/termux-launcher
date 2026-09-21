@@ -1,4 +1,49 @@
+# Pressed-key popup — spec
+
+## v2 — minimal (2026-09-21)
+
+Shipped design, after the developer used v1 ("Halo Float") for a day: *"modern minimalism instead
+of too fancy items which would not be ideal for daily use by a variety of user base."* Everything
+under "v1" below is superseded and kept only for the record.
+
+Phase `feat/key-popup-minimal`, from `dev` at d7c3d7d3.
+
+1. **One glyph, nothing else.** Per finger the popup is a single filled character: the value that
+   would be committed. No ring of alternates, no halo, no HELD / LATCH mark, and no veil over the
+   keyboard — the veil, `KeyPopupPalette.dim` and the whole `setVeilBounds` path are gone. On a tap
+   it is the key's centre value; when the pointer engine reports a swipe target the glyph is
+   **replaced in place** by the target's value, never joined by it.
+2. **Tap-or-swipe grace.** Nothing is drawn on finger-down. A 50 ms timer
+   (`KeyPopupOverlayView.SHOW_DELAY_MS`, on the overlay's own main-looper handler) decides: a swipe
+   target arriving first shows the target straight away, a lift arriving first shows nothing at all,
+   and otherwise the centre value appears when the timer fires. Fast typing therefore flashes
+   nothing. The timer is dropped on hide, on hideAll and on teardown.
+3. **Anchored just above the cap.** Anchor X is the cap's centre, clamped so the glyph's measured
+   half-width plus 4 dp stays inside the keyboard's own width. Anchor Y puts the glyph's line box
+   6 dp above the cap's top edge — a 30 dp glyph is centred 21 dp above it, against v1's ~66 dp
+   rise — and never above the top of the overlay. The overlay still lives in the activity's content
+   view, so a top-row glyph floats over the terminal.
+4. **Sizes −35 %.** By label length: 1 character → 30 dp (weight 300, the keyboard's label face),
+   2 → 20 dp (400, monospace), 3–4 → 14 dp (500, monospace), 5+ → 12 dp (500, monospace). A
+   `FLAG_KEY_FONT` value still uses the keyboard's special font, and a private-use label still uses
+   the label font.
+5. **Solid colour, not outline.** The glyph is filled with `primary` from the Material theme; there
+   is no stroke. One soft shadow layer carries it over terminal text: 4 dp radius, 1 dp down,
+   `colorSurfaceContainerLowest` at 60 %. That role inverts with the theme on its own, so the
+   shadow is near-black on a dark theme and near-white on a light one. Nothing glows.
+6. **Smoother motion.** Enter: alpha 0→1 with a 4 dp rise, 120 ms, `PathInterpolator(0.4, 0, 0.2, 1)`.
+   Exit: alpha 1→0 with a 3 dp rise, 100 ms, `PathInterpolator(0.4, 0, 1, 1)`. Glyph swap on a
+   swipe target: a 60 ms crossfade at the same anchor. No scale, no overshoot. Reduced motion
+   collapses every duration to 1 ms. Every animator ends; nothing repaints while a finger rests.
+7. **Unchanged.** Per-pointer state, the exit running after the key is committed and never gating
+   input, the `in_app_keyboard_key_popup` toggle and its copy, the palette refresh on a theme
+   change, floating and docked keyboards alike, and `onTouchEvent` returning false.
+
+---
+
 # Pressed-key popup ("Halo Float") — spec v1 (2026-09-21)
+
+*(v1, superseded by v2 above.)*
 
 Design handoff received from the developer on 2026-09-21 (bundle `Terminal keyboard popup variants.zip`, README reproduced below verbatim). It supersedes the review-page variants (balloon, compass, stem callouts) and settles D5.
 

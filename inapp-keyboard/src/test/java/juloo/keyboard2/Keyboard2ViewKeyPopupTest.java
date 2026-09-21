@@ -39,6 +39,11 @@ public class Keyboard2ViewKeyPopupTest
       + "<key c='shift'/>"
       + "<key c='z'/>"
       + "</row></keyboard>";
+  private static final String GLYPH_LAYOUT =
+      "<keyboard bottom_row='false'><row>"
+      + "<key c='backspace' ne='delete'/>"
+      + "<key c='space' n='switch_forward'/>"
+      + "</row></keyboard>";
 
   private final Recorder popup = new Recorder();
   private final RecordingHandler keys = new RecordingHandler();
@@ -67,6 +72,27 @@ public class Keyboard2ViewKeyPopupTest
         View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.AT_MOST));
     view.layout(0, 0, view.getMeasuredWidth(), view.getMeasuredHeight());
     view.setKeyPopupListener(popup);
+  }
+
+  @Test
+  public void glyphFontKeysReportAPopupToo() throws Exception
+  {
+    view.setKeyboard(KeyboardData.load_string_exn(GLYPH_LAYOUT));
+    view.measure(
+        View.MeasureSpec.makeMeasureSpec(600, View.MeasureSpec.EXACTLY),
+        View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.AT_MOST));
+    view.layout(0, 0, view.getMeasuredWidth(), view.getMeasuredHeight());
+    // backspace is the 1st of 2 keys across 600px: x in [0,300); space the 2nd: [300,600)
+    down(150f, 50f, 0);
+    assertEquals("backspace shows a popup", 1, popup.shown.size());
+    Keyboard2View.KeyPopupInfo bs = popup.shown.get(0);
+    assertNotNull(bs.label);
+    assertTrue("the label is drawn in the key font", bs.labelKeyFont);
+    assertNotNull("its corner value rides along", bs.ringLabels[2]);
+    up(150f, 50f, 0);
+    down(450f, 50f, 1);
+    assertEquals("space shows a popup", 2, popup.shown.size());
+    assertNotNull(popup.shown.get(1).label);
   }
 
   @Test

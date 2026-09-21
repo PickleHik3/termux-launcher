@@ -21,9 +21,8 @@ import juloo.keyboard2.Theme;
  * <p>The keyboard reports what each finger currently holds; this turns that into the overlay's own
  * coordinates and hands it over. The overlay is not a child of the keyboard: it is added to the
  * window's content view, so a top-row popup floats over the terminal output instead of being
- * clipped by the keyboard's container, and the veil it draws covers the keyboard and the terminal
- * alike. Whether the keyboard is docked or floating makes no difference — the coordinates are
- * resolved from the screen each time a finger goes down.
+ * clipped by the keyboard's container. Whether the keyboard is docked or floating makes no
+ * difference — the coordinates are resolved from the screen each time a finger goes down.
  */
 public final class KeyPopupController implements Keyboard2View.KeyPopupListener {
 
@@ -121,7 +120,7 @@ public final class KeyPopupController implements Keyboard2View.KeyPopupListener 
         mBounds.set(info.keyBounds);
         mBounds.offset(dx, dy);
         mOverlay.show(pointerId, mBounds, dx, dx + mKeyboardView.getWidth(),
-            info.label, info.labelKeyFont, info.ringLabels, info.ringKeyFont, info.latchable);
+            info.label, info.labelKeyFont);
     }
 
     @Override
@@ -130,9 +129,9 @@ public final class KeyPopupController implements Keyboard2View.KeyPopupListener 
         mOverlay.target(pointerId, label, labelKeyFont, slot);
     }
 
+    /** Nothing to show: the popup is one glyph, with no room for a held or latched mark. */
     @Override
     public void onKeyPopupLatch(int pointerId, boolean latched) {
-        mOverlay.latch(pointerId, latched);
     }
 
     @Override

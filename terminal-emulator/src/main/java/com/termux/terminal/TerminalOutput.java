@@ -62,6 +62,29 @@ public abstract class TerminalOutput {
     }
 
     /**
+     * Notify the terminal client of a whole desktop-notification request — {@code OSC 99} — with
+     * everything the program said about it: a name to close or replace it by, how urgent it is,
+     * whether it wants to be told the user tapped it.
+     *
+     * <p>The default passes the words along the older, plainer path, so a client that only knows
+     * how to show a title and a body keeps working.
+     */
+    public void onKittyNotification(KittyNotification notification) {
+        onNotification(notification.getTitle(), notification.getBody());
+    }
+
+    /** Take down the notification the program named, if it is still up. */
+    public void onKittyNotificationClose(String id) {
+    }
+
+    /**
+     * The running program asked for a mouse pointer shape — {@code OSC 22} — or, with null, for
+     * the terminal's own again. The default has no pointer to change.
+     */
+    public void onPointerShapeChanged(String shape) {
+    }
+
+    /**
      * Ask the terminal client to redraw, for a change to what is on screen that it has no other
      * way to notice — the pixels behind a kitty animation's cells, which move without a single
      * cell or byte of the screen buffer changing. Everything the emulator parses already reaches
