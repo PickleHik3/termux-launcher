@@ -181,8 +181,25 @@ hand-edit it. To add or change an item:
 2. Run `scripts/tlstore/build-catalog.sh <path to termux-launcher-binaries/SHA256SUMS>` to compute
    digests, bump the serial, and write `catalog.tsv`. A plain `http(s)` source is downloaded once
    to hash it, so that step needs the network; it must name a tag or a commit, never a branch.
-3. Run `scripts/tlstore/sign-catalog.sh` to sign it.
+3. Run `scripts/tlstore/sign.sh` to sign it (it also signs the `tlstore` script itself).
 4. Commit all three: `items.tsv`, `catalog.tsv`, and `catalog.tsv.minisig`.
+
+## On official Termux
+
+Termux Launcher puts tlstore in place for you, but you do not need the launcher to use it — on
+plain Termux, one command installs it:
+
+```
+curl -fsSL https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/scripts/tlstore/install.sh | sh
+```
+
+It checks what it downloads before installing anything, and puts tlstore exactly where the
+launcher app would: the `tlstore` command in your Termux `bin`, with the shorter `tl` and `tls`
+where those names are still free, and its item list alongside it. `tlstore update` keeps tlstore
+itself current from there, the same way it keeps your installed items current — you never need to
+run the command above again. If you install Termux Launcher later, the app quietly takes over
+keeping tlstore up to date. If you already have the launcher, running this command does nothing —
+it already provides tlstore.
 
 Anything a user should not choose directly gets `hidden=1` in its options; anything needed only
 while installing goes in `build=`. A file in this repository is pinned to a tag or the commit that
