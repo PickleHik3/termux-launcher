@@ -20,8 +20,9 @@ same way. This page is the short route from switching it on to running a desktop
    ```
 
    On a pacman-based install the X11 repository is already configured, so `pacman -S
-   xkeyboard-config` is all it takes. Until the layouts are installed the Display place says so
-   and the Start button is hidden.
+   xkeyboard-config` is all it takes; on the VAJ edition skip the first line, its repository has
+   the package directly. Until the layouts are installed the Display place says so and the Start
+   button is hidden.
 3. Start a display from any shell:
 
    ```sh
@@ -319,5 +320,7 @@ the container is then just `debian`.
 - **Nothing is accelerated.** `glmark2-es2` names the renderer in its first lines — `llvmpipe`
   means a profile variable is missing or the profile does not fit this GPU.
 
-On the VAJ edition the display works the same way, but its package repository does not carry
-`x11-repo` yet.
+On the VAJ edition the display works the same way, but there is no separate `x11-repo`: its own
+repository carries what the display needs directly, so it is `pkg install xkeyboard-config` alone,
+and `pkg install openbox` for the window manager. The same repository carries a small set of
+graphical apps (a file manager, a text editor, a terminal) but no browser yet.
