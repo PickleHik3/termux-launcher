@@ -8,4 +8,5 @@
     <item name="widget_pane_notice" type="id" />
     <item name="widget_picker_sheet" type="id" />
     <item name="widget_edit_overlay" type="id" />
+    <item name="widget_drag_layer" type="id" />
 </resources>

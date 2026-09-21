@@ -11,10 +11,10 @@
     <string name="widget_add">Add widget</string>
     <string name="widget_empty_hint">Long-press to add widgets</string>
     <string name="widget_menu_edit_widgets">Edit widgets</string>
-    <string name="widget_menu_add_page">Add page</string>
     <string name="widget_menu_remove_page">Remove page</string>
     <string name="widget_unsupported">Widgets aren\'t supported on this device</string>
     <string name="widget_remove_failed">Widget couldn\'t be removed</string>
+    <string name="widget_no_room_on_page">No room on this page.</string>
     <string name="widget_picker_search_hint">Search widgets</string>
     <string name="widget_picker_no_matches">No widgets match that search.</string>
     <string name="widget_picker_app_expanded">expanded</string>

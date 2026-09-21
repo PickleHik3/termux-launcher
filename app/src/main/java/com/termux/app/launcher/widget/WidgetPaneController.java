@@ -92,6 +92,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         });
         pane.setListener(new WidgetPaneView.Listener() {
             @Override public void onPageChangeRequested(int page) { setCurrentPage(page); }
+            @Override public void onWidgetEditCommit() { commitEditSession(); }
+            @Override public void onWidgetEditDiscard() { discardEditSession(); }
         }, this::selectProvider);
         widgets.setListener(this);
         render();
@@ -119,7 +121,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (pane.widgetEditActive()) { exitEditMode(); return true; }
         return pane.onBackPressed();
     }
-    public void destroy() { widgets.setListener(null); catalog.cancel(); dismissPaneMenu(); }
+    public void destroy() {
+        pane.removeCallbacks(edgeFlip);
+        widgets.setListener(null); catalog.cancel(); dismissPaneMenu();
+    }
 
     int currentPage() { return currentPage; }
 
@@ -153,7 +158,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         switch (item) {
             case ADD_WIDGET: openPicker(); break;
             case EDIT_WIDGETS: menuEditWidgets(); break;
-            case ADD_PAGE: menuAddPage(); break;
             case REMOVE_PAGE: menuRemovePage(); break;
         }
     }
@@ -178,16 +182,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         if (first == null) return;
         beginEditSession(first.appWidgetId);
-    }
-
-    void menuAddPage() {
-        int appended = widgets.repository().addPage();
-        if (appended < 0) {
-            pane.showNotice(messageFor(LauncherWidgetHostController.AddResult.STORAGE_FAILURE));
-            return;
-        }
-        currentPage = appended;
-        render();
     }
 
     void menuRemovePage() {
@@ -295,6 +289,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     @Override public void onWidgetRepositoryChanged(@NonNull LauncherWidgetHostController.AddResult result) {
+        // A widget arrived or left: the one empty page behind the last populated one follows.
+        widgets.repository().trimSparePages();
         render();
         if (result == LauncherWidgetHostController.AddResult.REMOVE_FAILED) {
             pane.showNotice(pane.getContext().getString(R.string.widget_remove_failed));
@@ -317,6 +313,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         Rect dragStartBounds;
         WidgetEditPolicy.Candidate moveCandidate;
         WidgetCellRect resizeCandidate;
+        /** The page the drag is over now: the widget's own until the finger turns it. */
+        int dragPage;
+        /** Which edge band the finger is resting in: -1 the leading one, +1 the trailing one. */
+        int edgeDirection;
+        /** True once the widget has been taken out of the grid to cross pages. */
+        boolean lifted;
+        float lastRawX, lastRawY;
         /** Neighbours currently shown pushed aside, appWidgetId to the cell they preview. */
         @NonNull Map<Integer, WidgetCellRect> previewDisplaced = Collections.emptyMap();
         EditState(int appWidgetId, int minColumnSpan, int minRowSpan,
@@ -330,6 +333,26 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     private EditState edit;
+
+    /** How long a dragged widget rests in an edge band before the page turns under it. */
+    private static final long EDGE_FLIP_DELAY_MS = 350L;
+    /** How wide that band is, measured in from the pane's leading and trailing edges. */
+    private static final int EDGE_BAND_DP = 24;
+
+    private final Runnable edgeFlip = this::flipDragPage;
+    private final int[] paneLocation = new int[2];
+
+    /** The layout as the edit session found it; the cross on the border tab puts it back. */
+    private static final class EditSnapshot {
+        @NonNull final List<LauncherWidgetRecord> records;
+        final int pageCount;
+        EditSnapshot(@NonNull List<LauncherWidgetRecord> records, int pageCount) {
+            this.records = records;
+            this.pageCount = pageCount;
+        }
+    }
+
+    @Nullable private EditSnapshot editSnapshot;
 
     private final WidgetEditOverlayView.Listener overlayListener =
         new WidgetEditOverlayView.Listener() {
@@ -386,6 +409,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         LauncherWidgetRecord record = widgets.repository().get(appWidgetId);
         WidgetCellView cell = pane.grid().cellForId(appWidgetId);
         if (record == null || cell == null) return false;
+        // The first widget of a session is where the discard button's "as it was" comes from;
+        // selecting another widget later is the same session and must not move that mark.
+        if (editSnapshot == null) {
+            editSnapshot = new EditSnapshot(widgets.repository().records(),
+                widgets.repository().pageCount());
+        }
         AppWidgetProviderInfo info = widgets.providerInfo(appWidgetId);
         WidgetGridMetrics metrics = pane.grid().metrics();
         int minColumns = 1, minRows = 1;
@@ -444,10 +473,46 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     private void exitEditMode() {
+        pane.removeCallbacks(edgeFlip);
+        if (edit != null && edit.lifted) returnDraggedCell(edit.appWidgetId);
+        pane.releaseWidgetDragLayer();
         clearDisplacementPreview(false);
         edit = null;
+        editSnapshot = null;
         pane.hideWidgetEditOverlay();
         syncEditSession();
+    }
+
+    /** The tick on the page's border tab. Every change is already saved, so this only closes. */
+    void commitEditSession() {
+        if (edit == null) return;
+        exitEditMode();
+    }
+
+    /**
+     * The cross. Everything the session moved, resized or carried to another page goes back where
+     * it was, pages and all. A widget dropped in the bin does not come back: it was handed to
+     * Android the moment it was dropped, and nothing here still holds it.
+     */
+    void discardEditSession() {
+        if (edit == null) return;
+        EditSnapshot snapshot = editSnapshot;
+        exitEditMode();
+        if (snapshot == null) return;
+        LauncherWidgetRepository repository = widgets.repository();
+        // Room for the pages the snapshot knew about before anything is put back on them.
+        repository.setPageCount(Math.max(repository.pageCount(), snapshot.pageCount));
+        List<LauncherWidgetRecord> batch = new ArrayList<>();
+        for (LauncherWidgetRecord was : snapshot.records) {
+            LauncherWidgetRecord now = repository.get(was.appWidgetId);
+            if (now == null) continue;
+            if (now.page != was.page || !now.cell.equals(was.cell)) {
+                batch.add(now.withPage(was.page).withCell(was.cell));
+            }
+        }
+        if (!batch.isEmpty()) repository.putRecords(batch);
+        repository.setPageCount(snapshot.pageCount);
+        render();
     }
 
     /** Whether the host has been told the edit chrome is up. */
@@ -468,28 +533,144 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.dragStartRawY = rawY;
         edit.dragStartBounds = pane.grid().metrics().boundsFor(record.cell);
         edit.moveCandidate = null;
+        edit.dragPage = record.page;
+        edit.edgeDirection = 0;
+        edit.lastRawX = rawX;
+        edit.lastRawY = rawY;
+        pane.removeCallbacks(edgeFlip);
         clearDisplacementPreview(false);
     }
 
     private void moveDrag(float rawX, float rawY) {
         LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
-        WidgetCellView cell = pane.grid().cellForId(edit.appWidgetId);
-        if (record == null || cell == null || edit.dragStartBounds == null) return;
+        if (record == null || edit.dragStartBounds == null) return;
+        edit.lastRawX = rawX;
+        edit.lastRawY = rawY;
         float translationX = rawX - edit.dragStartRawX;
         float translationY = rawY - edit.dragStartRawY;
-        cell.setTranslationX(translationX);
-        cell.setTranslationY(translationY);
-        cell.setTranslationZ(dp(8));
+        if (edit.lifted) {
+            Rect carried = paneBounds(record.cell);
+            carried.offset(Math.round(translationX), Math.round(translationY));
+            pane.widgetDragLayer().moveTo(carried);
+        } else {
+            WidgetCellView cell = pane.grid().cellForId(edit.appWidgetId);
+            if (cell == null) return;
+            cell.setTranslationX(translationX);
+            cell.setTranslationY(translationY);
+            cell.setTranslationZ(dp(8));
+        }
+        watchPageEdge(rawX);
+        updateDragCandidate(record);
+    }
+
+    /**
+     * Where the widget would land on the page it is over, and what that page would have to shuffle
+     * to take it. The page is {@link EditState#dragPage}, which is the widget's own until a turn
+     * at the edge moves it on, so the same ghost and the same neighbour preview serve both.
+     */
+    private void updateDragCandidate(@NonNull LauncherWidgetRecord record) {
+        if (edit.dragStartBounds == null) return;
         Rect dragged = new Rect(edit.dragStartBounds);
-        dragged.offset(Math.round(translationX), Math.round(translationY));
-        edit.moveCandidate = WidgetEditPolicy.snapMove(pane.grid().metrics(),
-            widgets.repository().recordsOnPage(record.page), edit.appWidgetId, record.cell,
+        dragged.offset(Math.round(edit.lastRawX - edit.dragStartRawX),
+            Math.round(edit.lastRawY - edit.dragStartRawY));
+        WidgetGridMetrics metrics = pane.grid().metrics();
+        edit.moveCandidate = WidgetEditPolicy.snapMove(metrics,
+            widgets.repository().recordsOnPage(edit.dragPage), edit.appWidgetId, record.cell,
             dragged);
         WidgetEditOverlayView overlay = pane.widgetEditOverlay();
-        overlay.setGhostBounds(edit.moveCandidate.valid
-            ? paneBounds(edit.moveCandidate.rect) : null);
+        if (edit.moveCandidate.valid) {
+            overlay.setGhostBounds(paneBounds(edit.moveCandidate.rect), true);
+        } else if (edit.dragPage != record.page) {
+            // Nowhere on this page to put it: the ghost stays under the finger and says so in red.
+            WidgetEditPolicy.Candidate nearest = WidgetEditPolicy.snapMove(metrics,
+                Collections.emptyList(), edit.appWidgetId, record.cell, dragged);
+            overlay.setGhostBounds(paneBounds(nearest.rect), false);
+        } else {
+            overlay.setGhostBounds(null);
+        }
         previewDisplacement(edit.moveCandidate.valid
             ? edit.moveCandidate.displaced : Collections.emptyMap());
+    }
+
+    /**
+     * A widget held against the pane's leading or trailing edge turns the page after a pause, and
+     * turns it again for as long as it is held there. Leaving the band stops it; so does the last
+     * page in that direction.
+     */
+    private void watchPageEdge(float rawX) {
+        pane.getLocationOnScreen(paneLocation);
+        float x = rawX - paneLocation[0];
+        float band = dp(EDGE_BAND_DP);
+        int direction = 0;
+        if (pane.getWidth() > 2 * band) {
+            if (x <= band) direction = -1;
+            else if (x >= pane.getWidth() - band) direction = 1;
+        }
+        if (direction != 0) {
+            int target = edit.dragPage + direction;
+            if (target < 0 || target >= widgets.repository().pageCount()) direction = 0;
+        }
+        if (direction == edit.edgeDirection) return;
+        edit.edgeDirection = direction;
+        pane.removeCallbacks(edgeFlip);
+        if (direction != 0) pane.postDelayed(edgeFlip, EDGE_FLIP_DELAY_MS);
+    }
+
+    /** The pause elapsed with the widget still in the band: the neighbouring page comes in. */
+    private void flipDragPage() {
+        if (edit == null || edit.edgeDirection == 0 || edit.dragStartBounds == null) return;
+        int direction = edit.edgeDirection;
+        int target = edit.dragPage + direction;
+        if (target < 0 || target >= widgets.repository().pageCount()) {
+            edit.edgeDirection = 0;
+            return;
+        }
+        LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
+        if (record == null) return;
+        if (!liftDraggedWidget(record)) { edit.edgeDirection = 0; return; }
+        clearDisplacementPreview(false);
+        edit.dragPage = target;
+        currentPage = target;
+        render();
+        pane.slideInFrom(direction);
+        updateDragCandidate(record);
+        // Still in the band: the next page follows after the same pause.
+        pane.postDelayed(edgeFlip, EDGE_FLIP_DELAY_MS);
+    }
+
+    /**
+     * Takes the dragged widget out of the grid for the crossing. What the finger carries from here
+     * is a picture of the cell in the pane's drag layer; the cell itself stays attached, hidden and
+     * off the page, because the gesture is being delivered through it and removing it with the page
+     * it left would cancel the drag in mid-air.
+     */
+    private boolean liftDraggedWidget(@NonNull LauncherWidgetRecord record) {
+        if (edit.lifted) return true;
+        WidgetCellView cell = pane.grid().cellForId(edit.appWidgetId);
+        if (cell == null) return false;
+        Rect carried = paneBounds(record.cell);
+        carried.offset(Math.round(cell.getTranslationX()), Math.round(cell.getTranslationY()));
+        if (!pane.widgetDragLayer().lift(cell, carried)) return false;
+        cell.setTranslationX(0f);
+        cell.setTranslationY(0f);
+        cell.setTranslationZ(0f);
+        cell.setVisibility(View.INVISIBLE);
+        pane.grid().setDragPinned(edit.appWidgetId);
+        edit.lifted = true;
+        return true;
+    }
+
+    /** Gives the hidden cell back to the grid; the picture it stood in for is dropped separately. */
+    private void returnDraggedCell(int appWidgetId) {
+        WidgetCellView cell = pane.grid().cellForId(appWidgetId);
+        if (cell != null) {
+            cell.setTranslationX(0f);
+            cell.setTranslationY(0f);
+            cell.setTranslationZ(0f);
+            cell.setVisibility(View.VISIBLE);
+        }
+        pane.grid().setDragPinned(-1);
+        if (edit != null) edit.lifted = false;
     }
 
     /**
@@ -546,18 +727,28 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     private void endMoveDrag(boolean canceled) {
-        LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
-        WidgetCellView cell = pane.grid().cellForId(edit.appWidgetId);
+        pane.removeCallbacks(edgeFlip);
+        edit.edgeDirection = 0;
+        int appWidgetId = edit.appWidgetId;
+        boolean lifted = edit.lifted;
+        LauncherWidgetRecord record = widgets.repository().get(appWidgetId);
         WidgetEditPolicy.Candidate candidate = edit.moveCandidate;
+        int target = edit.dragPage;
         edit.moveCandidate = null;
         edit.dragStartBounds = null;
+        boolean crossed = record != null && target != record.page;
+        edit.dragPage = record == null ? currentPage : record.page;
         boolean committed = false;
         if (!canceled && record != null && candidate != null && candidate.valid
-            && !candidate.rect.equals(record.cell)) {
-            committed = commitMove(record, candidate);
+            && (crossed || !candidate.rect.equals(record.cell))) {
+            committed = commitMove(record, candidate, target);
         }
+        // Dropped over a page with no room for it: the widget goes home, and so does the page.
+        boolean blocked = crossed && !committed && !canceled;
+        if (lifted) returnDraggedCell(appWidgetId);
         // The real layout takes over on render(); a surviving translation would double the offset.
         clearDisplacementPreview(!committed);
+        WidgetCellView cell = lifted ? null : pane.grid().cellForId(appWidgetId);
         if (cell != null) {
             if (committed || host.reducedMotion()) {
                 cell.setTranslationX(0f); cell.setTranslationY(0f); cell.setTranslationZ(0f);
@@ -566,23 +757,39 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                     .setDuration(160).start();
             }
         }
-        if (committed) {
+        int backwards = 0;
+        if (crossed && !committed) {
+            backwards = record.page > target ? 1 : -1;
+            currentPage = record.page;
+        }
+        if (committed) widgets.repository().trimSparePages();
+        if (committed || crossed) {
             render();
+            if (backwards != 0) pane.slideInFrom(backwards);
         } else {
             WidgetEditOverlayView overlay = pane.widgetEditOverlay();
             overlay.setDragging(false);
             overlay.setGhostBounds(null);
         }
+        if (lifted) {
+            LauncherWidgetRecord landed = widgets.repository().get(appWidgetId);
+            pane.widgetDragLayer().drop(landed == null ? null : paneBounds(landed.cell),
+                !host.reducedMotion());
+        }
+        if (blocked) {
+            pane.showNotice(pane.getContext().getString(R.string.widget_no_room_on_page));
+        }
     }
 
     /** One atomic commit for the dragged widget and everything it pushed aside. */
     private boolean commitMove(@NonNull LauncherWidgetRecord record,
-                               @NonNull WidgetEditPolicy.Candidate candidate) {
+                               @NonNull WidgetEditPolicy.Candidate candidate, int page) {
+        LauncherWidgetRecord moved = record.withPage(page).withCell(candidate.rect);
         if (candidate.displaced.isEmpty()) {
-            return widgets.repository().putRecord(record.withCell(candidate.rect));
+            return widgets.repository().putRecord(moved);
         }
         List<LauncherWidgetRecord> batch = new ArrayList<>();
-        batch.add(record.withCell(candidate.rect));
+        batch.add(moved);
         for (Map.Entry<Integer, WidgetCellRect> entry : candidate.displaced.entrySet()) {
             LauncherWidgetRecord neighbour = widgets.repository().get(entry.getKey());
             if (neighbour == null) return false;
@@ -644,7 +851,20 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     /** The open session again, sized for the grid the render just laid out. */
     private void restoreEditChrome() {
         if (edit == null) return;
+        if (edit.lifted) { restoreCrossingChrome(); return; }
         if (!beginEditSession(edit.appWidgetId)) edit = null;
+    }
+
+    /**
+     * The chrome for a page the dragged widget has not landed on. Its own frame is nowhere — the
+     * widget is in the air — so the page underneath is outlined and the ghost carries the session,
+     * and the ordinary "the widget is gone, end the session" rule must not fire on the way past.
+     */
+    private void restoreCrossingChrome() {
+        WidgetEditOverlayView overlay = pane.widgetEditOverlay();
+        overlay.setListener(overlayListener);
+        overlay.show(new Rect(), false, false, editableOutlines(edit.appWidgetId), false);
+        overlay.resumeMoveDrag();
     }
 
     @NonNull private String messageFor(LauncherWidgetHostController.AddResult result) {
