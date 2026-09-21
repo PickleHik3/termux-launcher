@@ -8,6 +8,9 @@ import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.os.SystemClock;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 /**
  * A circular buffer of {@link TerminalRow}:s which keeps notes about what is visible on a logical screen and the scroll
  * history.
@@ -114,6 +117,8 @@ public final class TerminalBuffer {
     public String getSelectedText(int selX1, int selY1, int selX2, int selY2, boolean joinBackLines, boolean joinFullLines) {
         final StringBuilder builder = new StringBuilder();
         final int columns = mColumns;
+        // A text sizing block is one unit: touching any of its cells copies its text, once.
+        Set<Long> blocksTaken = null;
         if (selY1 < -getActiveTranscriptRows())
             selY1 = -getActiveTranscriptRows();
         if (selY2 >= mScreenRows)
@@ -129,6 +134,31 @@ public final class TerminalBuffer {
                 x2 = columns;
             }
             TerminalRow lineObject = mLines[externalToInternalRow(row)];
+            if (lineObject != null && lineObject.hasTextSizes()) {
+                if (blocksTaken == null) blocksTaken = new HashSet<>();
+                StringBuilder rowText = new StringBuilder();
+                appendRowWithTextBlocks(rowText, row, lineObject, x1, x2, blocksTaken);
+                boolean blockRowWrap = getLineWrap(row);
+                boolean trimThisBlockRow = blockRowWrap && x2 == columns && mTrimWrappedTrailingSpaces && !joinFullLines;
+                int lastPrinting = -1;
+                if (blockRowWrap && x2 == columns && !trimThisBlockRow) {
+                    lastPrinting = rowText.length() - 1;
+                } else {
+                    for (int i = 0; i < rowText.length(); i++)
+                        if (rowText.charAt(i) != ' ') lastPrinting = i;
+                }
+                if (lastPrinting >= 0) builder.append(rowText, 0, lastPrinting + 1);
+                if (trimThisBlockRow && joinBackLines && row < selY2 && lastPrinting < rowText.length() - 1) {
+                    TerminalRow nextLineObject = mLines[externalToInternalRow(row + 1)];
+                    if (nextLineObject != null && nextLineObject.mText.length > 0 && nextLineObject.mText[0] != ' ')
+                        builder.append(' ');
+                }
+                boolean blockRowFillsWidth = lastPrinting == rowText.length() - 1;
+                if ((!joinBackLines || !blockRowWrap) && (!joinFullLines || !blockRowFillsWidth)
+                    && row < selY2 && row < mScreenRows - 1)
+                    builder.append('\n');
+                continue;
+            }
             int x1Index = lineObject.findStartOfColumn(x1);
             int x2Index = (x2 < mColumns) ? lineObject.findStartOfColumn(x2) : lineObject.getSpaceUsed();
             if (x2Index == x1Index) {
@@ -169,6 +199,39 @@ public final class TerminalBuffer {
                 builder.append('\n');
         }
         return builder.toString();
+    }
+
+    /**
+     * The selected part of a row that carries text sizing blocks. A block contributes its text
+     * once, at the first of its cells the selection reaches; its other cells contribute nothing.
+     */
+    private void appendRowWithTextBlocks(StringBuilder out, int row, TerminalRow line,
+                                         int x1, int x2, Set<Long> blocksTaken) {
+        final int spaceUsed = line.getSpaceUsed();
+        int[] cellStart = new int[mColumns];
+        int[] cellEnd = new int[mColumns];
+        Arrays.fill(cellStart, -1);
+        int column = 0;
+        int index = 0;
+        while (index < spaceUsed && column < mColumns) {
+            int start = index;
+            index += Character.isHighSurrogate(line.mText[index]) ? 2 : 1;
+            int width = line.getDisplayWidthAt(start);
+            while (index < spaceUsed && line.getDisplayWidthAt(index) <= 0)
+                index += Character.isHighSurrogate(line.mText[index]) ? 2 : 1;
+            cellStart[column] = start;
+            cellEnd[column] = index;
+            column += Math.max(1, width);
+        }
+        for (int c = Math.max(0, x1); c < x2 && c < mColumns; c++) {
+            if (line.getTextSizeRecord(c) != 0) {
+                TextBlock block = getTextBlockAt(row, c);
+                if (block != null && blocksTaken.add(((long) block.row << 32) | (long) block.column))
+                    out.append(getTextBlockText(block));
+                continue;
+            }
+            if (cellStart[c] >= 0) out.append(line.mText, cellStart[c], cellEnd[c] - cellStart[c]);
+        }
     }
 
     public String getWordAtLocation(int x, int y) {
@@ -387,6 +450,73 @@ public final class TerminalBuffer {
                     int displayWidth = oldLine.getDisplayWidthAt(
                         i - (Character.isSupplementaryCodePoint(codePoint) ? 1 : 0));
                     if (justToCursor && newCursorPlaced && displayWidth > 0) break;
+                    int sizeRecord = (displayWidth > 0) ? oldLine.getTextSizeRecord(currentOldCol) : 0;
+                    if (sizeRecord != 0) {
+                        // A block is replayed as a block: its cells are one column each, its text
+                        // lives in the anchor, and the cells beside it are blanks that carry only
+                        // an offset. Copying them character by character would scatter it.
+                        int clusterStart = i - (Character.isSupplementaryCodePoint(codePoint) ? 1 : 0);
+                        int clusterEnd = i + 1;
+                        while (clusterEnd < oldLine.getSpaceUsed()
+                            && oldLine.getDisplayWidthAt(clusterEnd) <= 0)
+                            clusterEnd += Character.isHighSurrogate(oldLine.mText[clusterEnd]) ? 2 : 1;
+                        if (KittyTextSizing.isAnchor(sizeRecord)) {
+                            String blockText = new String(oldLine.mText, clusterStart, clusterEnd - clusterStart);
+                            long blockStyle = oldLine.getStyle(currentOldCol);
+                            int blockDecoration = oldLine.getDecorationColor(currentOldCol);
+                            int blockHyperlink = oldLine.getHyperlinkId(currentOldCol);
+                            int scale = KittyTextSizing.scaleOf(sizeRecord);
+                            int cellWidth = KittyTextSizing.widthOf(sizeRecord);
+                            // The full block if it fits the new width, otherwise one row of
+                            // normal-size cells that keeps the record for when it fits again.
+                            boolean fits = scale * cellWidth <= mColumns && scale <= mScreenRows;
+                            int placeColumns = fits ? scale * cellWidth : cellWidth;
+                            int placeRows = fits ? scale : 1;
+                            if (placeColumns <= mColumns) {
+                                if (currentOutputExternalColumn + placeColumns > mColumns) {
+                                    setLineWrap(currentOutputExternalRow);
+                                    if (currentOutputExternalRow == mScreenRows - 1) {
+                                        if (newCursorPlaced) newCursorRow--;
+                                        scrollDownOneLine(0, mScreenRows, currentStyle);
+                                    } else {
+                                        currentOutputExternalRow++;
+                                    }
+                                    currentOutputExternalColumn = 0;
+                                }
+                                // A demoted block only grows back into cells that are still blank.
+                                if (fits && KittyTextSizing.isDemoted(sizeRecord) && placeRows > 1
+                                    && !isAreaBlank(currentOutputExternalColumn,
+                                        Math.min(currentOutputExternalRow + 1, mScreenRows - 1),
+                                        placeColumns, Math.min(placeRows - 1, mScreenRows - currentOutputExternalRow - 1))) {
+                                    fits = false;
+                                    placeColumns = cellWidth;
+                                    placeRows = 1;
+                                }
+                                int rowsOverflowing = currentOutputExternalRow + placeRows - mScreenRows;
+                                for (int scrolled = 0; scrolled < rowsOverflowing; scrolled++) {
+                                    if (newCursorPlaced) newCursorRow--;
+                                    scrollDownOneLine(0, mScreenRows, currentStyle);
+                                }
+                                if (rowsOverflowing > 0) currentOutputExternalRow -= rowsOverflowing;
+                                writeTextBlock(currentOutputExternalColumn, currentOutputExternalRow,
+                                    blockText, KittyTextSizing.withDemoted(sizeRecord, !fits),
+                                    blockStyle, blockDecoration, blockHyperlink);
+                                if (oldCursorRow == externalOldRow && oldCursorColumn == currentOldCol) {
+                                    newCursorColumn = currentOutputExternalColumn;
+                                    newCursorRow = currentOutputExternalRow;
+                                    newCursorPlaced = true;
+                                }
+                                currentOutputExternalColumn += placeColumns;
+                            }
+                        } else if (KittyTextSizing.offsetYOf(sizeRecord) > 0) {
+                            // A cell on one of the block's lower rows: the anchor is not on this
+                            // row, so keep the column it took so following text stays put.
+                            currentOutputExternalColumn++;
+                        }
+                        currentOldCol++;
+                        i = clusterEnd - 1;
+                        continue;
+                    }
                     // Use the last style if this is a zero-width character:
                     if (displayWidth > 0) {
                         styleAtCol = oldLine.getStyle(currentOldCol);
@@ -474,6 +604,13 @@ public final class TerminalBuffer {
     public void scrollDownOneLine(int topMargin, int bottomMargin, long style) {
         if (topMargin > bottomMargin - 1 || topMargin < 0 || bottomMargin > mScreenRows)
             throw new IllegalArgumentException("topMargin=" + topMargin + ", bottomMargin=" + bottomMargin + ", mScreenRows=" + mScreenRows);
+        // Rows move by reference, so a whole-screen scroll carries every block along with it. A
+        // scroll region does not: the row leaving at the top of the region, and any block straddling
+        // a margin, would be cut in half, and a block always goes as a whole.
+        if (topMargin > 0)
+            dropTextBlocksIn(0, topMargin, mColumns, 1, style);
+        if (bottomMargin < mScreenRows)
+            dropTextBlocksCrossingRow(bottomMargin, style);
         // Copy the fixed topMargin lines one line down so that they remain on screen in same position:
         blockCopyLinesDown(mScreenFirstRow, topMargin);
         // Copy the fixed mScreenRows-bottomMargin lines one line down so that they remain on screen in same
@@ -532,6 +669,10 @@ public final class TerminalBuffer {
             return;
         if (sx < 0 || sx + w > mColumns || sy < 0 || sy + h > mScreenRows || dx < 0 || dx + w > mColumns || dy < 0 || dy + h > mScreenRows)
             throw new IllegalArgumentException();
+        // A block is never copied in part, and the source rectangle is about to lose what was
+        // there, so every block either rectangle touches goes as a whole first.
+        dropTextBlocksIn(sx, sy, w, h);
+        dropTextBlocksIn(dx, dy, w, h);
         boolean copyingUp = sy > dy;
         for (int y = 0; y < h; y++) {
             int y2 = copyingUp ? y : (h - (y + 1));
@@ -549,6 +690,7 @@ public final class TerminalBuffer {
         if (sx < 0 || sx + w > mColumns || sy < 0 || sy + h > mScreenRows) {
             throw new IllegalArgumentException("Illegal arguments! blockSet(" + sx + ", " + sy + ", " + w + ", " + h + ", " + val + ", " + mColumns + ", " + mScreenRows + ")");
         }
+        dropTextBlocksIn(sx, sy, w, h, style);
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) setChar(sx + x, sy + y, val, style);
             if (sx + w == mColumns && val == ' ') {
@@ -572,8 +714,16 @@ public final class TerminalBuffer {
     public void setChar(int column, int row, int codePoint, long style, int decorationColor, int hyperlinkId) {
         if (row < 0 || row >= mScreenRows || column < 0 || column >= mColumns)
             throw new IllegalArgumentException("TerminalBuffer.setChar(): row=" + row + ", column=" + column + ", mScreenRows=" + mScreenRows + ", mColumns=" + mColumns);
-        row = externalToInternalRow(row);
-        allocateFullLineIfNecessary(row).setChar(column, codePoint, style, decorationColor, hyperlinkId);
+        TerminalRow line = allocateFullLineIfNecessary(externalToInternalRow(row));
+        if (line.hasTextSizes() && line.isTextSizeCell(column)) {
+            // Writing over the cell that holds a block's text takes the whole block away; writing
+            // over any other cell of it leaves a hole and the rest standing.
+            if (line.isTextSizeAnchor(column))
+                dropTextBlockAt(row, column, true, style);
+            else
+                line.setTextSizeRecord(column, 0);
+        }
+        line.setChar(column, codePoint, style, decorationColor, hyperlinkId);
     }
 
     /** Attach a code point to the grapheme already stored in a cell without consuming a new cell. */
@@ -628,6 +778,229 @@ public final class TerminalBuffer {
 
     public int getHyperlinkIdAt(int externalRow, int column) {
         return allocateFullLineIfNecessary(externalToInternalRow(externalRow)).getHyperlinkId(column);
+    }
+
+    // --- Text sizing blocks (OSC 66) ------------------------------------------------------
+
+    /**
+     * Where one text sizing block sits, in external row coordinates. The cell at
+     * ({@link #row}, {@link #column}) is the anchor: it holds the block's text, and every other
+     * cell of the rectangle is blank and points back to it.
+     */
+    public static final class TextBlock {
+
+        /** The anchor's row, in external coordinates; may be negative for a transcript row. */
+        public final int row;
+
+        /** The anchor's column. */
+        public final int column;
+
+        /** How many rows the block covers. One for a demoted block. */
+        public final int rows;
+
+        /** How many columns the block covers. */
+        public final int columns;
+
+        /** How many times normal size the text is drawn. */
+        public final int scale;
+
+        /** How many cells wide the text is before scaling. */
+        public final int cellWidth;
+
+        /** The {@code n} of the {@code n/d} height fraction; 0 means the whole height. */
+        public final int fractionNumerator;
+
+        /** The {@code d} of the {@code n/d} height fraction; 0 means the whole height. */
+        public final int fractionDenominator;
+
+        /** 0 top, 1 bottom, 2 centre. */
+        public final int verticalAlign;
+
+        /** 0 left, 1 right, 2 centre. */
+        public final int horizontalAlign;
+
+        /** Whether the block did not fit the screen width and sits on one row at normal size. */
+        public final boolean demoted;
+
+        TextBlock(int row, int column, int record) {
+            this.row = row;
+            this.column = column;
+            this.rows = KittyTextSizing.rowsOf(record);
+            this.columns = KittyTextSizing.columnsOf(record);
+            this.scale = KittyTextSizing.scaleOf(record);
+            this.cellWidth = KittyTextSizing.widthOf(record);
+            this.fractionNumerator = KittyTextSizing.numeratorOf(record);
+            this.fractionDenominator = KittyTextSizing.denominatorOf(record);
+            this.verticalAlign = KittyTextSizing.verticalAlignOf(record);
+            this.horizontalAlign = KittyTextSizing.horizontalAlignOf(record);
+            this.demoted = KittyTextSizing.isDemoted(record);
+        }
+
+        /** Whether a cell is inside this block. */
+        public boolean contains(int externalRow, int cellColumn) {
+            return externalRow >= row && externalRow < row + rows
+                && cellColumn >= column && cellColumn < column + columns;
+        }
+
+        @Override
+        public String toString() {
+            return "TextBlock[row=" + row + ", column=" + column + ", rows=" + rows
+                + ", columns=" + columns + ", scale=" + scale + ", cellWidth=" + cellWidth
+                + (demoted ? ", demoted" : "") + "]";
+        }
+    }
+
+    /**
+     * The text sizing block a cell belongs to, or null when the cell is a plain one. A cell whose
+     * anchor has scrolled out of the transcript resolves to null too, so half a block left behind
+     * at the top of history reads as blank rather than throwing.
+     */
+    @Nullable
+    public TextBlock getTextBlockAt(int externalRow, int column) {
+        if (column < 0 || column >= mColumns) return null;
+        if (externalRow < -mActiveTranscriptRows || externalRow >= mScreenRows) return null;
+        TerminalRow line = mLines[externalToInternalRow(externalRow)];
+        if (line == null) return null;
+        int record = line.getTextSizeRecord(column);
+        if (!KittyTextSizing.isPresent(record)) return null;
+        int anchorRow = externalRow - KittyTextSizing.offsetYOf(record);
+        int anchorColumn = column - KittyTextSizing.offsetXOf(record);
+        if (anchorColumn < 0 || anchorRow < -mActiveTranscriptRows) return null;
+        TerminalRow anchorLine = mLines[externalToInternalRow(anchorRow)];
+        if (anchorLine == null) return null;
+        int anchorRecord = anchorLine.getTextSizeRecord(anchorColumn);
+        if (!KittyTextSizing.isAnchor(anchorRecord) || !KittyTextSizing.sameBlock(anchorRecord, record))
+            return null;
+        return new TextBlock(anchorRow, anchorColumn, anchorRecord);
+    }
+
+    /** The text a block draws, read from its anchor cell. Empty when the anchor has gone. */
+    @NonNull
+    public String getTextBlockText(@NonNull TextBlock block) {
+        if (block.row < -mActiveTranscriptRows || block.row >= mScreenRows) return "";
+        TerminalRow line = mLines[externalToInternalRow(block.row)];
+        if (line == null) return "";
+        int start = line.findStartOfColumn(block.column);
+        int end = (block.column + 1 < mColumns)
+            ? line.findStartOfColumn(block.column + 1) : line.getSpaceUsed();
+        return (end <= start) ? "" : new String(line.mText, start, end - start);
+    }
+
+    /**
+     * Write one block: blank its rectangle, put the whole text in the top left cell as a single
+     * cluster, and stamp each cell with where in the block it sits. The record says how many rows
+     * and columns the block covers.
+     */
+    public void writeTextBlock(int column, int row, @NonNull String text, int record,
+                               long style, int decorationColor, int hyperlinkId) {
+        int rows = KittyTextSizing.rowsOf(record);
+        int columns = KittyTextSizing.columnsOf(record);
+        if (column < 0 || row < 0 || column + columns > mColumns || row + rows > mScreenRows) return;
+        dropTextBlocksIn(column, row, columns, rows, style);
+        for (int y = 0; y < rows; y++) {
+            TerminalRow line = allocateFullLineIfNecessary(externalToInternalRow(row + y));
+            for (int x = 0; x < columns; x++)
+                line.setChar(column + x, ' ', style, decorationColor, hyperlinkId);
+        }
+        TerminalRow anchorLine = allocateFullLineIfNecessary(externalToInternalRow(row));
+        boolean first = true;
+        for (int i = 0; i < text.length(); ) {
+            int codePoint = text.codePointAt(i);
+            i += Character.charCount(codePoint);
+            if (first) {
+                anchorLine.setBlockAnchorChar(column, codePoint, style, decorationColor, hyperlinkId);
+                first = false;
+            } else {
+                anchorLine.appendCodePointToCell(column, codePoint);
+            }
+        }
+        for (int y = 0; y < rows; y++) {
+            TerminalRow line = allocateFullLineIfNecessary(externalToInternalRow(row + y));
+            for (int x = 0; x < columns; x++)
+                line.setTextSizeRecord(column + x, KittyTextSizing.withOffsets(record, x, y));
+        }
+    }
+
+    /** Whether every cell of a rectangle is a plain blank, which is what a block may grow into. */
+    public boolean isAreaBlank(int column, int row, int columns, int rows) {
+        for (int y = row; y < row + rows; y++) {
+            if (y < 0 || y >= mScreenRows) return false;
+            TerminalRow line = mLines[externalToInternalRow(y)];
+            if (line == null) continue;
+            for (int x = column; x < column + columns; x++) {
+                if (x < 0 || x >= mColumns) return false;
+                if (line.getTextSizeRecord(x) != 0) return false;
+                int start = line.findStartOfColumn(x);
+                int end = (x + 1 < mColumns) ? line.findStartOfColumn(x + 1) : line.getSpaceUsed();
+                for (int i = start; i < end; i++)
+                    if (line.mText[i] != ' ') return false;
+            }
+        }
+        return true;
+    }
+
+    /** Take away every block that touches a rectangle, keeping each cleared cell's own style. */
+    public void dropTextBlocksIn(int x, int y, int w, int h) {
+        dropTextBlocksIn(x, y, w, h, false, 0);
+    }
+
+    /** Take away every block that touches a rectangle, blanking its cells with the given style. */
+    public void dropTextBlocksIn(int x, int y, int w, int h, long style) {
+        dropTextBlocksIn(x, y, w, h, true, style);
+    }
+
+    private void dropTextBlocksIn(int x, int y, int w, int h, boolean useStyle, long style) {
+        if (w <= 0 || h <= 0) return;
+        int firstRow = Math.max(y, -mActiveTranscriptRows);
+        int lastRow = Math.min(y + h - 1, mScreenRows - 1);
+        int firstColumn = Math.max(0, x);
+        int lastColumn = Math.min(x + w, mColumns) - 1;
+        for (int row = firstRow; row <= lastRow; row++) {
+            TerminalRow line = mLines[externalToInternalRow(row)];
+            if (line == null || !line.hasTextSizes()) continue;
+            for (int column = firstColumn; column <= lastColumn; column++) {
+                if (line.getTextSizeRecord(column) != 0)
+                    dropTextBlockAt(row, column, useStyle, style);
+            }
+        }
+    }
+
+    /** Take away every block that straddles a row boundary, one that a scroll would cut. */
+    private void dropTextBlocksCrossingRow(int boundary, long style) {
+        if (boundary < 0 || boundary >= mScreenRows) return;
+        TerminalRow line = mLines[externalToInternalRow(boundary)];
+        if (line == null || !line.hasTextSizes()) return;
+        for (int column = 0; column < mColumns; column++) {
+            int record = line.getTextSizeRecord(column);
+            if (record != 0 && KittyTextSizing.offsetYOf(record) > 0)
+                dropTextBlockAt(boundary, column, true, style);
+        }
+    }
+
+    /** Turn the whole block a cell belongs to back into plain blanks. */
+    void dropTextBlockAt(int externalRow, int column, boolean useStyle, long style) {
+        TextBlock block = getTextBlockAt(externalRow, column);
+        if (block == null) {
+            // An orphan left behind when its anchor scrolled away: just make the cell plain.
+            TerminalRow line = mLines[externalToInternalRow(externalRow)];
+            if (line != null) {
+                line.setTextSizeRecord(column, 0);
+                line.setChar(column, ' ', useStyle ? style : line.getStyle(column));
+            }
+            return;
+        }
+        for (int y = 0; y < block.rows; y++) {
+            int row = block.row + y;
+            if (row < -mActiveTranscriptRows || row >= mScreenRows) continue;
+            TerminalRow line = mLines[externalToInternalRow(row)];
+            if (line == null) continue;
+            for (int x = 0; x < block.columns; x++) {
+                int cellColumn = block.column + x;
+                if (cellColumn >= mColumns) break;
+                line.setTextSizeRecord(cellColumn, 0);
+                line.setChar(cellColumn, ' ', useStyle ? style : line.getStyle(cellColumn));
+            }
+        }
     }
 
     /** Mark hyperlink ids referenced by the visible screen and active transcript only. */

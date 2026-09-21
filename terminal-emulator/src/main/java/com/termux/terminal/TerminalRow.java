@@ -101,6 +101,13 @@ public final class TerminalRow {
     private int[] mHyperlinkIds;
 
     /**
+     * The text sizing record of each cell, or null while every cell in this row is plain. A cell
+     * that belongs to an {@code OSC 66} block carries how big that block is and where in it the
+     * cell sits; see {@link KittyTextSizing} for the packing. Zero means a plain cell.
+     */
+    private int[] mTextSizes;
+
+    /**
      * Construct a blank row (containing only whitespace, ' ') with a specified style.
      */
     public TerminalRow(int columns, long style) {
@@ -155,6 +162,86 @@ public final class TerminalRow {
             mHyperlinkIds = new int[mColumns];
         }
         mHyperlinkIds[column] = hyperlinkId;
+    }
+
+    /** If any cell in this row belongs to a text sizing block. Performance only. */
+    public boolean hasTextSizes() {
+        return mTextSizes != null;
+    }
+
+    /** The packed text sizing record of a cell, or zero when the cell is a plain one. */
+    int getTextSizeRecord(int column) {
+        return (mTextSizes == null || column < 0 || column >= mColumns) ? 0 : mTextSizes[column];
+    }
+
+    /** Store a packed record, or zero to make the cell plain again. */
+    void setTextSizeRecord(int column, int record) {
+        if (mTextSizes == null) {
+            if (record == 0)
+                return;
+            mTextSizes = new int[mColumns];
+        }
+        mTextSizes[column] = record;
+    }
+
+    /** Whether this cell is part of a text sizing block at all. */
+    public boolean isTextSizeCell(int column) {
+        return KittyTextSizing.isPresent(getTextSizeRecord(column));
+    }
+
+    /** Whether this cell is a block's top left cell, the one that holds the text. */
+    public boolean isTextSizeAnchor(int column) {
+        return KittyTextSizing.isAnchor(getTextSizeRecord(column));
+    }
+
+    /** How many times normal size the block covering this cell is drawn, or 1 for a plain cell. */
+    public int getTextScale(int column) {
+        return KittyTextSizing.scaleOf(getTextSizeRecord(column));
+    }
+
+    /** How many cells wide the block's text is before scaling, or 1 for a plain cell. */
+    public int getTextCellWidth(int column) {
+        return KittyTextSizing.widthOf(getTextSizeRecord(column));
+    }
+
+    /** How far right of its block's anchor this cell sits. */
+    public int getTextSizeOffsetX(int column) {
+        return KittyTextSizing.offsetXOf(getTextSizeRecord(column));
+    }
+
+    /** How far below its block's anchor this cell sits. */
+    public int getTextSizeOffsetY(int column) {
+        return KittyTextSizing.offsetYOf(getTextSizeRecord(column));
+    }
+
+    /** The {@code n} of the block's {@code n/d} height fraction; 0 means the whole height. */
+    public int getTextFractionNumerator(int column) {
+        return KittyTextSizing.numeratorOf(getTextSizeRecord(column));
+    }
+
+    /** The {@code d} of the block's {@code n/d} height fraction; 0 means the whole height. */
+    public int getTextFractionDenominator(int column) {
+        return KittyTextSizing.denominatorOf(getTextSizeRecord(column));
+    }
+
+    /** Where in the block's height the text sits: 0 top, 1 bottom, 2 centre. */
+    public int getTextVerticalAlign(int column) {
+        return KittyTextSizing.verticalAlignOf(getTextSizeRecord(column));
+    }
+
+    /** Where in the block's width the text sits: 0 left, 1 right, 2 centre. */
+    public int getTextHorizontalAlign(int column) {
+        return KittyTextSizing.horizontalAlignOf(getTextSizeRecord(column));
+    }
+
+    /** Whether the block was too wide for the screen and sits on one row at normal size. */
+    public boolean isTextSizeDemoted(int column) {
+        return KittyTextSizing.isDemoted(getTextSizeRecord(column));
+    }
+
+    /** Forget every text sizing record on this row, leaving the text where it is. */
+    void clearTextSizes() {
+        mTextSizes = null;
     }
 
     /**
@@ -260,6 +347,7 @@ public final class TerminalRow {
         // Erasing a row drops its links and decoration colors, as they belong to the erased text.
         mDecorationColors = null;
         mHyperlinkIds = null;
+        mTextSizes = null;
         mShellIntegrationMark = MARK_NONE;
     }
 
@@ -273,6 +361,15 @@ public final class TerminalRow {
             WcWidth.width(codePoint), true);
     }
 
+    /**
+     * Write the first code point of a text sizing block's text into its anchor cell. The block's
+     * width comes from its record rather than from the character, so even a wide character is
+     * stored as one cell here and the cells beside it stay blank continuation cells.
+     */
+    public void setBlockAnchorChar(int column, int codePoint, long style, int decorationColor, int hyperlinkId) {
+        setChar(column, codePoint, style, decorationColor, hyperlinkId, 1, true);
+    }
+
     /** Attach a code point to the existing grapheme without consuming another terminal cell. */
     public void appendCodePointToCell(int column, int codePoint) {
         setChar(column, codePoint, 0, TextStyle.DECORATION_COLOR_DEFAULT, 0, 0, false);
@@ -282,6 +379,8 @@ public final class TerminalRow {
     public boolean widenCell(int column) {
         int start = findStartOfColumn(column);
         if (mCharWidths[start] != 1 || column >= mColumns - 1) return false;
+        // A sized block already owns how many cells it covers; widening would eat its neighbour.
+        if (isTextSizeCell(column) || isTextSizeCell(column + 1)) return false;
         if (wideDisplayCharacterStartingAt(column + 1))
             setChar(column + 1, ' ', mStyle[column + 1]);
         int nextStart = findStartOfColumn(column + 1);
@@ -306,6 +405,9 @@ public final class TerminalRow {
             mStyle[columnToSet] = style;
             setDecorationColor(columnToSet, decorationColor);
             setHyperlinkId(columnToSet, hyperlinkId);
+            // Writing ordinary text over a cell makes it a plain one again. Dropping the rest of
+            // the block it belonged to is TerminalBuffer's job, since only it can see other rows.
+            setTextSizeRecord(columnToSet, 0);
             if (!mHasBitmap && TextStyle.isBitmap(style)) {
                 mHasBitmap = true;
             }
