@@ -1266,6 +1266,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_SOUND_ENABLED, value, false);
     }
 
+    /** Whether a pressed key floats above the finger with its other characters around it. */
+    public boolean isInAppKeyboardKeyPopupEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_POPUP,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_POPUP);
+    }
+
+    public void setInAppKeyboardKeyPopupEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_POPUP, value, false);
+    }
+
     /** Absolute path of the imported label font file, or empty for the default typeface. */
     public String getInAppKeyboardFontPath() {
         String value = SharedPreferenceUtils.getString(
