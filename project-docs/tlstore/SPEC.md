@@ -225,3 +225,93 @@ this phase verified.
 **2026-09-06**: `docs/en/examples/setup-launcher`, `docs/en/examples/setup-nvim` and
 `docs/en/examples/update-setup-launcher-digests.sh` — the scripts this store replaces — were
 removed, along with every reference to them (P7).
+
+## Revision 3 (2026-09-21) — hosts, a machine-readable face, a browser, upstream Termux
+
+The developer wants to keep adding terminal tools (the fastfetch GIF patch is the model: special
+work to run in Termux), a Pacsea-like browser, and the store on official Termux too. Decided
+2026-09-21 without a review page ("not much for me to review, proceed"): TSV contract + fzf browser,
+not a compiled TUI; CI signing is a later round.
+
+### Hosts
+
+Three environments run the store. `prefixes` already tells editions apart by `$PREFIX`; it cannot
+tell the launcher built as `com.termux` from official Termux, which share a prefix. A second
+dimension, the **host**:
+
+| host | how tlstore knows | items that differ |
+|---|---|---|
+| `launcher` | `TERM_PROGRAM=termux-launcher`; when `TERM_PROGRAM` is unset (ssh), `$STORE_DIR/.installed` exists (the app writes it on every start, nothing else does) | everything |
+| `termux` | `TERM_PROGRAM` set to anything else, or unset with no `.installed` | `fastfetch` is out (the GIF logo needs the launcher's kitty graphics); `sigye`, `claude-code`, `kitten`, `fish-shell` stay |
+
+`TLSTORE_HOST=launcher|termux` overrides detection (tests, and a user who knows better). The nix
+edition is out of scope: no apt/pacman, and nothing here targets it.
+
+Catalog: new `options` key `host=<comma list of launcher|termux>`; absent means every host. A row
+whose host does not match is filtered in `rows()` exactly like the arch filter — never listed,
+searched, browsed or installable, `info` says "not in the list". Optional `min-launcher=X.Y.Z`
+compares against `TERM_PROGRAM_VERSION` (the launcher's versionName) and passes when that is unset.
+`items.tsv`: both `fastfetch` rows gain `host=launcher`. `doctor` prints an `App` line:
+`Termux Launcher 0.2.40 (com.termux)` or `Termux (com.termux)`.
+
+### TSV contract (`--tsv` on list, search, info, update --check)
+
+Tab-separated, no header, no colour, stable column order; product copy stays in `summary` only.
+
+```
+list   --tsv [-i|-a]    name  state  version  installed  kind  summary      state: installed|available
+search --tsv <query>    same columns as list
+info   --tsv <name>     key  value   one row per line info prints (Kind, Version, From, Checksum,
+                                     Needs, Builds with, Files, Installed, Summary)
+update --check --tsv    name  installed  available  note   note: "" | config-asks | latest
+```
+
+Nothing else changes shape. The browser and any later front end read only these.
+
+### `tlstore browse`
+
+`tlstore browse` (and plain `tlstore` on a tty when fzf is present; otherwise usage as today) is
+the Pacsea-shaped view built on fzf: the item list on top with `*` for installed, `tlstore info` as
+the preview pane, a header line naming the keys. Portrait phones are ~45 columns: preview goes
+`down` when `COLUMNS` < 80, `right` otherwise. Keys: Tab marks, Enter installs the marked items
+(or the current one), Ctrl-R removes the current item, Ctrl-U updates everything, Ctrl-F refreshes
+the list, ? shows the keys, Esc leaves. Actions run outside fzf (its `--expect` returns the key
+and the selection; tlstore runs the plan in the terminal so prompts work, waits for Enter, reopens
+the view). Without fzf: offer to install it through the package manager as `refresh` does for
+minisign; declined → the numbered picker from `install`. Marked items that are already installed
+are skipped with one line. `motd.sh` points at `tlstore browse`.
+
+### Standalone install on official Termux
+
+`scripts/tlstore/install.sh`, run as
+`curl -fsSL https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/scripts/tlstore/install.sh | sh`.
+It refuses outside a Termux prefix (`$PREFIX` under `/data/data/*/files/usr`) and on non-aarch64
+says so but continues (pkg items still work). Steps: `pkg install -y minisign` (asks first unless
+`-y`/`TLSTORE_ASSUME_YES`); fetch `trusted.pub`, `tlstore` + `tlstore.minisig`, `catalog.tsv` +
+`.minisig` from `$TLSTORE_RAW_BASE` (default the raw `main` URL above); verify both signatures
+against the fetched key (TLS + GitHub is the trust root, the same as any curl-pipe installer) and
+stop on any failure; write `$PREFIX/bin/tlstore` (keeps the `# written by termux-launcher` marker
+so the app takes the file over if the launcher is installed later), symlinks `tl`/`tls` only when
+those names are free, `$STORE_DIR/{catalog.tsv,trusted.pub}` and `$STORE_DIR/.standalone`
+containing the raw base URL; removes a stale `.installed`. Ends with the doctor line and
+`tlstore browse`'s name.
+
+Self-update: on a standalone install (`.standalone` present, `.installed` absent) `tlstore update`
+also fetches `tlstore` + `.minisig` from the recorded base, verifies, and replaces itself when the
+`TLSTORE_VERSION` line is newer — after the item work, and it re-executes nothing. On the launcher
+the app rewrites the script, so self-update is skipped. `sign-catalog.sh` becomes `sign.sh`:
+signs the catalog and the script (`tlstore.minisig`, trusted comment `tlstore <version>`).
+Tests point `TLSTORE_RAW_BASE` at a `file://` tree.
+
+### Build plan
+
+| phase | branch / worktree | deliverable | depends on | model |
+|---|---|---|---|---|
+| core | `feat/tlstore-core` / `tl-wt-tlstore-core` | host gating, `--tsv`, `browse`, self-update hook, items.tsv, motd, docs for browse and hosts, tests | — | opus |
+| installer | `feat/tlstore-installer` / `tl-wt-tlstore-installer` | `install.sh`, `sign.sh`, installer tests (own file), docs section "On official Termux" | spec only (marker + URL contract above) | sonnet |
+
+Merge order: core, then installer; the orchestrator wires the installer test into `test.sh`, runs
+the suite on the merged state, regenerates and signs the catalog. Gate: `scripts/tlstore/test.sh`
+all shells green and shellcheck clean; `browse` smoke on Waydroid (pkg items only, x86_64).
+Later rounds: CI in `termux-launcher-binaries` (tag → build → SHA256SUMS) and catalog signing on
+push; the catalog itself grows item by item.
