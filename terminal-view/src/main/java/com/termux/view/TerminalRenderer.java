@@ -523,45 +523,6 @@ public final class TerminalRenderer {
     /** Which visible rows this frame has to record; grown to the visible row count and reused. */
     private boolean[] mChangedRows = new boolean[0];
 
-    private boolean[] changedRowsBuffer(int visibleRows) {
-        if (mChangedRows.length < visibleRows) mChangedRows = new boolean[visibleRows];
-        return mChangedRows;
-    }
-
-    /**
-     * How far the cursor reaches across one row. Over a plain cell that is the one column it
-     * stands on; over a cell of a text sizing block it is the block's full width, on every row the
-     * block covers, because D2 grows the cursor to the whole block.
-     */
-    private static final class CursorSpan {
-        /** The first column covered, or -1 when the cursor is not drawn on this row at all. */
-        int column = -1;
-        /** How many columns are covered; one outside a block. */
-        int columns = 1;
-        /** Whether this is the last row covered — the row an underline cursor is drawn on. */
-        boolean lastRow = true;
-    }
-
-    /**
-     * Work out which part of one row the cursor covers. A cursor inside a block reaches every row
-     * of it, so a row that does not hold the cursor itself can still have to paint it.
-     */
-    private static void cursorSpanFor(CursorSpan out,
-                                      @Nullable TerminalBuffer.TextBlock cursorBlock, int row,
-                                      int cursorRow, int cursorCol, boolean cursorVisible) {
-        if (cursorBlock != null) {
-            final boolean covered = row >= cursorBlock.row
-                && row < cursorBlock.row + cursorBlock.rows;
-            out.column = covered ? cursorBlock.column : -1;
-            out.columns = covered ? cursorBlock.columns : 1;
-            out.lastRow = covered && row == cursorBlock.row + cursorBlock.rows - 1;
-            return;
-        }
-        out.column = (row == cursorRow && cursorVisible) ? cursorCol : -1;
-        out.columns = 1;
-        out.lastRow = true;
-    }
-
     private final Path mBoxPath = new Path();
 
     private final RectF mBoxOval = new RectF();
@@ -917,6 +878,45 @@ public final class TerminalRenderer {
         } finally {
             Trace.endSection();
         }
+    }
+
+    private boolean[] changedRowsBuffer(int visibleRows) {
+        if (mChangedRows.length < visibleRows) mChangedRows = new boolean[visibleRows];
+        return mChangedRows;
+    }
+
+    /**
+     * How far the cursor reaches across one row. Over a plain cell that is the one column it
+     * stands on; over a cell of a text sizing block it is the block's full width, on every row the
+     * block covers, because D2 grows the cursor to the whole block.
+     */
+    private static final class CursorSpan {
+        /** The first column covered, or -1 when the cursor is not drawn on this row at all. */
+        int column = -1;
+        /** How many columns are covered; one outside a block. */
+        int columns = 1;
+        /** Whether this is the last row covered — the row an underline cursor is drawn on. */
+        boolean lastRow = true;
+    }
+
+    /**
+     * Work out which part of one row the cursor covers. A cursor inside a block reaches every row
+     * of it, so a row that does not hold the cursor itself can still have to paint it.
+     */
+    private static void cursorSpanFor(CursorSpan out,
+                                      @Nullable TerminalBuffer.TextBlock cursorBlock, int row,
+                                      int cursorRow, int cursorCol, boolean cursorVisible) {
+        if (cursorBlock != null) {
+            final boolean covered = row >= cursorBlock.row
+                && row < cursorBlock.row + cursorBlock.rows;
+            out.column = covered ? cursorBlock.column : -1;
+            out.columns = covered ? cursorBlock.columns : 1;
+            out.lastRow = covered && row == cursorBlock.row + cursorBlock.rows - 1;
+            return;
+        }
+        out.column = (row == cursorRow && cursorVisible) ? cursorCol : -1;
+        out.columns = 1;
+        out.lastRow = true;
     }
 
     private void renderRows(TerminalEmulator mEmulator, Canvas canvas, int topRow, int selectionY1, int selectionY2, int selectionX1, int selectionX2, boolean transparentBackground, int transparentOverlayColor, float horizontalOffset, int extraRows) {
