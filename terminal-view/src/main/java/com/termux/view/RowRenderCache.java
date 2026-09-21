@@ -83,14 +83,32 @@ final class RowRenderCache {
         long placementGeneration;
         /** The column the cursor is drawn at on this row, or -1 when it is not drawn here. */
         int cursorColumn = -1;
+        /** How many columns the cursor covers here: a block's whole width when it stands on one. */
+        int cursorColumns = 1;
+        /** Whether this is the last row the cursor covers, the one an underline is drawn on. */
+        boolean cursorLastRow = true;
         int cursorShape;
         int cursorColor;
         int selectionStart = -1;
         int selectionEnd = -1;
+        /** Whether the row carries any kitty text sizing record; see {@link #captureTextSizes}. */
+        boolean hasTextSizes;
+        /** One comparable summary per column of the size record it carries. */
+        int[] textSizes = NO_INTS;
+        /** How far above this row the head of the block group it belongs to sits. */
+        int blockRowsAbove;
+        /** How far below this row a block anchored on it reaches. */
+        int blockRowsBelow;
     }
 
     private Row[] mRows = NO_ROWS;
     private int mVisibleRows;
+
+    /** Whether any row of the frame being compared carries a text sizing record at all. */
+    private boolean mAnyTextBlocks;
+
+    /** Scratch for {@link #spreadTextBlockGroups}, grown to the visible row count and reused. */
+    private int[] mGroupEnd = NO_INTS;
 
     /** Raised from outside, and consumed by the next frame. */
     private boolean mInvalidated = true;
@@ -182,6 +200,7 @@ final class RowRenderCache {
         mVisibleRows = visibleRows;
         resize(visibleRows);
         mAllDirty = dirty;
+        mAnyTextBlocks = false;
         return dirty;
     }
 
@@ -191,14 +210,18 @@ final class RowRenderCache {
      * way. Says nothing about the row's images: ask {@link #rowCarriesAnImage} for those. Must be
      * called once per visible row, in order, after {@link #beginFrame}.
      */
-    boolean rowChanged(int index, TerminalRow line, int columns, int cursorColumn, int cursorShape,
+    boolean rowChanged(int index, TerminalRow line, int columns, int cursorColumn,
+                       int cursorColumns, boolean cursorLastRow, int cursorShape,
                        int cursorColor, int selectionStart, int selectionEnd, int urlKey) {
         final Row state = mRows[index];
         boolean changed = mAllDirty || !state.recorded || state.line != line;
-        // The cursor's shape and colour only reach the row it is drawn on.
+        // The cursor's shape and colour only reach the row it is drawn on. How far it reaches
+        // across the row is its own input: over a text sizing block it covers the whole block.
         if (state.cursorColumn != cursorColumn
             || (cursorColumn >= 0
-                && (state.cursorShape != cursorShape || state.cursorColor != cursorColor)))
+                && (state.cursorShape != cursorShape || state.cursorColor != cursorColor
+                    || state.cursorColumns != cursorColumns
+                    || state.cursorLastRow != cursorLastRow)))
             changed = true;
         if (state.selectionStart != selectionStart || state.selectionEnd != selectionEnd)
             changed = true;
@@ -206,6 +229,8 @@ final class RowRenderCache {
         state.urlKey = urlKey;
         state.line = line;
         state.cursorColumn = cursorColumn;
+        state.cursorColumns = cursorColumns;
+        state.cursorLastRow = cursorLastRow;
         state.cursorShape = cursorShape;
         state.cursorColor = cursorColor;
         state.selectionStart = selectionStart;
@@ -218,8 +243,49 @@ final class RowRenderCache {
         if (captureStyle(state, line, columns)) changed = true;
         if (captureDecorationColors(state, line, columns)) changed = true;
         if (captureHyperlinks(state, line, columns)) changed = true;
+        if (captureTextSizes(state, line, columns)) changed = true;
+        if (state.hasTextSizes) mAnyTextBlocks = true;
         state.recorded = true;
         return changed;
+    }
+
+    /**
+     * Fold the rows a text sizing block spans into one answer, in place: D4 B makes an anchor row
+     * and the rows under it a single cached layer, so they are recorded together or not at all.
+     *
+     * <p>The block's ink is recorded into the node of the row that draws it — its anchor's, or the
+     * first visible row when the anchor has scrolled off the top — and reaches down over the rows
+     * beneath. Without this, a change in one of those rows would re-record that row alone and
+     * leave the block itself as it was drawn several frames ago.
+     *
+     * <p>Rows with no block, and demoted blocks, which are one row tall, are left exactly as
+     * {@link #rowChanged} answered for them.
+     *
+     * <p>Call once per frame, after {@link #rowChanged} has been called for every visible row and
+     * before any of them is recorded.
+     */
+    void spreadTextBlockGroups(boolean[] changed) {
+        if (!mAnyTextBlocks) return;
+        final int rows = Math.min(mVisibleRows, Math.min(changed.length, mRows.length));
+        if (rows <= 1) return;
+        if (mGroupEnd.length < rows) mGroupEnd = new int[rows];
+        final int[] groupEnd = mGroupEnd;
+        for (int i = 0; i < rows; i++) groupEnd[i] = i;
+        for (int i = 0; i < rows; i++) {
+            final Row state = mRows[i];
+            if (state.blockRowsAbove == 0 && state.blockRowsBelow == 0) continue;
+            final int head = Math.max(0, i - state.blockRowsAbove);
+            final int end = Math.min(rows - 1, Math.max(i, i + state.blockRowsBelow));
+            if (end > groupEnd[head]) groupEnd[head] = end;
+        }
+        for (int head = 0; head < rows; head++) {
+            final int end = groupEnd[head];
+            if (end <= head) continue;
+            boolean dirty = false;
+            for (int i = head; i <= end && !dirty; i++) dirty = changed[i];
+            if (!dirty) continue;
+            for (int i = head; i <= end; i++) changed[i] = true;
+        }
     }
 
     /**
@@ -396,6 +462,61 @@ final class RowRenderCache {
             }
         }
         return changed;
+    }
+
+    /**
+     * The kitty text sizing records of the row, and how far the block group it belongs to reaches
+     * above and below it. Only a row that carries a record pays for the walk, exactly as the
+     * decoration and hyperlink tables do.
+     *
+     * <p>The packed record is the emulator's own business, so what is compared here is rebuilt
+     * from the typed accessors: the cache only has to notice that a record moved, never read it.
+     */
+    private static boolean captureTextSizes(Row state, TerminalRow line, int columns) {
+        final boolean has = line.hasTextSizes();
+        boolean changed = state.hasTextSizes != has;
+        state.hasTextSizes = has;
+        int above = 0;
+        int below = 0;
+        if (has) {
+            if (state.textSizes.length < columns) {
+                state.textSizes = new int[columns];
+                changed = true;
+            }
+            for (int column = 0; column < columns; column++) {
+                final int record = textSizeKey(line, column);
+                if (state.textSizes[column] != record) {
+                    state.textSizes[column] = record;
+                    changed = true;
+                }
+                if (record == 0) continue;
+                if (line.getTextSizeOffsetY(column) > above)
+                    above = line.getTextSizeOffsetY(column);
+                if (line.isTextSizeAnchor(column) && !line.isTextSizeDemoted(column)
+                    && line.getTextScale(column) - 1 > below)
+                    below = line.getTextScale(column) - 1;
+            }
+        }
+        if (state.blockRowsAbove != above || state.blockRowsBelow != below) changed = true;
+        state.blockRowsAbove = above;
+        state.blockRowsBelow = below;
+        return changed;
+    }
+
+    /** One comparable int per cell: zero for a plain one, every field of its record otherwise. */
+    private static int textSizeKey(TerminalRow line, int column) {
+        if (!line.isTextSizeCell(column)) return 0;
+        return 1
+            | (line.isTextSizeAnchor(column) ? 2 : 0)
+            | (line.isTextSizeDemoted(column) ? 4 : 0)
+            | (line.getTextScale(column) << 3)
+            | (line.getTextCellWidth(column) << 6)
+            | (line.getTextSizeOffsetX(column) << 9)
+            | (line.getTextSizeOffsetY(column) << 15)
+            | (line.getTextFractionNumerator(column) << 18)
+            | (line.getTextFractionDenominator(column) << 22)
+            | (line.getTextVerticalAlign(column) << 26)
+            | (line.getTextHorizontalAlign(column) << 28);
     }
 
     private static boolean captureHyperlinks(Row state, TerminalRow line, int columns) {

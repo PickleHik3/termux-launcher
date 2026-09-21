@@ -1,20 +1,18 @@
-# P1 text sizing model (feat/text-sizing-model) - done
+# P2 text sizing renderer (feat/text-sizing-draw)
 
 ## Done
-- `KittyTextSizing`: OSC 66 parser, grapheme split, cell measure/cut, the packed size record.
-- `TerminalRow`: `mTextSizes` side table + typed accessors; cleared by `clear`/`setChar`;
-  `widenCell` refuses sized cells; `setBlockAnchorChar` keeps a whole block text in one cell.
-- `TerminalBuffer`: `TextBlock`, `getTextBlockAt`, `getTextBlockText`, `writeTextBlock`,
-  `isAreaBlank`, `dropTextBlocksIn`, wired into `setChar`/`blockCopy`/`blockSet`/
-  `scrollDownOneLine`; D5 selection; D3 reflow with demote/promote.
-- `TerminalEmulator`: OSC 66 case, `doTextSizing`/`writeTextSizeBlock`, REP of a block.
-- `KittyTextSizingTest` (37 tests); `assertInvariants` uses stored widths on rows with blocks.
-- Suite: 474 tests green (437 before), terminal-view green.
+- `TextBlockGeometry`: pure block rect / size scale / alignment / cursor rect maths.
+- `TerminalRenderer`: block cells break the run; `drawRowTextBlocks` + `drawTextBlock` draw each
+  anchor at scale (x n/d), clipped and aligned; cursor span covers a block (D2) on both paths and
+  in `drawExtraCursors`; the record loop is split into compare-then-record for D4.
+- `RowRenderCache`: `captureTextSizes` + `spreadTextBlockGroups` (D4 B group dirtying).
+- `TextBlockSelection` + controller wiring (D5).
 
 ## Next
-- Nothing here. P2 (renderer) builds on the contract in the final report.
+- Tests: RowRenderCacheTest (group dirtying, record change), TextSizingRenderTest (geometry),
+  TextBlockSelectionTest.
 
 ## Gotchas
-- The anchor holds the whole text as one cluster at stored width 1; never use `WcWidth` on it.
-- Records are stamped after the text is written, or `setChar` would drop the block being written.
-- `getWordAtLocation`'s fixed-width column maths is off on rows that carry blocks.
+- `TerminalRow.getTextSizeRecord` is package-private, so the cache rebuilds a comparable key from
+  the typed accessors (`textSizeKey`).
+- `getWordAtLocation` is an emulator fix, not this phase's; described in the report.
