@@ -214,28 +214,25 @@ public class TourRunTest {
     }
 
     @Test
-    public void theKeyboardLessonEndsOnTheTerminalsHoldWhichTheRunOnlyShows() {
+    public void theKeyboardLessonNoLongerEndsOnTheTerminalsHold() {
+        // The hold asked a fresh phone for something it cannot do: its mouse half needs a program
+        // that follows the mouse, and a shell that has just been installed has none. The fact is
+        // on the closing card now, and the lesson is the two taps that work anywhere.
         TourStep keyboard = step(GUEST, TourRun.KEYBOARD);
-        assertTrue(keyboard.endsShown);
+        assertFalse(keyboard.endsShown);
+        assertEquals(2, keyboard.stageCount());
         assertEquals(2, keyboard.signalCount());
-        assertEquals(3, keyboard.stageCount());
-        assertTrue(keyboard.isShownOnlyStage(2));
         assertFalse(keyboard.isShownOnlyStage(1));
-        // Nothing to watch for: what the hold does needs a program that follows the mouse.
-        assertNull(keyboard.signalAt(2));
-        assertEquals(TourTargets.TERMINAL_PANE, keyboard.targetIdAt(2));
-        assertEquals(TourGesture.HOLD, keyboard.gestureAt(2));
-        // Its own sentence, and the same one whichever way round the lesson began.
-        assertNotEquals(keyboard.copyResAt(1), keyboard.copyResAt(2));
-        assertEquals(step(HOME, TourRun.KEYBOARD).copyResAt(2), keyboard.copyResAt(2));
+        assertEquals(TourGesture.TAP, keyboard.gestureAt(1));
+        assertEquals(TourTargets.KEYBOARD_TOGGLE_KEY, keyboard.targetIdAt(1));
     }
 
     @Test
-    public void itIsTheOnlyStageOfTheRunWithNoSignalBehindIt() {
+    public void noStageOfTheRunIsLeftWithoutASignalBehindIt() {
         for (TourStep step : TourRun.steps(GUEST)) {
             if (step.kind != TourStep.Kind.LESSON) continue;
-            assertEquals("shown stage of " + step.id, TourRun.KEYBOARD.equals(step.id),
-                step.endsShown);
+            assertFalse("shown stage of " + step.id, step.endsShown);
+            assertEquals("stages of " + step.id, step.stageCount(), step.signalCount());
         }
     }
 

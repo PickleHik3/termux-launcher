@@ -142,31 +142,29 @@ public final class TourRun {
     }
 
     /**
-     * Lesson four, both ways round the same button, and then one thing the run only shows.
+     * Lesson four, both ways round the same button.
      *
      * <p>Nothing is typed: the lesson is about getting the keyboard out of the way and back again,
      * and a shell command is practice for another day.
      *
-     * <p>The last stage is the hold on the terminal, which is the only stage of the run with no
-     * signal behind it. What the hold does needs a program that follows the mouse before anything
-     * happens on screen, so there is nothing the launcher could watch for: the card shows the
-     * gesture and the user's Done is the way on.
+     * <p>Decision (user, 2026-09-21): the lesson used to end on a third stage that only showed a
+     * hold on the terminal pane. It asked for something a new phone cannot do — the mouse half of
+     * that hold needs a program following the mouse, and a shell that has just been installed has
+     * none, so there the hold only ever selects text. The fact moved to the closing card, where it
+     * is read instead of performed, and the lesson is two taps again: both work on any phone, and
+     * every stage in the run waits for a signal once more.
      */
     private static TourStep keyboard(RunContext context) {
         int[] copy = context.keyboardShown
-            ? new int[] {R.string.tour_card_keyboard_hide, R.string.tour_card_keyboard_show_again,
-                R.string.tour_card_keyboard_hold_terminal}
-            : new int[] {R.string.tour_card_keyboard_show, R.string.tour_card_keyboard_hide_again,
-                R.string.tour_card_keyboard_hold_terminal};
+            ? new int[] {R.string.tour_card_keyboard_hide, R.string.tour_card_keyboard_show_again}
+            : new int[] {R.string.tour_card_keyboard_show, R.string.tour_card_keyboard_hide_again};
         String[] signals = context.keyboardShown
             ? new String[] {TourSignals.KEYBOARD_HIDDEN, TourSignals.KEYBOARD_SHOWN}
             : new String[] {TourSignals.KEYBOARD_SHOWN, TourSignals.KEYBOARD_HIDDEN};
         return new TourStep(KEYBOARD, copy,
-            new String[] {TourTargets.KEYBOARD_TOGGLE_KEY, TourTargets.KEYBOARD_TOGGLE_KEY,
-                TourTargets.TERMINAL_PANE},
+            new String[] {TourTargets.KEYBOARD_TOGGLE_KEY, TourTargets.KEYBOARD_TOGGLE_KEY},
             signals,
-            new TourGesture[] {TourGesture.TAP, TourGesture.TAP, TourGesture.HOLD}, false, false,
-            true);
+            new TourGesture[] {TourGesture.TAP, TourGesture.TAP}, false, false);
     }
 
     /**

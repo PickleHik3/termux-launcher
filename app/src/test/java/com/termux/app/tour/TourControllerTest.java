@@ -5,6 +5,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.R;
+
 import org.junit.Before;
 import org.junit.Test;
 
@@ -27,6 +29,9 @@ public class TourControllerTest {
 
     /** The same phone, already set up with this launcher as its home screen. */
     private static final TourRun.RunContext HOME_PHONE = new TourRun.RunContext(true, true);
+
+    /** The id of the stand-in lesson that ends on a stage the run only shows. */
+    private static final String SHOWN_LESSON = "shown_lesson";
 
     private FakeClock clock;
     private FakePrefs prefs;
@@ -60,6 +65,34 @@ public class TourControllerTest {
             return;
         }
         controller.onSignal(step.signalAt(controller.currentStage()));
+    }
+
+    /**
+     * A run whose middle lesson ends on a stage the run only shows.
+     *
+     * <p>No lesson in the real run does any more — the hold on the terminal was the one, and it
+     * moved to the closing card on 2026-09-21 because a fresh phone cannot perform it. The
+     * controller still knows how to carry such a stage, so the rules for it are checked here on a
+     * run built for the purpose rather than on whichever lesson happens to have one.
+     */
+    private void aRunWithAStageThatIsOnlyShown() {
+        TourStep shown = new TourStep(SHOWN_LESSON,
+            new int[] {R.string.tour_card_keyboard_hide, R.string.tour_card_keyboard_show_again,
+                R.string.tour_card_find_help_close},
+            new String[] {TourTargets.KEYBOARD_TOGGLE_KEY, TourTargets.KEYBOARD_TOGGLE_KEY,
+                TourTargets.TERMINAL_PANE},
+            new String[] {TourSignals.KEYBOARD_HIDDEN, TourSignals.KEYBOARD_SHOWN},
+            new TourGesture[] {TourGesture.TAP, TourGesture.TAP, TourGesture.HOLD}, false, false,
+            true);
+        List<TourStep> run = new ArrayList<>(TourRun.steps(PHONE));
+        run.set(run.indexOf(step(TourRun.KEYBOARD, run)), shown);
+        controller = new TourController(run, prefs, clock);
+        controller.setListener(listener);
+    }
+
+    private static TourStep step(String id, List<TourStep> run) {
+        for (TourStep step : run) if (step.id.equals(id)) return step;
+        throw new AssertionError("no step " + id);
     }
 
     /** Builds the run again for a phone this launcher is already the home app of. */
@@ -509,17 +542,27 @@ public class TourControllerTest {
         assertEquals(1, controller.currentStage());
         assertTrue(controller.isRunning());
         doTheGesture();
-        // The lesson's last stage is only shown, so practice too waits for the user's Done.
-        assertEquals(2, controller.currentStage());
-        assertTrue(controller.isRunning());
-        controller.done();
         assertFalse(controller.isRunning());
         assertFalse(controller.isPracticing());
         assertNull(controller.currentStep());
         assertEquals(Arrays.asList(Boolean.FALSE), listener.finished);
         // Not the next lesson: practice is one lesson and then the overlay comes down.
-        assertEquals(Arrays.asList(TourRun.KEYBOARD + ":0", TourRun.KEYBOARD + ":1",
-            TourRun.KEYBOARD + ":2"), listener.shown);
+        assertEquals(Arrays.asList(TourRun.KEYBOARD + ":0", TourRun.KEYBOARD + ":1"),
+            listener.shown);
+        assertEquals(0, prefs.writes);
+    }
+
+    @Test
+    public void practiceOnALessonThatEndsShownWaitsForTheUsersDone() {
+        aRunWithAStageThatIsOnlyShown();
+        controller.startPractice(SHOWN_LESSON);
+        doTheGesture();
+        doTheGesture();
+        assertEquals(2, controller.currentStage());
+        assertTrue(controller.isRunning());
+        controller.done();
+        assertFalse(controller.isRunning());
+        assertFalse(controller.isPracticing());
         assertEquals(0, prefs.writes);
     }
 
@@ -658,13 +701,14 @@ public class TourControllerTest {
 
     @Test
     public void resumeComesBackOnTheStageALessonOnlyShows() {
-        // The stage is the last of the keyboard lesson, and a process death on it must not drop
-        // the user back onto a keyboard tap they have already made.
+        // A process death on such a stage must not drop the user back onto a tap they have
+        // already made.
+        aRunWithAStageThatIsOnlyShown();
         prefs.runVersion = TourController.RUN_VERSION;
         prefs.stepIndex = 3;
         prefs.stage = 2;
         assertTrue(controller.resumeIfInProgress());
-        assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
+        assertEquals(SHOWN_LESSON, controller.currentStep().id);
         assertEquals(2, controller.currentStage());
         assertTrue(controller.currentStep().isShownOnlyStage(controller.currentStage()));
     }
@@ -707,7 +751,8 @@ public class TourControllerTest {
 
     @Test
     public void theStageTheRunOnlyShowsIsClearedByDoneAndByNothingElse() {
-        controller.startAt(TourRun.KEYBOARD);
+        aRunWithAStageThatIsOnlyShown();
+        controller.startAt(SHOWN_LESSON);
         doTheGesture();
         doTheGesture();
         TourStep keyboard = controller.currentStep();
@@ -719,7 +764,7 @@ public class TourControllerTest {
         for (String signal : new String[] {TourSignals.KEYBOARD_SHOWN, TourSignals.KEYBOARD_HIDDEN,
                 TourSignals.PALETTE_OPENED, TourSignals.PANE_CORNER_MENU})
             controller.onSignal(signal);
-        assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
+        assertEquals(SHOWN_LESSON, controller.currentStep().id);
         assertEquals(2, controller.currentStage());
         assertEquals(2, prefs.stage);
 
@@ -729,7 +774,8 @@ public class TourControllerTest {
 
     @Test
     public void thatStageOffersTheSameThreeButtonsAsEveryOtherStage() {
-        controller.startAt(TourRun.KEYBOARD);
+        aRunWithAStageThatIsOnlyShown();
+        controller.startAt(SHOWN_LESSON);
         assertEquals(Arrays.asList(TourAction.BACK, TourAction.SKIP_STEP, TourAction.END_TOUR),
             controller.currentActions());
         doTheGesture();
@@ -740,7 +786,8 @@ public class TourControllerTest {
 
     @Test
     public void skipStepOnThatStageIsTheWayOnAndNotASkip() {
-        controller.startAt(TourRun.KEYBOARD);
+        aRunWithAStageThatIsOnlyShown();
+        controller.startAt(SHOWN_LESSON);
         doTheGesture();
         doTheGesture();
         assertTrue(controller.currentStep().isShownOnlyStage(controller.currentStage()));
