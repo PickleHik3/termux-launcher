@@ -10,6 +10,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.terminal.io.ExtraKeysDefaultOffer;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
@@ -94,6 +95,24 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     }
 
     /**
+     * The one thing about the user's keys the run cannot work out for itself: the row they have
+     * now, whether they have already been asked about this release's row, and the two answers.
+     */
+    public interface KeyRowHost {
+        /** The user's own {@code extra-keys} value, or null when their file sets none. */
+        @Nullable String ownKeyRow();
+
+        /** Whether the key-row question has been put to this user already. */
+        boolean keyRowAnswered();
+
+        /** Take this release's row, keeping theirs so the editor can offer it back. */
+        void switchToDefaultKeyRow();
+
+        /** Keep the row they have, and do not ask again. */
+        void keepOwnKeyRow();
+    }
+
+    /**
      * The card an older run that stopped somewhere unmapped is met with. Not part of the run: it
      * is the question asked before one starts, and it is answered with a button.
      */
@@ -112,6 +131,13 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @Nullable private ChromeProbe mChromeProbe;
     @Nullable private WallHost mWallHost;
     @Nullable private HomeHost mHomeHost;
+    @Nullable private KeyRowHost mKeyRowHost;
+    /**
+     * Whether the row the user would keep has no keyboard key on it, read when the run is built.
+     * The keyboard lesson points at that key, so a "Keep mine" on such a row takes the lesson out
+     * of the rest of the run.
+     */
+    private boolean mOwnKeyRowLacksKeyboardKey;
     /** A run that was asked for while help was up, held until help goes away. */
     @Nullable private Runnable mStartWaitingForHelp;
     /** Whether the pinned-apps sheet is in front of the user, which only it can say. */
@@ -192,6 +218,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mHomeHost = host;
     }
 
+    /** The user's own row of keys, which the key-row card reads and answers. */
+    public void setKeyRowHost(@Nullable KeyRowHost host) {
+        mKeyRowHost = host;
+    }
+
     /**
      * Offers the run to someone who has just finished first launch, and to anyone whose last run
      * was of an older version of it: an update brings cards they have never been shown, so the
@@ -269,8 +300,17 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
      * was first wired up.
      */
     private void rebuildRunForThisPhone() {
+        String ownRow = mKeyRowHost == null ? null : mKeyRowHost.ownKeyRow();
+        boolean hasOwnRow = ExtraKeysDefaultOffer.isCustomRow(ownRow);
+        boolean answered = mKeyRowHost != null && mKeyRowHost.keyRowAnswered();
+        mOwnKeyRowLacksKeyboardKey =
+            hasOwnRow && !ExtraKeysDefaultOffer.hasKeyboardKey(ownRow);
         mController.setSteps(TourRun.steps(new TourRun.RunContext(
-            mHomeHost != null && mHomeHost.isLauncherHomeApp(), mSignals.isKeyboardShown())));
+            mHomeHost != null && mHomeHost.isLauncherHomeApp(), mSignals.isKeyboardShown(),
+            hasOwnRow && !answered)));
+        // Someone who was asked in an earlier run and kept a row with no keyboard key on it still
+        // has nothing for the keyboard lesson to point at.
+        if (answered && mOwnKeyRowLacksKeyboardKey) mController.dropStep(TourRun.KEYBOARD);
     }
 
     /**
@@ -557,6 +597,20 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
      * the user was told.
      */
     @Override
+    public void onTourKeyRowChoice(TourController.Choice choice) {
+        TourLog.d("key-row card answered " + choice);
+        if (mKeyRowHost == null) return;
+        if (choice == TourController.Choice.SWITCH_KEY_ROW) {
+            mKeyRowHost.switchToDefaultKeyRow();
+            return;
+        }
+        if (choice != TourController.Choice.KEEP_KEY_ROW) return;
+        mKeyRowHost.keepOwnKeyRow();
+        // The keyboard lesson is the key they have just decided not to have.
+        if (mOwnKeyRowLacksKeyboardKey) mController.dropStep(TourRun.KEYBOARD);
+    }
+
+    @Override
     public void onTourResumeOrRestart() {
         TourOverlayView overlay = obtainOverlay();
         if (overlay == null) return;
@@ -582,6 +636,10 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             case USE_AS_HOME: mController.choose(TourController.Choice.USE_AS_HOME); break;
             case KEEP_TRYING: mController.choose(TourController.Choice.KEEP_TRYING); break;
             case CONTINUE: mController.choose(TourController.Choice.CONTINUE); break;
+            case SWITCH_KEY_ROW:
+                mController.choose(TourController.Choice.SWITCH_KEY_ROW); break;
+            case KEEP_KEY_ROW:
+                mController.choose(TourController.Choice.KEEP_KEY_ROW); break;
             case TAKE_THE_TOUR:
                 // The two sentences that read the phone are read again here: the user has had the
                 // welcome card in front of them, and the keyboard may have gone since it appeared.

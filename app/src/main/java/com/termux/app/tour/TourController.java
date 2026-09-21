@@ -75,14 +75,18 @@ public final class TourController {
     private static final List<TourAction> SHOWN_STAGE_ACTIONS = Collections.unmodifiableList(
         Arrays.asList(TourAction.BACK, TourAction.SKIP_STEP, TourAction.END_TOUR));
 
-    /** What the user answered on the home-screen card. */
+    /** What the user answered on a card that is a question. */
     public enum Choice {
         /** Make the launcher the phone's home app. */
         USE_AS_HOME,
         /** Leave the home app as it is for now. */
         KEEP_TRYING,
-        /** Nothing to decide: the launcher is already the home app. */
-        CONTINUE
+        /** Nothing to decide: the card had one way on. */
+        CONTINUE,
+        /** Take this release's row of keys. */
+        SWITCH_KEY_ROW,
+        /** Keep the row of keys the user already has. */
+        KEEP_KEY_ROW
     }
 
     /**
@@ -204,6 +208,12 @@ public final class TourController {
         default void onTourHomeChoice(Choice choice) {}
 
         /**
+         * The user answered the key-row card. The run moves on either way; writing the row, and
+         * remembering that the question has been put, is the part only the launcher can do.
+         */
+        default void onTourKeyRowChoice(Choice choice) {}
+
+        /**
          * A run from an older version of the tour was interrupted somewhere this run has no
          * equivalent for. Ask the user, then call {@link #resumeChosen()} or
          * {@link #restartChosen()}: both begin at the first lesson, and the difference is only
@@ -213,6 +223,8 @@ public final class TourController {
     }
 
     private final List<TourStep> mSteps;
+    /** Cards this run walks past because the phone has nothing for them to point at. */
+    private final java.util.Set<String> mDropped = new java.util.HashSet<>();
     private final Prefs mPrefs;
     private final Clock mClock;
 
@@ -259,6 +271,7 @@ public final class TourController {
         if ((mRunning && !mShowingWelcome) || steps == null || steps.isEmpty()) return;
         mSteps.clear();
         mSteps.addAll(steps);
+        mDropped.clear();
     }
 
     /**
@@ -518,12 +531,26 @@ public final class TourController {
         }
     }
 
-    /** The user answered the home-screen card. The run moves on whichever answer they gave. */
+    /** The user answered a question card. The run moves on whichever answer they gave. */
     public void choose(Choice choice) {
         TourStep step = currentStep();
         if (step == null || !step.isChoiceCard() || choice == null) return;
-        if (mListener != null) mListener.onTourHomeChoice(choice);
+        if (mListener != null) {
+            if (TourRun.KEY_ROW.equals(step.id)) mListener.onTourKeyRowChoice(choice);
+            else mListener.onTourHomeChoice(choice);
+        }
         advance();
+    }
+
+    /**
+     * Takes a card out of the rest of this run, wherever the run stands. For the one card whose
+     * control may not exist on this phone at all: the keyboard lesson points at a key of the
+     * shipped row, and a user who has just answered the key-row card with "Keep mine" may have no
+     * such key. The card is passed over in both directions from then on, exactly as a question
+     * with nothing to ask is, and a fresh run — {@link #setSteps} — brings it back.
+     */
+    public void dropStep(String stepId) {
+        if (stepId != null) mDropped.add(stepId);
     }
 
     /** Back to the first stage of the lesson before this one; nothing to do on the first. */
@@ -630,7 +657,8 @@ public final class TourController {
      * <p>The card stays in the run either way: every stored card number, and every number the
      * older runs are mapped onto, means the card it has always meant.
      */
-    private static boolean isPassedOver(TourStep step) {
+    private boolean isPassedOver(TourStep step) {
+        if (mDropped.contains(step.id)) return true;
         return step.isChoiceCard() && step.actions().size() == 1
             && step.actions().get(0) == TourAction.CONTINUE;
     }

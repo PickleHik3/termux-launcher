@@ -28,6 +28,10 @@ public class TourControllerTest {
     /** The same phone, already set up with this launcher as its home screen. */
     private static final TourRun.RunContext HOME_PHONE = new TourRun.RunContext(true, true);
 
+    /** The same phone, in the hands of someone updating who has a key row of their own. */
+    private static final TourRun.RunContext OWN_ROW_PHONE =
+        new TourRun.RunContext(false, true, true);
+
     private FakeClock clock;
     private FakePrefs prefs;
     private RecordingListener listener;
@@ -45,6 +49,20 @@ public class TourControllerTest {
         TourController fresh = new TourController(TourRun.steps(PHONE), prefs, clock);
         fresh.setListener(listener);
         return fresh;
+    }
+
+    /** Where a card sits in the run, so a card added in the middle does not rewrite every test. */
+    private static int cardNumber(String id) {
+        List<TourStep> steps = TourRun.steps(PHONE);
+        for (int i = 0; i < steps.size(); i++)
+            if (steps.get(i).id.equals(id)) return i;
+        throw new AssertionError("no card " + id + " in the run");
+    }
+
+    /** Builds the run again for someone who has a row of keys of their own. */
+    private void theUserHasAKeyRowOfTheirOwn() {
+        controller = new TourController(TourRun.steps(OWN_ROW_PHONE), prefs, clock);
+        controller.setListener(listener);
     }
 
     private void arm() {
@@ -218,7 +236,7 @@ public class TourControllerTest {
         assertFalse(controller.isPracticing());
         assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
         assertEquals(0, controller.currentStage());
-        assertEquals(3, prefs.stepIndex);
+        assertEquals(cardNumber(TourRun.KEYBOARD), prefs.stepIndex);
         assertEquals(0, prefs.stage);
         // A normal run: everything after that lesson still follows.
         clearTheCard();
@@ -400,6 +418,71 @@ public class TourControllerTest {
         assertTrue(controller.currentActions().isEmpty());
     }
 
+    // The key-row question.
+
+    @Test
+    public void eitherAnswerToTheKeyRowQuestionMovesTheRunOnToTheKeyboardLesson() {
+        for (TourController.Choice choice : new TourController.Choice[] {
+                TourController.Choice.SWITCH_KEY_ROW, TourController.Choice.KEEP_KEY_ROW}) {
+            setUp();
+            theUserHasAKeyRowOfTheirOwn();
+            controller.startAt(TourRun.KEY_ROW);
+            assertEquals(Arrays.asList(TourAction.SWITCH_KEY_ROW, TourAction.KEEP_KEY_ROW),
+                controller.currentActions());
+            controller.choose(choice);
+            assertEquals(Arrays.asList(choice), listener.chosen);
+            assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
+            assertFalse(prefs.skipped);
+        }
+    }
+
+    @Test
+    public void keepingTheirOwnRowTakesTheKeyboardLessonOutOfTheRunWhenTheRowHasNoSuchKey() {
+        theUserHasAKeyRowOfTheirOwn();
+        listener.dropsKeyboardOnKeep = controller;
+        controller.startAt(TourRun.KEY_ROW);
+        controller.choose(TourController.Choice.KEEP_KEY_ROW);
+        // The lesson points at a key of the shipped row, which is the row they have just kept off
+        // their phone; the run walks past it in both directions from here.
+        assertEquals(TourRun.FIND_ACTION, controller.currentStep().id);
+        assertFalse(listener.shown.contains(TourRun.KEYBOARD + ":0"));
+        controller.back();
+        assertEquals(TourRun.KEY_ROW, controller.currentStep().id);
+    }
+
+    @Test
+    public void takingThisReleasesRowLeavesTheKeyboardLessonWhereItIs() {
+        theUserHasAKeyRowOfTheirOwn();
+        listener.dropsKeyboardOnKeep = controller;
+        controller.startAt(TourRun.KEY_ROW);
+        controller.choose(TourController.Choice.SWITCH_KEY_ROW);
+        assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
+    }
+
+    @Test
+    public void aFreshInstallWalksPastTheKeyRowQuestionWithoutBeingAsked() {
+        controller.startAt(TourRun.FIND_APPS);
+        clearTheCard();
+        assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
+        assertTrue(listener.chosen.isEmpty());
+        assertFalse(listener.shown.contains(TourRun.KEY_ROW + ":0"));
+        assertEquals(cardNumber(TourRun.KEYBOARD), prefs.stepIndex);
+    }
+
+    @Test
+    public void aRunRebuiltForAFreshStartHasItsKeyboardLessonBack() {
+        theUserHasAKeyRowOfTheirOwn();
+        listener.dropsKeyboardOnKeep = controller;
+        controller.startAt(TourRun.KEY_ROW);
+        controller.choose(TourController.Choice.KEEP_KEY_ROW);
+        assertEquals(TourRun.FIND_ACTION, controller.currentStep().id);
+        controller.finish();
+        controller.setSteps(TourRun.steps(PHONE));
+        controller.startAt(TourRun.FIND_APPS);
+        clearTheCard();
+        assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
+    }
+
     // The home-screen question.
 
     @Test
@@ -436,7 +519,7 @@ public class TourControllerTest {
         clearTheCard();
         assertEquals(TourRun.CLOSING, controller.currentStep().id);
         // The card the run walked past is never written down as the card the user is on.
-        assertEquals(6, prefs.stepIndex);
+        assertEquals(cardNumber(TourRun.CLOSING), prefs.stepIndex);
         assertTrue(listener.chosen.isEmpty());
         assertFalse(listener.shown.contains(TourRun.HOME_CHOICE + ":0"));
         assertFalse(prefs.skipped);
@@ -449,7 +532,7 @@ public class TourControllerTest {
         controller.back();
         assertEquals(TourRun.FIND_ACTION, controller.currentStep().id);
         assertEquals(0, controller.currentStage());
-        assertEquals(4, prefs.stepIndex);
+        assertEquals(cardNumber(TourRun.FIND_ACTION), prefs.stepIndex);
     }
 
     @Test
@@ -468,11 +551,11 @@ public class TourControllerTest {
         // stopped on has nothing left to ask.
         thePhoneIsAlreadyOurHome();
         prefs.runVersion = TourController.RUN_VERSION;
-        prefs.stepIndex = 5;
+        prefs.stepIndex = cardNumber(TourRun.HOME_CHOICE);
         prefs.stage = 0;
         assertTrue(controller.resumeIfInProgress());
         assertEquals(TourRun.CLOSING, controller.currentStep().id);
-        assertEquals(6, prefs.stepIndex);
+        assertEquals(cardNumber(TourRun.CLOSING), prefs.stepIndex);
     }
 
     @Test
@@ -661,7 +744,7 @@ public class TourControllerTest {
         // The stage is the last of the keyboard lesson, and a process death on it must not drop
         // the user back onto a keyboard tap they have already made.
         prefs.runVersion = TourController.RUN_VERSION;
-        prefs.stepIndex = 3;
+        prefs.stepIndex = cardNumber(TourRun.KEYBOARD);
         prefs.stage = 2;
         assertTrue(controller.resumeIfInProgress());
         assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
@@ -877,7 +960,7 @@ public class TourControllerTest {
         assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
         // The card did not change, so neither does the user's place inside it.
         assertEquals(1, controller.currentStage());
-        assertEquals(3, prefs.stepIndex);
+        assertEquals(cardNumber(TourRun.KEYBOARD), prefs.stepIndex);
         assertEquals(1, prefs.stage);
         assertEquals(TourController.RUN_VERSION, prefs.runVersion);
         assertEquals(0, listener.resumeOrRestartAsked);
@@ -905,7 +988,7 @@ public class TourControllerTest {
         assertFalse(controller.isShowingWelcome());
         assertEquals(TourRun.KEYBOARD, controller.currentStep().id);
         assertEquals(1, controller.currentStage());
-        assertEquals(3, prefs.stepIndex);
+        assertEquals(cardNumber(TourRun.KEYBOARD), prefs.stepIndex);
         assertEquals(1, prefs.stage);
         assertEquals(TourController.RUN_VERSION, prefs.runVersion);
         assertEquals(0, listener.resumeOrRestartAsked);
@@ -917,7 +1000,8 @@ public class TourControllerTest {
             TourRun.KEYBOARD, TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING};
         for (int i = 0; i < cards.length; i++) {
             assertEquals("card " + i, cards[i], TourController.versionThreeCardFor(i));
-            assertEquals("card " + i, cards[i], TourRun.steps(PHONE).get(i).id);
+            // Mapped by name, not read as a position: this run has a card that one never had.
+            assertTrue("card " + i + " is gone", cardNumber(cards[i]) >= 0);
         }
         for (int outside : new int[] {-1, cards.length, 99})
             assertNull("card " + outside, TourController.versionThreeCardFor(outside));
@@ -1033,6 +1117,11 @@ public class TourControllerTest {
         private final List<Boolean> finished = new ArrayList<>();
         private final List<TourController.Choice> chosen = new ArrayList<>();
         private int resumeOrRestartAsked;
+        /**
+         * The controller, when this listener should do what the launcher does on "Keep mine": a
+         * kept row with no keyboard key on it takes the keyboard lesson out of the run.
+         */
+        private TourController dropsKeyboardOnKeep;
 
         void clear() {
             shown.clear();
@@ -1054,6 +1143,13 @@ public class TourControllerTest {
         @Override
         public void onTourHomeChoice(TourController.Choice choice) {
             chosen.add(choice);
+        }
+
+        @Override
+        public void onTourKeyRowChoice(TourController.Choice choice) {
+            chosen.add(choice);
+            if (choice == TourController.Choice.KEEP_KEY_ROW && dropsKeyboardOnKeep != null)
+                dropsKeyboardOnKeep.dropStep(TourRun.KEYBOARD);
         }
 
         @Override

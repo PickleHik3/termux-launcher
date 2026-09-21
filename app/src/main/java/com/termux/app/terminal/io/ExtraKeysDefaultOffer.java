@@ -61,6 +61,24 @@ public final class ExtraKeysDefaultOffer {
         return ExtraKeysLayoutModel.parse(value).serialize();
     }
 
+    /** The name of the key that shows and hides the keyboard. */
+    private static final String KEYBOARD_KEY = "KEYBOARD";
+
+    /**
+     * Whether a row carries the key that shows and hides the keyboard. The shipped row opens with
+     * it, and one lesson of the first-launch run is that key both ways round; a row of the user's
+     * own often has nothing of the kind, and a lesson pointing at a key that is not there teaches
+     * nobody anything.
+     */
+    public static boolean hasKeyboardKey(@Nullable String extraKeysValue) {
+        if (isBlank(extraKeysValue)) return false;
+        for (java.util.List<ExtraKeysLayoutModel.Key> row
+                : ExtraKeysLayoutModel.parse(extraKeysValue).rows())
+            for (ExtraKeysLayoutModel.Key key : row)
+                if (KEYBOARD_KEY.equalsIgnoreCase(key.key)) return true;
+        return false;
+    }
+
     /** Whether a saved previous row has anything in it to offer back. */
     public static boolean hasPreviousRow(@Nullable String previousValue) {
         if (isBlank(previousValue)) return false;
