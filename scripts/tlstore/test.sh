@@ -28,6 +28,16 @@
 #                            no pty, so it sets this knob and pipes the answers
 #                            in; without it the "nobody is there" paths are what
 #                            get tested, and both are.
+#   TLSTORE_HOST=launcher  — which app the store is running in. The suite also
+#                            drives the detection itself, through TERM_PROGRAM,
+#                            TERM_PROGRAM_VERSION and the marker file the app
+#                            writes, and checks all three.
+#   TLSTORE_FZF=no-such-fzf — the fzf command. There is no pty here, so the
+#                            full-screen view cannot run; pointing this at a
+#                            name that is not there tests what people without
+#                            fzf get instead.
+#   TLSTORE_RAW_BASE       — where a hand-installed tlstore looks for a newer
+#                            one; the suite points it at a file:// tree.
 # The catalog signature tests need minisign. Without it they are skipped, and
 # the suite says so instead of passing quietly.
 
@@ -90,6 +100,9 @@ write_catalog() {
         printf 'kit\tbundle\t-\t*\t-\t-\t-\thello,fakebin,demo-pkg,secret\t-\tA few things at once.\n'
         printf 'plug\tfisher\t-\t*\tdemo/one demo/two\t-\t-\t-\t-\tPlugins for the shell.\n'
         printf 'secret\tfile\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/secret.conf\t-\thidden=1\tA part of something else.\n' "$FX" "$(sha "$FX/mine.conf")"
+        printf 'launcheronly\tbinary\t1\t*\tfile://%s/twin.bin\t%s\t~/.local/bin/launcheronly\t-\thost=launcher\tOnly where the launcher runs it.\n' "$FX" "$(sha "$FX/twin.bin")"
+        printf 'termuxonly\tbinary\t1\t*\tfile://%s/other.bin\t%s\t~/.local/bin/termuxonly\t-\thost=termux\tOnly in the plain app.\n' "$FX" "$(sha "$FX/other.bin")"
+        printf 'recentonly\tbinary\t1\t*\tfile://%s/twin.bin\t%s\t~/.local/bin/recentonly\t-\tmin-launcher=0.3.0\tWants a recent app.\n' "$FX" "$(sha "$FX/twin.bin")"
     } > "$out"
 }
 
@@ -108,6 +121,7 @@ build_fixture() {
     printf 'your own settings go here\n' > "$FX/mine.conf"
     printf '#!/bin/sh\necho fakebin 1\n' > "$FX/fakebin-1"
     printf '#!/bin/sh\necho fakebin 2\n' > "$FX/fakebin-2"
+    printf '#!/bin/sh\necho fakebin 3\n' > "$FX/fakebin-3"
     printf '#!/bin/sh\necho twin here\n' > "$FX/twin.bin"
     printf '#!/bin/sh\necho other edition\n' > "$FX/other.bin"
     printf 'not really a loader\n' > "$FX/loader.bin"
@@ -197,6 +211,11 @@ tl() {
             TLSTORE_ARCH=aarch64 \
             TLSTORE_PATCHELF=true \
             TLSTORE_ASSUME_TTY="${TTY_KNOB:-0}" \
+            TLSTORE_HOST="${HOST_KNOB:-}" \
+            TLSTORE_FZF="${FZF_KNOB:-}" \
+            TLSTORE_RAW_BASE="${RAWBASE_KNOB:-}" \
+            TERM_PROGRAM="${TP_KNOB:-}" \
+            TERM_PROGRAM_VERSION="${TPV_KNOB:-}" \
             "${SHCMD[@]}" "$TLSTORE" "$@" 2>&1)"
     else
         OUT="$(env -i \
@@ -207,11 +226,21 @@ tl() {
             TLSTORE_ARCH=aarch64 \
             TLSTORE_PATCHELF=true \
             TLSTORE_ASSUME_TTY="${TTY_KNOB:-0}" \
+            TLSTORE_HOST="${HOST_KNOB:-}" \
+            TLSTORE_FZF="${FZF_KNOB:-}" \
+            TLSTORE_RAW_BASE="${RAWBASE_KNOB:-}" \
+            TERM_PROGRAM="${TP_KNOB:-}" \
+            TERM_PROGRAM_VERSION="${TPV_KNOB:-}" \
             "${SHCMD[@]}" "$TLSTORE" "$@" < /dev/null 2>&1)"
     fi
     ST=$?
     STDIN_TEXT=""
     TTY_KNOB=0
+    HOST_KNOB=""
+    FZF_KNOB=""
+    RAWBASE_KNOB=""
+    TP_KNOB=""
+    TPV_KNOB=""
     return 0
 }
 
@@ -244,6 +273,11 @@ run_suite() {
     build_fixture
     CATALOG_URL="file://$FX/newer.tsv"
     STDIN_TEXT=""
+    HOST_KNOB=""
+    FZF_KNOB=""
+    RAWBASE_KNOB=""
+    TP_KNOB=""
+    TPV_KNOB=""
 
     # --- help, version, usage ---
     tl; expect_status "no arguments prints help" 0; expect_out "no arguments prints help" "tlstore install"
@@ -281,6 +315,52 @@ run_suite() {
     expect_status "info" 0
     expect_out "info names where the file goes" ".config/hello.conf"
     expect_out "info names the checksum" "$(sha "$FX/hello.conf")"
+
+    # --- which app the store is running in ---
+    # Nothing in the environment and no marker file: the plain app.
+    tl list
+    expect_no_out "an item for the launcher is hidden in the plain app" "launcheronly"
+    expect_out "an item for the plain app shows there" "termuxonly"
+    HOST_KNOB=launcher
+    tl list
+    expect_out "TLSTORE_HOST=launcher shows the launcher's items" "launcheronly"
+    expect_no_out "and hides the plain app's" "termuxonly"
+    TP_KNOB=termux-launcher
+    tl list
+    expect_out "the launcher names itself in the environment" "launcheronly"
+    TP_KNOB=something-else
+    tl list
+    expect_no_out "any other app in the environment is not the launcher" "launcheronly"
+    # Over ssh nothing names the app; the file it writes on every start does.
+    touch "$TPREFIX/libexec/termux-launcher/tlstore/.installed"
+    tl list
+    expect_out "with nothing else to go on, the app's own file answers" "launcheronly"
+    rm -f "$TPREFIX/libexec/termux-launcher/tlstore/.installed"
+    tl list
+    expect_no_out "and without it this is the plain app" "launcheronly"
+    tl info launcheronly
+    expect_status "info on an item for the other app fails" 1
+    expect_out "and says it is not in the list" "not in the list"
+    HOST_KNOB=launcher
+    tl info launcheronly
+    expect_status "info on it in the launcher works" 0
+    tl install launcheronly -y
+    expect_status "installing an item for the other app is refused" 1
+
+    # --- an item that wants a recent launcher ---
+    TP_KNOB=termux-launcher
+    TPV_KNOB=0.2.39
+    tl list
+    expect_no_out "an older launcher does not see it" "recentonly"
+    TP_KNOB=termux-launcher
+    TPV_KNOB=0.3.1
+    tl list
+    expect_out "a newer launcher sees it" "recentonly"
+    TP_KNOB=termux-launcher
+    tl list
+    expect_out "a launcher that does not say its version sees it" "recentonly"
+    tl list
+    expect_out "and so does the plain app" "recentonly"
 
     # --- a file, where there is none yet ---
     mkdir -p "$TESTHOME/.config"
@@ -503,6 +583,129 @@ y
     expect_status "doctor" 0
     expect_out "doctor names the prefix" "$TPREFIX"
     expect_out "doctor names the item list" "Item list"
+    expect_out "doctor names the app it is running in" "^App *Termux (com.termux)"
+    TP_KNOB=termux-launcher
+    TPV_KNOB=0.2.40
+    tl doctor
+    expect_out "doctor names the launcher and its version" "^App *Termux Launcher 0.2.40 (com.termux)"
+
+    # --- the columns a program reads ---
+    tl list --tsv
+    expect_status "list --tsv" 0
+    expect_out "list --tsv says what is installed, with both versions" \
+        $'^hello\tinstalled\t2\t2\tfile\tA greeting'
+    expect_out "list --tsv leaves the installed column empty for the rest" \
+        $'^twin\tavailable\t1\t\tbinary\t'
+    expect_no_out "list --tsv prints no mark column" '^\* '
+    expect_no_out "list --tsv hides the parts of other items" "^secret"
+    tl list --tsv -a
+    expect_no_out "list --tsv -a is only what you do not have" $'^hello\t'
+    tl list --tsv -i
+    expect_out "list --tsv -i is only what you have" $'^hello\tinstalled\t'
+    tl search --tsv greeting
+    expect_status "search --tsv" 0
+    expect_out "search --tsv has the same columns as list" $'^hello\tinstalled\t2\t2\tfile\t'
+    tl info --tsv hello
+    expect_status "info --tsv" 0
+    expect_out "info --tsv gives one key and value per line" $'^Kind\tfile$'
+    expect_out "info --tsv names the version" $'^Version\t2$'
+    expect_out "info --tsv names where it came from" $'^From\tfile://'
+    expect_out "info --tsv names the checksum" $'^Checksum\t'
+    expect_out "info --tsv names what it needs" $'^Needs\t'
+    expect_out "info --tsv names where the file goes" $'^Files\t.*hello.conf$'
+    expect_out "info --tsv says what is installed" $'^Installed\t2$'
+    expect_out "info --tsv ends with the summary" $'^Summary\tA greeting you can read.$'
+    expect_no_out "info --tsv is not the form for people" "^hello$"
+    tl info --tsv claude-code
+    expect_out "info --tsv names the build tools" $'^Builds with\tdemo-build$'
+    tl info --tsv
+    expect_status "info --tsv still needs a name" 2
+
+    # A newer list, put in place without a refresh, so there is something to
+    # report as out of date.
+    write_catalog "$TESTHOME/.local/share/tlstore/catalog.tsv" 2026090610 3 fakebin-3
+    tl update --check --tsv --offline
+    expect_status "update --check --tsv" 0
+    expect_out "it names the item, what you have and what there is" $'^fakebin\t2\t3\t$'
+    expect_out "a config item is marked as one that asks" $'^hello\t2\t3\tconfig-asks$'
+    expect_out "an item pinned to the newest there is says so" $'^claude-code\t1.0.0\tlatest\tlatest$'
+    expect_no_out "and nothing a person would read" "up to date"
+    expect_no_out "and no packages line" "package manager"
+    write_catalog "$TESTHOME/.local/share/tlstore/catalog.tsv" 2026090603 2 fakebin-2
+    tl update --check --tsv --offline
+    expect_no_out "with nothing out of date the row is gone" $'^fakebin\t'
+    expect_out "and only the item pinned to the newest is left" $'^claude-code\t1.0.0\tlatest\tlatest$'
+
+    # --- keeping tlstore itself current, when it was installed by hand ---
+    if [ "$HAVE_MINISIGN" = 1 ]; then
+        store="$TPREFIX/libexec/termux-launcher/tlstore"
+        mkdir -p "$FX/selfnew" "$FX/selfsame" "$FX/selfbad"
+        sed 's/^TLSTORE_VERSION=.*/TLSTORE_VERSION=9.9/' "$TLSTORE" > "$FX/selfnew/tlstore"
+        printf '# the newer one\n' >> "$FX/selfnew/tlstore"
+        cp "$TLSTORE" "$FX/selfsame/tlstore"
+        cp "$FX/selfnew/tlstore" "$FX/selfbad/tlstore"
+        for d in selfnew selfsame selfbad; do
+            minisign -S -s "$ROOT/key.sec" -x "$FX/$d/tlstore.minisig" -m "$FX/$d/tlstore" >/dev/null 2>&1
+        done
+        printf '# nudged after signing\n' >> "$FX/selfbad/tlstore"
+
+        cp "$TLSTORE" "$TPREFIX/bin/tlstore"
+        printf 'file://%s\n' "$FX/selfnew" > "$store/.standalone"
+        tl update -y
+        expect_status "update on a hand-installed tlstore" 0
+        expect_out "it says which version is in place now" "tlstore is now version 9.9"
+        if grep -q "^# the newer one" "$TPREFIX/bin/tlstore"; then pass; else fail "the newer tlstore replaced the old one"; fi
+
+        cp "$TLSTORE" "$TPREFIX/bin/tlstore"
+        RAWBASE_KNOB="file://$FX/selfsame"
+        tl update -y
+        expect_no_out "the same version is not installed again" "tlstore is now version"
+        if grep -q "^# the newer one" "$TPREFIX/bin/tlstore"; then fail "nothing should have been replaced"; else pass; fi
+
+        printf 'file://%s\n' "$FX/selfbad" > "$store/.standalone"
+        tl update -y
+        expect_out "a tlstore whose signature does not cover it is refused" "not signed by the launcher"
+        if grep -q "^# the newer one" "$TPREFIX/bin/tlstore"; then fail "a refused tlstore must not land"; else pass; fi
+
+        printf 'file://%s\n' "$FX/selfnew" > "$store/.standalone"
+        touch "$store/.installed"
+        tl update -y
+        expect_no_out "inside the launcher tlstore leaves itself alone" "tlstore is now version"
+        if grep -q "^# the newer one" "$TPREFIX/bin/tlstore"; then fail "the app's own copy must not be replaced"; else pass; fi
+        rm -f "$store/.installed" "$store/.standalone" "$TPREFIX/bin/tlstore"
+    else
+        skip "self-update tests" "minisign is not installed"
+    fi
+
+    # --- browsing ---
+    FZF_KNOB=no-such-fzf
+    tl browse
+    expect_status "browse with nobody at a terminal" 0
+    expect_out "it falls back to the whole list" "hello"
+    expect_out "and says why" "needs a terminal"
+
+    : > "$ROOT/pkg.log"
+    TTY_KNOB=1
+    FZF_KNOB=no-such-fzf
+    STDIN_TEXT='n
+
+'
+    tl browse
+    expect_status "browse without fzf" 0
+    expect_out "it offers to install fzf" "needs fzf"
+    expect_out "declining leaves the numbered picker" "Type numbers to pick"
+    if grep -q fzf "$ROOT/pkg.log" 2>/dev/null; then fail "declining installs nothing"; else pass; fi
+
+    : > "$ROOT/pkg.log"
+    TTY_KNOB=1
+    FZF_KNOB=no-such-fzf
+    STDIN_TEXT='y
+
+'
+    tl browse
+    expect_status "browse, the offer accepted" 0
+    if grep -q fzf "$ROOT/pkg.log" 2>/dev/null; then pass; else fail "the package manager was asked for fzf"; fi
+    expect_out "and the numbered picker still comes up" "Type numbers to pick"
 
     # --- the numbered picker ---
     rm -rf "$TESTHOME/.local/share/tlstore" "$TESTHOME/.config/hello.conf"

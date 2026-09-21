@@ -21,10 +21,16 @@
 #   TLSTORE_PATCHELF    the patchelf command (tests pass a no-op)
 #   TLSTORE_ASSUME_TTY  1 = answer questions from stdin even when it is not a
 #                       terminal (the test suite pipes them in)
+#   TLSTORE_HOST        launcher|termux — which app the store is running in,
+#                       when the detection below should not have the last word
+#   TLSTORE_RAW_BASE    where a standalone install looks for a newer tlstore
+#                       (default the raw main URL; tests point it at file://)
+#   TLSTORE_FZF         the fzf command (tests point it at a name that is not
+#                       there, to take the path for people without fzf)
 
 set -u
 
-TLSTORE_VERSION=0.1
+TLSTORE_VERSION=0.2
 
 PREFIX="${TLSTORE_PREFIX:-${PREFIX:-${HOME%/files/home}/files/usr}}"
 HOME="${HOME:?tlstore needs HOME}"
@@ -48,12 +54,49 @@ USER_CATALOG="$DATA_DIR/catalog.tsv"
 PUBKEY="$STORE_DIR/trusted.pub"
 STATE="$DATA_DIR/installed.tsv"
 
+# The app writes this on every start; a hand install writes the other one, with
+# the address it came from inside it.
+INSTALLED_MARK="$STORE_DIR/.installed"
+STANDALONE_MARK="$STORE_DIR/.standalone"
+
+# Which app the store is running in. The launcher names itself in the
+# environment; over ssh nothing does, and then the app's own marker answers.
+HOST="${TLSTORE_HOST:-}"
+case "$HOST" in
+    launcher|termux) ;;
+    *)
+        if [ "${TERM_PROGRAM:-}" = termux-launcher ]; then
+            HOST=launcher
+        elif [ -n "${TERM_PROGRAM:-}" ]; then
+            HOST=termux
+        elif [ -f "$INSTALLED_MARK" ]; then
+            HOST=launcher
+        else
+            HOST=termux
+        fi
+        ;;
+esac
+
+# The launcher's own version, for items that need a recent one. Only the
+# launcher sets it, and an item asking for it passes anywhere else.
+LAUNCHER_VERSION="${TERM_PROGRAM_VERSION:-}"
+[ "$HOST" = launcher ] || LAUNCHER_VERSION=""
+
 CATALOG_URL="${TLSTORE_CATALOG_URL:-https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/app/src/main/assets/tlstore/catalog.tsv}"
 NPM_REGISTRY="${TLSTORE_NPM_REGISTRY:-https://registry.npmjs.org}"
 PATCHELF="${TLSTORE_PATCHELF:-patchelf}"
+FZF="${TLSTORE_FZF:-fzf}"
 
 LAUNCHER_RAW="https://raw.githubusercontent.com/PickleHik3/termux-launcher"
 BINARIES_RAW="https://raw.githubusercontent.com/PickleHik3/termux-launcher-binaries"
+
+# Where a hand-installed tlstore looks for a newer one: the address the
+# installer wrote down, unless the environment says otherwise.
+RAW_BASE="${TLSTORE_RAW_BASE:-}"
+if [ -z "$RAW_BASE" ] && [ -f "$STANDALONE_MARK" ]; then
+    RAW_BASE=$(head -1 "$STANDALONE_MARK" 2>/dev/null || true)
+fi
+[ -n "$RAW_BASE" ] || RAW_BASE="$LAUNCHER_RAW/main/app/src/main/assets/tlstore"
 
 ASSUME_YES="${TLSTORE_ASSUME_YES:-0}"
 [ "$ASSUME_YES" = 1 ] || ASSUME_YES=0
@@ -79,6 +122,14 @@ CATALOG_FROM=""
 FAILED=0
 
 TAB=$(printf '\t')
+
+# This file, named so the browser's preview pane can run it again.
+SELF="$0"
+case "$SELF" in
+    */*) ;;
+    *) SELF=$(command -v "$SELF" 2>/dev/null) || SELF="$PREFIX/bin/tlstore" ;;
+esac
+[ -n "$SELF" ] || SELF="$PREFIX/bin/tlstore"
 
 # ---------------------------------------------------------------------------
 # Output
@@ -123,10 +174,11 @@ need_catalog() {
     pick_catalog || die "the list of items is missing — reopen the app to put it back"
 }
 
-# Every row that applies here: this edition's prefix, this processor, first row
-# per name wins.
+# Every row that applies here: this edition's prefix, this processor, this app,
+# a new enough launcher; first row per name wins.
 rows() {
-    awk -F "$TAB" -v pkgname="$APP_PACKAGE" -v archok="$ARCH_OK" '
+    awk -F "$TAB" -v pkgname="$APP_PACKAGE" -v archok="$ARCH_OK" \
+        -v host="$HOST" -v lver="$LAUNCHER_VERSION" '
         function prefix_ok(list,   n, i, parts) {
             if (list == "*" || list == "") return 1
             n = split(list, parts, ",")
@@ -137,11 +189,45 @@ rows() {
             if (archok == "1") return 1
             return (kind != "binary" && kind != "npm-musl")
         }
+        function optval(list, key,   n, i, parts) {
+            n = split(list, parts, ";")
+            for (i = 1; i <= n; i++)
+                if (index(parts[i], key "=") == 1)
+                    return substr(parts[i], length(key) + 2)
+            return ""
+        }
+        function host_ok(list,   want, n, i, parts) {
+            want = optval(list, "host")
+            if (want == "") return 1
+            n = split(want, parts, ",")
+            for (i = 1; i <= n; i++) if (parts[i] == host) return 1
+            return 0
+        }
+        function vercmp(a, b,   na, nb, pa, pb, i, n, x, y) {
+            na = split(a, pa, /[.\-_]/)
+            nb = split(b, pb, /[.\-_]/)
+            n = (na > nb) ? na : nb
+            for (i = 1; i <= n; i++) {
+                x = (i <= na) ? pa[i] + 0 : 0
+                y = (i <= nb) ? pb[i] + 0 : 0
+                if (x > y) return 1
+                if (x < y) return -1
+            }
+            return 0
+        }
+        function launcher_ok(list,   want) {
+            want = optval(list, "min-launcher")
+            if (want == "") return 1
+            if (lver == "") return 1
+            return vercmp(lver, want) >= 0
+        }
         /^[ \t]*#/ { next }
         /^[ \t]*$/ { next }
         NF < 10 { next }
         !prefix_ok($4) { next }
         !arch_ok($2) { next }
+        !host_ok($9) { next }
+        !launcher_ok($9) { next }
         seen[$1]++ { next }
         { print }
     ' "$CATALOG"
@@ -372,6 +458,27 @@ download() {
 interactive() {
     [ "$ASSUME_TTY" = 1 ] && return 0
     [ -t 0 ]
+}
+
+# A full-screen view needs a real terminal at both ends, whatever the knob says.
+on_terminal() {
+    [ -t 0 ] && [ -t 1 ]
+}
+
+# How wide the terminal is; 80 when nothing here will say.
+term_cols() {
+    tc_n="${COLUMNS:-}"
+    case "$tc_n" in
+        ''|*[!0-9]*) tc_n="" ;;
+    esac
+    if [ -z "$tc_n" ] && have tput; then
+        tc_n=$(tput cols 2>/dev/null || printf '')
+        case "$tc_n" in
+            ''|*[!0-9]*) tc_n="" ;;
+        esac
+    fi
+    { [ -n "$tc_n" ] && [ "$tc_n" -gt 0 ]; } || tc_n=80
+    printf '%s' "$tc_n"
 }
 
 yes_reply() {
@@ -1028,6 +1135,7 @@ tlstore installs the tools and configs the launcher shows off.
   tlstore list [-i|-a]        everything, what you have (-i), what you do not (-a)
   tlstore search <term>       find an item by name or description
   tlstore info <name>         what an item is and where it goes
+  tlstore browse              look through everything and install as you go
   tlstore install [name...]   install items; with no names, pick from a list
   tlstore remove <name...>    remove items tlstore installed
   tlstore update [name...]    bring what you have up to date
@@ -1042,47 +1150,102 @@ tlstore installs the tools and configs the launcher shows off.
 EOF
 }
 
+# emit_items <style list|search> <all|installed|available> <tsv 0|1> [term]
+# The one place the item list is printed, for people and for programs. The
+# machine-readable columns are name, state, version, installed, kind, summary.
+emit_items() {
+    ei_style="$1"
+    ei_mode="$2"
+    ei_tsv="$3"
+    ei_term="${4:-}"
+    visible_rows | awk -F "$TAB" -v term="$ei_term" '
+        BEGIN { t = tolower(term) }
+        t == "" || index(tolower($1), t) > 0 || index(tolower($10), t) > 0 {
+            printf "%s\t%s\t%s\t%s\t%s\n", $1, $2, $3, $9, $10
+        }' |
+    while IFS="$TAB" read -r ei_name ei_kind ei_version ei_options ei_summary; do
+        if is_installed "$ei_name"; then
+            [ "$ei_mode" = available ] && continue
+            ei_state=installed
+            ei_have=$(installed_version "$ei_name")
+            ei_mark="*"
+        else
+            [ "$ei_mode" = installed ] && continue
+            ei_state=available
+            ei_have=""
+            ei_mark=" "
+        fi
+        if [ "$ei_tsv" = 1 ]; then
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+                "$ei_name" "$ei_state" "$ei_version" "$ei_have" "$ei_kind" "$ei_summary"
+            continue
+        fi
+        if [ "$ei_style" = list ]; then
+            printf '%s %-14s %s\n' "$ei_mark" "$ei_name" "$ei_summary"
+            ei_build=$(opt "$ei_options" build)
+            [ -z "$ei_build" ] || printf '    needs while installing: %s\n' "$ei_build"
+        else
+            printf '  %-14s %s\n' "$ei_name" "$ei_summary"
+        fi
+    done
+    return 0
+}
+
 cmd_list() {
     cl_mode=all
+    cl_tsv=0
     for cl_a in "$@"; do
         case "$cl_a" in
             -i) cl_mode=installed ;;
             -a) cl_mode=available ;;
+            --tsv) cl_tsv=1 ;;
             *) err "unknown option: $cl_a"; return 2 ;;
         esac
     done
     need_catalog
-    visible_rows | awk -F "$TAB" '{ printf "%s\t%s\t%s\n", $1, $9, $10 }' |
-    while IFS="$TAB" read -r cl_name cl_options cl_summary; do
-        if is_installed "$cl_name"; then
-            [ "$cl_mode" = available ] && continue
-            cl_mark="*"
-        else
-            [ "$cl_mode" = installed ] && continue
-            cl_mark=" "
-        fi
-        printf '%s %-14s %s\n' "$cl_mark" "$cl_name" "$cl_summary"
-        cl_build=$(opt "$cl_options" build)
-        [ -z "$cl_build" ] || printf '    needs while installing: %s\n' "$cl_build"
-    done
-    return 0
+    emit_items list "$cl_mode" "$cl_tsv"
 }
 
 cmd_search() {
-    [ $# -ge 1 ] || { err "search needs something to look for"; return 2; }
+    cs_tsv=0
+    cs_term=""
+    for cs_a in "$@"; do
+        case "$cs_a" in
+            --tsv) cs_tsv=1 ;;
+            -*) err "unknown option: $cs_a"; return 2 ;;
+            *)
+                if [ -n "$cs_term" ]; then
+                    err "search takes one thing to look for"
+                    return 2
+                fi
+                cs_term="$cs_a"
+                ;;
+        esac
+    done
+    [ -n "$cs_term" ] || { err "search needs something to look for"; return 2; }
     need_catalog
-    visible_rows | awk -F "$TAB" -v term="$1" '
-        BEGIN { t = tolower(term) }
-        index(tolower($1), t) > 0 || index(tolower($10), t) > 0 {
-            printf "  %-14s %s\n", $1, $10
-        }'
-    return 0
+    emit_items search all "$cs_tsv" "$cs_term"
 }
 
 cmd_info() {
-    [ $# -eq 1 ] || { err "info needs one name"; return 2; }
+    ci_tsv=0
+    ci_want=""
+    for ci_a in "$@"; do
+        case "$ci_a" in
+            --tsv) ci_tsv=1 ;;
+            -*) err "unknown option: $ci_a"; return 2 ;;
+            *)
+                if [ -n "$ci_want" ]; then
+                    err "info needs one name"
+                    return 2
+                fi
+                ci_want="$ci_a"
+                ;;
+        esac
+    done
+    [ -n "$ci_want" ] || { err "info needs one name"; return 2; }
     need_catalog
-    load_item "$1" || { err "$1 is not in the list"; return 1; }
+    load_item "$ci_want" || { err "$ci_want is not in the list"; return 1; }
     ci_files=$(item_targets "$it_name" "$it_kind" "$it_target" "$it_source")
     ci_where="$ci_files"
     case "$it_kind" in
@@ -1090,6 +1253,21 @@ cmd_info() {
         bundle) ci_where="-" ;;
     esac
     [ -n "$ci_where" ] || ci_where="-"
+    ci_build=$(opt "$it_options" build)
+    if [ "$ci_tsv" = 1 ]; then
+        printf '%s\t%s\n' Kind "$it_kind"
+        printf '%s\t%s\n' Version "$it_version"
+        printf '%s\t%s\n' From "$it_source"
+        printf '%s\t%s\n' Checksum "$it_digest"
+        printf '%s\t%s\n' Needs "$it_requires"
+        [ -z "$ci_build" ] || printf '%s\t%s\n' "Builds with" "$ci_build"
+        printf '%s\t%s\n' Files "$ci_where"
+        if is_installed "$it_name"; then
+            printf '%s\t%s\n' Installed "$(installed_version "$it_name")"
+        fi
+        printf '%s\t%s\n' Summary "$it_summary"
+        return 0
+    fi
     say "$it_name"
     say "  $it_summary"
     printf '  %-11s %s\n' Kind "$it_kind"
@@ -1097,7 +1275,6 @@ cmd_info() {
     printf '  %-11s %s\n' From "$it_source"
     printf '  %-11s %s\n' Checksum "$it_digest"
     printf '  %-11s %s\n' Needs "$it_requires"
-    ci_build=$(opt "$it_options" build)
     [ -z "$ci_build" ] || printf '  %-11s %s\n' "Builds with" "$ci_build"
     printf '  %-11s %s\n' Files "$ci_where"
     if is_installed "$it_name"; then
@@ -1199,14 +1376,17 @@ cmd_remove() {
     return 0
 }
 
-cmd_update() {
+# The item half of update; cmd_update adds the self-update on top of it.
+update_items() {
     cu_check=0
     cu_offline=0
+    cu_tsv=0
     cu_names=""
     for cu_a in "$@"; do
         case "$cu_a" in
             --check) cu_check=1 ;;
             --offline) cu_offline=1 ;;
+            --tsv) cu_tsv=1 ;;
             --configs) REPLACE_CONFIGS=1 ;;
             -y|--yes) ASSUME_YES=1 ;;
             -*) err "unknown option: $cu_a"; return 2 ;;
@@ -1219,7 +1399,7 @@ cmd_update() {
 
     [ -n "$cu_names" ] || cu_names=$(installed_names | tr '\n' ' ')
     if [ -z "$(printf '%s' "$cu_names" | tr -d ' ')" ]; then
-        say "Nothing is installed yet."
+        [ "$cu_tsv" = 1 ] || say "Nothing is installed yet."
         return 0
     fi
 
@@ -1227,10 +1407,13 @@ cmd_update() {
     cu_pkgs=""
     cu_latest=""
     for cu_n in $cu_names; do
-        is_installed "$cu_n" || { say "$cu_n is not installed"; continue; }
+        if ! is_installed "$cu_n"; then
+            [ "$cu_tsv" = 1 ] || say "$cu_n is not installed"
+            continue
+        fi
         cu_row=$(row "$cu_n")
         if [ -z "$cu_row" ]; then
-            say "$cu_n is no longer in the list"
+            [ "$cu_tsv" = 1 ] || say "$cu_n is no longer in the list"
             continue
         fi
         cu_kind=$(field "$cu_row" 2)
@@ -1253,6 +1436,20 @@ cmd_update() {
                 ;;
         esac
     done
+
+    if [ "$cu_check" = 1 ] && [ "$cu_tsv" = 1 ]; then
+        for cu_n in $cu_out; do
+            cu_row=$(row "$cu_n")
+            cu_note=""
+            [ "$(field "$cu_row" 2)" = file ] && cu_note=config-asks
+            printf '%s\t%s\t%s\t%s\n' "$cu_n" \
+                "$(installed_version "$cu_n")" "$(field "$cu_row" 3)" "$cu_note"
+        done
+        for cu_n in $cu_latest; do
+            printf '%s\t%s\t%s\t%s\n' "$cu_n" "$(installed_version "$cu_n")" latest latest
+        done
+        return 0
+    fi
 
     if [ "$cu_check" = 1 ]; then
         if [ -z "$(printf '%s' "$cu_out" | tr -d ' ')" ]; then
@@ -1293,6 +1490,15 @@ cmd_update() {
     return 0
 }
 
+cmd_update() {
+    update_items "$@"
+    cu_status=$?
+    if [ "$cu_status" != 2 ] && [ "${cu_check:-0}" = 0 ] && [ "${cu_offline:-0}" = 0 ]; then
+        self_update
+    fi
+    return "$cu_status"
+}
+
 cmd_refresh() {
     for cf_a in "$@"; do
         case "$cf_a" in
@@ -1307,6 +1513,196 @@ cmd_refresh() {
     return 0
 }
 
+# ---------------------------------------------------------------------------
+# Browsing
+# ---------------------------------------------------------------------------
+
+# One line per item for the browser: the name first, then what is shown.
+browse_lines() {
+    visible_rows | awk -F "$TAB" '{ printf "%s\t%s\n", $1, $10 }' |
+    while IFS="$TAB" read -r bl_name bl_summary; do
+        if is_installed "$bl_name"; then
+            bl_mark="*"
+        else
+            bl_mark=" "
+        fi
+        printf '%s\t%s %-14s %s\n' "$bl_name" "$bl_mark" "$bl_name" "$bl_summary"
+    done
+}
+
+browse_keys() {
+    say ""
+    say "  Tab      mark an item"
+    say "  Enter    install what is marked, or the one you are on"
+    say "  Ctrl-R   remove the one you are on"
+    say "  Ctrl-U   update everything you have"
+    say "  Ctrl-F   fetch a fresh list"
+    say "  ?        show these keys"
+    say "  Esc      leave"
+    say ""
+}
+
+browse_pause() {
+    say ""
+    printf 'Press Enter to go back. '
+    read -r bp_answer || bp_answer=""
+}
+
+# The full-screen view. Everything it does happens after the view closes, so
+# the questions tlstore asks still reach the person, and then it opens again.
+browse_view() {
+    mkdir -p "$CACHE_DIR"
+    bf_list="$CACHE_DIR/browse.tsv"
+    if [ "$(term_cols)" -lt 80 ]; then
+        bf_preview="down:60%"
+        bf_header="Tab mark  Enter install  Ctrl-R remove  ? keys"
+    else
+        bf_preview="right:55%"
+        bf_header="Tab mark   Enter install   Ctrl-R remove   Ctrl-U update   Ctrl-F list   ? keys"
+    fi
+    while :; do
+        browse_lines > "$bf_list"
+        if [ ! -s "$bf_list" ]; then
+            say "There is nothing to show."
+            break
+        fi
+        bf_res=$("$FZF" --multi --delimiter="$TAB" --with-nth=2.. \
+            --prompt='tlstore> ' --header="$bf_header" --header-first \
+            --expect=ctrl-r,ctrl-u,ctrl-f,? \
+            --preview="'$SELF' info {1}" --preview-window="$bf_preview" \
+            < "$bf_list") || break
+        bf_key=$(printf '%s\n' "$bf_res" | sed -n '1p')
+        bf_sel=$(printf '%s\n' "$bf_res" | sed '1d' | cut -d "$TAB" -f1 | tr '\n' ' ')
+        FAILED=0
+        case "$bf_key" in
+            '?')
+                browse_keys
+                browse_pause
+                ;;
+            ctrl-f)
+                cmd_refresh || true
+                pick_catalog || true
+                browse_pause
+                ;;
+            ctrl-u)
+                cmd_update || true
+                browse_pause
+                ;;
+            ctrl-r)
+                bf_one="${bf_sel%% *}"
+                if [ -n "$bf_one" ]; then
+                    cmd_remove "$bf_one" || true
+                    browse_pause
+                fi
+                ;;
+            *)
+                bf_todo=""
+                for bf_n in $bf_sel; do
+                    if is_installed "$bf_n"; then
+                        say "$bf_n is already installed."
+                    else
+                        bf_todo="$bf_todo $bf_n"
+                    fi
+                done
+                if [ -n "$(printf '%s' "$bf_todo" | tr -d ' ')" ]; then
+                    # shellcheck disable=SC2086  # a list of names, split on purpose
+                    cmd_install $bf_todo || true
+                    browse_pause
+                elif [ -n "$(printf '%s' "$bf_sel" | tr -d ' ')" ]; then
+                    browse_pause
+                fi
+                ;;
+        esac
+    done
+    rm -f "$bf_list"
+    return 0
+}
+
+cmd_browse() {
+    [ $# -eq 0 ] || { err "browse takes no options"; return 2; }
+    need_catalog
+    if on_terminal && have "$FZF"; then
+        browse_view
+        return 0
+    fi
+    if ! on_terminal && ! interactive; then
+        say "Browsing needs a terminal; here is the whole list instead."
+        cmd_list
+        return 0
+    fi
+    if ! have "$FZF"; then
+        if ask_yn "Browsing the list needs fzf. Install it?"; then
+            install_pkg fzf >/dev/null 2>&1 || true
+        fi
+        if on_terminal && have "$FZF"; then
+            browse_view
+            return 0
+        fi
+    fi
+    cmd_install
+}
+
+# ---------------------------------------------------------------------------
+# Keeping tlstore itself current
+# ---------------------------------------------------------------------------
+
+# version_newer <a> <b> — true when a is ahead of b.
+version_newer() {
+    awk -v a="$1" -v b="$2" '
+        function vercmp(x, y,   nx, ny, px, py, i, n, p, q) {
+            nx = split(x, px, /[.\-_]/)
+            ny = split(y, py, /[.\-_]/)
+            n = (nx > ny) ? nx : ny
+            for (i = 1; i <= n; i++) {
+                p = (i <= nx) ? px[i] + 0 : 0
+                q = (i <= ny) ? py[i] + 0 : 0
+                if (p > q) return 1
+                if (p < q) return -1
+            }
+            return 0
+        }
+        BEGIN { exit (vercmp(a, b) > 0) ? 0 : 1 }'
+}
+
+# A tlstore installed by hand keeps itself current. Inside the launcher the app
+# writes the file on every start, so there this does nothing.
+self_update() {
+    [ -f "$STANDALONE_MARK" ] || return 0
+    [ ! -f "$INSTALLED_MARK" ] || return 0
+    su_target="$PREFIX/bin/tlstore"
+    [ -f "$su_target" ] || return 0
+    have curl || return 0
+    have minisign || return 0
+    [ -f "$PUBKEY" ] || return 0
+    mkdir -p "$CACHE_DIR"
+    su_new="$CACHE_DIR/tlstore.new"
+    su_sig="$CACHE_DIR/tlstore.new.minisig"
+    if ! curl -fsL -o "$su_new" "$RAW_BASE/tlstore" 2>/dev/null ||
+       ! curl -fsL -o "$su_sig" "$RAW_BASE/tlstore.minisig" 2>/dev/null; then
+        rm -f "$su_new" "$su_sig"
+        return 0
+    fi
+    if ! minisign -Q -V -p "$PUBKEY" -x "$su_sig" -m "$su_new" >/dev/null 2>&1; then
+        rm -f "$su_new" "$su_sig"
+        err "the tlstore that was offered is not signed by the launcher — ignoring it"
+        return 0
+    fi
+    su_version=$(sed -n 's/^TLSTORE_VERSION=\([0-9][0-9.]*\)$/\1/p' "$su_new" | head -1)
+    if [ -z "$su_version" ] || ! version_newer "$su_version" "$TLSTORE_VERSION"; then
+        rm -f "$su_new" "$su_sig"
+        return 0
+    fi
+    if cp "$su_new" "$su_target.new" && chmod 755 "$su_target.new" &&
+       mv "$su_target.new" "$su_target"; then
+        say "tlstore is now version $su_version."
+    else
+        rm -f "$su_target.new"
+        err "could not put the newer tlstore in place"
+    fi
+    rm -f "$su_new" "$su_sig"
+    return 0
+}
+
 cd_line() { printf '%-13s %s\n' "$1" "$2"; }
 
 cmd_doctor() {
@@ -1317,6 +1713,16 @@ cmd_doctor() {
         cd_line Edition "$APP_PACKAGE"
     else
         cd_line Edition "unknown"
+    fi
+    cd_pkg="${APP_PACKAGE:-unknown}"
+    if [ "$HOST" = launcher ]; then
+        if [ -n "$LAUNCHER_VERSION" ]; then
+            cd_line App "Termux Launcher $LAUNCHER_VERSION ($cd_pkg)"
+        else
+            cd_line App "Termux Launcher ($cd_pkg)"
+        fi
+    else
+        cd_line App "Termux ($cd_pkg)"
     fi
     case ":$PATH:" in
         *":$BIN_DIR:"*)
@@ -1400,6 +1806,10 @@ cmd_version() {
 
 main() {
     if [ $# -eq 0 ]; then
+        if on_terminal && have "$FZF"; then
+            cmd_browse
+            return $?
+        fi
         usage
         return 0
     fi
@@ -1408,6 +1818,7 @@ main() {
     case "$tl_cmd" in
         list) cmd_list "$@" ;;
         search) cmd_search "$@" ;;
+        browse) cmd_browse "$@" ;;
         info) cmd_info "$@" ;;
         install|add) cmd_install "$@" ;;
         remove|uninstall) cmd_remove "$@" ;;
