@@ -270,6 +270,64 @@ public class KittyNotificationsTest extends TerminalTestCase {
 		assertNull(mTerminal.getPointerShape());
 	}
 
+	/**
+	 * An escape a program never closed keeps swallowing, so the terminal's own bytes — here a
+	 * shell-integration marker printed straight afterwards — end up inside the title. None of it
+	 * may reach the notification.
+	 */
+	public void testControlCharactersNeverReachTheNotification() {
+		withTerminalSized(20, 5);
+		// Base64 so the embedded escape arrives as payload rather than ending the sequence.
+		enterString("\033]99;i=1:e=1:d=1:p=title;" + b64("Build finished\033]133;D;0") + "\033\\");
+		assertEquals(1, mOutput.kittyNotifications.size());
+		String title = mOutput.kittyNotifications.get(0).getTitle();
+		assertEquals("Build finished]133;D;0", title);
+		for (int i = 0; i < title.length(); i++) {
+			char c = title.charAt(i);
+			assertFalse("control character at " + i, c < ' ' || c == '\u007F');
+		}
+	}
+
+	/** A body may be several lines; a title is one. */
+	public void testBodyKeepsItsLineBreaksAndTheTitleDoesNot() {
+		withTerminalSized(20, 5);
+		enterString("\033]99;i=1:e=1:d=0:p=title;" + b64("Build\nfinished") + "\033\\");
+		enterString("\033]99;i=1:e=1:d=1:p=body;"
+			+ b64("42 tests passed\nall green\007\u0001") + "\033\\");
+		KittyNotification notification = mOutput.kittyNotifications.get(0);
+		assertEquals("Build finished", notification.getTitle());
+		assertEquals("42 tests passed\nall green", notification.getBody());
+	}
+
+	/** Runs of spaces, tabs and line breaks come out as one gap, and the ends are trimmed. */
+	public void testWhitespaceIsCollapsedAndTrimmed() {
+		assertEquals("a b", KittyNotifications.clean("   a \t  b   ", false));
+		assertEquals("a b", KittyNotifications.clean("a\n\n\n\tb", false));
+		assertEquals("a\nb", KittyNotifications.clean("\n\n a \n \n b \n\n", true));
+		assertEquals("a\tb", KittyNotifications.clean("a \t b", true));
+		assertEquals("", KittyNotifications.clean("\u0001\033\u007F", false));
+		assertEquals("", KittyNotifications.clean(null, true));
+	}
+
+	/** A request with nothing left to say after cleaning is not worth waking the user for. */
+	public void testARequestOfNothingButControlBytesIsDropped() {
+		withTerminalSized(20, 5);
+		enterString("\033]99;i=1:e=1:d=0:p=title;" + b64("\033\007") + "\033\\");
+		enterString("\033]99;i=1:e=1:d=1:p=body;" + b64("\u0001\u007F") + "\033\\");
+		assertTrue(mOutput.kittyNotifications.isEmpty());
+	}
+
+	/** Button labels are read by the user too, so they are cleaned the same way. */
+	public void testButtonLabelsAreCleaned() {
+		withTerminalSized(20, 5);
+		enterString("\033]99;i=1:d=0:p=title;Deploy?\033\\");
+		enterString("\033]99;i=1:e=1:d=1:p=buttons;" + b64("Yes\007  No  now ") + "\033\\");
+		KittyNotification notification = mOutput.kittyNotifications.get(0);
+		assertEquals(2, notification.getButtons().size());
+		assertEquals("Yes", notification.getButtons().get(0));
+		assertEquals("No now", notification.getButtons().get(1));
+	}
+
 	/** OSC 99 does not disturb the older, plainer notification escapes. */
 	public void testOlderNotificationEscapesStillWork() {
 		withTerminalSized(20, 5);

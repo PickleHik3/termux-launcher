@@ -279,6 +279,59 @@ public final class KittyNotifications {
         return new String(decoded.toByteArray(), StandardCharsets.UTF_8);
     }
 
+    /** Ranked whitespace: what survives when several kinds run together between two words. */
+    private static final int GAP_NONE = 0;
+
+    private static final int GAP_SPACE = 1;
+
+    private static final int GAP_TAB = 2;
+
+    private static final int GAP_BREAK = 3;
+
+    /**
+     * Clean text a program sent, before anybody shows it.
+     *
+     * <p>What arrives here is whatever the program's output happened to be, and an escape it never
+     * closed keeps swallowing until something else ends it — so the terminal's own control bytes,
+     * and pieces of whatever the shell printed next, can land inside a title. None of that belongs
+     * on a notification: the control characters go, and a run of spaces, tabs and line breaks
+     * becomes one gap of the widest kind that was in it.
+     *
+     * @param multiline true for a body, which may keep its line breaks and tabs; false for a
+     *     title, where every gap becomes a single space.
+     */
+    @NonNull
+    static String clean(@Nullable String text, boolean multiline) {
+        if (text == null || text.isEmpty()) return "";
+        StringBuilder out = new StringBuilder(text.length());
+        int gap = GAP_NONE;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '\n' || c == '\r') {
+                gap = Math.max(gap, multiline ? GAP_BREAK : GAP_SPACE);
+                continue;
+            }
+            if (c == '\t') {
+                gap = Math.max(gap, multiline ? GAP_TAB : GAP_SPACE);
+                continue;
+            }
+            if (c == ' ') {
+                gap = Math.max(gap, GAP_SPACE);
+                continue;
+            }
+            // Every other control character is dropped outright rather than turned into a space:
+            // it was never meant to be read, and standing in for it would only widen the gap.
+            if (c < ' ' || c == '\u007F') continue;
+            // Nothing is written before the first word or after the last, so the text comes out
+            // trimmed without a second pass.
+            if (out.length() > 0 && gap != GAP_NONE)
+                out.append(gap == GAP_BREAK ? '\n' : gap == GAP_TAB ? '\t' : ' ');
+            gap = GAP_NONE;
+            out.append(c);
+        }
+        return out.toString();
+    }
+
     @NonNull
     private static List<String> splitDecoded(@Nullable String packed) {
         List<String> parts = new ArrayList<>();
@@ -362,14 +415,18 @@ public final class KittyNotifications {
             List<String> buttonLabels = new ArrayList<>();
             if (!buttons.isEmpty()) {
                 for (String label : buttons.split(String.valueOf(BUTTON_SEPARATOR), -1)) {
-                    if (!label.isEmpty()) buttonLabels.add(label);
+                    // A button's label is read by the user too, so it is cleaned like a title.
+                    String cleaned = clean(label, false);
+                    if (!cleaned.isEmpty()) buttonLabels.add(cleaned);
                 }
             }
             String application = applicationName == null || applicationName.isEmpty()
-                ? null : decodeBase64Utf8(applicationName);
+                ? null : clean(decodeBase64Utf8(applicationName), false);
             String soundName = sound == null || sound.isEmpty() ? null : decodeBase64Utf8(sound);
-            return new KittyNotification(id, title, body, urgency, occasion, focusOnActivate,
-                reportOnActivate, reportOnClose, timeoutMillis,
+            // Cleaned here, once, so no client has to wonder whether what it was handed is safe to
+            // show. A request left with nothing to say is dropped by the caller.
+            return new KittyNotification(id, clean(title, false), clean(body, true), urgency,
+                occasion, focusOnActivate, reportOnActivate, reportOnClose, timeoutMillis,
                 application == null || application.isEmpty() ? null : application,
                 splitDecoded(iconNames), splitDecoded(types),
                 soundName == null || soundName.isEmpty() ? null : soundName, buttonLabels);
