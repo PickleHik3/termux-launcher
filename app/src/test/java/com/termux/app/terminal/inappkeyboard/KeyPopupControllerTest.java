@@ -91,50 +91,42 @@ public class KeyPopupControllerTest {
     }
 
     @Test
-    public void aPressPutsAGlyphUpOnceTheGraceperiodPassesAndTheReleaseTakesItDown() {
+    public void aPressPutsAGlyphUpAtOnceAndTheReleaseLetsItFinishItsStay() {
         controller.setEnabled(true);
-
         press();
-        assertFalse("nothing is drawn on the way down",
+        assertTrue("the glyph is up the moment the finger lands",
             controller.overlay().hasActivePopups());
-        assertTrue("the finger is down, the glyph is only waiting",
-            controller.overlay().hasPendingPopups());
-
-        settle();
-        assertTrue(controller.overlay().hasActivePopups());
         assertFalse(controller.overlay().hasPendingPopups());
-
         release();
-        assertFalse(controller.overlay().hasActivePopups());
+        assertFalse("the finger is gone", controller.overlay().hasActivePopups());
+        assertTrue("but the glyph finishes its minimum stay", controller.overlay().isShowingGlyphs());
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(
+            KeyPopupOverlayView.MIN_VISIBLE_MS / 2, TimeUnit.MILLISECONDS);
+        assertTrue(controller.overlay().isShowingGlyphs());
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS);
+        assertFalse("then fades out", controller.overlay().isShowingGlyphs());
     }
 
     @Test
-    public void aFingerThatLiftsInsideTheGracePeriodNeverShowsAnything() {
+    public void aTapShorterThanTheStayStillReadsForTheWholeStay() {
         controller.setEnabled(true);
-
         press();
         release();
-
-        assertFalse(controller.overlay().hasActivePopups());
-        assertFalse(controller.overlay().hasPendingPopups());
-
-        // And the timer does not fire behind the finger's back afterwards.
+        assertTrue(controller.overlay().isShowingGlyphs());
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(
+            KeyPopupOverlayView.MIN_VISIBLE_MS - 20, TimeUnit.MILLISECONDS);
+        assertTrue("still up just before the stay ends", controller.overlay().isShowingGlyphs());
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS);
-        assertFalse(controller.overlay().hasActivePopups());
+        assertFalse(controller.overlay().isShowingGlyphs());
     }
 
     @Test
-    public void aSwipeInsideTheGracePeriodShowsItsTargetStraightAway() {
+    public void aSwipeRightAfterTheLandingReplacesTheGlyphInPlace() {
         controller.setEnabled(true);
-
         press();
         controller.onKeyPopupTarget(0, "1", false, 2);
-
-        assertTrue(controller.overlay().hasActivePopups());
-        assertFalse("the centre value never got its turn",
-            controller.overlay().hasPendingPopups());
-
-        // The timer that would have shown the centre value is gone, not merely overtaken.
+        assertTrue("still exactly one glyph for the finger", controller.overlay().hasActivePopups());
+        assertFalse(controller.overlay().hasPendingPopups());
         settle();
         assertTrue(controller.overlay().hasActivePopups());
     }
@@ -167,14 +159,13 @@ public class KeyPopupControllerTest {
     }
 
     @Test
-    public void tearingDownWhileAFingerIsStillInsideTheGracePeriodDropsTheTimer() {
+    public void tearingDownWhileAGlyphIsFinishingItsStayDropsThePendingExit() {
         controller.setEnabled(true);
         press();
-
+        release();
         controller.destroy();
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS);
-
-        assertFalse(controller.overlay().hasActivePopups());
+        assertFalse(controller.overlay().isShowingGlyphs());
         assertFalse(controller.overlay().hasPendingPopups());
     }
 

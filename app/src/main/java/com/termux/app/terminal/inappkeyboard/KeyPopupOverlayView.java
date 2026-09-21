@@ -27,7 +27,8 @@ import androidx.core.graphics.ColorUtils;
  *
  * <p>One view draws everything: per finger, one filled character — the value that would be
  * committed right now — in the theme's accent, anchored over the cap. Nothing else. No veil, no
- * ring of alternates, no halo, no sub-label. A short grace period after the finger lands decides
+ * ring of alternates, no halo, no sub-label. The glyph rises out of the cap the moment the finger
+ * lands, stays at least {@link #MIN_VISIBLE_MS}, and leaves upwards. An optional grace period decides
  * between a tap and a swipe, so fast typing never flashes a glyph, and a swipe replaces the glyph
  * in place rather than lighting a second one beside it.
  *
@@ -41,25 +42,36 @@ import androidx.core.graphics.ColorUtils;
 public final class KeyPopupOverlayView extends View {
 
     /** How long the glyph waits, so a swipe shows its target instead of the centre value first. */
-    static final long SHOW_DELAY_MS = 50L;
+    /** No grace on the way down: the glyph is up the moment the finger lands, and stays put. */
+    static final long SHOW_DELAY_MS = 0L;
+    /**
+     * How long a glyph stays fully up after it appeared, whatever the finger does. Fast typing
+     * lands and lifts in 20-100 ms; without this floor a popup was on screen for two or three
+     * frames, or not at all, and read as flicker with uneven lengths from key to key.
+     */
+    static final long MIN_VISIBLE_MS = 200L;
     /** Enter: opacity and a short rise to the anchor. */
-    private static final long ENTER_MS = 120L;
+    private static final long ENTER_MS = 180L;
     /** Exit: opacity and a shorter rise past the anchor, once the key is on its way. */
-    private static final long EXIT_MS = 100L;
+    private static final long EXIT_MS = 160L;
     /** A swipe target replacing the glyph in place. */
     private static final long SWAP_MS = 60L;
     /** Reduced motion keeps every state change, just none of the travel. */
     private static final long INSTANT_MS = 1L;
 
-    private static final float ENTER_RISE_DP = 4f;
-    private static final float EXIT_RISE_DP = 3f;
+    /** How far the glyph travels on past its resting place while it fades out. */
+    private static final float EXIT_RISE_DP = 14f;
+    private static final float ENTER_FROM_SCALE = 0.7f;
+    private static final float EXIT_TO_SCALE = 0.85f;
     private static final float SHADOW_RADIUS_DP = 4f;
     private static final float SHADOW_DY_DP = 1f;
     /** Slack round the glyph's box when asking for a repaint: the shadow and the rise. */
     private static final float INVALIDATE_PAD_DP = 10f;
 
-    private final Interpolator mEnterInterpolator = new PathInterpolator(0.4f, 0f, 0.2f, 1f);
-    private final Interpolator mExitInterpolator = new PathInterpolator(0.4f, 0f, 1f, 1f);
+    /** Material 3 emphasized decelerate: quick out of the cap, settling softly. */
+    private final Interpolator mEnterInterpolator = new PathInterpolator(0.05f, 0.7f, 0.1f, 1f);
+    /** Material 3 emphasized accelerate: lingers, then leaves. */
+    private final Interpolator mExitInterpolator = new PathInterpolator(0.3f, 0f, 0.8f, 0.15f);
 
     private final Paint mGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mMeasurePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -179,7 +191,7 @@ public final class KeyPopupOverlayView extends View {
             return;
         }
         mExiting.add(popup);
-        popup.startExit();
+        popup.exitAfterDwell();
         invalidatePopup(popup);
     }
 
@@ -206,6 +218,12 @@ public final class KeyPopupOverlayView extends View {
     }
 
     /** Whether a finger is down but its glyph has not been drawn yet. */
+    /** Whether any glyph is on screen at all: up under a finger, dwelling after it, or fading. */
+    @androidx.annotation.VisibleForTesting
+    boolean isShowingGlyphs() {
+        return hasActivePopups() || !mExiting.isEmpty();
+    }
+
     @androidx.annotation.VisibleForTesting
     boolean hasPendingPopups() {
         for (int i = 0; i < mPopups.size(); i++)
@@ -231,13 +249,17 @@ public final class KeyPopupOverlayView extends View {
         if (alpha <= 0f) return;
         float density = density();
         float dy = popup.translateYPx(density);
+        float scale = popup.scale();
         float swap = popup.swap;
+        int save = canvas.save();
+        if (scale != 1f) canvas.scale(scale, scale, popup.anchorX, popup.anchorY + dy);
         if (popup.previousLabel != null && swap < 1f) {
             drawGlyph(canvas, popup, popup.previousLabel, popup.previousLabelKeyFont,
                 popup.previousMetrics, alpha * (1f - swap), dy, density);
         }
         drawGlyph(canvas, popup, popup.label, popup.labelKeyFont, popup.metrics,
             alpha * (popup.previousLabel == null ? 1f : swap), dy, density);
+        canvas.restoreToCount(save);
     }
 
     private void drawGlyph(@NonNull Canvas canvas, @NonNull Popup popup, @NonNull String label,
@@ -332,6 +354,9 @@ public final class KeyPopupOverlayView extends View {
 
         /** True while the grace period is still running and nothing has been drawn. */
         boolean pending = true;
+        /** When the glyph came up; the exit waits until {@link #MIN_VISIBLE_MS} has passed since. */
+        long shownAtMs;
+        private final Runnable exitTask = this::startExit;
 
         KeyPopupGeometry.Metrics metrics;
         float anchorX;
@@ -374,6 +399,7 @@ public final class KeyPopupOverlayView extends View {
 
         /** Wait out the grace period before anything is drawn. */
         void scheduleAppear() {
+            if (SHOW_DELAY_MS <= 0L) { appear(); return; }
             pending = true;
             mHandler.postDelayed(appearTask, SHOW_DELAY_MS);
         }
@@ -386,6 +412,7 @@ public final class KeyPopupOverlayView extends View {
         /** The glyph is drawn from now on; it fades and rises into its anchor. */
         void appear() {
             cancelTimer();
+            shownAtMs = android.os.SystemClock.uptimeMillis();
             previousLabel = null;
             previousMetrics = null;
             swap = 1f;
@@ -410,7 +437,14 @@ public final class KeyPopupOverlayView extends View {
             });
         }
 
+        /** Lets the glyph finish its minimum stay, then fades it; a very short tap still reads. */
+        void exitAfterDwell() {
+            long remaining = MIN_VISIBLE_MS - (android.os.SystemClock.uptimeMillis() - shownAtMs);
+            if (remaining > 0L) mHandler.postDelayed(exitTask, remaining);
+            else startExit();
+        }
         void startExit() {
+            if (exiting) return;
             exiting = true;
             exit = 0f;
             exitAnimator = run(exitAnimator, EXIT_MS, value -> exit = value, () -> {
@@ -450,20 +484,28 @@ public final class KeyPopupOverlayView extends View {
         /** Everything this popup could still do, undone. */
         void stop() {
             mHandler.removeCallbacks(appearTask);
+            mHandler.removeCallbacks(exitTask);
             pending = false;
             cancelAnimators();
         }
 
         float alpha() {
             if (exiting) return clamp01(1f - mExitInterpolator.getInterpolation(exit));
-            return clamp01(mEnterInterpolator.getInterpolation(enter));
+            // Solid by the time it is half-way up, so the rise reads as a shape, not a fade.
+            return clamp01(mEnterInterpolator.getInterpolation(enter) * 1.8f);
         }
 
-        /** The short travel into the anchor on the way in, and past it on the way out. */
+        float scale() {
+            if (exiting) return lerp(1f, EXIT_TO_SCALE, mExitInterpolator.getInterpolation(exit));
+            return lerp(ENTER_FROM_SCALE, 1f, mEnterInterpolator.getInterpolation(enter));
+        }
+
+        /** Comes up out of the cap: starts centred on the key, settles at the anchor; leaves upwards. */
         float translateYPx(float density) {
             if (exiting)
                 return lerp(0f, -EXIT_RISE_DP * density, mExitInterpolator.getInterpolation(exit));
-            return lerp(ENTER_RISE_DP * density, 0f, mEnterInterpolator.getInterpolation(enter));
+            float fromCap = keyBounds.centerY() - anchorY;
+            return lerp(fromCap, 0f, mEnterInterpolator.getInterpolation(enter));
         }
 
         /** The box this popup can paint into, grown for the shadow and the travel. */
@@ -473,8 +515,10 @@ public final class KeyPopupOverlayView extends View {
             float glyph = Math.max(metrics.glyphSizePx,
                 previousMetrics == null ? 0f : previousMetrics.glyphSizePx);
             float vertical = glyph + pad;
-            out.set((int) Math.floor(anchorX - half), (int) Math.floor(anchorY - vertical),
-                (int) Math.ceil(anchorX + half), (int) Math.ceil(anchorY + vertical));
+            float rise = EXIT_RISE_DP * density();
+            float drop = Math.max(0f, keyBounds.centerY() - anchorY);
+            out.set((int) Math.floor(anchorX - half), (int) Math.floor(anchorY - vertical - rise),
+                (int) Math.ceil(anchorX + half), (int) Math.ceil(anchorY + vertical + drop));
         }
     }
 
