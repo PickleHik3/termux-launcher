@@ -10,7 +10,6 @@ import android.graphics.Color;
 
 import com.google.android.material.color.MaterialColors;
 
-import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -18,7 +17,7 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 /**
- * The popup carries no material of its own, so every colour it draws has to come from a Material
+ * The popup carries no material of its own, so both colours it draws have to come from a Material
  * role with the design's alpha on top — never a hard-coded hex.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -33,49 +32,51 @@ public class KeyPopupPaletteTest {
     }
 
     @Test
-    public void everyColourIsAThemeRoleWithItsOwnAlpha() {
+    public void theGlyphIsTheThemesAccentAtFullStrength() {
         Context context = themed();
         KeyPopupPalette palette = KeyPopupPalette.resolve(context);
 
         int primary = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorPrimary, 0);
-        int onSurface = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurface, 0);
-        int onSurfaceVariant = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurfaceVariant, 0);
+        assertEquals(primary | 0xFF000000, palette.primary);
+        assertEquals(255, Color.alpha(palette.primary));
+    }
 
-        assertEquals("the halo is the theme's own accent, at full strength",
-            primary | 0xFF000000, palette.primary);
-        assertEquals(rgb(onSurface), rgb(palette.glyphStroke));
-        assertEquals(rgb(onSurfaceVariant), rgb(palette.ringIdle));
-        assertEquals(rgb(onSurfaceVariant), rgb(palette.subLabel));
+    @Test
+    public void theShadowIsTheLowestSurfaceAtTheDesignsOpacity() {
+        Context context = themed();
+        KeyPopupPalette palette = KeyPopupPalette.resolve(context);
 
-        assertEquals(242, Color.alpha(palette.glyphStroke));
-        assertEquals(153, Color.alpha(palette.ringIdle));
-        assertEquals(115, Color.alpha(palette.subLabel));
-        assertEquals(184, Color.alpha(palette.dim));
+        int lowest = MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorSurfaceContainerLowest,
+            MaterialColors.getColor(context, com.google.android.material.R.attr.colorSurface, 0));
+        assertEquals(rgb(lowest), rgb(palette.shadow));
+        assertEquals(153, Color.alpha(palette.shadow));
     }
 
     @Test
     @Config(qualifiers = "night")
-    public void aDarkThemeCarriesTheHaloAtFullGlow() {
-        KeyPopupPalette palette = KeyPopupPalette.resolve(themed());
-        assertEquals(1f, palette.glow, 0.001f);
+    public void aDarkThemesShadowReadsAsGroundNotAsInk() {
+        assertShadowTracksTheGround();
     }
 
     @Test
     @Config(qualifiers = "notnight")
-    public void aLightThemeKeepsTheOutlineDarkAndTonesTheHaloDown() {
+    public void aLightThemesShadowInvertsWithTheTheme() {
+        assertShadowTracksTheGround();
+    }
+
+    /** Whichever way the theme goes, the shadow is the surface's colour, not the text's. */
+    private void assertShadowTracksTheGround() {
         Context context = themed();
         KeyPopupPalette palette = KeyPopupPalette.resolve(context);
-
-        assertTrue("the halo is quieter where the ground is bright", palette.glow < 1f);
-        int surface = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorSurface, 0);
-        // The outline is onSurface, so it inverts with the theme on its own: darker than the
-        // surface it is drawn over.
-        assertTrue("the outline reads dark against a light surface",
-            luminance(palette.glyphStroke) < luminance(surface));
+        double surface = luminance(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorSurface, 0));
+        double onSurface = luminance(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSurface, 0));
+        double shadow = luminance(palette.shadow);
+        assertTrue("the shadow is the ground the glyph is lifted off",
+            Math.abs(shadow - surface) < Math.abs(shadow - onSurface));
     }
 
     @Test
@@ -84,6 +85,8 @@ public class KeyPopupPaletteTest {
         int first = KeyPopupPalette.signature(context);
         assertEquals("and stays put when it does not", first, KeyPopupPalette.signature(context));
         assertNotEquals(0, first);
+        assertNotEquals("and is not simply the accent", first,
+            KeyPopupPalette.resolve(context).primary);
     }
 
     @Test

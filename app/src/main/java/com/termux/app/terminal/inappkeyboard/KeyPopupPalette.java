@@ -1,7 +1,6 @@
 package com.termux.app.terminal.inappkeyboard;
 
 import android.content.Context;
-import android.content.res.Configuration;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
@@ -10,77 +9,41 @@ import androidx.core.graphics.ColorUtils;
 import com.google.android.material.color.MaterialColors;
 
 /**
- * The colours the pressed-key popup is drawn in, resolved from the active Material theme.
+ * The two colours the pressed-key glyph is drawn in, resolved from the active Material theme.
  *
- * <p>The popup has no material of its own — no card, no border, no scrim behind the glyph. Its
- * legibility rests on one accent halo and on dimming the whole surface beneath it, so every colour
- * here is a Material role with the design's alpha applied on top, exactly the way a state layer
- * works. On a light theme the outline is already the dark one (it is {@code onSurface}) and the
- * halo is toned down instead, which is the inversion the design asks for.
+ * <p>The popup has no material of its own — no card, no border, no veil over the surface. It is one
+ * filled glyph in the theme's accent, with a soft shadow in the theme's lowest surface behind it so
+ * it still reads over terminal text. Both are Material roles, so they invert with the theme on
+ * their own: the shadow is near-black on a dark theme and near-white on a light one.
  */
 public final class KeyPopupPalette {
 
-    /** Halo, targeted alternate, the outline once a direction is targeted, the latch mark. */
+    /** The glyph itself. */
     @ColorInt public final int primary;
-    /** The centre glyph's outline at rest. */
-    @ColorInt public final int glyphStroke;
-    /** An alternate that is not the target. */
-    @ColorInt public final int ringIdle;
-    /** The HELD / LATCH mark under a modifier's glyph. */
-    @ColorInt public final int subLabel;
-    /** The surface-wide veil, already carrying its own opacity. */
-    @ColorInt public final int dim;
-    /** Multiplier on every halo and glow alpha. */
-    public final float glow;
+    /** The soft shadow behind it, already carrying its own opacity. */
+    @ColorInt public final int shadow;
 
-    KeyPopupPalette(@ColorInt int primary, @ColorInt int glyphStroke, @ColorInt int ringIdle,
-                    @ColorInt int subLabel, @ColorInt int dim, float glow) {
+    KeyPopupPalette(@ColorInt int primary, @ColorInt int shadow) {
         this.primary = primary;
-        this.glyphStroke = glyphStroke;
-        this.ringIdle = ringIdle;
-        this.subLabel = subLabel;
-        this.dim = dim;
-        this.glow = glow;
+        this.shadow = shadow;
     }
 
-    /** Alphas from the design, so the roles keep their intended relationship. */
-    private static final float GLYPH_STROKE_ALPHA = 0.95f;
-    private static final float RING_IDLE_ALPHA = 0.60f;
-    private static final float SUB_LABEL_ALPHA = 0.45f;
-    private static final float DIM_ALPHA = 0.72f;
-    /** A light theme carries the same accent at a lower glow, so the halo does not wash out. */
-    private static final float LIGHT_GLOW = 0.7f;
+    /** How strongly the shadow carries, so the glyph separates without glowing. */
+    private static final float SHADOW_ALPHA = 0.60f;
 
     @NonNull
     public static KeyPopupPalette resolve(@NonNull Context context) {
         int surface = role(context, com.google.android.material.R.attr.colorSurface, 0xFF101010);
-        int onSurface = role(context, com.google.android.material.R.attr.colorOnSurface, 0xFFF2EFE8);
-        int onSurfaceVariant = role(context,
-            com.google.android.material.R.attr.colorOnSurfaceVariant,
-            ColorUtils.blendARGB(onSurface, surface, 0.28f));
         int primary = role(context, com.google.android.material.R.attr.colorPrimary, 0xFFE9B308);
         int lowest = role(context,
             com.google.android.material.R.attr.colorSurfaceContainerLowest, surface);
-        boolean night = (context.getResources().getConfiguration().uiMode
-            & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
-        return new KeyPopupPalette(
-            opaque(primary),
-            withAlpha(onSurface, GLYPH_STROKE_ALPHA),
-            withAlpha(onSurfaceVariant, RING_IDLE_ALPHA),
-            withAlpha(onSurfaceVariant, SUB_LABEL_ALPHA),
-            withAlpha(lowest, DIM_ALPHA),
-            night ? 1f : LIGHT_GLOW);
+        return new KeyPopupPalette(opaque(primary), withAlpha(lowest, SHADOW_ALPHA));
     }
 
-    /** A signature that moves whenever any of the roles above does. */
+    /** A signature that moves whenever either role above does. */
     public static int signature(@NonNull Context context) {
         KeyPopupPalette p = resolve(context);
-        int hash = p.primary;
-        hash = 31 * hash + p.glyphStroke;
-        hash = 31 * hash + p.ringIdle;
-        hash = 31 * hash + p.subLabel;
-        hash = 31 * hash + p.dim;
-        return 31 * hash + Float.floatToIntBits(p.glow);
+        return 31 * p.primary + p.shadow;
     }
 
     @ColorInt

@@ -9,15 +9,19 @@ import static org.junit.Assert.assertTrue;
 import android.app.Application;
 import android.content.Context;
 import android.graphics.Color;
+import android.os.Looper;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
+
+import java.util.concurrent.TimeUnit;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
+import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 
 import juloo.keyboard2.Keyboard2View;
@@ -26,7 +30,7 @@ import juloo.keyboard2.KeyValue;
 import juloo.keyboard2.Pointers;
 import juloo.keyboard2.Theme;
 
-/** Attaching, detaching and honouring the setting. */
+/** Attaching, detaching, the tap-or-swipe grace period, and honouring the setting. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28, application = Application.class)
 public class KeyPopupControllerTest {
@@ -87,12 +91,64 @@ public class KeyPopupControllerTest {
     }
 
     @Test
-    public void aPressPutsAPopupUpAndTheReleaseTakesItDown() {
+    public void aPressPutsAGlyphUpOnceTheGraceperiodPassesAndTheReleaseTakesItDown() {
         controller.setEnabled(true);
 
         press();
-        assertTrue(controller.overlay().hasActivePopups());
+        assertFalse("nothing is drawn on the way down",
+            controller.overlay().hasActivePopups());
+        assertTrue("the finger is down, the glyph is only waiting",
+            controller.overlay().hasPendingPopups());
 
+        settle();
+        assertTrue(controller.overlay().hasActivePopups());
+        assertFalse(controller.overlay().hasPendingPopups());
+
+        release();
+        assertFalse(controller.overlay().hasActivePopups());
+    }
+
+    @Test
+    public void aFingerThatLiftsInsideTheGracePeriodNeverShowsAnything() {
+        controller.setEnabled(true);
+
+        press();
+        release();
+
+        assertFalse(controller.overlay().hasActivePopups());
+        assertFalse(controller.overlay().hasPendingPopups());
+
+        // And the timer does not fire behind the finger's back afterwards.
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS);
+        assertFalse(controller.overlay().hasActivePopups());
+    }
+
+    @Test
+    public void aSwipeInsideTheGracePeriodShowsItsTargetStraightAway() {
+        controller.setEnabled(true);
+
+        press();
+        controller.onKeyPopupTarget(0, "1", false, 2);
+
+        assertTrue(controller.overlay().hasActivePopups());
+        assertFalse("the centre value never got its turn",
+            controller.overlay().hasPendingPopups());
+
+        // The timer that would have shown the centre value is gone, not merely overtaken.
+        settle();
+        assertTrue(controller.overlay().hasActivePopups());
+    }
+
+    @Test
+    public void aSwipeAfterTheGlyphIsUpReplacesItInPlace() {
+        controller.setEnabled(true);
+        press();
+        settle();
+
+        controller.onKeyPopupTarget(0, "1", false, 2);
+
+        assertTrue("still exactly one glyph for the finger",
+            controller.overlay().hasActivePopups());
         release();
         assertFalse(controller.overlay().hasActivePopups());
     }
@@ -101,12 +157,25 @@ public class KeyPopupControllerTest {
     public void turningItOffClearsWhatIsUpAndLeavesTheHostAsItWasFound() {
         controller.setEnabled(true);
         press();
+        settle();
 
         controller.setEnabled(false);
 
         assertFalse(controller.overlay().hasActivePopups());
         assertNull(controller.overlay().getParent());
         assertFalse(controller.isEnabled());
+    }
+
+    @Test
+    public void tearingDownWhileAFingerIsStillInsideTheGracePeriodDropsTheTimer() {
+        controller.setEnabled(true);
+        press();
+
+        controller.destroy();
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS);
+
+        assertFalse(controller.overlay().hasActivePopups());
+        assertFalse(controller.overlay().hasPendingPopups());
     }
 
     @Test
@@ -135,6 +204,12 @@ public class KeyPopupControllerTest {
 
     private void press() {
         touch(MotionEvent.ACTION_DOWN);
+    }
+
+    /** Wait out the tap-or-swipe grace period, so the glyph is actually on screen. */
+    private void settle() {
+        Shadows.shadowOf(Looper.getMainLooper())
+            .idleFor(KeyPopupOverlayView.SHOW_DELAY_MS, TimeUnit.MILLISECONDS);
     }
 
     private void release() {
