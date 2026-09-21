@@ -18,6 +18,13 @@
 #                           produces a minisign when asked to install one —
 #                           for the tests about that question itself.
 # A fake `pkg` is on both, logging every invocation to pkg.log.
+#
+# The minisign question is asked with install.sh's own bytes on stdin and no
+# controlling terminal at all, or with a real one — the same two shapes
+# `curl ... | sh` and a person running it directly ever produce. `setsid`
+# gives the first (no /dev/tty to fall back to); `script -qc` gives the
+# second (a real pty, so /dev/tty answers even though stdin is still the
+# installer). Either missing on this host just skips that one check.
 
 set -u
 
@@ -68,6 +75,11 @@ EOF
         printf '# tlstore catalog\tserial=2026092101\n'
         printf '# name\tkind\tversion\tprefixes\tsource\tdigest\ttarget\trequires\toptions\tsummary\n'
     } > "$ASSETDIR/catalog.tsv"
+
+    HAVE_SETSID=0
+    command -v setsid >/dev/null 2>&1 && HAVE_SETSID=1
+    HAVE_SCRIPT=0
+    command -v script >/dev/null 2>&1 && HAVE_SCRIPT=1
 
     HAVE_MINISIGN=0
     REAL_MINISIGN="$(command -v minisign 2>/dev/null || true)"
@@ -133,7 +145,8 @@ reset_prefix() {
     mkdir -p "$TPREFIX/bin"
 }
 
-# ti [args...] — stdin comes from $STDIN_TEXT when set; PATH from $RUNPATH.
+# ti [args...] — stdin comes from $STDIN_TEXT when set; PATH from $RUNPATH;
+# TERM_PROGRAM from $TERM_PROGRAM_KNOB when set.
 ti() {
     local input="${STDIN_TEXT:-}"
     if [ -n "$input" ]; then
@@ -142,6 +155,7 @@ ti() {
             TLSTORE_PREFIX="$TPREFIX" \
             TLSTORE_RAW_BASE="${RAW_BASE:-}" \
             TLSTORE_ARCH=aarch64 \
+            TERM_PROGRAM="${TERM_PROGRAM_KNOB:-}" \
             "${SHCMD[@]}" "$INSTALL" "$@" 2>&1)"
     else
         OUT="$(env -i \
@@ -149,6 +163,7 @@ ti() {
             TLSTORE_PREFIX="$TPREFIX" \
             TLSTORE_RAW_BASE="${RAW_BASE:-}" \
             TLSTORE_ARCH=aarch64 \
+            TERM_PROGRAM="${TERM_PROGRAM_KNOB:-}" \
             "${SHCMD[@]}" "$INSTALL" "$@" < /dev/null 2>&1)"
     fi
     ST=$?
@@ -191,6 +206,7 @@ run_suite() {
     RAW_BASE="file://$FX"
     RUNPATH="$RUNPATH_WITH_MINISIGN"
     STDIN_TEXT=""
+    TERM_PROGRAM_KNOB=""
 
     # --- prefix checks, before anything is fetched ---
     reset_prefix
@@ -209,6 +225,24 @@ run_suite() {
     expect_status "a prefix outside /data/data/*/files/usr is refused" 1
     expect_no_file "nothing was written" "$TPREFIX/bin/tlstore"
     TPREFIX="$STASH"
+
+    # --- the launcher is already here: nothing to do, nothing touched ---
+    reset_prefix
+    mkdir -p "$TPREFIX/libexec/termux-launcher/tlstore"
+    : > "$TPREFIX/libexec/termux-launcher/tlstore/.installed"
+    ti
+    expect_status "a .installed from the app is a no-op" 0
+    expect_out "and says so" "Termux Launcher already"
+    expect_no_file "nothing was written" "$TPREFIX/bin/tlstore"
+    expect_file "the app's own marker is untouched" "$TPREFIX/libexec/termux-launcher/tlstore/.installed"
+
+    reset_prefix
+    TERM_PROGRAM_KNOB=termux-launcher
+    ti
+    expect_status "TERM_PROGRAM=termux-launcher is a no-op" 0
+    expect_out "and says so" "Termux Launcher already"
+    expect_no_file "nothing was written" "$TPREFIX/bin/tlstore"
+    TERM_PROGRAM_KNOB=""
 
     if [ "$HAVE_MINISIGN" = 1 ]; then
         # --- signatures ---
@@ -241,13 +275,29 @@ run_suite() {
         expect_content ".standalone names the base" "$TPREFIX/libexec/termux-launcher/tlstore/.standalone" "$RAW_BASE"
         expect_out "the summary names browse" "tlstore browse"
 
-        # --- a stale .installed from an earlier app install is cleared ---
+        # --- a tlstore this did not write is not silently replaced ---
         reset_prefix
-        mkdir -p "$TPREFIX/libexec/termux-launcher/tlstore"
-        : > "$TPREFIX/libexec/termux-launcher/tlstore/.installed"
+        printf '#!/bin/sh\necho not ours\n' > "$TPREFIX/bin/tlstore"
+        chmod +x "$TPREFIX/bin/tlstore"
+        ti
+        expect_status "a tlstore without the marker is refused" 1
+        expect_out "and says so" "already a tlstore here"
+        expect_content "it is left untouched" "$TPREFIX/bin/tlstore" "#!/bin/sh
+echo not ours"
         ti -y
-        expect_status "install over a stale .installed" 0
-        expect_no_file "the stale marker is removed" "$TPREFIX/libexec/termux-launcher/tlstore/.installed"
+        expect_status "-y replaces it anyway" 0
+        if head -2 "$TPREFIX/bin/tlstore" | grep -q '# written by termux-launcher'; then pass; else fail "the marker is there after -y replaces it"; fi
+
+        reset_prefix
+        ln -s /bin/true "$TPREFIX/bin/tlstore"
+        ti
+        expect_status "a tlstore that is a symlink is refused too" 1
+        expect_out "and says so" "already a tlstore here"
+
+        reset_prefix
+        ti -y
+        ti
+        expect_status "reinstalling over our own tlstore needs no -y" 0
 
         # --- tl already taken is left alone; tls still gets it ---
         reset_prefix
@@ -261,30 +311,46 @@ run_suite() {
 echo not ours"
         expect_symlink_to "tls still got the alias" "$TPREFIX/bin/tls" "tlstore"
 
-        # --- minisign missing: the question, and the two answers ---
+        # --- minisign missing: the question, asked and answered for real ---
         # Each case starts with no minisign in the fixture PATH — a case that
         # installed one (real or fake) would otherwise leak it into the next.
+        # install.sh runs with no filename argument and its own source on
+        # stdin, the exact shape of `curl ... | sh` — a plain `read` there
+        # would be answered by the installer's own bytes, not a person.
+
+        if [ "$HAVE_SETSID" = 1 ]; then
+            reset_prefix
+            RUNPATH="$RUNPATH_NO_MINISIGN"
+            rm -f "$FIXBIN/minisign"
+            OUT="$(setsid env -i \
+                HOME="$HOME_DIR" PATH="$RUNPATH" \
+                TLSTORE_PREFIX="$TPREFIX" TLSTORE_RAW_BASE="$RAW_BASE" TLSTORE_ARCH=aarch64 \
+                "${SHCMD[@]}" < "$INSTALL" 2>&1)"
+            ST=$?
+            expect_status "no terminal at all: the installer's own bytes are never read as an answer" 1
+            expect_out "it stops with a plain sentence instead" "minisign is required"
+            expect_no_file "nothing was installed" "$TPREFIX/bin/tlstore"
+            RUNPATH="$RUNPATH_WITH_MINISIGN"
+        else
+            skip "the no-terminal-at-all check" "setsid is not installed"
+        fi
+
+        if [ "$HAVE_SCRIPT" = 1 ]; then
+            reset_prefix
+            RUNPATH="$RUNPATH_NO_MINISIGN"
+            rm -f "$FIXBIN/minisign"
+            : > "$ROOT/pkg.log"
+            OUT="$(printf 'y\n' | script -qc "env -i HOME='$HOME_DIR' PATH='$RUNPATH' TLSTORE_PREFIX='$TPREFIX' TLSTORE_RAW_BASE='$RAW_BASE' TLSTORE_ARCH=aarch64 ${SHCMD[*]} < '$INSTALL'" /dev/null 2>&1)"
+            ST=$?
+            expect_status "a real terminal answer lands even though stdin is still the installer" 0
+            if grep -q -- "install -y minisign" "$ROOT/pkg.log"; then pass; else fail "pkg was asked for minisign"; fi
+            RUNPATH="$RUNPATH_WITH_MINISIGN"
+        else
+            skip "the /dev/tty answer check" "script is not installed"
+        fi
+
         reset_prefix
         RUNPATH="$RUNPATH_NO_MINISIGN"
-        rm -f "$FIXBIN/minisign"
-        : > "$ROOT/pkg.log"
-        STDIN_TEXT='n
-'
-        ti
-        expect_status "declining to install minisign stops" 1
-        expect_out "with a plain sentence" "minisign is required"
-        expect_no_file "nothing was installed" "$TPREFIX/bin/tlstore"
-
-        reset_prefix
-        rm -f "$FIXBIN/minisign"
-        : > "$ROOT/pkg.log"
-        STDIN_TEXT='y
-'
-        ti
-        expect_status "accepting installs minisign and continues" 0
-        if grep -q -- "install -y minisign" "$ROOT/pkg.log"; then pass; else fail "pkg was asked for minisign"; fi
-
-        reset_prefix
         rm -f "$FIXBIN/minisign"
         : > "$ROOT/pkg.log"
         ti -y

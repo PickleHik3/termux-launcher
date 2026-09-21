@@ -43,10 +43,21 @@ for ii_a in "$@"; do
     esac
 done
 
+# A yes/no question. -y (or TLSTORE_ASSUME_YES) answers it without asking.
+# Under `curl ... | sh` stdin is the script itself, not a person, so a plain
+# `read` here would consume a line of the installer and never match yes —
+# this reads from /dev/tty instead whenever stdin is not a terminal. With no
+# terminal on stdin and no /dev/tty to open either, there is nobody to ask,
+# and the answer is no rather than guessing.
 ask_yn() {
     [ "$ASSUME_YES" = 1 ] && return 0
-    printf '%s [Y/n] ' "$1"
-    read -r ii_answer || ii_answer=""
+    if [ -t 0 ]; then
+        printf '%s [Y/n] ' "$1"
+        read -r ii_answer || ii_answer=""
+    else
+        printf '%s [Y/n] ' "$1" > /dev/tty 2>/dev/null || return 1
+        read -r ii_answer < /dev/tty 2>/dev/null || return 1
+    fi
     [ -n "$ii_answer" ] || ii_answer=y
     yes_reply "$ii_answer"
 }
@@ -74,6 +85,27 @@ esac
 
 BIN_DIR="$PREFIX/bin"
 STORE_DIR="$PREFIX/libexec/termux-launcher/tlstore"
+MARKER='# written by termux-launcher'
+
+# Termux Launcher is already here — its own installer keeps tlstore current
+# on every start, so there is nothing for this one to do.
+if [ "${TERM_PROGRAM:-}" = termux-launcher ] || [ -e "$STORE_DIR/.installed" ]; then
+    say "Termux Launcher already keeps tlstore up to date here — there is nothing for this to do."
+    exit 0
+fi
+
+# A tlstore already here that this installer (or the app) did not write is
+# someone else's — refuse to take it over silently, the same as the app does.
+ii_tlstore_is_foreign() {
+    [ -L "$BIN_DIR/tlstore" ] && return 0
+    [ -e "$BIN_DIR/tlstore" ] || return 1
+    head -5 "$BIN_DIR/tlstore" 2>/dev/null | grep -qF "$MARKER" && return 1
+    return 0
+}
+if ii_tlstore_is_foreign && [ "$ASSUME_YES" != 1 ]; then
+    err "there is already a tlstore here that this did not write — rerun with -y to replace it"
+    exit 1
+fi
 
 ARCH="${TLSTORE_ARCH:-$(uname -m 2>/dev/null || echo unknown)}"
 case "$ARCH" in

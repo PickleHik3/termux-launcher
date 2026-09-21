@@ -196,7 +196,8 @@ launcher app would: the `tlstore` command in your Termux `bin`, with the shorter
 where those names are still free, and its item list alongside it. `tlstore update` keeps tlstore
 itself current from there, the same way it keeps your installed items current — you never need to
 run the command above again. If you install Termux Launcher later, the app quietly takes over
-keeping tlstore up to date.
+keeping tlstore up to date. If you already have the launcher, running this command does nothing —
+it already provides tlstore.
 
 Anything a user should not choose directly gets `hidden=1` in its options; anything needed only
 while installing goes in `build=`. A file in this repository is pinned to a tag or the commit that
