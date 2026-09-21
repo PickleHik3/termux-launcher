@@ -513,22 +513,17 @@ public class KittyGraphicsProtocolTest extends TerminalTestCase {
 
     /**
      * Deleting what a client names is only safe under kitty's rule: the path must carry the
-     * protocol marker and live in a temporary directory. Everything else is refused unread.
+     * protocol marker and live in a temporary directory. The rule is on the deletion, not on the
+     * read — a plugin that converts an image writes it to vim's own tempname, which carries no
+     * marker — so such a file is rendered and then left exactly where the client put it.
      */
-    public void testTemporaryFileMediumRefusesPathsItMayNotDelete() throws IOException {
-        File outside = tempFile("kitty-plain-", ".png", pngHeader(1, 1));
-        assertEnteringStringGivesResponse("\033_Gi=82,a=t,f=100,t=t;" + base64Path(outside) + "\033\\",
-            "\033_Gi=82;EINVAL:temporary file is not in a temporary directory\033\\");
-        assertTrue("a refused path is never deleted", outside.exists());
-        assertEnteringStringGivesResponse("\033_Gi=83,a=t,f=100,t=t;"
-                + base64("/var/lib/tty-graphics-protocol-1.png".getBytes(StandardCharsets.UTF_8))
-                + "\033\\",
-            "\033_Gi=83;EINVAL:temporary file is not in a temporary directory\033\\");
-        // The same path is fine for t=f, which reads without deleting — it just does not exist.
-        assertEnteringStringGivesResponse("\033_Gi=84,a=t,f=100,t=f;"
-                + base64("/var/lib/tty-graphics-protocol-1.png".getBytes(StandardCharsets.UTF_8))
-                + "\033\\",
-            "\033_Gi=84;EBADF:cannot read transmission file\033\\");
+    public void testTemporaryFileMediumKeepsAFileItMayNotDelete() throws IOException {
+        File outside = tempFile("nvim-converted-", ".png", pngHeader(2, 2));
+        enterString("\033_Gi=82,a=t,f=100,t=t;" + base64Path(outside) + "\033\\");
+        assertEquals("the image is still read", "", mOutput.getOutputAndClear());
+        assertEnteringStringGivesResponse("\033_Gi=82,p=9,a=p,U=1,c=2,r=2\033\\",
+            "\033_Gi=82,p=9;OK\033\\");
+        assertTrue("a path outside the deletable set is left alone", outside.exists());
     }
 
     public void testFileMediumAnswersEbadfForAFileItCannotRead() throws IOException {

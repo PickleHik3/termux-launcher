@@ -385,13 +385,11 @@ final class KittyGraphicsProtocol {
             reply(command, "EBADF:cannot read transmission file", true, always);
             return null;
         }
-        boolean temporary = command.medium == 't';
-        if (temporary && !isProtocolTempFile(file)) {
-            // kitty's rule, and the reason t=t may delete what it reads: only a file written for
-            // this protocol, in a temporary directory, is ever a candidate for deletion.
-            reply(command, "EINVAL:temporary file is not in a temporary directory", true, always);
-            return null;
-        }
+        // t=t hands the file over, but the restriction the spec puts on it is on the deletion, not
+        // on the read — a client that may name a path for t=f may name the same path for t=t. So an
+        // unsafe path is read and left alone rather than refused: only a file written for this
+        // protocol, in a temporary directory, is ever deleted.
+        boolean deletable = command.medium == 't' && isProtocolTempFile(file);
         byte[] data = null;
         String error = null;
         try {
@@ -419,8 +417,8 @@ final class KittyGraphicsProtocol {
             data = null;
             error = "EBADF:cannot read transmission file";
         } finally {
-            // kitty deletes a t=t file whether or not it could be read; the client handed it over.
-            if (temporary) //noinspection ResultOfMethodCallIgnored
+            // Deleted whether or not it could be read: the client handed the file over.
+            if (deletable) //noinspection ResultOfMethodCallIgnored
                 file.delete();
         }
         if (data == null) {
@@ -431,8 +429,8 @@ final class KittyGraphicsProtocol {
     }
 
     /**
-     * kitty only accepts (and therefore only deletes) a {@code t=t} file whose path carries the
-     * protocol marker and sits in a temporary directory. On Android the platform temporary
+     * kitty only deletes a {@code t=t} file whose path carries the protocol marker and sits in a
+     * temporary directory. On Android the platform temporary
      * directory is the package's own {@code files/usr/tmp} — what {@code $TMPDIR} points at inside
      * the app's shell — so it counts alongside the desktop's {@code /tmp} and {@code /dev/shm}.
      */
