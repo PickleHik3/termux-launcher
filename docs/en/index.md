@@ -38,6 +38,7 @@ access; skip it if command-line tools do not need your shared files.
 - [Getting started](Launcher_Getting_Started.md)
 - [Using Termux Launcher](Launcher_Usage.md)
 - [The Linux display](X11_Display.md)
+- [Linux apps from a distro](Linux_Apps_From_A_Distro.md) — graphical apps from Termux or a proot distro in the app drawer
 - [Settings map](Launcher_Settings.md)
 - [Troubleshooting](Launcher_Troubleshooting.md)
 - [Modern terminal power-user guide](Terminal_Modernization.md)
