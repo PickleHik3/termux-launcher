@@ -193,4 +193,95 @@ public class X11CliInstallerTest {
         assertTrue(new File(prefix, "share/xkeyboard-config-2").mkdirs());
         assertTrue("the same prefix, re-read", X11CliInstaller.hasKeyboardData(prefix));
     }
+
+    // ---- The nix edition: no bash, and the keyboard data only in the store ------------------
+
+    /** The profile link, which is the whole of "this prefix is nix". */
+    private void nixProfile(File prefix) throws IOException {
+        File env = new File(prefix, "nix/store/c7ly-user-environment");
+        assertTrue(new File(env, "share").mkdirs());
+        File profiles = new File(prefix, "nix/var/nix/profiles/per-user/nix-on-droid");
+        assertTrue(profiles.mkdirs());
+        Files.createSymbolicLink(new File(profiles, "profile-2-link").toPath(),
+            java.nio.file.Paths.get("/nix/store/c7ly-user-environment"));
+        Files.createSymbolicLink(new File(profiles, "profile").toPath(),
+            java.nio.file.Paths.get("profile-2-link"));
+    }
+
+    /** An {@code xkeyboard-config} store entry, as a switch leaves one. */
+    private File xkeyboardConfig(File prefix, String name) {
+        File xkb = new File(prefix, "nix/store/" + name + "/share/X11/xkb");
+        assertTrue(xkb.mkdirs());
+        return xkb;
+    }
+
+    @Test public void aNixPrefixGetsScriptsItCanActuallyRun() throws IOException {
+        File prefix = new File(temp.getRoot(), "usr");
+        nixProfile(prefix);
+
+        assertEquals(X11CliInstaller.Result.INSTALLED, installer.install());
+
+        String shebang = "#!" + new File(bin, "sh").getPath() + "\n";
+        assertTrue("no bash in a nix prefix to point the server script at",
+            text(installer.serverScript()).startsWith(shebang));
+        assertTrue(text(installer.preferenceScript()).startsWith(shebang));
+        assertEquals(shebang + "echo tried every profile\n", text(installer.gpuSetupScript()));
+    }
+
+    @Test public void theKeyboardDataIsLinkedOutOfTheStoreAndKeptCurrent() throws IOException {
+        File prefix = new File(temp.getRoot(), "usr");
+        nixProfile(prefix);
+        File first = xkeyboardConfig(prefix, "0amyq-xkeyboard-config-2.47");
+        assertTrue(new File(prefix, "nix/store/0amyq-xkeyboard-config-2.47")
+            .setLastModified(1_000_000L));
+
+        assertFalse("nothing in the prefix itself", X11CliInstaller.hasKeyboardData(prefix));
+        installer.install();
+        File link = new File(prefix, "share/X11/xkb");
+        assertTrue(Files.isSymbolicLink(link.toPath()));
+        assertEquals(first.toPath(), Files.readSymbolicLink(link.toPath()));
+        assertTrue("which is what the Display page reads", X11CliInstaller.hasKeyboardData(prefix));
+
+        // A switch rebuilds the package into a store path of a new name; the next pass follows it
+        // even though everything else is already up to date.
+        File second = xkeyboardConfig(prefix, "bbbb-xkeyboard-config-2.48");
+        assertTrue(new File(prefix, "nix/store/bbbb-xkeyboard-config-2.48")
+            .setLastModified(2_000_000L));
+        assertEquals(X11CliInstaller.Result.UP_TO_DATE, installer.install());
+        assertEquals(second.toPath(), Files.readSymbolicLink(link.toPath()));
+    }
+
+    @Test public void aKeyboardDirectorySomebodyElsePutThereIsLeftAlone() throws IOException {
+        File prefix = new File(temp.getRoot(), "usr");
+        nixProfile(prefix);
+        xkeyboardConfig(prefix, "0amyq-xkeyboard-config-2.47");
+        File theirs = new File(prefix, "share/X11/xkb");
+        assertTrue(theirs.mkdirs());
+
+        installer.install();
+
+        assertFalse(Files.isSymbolicLink(theirs.toPath()));
+        assertTrue(theirs.isDirectory());
+    }
+
+    @Test public void uninstallTakesOurKeyboardLinkOutAndLeavesARealDirectory() throws IOException {
+        File prefix = new File(temp.getRoot(), "usr");
+        nixProfile(prefix);
+        xkeyboardConfig(prefix, "0amyq-xkeyboard-config-2.47");
+        installer.install();
+        File link = new File(prefix, "share/X11/xkb");
+        assertTrue(Files.isSymbolicLink(link.toPath()));
+
+        installer.uninstall();
+        assertFalse(Files.isSymbolicLink(link.toPath()));
+        assertFalse(link.exists());
+    }
+
+    @Test public void aTermuxPrefixIsLeftExactlyAsItWas() throws IOException {
+        // No profile link, so nothing nix-shaped happens: the bash shebang and no xkb link.
+        assertEquals(X11CliInstaller.Result.INSTALLED, installer.install());
+        assertTrue(text(installer.serverScript())
+            .startsWith("#!" + new File(bin, "bash").getPath() + "\n"));
+        assertFalse(new File(temp.getRoot(), "usr/share/X11/xkb").exists());
+    }
 }

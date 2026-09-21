@@ -261,7 +261,7 @@
     <string name="widget_picker_no_space">No room for a %1$d × %2$d widget on this %3$d × %4$d page. You can make the grid bigger in Settings.</string>
     <string name="termux_x11_no_display">No display is running.</string>
     <string name="termux_x11_needs_keyboard_data">The display needs the xkeyboard-config package installed before it can start.</string>
-    <string name="termux_x11_unavailable_nix">The Linux display is not available in this edition yet.</string>
+    <string name="termux_x11_needs_keyboard_data_nix">Add xkeyboard-config to home.nix and switch, then come back.</string>
     <string name="termux_x11_read_guide">Read the guide</string>
     <string name="termux_x11_start_display">Start display</string>
     <string name="termux_x11_display_off">The Linux display is switched off.</string>
@@ -287,7 +287,7 @@
     <string name="settings_gui_apps_copy_summary">Then paste it into the terminal and press Enter.</string>
     <string name="settings_gui_apps_clipboard_label">Get GUI apps</string>
     <string name="settings_gui_apps_copied">Command copied. Paste it into the terminal and press Enter.</string>
-    <string name="settings_gui_apps_nix_card">Graphical apps come from nixpkgs: add them to home.nix and run nix-on-droid switch.</string>
+    <string name="settings_gui_apps_nix_card">Add an app such as xterm and xkeyboard-config to home.nix, run nix-on-droid switch, and it appears in the app drawer.</string>
     <string name="settings_gui_apps_nix_docs">Read the docs</string>
     <string name="settings_x11_display_title">Display</string>
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
@@ -1898,7 +1898,7 @@
     <string name="tour_closing_extras_copy_nix">Extra tools come from nixpkgs too: add fastfetch, sigye or kitten to home.nix.</string>
     <string name="tour_closing_gui_apps_heading">GUI apps</string>
     <string name="tour_closing_gui_apps_copy">Settings \u2192 Display \u2192 Get GUI apps sets up graphical Linux apps that open from the app drawer.</string>
-    <string name="tour_closing_gui_apps_copy_nix">Graphical apps come from nixpkgs: add them to home.nix and run nix-on-droid switch.</string>
+    <string name="tour_closing_gui_apps_copy_nix">Add an app to home.nix and run nix-on-droid switch — it appears in the app drawer.</string>
     <!-- Shell commands: never translated. -->
     <string name="tour_closing_extras_command" translatable="false">tlstore install fastfetch sigye claude-code kitten</string>
     <string name="tour_docs_url" translatable="false">https://picklehik3.github.io/termux-launcher-site/#wiki</string>

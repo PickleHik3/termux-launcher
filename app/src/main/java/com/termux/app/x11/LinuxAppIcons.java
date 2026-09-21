@@ -36,6 +36,12 @@ public final class LinuxAppIcons {
         "256x256", "192x192", "128x128", "96x96", "72x72", "64x64", "48x48", "32x32", "scalable"
     };
 
+    /**
+     * The icon themes searched, in order. {@code locolor} is the small-screen theme a few old X
+     * programs still ship instead of a hicolor one, and nixpkgs carries them as they are.
+     */
+    private static final String[] THEMES = {"hicolor", "locolor"};
+
     /** Checked in this order at every candidate location: a PNG at a size beats an SVG at it. */
     private static final String[] ICON_EXTENSIONS = {".png", ".svg"};
 
@@ -58,7 +64,7 @@ public final class LinuxAppIcons {
             File file = container.inside(iconName);
             return file.isFile() && isSupportedIcon(file) ? file : null;
         }
-        return find(iconName, container.iconPrefix());
+        return find(iconName, container.iconPrefix(), container);
     }
 
     /**
@@ -68,23 +74,43 @@ public final class LinuxAppIcons {
      */
     @Nullable
     public static File find(@NonNull String iconName, @NonNull File prefix) {
+        return find(iconName, prefix, null);
+    }
+
+    /**
+     * The same search, walked the way {@code container} needs its paths walked — plain joining
+     * everywhere but a nix profile, where any component of {@code share/icons/…} can itself be a
+     * link into the store and has to be followed before the next one means anything.
+     */
+    @Nullable
+    private static File find(@NonNull String iconName, @NonNull File prefix,
+                             @Nullable ProotDistro.Container container) {
         if (iconName.isEmpty()) return null;
         if (iconName.startsWith("/")) {
-            File file = new File(iconName);
+            File file = container == null ? new File(iconName) : container.inside(iconName);
             return file.isFile() && isSupportedIcon(file) ? file : null;
         }
         String name = stripKnownExtension(iconName);
-        for (String size : HICOLOR_SIZES) {
-            for (String ext : ICON_EXTENSIONS) {
-                File file = new File(prefix, "share/icons/hicolor/" + size + "/apps/" + name + ext);
-                if (file.isFile()) return file;
+        for (String theme : THEMES) {
+            for (String size : HICOLOR_SIZES) {
+                for (String ext : ICON_EXTENSIONS) {
+                    File file = under(container, prefix,
+                        "share/icons/" + theme + "/" + size + "/apps/" + name + ext);
+                    if (file.isFile()) return file;
+                }
             }
         }
         for (String ext : ICON_EXTENSIONS) {
-            File pixmap = new File(prefix, "share/pixmaps/" + name + ext);
+            File pixmap = under(container, prefix, "share/pixmaps/" + name + ext);
             if (pixmap.isFile()) return pixmap;
         }
         return null;
+    }
+
+    @NonNull
+    private static File under(@Nullable ProotDistro.Container container, @NonNull File base,
+                              @NonNull String relative) {
+        return container == null ? new File(base, relative) : container.under(base, relative);
     }
 
     @NonNull

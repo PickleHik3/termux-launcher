@@ -15199,8 +15199,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean runScript(@NonNull String script,
                         @NonNull com.termux.app.x11.X11LinuxAppRunner.ScriptExitListener onExit) {
                     if (mTermuxService == null) return false;
+                    // bash everywhere but the nix edition, whose prefix only has the bootstrap's
+                    // sh; a task started with a shell that is not there runs nothing at all.
                     com.termux.shared.shell.command.runner.app.AppShell shell =
-                        mTermuxService.createTermuxTask(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash",
+                        mTermuxService.createTermuxTask(com.termux.app.x11.NixProfile.scriptShellPath(),
                             new String[]{"-c", script}, null, TermuxConstants.TERMUX_HOME_DIR_PATH);
                     if (shell == null) return false;
                     // TermuxService already reads the exit code safely inside the onAppShellExited

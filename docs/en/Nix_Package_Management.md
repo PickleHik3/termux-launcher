@@ -388,6 +388,58 @@ Roll back to the previous generation any time:
 nix-on-droid rollback
 ```
 
+## Graphical apps
+
+Graphical Linux apps work on this edition, and they arrive the same way
+everything else does: name them in the config and switch. There is no
+`pkg install`, no extra repository, and nothing to copy from the
+launcher's **Get GUI apps** screen — that screen builds a command for the
+Termux edition's two routes, neither of which exists here.
+
+Add the app, and `xkeyboard-config` alongside it:
+
+```nix
+environment.packages = with pkgs; [
+  xterm
+  xkeyboard-config   # the display server will not start without it
+];
+```
+
+```sh
+nix-on-droid switch --flake ~/.config/nix-on-droid
+```
+
+`home.nix`'s `home.packages` works just as well — both end up in the same
+profile, which is what the launcher reads.
+
+Come back to the launcher and the app is in the app drawer under **Linux
+apps**, with the name and icon the package itself ships. Tap it: the
+display starts if it is not already up, and the app opens on it. Nothing
+is written to a file and there is no command to run in the terminal.
+
+`xkeyboard-config` is a one-time thing, and it is the whole of the
+display's setup. Until it is installed the Display place says so and
+keeps its start button hidden, because the X server exits on startup
+without that keyboard data. It is data rather than a program, so it does
+not show up on `PATH` and there is nothing to run — the launcher finds it
+in the store and points the server at it after each switch.
+
+A few notes:
+
+- **Enable the display first.** **Settings → Display → Linux display**
+  turns it on. The Display place is where the apps open.
+- **Every switch is picked up on its own.** The store path changes each
+  time; return to the launcher and the drawer is already right.
+- **Terminal programs with a menu entry** — `vim`, for instance, ships
+  one — open in a terminal pane instead of on the display. That is the
+  entry saying `Terminal=true`, and it is the same on every edition.
+- **A blank tile** means the package's icon is in a format the launcher
+  does not read. PNG and SVG are used; older X programs often ship XPM,
+  and get the default tile.
+- **Fonts.** A bare nixpkgs environment has none beyond what the app
+  itself carries. Add `dejavu_fonts` if an app comes up with boxes
+  instead of text.
+
 ## Housekeeping
 
 ```sh

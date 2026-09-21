@@ -43,7 +43,7 @@ public final class X11CliInstaller {
     private static final String LOG_TAG = "X11CliInstaller";
 
     /** Bumped whenever the written files change, so an upgrade rewrites them once. */
-    @VisibleForTesting static final int VERSION = 8;
+    @VisibleForTesting static final int VERSION = 9;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -152,6 +152,49 @@ public final class X11CliInstaller {
             || new File(prefixDir, "share/xkeyboard-config-2").isDirectory();
     }
 
+    /** The link {@link #linkKeyboardData} keeps, and the server script's first search path. */
+    @NonNull
+    private static File keyboardDataLink(@NonNull File prefixDir) {
+        return new File(prefixDir, "share/X11/xkb");
+    }
+
+    /**
+     * On nix, point {@code $PREFIX/share/X11/xkb} at whichever store path holds this phone's
+     * {@code xkeyboard-config} right now, so the probe above and the server script's own search
+     * both find it where they already look.
+     *
+     * <p>Run on every install pass rather than once behind the version marker: a
+     * {@code nix-on-droid switch} rebuilds the package into a store path of a different name, and
+     * a link left pointing at the old one is a display that stops starting for no visible reason.
+     * A {@code share/X11/xkb} that is not a link of ours is somebody's own arrangement and is
+     * left exactly as it is.
+     *
+     * @return whether the link now points at the data
+     */
+    @VisibleForTesting
+    boolean linkKeyboardData() {
+        File prefixDir = binDir.getParentFile();
+        if (prefixDir == null || !NixProfile.isNix(prefixDir)) return false;
+        File data = NixProfile.keyboardData(prefixDir);
+        if (data == null) return false;
+        File link = keyboardDataLink(prefixDir);
+        try {
+            boolean isLink = Files.isSymbolicLink(link.toPath());
+            if (isLink && data.toPath().equals(Files.readSymbolicLink(link.toPath()))) return true;
+            if (!isLink && link.exists()) return link.isDirectory();
+            File parent = link.getParentFile();
+            if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+                throw new IOException("Failed to create " + parent);
+            }
+            if (isLink) Files.delete(link.toPath());
+            Files.createSymbolicLink(link.toPath(), data.toPath());
+            return true;
+        } catch (IOException | RuntimeException e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to link the keyboard data: " + e.getMessage());
+            return false;
+        }
+    }
+
     /** True once this launcher's own commands are in place. */
     public static boolean isInstalled(@NonNull Context context) {
         X11CliInstaller installer = forPrefix(context);
@@ -170,6 +213,7 @@ public final class X11CliInstaller {
     @NonNull
     Result install() {
         if (!binDir.isDirectory()) return Result.NO_PREFIX;
+        linkKeyboardData();
         String marker = MARKER_PREAMBLE + " v" + VERSION + " " + applicationId + "\n";
         if (marker.equals(read(markerFile()))) return Result.UP_TO_DATE;
         if (isForeignCommand()) {
@@ -185,8 +229,10 @@ public final class X11CliInstaller {
             try (InputStream in = assets.open(LOADER_ASSET)) {
                 writeAtomically(loaderFile(), in, false, false);
             }
-            writeAtomically(serverScript(), bytes(serverScript(applicationId)), true, true);
-            writeAtomically(preferenceScript(), bytes(preferenceScript(applicationId)), true, true);
+            String shell = shellPath();
+            writeAtomically(serverScript(), bytes(serverScript(applicationId, shell)), true, true);
+            writeAtomically(preferenceScript(), bytes(preferenceScript(applicationId, shell)), true,
+                true);
             writeAtomically(gpuSetupScript(), bytes(withPrefixShebang(readText(GPU_SETUP_ASSET))), true, true);
             writeAtomically(openboxRc(), bytes(openboxRcContent()), true, false);
             writeAtomically(markerFile(), bytes(marker), true, false);
@@ -199,6 +245,18 @@ public final class X11CliInstaller {
 
     void uninstall() {
         if (isForeignCommand()) return;
+        File prefixDir = binDir.getParentFile();
+        if (prefixDir != null) {
+            // Only ever the link this class made; a real directory there is somebody's own data.
+            File link = keyboardDataLink(prefixDir);
+            if (Files.isSymbolicLink(link.toPath())) {
+                try {
+                    Files.delete(link.toPath());
+                } catch (IOException e) {
+                    Logger.logWarn(LOG_TAG, "Failed to remove " + link);
+                }
+            }
+        }
         for (File file : new File[]{serverScript(), preferenceScript(), gpuSetupScript(),
                 loaderFile(), openboxRc(), markerFile()}) {
             if (!file.exists() && !Files.isSymbolicLink(file.toPath())) continue;
@@ -229,7 +287,18 @@ public final class X11CliInstaller {
      */
     @NonNull
     static String serverScript(@NonNull String applicationId) {
-        return "#!" + BIN_DIR + "/bash\n"
+        return serverScript(applicationId, BIN_DIR + "/bash");
+    }
+
+    /**
+     * {@link #serverScript(String)} with the shell spelled out. The nix edition's prefix has no
+     * {@code bash} — it has the bootstrap's {@code sh} and nothing else — and a script whose
+     * shebang names a file that is not there does not run at all, which is a display that never
+     * starts. See {@link NixProfile#scriptShell}.
+     */
+    @NonNull
+    static String serverScript(@NonNull String applicationId, @NonNull String shell) {
+        return "#!" + shell + "\n"
             + MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
             + "if [ ! -e /system/bin/getprop ] || [ ! -e /system/bin/app_process ]; then\n"
             + "  echo \"This needs a standard Android system: the display server runs as an app process.\"\n"
@@ -261,7 +330,13 @@ public final class X11CliInstaller {
      */
     @NonNull
     static String preferenceScript(@NonNull String applicationId) {
-        return "#!" + BIN_DIR + "/bash\n"
+        return preferenceScript(applicationId, BIN_DIR + "/bash");
+    }
+
+    /** {@link #preferenceScript(String)} with the shell spelled out; see the server script's. */
+    @NonNull
+    static String preferenceScript(@NonNull String applicationId, @NonNull String shell) {
+        return "#!" + shell + "\n"
             + MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
             + "if [ ! -e /system/bin/app_process ]; then\n"
             + "  echo \"This needs a standard Android system: the display server runs as an app process.\"\n"
@@ -374,7 +449,15 @@ public final class X11CliInstaller {
         if (!script.startsWith("#!")) return script;
         int newline = script.indexOf('\n');
         if (newline < 0) return script;
-        return "#!" + new File(binDir, "bash").getPath() + script.substring(newline);
+        return "#!" + shellPath() + script.substring(newline);
+    }
+
+    /** The shell this prefix actually has: {@code bash} everywhere but nix, {@code sh} there. */
+    @NonNull
+    private String shellPath() {
+        File prefixDir = binDir.getParentFile();
+        return prefixDir == null ? new File(binDir, "bash").getPath()
+            : NixProfile.scriptShell(prefixDir).getPath();
     }
 
     @NonNull
