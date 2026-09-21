@@ -1,17 +1,16 @@
-# Widget pages on demand
+# Widget pages on demand — done
 
 ## Done
-- Repository: trimEmptyPages() + fresh pages (addFreshPage/setPages/freshPages, persisted as
-  "freshPages"); trimSparePages removed. Controller: trim on load/change/drag end, menuAddPage back,
-  drag past the last page makes one. Frame: + action on the resting tab.
-- Widget + wall suites green (273 tests).
+- 8155771a: trimEmptyPages() + hand-added ("fresh") pages in the repository, trim on load / every
+  repository change / drag end, drag past the last page makes a page, + on the corner tab, tests.
+- Follow-up commit: discard also trims, so a binned widget's page does not come back.
 
 ## In progress
-- Full module suite run, then commit.
+- Nothing.
 
 ## Next
-- Nothing after the suite is green.
+- Waydroid gate: drag past the last page, the +, and emptying a page.
 
 ## Gotchas
-- An empty *leading* page now goes too, so page indices renumber; currentPage is clamped after every
-  trim. The + action is routed through WidgetPaneView (like the tick/cross), not through Host.
+- An empty *leading* page goes too, so pages renumber; currentPage is clamped after every trim.
+- The + is routed through WidgetPaneView (like the tick/cross), not through WidgetPaneFrame.Host.

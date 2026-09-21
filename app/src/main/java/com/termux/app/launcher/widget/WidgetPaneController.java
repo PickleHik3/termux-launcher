@@ -544,6 +544,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         if (!batch.isEmpty()) repository.putRecords(batch);
         repository.setPages(snapshot.pageCount, snapshot.freshPages);
+        // A widget binned during the session does not come back, so the page it was the last thing
+        // on does not either: the restored count is trimmed to what the layout now holds.
+        repository.trimEmptyPages();
         clampCurrentPage();
         render();
     }

@@ -149,6 +149,23 @@ public class WidgetEditSessionExitTest {
         assertEquals(new WidgetCellRect(0, 0, 1, 1), fixture.repository.get(1).cell);
     }
 
+    /** And the page that widget was the last thing on does not come back with the count either. */
+    @Test public void theCrossDoesNotBringBackThePageABinnedWidgetOwned() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
+        fixture.put(2, new WidgetCellRect(0, 0, 1, 1), 1);
+        fixture.renderAndLayout();
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+        assertEquals(2, fixture.repository.pageCount());
+
+        assertTrue(fixture.repository.removeRecord(2));
+        fixture.pane.discardWidgetEdit();
+
+        assertEquals(1, fixture.repository.pageCount());
+        assertEquals(0, fixture.repository.get(1).page);
+    }
+
     private static final class Fixture {
         final Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         final LauncherWidgetRepository repository;
