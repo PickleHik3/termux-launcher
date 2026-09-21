@@ -114,12 +114,15 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
                 route.setValue(only);
             }
             applyDistroRow(only);
+            applyBrowserRowVisibility(only, edition);
             Preference hint = findPreference(KEY_HINT);
             if (hint != null) hint.setSummary(R.string.settings_gui_apps_intro_distro_only);
         } else if (route != null) {
             applyDistroRow(route.getValue());
+            applyBrowserRowVisibility(route.getValue(), edition);
             route.setOnPreferenceChangeListener((preference, value) -> {
                 applyDistroRow(String.valueOf(value));
+                applyBrowserRowVisibility(String.valueOf(value), edition);
                 return true;
             });
         }
@@ -153,6 +156,18 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
         if (distro != null) {
             distro.setVisible(GuiAppsSetup.Route.of(route) == GuiAppsSetup.Route.DISTRO);
         }
+    }
+
+    /**
+     * VAJ ships no browser at all, so its X11 route has nothing for the Browser row to tick; the
+     * row returns once the route switches to a distro, where a real browser exists.
+     */
+    private void applyBrowserRowVisibility(@Nullable String route, @NonNull TourEdition edition) {
+        Preference browser = findPreference("gui_apps_starter_" + GuiAppsSetup.StarterApp.BROWSER.key);
+        if (browser == null) return;
+        boolean hide = edition == TourEdition.VAJ
+            && GuiAppsSetup.Route.of(route) == GuiAppsSetup.Route.X11_REPO;
+        browser.setVisible(!hide);
     }
 
     /**
@@ -211,7 +226,7 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
         ListPreference distro = findPreference(KEY_DISTRO);
         return GuiAppsSetup.command(resolvedRoute,
             GuiAppsSetup.Distro.of(distro == null ? null : distro.getValue()),
-            starters());
+            starters(), edition);
     }
 
     /**

@@ -44,12 +44,17 @@ public class TourClosingCardTest {
                 assertNotEquals("no heading for " + edition, 0, section.headingRes);
                 assertNotEquals("no copy for " + edition, 0, section.copyRes);
             }
-            // The first three sections read the same everywhere; nix's graphical-apps sentence is
-            // its own, since it has no "Get GUI apps" screen for the others' sentence to name.
-            assertEquals(TourClosingCard.sections(TourEdition.TERMUX).subList(0, 3),
-                sections.subList(0, 3));
-            assertEquals(TourClosingCard.commandResources(TourEdition.TERMUX),
-                TourClosingCard.commandResources(edition));
+            // The first two sections read the same everywhere; nix has its own sentence for
+            // extras (no pkg, so no tlstore) and for graphical apps (no "Get GUI apps" screen).
+            assertEquals(TourClosingCard.sections(TourEdition.TERMUX).subList(0, 2),
+                sections.subList(0, 2));
+            if (edition == TourEdition.NIX) {
+                assertTrue("nix has no pkg, so no command on the card",
+                    TourClosingCard.commandResources(edition).isEmpty());
+            } else {
+                assertEquals(TourClosingCard.commandResources(TourEdition.TERMUX),
+                    TourClosingCard.commandResources(edition));
+            }
         }
     }
 
@@ -95,16 +100,23 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void theExtrasSectionIsTheCardsOneCommand() {
+    public void theExtrasSectionIsTheCardsOneCommandExceptOnNix() {
         for (TourEdition edition : TourEdition.values()) {
             TourClosingCard.Section extras = TourClosingCard.sections(edition).get(2);
             assertEquals(R.string.tour_closing_extras_heading, extras.headingRes);
-            assertEquals(R.string.tour_closing_extras_copy, extras.copyRes);
-            assertTrue("no extras command for " + edition, extras.hasCommand());
-            assertEquals(R.string.tour_closing_extras_command, extras.commandRes);
-            assertEquals("one command on the card for " + edition,
-                java.util.Collections.singletonList(extras.commandRes),
-                TourClosingCard.commandResources(edition));
+            if (edition == TourEdition.NIX) {
+                assertEquals(R.string.tour_closing_extras_copy_nix, extras.copyRes);
+                assertFalse("nix has no pkg, so tlstore has nothing to install",
+                    extras.hasCommand());
+                assertTrue(TourClosingCard.commandResources(edition).isEmpty());
+            } else {
+                assertEquals(R.string.tour_closing_extras_copy, extras.copyRes);
+                assertTrue("no extras command for " + edition, extras.hasCommand());
+                assertEquals(R.string.tour_closing_extras_command, extras.commandRes);
+                assertEquals("one command on the card for " + edition,
+                    java.util.Collections.singletonList(extras.commandRes),
+                    TourClosingCard.commandResources(edition));
+            }
         }
     }
 

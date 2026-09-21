@@ -29,6 +29,10 @@ import java.util.List;
  * rather than handing a newcomer one line to paste. Nix has no such screen — its apps come from
  * nixpkgs and {@code home.nix} — so its version of the sentence says that instead.
  *
+ * <p>The extras section is a command everywhere except nix: {@code pkg} does not exist there, so
+ * tlstore cannot either, and nix's version of the sentence points at {@code home.nix} instead of
+ * handing over a command that would just fail.
+ *
  * <p>Pure, so the table below is a unit test rather than four screenshots.
  */
 public final class TourClosingCard {
@@ -58,6 +62,13 @@ public final class TourClosingCard {
         R.string.tour_closing_customize_heading, R.string.tour_closing_customize_copy, 0);
     private static final Section EXTRAS = new Section(R.string.tour_closing_extras_heading,
         R.string.tour_closing_extras_copy, R.string.tour_closing_extras_command);
+    /**
+     * Decision (user, 2026-09-20/21): the nix edition has no {@code pkg}, so tlstore's install
+     * command cannot run there either. Same heading, its own sentence pointing at
+     * {@code home.nix} instead, and nothing to copy.
+     */
+    private static final Section EXTRAS_NIX = new Section(
+        R.string.tour_closing_extras_heading, R.string.tour_closing_extras_copy_nix, 0);
     private static final Section GUI_APPS = new Section(
         R.string.tour_closing_gui_apps_heading, R.string.tour_closing_gui_apps_copy, 0);
     /**
@@ -71,7 +82,7 @@ public final class TourClosingCard {
     private static final List<Section> SECTIONS = Collections.unmodifiableList(
         Arrays.asList(SHORTCUTS, CUSTOMIZE, EXTRAS, GUI_APPS));
     private static final List<Section> SECTIONS_NIX = Collections.unmodifiableList(
-        Arrays.asList(SHORTCUTS, CUSTOMIZE, EXTRAS, GUI_APPS_NIX));
+        Arrays.asList(SHORTCUTS, CUSTOMIZE, EXTRAS_NIX, GUI_APPS_NIX));
 
     /**
      * The card's sections, in order. The same four in every edition, and the same heading for the
