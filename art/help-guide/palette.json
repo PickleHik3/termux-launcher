@@ -1,0 +1,36 @@
+{
+  "id": "palette",
+  "crop": [
+    [
+      0,
+      420,
+      600,
+      290
+    ],
+    [
+      0,
+      1150,
+      600,
+      100
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.2000875800003996,
+      "kind": "swipe",
+      "points": [
+        300,
+        1205,
+        300,
+        1150
+      ],
+      "duration": 0.15
+    }
+  ],
+  "duration": 9.93,
+  "bytes": 132074,
+  "width": 600,
+  "height": 390,
+  "video": "palette.mp4",
+  "poster": "palette.jpg"
+}

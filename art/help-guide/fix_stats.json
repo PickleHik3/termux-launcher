@@ -1,0 +1,30 @@
+{
+  "id": "fix_stats",
+  "crop": [
+    [
+      0,
+      0,
+      600,
+      700
+    ]
+  ],
+  "events": [
+    {
+      "t": 5.362200367999321,
+      "kind": "swipe",
+      "points": [
+        300,
+        1000,
+        300,
+        600
+      ],
+      "duration": 0.6
+    }
+  ],
+  "duration": 9.17,
+  "bytes": 130622,
+  "width": 600,
+  "height": 700,
+  "video": "fix_stats.mp4",
+  "poster": "fix_stats.jpg"
+}

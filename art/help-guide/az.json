@@ -1,0 +1,31 @@
+{
+  "id": "az",
+  "crop": [
+    [
+      0,
+      1422,
+      1080,
+      315
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.6002363330044318,
+      "kind": "swipe",
+      "points": [
+        80,
+        1606,
+        1000,
+        1606
+      ],
+      "duration": 2.5
+    }
+  ],
+  "duration": 6.72,
+  "bytes": 1001019,
+  "width": 1080,
+  "height": 315,
+  "video": "az.mp4",
+  "poster": "az.jpg",
+  "source": "pong 1080x2412@420 native"
+}

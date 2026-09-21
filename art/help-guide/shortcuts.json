@@ -1,0 +1,55 @@
+{
+  "id": "shortcuts",
+  "crop": [
+    [
+      0,
+      925,
+      600,
+      325
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.8001175329991383,
+      "kind": "tap",
+      "points": [
+        52,
+        1207
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 3.060663668999041,
+      "kind": "tap",
+      "points": [
+        140,
+        1207
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 7.057744169997022,
+      "kind": "tap",
+      "points": [
+        140,
+        1207
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 9.252922411000327,
+      "kind": "tap",
+      "points": [
+        52,
+        1207
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 12.2,
+  "bytes": 83981,
+  "width": 600,
+  "height": 325,
+  "video": "shortcuts.mp4",
+  "poster": "shortcuts.jpg"
+}

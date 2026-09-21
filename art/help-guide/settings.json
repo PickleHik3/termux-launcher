@@ -1,0 +1,36 @@
+{
+  "id": "settings",
+  "crop": [
+    [
+      0,
+      0,
+      600,
+      500
+    ],
+    [
+      0,
+      1160,
+      600,
+      90
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.8001915259992529,
+      "kind": "swipe",
+      "points": [
+        135,
+        1198,
+        190,
+        1248
+      ],
+      "duration": 0.25
+    }
+  ],
+  "duration": 6.43,
+  "bytes": 72620,
+  "width": 600,
+  "height": 590,
+  "video": "settings.mp4",
+  "poster": "settings.jpg"
+}

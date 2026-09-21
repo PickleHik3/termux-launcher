@@ -1,0 +1,28 @@
+{
+  "id": "fix_support",
+  "crop": [
+    [
+      0,
+      0,
+      600,
+      700
+    ]
+  ],
+  "events": [
+    {
+      "t": 5.373016878998897,
+      "kind": "tap",
+      "points": [
+        300,
+        1149
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 10.13,
+  "bytes": 103908,
+  "width": 600,
+  "height": 700,
+  "video": "fix_support.mp4",
+  "poster": "fix_support.jpg"
+}

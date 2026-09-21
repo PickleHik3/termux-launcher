@@ -1,0 +1,39 @@
+{
+  "id": "workspaces",
+  "crop": [
+    [
+      0,
+      380,
+      600,
+      490
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.8000731160027499,
+      "kind": "swipe",
+      "points": [
+        300,
+        1205,
+        300,
+        1150
+      ],
+      "duration": 0.15
+    },
+    {
+      "t": 6.8682322570020915,
+      "kind": "tap",
+      "points": [
+        150,
+        608
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 11.33,
+  "bytes": 81555,
+  "width": 600,
+  "height": 490,
+  "video": "workspaces.mp4",
+  "poster": "workspaces.jpg"
+}

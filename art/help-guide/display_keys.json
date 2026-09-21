@@ -1,0 +1,79 @@
+{
+  "id": "display_keys",
+  "crop": [
+    [
+      0,
+      40,
+      600,
+      300
+    ],
+    [
+      0,
+      940,
+      600,
+      310
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.8002715729999181,
+      "kind": "tap",
+      "points": [
+        200,
+        200
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 3.3771448119987326,
+      "kind": "tap",
+      "points": [
+        43,
+        1225
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 6.465152286000375,
+      "kind": "tap",
+      "points": [
+        535,
+        1085
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 8.44786810399819,
+      "kind": "tap",
+      "points": [
+        152,
+        1085
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 10.43673796299845,
+      "kind": "tap",
+      "points": [
+        545,
+        1207
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 13.83021215700137,
+      "kind": "tap",
+      "points": [
+        300,
+        972
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 17.77,
+  "bytes": 190705,
+  "width": 600,
+  "height": 610,
+  "video": "display_keys.mp4",
+  "poster": "display_keys.jpg"
+}

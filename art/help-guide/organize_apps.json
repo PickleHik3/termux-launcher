@@ -1,0 +1,31 @@
+{
+  "id": "organize_apps",
+  "crop": [
+    [
+      0,
+      819,
+      1080,
+      810
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.6001532029913506,
+      "kind": "swipe",
+      "points": [
+        1002,
+        1504,
+        1002,
+        1504
+      ],
+      "duration": 0.9
+    }
+  ],
+  "duration": 7.68,
+  "bytes": 1070887,
+  "width": 1080,
+  "height": 810,
+  "video": "organize_apps.mp4",
+  "poster": "organize_apps.jpg",
+  "source": "pong 1080x2412@420 native"
+}

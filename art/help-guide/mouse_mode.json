@@ -1,0 +1,44 @@
+{
+  "id": "mouse_mode",
+  "crop": [
+    [
+      0,
+      302,
+      1080,
+      79
+    ],
+    [
+      0,
+      1627,
+      1080,
+      104
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.600070508007775,
+      "kind": "tap",
+      "points": [
+        231,
+        1680
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 3.1544582190108486,
+      "kind": "tap",
+      "points": [
+        231,
+        1680
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 5.76,
+  "bytes": 130448,
+  "width": 1080,
+  "height": 183,
+  "video": "mouse_mode.mp4",
+  "poster": "mouse_mode.jpg",
+  "source": "pong 1080x2412@420 native"
+}

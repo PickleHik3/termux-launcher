@@ -1,0 +1,29 @@
+{
+  "id": "stats",
+  "crop": [
+    [
+      0,
+      302,
+      1080,
+      1035
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.6000671369984047,
+      "kind": "tap",
+      "points": [
+        980,
+        341
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 7.38,
+  "bytes": 1311513,
+  "width": 1080,
+  "height": 1035,
+  "video": "stats.mp4",
+  "poster": "stats.jpg",
+  "source": "pong 1080x2412@420 native"
+}

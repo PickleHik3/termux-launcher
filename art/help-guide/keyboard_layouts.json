@@ -1,0 +1,63 @@
+{
+  "id": "keyboard_layouts",
+  "crop": [
+    [
+      0,
+      500,
+      600,
+      760
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.8001272959991184,
+      "kind": "swipe",
+      "points": [
+        43,
+        972,
+        43,
+        925
+      ],
+      "duration": 0.2
+    },
+    {
+      "t": 4.174294692998956,
+      "kind": "swipe",
+      "points": [
+        300,
+        962,
+        300,
+        560
+      ],
+      "duration": 0.5
+    },
+    {
+      "t": 7.528172607999295,
+      "kind": "swipe",
+      "points": [
+        43,
+        1225,
+        43,
+        1180
+      ],
+      "duration": 0.2
+    },
+    {
+      "t": 10.903372459997627,
+      "kind": "swipe",
+      "points": [
+        43,
+        972,
+        43,
+        925
+      ],
+      "duration": 0.2
+    }
+  ],
+  "duration": 14.5,
+  "bytes": 147561,
+  "width": 600,
+  "height": 760,
+  "video": "keyboard_layouts.mp4",
+  "poster": "keyboard_layouts.jpg"
+}

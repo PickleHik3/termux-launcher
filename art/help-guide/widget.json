@@ -1,0 +1,39 @@
+{
+  "id": "widget",
+  "crop": [
+    [
+      0,
+      0,
+      600,
+      700
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.8000780820002547,
+      "kind": "swipe",
+      "points": [
+        300,
+        500,
+        300,
+        500
+      ],
+      "duration": 0.7
+    },
+    {
+      "t": 4.386935807000555,
+      "kind": "tap",
+      "points": [
+        250,
+        450
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 8.67,
+  "bytes": 96109,
+  "width": 600,
+  "height": 700,
+  "video": "widget.mp4",
+  "poster": "widget.jpg"
+}

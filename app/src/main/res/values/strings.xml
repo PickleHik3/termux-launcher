@@ -1888,7 +1888,6 @@
     <string name="tour_card_keyboard_show_again">Tap it again to bring the keyboard back.</string>
     <string name="tour_card_keyboard_show">Tap the keyboard button to show the keyboard.</string>
     <string name="tour_card_keyboard_hide_again">Tap it again to hide the keyboard.</string>
-    <string name="tour_card_keyboard_hold_terminal">A short hold, until the first buzz, sends mouse clicks and drags to apps in the terminal. A longer hold opens the text menu, the way plain Termux does.</string>
     <string name="tour_card_find_action_palette">Swipe up on the space bar to open the command palette.</string>
     <string name="tour_card_find_action_close">Search for anything, launch Android apps and reach Termux Launcher features. Tap outside the palette to close it.</string>
     <string name="tour_card_key_row">This update brings a new row of keys under the terminal. Take it now, or keep the row you have. Either way the other row is in Settings, under Extra keys.</string>
@@ -1902,6 +1901,8 @@
     <string name="tour_copied_commands">Copied</string>
     <string name="tour_copy_commands">Commands</string>
     <string name="tour_read_the_docs">Read the docs</string>
+    <string name="tour_closing_hold_heading">Holding on the terminal</string>
+    <string name="tour_closing_hold_copy">Hold on the text to select and copy it; in a full-screen program such as htop or nvim, the same hold makes your finger the mouse.</string>
     <string name="tour_closing_shortcuts_heading">Shortcuts</string>
     <string name="tour_closing_shortcuts_copy">Ctrl + Alt is the default shortcut key; hold it to see what each key does.</string>
     <string name="tour_closing_customize_heading">Customize</string>
@@ -1909,6 +1910,8 @@
     <string name="tour_closing_extras_heading">Launcher extras</string>
     <string name="tour_closing_extras_copy">Use tlstore to install terminal goodies such as fastfetch with GIF support, the sigye clock, Claude Code and kitten, kitty\'s companion tool.</string>
     <string name="tour_closing_extras_copy_nix">Extra tools come from nixpkgs too: add fastfetch, sigye or kitten to home.nix.</string>
+    <string name="tour_closing_pictures_heading">Pictures</string>
+    <string name="tour_closing_pictures_copy">Programs can draw pictures straight into a pane; if an older Neovim will not, Help has the one line it needs.</string>
     <string name="tour_closing_gui_apps_heading">GUI apps</string>
     <string name="tour_closing_gui_apps_copy">Settings \u2192 Display \u2192 Get GUI apps sets up graphical Linux apps that open from the app drawer.</string>
     <string name="tour_closing_gui_apps_copy_nix">Add an app to home.nix and run nix-on-droid switch — it appears in the app drawer.</string>
@@ -2104,8 +2107,10 @@
     <string name="help_topic_mouse_back">Tap Mouse again to go back to scrolling.</string>
     <string name="help_topic_mouse_aliases">mouse, mouse mode, touch, pointer, click, tap</string>
     <string name="help_topic_hold_title">Holding on the terminal</string>
-    <string name="help_topic_hold_summary">A short hold makes your finger the mouse; a longer hold opens the text menu.</string>
-    <string name="help_topic_hold_action">Hold on the text: after the first buzz, drag to steer a program that uses the mouse, or keep holding for Copy, Paste and More.</string>
+    <string name="help_topic_hold_summary">Hold on the text to select it, or to use your finger as the mouse.</string>
+    <string name="help_topic_hold_action">Hold on the text until it buzzes and selection starts, with Copy, Paste and More.</string>
+    <string name="help_topic_hold_step1">In a full-screen program such as htop or nvim, the same hold makes your finger the mouse: lift to click, drag to drag.</string>
+    <string name="help_topic_hold_step2">Keep holding there and a second buzz starts selecting instead.</string>
     <string name="help_topic_hold_aliases">long press, hold, press and hold, select text, selection, copy, paste, menu, mouse drag</string>
     <string name="help_topic_size_title">Text size</string>
     <string name="help_topic_size_summary">Each pane can show larger or smaller terminal text.</string>

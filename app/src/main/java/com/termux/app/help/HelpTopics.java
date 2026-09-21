@@ -307,6 +307,7 @@ public final class HelpTopics {
             .doc("Launcher_Usage.md#touch-works-like-a-mouse"));
         b.add(topic("hold_terminal", Group.TERMINAL, R.string.help_topic_hold_title,
                 R.string.help_topic_hold_summary, R.string.help_topic_hold_action)
+            .steps(R.string.help_topic_hold_step1, R.string.help_topic_hold_step2)
             .related("copy_paste", "mouse_mode")
             .aliases(R.string.help_topic_hold_aliases)
             .doc("Launcher_Usage.md#touch-works-like-a-mouse"));

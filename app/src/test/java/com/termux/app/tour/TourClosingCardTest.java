@@ -36,18 +36,18 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void everyEditionGetsTheSameFourSectionsWithAHeadingAndASentence() {
+    public void everyEditionGetsTheSameSixSectionsWithAHeadingAndASentence() {
         for (TourEdition edition : TourEdition.values()) {
             List<TourClosingCard.Section> sections = TourClosingCard.sections(edition);
-            assertEquals("four sections for " + edition, 4, sections.size());
+            assertEquals("six sections for " + edition, 6, sections.size());
             for (TourClosingCard.Section section : sections) {
                 assertNotEquals("no heading for " + edition, 0, section.headingRes);
                 assertNotEquals("no copy for " + edition, 0, section.copyRes);
             }
-            // The first two sections read the same everywhere; nix has its own sentence for
+            // The first three sections read the same everywhere; nix has its own sentence for
             // extras (no pkg, so no tlstore) and for graphical apps (no "Get GUI apps" screen).
-            assertEquals(TourClosingCard.sections(TourEdition.TERMUX).subList(0, 2),
-                sections.subList(0, 2));
+            assertEquals(TourClosingCard.sections(TourEdition.TERMUX).subList(0, 3),
+                sections.subList(0, 3));
             if (edition == TourEdition.NIX) {
                 assertTrue("nix has no pkg, so no command on the card",
                     TourClosingCard.commandResources(edition).isEmpty());
@@ -78,10 +78,37 @@ public class TourClosingCardTest {
     }
 
     @Test
-    public void theShortcutsSectionComesFirstEverywhereAndCarriesNoCommand() {
+    public void theHoldComesFirstEverywhereAndCarriesNoCommand() {
+        // The tour used to end the Keyboard lesson on a hold a fresh phone cannot perform: its
+        // mouse half needs a program that follows the mouse. It is read here instead, and first,
+        // because it is the one thing on this card a finger will meet by accident.
+        for (TourEdition edition : TourEdition.values()) {
+            TourClosingCard.Section hold = TourClosingCard.sections(edition).get(0);
+            assertEquals(R.string.tour_closing_hold_heading, hold.headingRes);
+            assertEquals(R.string.tour_closing_hold_copy, hold.copyRes);
+            assertFalse("the hold has nothing to run", hold.hasCommand());
+        }
+    }
+
+    @Test
+    public void picturesSitBeforeTheGraphicalAppsAndPointAtHelpRatherThanACommand() {
+        // Decision (user, 2026-09-21): a sentence, not a command. The terminal draws pictures
+        // without being asked; the one line some older programs need is a habit, not a paste, and
+        // it keeps its caveats in Help.
+        for (TourEdition edition : TourEdition.values()) {
+            List<TourClosingCard.Section> sections = TourClosingCard.sections(edition);
+            TourClosingCard.Section pictures = sections.get(sections.size() - 2);
+            assertEquals(R.string.tour_closing_pictures_heading, pictures.headingRes);
+            assertEquals(R.string.tour_closing_pictures_copy, pictures.copyRes);
+            assertFalse("pictures have nothing to run", pictures.hasCommand());
+        }
+    }
+
+    @Test
+    public void theShortcutsSectionComesSecondEverywhereAndCarriesNoCommand() {
         // No lesson teaches the shortcut key, so the card names it on the way out.
         for (TourEdition edition : TourEdition.values()) {
-            TourClosingCard.Section shortcuts = TourClosingCard.sections(edition).get(0);
+            TourClosingCard.Section shortcuts = TourClosingCard.sections(edition).get(1);
             assertEquals(R.string.tour_closing_shortcuts_heading, shortcuts.headingRes);
             assertEquals(R.string.tour_closing_shortcuts_copy, shortcuts.copyRes);
             assertFalse("shortcuts has nothing to run", shortcuts.hasCommand());
@@ -92,7 +119,7 @@ public class TourClosingCardTest {
     public void customizeSitsBetweenTheShortcutsAndTheExtrasAndCarriesNoCommand() {
         // The run teaches no lesson about the editors, so the way to them is said here.
         for (TourEdition edition : TourEdition.values()) {
-            TourClosingCard.Section customize = TourClosingCard.sections(edition).get(1);
+            TourClosingCard.Section customize = TourClosingCard.sections(edition).get(2);
             assertEquals(R.string.tour_closing_customize_heading, customize.headingRes);
             assertEquals(R.string.tour_closing_customize_copy, customize.copyRes);
             assertFalse("customize has nothing to run", customize.hasCommand());
@@ -102,7 +129,7 @@ public class TourClosingCardTest {
     @Test
     public void theExtrasSectionIsTheCardsOneCommandExceptOnNix() {
         for (TourEdition edition : TourEdition.values()) {
-            TourClosingCard.Section extras = TourClosingCard.sections(edition).get(2);
+            TourClosingCard.Section extras = TourClosingCard.sections(edition).get(3);
             assertEquals(R.string.tour_closing_extras_heading, extras.headingRes);
             if (edition == TourEdition.NIX) {
                 assertEquals(R.string.tour_closing_extras_copy_nix, extras.copyRes);
