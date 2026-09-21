@@ -246,10 +246,14 @@ public final class TerminalBuffer {
         while (y2 < mScreenRows && !getSelectedText(0, y, mColumns, y2 + 1, true, true).contains("\n")) {
             y2++;
         }
+        // A sized block is one unit, so tapping any of its cells gives the whole of its text.
+        TextBlock tappedBlock = getTextBlockAt(y, x);
+        if (tappedBlock != null)
+            return getTextBlockText(tappedBlock);
         // Get the text for the whole wrapped line
         String text = getSelectedText(0, y1, mColumns, y2, true, true);
         // The index of x in text
-        int textOffset = (y - y1) * mColumns + x;
+        int textOffset = joinedTextOffset(y1, y2, y, x);
         if (textOffset >= text.length()) {
             // The click was to the right of the last word on the line, so
             // there's no word to return
@@ -267,6 +271,45 @@ public final class TerminalBuffer {
             return "";
         }
         return text.substring(x1 + 1, x2);
+    }
+
+    /**
+     * Where the cell at ({@code y}, {@code x}) starts inside the joined text of the wrapped rows
+     * {@code y1} to {@code y2}. Every plain row contributes one character per column, so the
+     * position is simple arithmetic; a row carrying a sized block does not, because the block's
+     * text is contributed once and its other cells contribute nothing, so those rows are counted
+     * the same way {@link #appendRowWithTextBlocks} writes them.
+     */
+    private int joinedTextOffset(int y1, int y2, int y, int x) {
+        boolean anyTextBlocks = false;
+        for (int row = y1; row <= y2 && row < mScreenRows; row++) {
+            TerminalRow line = mLines[externalToInternalRow(row)];
+            if (line != null && line.hasTextSizes()) {
+                anyTextBlocks = true;
+                break;
+            }
+        }
+        if (!anyTextBlocks)
+            return (y - y1) * mColumns + x;
+        Set<Long> blocksTaken = new HashSet<>();
+        int offset = 0;
+        for (int row = y1; row < y; row++)
+            offset += contributedLength(row, mColumns, blocksTaken);
+        return offset + contributedLength(y, x, blocksTaken);
+    }
+
+    /** How many characters columns 0 up to {@code x2} of a row put into the joined text. */
+    private int contributedLength(int row, int x2, Set<Long> blocksTaken) {
+        if (row < -mActiveTranscriptRows || row >= mScreenRows) return 0;
+        TerminalRow line = mLines[externalToInternalRow(row)];
+        if (line == null) return 0;
+        if (line.hasTextSizes()) {
+            StringBuilder contributed = new StringBuilder();
+            appendRowWithTextBlocks(contributed, row, line, 0, x2, blocksTaken);
+            return contributed.length();
+        }
+        int x2Index = (x2 < mColumns) ? line.findStartOfColumn(x2) : line.getSpaceUsed();
+        return Math.max(0, x2Index - line.findStartOfColumn(0));
     }
 
     public int getActiveTranscriptRows() {

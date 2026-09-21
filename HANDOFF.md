@@ -23,3 +23,6 @@
 - `terminal-view/build.gradle` gained `unitTests.returnDefaultValues` (as terminal-emulator has),
   so a test can build a `TerminalBuffer` without SystemClock.
 - `getWordAtLocation` is an emulator fix; described in the report, not made here.
+
+## Merged from the model phase
+- f4cffebc: getWordAtLocation offsets on rows with blocks; getTextSizeRecord public.

@@ -388,6 +388,36 @@ public class KittyTextSizingTest extends TerminalTestCase {
 		assertEquals("Hitail\n", screen().getSelectedText(0, 0, 19, 1));
 	}
 
+	/** Double tap: a block is one word, and the words after it are still found where they are. */
+	public void testWordAtLocationAroundABlock() {
+		withTerminalSized(20, 4);
+		enterString("\033]66;s=2:w=2;Hi\033\\");
+		enterString(" alpha beta");
+		assertEquals("Hi", screen().getWordAtLocation(0, 0));
+		assertEquals("Hi", screen().getWordAtLocation(2, 0));
+		assertEquals("Hi", screen().getWordAtLocation(1, 1));
+		assertEquals("alpha", screen().getWordAtLocation(5, 0));
+		assertEquals("alpha", screen().getWordAtLocation(9, 0));
+		assertEquals("beta", screen().getWordAtLocation(11, 0));
+		assertEquals("beta", screen().getWordAtLocation(14, 0));
+		assertEquals("", screen().getWordAtLocation(4, 0));
+	}
+
+	/** The record is one int a cache can compare, and it describes the same block as the accessors. */
+	public void testTheRecordIsReadableAsOneValue() {
+		withTerminalSized(20, 4);
+		enterString("\033]66;s=2:w=2;Hi\033\\");
+		TerminalRow row = screen().mLines[screen().externalToInternalRow(0)];
+		assertTrue(row.hasTextSizes());
+		assertEquals(0, row.getTextSizeRecord(4));
+		assertTrue(row.getTextSizeRecord(0) != 0);
+		assertTrue("every cell of a block differs only in its offsets",
+			row.getTextSizeRecord(0) != row.getTextSizeRecord(1));
+		assertEquals(2, row.getTextScale(3));
+		assertEquals(3, row.getTextSizeOffsetX(3));
+		assertEquals(0, row.getTextSizeOffsetY(3));
+	}
+
 	public void testSelectingBesideABlockDoesNotPickItUp() {
 		withTerminalSized(20, 6);
 		enterString("\033]66;s=2:w=2;Hi\033\\");
