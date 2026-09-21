@@ -149,6 +149,7 @@ import com.termux.app.terminal.inappkeyboard.FloatingKeyboardController;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardHost;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
+import com.termux.app.terminal.io.ExtraKeysDefaultOffer;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
 import com.termux.shared.activities.ReportActivity;
 import com.termux.shared.activity.ActivityUtils;
@@ -605,6 +606,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private PlaceLayoutStore mPlaceLayoutStore;
     /** The first-boot tour: the cards drawn over the real chrome, and the run behind them. */
     @Nullable private FirstBootTour mFirstBootTour;
+
+    /** Whether the one-time "take the new key row?" card is up, so it is never raised twice. */
+    private boolean mExtraKeysDefaultOfferShowing;
 
     /**
      * The look layer sitting under {@link #mPreferences}: every surface value the chrome reads
@@ -1442,6 +1446,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (t == null) return;
                     if (forceOnboarding) t.restart();
                     else t.startIfNeeded();
+                    // After the run's own decision, so the two are never up together: the card
+                    // holds while the run is going or still to be offered.
+                    maybeOfferExtraKeysDefaultRow();
                 });
                 startFirstRunPermissionChain(forceOnboarding);
             });
@@ -1479,6 +1486,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setFirstRunChainFinishedListener(() -> {
                 FirstBootTour t = firstBootTour();
                 if (t != null) t.startIfNeeded();
+                maybeOfferExtraKeysDefaultRow();
             });
             startFirstRunPermissionChain(false);
         });
@@ -2088,6 +2096,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The arrival the "come back to Termux" lesson is waiting for, however the user made it.
         if (mFirstBootTour != null) mFirstBootTour.onLauncherResumed();
 
+        // The row card, for the update that has no first-run chain to hang it off and for the one
+        // that was held while the run had the screen.
+        maybeOfferExtraKeysDefaultRow();
+
         // Check if a crash happened on last run of the app or if a plugin crashed and show a
         // notification with the crash details if it did
         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(this, LOG_TAG);
@@ -2112,6 +2124,101 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             FirstBootTour tour = firstBootTour();
             if (tour != null) tour.restart();
         });
+    }
+
+    /**
+     * The one-time card asking someone who has a key row of their own whether to take this
+     * release's row.
+     *
+     * <p>A value for {@code extra-keys} in the user's properties file replaces the shipped row for
+     * good, so an update's new keys would never reach anyone who had ever edited theirs. They are
+     * asked once, and only if the row they have is not already the shipped one; a fresh install
+     * sets no such value and is never asked. The answer is remembered either way, back button
+     * included. The card waits while the first-launch run is going or still to be offered, and is
+     * looked at again on the way back in, so the two are never up together.
+     */
+    private void maybeOfferExtraKeysDefaultRow() {
+        if (mExtraKeysDefaultOfferShowing || mPreferences == null) return;
+        if (isFinishing() || isDestroyed()) return;
+        // Cheapest check first: once answered, nothing else is read on any later resume.
+        if (mPreferences.isExtraKeysDefaultOffered()) return;
+        FirstBootTour tour = firstBootTour();
+        boolean tourInTheWay = tour != null && tour.isRunPending();
+        java.util.Properties properties = com.termux.app.settings.TermuxPropertiesFile.load(this);
+        String pageOne = properties.getProperty(
+            com.termux.shared.termux.settings.properties.TermuxPropertyConstants.KEY_EXTRA_KEYS);
+        if (!ExtraKeysDefaultOffer.isCustomRow(pageOne)) {
+            // Nothing to offer: they already have the shipped row. Remember that, so a fresh
+            // install never reads the properties file for this again.
+            mPreferences.setExtraKeysDefaultOffered(true);
+            return;
+        }
+        if (!ExtraKeysDefaultOffer.shouldOffer(pageOne, false, tourInTheWay)) return;
+        String pageTwo = properties.getProperty(
+            com.termux.shared.termux.settings.properties.TermuxPropertyConstants.KEY_EXTRA_KEYS2);
+        mExtraKeysDefaultOfferShowing = true;
+        AlertDialog dialog = new MaterialAlertDialogBuilder(this)
+            .setCustomTitle(extraKeysDefaultOfferTitle())
+            .setMessage(R.string.extra_keys_default_offer_message)
+            .setNegativeButton(R.string.extra_keys_default_offer_keep, null)
+            .setPositiveButton(R.string.extra_keys_default_offer_switch,
+                (d, which) -> takeDefaultExtraKeysRow(pageOne, pageTwo))
+            .create();
+        dialog.setOnDismissListener(d -> {
+            mExtraKeysDefaultOfferShowing = false;
+            // Answered is answered, back button and a tap outside included — but a card taken off
+            // the screen by a rotation or by the user leaving was never answered, and comes back.
+            if (isFinishing() || isDestroyed() || isChangingConfigurations()) return;
+            if (mPreferences != null) mPreferences.setExtraKeysDefaultOffered(true);
+        });
+        dialog.show();
+    }
+
+    /** The card's heading: the launcher's name over one short title, the way its cards read. */
+    @NonNull
+    private View extraKeysDefaultOfferTitle() {
+        float density = getResources().getDisplayMetrics().density;
+        LinearLayout title = new LinearLayout(this);
+        title.setOrientation(LinearLayout.VERTICAL);
+        title.setPadding((int) (24 * density), (int) (20 * density), (int) (24 * density), 0);
+        TextView kicker = new TextView(this);
+        kicker.setText(R.string.tour_card_kicker);
+        kicker.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 12f);
+        kicker.setAllCaps(true);
+        kicker.setLetterSpacing(0.08f);
+        kicker.setTextColor(MaterialColors.getColor(this,
+            com.google.android.material.R.attr.colorPrimary, Color.WHITE));
+        TextView heading = new TextView(this);
+        heading.setText(R.string.extra_keys_default_offer_title);
+        heading.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 20f);
+        heading.setPadding(0, (int) (4 * density), 0, 0);
+        heading.setTextColor(MaterialColors.getColor(this,
+            com.google.android.material.R.attr.colorOnSurface, Color.WHITE));
+        title.addView(kicker);
+        title.addView(heading);
+        return title;
+    }
+
+    /**
+     * Takes the shipped row, keeping what the user had so the editor can offer it back under
+     * Presets. The write and the restyle are the editor's own Save path, so the row on screen
+     * changes at once while the launcher is in front.
+     */
+    private void takeDefaultExtraKeysRow(@Nullable String previousPageOne,
+                                         @Nullable String previousPageTwo) {
+        if (mPreferences != null) {
+            mPreferences.setExtraKeysDefaultOffered(true);
+            mPreferences.setPreviousExtraKeys(0, previousPageOne == null ? "" : previousPageOne.trim());
+            mPreferences.setPreviousExtraKeys(1, previousPageTwo == null ? "" : previousPageTwo.trim());
+        }
+        for (int page = 0; page < TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS.length
+            && page < TermuxTerminalExtraKeys.PAGE_DEFAULT_VALUES.length; page++) {
+            com.termux.app.settings.TermuxPropertiesFile.write(
+                TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS[page],
+                TermuxTerminalExtraKeys.PAGE_DEFAULT_VALUES[page]);
+        }
+        requestTermuxActivityStylingOnNextResume(this, false);
+        AppNotice.show(this, R.string.extra_keys_default_offer_switched);
     }
 
     /** The tour, built on the preferences the first time anything asks for it. */
