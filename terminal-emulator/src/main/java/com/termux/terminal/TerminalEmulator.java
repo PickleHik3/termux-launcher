@@ -418,6 +418,15 @@ public final class TerminalEmulator {
     private final KittyNotifications mKittyNotifications = new KittyNotifications();
 
     /**
+     * The text of the last {@code OSC 66} block written, or null when the last thing written was
+     * ordinary text. REP repeats a block just as it repeats a character.
+     */
+    private String mLastTextBlockText;
+
+    /** The packed size record of {@link #mLastTextBlockText}. */
+    private int mLastTextBlockRecord;
+
+    /**
      * What a finished {@code OSC 99} request does: the whole notification goes to the client, and
      * the answer to a query goes back down the pty to the program that asked.
      */
@@ -3063,9 +3072,16 @@ public final class TerminalEmulator {
                 break;
             case // Repeat the preceding graphic character Ps times (REP).
             'b':
+                final int numRepeat = getArg0(1);
+                if (mLastTextBlockText != null) {
+                    // The last thing written was a sized block, so that is what repeats.
+                    final String repeatedText = mLastTextBlockText;
+                    final int repeatedRecord = mLastTextBlockRecord;
+                    for (int i = 0; i < numRepeat; i++) writeTextSizeBlock(repeatedText, repeatedRecord);
+                    break;
+                }
                 if (mLastEmittedCodePoint == -1)
                     break;
-                final int numRepeat = getArg0(1);
                 for (int i = 0; i < numRepeat; i++) emitCodePoint(mLastEmittedCodePoint);
                 break;
             case // Primary Device Attributes (http://www.vt100.net/docs/vt510-rm/DA1) if argument is missing or zero.
@@ -3802,6 +3818,11 @@ public final class TerminalEmulator {
                 // editor, a busy pointer for a long job, a hand over something to click.
                 setPointerShapeFromOsc(textParameter);
                 break;
+            case 66:
+                // Text drawn larger than one cell: the program says how many times normal size and
+                // how wide, and the terminal keeps a rectangle of cells for it.
+                doTextSizing(textParameter);
+                break;
             case 99:
                 // The rich desktop notification. Unlike OSC 9 and OSC 777 this one carries a
                 // proper request — a name to replace or close it by, how urgent it is, whether
@@ -3906,6 +3927,81 @@ public final class TerminalEmulator {
         if (id == null) return;
         String report = mKittyNotifications.closed(id);
         if (report != null) mSession.write(report);
+    }
+
+    /**
+     * Handle one {@code OSC 66}. With a forced width the whole text is one block; without one every
+     * character becomes a block of its own, which is what a program drawing a heading sends.
+     */
+    private void doTextSizing(String args) {
+        KittyTextSizing.Request request = KittyTextSizing.parse(args);
+        if (request == null) return;
+        if (request.width > 0) {
+            // Text wider than the cells the program asked for is cut, not shrunk.
+            String text = KittyTextSizing.cutToCells(request.text, request.width);
+            if (text.isEmpty()) return;
+            writeTextSizeBlock(text, packTextSizeRecord(request, request.width));
+        } else {
+            for (String grapheme : KittyTextSizing.splitGraphemes(request.text)) {
+                int cellWidth = Math.min(Math.max(1, KittyTextSizing.measureCells(grapheme)),
+                    KittyTextSizing.MAX_WIDTH);
+                writeTextSizeBlock(grapheme, packTextSizeRecord(request, cellWidth));
+            }
+        }
+    }
+
+    private int packTextSizeRecord(KittyTextSizing.Request request, int cellWidth) {
+        return KittyTextSizing.packRecord(request.scale, cellWidth, request.numerator,
+            request.denominator, request.verticalAlign, request.horizontalAlign, false);
+    }
+
+    /**
+     * Put one sized block at the cursor and move the cursor past it, on the same row. A block that
+     * cannot fit the screen at all is thrown away and the cursor stays where it is.
+     */
+    private void writeTextSizeBlock(String text, int record) {
+        final int blockRows = KittyTextSizing.rowsOf(record);
+        final int blockColumns = KittyTextSizing.columnsOf(record);
+        if (blockColumns > mRightMargin - mLeftMargin || blockRows > mBottomMargin - mTopMargin)
+            return;
+        final boolean autoWrap = isDecsetInternalBitSet(DECSET_BIT_AUTOWRAP);
+        if (mCursorCol + blockColumns > mRightMargin) {
+            // Like a wide character, a block that does not fit goes to the next line whole.
+            if (!autoWrap) return;
+            mScreen.setLineWrap(mCursorRow);
+            mCursorCol = mLeftMargin;
+            if (mCursorRow + 1 < mBottomMargin) {
+                mCursorRow++;
+            } else {
+                scrollDownOneLine();
+            }
+        }
+        int rowsBelowMargin = mCursorRow + blockRows - mBottomMargin;
+        for (int i = 0; i < rowsBelowMargin; i++) scrollDownOneLine();
+        final int topRow = (rowsBelowMargin > 0) ? mCursorRow - rowsBelowMargin : mCursorRow;
+        final int anchorColumn = mCursorCol;
+        if (mInsertMode) {
+            int destinationColumn = anchorColumn + blockColumns;
+            if (destinationColumn < mRightMargin)
+                mScreen.blockCopy(anchorColumn, topRow, mRightMargin - destinationColumn, 1,
+                    destinationColumn, topRow);
+        }
+        mScreen.writeTextBlock(anchorColumn, topRow, text, record, getStyle(), mUnderlineColor,
+            mCurrentHyperlinkId);
+        mLastTextBlockText = text;
+        mLastTextBlockRecord = record;
+        mLastEmittedCodePoint = -1;
+        // A combining mark arriving next belongs to the block's text, so point the grapheme
+        // tracking at the anchor cell the way an ordinary write points it at the cell it filled.
+        mGraphemeClusterer.accept(text.codePointBefore(text.length()), false);
+        mLastGraphemeRow = topRow;
+        mLastGraphemeColumn = anchorColumn;
+        mCursorRow = topRow;
+        if (autoWrap) mAboutToAutoWrap = (anchorColumn == mRightMargin - blockColumns);
+        mCursorCol = Math.min(anchorColumn + blockColumns, mRightMargin - 1);
+        mLastGraphemeCursorRow = mCursorRow;
+        mLastGraphemeCursorCol = mCursorCol;
+        mLastGraphemeAboutToAutoWrap = mAboutToAutoWrap;
     }
 
     private void blockClear(int sx, int sy, int w) {
@@ -4279,6 +4375,7 @@ public final class TerminalEmulator {
      */
     private void emitCodePoint(int codePoint) {
         mLastEmittedCodePoint = codePoint;
+        mLastTextBlockText = null;
         if (mUseLineDrawingUsesG0 ? mUseLineDrawingG0 : mUseLineDrawingG1) {
             // http://www.vt100.net/docs/vt102-ug/table5-15.html.
             switch(codePoint) {
@@ -4644,6 +4741,7 @@ public final class TerminalEmulator {
     }
 
     private void resetGraphemeTracking() {
+        mLastTextBlockText = null;
         mGraphemeClusterer.reset();
         mLastGraphemeRow = mLastGraphemeColumn = -1;
         mLastGraphemeCursorRow = mLastGraphemeCursorCol = -1;
