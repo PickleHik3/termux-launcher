@@ -19,6 +19,7 @@
     <string name="widget_storage_failure">Widget couldn\'t be saved</string>
     <string name="widget_add_failed">Widget wasn\'t added</string>
     <string name="widget_grid_full">Grid is full</string>
+    <string name="widget_wall_reset">Your widgets are gone — add them again</string>
     <string name="widget_no_room_on_page">No room on this page.</string>
     <string name="widget_picker_search_hint">Search widgets</string>
     <string name="widget_picker_no_matches">No widgets match that search.</string>

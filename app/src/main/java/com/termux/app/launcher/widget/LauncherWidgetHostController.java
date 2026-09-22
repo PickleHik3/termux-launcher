@@ -49,6 +49,8 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         NO_SPACE,
         REMOVED,
         REMOVE_FAILED,
+        /** The host had forgotten every widget on the wall, so the wall was emptied. */
+        WALL_RESET,
         IGNORED
     }
 
@@ -535,6 +537,10 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
             // Without the host allocation snapshot, absence cannot safely mean uninstall.
             return;
         }
+        if (WidgetProviderReconcilePolicy.isWallLost(repository.records(), owned,
+            repository.pending() != null) && clearLostWall()) {
+            return;
+        }
         for (LauncherWidgetRecord record : repository.records()) {
             AppWidgetProviderInfo info;
             try {
@@ -646,6 +652,23 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
             && resumedPendingTokens.add(pending.token)) {
             continueAfterBound(pending.withStage(WidgetAddTransaction.Stage.BOUND));
         }
+    }
+
+    /**
+     * The whole wall's IDs are unknown to the host: it was restored onto another device, or the
+     * host's own data went. Nothing here can be reconnected — the IDs are gone, and the cells they
+     * were arranged into mean nothing without them — so the wall goes in one piece, both
+     * orientations with it, instead of becoming a page of placeholders the user has to clear by
+     * hand. Said once, here, rather than once per widget.
+     *
+     * @return true when the wall was emptied; false leaves this reconciliation to carry on as
+     *     before, so a failed write is retried rather than half-applied.
+     */
+    private boolean clearLostWall() {
+        if (!repository.resetToEmptyWall()) return false;
+        hostViews.clear();
+        notifyChanged(AddResult.WALL_RESET);
+        return true;
     }
 
     private boolean providerMatches(WidgetAddTransaction expected, @Nullable AppWidgetProviderInfo info) {

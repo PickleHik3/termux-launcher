@@ -322,11 +322,20 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (result == LauncherWidgetHostController.AddResult.REMOVE_FAILED) {
             pane.showNotice(pane.getContext().getString(R.string.widget_remove_failed));
         }
+        // The wall was emptied because nothing on it could be reconnected. One sentence for the
+        // whole wall, and the reconciliation that emptied it cannot say this twice: there is
+        // nothing left to lose.
+        if (result == LauncherWidgetHostController.AddResult.WALL_RESET) {
+            pane.showNotice(pane.getContext().getString(R.string.widget_wall_reset));
+        }
         if (awaitingExternal && result != LauncherWidgetHostController.AddResult.IGNORED
             && result != LauncherWidgetHostController.AddResult.STARTED) {
             awaitingExternal = false;
             if (!host.isWidgetSurfaceShowing()) host.restoreWidgetSurfaceOrigin();
-            if (result != LauncherWidgetHostController.AddResult.READY) pane.showNotice(messageFor(result));
+            if (result != LauncherWidgetHostController.AddResult.READY
+                && result != LauncherWidgetHostController.AddResult.WALL_RESET) {
+                pane.showNotice(messageFor(result));
+            }
         }
         if (result != LauncherWidgetHostController.AddResult.IGNORED) liveOrigin = null;
     }
@@ -972,6 +981,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             case DECLINED: return pane.getContext().getString(R.string.widget_add_failed);
             case NO_SPACE: return pane.getContext().getString(R.string.widget_grid_full);
             case REMOVE_FAILED: return pane.getContext().getString(R.string.widget_remove_failed);
+            case WALL_RESET: return pane.getContext().getString(R.string.widget_wall_reset);
             default: return pane.getContext().getString(R.string.widget_add_failed);
         }
     }
