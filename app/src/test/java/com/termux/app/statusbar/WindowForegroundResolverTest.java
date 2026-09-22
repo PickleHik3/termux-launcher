@@ -54,6 +54,26 @@ public class WindowForegroundResolverTest {
         assertTrue(info.working);
     }
 
+    /**
+     * A CPU delta is only true of the moment it was measured. A reading nobody is refreshing — the
+     * privileged backend went away mid-poll — must stop claiming the pane is working, or the window
+     * pill turns its ring over a command that finished long ago.
+     */
+    @Test
+    public void aWorkingReadingStopsCountingOnceItIsStale() {
+        WindowForegroundResolver resolver = new WindowForegroundResolver(null);
+        resolver.applyOutput("10|fg|500|sh\tbuild.sh\ng|500|0\n",
+            Collections.singletonList(10), 1000L);
+        resolver.applyOutput("10|fg|500|sh\tbuild.sh\ng|500|200\n",
+            Collections.singletonList(10), 2000L);
+        WindowForegroundResolver.ForegroundInfo info = resolver.get(10);
+
+        assertTrue(info.working);
+        assertTrue(info.isWorkingAsOf(2000L + WindowForegroundResolver.WORKING_TTL_MS));
+        assertFalse("a reading nobody refreshed cannot keep asserting work",
+            info.isWorkingAsOf(2000L + WindowForegroundResolver.WORKING_TTL_MS + 1L));
+    }
+
     @Test
     public void aGroupWithNoRowsReportsUnknownRatherThanZero() {
         WindowForegroundResolver resolver = new WindowForegroundResolver(null);
@@ -119,5 +139,129 @@ public class WindowForegroundResolverTest {
             Collections.singletonList(10), 1000L);
         assertEquals("nvim", resolver.get(10).processName);
         assertEquals("config.toml", resolver.get(10).openFile);
+    }
+
+    /** The regression: a shebang-launched npm CLI reported as its interpreter, never itself. */
+    @Test
+    public void aNodeShebangScriptResolvesToItsOwnNameNotNode() {
+        WindowForegroundResolver resolver = new WindowForegroundResolver(null);
+        resolver.applyOutput(
+            "10|fg|500|node\t/data/data/com.termux/files/usr/lib/node_modules/@openai/codex/bin/codex.js\t--foo\n"
+                + "g|500|0\n",
+            Collections.singletonList(10), 1000L);
+        assertEquals("codex", resolver.get(10).processName);
+    }
+
+    /**
+     * The reported device's actual install: Codex CLI Termux ships as a scoped npm package whose
+     * {@code #!/usr/bin/env node} shebang starts a JS wrapper that itself spawns a native
+     * {@code codex.bin} child. The child never becomes the foreground group leader — the resolver
+     * has no way to walk to it (see the class doc), so the wrapper's own argv is all it ever reads,
+     * for the pane's whole lifetime, not just at startup.
+     */
+    @Test
+    public void theRealCodexTermuxPackagePathResolvesToCodex() {
+        assertEquals("codex", WindowForegroundResolver.unwrapInterpreter("node", new String[]{"node",
+            "/data/data/com.termux/files/usr/lib/node_modules/@mmmbuto/codex-cli-termux/bin/codex.js"}));
+    }
+
+    /** A generic entrypoint filename climbs past itself and past the generic wrapper directory. */
+    @Test
+    public void aGenericEntrypointClimbsToThePackageDirectory() {
+        assertEquals("some-tool", WindowForegroundResolver.unwrapInterpreter("node",
+            new String[]{"node", "/usr/lib/node_modules/some-tool/bin/cli.js"}));
+        assertEquals("some-tool", WindowForegroundResolver.unwrapInterpreter("node",
+            new String[]{"node", "/usr/lib/node_modules/some-tool/bin/index.js"}));
+    }
+
+    /**
+     * Python's {@code -m} is the one flag confidently known to carry the identity itself: the
+     * module name, not a file. {@code 8000} is {@code http.server}'s own argument, not a further
+     * script to resolve, and must not be picked up as one.
+     */
+    @Test
+    public void pythonModuleFlagResolvesToTheModuleNameNotItsTrailingArgument() {
+        assertEquals("http.server", WindowForegroundResolver.unwrapInterpreter("python3",
+            new String[]{"python3", "-m", "http.server", "8000"}));
+    }
+
+    /**
+     * Regression: {@code -c}'s value is a code string, not a script path. It must not be parsed at
+     * all — sanitizing the code into something path-shaped ("print1") is a confident-looking wrong
+     * answer, which is worse than falling back to the plain interpreter name.
+     */
+    @Test
+    public void pythonEvalFlagValueIsNeverReadAsAScriptName() {
+        assertNull(WindowForegroundResolver.unwrapInterpreter("python3",
+            new String[]{"python3", "-c", "print(1)"}));
+    }
+
+    /**
+     * Regression: once an eval flag is seen, nothing after it is a script either — it is the
+     * evaluated code's own argv, e.g. {@code userarg} below is {@code process.argv[2]} inside
+     * {@code -e}'s script, not a program name.
+     */
+    @Test
+    public void nodeEvalFlagsTrailingArgumentIsNeverReadAsAScriptName() {
+        assertNull(WindowForegroundResolver.unwrapInterpreter("node",
+            new String[]{"node", "-e", "code", "userarg"}));
+    }
+
+    /**
+     * An unrecognized flag is not assumed to take no value: guessing wrong (treating its value as
+     * the script) is worse than bailing out to the plain interpreter name.
+     */
+    @Test
+    public void anUnrecognizedFlagBailsOutRatherThanGuessing() {
+        assertNull(WindowForegroundResolver.unwrapInterpreter("node",
+            new String[]{"node", "-r", "dotenv/config", "/opt/mytool/bin/mytool.js"}));
+    }
+
+    /** Nothing but flags after the interpreter (an eval one-liner): fall back to the interpreter. */
+    @Test
+    public void anInterpreterWithNoScriptPathIsLeftAlone() {
+        assertNull(WindowForegroundResolver.unwrapInterpreter("node",
+            new String[]{"node", "-e", "console.log(1)"}));
+    }
+
+    /** Shells are not treated as interpreters: their own glyph already names them. */
+    @Test
+    public void shellsAreNotUnwrapped() {
+        assertNull(WindowForegroundResolver.unwrapInterpreter("bash",
+            new String[]{"bash", "/home/amal/build.sh"}));
+    }
+
+
+    /**
+     * The CPU delta covers the whole stretch between two polls. A keystroke inside that stretch —
+     * typing into an ssh session, say — makes the reading no evidence of a command working, while
+     * one before the stretch leaves it standing.
+     */
+    @Test
+    public void aWorkingReadingTheUserTypedDuringIsNoEvidence() {
+        WindowForegroundResolver resolver = new WindowForegroundResolver(null);
+        resolver.applyOutput("10|fg|500|ssh\tbox\ng|500|0\n",
+            Collections.singletonList(10), 1000L);
+        resolver.applyOutput("10|fg|500|ssh\tbox\ng|500|200\n",
+            Collections.singletonList(10), 3000L);
+        WindowForegroundResolver.ForegroundInfo info = resolver.get(10);
+
+        assertEquals(1000L, info.cpuSinceMs);
+        assertTrue(info.isWorkingAsOf(3100L));
+        assertTrue("never typed", info.isWorkingAsOf(3100L, 0L));
+        assertTrue("typed before the stretch", info.isWorkingAsOf(3100L, 900L));
+        assertFalse("typed during it", info.isWorkingAsOf(3100L, 2000L));
+        assertFalse("typed as it was taken", info.isWorkingAsOf(3100L, 3000L));
+        assertTrue("typed after it; the instant grace covers that", info.isWorkingAsOf(3100L, 3050L));
+    }
+
+    @Test
+    public void aFirstReadingHasNoStretchToHaveTypedDuring() {
+        WindowForegroundResolver resolver = new WindowForegroundResolver(null);
+        resolver.applyOutput("10|fg|500|ssh\tbox\ng|500|0\n",
+            Collections.singletonList(10), 1000L);
+
+        assertEquals(-1L, resolver.get(10).cpuSinceMs);
+        assertFalse(resolver.get(10).isWorkingAsOf(1100L, 500L));
     }
 }

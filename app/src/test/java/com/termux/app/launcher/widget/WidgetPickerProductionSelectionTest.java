@@ -15,7 +15,6 @@ import android.view.View;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
-import com.termux.app.statusbar.TopStatusBarState;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -35,6 +34,12 @@ public class WidgetPickerProductionSelectionTest {
     @Test public void realPlusAdapterCardPolicyAndA1CallProduceDurablePlacement() {
         Fixture fixture = new Fixture(false);
         fixture.controller.openPicker();
+        fixture.idleAndLayout();
+        // The list opens collapsed: the app row is what is there, and it opens the cards.
+        RecyclerView.ViewHolder app = fixture.pane.picker().list()
+            .findViewHolderForAdapterPosition(0);
+        assertNotNull("app row must be attached", app);
+        assertTrue(app.itemView.performClick());
         fixture.idleAndLayout();
         RecyclerView.ViewHolder card = fixture.pane.picker().list()
             .findViewHolderForAdapterPosition(1);
@@ -57,7 +62,7 @@ public class WidgetPickerProductionSelectionTest {
         final WidgetPaneView pane;
         final WidgetPaneController controller;
         final AppWidgetProviderInfo info;
-        boolean fullEngaged = true;
+        boolean surfaceShowing = true;
         int restoreCount;
         Fixture(boolean fill) {
             activity.setTheme(R.style.Theme_TermuxActivity_DayNight_NoActionBar);
@@ -78,11 +83,13 @@ public class WidgetPickerProductionSelectionTest {
                 1024 * 1024);
             controller = new WidgetPaneController(pane, widgets, new WidgetPaneController.Host() {
                 @Override public boolean reducedMotion() { return true; }
-                @Override public boolean isFullEngaged() { return fullEngaged; }
-                @Override public TopStatusBarState fullPriorState() { return TopStatusBarState.EXPANDED; }
-                @Override public void restoreFull(TopStatusBarState prior) { restoreCount++; fullEngaged = true; }
+                @Override public boolean isWidgetSurfaceShowing() { return surfaceShowing; }
+                @Override public void captureWidgetSurfaceOrigin() { }
+                @Override public void restoreWidgetSurfaceOrigin() {
+                    restoreCount++; surfaceShowing = true;
+                }
             }, loader);
-            controller.onFullFrame(1f); controller.onFullSettled(true); layout();
+            controller.onWallPageShown(true); layout();
         }
         void idleAndLayout() { Shadows.shadowOf(Looper.getMainLooper()).idle(); layout();
             Shadows.shadowOf(Looper.getMainLooper()).idle(); }

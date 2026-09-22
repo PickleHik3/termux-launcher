@@ -2,6 +2,7 @@ package com.termux.shared.termux.shell.command.environment;
 
 import android.content.Context;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import com.termux.shared.errors.Error;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
@@ -30,6 +31,13 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
 
     /** Value exported as {@link #ENV_TERM_PROGRAM}, identifying this terminal to capability detectors. */
     public static final String TERM_PROGRAM_NAME = "termux-launcher";
+
+    /**
+     * Environment variable naming the pane a shell is running in, i.e. its
+     * {@code TerminalSession.mHandle} — the same id the {@code /v1/panes} routes address. It is what
+     * lets a process in a shell talk about its own pane without being told which one it is.
+     */
+    public static final String ENV_LAUNCHER_PANE = "TERMUX_LAUNCHER_PANE";
 
     public TermuxShellEnvironment() {
         super();
@@ -62,6 +70,23 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
         }
     }
 
+    /** {@code DISPLAY} for new shells while an embedded display runs and the user asked for it. */
+    private static volatile String sDisplayForNewSessions;
+
+    /**
+     * Put {@code DISPLAY=<display>} into every shell started from now on, or stop doing so with
+     * null. The launcher sets this while its embedded X display is running and the opt-in is on;
+     * nothing is written into rc files, and shells already running are not touched.
+     */
+    public static void setDisplayForNewSessions(@Nullable String display) {
+        sDisplayForNewSessions = display == null || display.trim().isEmpty() ? null : display.trim();
+    }
+
+    @Nullable
+    public static String getDisplayForNewSessions() {
+        return sDisplayForNewSessions;
+    }
+
     /**
      * Get shell environment for Termux.
      */
@@ -70,6 +95,8 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
     public HashMap<String, String> getEnvironment(@NonNull Context currentPackageContext, boolean isFailSafe) {
         // Termux environment builds upon the Android environment
         HashMap<String, String> environment = super.getEnvironment(currentPackageContext, isFailSafe);
+        String display = sDisplayForNewSessions;
+        if (display != null) environment.put("DISPLAY", display);
         HashMap<String, String> termuxAppEnvironment = TermuxAppShellEnvironment.getEnvironment(currentPackageContext);
         if (termuxAppEnvironment != null)
             environment.putAll(termuxAppEnvironment);

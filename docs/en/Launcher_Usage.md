@@ -29,12 +29,28 @@ shell prompts:
 - **Drag scrolls, always.** Inside mouse-aware apps the drag becomes scroll-wheel events, so lists
   in `htop`, lazygit, or vim scroll naturally.
 - **Tap sends a mouse click** when the running app tracks the mouse.
-- **Press and hold briefly, then drag, to hold the mouse button down.** A small haptic marks the
-  moment your finger becomes a held mouse drag — from there you can select text in vim, drag tmux
-  splits, or resize TUI panes exactly like a desktop mouse would.
-- **A quick long-press without moving** still starts ordinary text selection with the copy toolbar.
+- **Hold for a moment to use the mouse.** In a mouse-aware app, keep a finger still and a small
+  haptic hands it the mouse button. Lift and that cell is clicked. Drag and, if the app asked for
+  motion, the button is held down and dragged with you — a second haptic marks the moment — so you
+  can select in vim, move tmux splits, or resize TUI panes exactly like a desktop mouse. If it did
+  not ask for motion, dragging sends nothing and the lift still clicks.
+- **Keep holding to select text.** Stay still a moment longer and a different haptic says the hold
+  has gone further: Copy · Paste · More opens where your finger landed, with More leading to the
+  rest of the actions. A second finger at any point is a two-finger scroll or pinch, as usual.
+- **In a plain shell there is no mouse to take:** the same hold starts ordinary text selection with
+  the copy toolbar at the first haptic, and a drag before it scrolls.
 - **Pinch to zoom** changes the focused pane's font size, with jitter filtering so two-finger
   scrolling does not zoom by accident.
+
+**Mouse mode** turns every touch into the mouse for programs that take one — a full-screen editor,
+a file manager, a TUI with clickable panes. A finger down is the left button at that cell, held as
+it moves and released where it lifts; two fingers turn the wheel, and a fast lift keeps it turning.
+A program that has not asked for the mouse gets nothing typed at it, and two fingers scroll the
+transcript as usual. A small mouse at the end of the status bar shows the mode is on. Switch it on
+and off with the **Mouse mode** action: on the shipped extra-keys row it is the keyboard key's
+swipe-up, and it can also sit on the in-app keyboard as a `tool:mouse.toggle` key or on a chord.
+On the Display place the same action swaps the keyboard for a touchpad — see
+[The Linux display](X11_Display.md#every-day).
 
 ## Use the status row
 
@@ -45,17 +61,63 @@ The top surface is both status display and navigation:
 - Tap `+` to create a window.
 - Tap CPU, memory, or weather to open its detail panel.
 - In the expanded status panel, tap the clock to open Android's clock app or the cog to open Settings.
+- A small mouse at the end of the stats means mouse mode is on; tap it to switch the mode off.
+
+The row belongs to the place on screen. On the terminal it holds the session badge and the window
+pills; on the Display place it lists the apps open on the display, front one selected, and a tap
+brings one forward; on Widgets it holds only the stats and the weather, centred under the clock,
+with the weather written out in full.
 
 The CPU and memory values describe the Android device, not only the foreground shell. Weather needs
 location permission and credits Open-Meteo in its detail view.
 
-A window pill breathes while its foreground process group is consuming CPU. A silent but busy build
-can therefore appear active; a sleeping or idle TUI does not count as work merely because it remains
-open.
+A window pill shows one short item: the open file in an editor, the process, or the directory of an
+idle shell. A process its icon names, such as python or pacman, shows the icon alone. Every mark sits
+in the icon's place, so the eye looks in one spot: a ring while the foreground process group is
+consuming CPU, a bell once the window rang or asked, a tick or a cross once a command finished unseen.
+A silent but busy build can therefore appear active; a sleeping or idle TUI does not count as work
+merely because it remains open.
 
 A background window that rings the terminal bell receives a pulsing error-colored rim when it needs
 attention. Focusing that window clears the state; a bell in the already-focused window is not marked
 as new attention.
+
+## Move between the terminal and the widget grid
+
+The terminal is one of three places in a ring — Widgets, Terminal, Display — so from any of them
+the other two are one step away, one to each side. The status bar is the pager. The icon beside
+the clock names the place you are on — a house for Widgets, a prompt for Terminal, a screen for
+Display — and the other two peek in from the bar's edges on the side each place slides in from.
+Swipe left or right anywhere on the bar and the icons move together: the one arriving takes the
+spot beside the clock as the one that was there leaves. Tap a peeking icon to go there. The Display
+icon reads quieter until a display is running. The row under the clock belongs to the place on
+screen: your session and windows on the terminal, the display's apps on Display, and nothing on
+Widgets, where the widgets speak for themselves. Where the wall rests is where the home screen
+comes back to. **Go to Widgets**, **Go to Terminal** and **Go to Display** are also actions you
+can put on the extra-keys row, on the in-app keyboard, or on a key chord.
+
+Exactly one place is on screen at a time, and the terminal never changes size for the others, so
+nothing reflows in your shells when you move. Your session keeps running while you are away.
+
+A swipe that starts on the window pills scrolls those, and only those. When the pills fit the row,
+or the strip already rests at the end you pull past, the swipe moves the wall instead.
+
+The widget grid holds Android home-screen widgets. Long-press an empty spot to add one, long-press
+a widget to move or resize it, and swipe inside the grid to reach its other pages. Drop a widget on
+top of others and they slide aside into free space on the page; when there is no room for them the
+widget takes the nearest free spot instead, as before. A tap on the page's edge drops a small tab
+holding the grid's settings and an edit button. While you are editing, every widget on the page is
+outlined and a tap on any of them picks it up to move or resize, and that tab reads out the grid's
+size; tapping it gives you two numbers to drag — columns and rows — which the widgets rearrange to
+as you drag. The same two numbers are sliders in the Layout editor for Home. The in-app
+keyboard goes away while you are on Widgets — nothing there takes typing — and comes back with the
+terminal.
+
+The Display place shows the Linux display. Its keyboard, hardware or on-screen, is the display's
+entirely: every key and every chord reaches the Linux program, and the launcher's shortcuts stay
+out of the way. Leave it by swiping the status bar, tapping a place icon or pressing Home. The
+place remembers whether the keyboard was up when you left. [The Linux display](X11_Display.md)
+covers turning it on, its menu, the touchpad and GPU acceleration.
 
 ## Launch Android apps
 
@@ -64,14 +126,14 @@ as new attention.
 Tap an icon in the dock to open it. Long-press an app for actions such as pinning, moving, or placing
 it in a folder. Long-press empty space in the pinned row to open the list editor.
 
-Manage the whole row under **Settings → Launcher & apps → Edit pinned apps**. The same page controls
+Manage the whole row under **Settings → Apps → Edit pinned apps**. The same page controls
 the pinned row, most-used page, notification dots, and icon browsing behavior.
 
 ### A–Z index
 
 Scrub horizontally across the A–Z row to jump to installed apps beginning with a letter. The index is
-a browsing control, not a text field. It can be hidden under **Settings → Launcher & apps →
-Alphabets row**.
+a browsing control, not a text field. It can be hidden from **Settings → Layout**, on the place
+you want it hidden for.
 
 ### Search from the shell prompt
 
@@ -83,7 +145,7 @@ At an idle prompt, type the app-search prefix followed by a query:
 ```
 
 The default prefix is `%`. Results replace the normal dock content; choose an app to launch it. Clear
-the query to return to the normal dock. Change the prefix under **Settings → Launcher & apps → App
+the query to return to the normal dock. Change the prefix under **Settings → Apps → App
 search prefix** if `%` conflicts with a shell workflow.
 
 ### Bind an app to a key
@@ -228,12 +290,15 @@ Review a hand-edited workspace before agreeing to run recorded commands.
 
 ## Use the built-in keyboard and action row
 
-The built-in keyboard is the default on a fresh install. The action row above it exposes keyboard,
-workspace, split, layout, navigation, and scratchpad actions. A long-press or swipe can reveal the
-popup action assigned to a key.
+The built-in keyboard is the default on a fresh install. The action row above it ships with seven
+keys: keyboard (swipe up for mouse mode), new session (swipe up for a new window), Widgets,
+Terminal, Display, split (swipe up for the other direction) and workspaces (swipe up to save one).
+A long-press or swipe reveals the popup action assigned to a key. Search, the prompt jumps and the
+scratchpad keep their chords and the command palette.
 
-Open **Settings → Keyboard & input** to change input method, appearance, colors, typeface, extra keys,
-feedback, and `~/.termux/keyboard/layout.xml` support.
+Open **Settings → Keyboard** to change input method, layouts, typing, feedback, extra keys, and
+`~/.termux/keyboard/layout.xml` support; its look — theme, colors, and typeface — is on **Settings →
+Look** now.
 
 The extra keys editor gives the **Display label** and **Swipe-up label** fields a glyph picker
 (the `Ω` button) with a searchable catalogue of arrows, box drawing, blocks, shapes, Powerline
@@ -256,16 +321,23 @@ keeps usable rows.
 
 Long-press a surface to reach its editor, or start from Settings:
 
-- **Appearance** controls wallpaper colors, terminal fonts, icons, surfaces, and Glass Lab.
-- **Terminal & status** controls full screen, pane support, clock, CPU, memory, weather, and status
-  behavior.
-- **Keyboard & input** controls the on-screen input method and built-in keyboard.
-- **Launcher & apps** controls pinned apps, A–Z browsing, search, notification dots, and Home behavior.
+- **Look** controls wallpaper colors, terminal fonts, icons, keyboard look, surfaces, and Glass Lab.
+- **Terminal** controls full screen, pane support, and lazy mode.
+- **Status bar** controls the clock, CPU, memory, weather, and notifications.
+- **Keyboard** controls the on-screen input method, layouts, typing, and feedback.
+- **Apps** controls pinned apps, A–Z browsing, search, notification dots, and Home behavior.
 
 See the [Settings map](Launcher_Settings.md) for every top-level section and the
 [Modern terminal guide](Terminal_Modernization.md) for custom bindings, font configuration, links,
 Kitty graphics, and diagnostics. The focused user references are [Terminal fonts](Terminal_Fonts.md)
 and [Kitty protocols and compatibility](Terminal_Kitty_Protocols.md).
+
+## Get help
+
+Hold any corner for its controls, then tap **?** to see what they do. The command palette and
+Settings also have a **Help** entry that opens the same thing. On the Terminal place it opens by
+topic — pick what you are stuck on, or tap **Show all** for the full reference. **Try it** on a
+topic closes help and walks you through that one action right away.
 
 ## Let terminal programs detect capabilities
 

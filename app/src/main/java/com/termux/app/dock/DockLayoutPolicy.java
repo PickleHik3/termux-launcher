@@ -1,6 +1,9 @@
 package com.termux.app.dock;
 
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
+import com.termux.app.launcher.paging.PageTickStrip;
+import com.termux.app.place.PlaceLayout;
+import com.termux.app.statusbar.StatusBarEdgeGeometry;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -12,7 +15,7 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
  *
  * <p>The activity snapshots the inputs at the points it used to call its ~20 {@code resolveDock*}
  * helpers and then reads fields off the layout, so the numbers below are the single source of truth
- * for row heights, paddings, insets, the landscape rail column, the capsule radius and the icon
+ * for row heights, paddings, insets, the apps rail column, the capsule radius and the icon
  * scale curves.
  */
 public final class DockLayoutPolicy {
@@ -53,13 +56,60 @@ public final class DockLayoutPolicy {
     public static final float DOCK_RAIL_ICON_SIZE_DP = 38f;
     public static final float DOCK_RAIL_ICON_SPACING_DP = 10f;
 
+    /**
+     * The air a pinned-apps row standing by itself keeps around its icons, on every edge and in
+     * both forms — the one place the row's vertical padding is decided.
+     *
+     * <p>Sharing a container the row keeps the dock's own paddings, which are the space between
+     * three rows on one sheet of glass. Alone on a plank of its own they were that space spent
+     * twice over: the plank's air around the sheet, then the row's air inside it, for a bar that is
+     * one icon tall. Screen space is worth more than the margin.
+     *
+     * <p>It is the whole of the air on the side without the ticks; the side with them is the
+     * strip's own band and nothing added to it. A lone row is asymmetric for it, which is what a
+     * bar with nothing beside it can afford to be.
+     */
+    public static final float LONE_ROW_AIR_DP = 4f;
+
+    /**
+     * The air a pinned-apps row sharing its container keeps around its icons, above and below.
+     *
+     * <p>It is the letters' own crown ({@link AccessoryStackLayoutPolicy#AZ_ROW_CROWN_DP}) rather
+     * than a number of its own, so the two bands of one sheet breathe alike. It used to be
+     * whatever the size preset left over: the band was derived from the extra-keys row and the
+     * icon was a fill ratio of it, so a bigger icon bought more air as well, and the row carried
+     * about twice the air of the bands beside it. The preset scales the icon now; the air is this,
+     * on every step and in both styles.
+     */
+    public static final float SHARED_ROW_AIR_DP = AccessoryStackLayoutPolicy.AZ_ROW_CROWN_DP;
+
     /** Everything the dock's numbers are a function of, snapshotted by the caller. */
     public static final class DockInputs {
         /** False before the preference store is attached; the rows collapse to zero then. */
         public final boolean preferencesAvailable;
         /** Rounded (capsule) dock style selected. */
         public final boolean capsule;
-        public final boolean landscape;
+        /**
+         * The pinned apps stand somewhere other than the dock's own bottom row — a rail down one
+         * side, or a row along the top. Either way the dock's row collapses.
+         */
+        public final boolean appsRowOnEdge;
+        /** Of those, the ones that stand as a column on a side edge: the rail. */
+        public final boolean appsOnRail;
+        /**
+         * The row shares its container with nothing else — the only dock row on the bottom edge, or
+         * the only bar on its plank off the dock, which a rail always is. It is what swaps the
+         * dock's own paddings for {@link #LONE_ROW_AIR_DP}; the icon is the same size either way.
+         */
+        public final boolean appsRowAlone;
+        /**
+         * Whether the row carries the page ticks. The strip is not a band beside the row: it
+         * stands in the air the row already keeps on its centre-facing side, so its presence is
+         * what that air is worth ({@link PageTickStrip#BAND_DP}) rather than something added to
+         * it. A rail is the exception the cross-axis never sees — its ticks stand in a column of
+         * their own beside it, and its own air is unchanged.
+         */
+        public final boolean appsRowPageStripShown;
         public final float density;
         /** The dock size preset, as stored (a raw scale, not a progress). */
         public final float barHeightScale;
@@ -67,15 +117,19 @@ public final class DockLayoutPolicy {
         public final int dockHorizontalInsetDp;
         /** Configured dock corner radius in dp, negative for the follow-the-style radius. */
         public final int configuredCornerRadiusDp;
-        /** Row switches as stored, before the landscape gate. */
+        /** Row switches as resolved for the place, before the edge gate. */
         public final boolean appsRowEnabledPref;
         public final boolean azRowEnabledPref;
         /**
-         * Whether the extra-keys row is showing. Not a row this policy sizes — the toolbar owns its
-         * own height — but it decides which row is on the dock's bottom rim, and so whether the A-Z
-         * row carries a chin under its letters.
+         * Whether another of the dock's own rows stands over / under the letters, read off the
+         * resolved bottom stack ({@code AccessoryStackLayoutPolicy.rowOverAz} / {@code rowUnderAz}).
+         * Neither is a row this policy sizes, but between them they decide which row is on the
+         * dock's rim, and so whether the A-Z row carries a crown over its letters and a chin under
+         * them. They are the order the user set rather than "the apps row is shown, the extra-keys
+         * row is shown": re-ordered, the keys can be the band standing over the letters.
          */
-        public final boolean extraKeysRowShown;
+        public final boolean rowOverAz;
+        public final boolean rowUnderAz;
         /** The extra-keys toolbar's single-row height, the apps row's baseline unit. */
         public final int baseToolbarHeightPx;
         /** Extra apps-row height requested by the tuning drag; negative values are ignored. */
@@ -87,14 +141,18 @@ public final class DockLayoutPolicy {
         private DockInputs(Builder b) {
             this.preferencesAvailable = b.preferencesAvailable;
             this.capsule = b.capsule;
-            this.landscape = b.landscape;
+            this.appsRowOnEdge = b.appsRowOnEdge;
+            this.appsOnRail = b.appsOnRail;
+            this.appsRowAlone = b.appsRowAlone;
+            this.appsRowPageStripShown = b.appsRowPageStripShown;
             this.density = b.density;
             this.barHeightScale = b.barHeightScale;
             this.dockHorizontalInsetDp = b.dockHorizontalInsetDp;
             this.configuredCornerRadiusDp = b.configuredCornerRadiusDp;
             this.appsRowEnabledPref = b.appsRowEnabledPref;
             this.azRowEnabledPref = b.azRowEnabledPref;
-            this.extraKeysRowShown = b.extraKeysRowShown;
+            this.rowOverAz = b.rowOverAz;
+            this.rowUnderAz = b.rowUnderAz;
             this.baseToolbarHeightPx = b.baseToolbarHeightPx;
             this.additionalAppsBarHeightPx = b.additionalAppsBarHeightPx;
             this.railOnRight = b.railOnRight;
@@ -109,7 +167,12 @@ public final class DockLayoutPolicy {
         public static final class Builder {
             private boolean preferencesAvailable = true;
             private boolean capsule;
-            private boolean landscape;
+            private boolean appsRowOnEdge;
+            private boolean appsOnRail;
+            private boolean appsRowAlone;
+            // Every row that lies down carries the ticks' band, whether or not it has a second
+            // page to show — the band is its air, so a row that gained a page cannot grow by it.
+            private boolean appsRowPageStripShown = true;
             private float density = 1f;
             private float barHeightScale = SIZE_PRESETS[2];
             private int dockHorizontalInsetDp =
@@ -118,9 +181,11 @@ public final class DockLayoutPolicy {
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
             private boolean appsRowEnabledPref;
             private boolean azRowEnabledPref;
-            // Defaults to shown, which is the shape every caller sized against before the A-Z
-            // row's chin existed: no chin unless a caller says the row is the bottom one.
-            private boolean extraKeysRowShown = true;
+            // Nothing over the letters and a row under them: the shape every caller sized
+            // against before the A-Z row's crown and chin existed, so a caller that says nothing
+            // about the order still gets what it always got.
+            private boolean rowOverAz;
+            private boolean rowUnderAz = true;
             private int baseToolbarHeightPx;
             private int additionalAppsBarHeightPx;
             private boolean railOnRight;
@@ -129,14 +194,18 @@ public final class DockLayoutPolicy {
 
             public Builder preferencesAvailable(boolean v) { this.preferencesAvailable = v; return this; }
             public Builder capsule(boolean v) { this.capsule = v; return this; }
-            public Builder landscape(boolean v) { this.landscape = v; return this; }
+            public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
+            public Builder appsOnRail(boolean v) { this.appsOnRail = v; return this; }
+            public Builder appsRowAlone(boolean v) { this.appsRowAlone = v; return this; }
+            public Builder appsRowPageStripShown(boolean v) { this.appsRowPageStripShown = v; return this; }
             public Builder density(float v) { this.density = v; return this; }
             public Builder barHeightScale(float v) { this.barHeightScale = v; return this; }
             public Builder dockHorizontalInsetDp(int v) { this.dockHorizontalInsetDp = v; return this; }
             public Builder configuredCornerRadiusDp(int v) { this.configuredCornerRadiusDp = v; return this; }
             public Builder appsRowEnabledPref(boolean v) { this.appsRowEnabledPref = v; return this; }
             public Builder azRowEnabledPref(boolean v) { this.azRowEnabledPref = v; return this; }
-            public Builder extraKeysRowShown(boolean v) { this.extraKeysRowShown = v; return this; }
+            public Builder rowOverAz(boolean v) { this.rowOverAz = v; return this; }
+            public Builder rowUnderAz(boolean v) { this.rowUnderAz = v; return this; }
             public Builder baseToolbarHeightPx(int v) { this.baseToolbarHeightPx = v; return this; }
             public Builder additionalAppsBarHeightPx(int v) { this.additionalAppsBarHeightPx = v; return this; }
             public Builder railOnRight(boolean v) { this.railOnRight = v; return this; }
@@ -155,7 +224,7 @@ public final class DockLayoutPolicy {
         boolean capsule = in.capsule;
         DockLayout.Builder out = new DockLayout.Builder();
         out.capsule = capsule;
-        out.landscape = in.landscape;
+        out.appsRowOnEdge = in.appsRowOnEdge;
         out.density = density;
         out.configuredCornerRadiusDp = in.configuredCornerRadiusDp;
 
@@ -191,41 +260,92 @@ public final class DockLayoutPolicy {
         // 6dp above equals 3dp below plus the fixed 3dp icon/A-Z band.
         out.defaultAppsTopPaddingPx = Math.round(density * 6f);
         out.defaultAppsBottomPaddingPx = Math.round(density * 3f);
-        out.appsTopPaddingPx = capsule ? out.capsuleAppsTopPaddingPx : out.defaultAppsTopPaddingPx;
-        out.appsBottomPaddingPx =
+        // The pair above is the legacy spacing of the dock's three rows on one sheet. It is no
+        // longer any row's padding: it survives only as the baseline the icon's size is read out
+        // of, so a given preset draws exactly the icon it always drew.
+        int sharedTopPaddingPx =
+            capsule ? out.capsuleAppsTopPaddingPx : out.defaultAppsTopPaddingPx;
+        int sharedBottomPaddingPx =
             capsule ? out.capsuleAppsBottomPaddingPx : out.defaultAppsBottomPaddingPx;
+        int loneAirPx = loneRowAirPx(density);
+        // The band the page ticks stand in is that side's air, not a band beside it. It used to
+        // stack on top of the air, so the icon sat half a strip below the middle of what the two
+        // hairlines enclose and the row read bottom-heavy. The strip draws inside the air now and
+        // the row is symmetric about its icon on every edge it lies on.
+        int stripBandPx = in.appsRowPageStripShown ? PageTickStrip.bandPx(density) : 0;
+        // Sharing, the row keeps the letters' crown on both sides — unless the ticks need more
+        // than that, in which case their own band is the air on both sides and the icon sits in
+        // the middle of it. Alone it keeps its sliver on the side without ticks and the strip's
+        // own band on the side with them, and nothing more: a plank of one bar should be as short
+        // as it can be, and there is no second band for it to read symmetric against. The one
+        // place the row's air is decided, whichever edge and form it is in.
+        int airPx = rowAirPx(in.appsRowAlone, in.appsRowPageStripShown, density);
+        int tickSideAirPx = rowTickSideAirPx(in.appsRowAlone, in.appsRowPageStripShown, density);
+        out.appsRowStripBandPx = stripBandPx;
+        out.appsTopPaddingPx = airPx;
+        out.appsBottomPaddingPx = airPx;
+        out.appsRowTickSideAirPx = tickSideAirPx;
         out.capsuleBottomGapPx = Math.round(density * 6f);
-
-        // Row metrics. The horizontal rows collapse in landscape, where the rail is the launcher
-        // surface instead, and collapse outright before a preference store exists.
-        boolean appsRowEnabled =
-            in.preferencesAvailable && in.appsRowEnabledPref && !in.landscape;
-        boolean azRowEnabled = in.preferencesAvailable && in.azRowEnabledPref && !in.landscape;
-        out.appsRowEnabled = appsRowEnabled;
-        out.azRowEnabled = azRowEnabled;
-        if (in.preferencesAvailable) {
-            out.appsBarHeightPx = appsRowEnabled
-                ? appsBarHeightPx(capsule, sizeProgress, defaultDockProgress,
-                    in.baseToolbarHeightPx, out.appsTopPaddingPx, out.appsBottomPaddingPx,
-                    density, Math.max(0, in.additionalAppsBarHeightPx))
-                : 0;
-            out.azRowHeightPx = AccessoryStackLayoutPolicy.computeAzRowHeightPx(
-                azRowEnabled, in.extraKeysRowShown, density);
-            out.azRowChinPaddingPx = AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(
-                azRowEnabled, in.extraKeysRowShown, density);
-            out.indicatorBandHeightPx = AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx(
-                appsRowEnabled && azRowEnabled, density);
-            out.interRowGapPx = out.indicatorBandHeightPx;
-        }
-        out.appsBarHeightHintPx =
-            Math.max(0, out.appsBarHeightPx - out.appsTopPaddingPx - out.appsBottomPaddingPx);
 
         out.iconScale = in.preferencesAvailable
             ? iconScaleFor(capsule, capsule ? sizeProgress : defaultDockProgress)
             : FALLBACK_ICON_SCALE;
 
-        // Landscape rail.
-        boolean railActive = in.landscape && in.preferencesAvailable && in.appsRowEnabledPref;
+        // Row metrics. The pinned-apps row collapses when the apps stand on a screen edge, where
+        // the rail is the launcher surface instead, and collapses outright before a preference
+        // store exists. The letters row keeps its slot either way — it is its own index, and its
+        // matches ride a floating strip when there is no row under it to fill.
+        boolean appsRowEnabled =
+            in.preferencesAvailable && in.appsRowEnabledPref && !in.appsRowOnEdge;
+        boolean azRowEnabled = in.preferencesAvailable && in.azRowEnabledPref;
+        out.appsRowEnabled = appsRowEnabled;
+        out.azRowEnabled = azRowEnabled;
+        if (in.preferencesAvailable) {
+            // The preset's own figure, kept for the one thing it still decides: how big the icon
+            // is. It was the row's band — the extra-keys row scaled, less the legacy paddings —
+            // and the icon was a fill ratio of what that left, so every dp the preset added was
+            // split between the icon and the air around it.
+            int iconBaselinePx = in.appsRowEnabledPref
+                ? Math.max(0, presetBaselineBandPx(capsule, sizeProgress, defaultDockProgress,
+                    in.baseToolbarHeightPx, sharedTopPaddingPx, sharedBottomPaddingPx,
+                    density, Math.max(0, in.additionalAppsBarHeightPx))
+                    - sharedTopPaddingPx - sharedBottomPaddingPx)
+                : 0;
+            out.appsRowIconPx = iconBaselinePx <= 0
+                ? 0 : dockIconSizePx(iconBaselinePx, out.iconScale, density);
+            // The band a lying-down apps row claims, whichever edge it lies on: the icon and the
+            // air either side of it, and nothing else. The dock's own height is that band while
+            // the row is the dock's; a row standing along the top is the same band in another
+            // stack, and the dock collapses to nothing. Alone the row is still formed around the
+            // baseline rather than the icon, so P8's numbers are exactly what they were.
+            out.appsRowBandPx = iconBaselinePx <= 0
+                ? 0
+                : (in.appsRowAlone ? iconBaselinePx : out.appsRowIconPx)
+                    + airPx + tickSideAirPx;
+            // The dock's own row view is the band less the strip's share of it: the ticks stand
+            // in the host beside the pager rather than inside it, and between them they are the
+            // band. Nothing is reserved for the strip on top of the air.
+            out.appsBarHeightPx =
+                appsRowEnabled ? Math.max(0, out.appsRowBandPx - stripBandPx) : 0;
+            out.azRowHeightPx = AccessoryStackLayoutPolicy.computeAzRowHeightPx(
+                azRowEnabled, in.rowOverAz, in.rowUnderAz, density);
+            out.azRowCrownPaddingPx = AccessoryStackLayoutPolicy.computeAzRowCrownPaddingPx(
+                azRowEnabled, in.rowOverAz, density);
+            out.azRowChinPaddingPx = AccessoryStackLayoutPolicy.computeAzRowChinPaddingPx(
+                azRowEnabled, in.rowUnderAz, density);
+            out.indicatorBandHeightPx = AccessoryStackLayoutPolicy.computePageIndicatorBandHeightPx(
+                appsRowEnabled && in.appsRowPageStripShown, density);
+            out.interRowGapPx = out.indicatorBandHeightPx;
+        }
+        // The box the icon is centred in: the band less the air on each side of it. Taken off the
+        // band rather than off the dock's own row, so a row lying down on another edge — where the
+        // dock's row has collapsed to nothing — still knows how tall its icons may be, and so that
+        // the strip's share of the air does not read as a shorter icon.
+        out.appsRowBandHintPx = Math.max(0, out.appsRowBandPx - airPx - tickSideAirPx);
+        out.appsBarHeightHintPx = appsRowEnabled ? out.appsRowBandHintPx : 0;
+
+        // The apps rail.
+        boolean railActive = in.appsOnRail && in.preferencesAvailable && in.appsRowEnabledPref;
         out.railActive = railActive;
         out.railOnRight = in.railOnRight;
         out.railPull = railActive
@@ -234,26 +354,141 @@ public final class DockLayoutPolicy {
             : AppDrawerGestureArbiter.Pull.NONE;
         out.railEdgeInsetPx =
             in.railOnRight ? in.displayCutoutInsetRightPx : in.displayCutoutInsetLeftPx;
-        // The docked edge's cutout inset PLUS a column wide enough for an icon and its two margins
-        // (not the larger of the two, which left the icons hard against the display edge).
+        // The docked edge's cutout inset PLUS a column wide enough for an icon and the row's own
+        // air either side of it, mirrored onto this axis (not the larger of the two, which left the
+        // icons hard against the display edge). The floor is a column still worth aiming a thumb
+        // at, which is what the air alone no longer guarantees.
         out.railWidthPx = out.railEdgeInsetPx
             + Math.max(Math.round(density * DOCK_RAIL_MIN_WIDTH_DP),
-                Math.round(density * (DOCK_RAIL_ICON_SIZE_DP + 2 * DOCK_RAIL_EDGE_MARGIN_DP)));
+                railIconSizePx(density) + 2 * loneAirPx);
 
-        out.compactStatusBarHeightPx = Math.round(density * (capsule ? 30f : 32f));
+        // The rail's own axis, so the vertical form of the pinned-apps row and the column it
+        // stands in are sized from one place rather than each measuring its own icons.
+        out.railBandPx = Math.max(0, out.railWidthPx - out.railEdgeInsetPx);
+        out.railIconSizePx = railIconSizePx(density);
+        out.railIconSpacingPx = railIconSpacingPx(density);
+        out.railSlotLengthPx = railSlotLengthPx(density);
+
+        // The bar's own geometry owns this number in one place, for every edge and both styles;
+        // the dock only asks what a compact row costs, because the lift it gives a bottom bar is
+        // that row's height. Two copies of 30/32 drifted the moment either was tuned.
+        out.compactStatusBarHeightPx = StatusBarEdgeGeometry.thicknessPx(
+            PlaceLayout.Edge.TOP, capsule, true, density);
 
         return out.build();
     }
 
     /**
-     * Keeps the old row/icon result as each preset's baseline, then allocates enough extra row
-     * height for the new icon curve. This makes the requested icon-size bump real in pixels while
-     * preserving the smallest preset and the fixed A-Z/extra-keys heights.
+     * {@link #LONE_ROW_AIR_DP} in pixels: the air a pinned-apps row standing by itself keeps around
+     * its icons and its ticks — above and below a row lying down, left and right of a rail.
      */
-    private static int appsBarHeightPx(boolean capsule, float sizeProgress,
-                                       float defaultDockProgress, int baseToolbarHeightPx,
-                                       int appsTopPaddingPx, int appsBottomPaddingPx,
-                                       float density, int additionalAppsBarHeightPx) {
+    public static int loneRowAirPx(float density) {
+        return Math.round(Math.max(0f, density) * LONE_ROW_AIR_DP);
+    }
+
+    /**
+     * {@link #SHARED_ROW_AIR_DP} in pixels: the air a pinned-apps row sharing its container keeps
+     * above and below its icons, which is the letters' crown beside it.
+     */
+    public static int sharedRowAirPx(float density) {
+        return Math.round(Math.max(0f, density) * SHARED_ROW_AIR_DP);
+    }
+
+    /**
+     * The air a pinned-apps row that lies down keeps on the side of its icons the ticks do <em>not
+     * </em> stand on.
+     *
+     * <p>Sharing its container it is the ticks' own band ({@link PageTickStrip#BAND_DP}) while the
+     * row carries them and the plain crown when it does not — the same figure as
+     * {@link #rowTickSideAirPx}, so the row is symmetric about its icon and the icon sits in the
+     * middle of what the two hairlines around it enclose.
+     *
+     * <p>A row standing alone has no such pair to read against: it keeps its sliver here whether
+     * or not it carries ticks, and the strip's band is all the air on the other side. The plank is
+     * then the icon and as little as the two sides can be.
+     */
+    public static int rowAirPx(boolean alone, boolean pageStripShown, float density) {
+        if (alone) return loneRowAirPx(density);
+        return Math.max(sharedRowAirPx(density),
+            pageStripShown ? PageTickStrip.bandPx(density) : 0);
+    }
+
+    /**
+     * The air on the side the ticks stand on: their own band while the row carries them, because
+     * the strip stands in that air rather than beside it, and the row's plain air when it does
+     * not. Never less than the plain air, so a row is never tighter on the ticks' side than on the
+     * other.
+     */
+    public static int rowTickSideAirPx(boolean alone, boolean pageStripShown, float density) {
+        int base = alone ? loneRowAirPx(density) : sharedRowAirPx(density);
+        return Math.max(base, pageStripShown ? PageTickStrip.bandPx(density) : 0);
+    }
+
+    /**
+     * One pinned icon in the form that lies down: a fill ratio of the row's content box, floored
+     * at a thumb-sized 20dp and never taller than the box it is centred in.
+     *
+     * <p>The row asks the same question of its own host on the frames before the dock has answered
+     * it, so the answer lives here rather than in the view: the band the policy hands over is this
+     * icon and its air, and the two cannot drift apart.
+     */
+    public static int dockIconSizePx(int rowContentHeightPx, float iconScale, float density) {
+        float safeDensity = Math.max(0f, density);
+        int minPx = Math.round(safeDensity * 20f);
+        int usablePx = Math.max(Math.round(safeDensity * 24f),
+            rowContentHeightPx - Math.round(safeDensity * 2f));
+        int candidate = Math.round(
+            usablePx * AccessoryStackLayoutPolicy.computeDockIconFillRatio(iconScale));
+        return Math.max(minPx, Math.min(Math.max(minPx, usablePx), candidate));
+    }
+
+    /** One rail icon's size, the same on every side and independent of the dock's size preset. */
+    public static int railIconSizePx(float density) {
+        return Math.round(Math.max(0f, density) * DOCK_RAIL_ICON_SIZE_DP);
+    }
+
+    /** The air above and below one rail icon. */
+    public static int railIconSpacingPx(float density) {
+        return Math.round(Math.max(0f, density) * DOCK_RAIL_ICON_SPACING_DP);
+    }
+
+    /**
+     * How much of the rail's axis one icon takes: itself and its air either side. The vertical
+     * form of the pinned-apps row gives each of its slots exactly this.
+     */
+    public static int railSlotLengthPx(float density) {
+        return railIconSizePx(density) + 2 * railIconSpacingPx(density);
+    }
+
+    /**
+     * Where the {@code index}-th icon's own box starts along the rail, measured from the first
+     * slot's top. The icon itself sits {@link #railIconSpacingPx} further in.
+     */
+    public static int railSlotOffsetPx(int index, float density) {
+        return Math.max(0, index) * railSlotLengthPx(density);
+    }
+
+    /**
+     * The deepest a row lying down is ever drawn: two rail slots. Every preset's band, the tuning
+     * drag's extra height included, sits well inside it. It is a backstop rather than a limit — the
+     * row is told {@link DockLayout#appsRowBandHintPx} on every pass — for the frames where nothing
+     * has told the row its band yet and the only figure it has is the host it was lent to, which
+     * off the dock can be a whole content column rather than a row.
+     */
+    public static int maxRowBandPx(float density) {
+        return 2 * railSlotLengthPx(density);
+    }
+
+    /**
+     * The preset's baseline row height — the extra-keys row scaled, then grown enough for the icon
+     * curve. It is not the row's band any more (that is the icon and its air): the caller takes the
+     * legacy paddings back off it and sizes the icon from what is left, which is the one thing this
+     * curve still decides.
+     */
+    private static int presetBaselineBandPx(boolean capsule, float sizeProgress,
+                                           float defaultDockProgress, int baseToolbarHeightPx,
+                                           int appsTopPaddingPx, int appsBottomPaddingPx,
+                                           float density, int additionalAppsBarHeightPx) {
         float baselineHeightFactor = capsule
             ? (1.12f + (sizeProgress * 0.60f))
             : (1.00f + (defaultDockProgress * 0.52f));

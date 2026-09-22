@@ -20,6 +20,8 @@ import org.robolectric.annotation.ConscryptMode;
 import org.robolectric.annotation.Config;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -243,5 +245,91 @@ public class DockIconCacheTest {
 
         assertNotSame(plainIcon, clonedIcon);
         assertNotSame(plainIcon, packIcon);
+    }
+
+    // ------------------------------------------------------------------ icon-pack identity
+
+    /**
+     * The key used to record only that artwork came from <em>a</em> pack, so two packs rendered
+     * the same app at the same size into one entry and only an invalidation nobody enforced kept
+     * them apart.
+     */
+    @Test
+    public void twoPacksRenderingOneAppAtOneSize_doNotShareAKey() {
+        LauncherAppEntry app = new LauncherAppEntry(
+            new AppRef("com.example.a", "Main"), "a", new ColorDrawable(0xFF00FF00), true);
+
+        String packA = DockIconCache.renderKey(app, 48, DockIconCache.Badge.NONE, "com.pack.a:3");
+        String packB = DockIconCache.renderKey(app, 48, DockIconCache.Badge.NONE, "com.pack.b:3");
+
+        assertNotEquals(packA, packB);
+        assertEquals(packA, DockIconCache.renderKey(app, 48, DockIconCache.Badge.NONE, "com.pack.a:3"));
+    }
+
+    /** A pack upgraded in place ships new drawables under the same package name. */
+    @Test
+    public void onePackAtTwoVersions_doesNotShareAKey() {
+        LauncherAppEntry app = new LauncherAppEntry(
+            new AppRef("com.example.a", "Main"), "a", new ColorDrawable(0xFF00FF00), true);
+
+        assertNotEquals(
+            DockIconCache.renderKey(app, 48, DockIconCache.Badge.NONE, "com.pack.a:3"),
+            DockIconCache.renderKey(app, 48, DockIconCache.Badge.NONE, "com.pack.a:4"));
+    }
+
+    /** Everything else that changes the pixels still separates keys beside the pack. */
+    @Test
+    public void theKeyStillSeparatesSizeBadgeAndTreatment() {
+        AppRef ref = new AppRef("com.example.a", "Main");
+        LauncherAppEntry untreated = new LauncherAppEntry(ref, "a", new ColorDrawable(0xFF00FF00), false);
+        LauncherAppEntry treated = new LauncherAppEntry(ref, "a", new ColorDrawable(0xFF00FF00), true);
+        String pack = "com.pack.a:3";
+
+        assertNotEquals(DockIconCache.renderKey(untreated, 48, DockIconCache.Badge.NONE, pack),
+            DockIconCache.renderKey(untreated, 64, DockIconCache.Badge.NONE, pack));
+        assertNotEquals(DockIconCache.renderKey(untreated, 48, DockIconCache.Badge.NONE, pack),
+            DockIconCache.renderKey(untreated, 48, DockIconCache.Badge.CLONE, pack));
+        assertNotEquals(DockIconCache.renderKey(untreated, 48, DockIconCache.Badge.CLONE, pack),
+            DockIconCache.renderKey(untreated, 48, DockIconCache.Badge.LINUX, pack));
+        // "Treated at all" is not "which pack": it still selects the saturation nudge.
+        assertNotEquals(DockIconCache.renderKey(untreated, 48, DockIconCache.Badge.NONE, pack),
+            DockIconCache.renderKey(treated, 48, DockIconCache.Badge.NONE, pack));
+    }
+
+    /** No pack selected is a stable token of its own, not a hole in the key. */
+    @Test
+    public void theSystemDefaultIsItsOwnIdentity() {
+        LauncherAppEntry app = entry("a");
+
+        assertEquals(DockIconCache.renderKey(app, 48, DockIconCache.Badge.NONE, null),
+            DockIconCache.renderKey(app, 48, DockIconCache.Badge.NONE, ""));
+        assertNotEquals(DockIconCache.renderKey(app, 48, DockIconCache.Badge.NONE, ""),
+            DockIconCache.renderKey(app, 48, DockIconCache.Badge.NONE, "com.pack.a:3"));
+    }
+
+    @Test
+    public void changingTheIdentity_dropsWhatWasRenderedUnderTheOldOne() {
+        DockIconCache cache = cacheWithMemoryClass(0);
+        LauncherAppEntry app = entry("a");
+
+        Drawable underTheDefault = cache.icon(app, 48);
+        assertTrue(cache.sizeBytes() > 0);
+
+        assertTrue(cache.setIconPackIdentity("com.pack.a:3"));
+        assertEquals("com.pack.a:3", cache.iconPackIdentity());
+        assertEquals(0, cache.sizeBytes());
+        assertNotSame(underTheDefault, cache.icon(app, 48));
+
+        // Re-stating the same identity is not a reason to throw away a warm cache.
+        assertFalse(cache.setIconPackIdentity("com.pack.a:3"));
+        assertTrue(cache.sizeBytes() > 0);
+    }
+
+    /** The badge an entry earns is part of the key, so it has to follow from the entry alone. */
+    @Test
+    public void theBadgeFollowsFromWhatTheEntryIs() {
+        assertEquals(DockIconCache.Badge.NONE, DockIconCache.badgeFor(entry("a")));
+        assertEquals(DockIconCache.Badge.CLONE, DockIconCache.badgeFor(new LauncherAppEntry(
+            new AppRef("com.example.a", "Main", -1, 7L, true, "clone"), "a", null)));
     }
 }

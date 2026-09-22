@@ -25,65 +25,68 @@ import androidx.core.view.ViewCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.place.PlaceLayout.Edge;
 
 /** Status pane gesture observer with a frozen DOWN snapshot and one-way claims. */
 public final class StatusBarSwipeLayout extends FrameLayout implements NestedScrollingParent3 {
 
     public interface Listener {
         void onCollapsedStateRequested(boolean collapsed);
-        default void onFullStateRequested(@NonNull TopStatusBarState priorState) { }
         default boolean isStatusGestureBlocked() { return false; }
-        /** A pull-down claimed the stream; return true to drive the FULL pane from this drag. */
-        default boolean onFullDragBegin(@NonNull TopStatusBarState priorState) { return false; }
-        /** FULL is open and a pull-up claimed the stream; return true to drag it closed. */
-        default boolean onFullCloseDragBegin() { return false; }
-        /** @param dragPx finger travel since the DOWN, positive downward */
-        default void onFullDrag(float dragPx) { }
-        /** @param velocityPxPerSec vertical release velocity, positive downward */
-        default void onFullDragEnd(float velocityPxPerSec) { }
-        default void onFullDragCancel() { }
+        /**
+         * A drag along the bar claimed the stream and the pane wall may take it; return true to
+         * drive the wall from this drag.
+         */
+        default boolean onWallDragBegin() { return false; }
+        /**
+         * @param alongPx finger travel along the bar since the DOWN — to the right on a bar that
+         *                stands along the top or the bottom, downward on one down a side.
+         */
+        default void onWallDrag(float alongPx) { }
+        /** @param velocityPxPerSec release velocity along the bar, in that same direction */
+        default void onWallDragEnd(float velocityPxPerSec) { }
+        default void onWallDragCancel() { }
     }
 
     private final int mTouchSlop;
-    private final int mLongPressTimeout;
     private final NestedScrollingParentHelper mNestedParentHelper;
     @Nullable private Listener mListener;
     @Nullable private StatusBarGesturePolicy mGesture;
     private TopStatusBarState mState = TopStatusBarState.EXPANDED;
-    private TopStatusBarState mNormalTarget = TopStatusBarState.EXPANDED;
+    @NonNull private Edge mEdge = Edge.TOP;
     private boolean mAnotherSurfaceEngaged;
-    private long mNextToken;
-    private long mPostedToken;
-    private boolean mFullCallbackDelivered;
     private boolean mDispatchInProgress;
     private boolean mDeferredReset;
-    private boolean mFullDragActive;
-    private boolean mFullPaneAvailable = true;
     @Nullable private android.view.VelocityTracker mVelocityTracker;
-    private int mFullStatusRowBottomInset;
-    private final Runnable mLongPress = this::commitLongPress;
-    /** Pull-down hint: a grabber pill that blooms below the row on a tap of the bar's chrome. */
-    private static final long HINT_DURATION_MS = 620L;
-    private static final float HINT_WIDTH_DP = 30f;
-    private static final float HINT_HEIGHT_DP = 3f;
-    private static final float HINT_INSET_DP = 3f;
-    private static final float HINT_TRAVEL_DP = 4f;
+    /**
+     * Drag hint: one small chevron that fades in at the row's inner edge on a tap of the bar's
+     * chrome, pointing the way the bar can go from here - down while it is folded, up while it
+     * is open - and drifting that way as it fades. A single thin stroke, no glow: the bar is
+     * quiet chrome and the hint should read as a whisper, not a widget.
+     */
+    private static final long HINT_DURATION_MS = 680L;
+    private static final float HINT_CHEVRON_WIDTH_DP = 10f;
+    private static final float HINT_CHEVRON_HEIGHT_DP = 4f;
+    private static final float HINT_STROKE_DP = 1.5f;
+    /**
+     * Distance from the bar's inner edge to where the chevron starts. Generous, so that the whole
+     * glyph sits inside the compact bar and its drift ends before the edge: it must never look as
+     * if it is sinking into the border.
+     */
+    private static final float HINT_INSET_DP = 10f;
+    private static final float HINT_TRAVEL_DP = 5f;
     @Nullable private ValueAnimator mHintAnimator;
     private float mHintProgress;
     @Nullable private Paint mHintPaint;
-    @Nullable private RectF mHintRect;
+    @Nullable private android.graphics.Path mHintPath;
     private int mPullHintCount;
 
-    /** How many times the pull-down hint has played — the animation itself is not observable. */
+    /** How many times the drag hint has played — the animation itself is not observable. */
     int pullHintCount() { return mPullHintCount; }
-    @Nullable private com.termux.app.GlassRimRenderer mRim;
-    private float mRimRadiusPx;
-    private float mRimProgress;
 
     public StatusBarSwipeLayout(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mLongPressTimeout = ViewConfiguration.getLongPressTimeout();
         mNestedParentHelper = new NestedScrollingParentHelper(this);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
@@ -91,62 +94,62 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     public void setListener(@Nullable Listener listener) { mListener = listener; }
 
     public void setCollapsed(boolean collapsed) {
-        mNormalTarget = TopStatusBarState.fromCollapsedPreference(collapsed);
-        if (mState != TopStatusBarState.FULL) mState = mNormalTarget;
-    }
-
-    public void setStatusState(@NonNull TopStatusBarState state,
-                               @NonNull TopStatusBarState normalTarget) {
-        mState = state;
-        mNormalTarget = normalTarget == TopStatusBarState.FULL
-            ? TopStatusBarState.EXPANDED : normalTarget;
-        if (state != TopStatusBarState.FULL) mFullStatusRowBottomInset = 0;
-        requestStructuralReset();
-    }
-
-    /** The parent is the final FULL row-position authority; the inset comes from the existing style. */
-    public void setFullStatusRowBottomInset(int bottomInsetPx) {
-        int resolved = Math.max(0, bottomInsetPx);
-        if (resolved == mFullStatusRowBottomInset) return;
-        mFullStatusRowBottomInset = resolved;
-        requestLayout();
+        mState = TopStatusBarState.fromCollapsedPreference(collapsed);
     }
 
     public void setAnotherSurfaceEngaged(boolean engaged) { mAnotherSurfaceEngaged = engaged; }
 
     /**
-     * Whether the FULL pane exists at all. Off for a terminal-only install: the pane is a home
-     * surface, and leaving the pull-down armed would open an empty notification panel over a
-     * terminal. Also silences the pull-down hint, which must never advertise a dead gesture.
+     * The edge the bar stands on. It decides which way a drag pages the wall and which way it
+     * folds the bar; a live stream is dropped rather than reinterpreted mid-gesture.
      */
-    public void setFullPaneAvailable(boolean available) {
-        if (mFullPaneAvailable == available) return;
-        mFullPaneAvailable = available;
-        if (!available) cancelPullHint();
+    public void setEdge(@NonNull Edge edge) {
+        if (mEdge == edge) return;
+        mEdge = edge;
+        if (mGesture != null) mGesture.cancel();
+        if (mWallDragActive && mListener != null) mListener.onWallDragCancel();
+        mWallDragActive = false;
+        requestStructuralReset();
     }
 
-    public boolean isFullPaneAvailable() { return mFullPaneAvailable; }
+    @NonNull public Edge edge() { return mEdge; }
 
     /**
-     * Glass rim over the FULL pane's outline: fades in with the expansion, shimmers while the
-     * transition (or the pull-down drag) is live, and disappears entirely in the normal forms.
+     * Whether the bar standing on this edge may rest expanded. A bar down a side stays compact
+     * regardless: this only vetoes the expand swipe, it never folds a bar already open elsewhere.
      */
-    public void setGlassRim(float radiusPx, float fullProgress) {
-        float progress = FullStatusBarGeometry.finiteUnit(fullProgress);
-        if (progress == mRimProgress && radiusPx == mRimRadiusPx) return;
-        mRimRadiusPx = Math.max(0f, radiusPx);
-        mRimProgress = progress;
-        invalidate();
+    public void setExpansionAllowed(boolean allowed) { mExpansionAllowed = allowed; }
+
+    /** Whether the pane wall has a place to go from here; off, a sideways drag means nothing. */
+    public void setWallAvailable(boolean available) {
+        mWallAvailable = available;
+        if (!available && mWallDragActive) {
+            mWallDragActive = false;
+            if (mListener != null) mListener.onWallDragCancel();
+        }
+    }
+
+    public boolean isWallAvailable() { return mWallAvailable; }
+
+    /**
+     * The wall was moved from elsewhere mid-drag (a tile tap, {@code wall.go}, Home). The drag
+     * is over: the rest of this finger's stream is ignored rather than fed to a wall that has
+     * stopped listening, and the next touch starts clean.
+     */
+    public void cancelWallDrag() {
+        if (!mWallDragActive) return;
+        mWallDragActive = false;
+        if (mGesture != null) mGesture.cancel();
+        requestStructuralReset();
     }
 
     /**
-     * A tap on the bar's own chrome answers with the grabber the bar does not wear at rest: a
-     * short pill that fades in below the row, sinks a few dp and fades out — the pull-down saying
-     * it is there. Taps that belong to a child (window chips, the stat and weather widgets, the
-     * sessions chip) never reach here, so switching windows or opening a card stays silent.
+     * A tap on the bar's own chrome answers with the direction the bar does not show at rest:
+     * one chevron that fades in at the row's inner edge, drifts the way a swipe would take the
+     * bar and fades out. Taps that belong to a child (window chips, the stat and weather widgets,
+     * the sessions chip) never reach here, so switching windows or opening a card stays silent.
      */
     private void showPullHint() {
-        if (!mFullPaneAvailable || mState == TopStatusBarState.FULL) return;
         mPullHintCount++;
         if (mHintAnimator != null) mHintAnimator.cancel();
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
@@ -180,88 +183,66 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     private void drawPullHint(@NonNull android.graphics.Canvas canvas) {
         if (mHintProgress <= 0f) return;
-        // One rise-and-fall envelope over the whole animation, so the pill never snaps off.
+        // One rise-and-fall envelope over the whole animation, so the chevron never snaps off.
         float envelope = (float) Math.sin(Math.PI * mHintProgress);
         if (envelope <= 0.01f) return;
         float density = getResources().getDisplayMetrics().density;
         if (mHintPaint == null) {
             mHintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-            mHintPaint.setStyle(Paint.Style.FILL);
+            mHintPaint.setStyle(Paint.Style.STROKE);
+            mHintPaint.setStrokeCap(Paint.Cap.ROUND);
+            mHintPaint.setStrokeJoin(Paint.Join.ROUND);
+            mHintPaint.setStrokeWidth(HINT_STROKE_DP * density);
+        }
+        if (mHintPath == null) mHintPath = new android.graphics.Path();
+        // Folded, the bar opens by a pull down; open, it folds by a push up. The chevron points
+        // that way and travels that way.
+        boolean opening = mState.toCollapsedPreference();
+        float expand = StatusBarGesturePolicy.expandSign(mEdge);
+        // Folded, the bar opens away from its edge; open, it folds back towards it.
+        boolean down = opening == (expand > 0f);
+        float direction = down ? 1f : -1f;
+        float width = HINT_CHEVRON_WIDTH_DP * density;
+        float height = HINT_CHEVRON_HEIGHT_DP * density;
+        float travel = HINT_TRAVEL_DP * density * mHintProgress * direction;
+        boolean vertical = StatusBarGesturePolicy.isVertical(mEdge);
+        // The chevron sits at the bar's inner edge — the one facing the terminal — and points
+        // the way a drag would take it, whichever edge the bar stands on.
+        float cx = vertical ? getHeight() / 2f : getWidth() / 2f;
+        float span = vertical ? getWidth() : getHeight();
+        float top = expand > 0f
+            ? span - HINT_INSET_DP * density - height + travel
+            : HINT_INSET_DP * density + travel;
+        int chevronLayer = vertical ? canvas.save() : -1;
+        if (vertical) {
+            // One rotation, so the chevron path below stays the single description of the shape:
+            // (x, y) drawn here lands at (y, height - x) on screen, which turns the row's
+            // "along the width, across the height" into the column's own two axes.
+            canvas.rotate(-90f, 0f, 0f);
+            canvas.translate(-getHeight(), 0f);
         }
         mHintPaint.setColor(pullHintColor());
-        mHintPaint.setAlpha(Math.round(150 * envelope));
-        float width = HINT_WIDTH_DP * density;
-        float height = HINT_HEIGHT_DP * density;
-        float travel = HINT_TRAVEL_DP * density * mHintProgress;
-        float left = (getWidth() - width) / 2f;
-        float top = getHeight() - height - HINT_INSET_DP * density + travel;
-        if (mHintRect == null) mHintRect = new RectF();
-        mHintRect.set(left, top, left + width, top + height);
-        canvas.drawRoundRect(mHintRect, height / 2f, height / 2f, mHintPaint);
+        mHintPaint.setAlpha(Math.round(200 * envelope));
+        // The tip leads: pointing down it is at the bottom, pointing up at the top.
+        float tipY = down ? top + height : top;
+        float tailY = down ? top : top + height;
+        mHintPath.reset();
+        mHintPath.moveTo(cx - width / 2f, tailY);
+        mHintPath.lineTo(cx, tipY);
+        mHintPath.lineTo(cx + width / 2f, tailY);
+        canvas.drawPath(mHintPath, mHintPaint);
+        if (chevronLayer >= 0) canvas.restoreToCount(chevronLayer);
     }
 
-    /** The hint's colour, from the theme like every other status widget, never a literal grey. */
+    /** The hint's colour: the accent, from the theme like every other status widget. */
     int pullHintColor() {
-        return MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-            ContextCompat.getColor(getContext(), R.color.termux_on_surface_variant));
+        return MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorPrimary,
+            ContextCompat.getColor(getContext(), R.color.termux_primary));
     }
 
     @Override protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
         super.dispatchDraw(canvas);
         drawPullHint(canvas);
-        if (mRimProgress <= 0f) return;
-        if (mRim == null) {
-            mRim = new com.termux.app.GlassRimRenderer(
-                getResources().getDisplayMetrics().density);
-        }
-        float shimmerPhase = mRimProgress < 1f ? mRimProgress : -1f;
-        mRim.draw(canvas, 0f, 0f, getWidth(), getHeight(), mRimRadiusPx, shimmerPhase,
-            mRimProgress);
-    }
-
-    /**
-     * FULL has three measured vertical bands. The top slot and status row are the chrome owners;
-     * the widget pane owns exactly the half-open rectangle between their laid-out bounds. Keeping
-     * this in their common parent prevents a body child from guessing either band's dp geometry.
-     */
-    @Override
-    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-        super.onLayout(changed, left, top, right, bottom);
-        layoutFullStatusRowAtMovingBottom();
-        layoutFullBodyBetweenChrome();
-    }
-
-    private void layoutFullStatusRowAtMovingBottom() {
-        if (mState != TopStatusBarState.FULL) return;
-        View statusRow = findViewById(R.id.terminal_status_row);
-        if (statusRow == null || statusRow.getVisibility() == GONE) return;
-        int rowBottom = Math.max(getPaddingTop(), getHeight() - getPaddingBottom()
-            - mFullStatusRowBottomInset);
-        int rowTop = Math.max(getPaddingTop(), rowBottom - statusRow.getMeasuredHeight());
-        int rowLeft = getPaddingLeft();
-        int rowRight = Math.max(rowLeft, getWidth() - getPaddingRight());
-        statusRow.layout(rowLeft, rowTop, rowRight, rowBottom);
-    }
-
-    private void layoutFullBodyBetweenChrome() {
-        if (mState != TopStatusBarState.FULL) return;
-        View body = findViewById(R.id.widget_pane);
-        View topSlot = findViewById(R.id.terminal_top_widget_area);
-        View statusRow = findViewById(R.id.terminal_status_row);
-        if (body == null || topSlot == null || statusRow == null) return;
-
-        int bodyLeft = getPaddingLeft();
-        int bodyRight = Math.max(bodyLeft, getWidth() - getPaddingRight());
-        int bodyTop = Math.max(getPaddingTop(), topSlot.getBottom());
-        int bodyBottom = Math.max(bodyTop,
-            Math.min(getHeight() - getPaddingBottom(), statusRow.getTop()));
-        int bodyWidth = bodyRight - bodyLeft;
-        int bodyHeight = bodyBottom - bodyTop;
-        if (body.getMeasuredWidth() != bodyWidth || body.getMeasuredHeight() != bodyHeight) {
-            body.measure(MeasureSpec.makeMeasureSpec(bodyWidth, MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec(bodyHeight, MeasureSpec.EXACTLY));
-        }
-        body.layout(bodyLeft, bodyTop, bodyRight, bodyBottom);
     }
 
     @Override
@@ -269,37 +250,40 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         mDispatchInProgress = true;
         try {
             int action = event.getActionMasked();
-            if (action == MotionEvent.ACTION_DOWN) {
-                // With the widgets pane open, the status row is display-only: window switching,
-                // stat/weather popups and the sessions chip all pause until the pane closes. The
-                // stream is still observed, so the pull-up works from the row too.
-                mMuteChildStream = mState == TopStatusBarState.FULL
-                    && isInsideView(findViewById(R.id.terminal_status_row), event);
-            }
             observe(event);
-            boolean handled = mMuteChildStream || super.dispatchTouchEvent(event);
-            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                mMuteChildStream = false;
-            }
+            boolean handled = super.dispatchTouchEvent(event);
             return handled;
         } finally {
             mDispatchInProgress = false;
             if (mDeferredReset) {
                 mDeferredReset = false;
-                if (!mFullDragActive) clearTracking();
+                clearTracking();
             }
         }
     }
 
-    private boolean mMuteChildStream;
+    private boolean mWallAvailable;
+    private boolean mWallDragActive;
+    private boolean mExpansionAllowed = true;
 
     /**
-     * Child streams are frozen at DOWN with one exception: a claimed pull-down takes over — the
+     * Child streams are frozen at DOWN with one exception: a claimed wall drag takes over — the
      * platform then delivers the children their CANCEL, exactly like a scroll container would.
      */
     @Override public boolean onInterceptTouchEvent(MotionEvent event) {
         StatusBarGesturePolicy gesture = mGesture;
-        return gesture != null && mFullDragActive && isFullDragClaim(gesture.claim());
+        if (gesture == null) return false;
+        StatusBarGesturePolicy.Claim claim = gesture.claim();
+        // The fold works from anywhere on the bar, so it starts over the clock, a chip or a tile
+        // as readily as over bare chrome. Taking the stream the moment it is claimed is what keeps
+        // those children usable: they get their CANCEL, exactly as a scroll container's children
+        // do, so the finger that folded the bar never also opens what it started on. A tap is
+        // untouched — it never travels far enough to make this claim.
+        if (claim == StatusBarGesturePolicy.Claim.EXPAND_SWIPE
+            || claim == StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE) return true;
+        // A wall drag can start on the clock or a tile, which own their own touches until the
+        // intent along the bar is clear; taking the stream then delivers them their CANCEL.
+        return mWallDragActive && claim == StatusBarGesturePolicy.Claim.WALL_PAGING;
     }
 
     @Override
@@ -311,10 +295,8 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (gesture == null) return false;
         switch (gesture.claim()) {
             case PENDING:
-            case HORIZONTAL_SWIPE:
-            case LONG_PRESS:
-            case PULL_DOWN:
-            case PULL_UP:
+            case WALL_PAGING:
+            case EXPAND_SWIPE:
             case COLLAPSE_SWIPE:
                 return true;
             default:
@@ -335,166 +317,122 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                     StatusBarGesturePolicy.Claim before = mGesture.claim();
                     StatusBarGesturePolicy.Claim after = mGesture.move(event.getX(), event.getY());
                     if (before == StatusBarGesturePolicy.Claim.PENDING
-                        && after != StatusBarGesturePolicy.Claim.PENDING) cancelLongPressTimer();
-                    if (before == StatusBarGesturePolicy.Claim.PENDING
-                        && (after == StatusBarGesturePolicy.Claim.PULL_DOWN
-                            || after == StatusBarGesturePolicy.Claim.PULL_UP)) {
-                        beginFullDrag(after == StatusBarGesturePolicy.Claim.PULL_UP);
+                        && after == StatusBarGesturePolicy.Claim.WALL_PAGING) {
+                        beginWallDrag();
                     }
-                    if (mFullDragActive && isFullDragClaim(after) && mListener != null) {
-                        mListener.onFullDrag(event.getRawY() - mGesture.down().rawY);
+                    if (mWallDragActive && after == StatusBarGesturePolicy.Claim.WALL_PAGING
+                        && mListener != null) {
+                        mListener.onWallDrag(StatusBarGesturePolicy.alongAxis(mEdge,
+                            event.getRawX() - mGesture.down().rawX,
+                            event.getRawY() - mGesture.down().rawY));
                     }
                 }
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                if (mGesture != null && !mFullDragActive) mGesture.secondPointer();
-                cancelLongPressTimer();
-                break;
+                if (mGesture != null) mGesture.secondPointer();
+                        break;
             case MotionEvent.ACTION_UP:
                 finish(event);
                 break;
             case MotionEvent.ACTION_CANCEL:
-                if (mFullDragActive && mListener != null) mListener.onFullDragCancel();
-                mFullDragActive = false;
+                if (mWallDragActive && mListener != null) mListener.onWallDragCancel();
+                mWallDragActive = false;
                 if (mGesture != null) mGesture.cancel();
-                cancelLongPressTimer();
-                requestStructuralReset();
+                        requestStructuralReset();
                 break;
             default:
                 break;
         }
     }
 
-    private void beginFullDrag(boolean closing) {
-        cancelLongPressTimer();
+    private void beginWallDrag() {
         Listener listener = mListener;
-        StatusBarGesturePolicy gesture = mGesture;
-        if (listener == null || gesture == null) return;
-        // Guarded BEFORE the callback: beginning the drag re-enters setStatusState (engagement
-        // flips the pane), whose structural reset would otherwise kill this live stream.
-        mFullDragActive = true;
-        boolean accepted = closing ? listener.onFullCloseDragBegin()
-            : listener.onFullDragBegin(gesture.down().normalTarget);
-        mFullDragActive = accepted;
-        if (accepted) {
-            performHapticFeedback(HapticFeedbackConstants.GESTURE_START);
-        } else {
-            gesture.cancel();
-        }
-    }
-
-    private static boolean isFullDragClaim(@NonNull StatusBarGesturePolicy.Claim claim) {
-        return claim == StatusBarGesturePolicy.Claim.PULL_DOWN
-            || claim == StatusBarGesturePolicy.Claim.PULL_UP;
+        if (listener == null) return;
+        mWallDragActive = listener.onWallDragBegin();
+        if (mWallDragActive) performHapticFeedback(HapticFeedbackConstants.GESTURE_START);
+        else if (mGesture != null) mGesture.cancel();
     }
 
     private void begin(MotionEvent event) {
         clearTracking();
-        long token = ++mNextToken;
         boolean inWindowBar = isInsideView(findViewById(R.id.terminal_window_bar), event);
         boolean interactive = isInsideInteractiveChild(this, event);
         boolean nestedChildOwned = isInsideNestedScrollingChild(this, event);
         Listener listener = mListener;
         boolean blocked = mAnotherSurfaceEngaged
             || (listener != null && listener.isStatusGestureBlocked());
-        // Pull-down works along the bar's whole length. In the EXPANDED form only the bar itself
-        // arms it — the top widget slot above (clock, notifications, media) keeps its own touch.
-        boolean inTopSlot = isInsideView(findViewById(R.id.terminal_top_widget_area), event);
-        boolean pullDownEligible = mFullPaneAvailable && !blocked && mState != TopStatusBarState.FULL
-            && !(mState == TopStatusBarState.EXPANDED && inTopSlot);
-        // With FULL open, an upward drag anywhere on the pane drags it closed — mirroring the
-        // pull-down. Only live drag owners veto it: a provider's own nested scroll, the widget
-        // edit overlay, and the picker sheet.
-        View editOverlay = findViewById(R.id.widget_edit_overlay);
-        boolean editActive = editOverlay != null && editOverlay.getVisibility() == VISIBLE;
-        View picker = findViewById(R.id.widget_picker_sheet);
-        boolean pickerOpen = picker instanceof com.termux.app.launcher.widget.WidgetPickerSheetView
-            && ((com.termux.app.launcher.widget.WidgetPickerSheetView) picker).isOpen();
-        boolean pullUpEligible = !blocked && mState == TopStatusBarState.FULL
-            && !nestedChildOwned && !editActive && !pickerOpen;
+        // The drag across the bar toggles its own form and works from anywhere on it, open or
+        // folded, whichever edge it stands on. The one surface it yields to is a child that
+        // answers drags on the fold's own axis — a card that scrolls across the bar, a hosted
+        // widget whose insides are not ours to read — because there the same finger means two
+        // things and the child asked first. Children that only take taps and children that scroll
+        // along the bar (the window strip) keep both: the fold claims the stream and cancels
+        // theirs, which is what onInterceptTouchEvent is for.
+        //
+        // This used to be a blanket veto over the whole widget slot while the bar was open. On a
+        // top bar that slot sits above the row and the veto never showed, because the finger comes
+        // off the row. On a bottom bar the slot is the band the open bar grew upward into, so it
+        // is exactly where a downward fold starts — and the bar could be opened but never closed.
+        boolean childOwnsFoldAxis = isInsideFoldAxisOwner(this, event);
+        boolean formEligible = !blocked && !childOwnsFoldAxis && mExpansionAllowed;
+        // The wall takes a drag along the bar from anywhere on it except the window strip, whose
+        // chips scroll first and hand over their own surplus distance. It works over the clock,
+        // the tiles and the stat widgets too: a drag along the bar on one of those is not a tap.
+        boolean wallEligible = mWallAvailable && !blocked && !inWindowBar && !nestedChildOwned;
         StatusBarGesturePolicy.Down down = new StatusBarGesturePolicy.Down(
             event.getPointerId(0), event.getRawX(), event.getRawY(), event.getX(), event.getY(),
-            event.getEventTime(), mState, mNormalTarget, inWindowBar, interactive, nestedChildOwned,
-            blocked, pullDownEligible, pullUpEligible, mTouchSlop, token);
+            event.getEventTime(), mState, inWindowBar, interactive, nestedChildOwned,
+            blocked, formEligible, wallEligible, mTouchSlop, mEdge);
         mGesture = new StatusBarGesturePolicy(down);
-        mFullCallbackDelivered = false;
-        mFullDragActive = false;
         if (mVelocityTracker == null) mVelocityTracker = android.view.VelocityTracker.obtain();
         mVelocityTracker.clear();
         mVelocityTracker.addMovement(event);
-        if (mGesture.claim() == StatusBarGesturePolicy.Claim.PENDING && down.eligible()) {
-            mPostedToken = token;
-            postDelayed(mLongPress, mLongPressTimeout);
-        }
     }
 
     private void finish(MotionEvent event) {
         StatusBarGesturePolicy gesture = mGesture;
-        cancelLongPressTimer();
-        if (gesture != null && isFullDragClaim(gesture.claim())) {
-            if (mFullDragActive && mListener != null) {
+        if (gesture != null
+            && gesture.claim() == StatusBarGesturePolicy.Claim.WALL_PAGING) {
+            if (mWallDragActive && mListener != null) {
                 float velocity = 0f;
                 if (mVelocityTracker != null) {
                     mVelocityTracker.computeCurrentVelocity(1000);
-                    velocity = mVelocityTracker.getYVelocity();
+                    velocity = StatusBarGesturePolicy.alongAxis(mEdge,
+                        mVelocityTracker.getXVelocity(), mVelocityTracker.getYVelocity());
                 }
-                mListener.onFullDragEnd(velocity);
+                mListener.onWallDragEnd(velocity);
             }
-            mFullDragActive = false;
-        } else if (gesture != null
-            && gesture.claim() == StatusBarGesturePolicy.Claim.HORIZONTAL_SWIPE) {
-            boolean collapsed = gesture.horizontalDelta() < 0f;
-            if (collapsed != (gesture.down().normalTarget == TopStatusBarState.COMPACT)
-                && mListener != null) {
-                mListener.onCollapsedStateRequested(collapsed);
-            }
+            mWallDragActive = false;
         } else if (gesture != null
             && gesture.claim() == StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE) {
-            if (gesture.down().normalTarget != TopStatusBarState.COMPACT && mListener != null) {
-                mListener.onCollapsedStateRequested(true);
-            }
+            if (mListener != null) mListener.onCollapsedStateRequested(true);
+        } else if (gesture != null
+            && gesture.claim() == StatusBarGesturePolicy.Claim.EXPAND_SWIPE) {
+            if (mListener != null) mListener.onCollapsedStateRequested(false);
         } else if (gesture != null && gesture.claim() == StatusBarGesturePolicy.Claim.PENDING) {
-            // eligible() is the "this touch was the bar's own, not a child's" test — pull-down
-            // alone keeps a chip's stream PENDING too, and a chip tap must not answer with a hint.
+            // eligible() is the "this touch was the bar's own, not a child's" test — the
+            // form drag alone keeps a chip's stream PENDING too, and a chip tap must not
+            // answer with a hint.
             if (gesture.down().eligible()) showPullHint();
             performClick();
         }
         requestStructuralReset();
     }
 
-    private void commitLongPress() {
-        StatusBarGesturePolicy gesture = mGesture;
-        if (gesture == null || mPostedToken == 0L) return;
-        if (gesture.timeout(mPostedToken) != StatusBarGesturePolicy.Claim.LONG_PRESS
-            || mFullCallbackDelivered || !mFullPaneAvailable) return;
-        mFullCallbackDelivered = true;
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-        Listener listener = mListener;
-        if (listener != null) listener.onFullStateRequested(gesture.down().normalTarget);
-    }
-
-    private void cancelLongPressTimer() {
-        removeCallbacks(mLongPress);
-        mPostedToken = 0L;
-    }
-
     /**
-     * Reentrant FULL callbacks cannot clear the dispatch latch until dispatchTouchEvent returns.
-     * A live pull-down owns its stream outright: state flips it causes (engagement → FULL) must
-     * not reset the tracking that is driving them; the drag resets itself at UP/CANCEL.
+     * A live wall drag owns its stream outright: state flips it causes must not reset the
+     * tracking that is driving them; the drag resets itself at UP/CANCEL. A reentrant callback
+     * cannot clear the dispatch latch until dispatchTouchEvent returns either.
      */
     private void requestStructuralReset() {
-        if (mFullDragActive) return;
-        cancelLongPressTimer();
+        if (mWallDragActive) return;
         if (mDispatchInProgress) mDeferredReset = true;
         else clearTracking();
     }
 
     private void clearTracking() {
-        cancelLongPressTimer();
         mGesture = null;
-        mFullCallbackDelivered = false;
-        mFullDragActive = false;
+        mWallDragActive = false;
         if (mVelocityTracker != null) {
             mVelocityTracker.recycle();
             mVelocityTracker = null;
@@ -537,6 +475,31 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         return false;
     }
 
+    /**
+     * Whether a child under this DOWN answers drags on the axis the bar folds along — the only
+     * thing that takes the fold away from the bar.
+     *
+     * <p>Scrolling is asked of the child on that axis alone, so the window strip, which scrolls
+     * along the bar, is not one of them: its chips and the fold never want the same finger. A
+     * hosted app widget is one whatever it contains, because what it does with a drag is the
+     * provider's business and we cannot ask it.
+     */
+    private boolean isInsideFoldAxisOwner(ViewGroup parent, MotionEvent event) {
+        boolean acrossIsVertical = !StatusBarGesturePolicy.isVertical(mEdge);
+        for (int i = parent.getChildCount() - 1; i >= 0; i--) {
+            View child = parent.getChildAt(i);
+            if (child.getVisibility() != VISIBLE || !isInsideView(child, event)) continue;
+            if (child instanceof AppWidgetHostView) return true;
+            boolean scrollsAcross = acrossIsVertical
+                ? child.canScrollVertically(-1) || child.canScrollVertically(1)
+                : child.canScrollHorizontally(-1) || child.canScrollHorizontally(1);
+            if (scrollsAcross) return true;
+            if (child instanceof ViewGroup
+                && isInsideFoldAxisOwner((ViewGroup) child, event)) return true;
+        }
+        return false;
+    }
+
     private boolean isInsideNestedScrollingChild(ViewGroup parent, MotionEvent event) {
         for (int i = parent.getChildCount() - 1; i >= 0; i--) {
             View child = parent.getChildAt(i);
@@ -566,7 +529,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                                                   int axes, int type) {
         mNestedParentHelper.onNestedScrollAccepted(child, target, axes, type);
         if (mGesture != null) mGesture.nestedScrollStarted();
-        cancelLongPressTimer();
     }
     @Override public void onStopNestedScroll(@NonNull View target, int type) {
         mNestedParentHelper.onStopNestedScroll(target, type);

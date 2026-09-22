@@ -1,1 +1,10 @@
 include ':app', ':termux-shared', ':terminal-emulator', ':terminal-view', ':termux-am-library', ':inapp-keyboard'
+
+// The embedded X server's Java half is always built: the launcher's Display page is written
+// against it. -Px11Server=false drops what makes it *work* — the loader the `termux-x11`
+// command hands to app_process and the libXlorie.so prebuilts (see app/build.gradle) — so an
+// edition or a contributor can build a launcher that has no display, and still compiles.
+include ':x11-server', ':x11-server:stub'
+if (!hasProperty('x11Server') || Boolean.parseBoolean(x11Server.toString())) {
+    include ':x11-server:loader'
+}

@@ -13,6 +13,7 @@ import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.model.LauncherAppEntry;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.logger.Logger;
 import com.termux.terminal.TerminalSession;
@@ -35,14 +36,25 @@ import java.util.concurrent.atomic.AtomicReference;
  * {@link TerminalHost}.
  *
  * <p>Terminal actions differ from the other tools in {@link LauncherToolRegistry}:
- * they need a foreground Activity and must run on the main thread, while callers
+ * most need a foreground Activity and must run on the main thread, while callers
  * may arrive on arbitrary background threads. This class is the single seam
  * between the two.
  *
- * <p>The host is held weakly and attached only between
- * {@code onResume} and {@code onStop}. When nothing is attached, callers get a
- * {@code 409 activity_not_running} rather than a silent no-op — an agent must be
- * able to tell "did nothing" from "could not act".
+ * <p>The host is held weakly and attached from {@code onResume} to {@code onDestroy} —
+ * it survives {@code onStop}/{@code onStart} cycles, so a backgrounded Activity that is
+ * merely stopped (not finishing, not destroyed) stays reachable. Two independent questions
+ * decide whether a call goes through: whether a host is attached at all
+ * ({@link #isAttached}, backed by {@link TerminalHost#isHostAlive()} — false once the
+ * Activity is finishing or destroyed, true across a plain stop), and whether it is actually
+ * on screen ({@link TerminalHost#isVisible()} — true only between {@code onStart} and
+ * {@code onStop}). A destroyed/absent host always answers {@code 409 activity_not_running}
+ * — silence would leave an agent unable to tell "did nothing" from "could not act". A host
+ * that is alive but not visible answers the same 409 for every tool that touches on-screen
+ * chrome (a picker, a toast, a page switch — meaningless or misleading with nobody looking),
+ * but the small set of pane routes in {@link #backgroundSafe} — the ones a shell-driven agent
+ * uses to open, list, focus, read, write and close a pane of its own — run regardless, since
+ * they only touch session/view state and never bring the app to the Android foreground
+ * themselves. See {@code docs/en/LauncherCtl_API.md#panes} for the caller-facing contract.
  */
 public final class TerminalActionDispatcher {
 
@@ -73,6 +85,11 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_PANE_ROTATE = "pane.rotate";
     public static final String TOOL_PANE_MOVE_TO_EDGE = "pane.move_to_edge";
     public static final String TOOL_PANE_NEXT_LAYOUT = "pane.next_layout";
+    public static final String TOOL_WALL_GO = "wall.go";
+    public static final String TOOL_WALL_WIDGETS = "wall.widgets";
+    public static final String TOOL_WALL_TERMINAL = "wall.terminal";
+    public static final String TOOL_WALL_DISPLAY = "wall.display";
+    public static final String TOOL_MOUSE_TOGGLE = "mouse.toggle";
     public static final String TOOL_PANE_SPLIT = "pane.split";
     /** Panes opened and driven through the local API (agents, scripts); see AgentPaneRegistry. */
     public static final String TOOL_PANE_OPEN = "pane.open";
@@ -81,6 +98,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_PANE_CLOSE = "pane.close";
     public static final String TOOL_PANE_WRITE = "pane.write";
     public static final String TOOL_PANE_READ = "pane.read";
+    public static final String TOOL_AGENT_STATUS = "agent.status";
     /** Most transcript lines one pane.read returns; enough to see a screen and its recent past. */
     static final int PANE_READ_MAX_LINES = 500;
     static final int PANE_READ_DEFAULT_LINES = 60;
@@ -117,6 +135,10 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_TERMINAL_RESET = "terminal.reset";
     public static final String TOOL_KEYBOARD_CYCLE_LAYOUT = "keyboard.cycle_layout";
     public static final String TOOL_KEYBOARD_SELECT_LAYOUT = "keyboard.select_layout";
+    public static final String TOOL_KEYBOARD_CYCLE_FORM = "keyboard.cycle_form";
+    public static final String TOOL_KEYBOARD_SET_FORM = "keyboard.set_form";
+    public static final String TOOL_KEYBOARD_SHOW = "keyboard.show";
+    public static final String TOOL_KEYBOARD_HIDE = "keyboard.hide";
     public static final String TOOL_APPEARANCE_SET_WALLPAPER = "appearance.set_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_WALLPAPER = "appearance.toggle_wallpaper";
     public static final String TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT = "terminal.jump_previous_prompt";
@@ -126,6 +148,7 @@ public final class TerminalActionDispatcher {
     /** Legacy alias from when the surface editor was called the glass lab; scripts may still call it. */
     public static final String TOOL_APPEARANCE_GLASS_LAB_LEGACY = "appearance.glass_lab";
     public static final String TOOL_APP_OPEN_SETTINGS = "app.open_settings";
+    public static final String TOOL_APP_OPEN_HELP = "app.open_help";
     public static final String TOOL_APP_OPEN_LOOK_AND_FEEL = "app.open_look_and_feel";
     public static final String TOOL_APP_OPEN_APPS_BAR = "app.open_apps_bar";
     public static final String TOOL_APP_COMMAND_PALETTE = "app.command_palette";
@@ -163,9 +186,11 @@ public final class TerminalActionDispatcher {
     }
 
     /**
-     * Called from {@code TermuxActivity.onStop()} and {@code onDestroy()}. Ignores
-     * the call when a different host has already attached, so an old activity's
-     * teardown cannot detach its replacement during recreation.
+     * Called from {@code TermuxActivity.onDestroy()} only — a plain {@code onStop()} leaves
+     * the host attached, since {@link #isHostAlive} still says yes and the background-safe
+     * pane routes need to keep reaching it. Ignores the call when a different host has
+     * already attached, so an old activity's teardown cannot detach its replacement during
+     * recreation.
      */
     public void detach(@NonNull TerminalHost host) {
         WeakReference<TerminalHost> current = hostRef.get();
@@ -175,9 +200,33 @@ public final class TerminalActionDispatcher {
         }
     }
 
-    /** Whether a foreground Activity is currently able to execute terminal actions. */
+    /** Whether a live host is attached, regardless of whether it is currently visible. */
     public boolean isAttached() {
         return currentHost() != null;
+    }
+
+    /**
+     * Terminal actions that do not need the Activity on screen: the pane routes an agent in a
+     * shell drives through the local API. Each only touches session/view state — opening,
+     * listing, focusing, reading, writing or closing a pane — and never calls anything that
+     * would bring the app to the Android foreground (no {@code startActivity}, no
+     * {@code moveTaskToFront}), so running one while the Activity is merely stopped cannot
+     * steal focus from whatever the user is actually looking at. Every other handled tool
+     * touches on-screen chrome directly (a picker, a toast, a page switch) and still requires
+     * {@link TerminalHost#isVisible()}.
+     */
+    private static boolean backgroundSafe(@NonNull String toolName) {
+        switch (toolName) {
+            case TOOL_PANE_OPEN:
+            case TOOL_PANE_LIST:
+            case TOOL_PANE_FOCUS:
+            case TOOL_PANE_CLOSE:
+            case TOOL_PANE_WRITE:
+            case TOOL_PANE_READ:
+                return true;
+            default:
+                return false;
+        }
     }
 
     /** Whether {@code toolName} is a terminal action handled by this dispatcher. */
@@ -204,6 +253,11 @@ public final class TerminalActionDispatcher {
             case TOOL_PANE_ROTATE:
             case TOOL_PANE_MOVE_TO_EDGE:
             case TOOL_PANE_NEXT_LAYOUT:
+            case TOOL_WALL_GO:
+            case TOOL_WALL_WIDGETS:
+            case TOOL_WALL_TERMINAL:
+            case TOOL_WALL_DISPLAY:
+            case TOOL_MOUSE_TOGGLE:
             case TOOL_PANE_TOGGLE_FLOAT:
             case TOOL_PANE_OPEN:
             case TOOL_PANE_LIST:
@@ -211,6 +265,7 @@ public final class TerminalActionDispatcher {
             case TOOL_PANE_CLOSE:
             case TOOL_PANE_WRITE:
             case TOOL_PANE_READ:
+            case TOOL_AGENT_STATUS:
             case TOOL_WINDOW_NEW:
             case TOOL_WINDOW_CLOSE:
             case TOOL_WINDOW_NEXT:
@@ -225,6 +280,10 @@ public final class TerminalActionDispatcher {
             case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:
             case TOOL_KEYBOARD_CYCLE_LAYOUT:
             case TOOL_KEYBOARD_SELECT_LAYOUT:
+            case TOOL_KEYBOARD_CYCLE_FORM:
+            case TOOL_KEYBOARD_SET_FORM:
+            case TOOL_KEYBOARD_SHOW:
+            case TOOL_KEYBOARD_HIDE:
             case TOOL_TERMINAL_TOGGLE_TOOLBAR:
             case TOOL_TERMINAL_FONT_SIZE_INCREASE:
             case TOOL_TERMINAL_FONT_SIZE_DECREASE:
@@ -249,6 +308,7 @@ public final class TerminalActionDispatcher {
             case TOOL_APPEARANCE_SURFACE_EDITOR:
             case TOOL_APPEARANCE_GLASS_LAB_LEGACY:
             case TOOL_APP_OPEN_SETTINGS:
+            case TOOL_APP_OPEN_HELP:
             case TOOL_APP_OPEN_LOOK_AND_FEEL:
             case TOOL_APP_OPEN_APPS_BAR:
             case TOOL_APP_COMMAND_PALETTE:
@@ -305,6 +365,17 @@ public final class TerminalActionDispatcher {
                 return inAppKeyboard;
             }
         };
+    }
+
+    /**
+     * The keyboard type the place on screen resolves to, for a caller that wants to show it — the
+     * palette marks the row for it. Docked while nothing is attached, which is what an install
+     * that has never chosen resolves to anyway.
+     */
+    @NonNull
+    public KeyboardForm keyboardForm() {
+        TerminalHost host = currentHost();
+        return host == null ? KeyboardForm.DOCKED : host.keyboardForm();
     }
 
     private static boolean hasSelectedText(@NonNull TerminalHost host) {
@@ -382,7 +453,10 @@ public final class TerminalActionDispatcher {
         JSONObject result = executeOnMainThreadInternal(toolName, arguments);
         if (result != null && result.optBoolean("ok", false)) {
             TerminalHost host = currentHost();
-            if (host != null) host.showTerminalActionHint(toolName);
+            // Not shown while merely stopped: a hint is an on-screen toast, and popping one for
+            // nobody to see is exactly the kind of hidden-UI work a background pane call must not
+            // do — see backgroundSafe and the class doc.
+            if (host != null && host.isVisible()) host.showTerminalActionHint(toolName);
         }
         return result;
     }
@@ -394,6 +468,10 @@ public final class TerminalActionDispatcher {
         if (host == null) {
             return error(409, "activity_not_running",
                 "The terminal UI is not in the foreground, so '" + toolName + "' cannot run");
+        }
+        if (!host.isVisible() && !backgroundSafe(toolName)) {
+            return error(409, "activity_not_running",
+                "The terminal is not in the foreground, so '" + toolName + "' cannot run");
         }
 
         try {
@@ -480,6 +558,28 @@ public final class TerminalActionDispatcher {
                     if (!host.applyPaneLayout(layout)) return noSession(toolName);
                     return ok().put("layout", layout);
                 }
+                case TOOL_WALL_GO: {
+                    if (!arguments.has("page")) return error(400, "bad_request", "Missing 'page'");
+                    String page = arguments.optString("page", "");
+                    if (!host.goToWallPage(page)) {
+                        return error(400, "bad_request",
+                            "Invalid 'page'; expected widgets, terminal, display, left, or right,"
+                                + " and the page must exist on this install");
+                    }
+                    return ok().put("page", page);
+                }
+                case TOOL_WALL_WIDGETS:
+                case TOOL_WALL_TERMINAL:
+                case TOOL_WALL_DISPLAY: {
+                    String page = TOOL_WALL_WIDGETS.equals(toolName) ? "widgets"
+                        : TOOL_WALL_DISPLAY.equals(toolName) ? "display" : "terminal";
+                    if (!host.goToWallPage(page)) {
+                        return error(400, "bad_request", "That place is not on this install's wall");
+                    }
+                    return ok().put("page", page);
+                }
+                case TOOL_MOUSE_TOGGLE:
+                    return ok().put("mouseMode", host.toggleMouseMode());
                 case TOOL_PANE_NEXT_LAYOUT: {
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
                     if (!host.cyclePaneLayout()) return noSession(toolName);
@@ -620,6 +720,23 @@ public final class TerminalActionDispatcher {
                     return ok().put("id", target.mHandle)
                         .put("text", lastLines(transcript, lines))
                         .put("running", target.isRunning());
+                }
+                case TOOL_AGENT_STATUS: {
+                    TerminalSession target = paneArgument(host, arguments);
+                    if (target == null) return paneNotFound(arguments);
+                    // Deliberately not requireOwned: the caller is the agent reporting on the pane
+                    // it is itself running in, which is never a pane the API opened.
+                    String raw = arguments.optString("state", "").trim();
+                    boolean clear = "clear".equalsIgnoreCase(raw);
+                    AgentStatus.State state = AgentStatusTracker.parseState(raw);
+                    if (!clear && state == null) {
+                        return error(400, "bad_request",
+                            "'state' must be one of working, blocked, idle, clear");
+                    }
+                    String agent = arguments.optString("agent", "").trim();
+                    host.reportAgentStatus(target, agent.isEmpty() ? null : agent, state);
+                    return ok().put("id", target.mHandle)
+                        .put("state", clear ? "clear" : raw.toLowerCase(java.util.Locale.ROOT));
                 }
                 case TOOL_PANE_EQUALIZE:
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
@@ -765,6 +882,10 @@ public final class TerminalActionDispatcher {
                 case TOOL_APP_OPEN_SETTINGS:
                     host.openSettings();
                     return ok();
+                case TOOL_APP_OPEN_HELP:
+                    // The whole guide, on its own screen — the same thing Settings opens.
+                    host.openHelpScreen();
+                    return ok();
                 case TOOL_APP_OPEN_LOOK_AND_FEEL:
                     host.openLookAndFeel();
                     return ok();
@@ -834,11 +955,13 @@ public final class TerminalActionDispatcher {
                 }
                 case TOOL_APP_KEY_INSPECTOR:
                     return ok().put("keyInspectorOpen", host.toggleKeyInspector());
+                // The drawer these two bindings name is the sessions drawer: one panel out of the
+                // terminal's leading edge, which is what the pair always meant.
                 case TOOL_APP_OPEN_DRAWER:
-                    host.openDrawer();
+                    host.showSessionBrowser();
                     return ok();
                 case TOOL_APP_CLOSE_DRAWER:
-                    host.closeDrawers();
+                    host.sheetController().dismiss();
                     return ok();
                 case TOOL_TERMINAL_ACTION_SHEET:
                     return host.showTerminalActionSheet(null) ? ok() : noSession(toolName);
@@ -994,6 +1117,53 @@ public final class TerminalActionDispatcher {
                     if (!host.selectInAppKeyboardLayout(layout))
                         return error(404, "not_found", "No keyboard layout named '" + layout + "'");
                     return ok().put("layout", host.activeInAppKeyboardLayout());
+                }
+
+                case TOOL_KEYBOARD_CYCLE_FORM: {
+                    String direction = arguments.optString("direction", "forward");
+                    if (!"forward".equals(direction) && !"backward".equals(direction))
+                        return error(400, "bad_request", "'direction' must be forward or backward");
+                    if (!host.isInAppKeyboardEnabled())
+                        return error(409, "unavailable", "The in-app keyboard is not enabled");
+                    KeyboardForm from = host.keyboardForm();
+                    KeyboardForm to = from.cycled("backward".equals(direction) ? -1 : 1);
+                    if (!host.setKeyboardForm(to))
+                        return error(503, "unavailable", "The place on screen is not settled yet");
+                    return ok().put("form", to.storageValue())
+                        .put("previousForm", from.storageValue());
+                }
+                case TOOL_KEYBOARD_SET_FORM: {
+                    String requested = arguments.optString("form", "").trim();
+                    if (requested.isEmpty()) return error(400, "bad_request", "Missing 'form'");
+                    KeyboardForm form = KeyboardForm.parse(requested, KeyboardForm.DOCKED);
+                    if (!form.storageValue().equals(requested))
+                        return error(400, "bad_request",
+                            "Invalid 'form'; expected docked, floating, or split");
+                    if (!host.isInAppKeyboardEnabled())
+                        return error(409, "unavailable", "The in-app keyboard is not enabled");
+                    if (!host.setKeyboardForm(form))
+                        return error(503, "unavailable", "The place on screen is not settled yet");
+                    return ok().put("form", form.storageValue());
+                }
+                case TOOL_KEYBOARD_SHOW:
+                case TOOL_KEYBOARD_HIDE: {
+                    // Deliberately not background-safe: both put a keyboard on screen or take one
+                    // off it, which is meaningless with nobody looking. The visibility gate above
+                    // has already answered 409 for a stopped activity by the time we are here.
+                    String source = arguments.optString("source", "manual");
+                    if (!"manual".equals(source) && !"focus".equals(source))
+                        return error(400, "bad_request", "'source' must be manual or focus");
+                    boolean fromFocus = "focus".equals(source);
+                    boolean show = TOOL_KEYBOARD_SHOW.equals(toolName);
+                    // The Display place can be typed into with the phone's own keyboard, which is
+                    // there to answer whether or not the in-app keyboard is switched on.
+                    if (!host.isInAppKeyboardEnabled() && !host.displayTakesSystemKeyboard())
+                        return error(409, "unavailable", "The in-app keyboard is not enabled");
+                    boolean applied = show
+                        ? host.showInAppKeyboard(fromFocus) : host.hideInAppKeyboard(fromFocus);
+                    if (!applied)
+                        return error(409, "unavailable", "The in-app keyboard is not on screen");
+                    return ok().put("source", source).put("keyboardShown", show);
                 }
 
                 case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:

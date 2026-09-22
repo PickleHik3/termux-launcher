@@ -2,14 +2,22 @@ package com.termux.app.chrome;
 
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Trace;
 import android.view.View;
+import android.view.ViewTreeObserver;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.R;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * The accessory chrome: the glass, blur, frost and backdrop treatment shared by the dock, the
@@ -52,11 +60,29 @@ public final class ChromeRenderer {
 
         int outlineColor();
 
+        /**
+         * The launcher's own wallpaper dim — black at the user's slider percentage — which sits
+         * under every glass surface and is part of what the chrome's ink is really standing on.
+         * Transparent when the slider is at 0. Read, never changed: the slider is the user's.
+         */
+        default int wallpaperDimColor() {
+            return android.graphics.Color.TRANSPARENT;
+        }
+
         /** True while the dock (and the surfaces that follow it) render as floating capsules. */
         boolean roundedDockStyle();
 
         /** Corner radius baked into the status bar's containing stroke, 0 when it has none. */
         float statusBarRimCornerRadiusPx();
+
+        /**
+         * True while the status bar is a band of the dock's own sheet of glass — ordered onto the
+         * bottom edge with another band above it. The dock's material is already under it there,
+         * so the bar takes no frost, no blur and no wash of its own.
+         */
+        default boolean statusBarOnDockPlank() {
+            return false;
+        }
 
         // ---- the wallpaper the blurred frames are captured from: WallpaperBlurCache.Source
 
@@ -73,7 +99,6 @@ public final class ChromeRenderer {
 
         boolean wallpaperPassthroughEnabled();
 
-        boolean fullStatusBarEngaged();
 
         /** The dock's effective blur radius (0 while a live wallpaper or the slider disables it). */
         int effectiveDockBlurRadiusDp();
@@ -115,8 +140,21 @@ public final class ChromeRenderer {
     public static final int SCOPE_WALLPAPER_BLUR_CACHE = 1 << 3;
     /** Re-cuts the top pane's wallpaper frost (status inset band + window-bar pane) now. */
     public static final int SCOPE_TOP_PANE_FROST = 1 << 4;
-    /** Builds and applies a spec synchronously, before this call returns. */
-    public static final int SCOPE_APPLY_NOW = 1 << 5;
+    /**
+     * Builds and applies a spec once before the frame this request lands in is laid out, no matter
+     * how many callers ask for it in the meantime.
+     *
+     * <p>This used to run inline, inside the caller. Every path that moves the wall or re-lays the
+     * dock asks for it several times over — the inset listener, the geometry pass, the place look,
+     * the toolbar toggle each behaved as if they were the only caller — and two page changes cost
+     * 27–38 full applies, 1.2–1.3 s of main thread, for a handful of distinct states (measured on
+     * Pong, 2026-09-08). What every caller actually needs is "applied before the user sees the next
+     * frame", so the apply now rides the frame's animation phase: after input, before layout and
+     * draw. A request made from inside a traversal (an inset dispatch, a layout listener) has
+     * missed that phase, so a pre-draw gate commits it in the same frame instead, re-running the
+     * layout when the apply moved anything.</p>
+     */
+    public static final int SCOPE_APPLY_THIS_FRAME = 1 << 5;
     /** Restarts the blur backstop heartbeat and arms the short recovery retry. */
     public static final int SCOPE_BLUR_HEALTH = 1 << 6;
 
@@ -124,24 +162,64 @@ public final class ChromeRenderer {
     private static final long ACCESSORY_BLUR_RECOVERY_RETRY_MS = 120L;
 
     @NonNull private final Surfaces mSurfaces;
+    @Nullable private final Executor mBlurWorker;
+    private boolean mDestroyed;
     @NonNull private final SurfaceDirtyLedger mLedger = new SurfaceDirtyLedger();
     @NonNull private final WallpaperBlurCache mBlurCache;
+    @NonNull private final ChromeInk mInk;
     @NonNull private final GlassSurfaceFactory mGlass;
     @NonNull private final WallpaperFrostPainter mFrost;
 
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
     private boolean mRenderSyncPending;
+    /** True only while {@link #mRenderSyncRunnable} is on the stack. */
+    private boolean mRenderSyncRunning;
+    /** Set when the render pass's own apply asked for another render pass. */
+    private boolean mRenderSyncAskedForItself;
+
+    /** True while a {@link #SCOPE_APPLY_THIS_FRAME} commit waits for its frame. */
+    private boolean mCommitPending;
+    /** The view the pending commit is riding; null when it fell back to a plain post. */
+    @Nullable private View mCommitGateView;
+    private final Runnable mCommitRunnable = this::commit;
+    private final ViewTreeObserver.OnPreDrawListener mCommitPreDrawListener = this::commitBeforeDraw;
 
     private final Runnable mRenderSyncRunnable;
     private final Runnable mBlurHeartbeatRunnable;
     private final Runnable mBlurRecoveryRunnable;
 
+    /** The production renderer: wallpaper decodes and blurs run on their own thread. */
     public ChromeRenderer(@NonNull Surfaces surfaces) {
+        this(surfaces, newBlurWorker());
+    }
+
+    /**
+     * {@code blurWorker} null keeps every blur-cache miss synchronous, which is what a window-less
+     * test wants; the Activity passes a worker so a miss costs the main thread nothing but a
+     * re-render when the frame lands.
+     */
+    public ChromeRenderer(@NonNull Surfaces surfaces, @Nullable Executor blurWorker) {
         mSurfaces = surfaces;
+        mBlurWorker = blurWorker;
         mRenderSyncRunnable = () -> {
             mRenderSyncPending = false;
-            mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
-            mSurfaces.enforceAccessoryFxInvariants();
+            mRenderSyncAskedForItself = false;
+            // What the pass is for is re-cutting the crops that went stale under settled
+            // geometry. Anything the apply below invalidates is therefore work this pass cannot
+            // do — it has already read the geometry — and earns the one follow-up pass; anything
+            // it merely asks for again does not. Two page changes cost 37 of these passes for a
+            // handful of distinct states, because the apply asks unconditionally (Pong, 2026-09-09).
+            long dirtyBefore = mLedger.dirtyGeneration();
+            mRenderSyncRunning = true;
+            try {
+                mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
+                mSurfaces.enforceAccessoryFxInvariants();
+            } finally {
+                mRenderSyncRunning = false;
+            }
+            if (mRenderSyncAskedForItself && mLedger.dirtyGeneration() != dirtyBefore) {
+                requestSync(SCOPE_ACCESSORY_RENDER);
+            }
         };
         mBlurHeartbeatRunnable = new Runnable() {
             @Override
@@ -173,10 +251,55 @@ public final class ChromeRenderer {
             }
             requestSync(SCOPE_BACKDROPS | SCOPE_ACCESSORY_RENDER);
         };
-        // Every frost crop was cut from a frame that a clear destroys.
-        mBlurCache = new WallpaperBlurCache(surfaces, mLedger::markFrostDirty);
-        mGlass = new GlassSurfaceFactory(surfaces);
+        // Every frost crop was cut from a frame that a clear destroys — and so was every wallpaper
+        // sample the chrome's ink was measured from, so the two go stale together, always.
+        mBlurCache = new WallpaperBlurCache(surfaces, this::onBlurFramesCleared,
+            WallpaperBlurCache.DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES, blurWorker,
+            blurWorker == null ? null : mHandler::post,
+            blurWorker == null ? null : this::onBlurFrameReady);
+        // A veil has to be applied before the frame that resolved it is drawn. SCOPE_ACCESSORY_RENDER
+        // alone is not enough: a pass that asks for a successor only gets one when it also left
+        // something in the ledger dirty, and a veil touches nothing the ledger tracks, so the
+        // request was dropped every time and the band was never veiled. The commit is gated on the
+        // frame instead of on the ledger, so it cannot be declined.
+        mInk = new ChromeInk(surfaces, mBlurCache,
+            () -> requestSync(SCOPE_APPLY_THIS_FRAME | SCOPE_ACCESSORY_RENDER));
+        mGlass = new GlassSurfaceFactory(surfaces, mInk);
         mFrost = new WallpaperFrostPainter(surfaces, mBlurCache, mLedger);
+    }
+
+    /**
+     * The shared pre-blurred frames have gone. Every crop cut from one is stale, and so is every
+     * wallpaper sample the chrome's ink was measured from — one callback for both, so no path can
+     * drop the frames and leave the ink believing in a wallpaper that is no longer there.
+     */
+    private void onBlurFramesCleared() {
+        mLedger.markFrostDirty();
+        mInk.invalidate();
+    }
+
+    /** One low-priority thread: decodes and blurs are sequential, and never on the main thread. */
+    @NonNull
+    public static Executor newBlurWorker() {
+        return Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "wallpaper-blur");
+            thread.setPriority(Thread.NORM_PRIORITY - 1);
+            return thread;
+        });
+    }
+
+    /**
+     * A frame the worker finished has just been filed. Every surface that drew nothing for want of
+     * it re-cuts its crop now: the accessory backdrops, the keyboard's, the top pane's frost and
+     * the terminal glass, then one coalesced render.
+     */
+    private void onBlurFrameReady() {
+        if (mDestroyed) return;
+        mLedger.markAllBackdropsDirty();
+        mLedger.markFrostDirty();
+        mSurfaces.updateTerminalGlassFrost();
+        requestSync(SCOPE_BACKDROPS | SCOPE_KEYBOARD_BACKDROP | SCOPE_TOP_PANE_FROST
+            | SCOPE_ACCESSORY_RENDER);
     }
 
     // ------------------------------------------------------------------- entry
@@ -188,13 +311,38 @@ public final class ChromeRenderer {
      * ask for {@link #SCOPE_WALLPAPER_BLUR_CACHE}.
      *
      * <p>Work runs in dependency order — drop the shared frames, invalidate the crops that were cut
-     * from them, then re-render — and the accessory render is coalesced to one pass per main-loop
-     * turn no matter how many callers ask for it.</p>
+     * from them, then re-render — and both passes are coalesced: the apply to one commit before the
+     * frame's layout ({@link #SCOPE_APPLY_THIS_FRAME}), the accessory render to one pass after it
+     * ({@link #SCOPE_ACCESSORY_RENDER}), no matter how many callers ask for either.</p>
      */
     public void requestSync(int scopes) {
-        if (scopes == 0) {
+        if (scopes == 0 || mDestroyed) {
+            // After onDestroy the worker is gone and the views are going; a request that still
+            // arrives from the activity's own teardown has nothing to render into.
             return;
         }
+        // The scopes ride in the section name so a trace shows which kind of request each caller
+        // made; the concatenation only happens while a trace is being recorded.
+        Trace.beginSection(tracing() ? "Chrome.requestSync " + scopes : "Chrome.requestSync");
+        try {
+            sync(scopes);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * Whether a trace is being recorded, and whether we may even ask. {@code Trace.isEnabled}
+     * arrived in API 29 and this app runs from 26, where the call site does not resolve at all —
+     * every chrome request threw {@link NoSuchMethodError} on Android 8 and 9, which for a home
+     * screen is the whole screen. Below 29 the plain section name is used.
+     */
+    private static boolean tracing() {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && Trace.isEnabled();
+    }
+
+    private void sync(int scopes) {
+        noteChromeShade();
         if ((scopes & SCOPE_WALLPAPER_BLUR_CACHE) != 0) {
             mBlurCache.clear();
         }
@@ -207,15 +355,27 @@ public final class ChromeRenderer {
         if ((scopes & SCOPE_KEYBOARD_BACKDROP) != 0) {
             mLedger.markDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
         }
-        if ((scopes & SCOPE_APPLY_NOW) != 0) {
-            mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
+        if ((scopes & SCOPE_APPLY_THIS_FRAME) != 0) {
+            scheduleCommit();
         }
         if ((scopes & SCOPE_TOP_PANE_FROST) != 0) {
-            mFrost.updateTopPane();
+            Trace.beginSection("Frost.updateTopPane");
+            try {
+                mFrost.updateTopPane();
+            } finally {
+                Trace.endSection();
+            }
         }
-        if ((scopes & SCOPE_ACCESSORY_RENDER) != 0 && !mRenderSyncPending) {
-            mRenderSyncPending = true;
-            mHandler.post(mRenderSyncRunnable);
+        if ((scopes & SCOPE_ACCESSORY_RENDER) != 0) {
+            if (mRenderSyncRunning) {
+                // The pass that would run is the pass asking. It decides for itself, once, at the
+                // end of its run — from whether it left anything stale — rather than each caller
+                // inside it booking a successor.
+                mRenderSyncAskedForItself = true;
+            } else if (!mRenderSyncPending) {
+                mRenderSyncPending = true;
+                mHandler.post(mRenderSyncRunnable);
+            }
         }
         if ((scopes & SCOPE_BLUR_HEALTH) != 0) {
             restartBlurHeartbeat();
@@ -223,9 +383,114 @@ public final class ChromeRenderer {
         }
     }
 
+    /**
+     * Publishes the chrome's ink polarity and its nominal glass to {@link ChromeShade}, so the
+     * structural constants three packages away — the glass rim, the drawer's card washes, the
+     * menus' selection highlight — can follow the same answer the inks do without each of them
+     * needing a path back to this object.
+     *
+     * <p>Done on every sync rather than on a mode callback: a sync is exactly the pass a wallpaper,
+     * palette or theme change already runs through, and the work is a handful of comparisons.</p>
+     *
+     * <p>{@link ChromeInk#polarity()} is the source of truth, but it is a vote of the bands that
+     * have been measured, and before any band has asked {@link ChromeInk#onGlass} it answers with
+     * its own default rather than with a measurement. Until then the mode's own glass casts the
+     * vote, which is the same rule applied to the one colour that is known.</p>
+     */
+    private void noteChromeShade() {
+        int base = mSurfaces.glassBaseColor();
+        boolean measured = false;
+        for (GlassBackdropCache.Band band : GlassBackdropCache.Band.values()) {
+            if (mInk.backdrops().hasSample(band)) {
+                measured = true;
+                break;
+            }
+        }
+        ChromeShade.note(measured ? mInk.polarity() : ChromeShade.polarityOf(base), base);
+    }
+
     /** True while a coalesced accessory render is waiting for its main-loop turn. */
     public boolean isRenderSyncPending() {
         return mRenderSyncPending;
+    }
+
+    /** True while a {@link #SCOPE_APPLY_THIS_FRAME} commit is waiting for its frame. */
+    public boolean isCommitPending() {
+        return mCommitPending;
+    }
+
+    // ------------------------------------------------------------------ commit
+
+    /**
+     * Books the one apply pass for this frame. On an attached window it rides the root view's
+     * animation phase, which the platform runs after input and before layout, so the layout that
+     * follows already sees the applied visibilities; a pre-draw gate on the same view catches a
+     * request made after that phase had passed. Without an attached root — before the first
+     * layout, after {@code onStop}, in a window-less test — a plain post keeps the old contract.
+     */
+    private void scheduleCommit() {
+        if (mCommitPending) {
+            return;
+        }
+        mCommitPending = true;
+        View gate = mSurfaces.findChromeView(R.id.activity_termux_root_view);
+        if (gate == null || !gate.isAttachedToWindow()) {
+            mHandler.post(mCommitRunnable);
+            return;
+        }
+        mCommitGateView = gate;
+        gate.postOnAnimation(mCommitRunnable);
+        ViewTreeObserver observer = gate.getViewTreeObserver();
+        if (observer.isAlive()) {
+            observer.addOnPreDrawListener(mCommitPreDrawListener);
+        }
+    }
+
+    private void commit() {
+        if (!mCommitPending) {
+            return;
+        }
+        unscheduleCommit();
+        if (mDestroyed) {
+            // Booked before onDestroy, delivered after it: applying the spec now would cut fresh
+            // backdrops from a blur cache whose worker has been shut down.
+            return;
+        }
+        Trace.beginSection("Chrome.commit");
+        try {
+            mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * The pre-draw gate: a commit still pending here was requested from inside this traversal.
+     * Apply it now, and when the apply moved a view, cancel this draw so the layout runs again
+     * before anything is shown — one frame later beats one frame wrong.
+     */
+    private boolean commitBeforeDraw() {
+        if (!mCommitPending) {
+            return true;
+        }
+        View gate = mCommitGateView;
+        commit();
+        return gate == null || !gate.isLayoutRequested();
+    }
+
+    private void unscheduleCommit() {
+        mCommitPending = false;
+        View gate = mCommitGateView;
+        mCommitGateView = null;
+        mHandler.removeCallbacks(mCommitRunnable);
+        if (gate == null) {
+            return;
+        }
+        gate.removeCallbacks(mCommitRunnable);
+        ViewTreeObserver observer = gate.getViewTreeObserver();
+        if (observer.isAlive()) {
+            observer.removeOnPreDrawListener(mCommitPreDrawListener);
+        }
     }
 
     /**
@@ -237,17 +502,31 @@ public final class ChromeRenderer {
     }
 
     /**
-     * Every pre-blurred wallpaper frame describes the orientation being left; a rotation makes all
-     * of them wrong at once.
+     * Every pre-blurred wallpaper frame describes the orientation and frame it was captured in; a
+     * rotation makes all of them wrong at once. The same callback also carries changes that leave
+     * the frames right — a hardware keyboard, navigation, screen layout — so the cache decides by
+     * comparing its recorded source rather than clearing on every call.
      */
     public void onConfigurationChanged() {
-        mBlurCache.clear();
+        mBlurCache.dropIfSourceMoved();
     }
 
     /**
-     * A backgrounded home app that keeps several full-screen blur bitmaps alive is exactly what
-     * aggressive vendor memory killers reap first. Everything released here is rebuilt on demand
-     * through the ledger, so the only cost of a trim is one blur redraw on the way back in.
+     * A bar has changed edge, so every crop cut against where a surface used to be is stale. Same
+     * treatment a turn of the screen gets — the cache goes if the frame it was cut from has moved,
+     * and every backdrop is re-cut on the next pass rather than per frame.
+     */
+    public void onArrangementChanged() {
+        mBlurCache.dropIfSourceMoved();
+        mLedger.markAllBackdropsDirty();
+    }
+
+    /**
+     * Real memory pressure ({@link ChromePolicy#trimReleasesBlurFrames}): a home app that keeps
+     * several full-screen blur bitmaps alive is exactly what aggressive vendor memory killers reap
+     * first. Everything released here is rebuilt on demand through the ledger — one decode and
+     * blur per radius on the way back in, which is why an ordinary trip to the background does not
+     * reach this method.
      */
     public void onTrimMemory() {
         mBlurCache.clear();
@@ -255,28 +534,36 @@ public final class ChromeRenderer {
     }
 
     /**
-     * Drops every pending chrome pass — the coalesced render, the blur backstop heartbeat and the
-     * short recovery retry. For the paths that are tearing the visible chrome down (onStop).
+     * Drops every pending chrome pass — the frame's commit, the coalesced render, the blur backstop
+     * heartbeat and the short recovery retry. For the paths that are tearing the visible chrome
+     * down (onStop).
      */
     public void cancelPendingWork() {
+        unscheduleCommit();
         mHandler.removeCallbacks(mRenderSyncRunnable);
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);
         mHandler.removeCallbacks(mBlurRecoveryRunnable);
         mRenderSyncPending = false;
+        mRenderSyncAskedForItself = false;
     }
 
     /**
      * The narrower cancel the in-place session recovery does: the pending render and the backstop
      * heartbeat go, but the short recovery retry stays armed so a reset that lands mid-blur still
-     * gets its follow-up pass.
+     * gets its follow-up pass, and a commit already booked for this frame still lands — the
+     * activity stays on screen through a recovery.
      */
     public void cancelPendingRender() {
         mHandler.removeCallbacks(mRenderSyncRunnable);
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);
         mRenderSyncPending = false;
+        mRenderSyncAskedForItself = false;
     }
 
     public void onDestroy() {
+        mDestroyed = true;
+        if (mBlurWorker instanceof ExecutorService) ((ExecutorService) mBlurWorker).shutdownNow();
+        unscheduleCommit();
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);
         mHandler.removeCallbacks(mBlurRecoveryRunnable);
         mBlurCache.clear();
@@ -296,6 +583,15 @@ public final class ChromeRenderer {
     @NonNull
     public WallpaperBlurCache blurCache() {
         return mBlurCache;
+    }
+
+    /**
+     * What colour a piece of chrome should be drawn in, given what it is standing on. The one
+     * accessor for legibility on glass; see {@link ChromeInk#onGlass}.
+     */
+    @NonNull
+    public ChromeInk ink() {
+        return mInk;
     }
 
     @NonNull

@@ -9,6 +9,8 @@ import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.os.Trace;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.termux.terminal.KittyImagePlaceholder;
 import com.termux.terminal.KittyUnicodePlaceholder;
@@ -17,7 +19,9 @@ import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalRow;
 import com.termux.terminal.TextStyle;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * Renderer of a {@link TerminalEmulator} into a {@link Canvas}.
@@ -114,6 +118,24 @@ public final class TerminalRenderer {
             if (isBold) return bold;
             if (isItalic) return italic;
             return regular;
+        }
+
+        /** Two settings that name the same axes on every slot draw the same glyphs. */
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) return true;
+            if (!(other instanceof FontVariations)) return false;
+            FontVariations o = (FontVariations) other;
+            return java.util.Objects.equals(regular, o.regular)
+                && java.util.Objects.equals(bold, o.bold)
+                && java.util.Objects.equals(italic, o.italic)
+                && java.util.Objects.equals(boldItalic, o.boldItalic)
+                && java.util.Objects.equals(symbols, o.symbols);
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(regular, bold, italic, boldItalic, symbols);
         }
     }
 
@@ -256,6 +278,44 @@ public final class TerminalRenderer {
 
     final SymbolMap[] mSymbolMaps;
 
+    /**
+     * The union of every configured range, so a code point outside all of them — every ASCII cell
+     * on a normal screen — is rejected by two comparisons instead of walking the whole map list.
+     * {@link Integer#MAX_VALUE} and -1 when nothing is configured, which rejects everything.
+     */
+    private final int mSymbolMapsFirstCodePoint;
+    private final int mSymbolMapsLastCodePoint;
+
+    /**
+     * Whether the map at this index may be remembered as {@link #mLastSymbolMapIndex}. Only a map
+     * no later map overlaps can be: the rule is that a later range wins, so a map some later one
+     * intersects may lose the next code point that lands in it, and answering from the memo would
+     * silently draw the wrong font.
+     */
+    private final boolean[] mSymbolMapIsExclusive;
+
+    /**
+     * The map the previous cell matched, when it was exclusive. Symbol cells cluster — a status
+     * line is runs of icons from one map — so this turns the reverse scan into one range test for
+     * every cell after the first.
+     */
+    private int mLastSymbolMapIndex = -1;
+
+    /** The distinct faces {@link #mSymbolMaps} draw from, and the one each map draws from. */
+    private final Typeface[] mSymbolFaces;
+    private final int[] mSymbolMapFaceIndex;
+
+    /** Memoized {@code hasGlyph} answers for {@link #mSymbolFaces}; null when nothing is mapped. */
+    @Nullable private final SymbolGlyphCache mSymbolGlyphs;
+
+    private final SymbolGlyphCache.Coverage mSymbolCoverage = new SymbolGlyphCache.Coverage() {
+        @Override
+        public boolean hasGlyph(int faceIndex, int codePoint) {
+            mCoveragePaint.setTypeface(mSymbolFaces[faceIndex]);
+            return mCoveragePaint.hasGlyph(new String(Character.toChars(codePoint)));
+        }
+    };
+
     /** Faces consulted, in configured order, for code points the primary face has no glyph for. */
     final Typeface[] mFallbackTypefaces;
 
@@ -282,12 +342,40 @@ public final class TerminalRenderer {
      */
     private boolean mCursorSuppressed;
 
+    /**
+     * Which visible rows changed since the last frame. Retained across frames, so a renderer starts
+     * with everything dirty and stays that way until it has drawn once.
+     */
+    private final RowRenderCache mRowCache = new RowRenderCache();
+
+    /**
+     * The recordings the unchanged rows are replayed from. Null until the first hardware-accelerated
+     * frame, and never touched below API 29 or on a software canvas.
+     */
+    @Nullable private TerminalRowNodes mRowNodes;
+
+    /** How many rows the last frame had to record again, for tests and for a trace to read. */
+    private int mRowsRecordedLastFrame;
+    /** How many rows the last frame re-recorded image draws for; zero when they were drawn inline. */
+    private int mImageRowsRecordedLastFrame;
+    private boolean mRowCacheBypassed;
+
+    /** Colour of the curly underline under a detected URL; 0 leaves URLs unmarked. */
+    private int mUrlUnderlineColor;
+
+    /** The URL cells of the visible rows, refreshed each frame from the screen text. */
+    private final UrlUnderlines mUrlUnderlines = new UrlUnderlines();
+
     private final Paint mTextPaint = new Paint();
     /** Fills for the find overlay, kept off the text paint's per-run state. */
     private final Paint mOverlayPaint = new Paint();
     private Typeface mCurrentTypeface;
 
-    /** Memoized fallback-chain lookups; sized for this renderer's chain and never resized. */
+    /**
+     * Memoized fallback-chain lookups; sized for this renderer's chain and never resized. Carried
+     * over from the renderer this one replaces when the faces are the same, see
+     * {@link #sharesFacesWith}.
+     */
     private final FallbackFontResolver mFallbackResolver;
 
     /** Scratch paint for coverage probes, so they cannot disturb the drawing paint's state. */
@@ -319,9 +407,55 @@ public final class TerminalRenderer {
      * measured at 73ms median frame time against 12ms with the axes removed.
      *
      * <p>The set of (face, axes) pairs a config can produce is tiny and fixed, so each instance is
-     * built once and the hot path just selects a typeface.
+     * built once and the hot path just selects a typeface. The map outlives the renderer: a text
+     * size change and a font reload that keeps the same faces both build a new renderer, and each
+     * used to start cold and instantiate every pair again on its first frame.</p>
      */
-    private final java.util.HashMap<String, Typeface> mVariationTypefaces = new java.util.HashMap<>();
+    private final VariationCache mVariationTypefaces;
+
+    /**
+     * The variable-font instances, as a face-then-axes lookup that allocates nothing to consult.
+     *
+     * <p>The face is matched by identity — a {@link Typeface} has no value equality worth using
+     * here — and the axis settings by their {@link String}, which are the long-lived fields of
+     * {@link FontVariations} and {@link SymbolMap}, so their hash is computed once and cached on
+     * the instance. The single flat map this replaces had to build a key string per lookup, and
+     * {@code configureFont} is called for every run.
+     */
+    static final class VariationCache {
+
+        private final java.util.IdentityHashMap<Typeface, java.util.HashMap<String, Typeface>>
+            mByFace = new java.util.IdentityHashMap<>();
+
+        /** The instance already built for this (face, axes) pair, or null for none. */
+        @Nullable
+        Typeface get(Typeface base, String variations) {
+            java.util.HashMap<String, Typeface> byAxes = mByFace.get(base);
+            return byAxes == null ? null : byAxes.get(variations);
+        }
+
+        void put(Typeface base, String variations, Typeface instance) {
+            java.util.HashMap<String, Typeface> byAxes = mByFace.get(base);
+            if (byAxes == null) {
+                byAxes = new java.util.HashMap<>(4);
+                mByFace.put(base, byAxes);
+            }
+            byAxes.put(variations, instance);
+        }
+
+        /** How many base faces have an entry, for tests. */
+        int faceCount() {
+            return mByFace.size();
+        }
+
+        /** How many (face, axes) instances are held, for tests. */
+        int size() {
+            int total = 0;
+            for (java.util.HashMap<String, Typeface> byAxes : mByFace.values())
+                total += byAxes.size();
+            return total;
+        }
+    }
 
     /**
      * The width of a single mono spaced character obtained by {@link Paint#measureText(String)} on a single 'X'.
@@ -345,11 +479,27 @@ public final class TerminalRenderer {
     private final int mFontBaselineDescent;
 
     /** Width cache for normal, bold, italic and bold-italic rendering. */
-    private final float[][] mAsciiMeasures = new float[4][127];
+    /**
+     * Advance of every ASCII character in each of the four SGR styles, measured once. Shared with
+     * the renderer this one replaced or was seeded from when the size, faces and axes are the
+     * same: the 508 measurements were 8.6 ms of a new pane's construction on Pong (2026-09-09).
+     */
+    private final float[][] mAsciiMeasures;
     private final RectF mSixelRect = new RectF();
 
     /** Reused by the Unicode-placeholder image path so drawing a cell allocates nothing. */
     private final KittyImagePlaceholder mKittyPlaceholder = new KittyImagePlaceholder();
+    /**
+     * The row whose image node is being recorded, or -1. It is a field rather than a parameter
+     * because the cell walk that reports images is shared with the software path, which has no row
+     * node to record into and nothing to remember.
+     */
+    private int mRecordingImagesForRow = -1;
+    /** The emulator {@link #mImageGenerations} asks, kept so the lookup allocates nothing. */
+    @Nullable private TerminalEmulator mImageGenerationSource;
+    private final RowRenderCache.ImageGenerations mImageGenerations =
+        imageId -> mImageGenerationSource == null ? 0
+            : mImageGenerationSource.getKittyImageGeneration(imageId);
     private final Rect mKittySourceRect = new Rect();
     private final RectF mKittyDestRect = new RectF();
     private final RectF mKittyCellRect = new RectF();
@@ -363,6 +513,24 @@ public final class TerminalRenderer {
 
     /** Reused by the synthesized box-drawing pass, for the same reason. */
     private final BoxGeometry.Segments mBoxSegments = new BoxGeometry.Segments();
+
+    /** Which columns of the row being drawn the cursor covers; reused for the same reason. */
+    private final CursorSpan mCursorSpan = new CursorSpan();
+
+    /** The frame's selection, so a cell can ask about a row other than its own; reused too. */
+    private final Selection mSelection = new Selection();
+
+    /** Reused when a text sizing block's cursor rectangle is computed, for the same reason. */
+    private final float[] mBlockCursorRect = new float[4];
+
+    /** Which visible rows this frame has to record; grown to the visible row count and reused. */
+    private boolean[] mChangedRows = new boolean[0];
+
+    /** The selection the cached rows were last recorded against; see {@link #recordAndReplayRows}. */
+    private int mCachedSelectionY1 = Integer.MIN_VALUE;
+    private int mCachedSelectionY2 = Integer.MIN_VALUE;
+    private int mCachedSelectionX1 = Integer.MIN_VALUE;
+    private int mCachedSelectionX2 = Integer.MIN_VALUE;
 
     private final Path mBoxPath = new Path();
 
@@ -503,12 +671,45 @@ public final class TerminalRenderer {
                             @Nullable BoxDrawingPolicy boxDrawingPolicy,
                             @Nullable Typeface[] fallbackTypefaces,
                             @Nullable SymbolExpansion symbolExpansion) {
+        this(textSize, typeface, boldTypeface, italicTypeface, boldItalicTypeface, symbolMaps,
+            ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments, boxDrawingPolicy,
+            fallbackTypefaces, symbolExpansion, null);
+    }
+
+    /**
+     * As above, replacing {@code previous}. When the new renderer draws with the same faces — the
+     * four primaries and the fallback chain, by identity — it inherits the variable-font instances
+     * and the fallback memo already built, so a text size change or a same-font reload does not
+     * spend its first frame instantiating every (face, axes) pair again. Neither cache depends on
+     * the text size: an instance is a face with axes applied, and glyph coverage is a property of
+     * the face. A face that changed starts both caches cold, as before.
+     */
+    public TerminalRenderer(int textSize, Typeface typeface, @Nullable Typeface boldTypeface,
+                            @Nullable Typeface italicTypeface,
+                            @Nullable Typeface boldItalicTypeface,
+                            @Nullable SymbolMap[] symbolMaps,
+                            @Nullable LigaturePolicy ligaturePolicy,
+                            @Nullable FontFeatures fontFeatures,
+                            @Nullable FontVariations fontVariations,
+                            @Nullable FontMetricsAdjustments fontMetricsAdjustments,
+                            @Nullable BoxDrawingPolicy boxDrawingPolicy,
+                            @Nullable Typeface[] fallbackTypefaces,
+                            @Nullable SymbolExpansion symbolExpansion,
+                            @Nullable TerminalRenderer previous) {
         mBoxDrawingPolicy = boxDrawingPolicy == null
             ? BoxDrawingPolicy.DEFAULT : boxDrawingPolicy;
         mSymbolExpansion = symbolExpansion == null ? SymbolExpansion.DEFAULT : symbolExpansion;
         mFallbackTypefaces = fallbackTypefaces == null || fallbackTypefaces.length == 0
             ? NO_FALLBACK_TYPEFACES : fallbackTypefaces.clone();
-        mFallbackResolver = new FallbackFontResolver(mFallbackTypefaces.length);
+        boolean inherit = previous != null && previous.sharesFacesWith(typeface, boldTypeface,
+            italicTypeface, boldItalicTypeface, mFallbackTypefaces);
+        mFallbackResolver = inherit
+            ? previous.mFallbackResolver : new FallbackFontResolver(mFallbackTypefaces.length);
+        mVariationTypefaces = inherit ? previous.mVariationTypefaces : new VariationCache();
+        boolean inheritMeasures = inherit && previous.mTextSize == textSize
+            && previous.mFontVariations.equals(fontVariations == null
+                ? FontVariations.NONE : fontVariations);
+        mAsciiMeasures = inheritMeasures ? previous.mAsciiMeasures : new float[4][127];
         mTextSize = textSize;
         mTypeface = typeface;
         mBoldTypeface = boldTypeface;
@@ -516,6 +717,36 @@ public final class TerminalRenderer {
         mBoldItalicTypeface = boldItalicTypeface;
         mSymbolMaps = symbolMaps == null || symbolMaps.length == 0
             ? NO_SYMBOL_MAPS : symbolMaps.clone();
+        int firstCodePoint = Integer.MAX_VALUE;
+        int lastCodePoint = -1;
+        for (SymbolMap map : mSymbolMaps) {
+            if (map.firstCodePoint < firstCodePoint) firstCodePoint = map.firstCodePoint;
+            if (map.lastCodePoint > lastCodePoint) lastCodePoint = map.lastCodePoint;
+        }
+        mSymbolMapsFirstCodePoint = firstCodePoint;
+        mSymbolMapsLastCodePoint = lastCodePoint;
+        mSymbolMapIsExclusive = new boolean[mSymbolMaps.length];
+        for (int i = 0; i < mSymbolMaps.length; i++) {
+            boolean overlappedByALaterMap = false;
+            for (int j = i + 1; j < mSymbolMaps.length && !overlappedByALaterMap; j++) {
+                overlappedByALaterMap =
+                    mSymbolMaps[j].firstCodePoint <= mSymbolMaps[i].lastCodePoint
+                        && mSymbolMaps[j].lastCodePoint >= mSymbolMaps[i].firstCodePoint;
+            }
+            mSymbolMapIsExclusive[i] = !overlappedByALaterMap;
+        }
+        mSymbolMapFaceIndex = new int[mSymbolMaps.length];
+        List<Typeface> symbolFaces = new ArrayList<>();
+        for (int i = 0; i < mSymbolMaps.length; i++) {
+            int index = symbolFaces.indexOf(mSymbolMaps[i].typeface);
+            if (index < 0) {
+                index = symbolFaces.size();
+                symbolFaces.add(mSymbolMaps[i].typeface);
+            }
+            mSymbolMapFaceIndex[i] = index;
+        }
+        mSymbolFaces = symbolFaces.toArray(new Typeface[0]);
+        mSymbolGlyphs = mSymbolMaps.length == 0 ? null : new SymbolGlyphCache();
         mLigaturePolicy = ligaturePolicy == null ? LigaturePolicy.NEVER : ligaturePolicy;
         mFontFeatures = fontFeatures == null ? FontFeatures.NONE : fontFeatures;
         mFontVariations = fontVariations == null ? FontVariations.NONE : fontVariations;
@@ -541,12 +772,14 @@ public final class TerminalRenderer {
         mFontBaselineDescent = Math.round(mFontLineSpacing - baselineFromTop);
         mFontLineSpacingAndAscent = Math.round(clamp(fontMetrics.descent
             + (mFontLineSpacing - baseLineSpacing) / 2f, 0f, mFontLineSpacing));
-        StringBuilder sb = new StringBuilder(" ");
-        for (int style = 0; style < mAsciiMeasures.length; style++) {
-            configureFont((style & 1) != 0, (style & 2) != 0);
-            for (int i = 0; i < mAsciiMeasures[style].length; i++) {
-                sb.setCharAt(0, (char) i);
-                mAsciiMeasures[style][i] = mTextPaint.measureText(sb, 0, 1);
+        if (!inheritMeasures) {
+            StringBuilder sb = new StringBuilder(" ");
+            for (int style = 0; style < mAsciiMeasures.length; style++) {
+                configureFont((style & 1) != 0, (style & 2) != 0);
+                for (int i = 0; i < mAsciiMeasures[style].length; i++) {
+                    sb.setCharAt(0, (char) i);
+                    mAsciiMeasures[style][i] = mTextPaint.measureText(sb, 0, 1);
+                }
             }
         }
         configureFont(false, false);
@@ -565,6 +798,59 @@ public final class TerminalRenderer {
             + (mFontLineSpacing - baseLineSpacing) / 2f - effectiveBaselineRaise;
         mDottedEffect = new DashPathEffect(new float[]{mDecorationThickness, mDecorationThickness * 2f}, 0f);
         mDashedEffect = new DashPathEffect(new float[]{mDecorationThickness * 4f, mDecorationThickness * 3f}, 0f);
+    }
+
+    /** True when a renderer built on these faces can inherit this one's caches. */
+    private boolean sharesFacesWith(Typeface typeface, @Nullable Typeface boldTypeface,
+                                    @Nullable Typeface italicTypeface,
+                                    @Nullable Typeface boldItalicTypeface,
+                                    @NonNull Typeface[] fallbackTypefaces) {
+        if (mTypeface != typeface || mBoldTypeface != boldTypeface
+            || mItalicTypeface != italicTypeface || mBoldItalicTypeface != boldItalicTypeface
+            || mFallbackTypefaces.length != fallbackTypefaces.length)
+            return false;
+        for (int i = 0; i < fallbackTypefaces.length; i++) {
+            if (mFallbackTypefaces[i] != fallbackTypefaces[i]) return false;
+        }
+        return true;
+    }
+
+    /** The variable-font instance cache, for tests that check it survives a rebuild. */
+    VariationCache variationTypefaceCache() {
+        return mVariationTypefaces;
+    }
+
+    /** The fallback memo, for tests that check it survives a rebuild. */
+    FallbackFontResolver fallbackResolver() {
+        return mFallbackResolver;
+    }
+
+    /**
+     * While set, every row is drawn directly even on a hardware canvas. A recording made through
+     * the row cache would hold references to the live row nodes and follow their next re-record;
+     * a frozen copy of the pane — the split reveal's snapshot — needs the glyphs themselves.
+     */
+    public void setRowCacheBypassed(boolean bypassed) {
+        mRowCacheBypassed = bypassed;
+    }
+
+    /**
+     * Mark every plain-text URL on screen with a curly underline in {@code color}, so a tap target
+     * is visible before it is tapped — touch has no hover. Zero turns the marks off.
+     */
+    public void setUrlUnderlineColor(int color) {
+        if (mUrlUnderlineColor == color) return;
+        mUrlUnderlineColor = color;
+        mRowCache.invalidate();
+    }
+
+    public int getUrlUnderlineColor() {
+        return mUrlUnderlineColor;
+    }
+
+    /** The ASCII advance table, for tests that check when a rebuild shares it. */
+    float[][] asciiMeasures() {
+        return mAsciiMeasures;
     }
 
     static float adjustMetric(float original, @Nullable MetricAdjustment adjustment) {
@@ -594,6 +880,85 @@ public final class TerminalRenderer {
      * from below is partially visible.
      */
     public final void render(TerminalEmulator mEmulator, Canvas canvas, int topRow, int selectionY1, int selectionY2, int selectionX1, int selectionX2, boolean transparentBackground, int transparentOverlayColor, float horizontalOffset, int extraRows) {
+        Trace.beginSection("Terminal.render");
+        try {
+            renderRows(mEmulator, canvas, topRow, selectionY1, selectionY2, selectionX1, selectionX2,
+                transparentBackground, transparentOverlayColor, horizontalOffset, extraRows);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private boolean[] changedRowsBuffer(int visibleRows) {
+        if (mChangedRows.length < visibleRows) mChangedRows = new boolean[visibleRows];
+        return mChangedRows;
+    }
+
+    /**
+     * The whole frame's selection, in the stream form the rest of the view works in: from
+     * ({@code x1}, {@code y1}) to ({@code x2}, {@code y2}) inclusive. Held whole rather than cut
+     * into a per-row pair because a cell of a text sizing block is selected when its <em>anchor
+     * cell</em> is, and the anchor sits on another row.
+     */
+    private static final class Selection {
+        int y1 = -1;
+        int y2 = -1;
+        int x1 = -1;
+        int x2 = -1;
+
+        void set(int selectionY1, int selectionY2, int selectionX1, int selectionX2) {
+            y1 = selectionY1;
+            y2 = selectionY2;
+            x1 = selectionX1;
+            x2 = selectionX2;
+        }
+
+        /** Whether the cell at this row and column is drawn selected. */
+        boolean covers(TerminalRow line, int row, int column) {
+            return TextBlockGeometry.cellSelected(line, row, column, y1, y2, x1, x2);
+        }
+
+        /** Whether a block anchored at this cell is selected, and so drawn inverted. */
+        boolean coversAnchor(int row, int column) {
+            return TextBlockGeometry.selectionCovers(row, column, y1, y2, x1, x2);
+        }
+    }
+
+    /**
+     * How far the cursor reaches across one row. Over a plain cell that is the one column it
+     * stands on; over a cell of a text sizing block it is the block's full width, on every row the
+     * block covers, because D2 grows the cursor to the whole block.
+     */
+    private static final class CursorSpan {
+        /** The first column covered, or -1 when the cursor is not drawn on this row at all. */
+        int column = -1;
+        /** How many columns are covered; one outside a block. */
+        int columns = 1;
+        /** Whether this is the last row covered — the row an underline cursor is drawn on. */
+        boolean lastRow = true;
+    }
+
+    /**
+     * Work out which part of one row the cursor covers. A cursor inside a block reaches every row
+     * of it, so a row that does not hold the cursor itself can still have to paint it.
+     */
+    private static void cursorSpanFor(CursorSpan out,
+                                      @Nullable TerminalBuffer.TextBlock cursorBlock, int row,
+                                      int cursorRow, int cursorCol, boolean cursorVisible) {
+        if (cursorBlock != null) {
+            final boolean covered = row >= cursorBlock.row
+                && row < cursorBlock.row + cursorBlock.rows;
+            out.column = covered ? cursorBlock.column : -1;
+            out.columns = covered ? cursorBlock.columns : 1;
+            out.lastRow = covered && row == cursorBlock.row + cursorBlock.rows - 1;
+            return;
+        }
+        out.column = (row == cursorRow && cursorVisible) ? cursorCol : -1;
+        out.columns = 1;
+        out.lastRow = true;
+    }
+
+    private void renderRows(TerminalEmulator mEmulator, Canvas canvas, int topRow, int selectionY1, int selectionY2, int selectionX1, int selectionX2, boolean transparentBackground, int transparentOverlayColor, float horizontalOffset, int extraRows) {
         final boolean boldWithBright = mEmulator.isBoldWithBright();
         final boolean reverseVideo = mEmulator.isReverseVideo();
         final int endRow = Math.min(topRow + mEmulator.mRows + extraRows, mEmulator.mRows);
@@ -605,11 +970,28 @@ public final class TerminalRenderer {
         final int[] palette = mEmulator.mColors.mCurrentColors;
         final int cursorShape = mEmulator.getCursorStyle();
         mEmulator.setCellSize((int) mFontWidth, (int) mFontLineSpacing);
+        mUrlUnderlines.prepare(screen, topRow, endRow, columns, mEmulator.mRows, mUrlUnderlineColor != 0);
         if (reverseVideo) {
             canvas.drawColor(palette[TextStyle.COLOR_INDEX_FOREGROUND], PorterDuff.Mode.SRC);
         } else if (transparentBackground) {
             canvas.drawColor(transparentOverlayColor, PorterDuff.Mode.SRC);
         }
+        if (drawRowsThroughNodes(mEmulator, canvas, screen, palette, topRow, endRow, columns,
+            cursorRow, cursorCol, cursorVisible, cursorShape, selectionY1, selectionY2,
+            selectionX1, selectionX2, boldWithBright, reverseVideo, transparentBackground,
+            transparentOverlayColor, horizontalOffset, extraRows)) {
+            drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
+            return;
+        }
+        mRowsRecordedLastFrame = Math.max(0, endRow - topRow);
+        mImageRowsRecordedLastFrame = 0;
+        // D2: a cursor standing anywhere inside a text sizing block covers the whole block, so the
+        // block is resolved once per frame and every row it reaches is told about it.
+        final TerminalBuffer.TextBlock cursorBlock =
+            cursorVisible ? screen.getTextBlockAt(cursorRow, cursorCol) : null;
+        final CursorSpan span = mCursorSpan;
+        final Selection selection = mSelection;
+        selection.set(selectionY1, selectionY2, selectionX1, selectionX2);
         float heightOffset = mFontLineSpacingAndAscent;
         // Backgrounds and the cursor block for every row are painted before any glyph, so a glyph
         // whose ink overhangs its cells — Nerd Font symbols routinely do — lands on top of a
@@ -618,22 +1000,17 @@ public final class TerminalRenderer {
         // pass needs no font configuration or shaping.
         for (int row = topRow; row < endRow; row++) {
             heightOffset += mFontLineSpacing;
-            final int cursorX = (row == cursorRow && cursorVisible) ? cursorCol : -1;
-            int selx1 = -1, selx2 = -1;
-            if (row >= selectionY1 && row <= selectionY2) {
-                if (row == selectionY1)
-                    selx1 = selectionX1;
-                selx2 = (row == selectionY2) ? selectionX2 : mEmulator.mColumns;
-            }
+            cursorSpanFor(span, cursorBlock, row, cursorRow, cursorCol, cursorVisible);
             TerminalRow lineObject = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
-            drawRowBackgroundAndCursor(canvas, lineObject, palette, heightOffset, columns, cursorX,
-                cursorShape, selx1, selx2, boldWithBright, reverseVideo, horizontalOffset,
+            drawRowBackgroundAndCursor(canvas, lineObject, palette, heightOffset, columns,
+                span.column, span.columns, span.lastRow,
+                cursorShape, selection, row, boldWithBright, reverseVideo, horizontalOffset,
                 palette[TextStyle.COLOR_INDEX_CURSOR]);
         }
         heightOffset = mFontLineSpacingAndAscent;
         for (int row = topRow; row < endRow; row++) {
             heightOffset += mFontLineSpacing;
-            final int cursorX = (row == cursorRow && cursorVisible) ? cursorCol : -1;
+            cursorSpanFor(span, cursorBlock, row, cursorRow, cursorCol, cursorVisible);
             int selx1 = -1, selx2 = -1;
             if (row >= selectionY1 && row <= selectionY2) {
                 if (row == selectionY1)
@@ -641,130 +1018,377 @@ public final class TerminalRenderer {
                 selx2 = (row == selectionY2) ? selectionX2 : mEmulator.mColumns;
             }
             TerminalRow lineObject = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
-            final char[] line = lineObject.mText;
-            final int charsUsedInLine = lineObject.getSpaceUsed();
-            long lastRunStyle = 0;
-            boolean lastRunInsideCursor = false;
-            boolean lastRunInsideSelection = false;
-            int lastRunStartColumn = -1;
-            int lastRunStartIndex = 0;
-            boolean lastRunFontWidthMismatch = false;
-            int lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
-            int lastRunHyperlinkId = 0;
-            Typeface lastRunSymbolTypeface = null;
-            Typeface lastRunFallbackTypeface = null;
-            // The settings the run's matched symbol map resolved to; null outside a symbol run.
-            String lastRunSymbolFeatures = null;
-            String lastRunSymbolVariations = null;
-            // Raised by the cells that flush the run to their left and paint themselves — image,
-            // placeholder, synthesized glyph, expanded symbol — so the next iteration starts a
-            // fresh run at the cell after them.
-            boolean startFreshRun = false;
-            int currentCharIndex = 0;
-            float measuredWidthForRun = 0.f;
-            // Both live in side tables on the row rather than in the style long, so they are only
-            // consulted for the rows that have them.
-            final boolean rowHasDecorationColors = lineObject.hasDecorationColors();
-            final boolean rowHasHyperlinks = lineObject.hasHyperlinks();
-            KittyUnicodePlaceholder.Cell previousPlaceholder = null;
-            int previousPlaceholderColumn = -2;
-            for (int column = 0; column < columns; ) {
-                if (startFreshRun) {
-                    measuredWidthForRun = 0.f;
-                    lastRunStyle = 0;
-                    lastRunInsideCursor = false;
-                    lastRunInsideSelection = false;
-                    lastRunStartColumn = column;
-                    lastRunStartIndex = currentCharIndex;
-                    lastRunFontWidthMismatch = false;
-                    lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
-                    lastRunHyperlinkId = 0;
-                    lastRunSymbolTypeface = null;
-                    lastRunFallbackTypeface = null;
-                    lastRunSymbolFeatures = null;
-                    lastRunSymbolVariations = null;
-                    startFreshRun = false;
+            drawRowGlyphs(mEmulator, canvas, lineObject, palette, heightOffset, columns,
+                span.column, span.columns,
+                cursorVisible, cursorShape, selx1, selx2, boldWithBright, reverseVideo,
+                horizontalOffset, false, mUrlUnderlines.segmentsFor(row - topRow));
+            drawRowTextBlocks(canvas, screen, lineObject, palette, heightOffset, row, topRow,
+                columns, span.column, span.columns, cursorShape, selection, boldWithBright,
+                reverseVideo, horizontalOffset);
+        }
+        drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
+    }
+
+    /**
+     * Replay the visible rows from their recordings, re-recording only the ones that moved.
+     *
+     * <p>Returns false — and draws nothing — whenever the caller must fall back to drawing the rows
+     * straight onto the canvas: below API 29 there is no public {@link android.graphics.RenderNode},
+     * and a software canvas cannot replay one. That fallback is the code this fork has always run,
+     * unchanged.
+     *
+     * <p>The three passes are kept apart exactly as the direct path keeps them: every row's
+     * backgrounds and cursor block first, then every row's glyphs, then every row's images, so
+     * overhanging ink is never covered by the next row's fill and an image still lands over the
+     * cells it covers. Each node spans the whole view and is recorded in the same
+     * coordinates the direct path draws in, so nothing about where a row lands, how its cell edges
+     * snap, or how far its glyphs may reach depends on which path drew it.
+     */
+    private boolean drawRowsThroughNodes(TerminalEmulator mEmulator, Canvas canvas,
+                                         TerminalBuffer screen, int[] palette, int topRow,
+                                         int endRow, int columns, int cursorRow, int cursorCol,
+                                         boolean cursorVisible, int cursorShape, int selectionY1,
+                                         int selectionY2, int selectionX1, int selectionX2,
+                                         boolean boldWithBright, boolean reverseVideo,
+                                         boolean transparentBackground, int transparentOverlayColor,
+                                         float horizontalOffset, int extraRows) {
+        if (mRowCacheBypassed
+            || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q
+            || !canvas.isHardwareAccelerated()
+            || !(canvas instanceof android.graphics.RecordingCanvas))
+            return false;
+        final int viewWidth = canvas.getWidth();
+        final int viewHeight = canvas.getHeight();
+        final int visibleRows = endRow - topRow;
+        if (viewWidth <= 0 || viewHeight <= 0 || visibleRows <= 0) return false;
+        recordAndReplayRows((android.graphics.RecordingCanvas) canvas, mEmulator, screen, palette,
+            topRow, endRow, columns, cursorRow, cursorCol, cursorVisible, cursorShape, selectionY1,
+            selectionY2, selectionX1, selectionX2, boldWithBright, reverseVideo,
+            transparentBackground, transparentOverlayColor, horizontalOffset, extraRows, viewWidth,
+            viewHeight, visibleRows);
+        return true;
+    }
+
+    @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.Q)
+    private void recordAndReplayRows(android.graphics.RecordingCanvas canvas,
+                                     TerminalEmulator mEmulator, TerminalBuffer screen,
+                                     int[] palette, int topRow, int endRow, int columns,
+                                     int cursorRow, int cursorCol, boolean cursorVisible,
+                                     int cursorShape, int selectionY1, int selectionY2,
+                                     int selectionX1, int selectionX2, boolean boldWithBright,
+                                     boolean reverseVideo, boolean transparentBackground,
+                                     int transparentOverlayColor, float horizontalOffset,
+                                     int extraRows, int viewWidth, int viewHeight,
+                                     int visibleRows) {
+        if (mRowNodes == null) {
+            mRowNodes = new TerminalRowNodes();
+            mRowCache.invalidate();
+        }
+        final TerminalRowNodes nodes = mRowNodes;
+        mRowCache.beginFrame(mEmulator, mEmulator.mRows, columns, topRow, extraRows,
+            horizontalOffset, transparentBackground, transparentOverlayColor, reverseVideo,
+            boldWithBright, palette, viewWidth, viewHeight, visibleRows);
+        // Sizing the nodes after the cache, so a pane that lost rows drops their recordings here.
+        nodes.resize(visibleRows);
+        final int cursorColor = palette[TextStyle.COLOR_INDEX_CURSOR];
+        final long placementGeneration = mEmulator.getKittyPlacementGeneration();
+        mImageGenerationSource = mEmulator;
+        int recorded = 0;
+        int imageRowsRecorded = 0;
+        // D2: the block the cursor stands on, resolved once, so every row it covers paints it.
+        final TerminalBuffer.TextBlock cursorBlock =
+            cursorVisible ? screen.getTextBlockAt(cursorRow, cursorCol) : null;
+        final CursorSpan span = mCursorSpan;
+        final Selection selection = mSelection;
+        selection.set(selectionY1, selectionY2, selectionX1, selectionX2);
+        // D4 B: the rows a block spans are one cached node, so every row is compared before any is
+        // recorded — a change in a row under a block has to re-record the row that draws it.
+        final boolean[] changedRows = changedRowsBuffer(visibleRows);
+        // A block's cells are filled from its anchor cell, which the selection may reach without
+        // touching the row the cell is on — and the anchor can even be above the top of the pane.
+        // So a row carrying a block is compared against the whole selection, not its own slice.
+        final boolean selectionMoved = mCachedSelectionY1 != selectionY1
+            || mCachedSelectionY2 != selectionY2 || mCachedSelectionX1 != selectionX1
+            || mCachedSelectionX2 != selectionX2;
+        mCachedSelectionY1 = selectionY1;
+        mCachedSelectionY2 = selectionY2;
+        mCachedSelectionX1 = selectionX1;
+        mCachedSelectionX2 = selectionX2;
+        for (int index = 0; index < visibleRows; index++) {
+            final int row = topRow + index;
+            cursorSpanFor(span, cursorBlock, row, cursorRow, cursorCol, cursorVisible);
+            int selx1 = -1, selx2 = -1;
+            if (row >= selectionY1 && row <= selectionY2) {
+                if (row == selectionY1)
+                    selx1 = selectionX1;
+                selx2 = (row == selectionY2) ? selectionX2 : columns;
+            }
+            final TerminalRow lineObject =
+                screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
+            changedRows[index] = mRowCache.rowChanged(index, lineObject, columns, span.column,
+                span.columns, span.lastRow, cursorShape, cursorColor, selx1, selx2,
+                mUrlUnderlines.keyFor(index))
+                || (selectionMoved && lineObject.hasTextSizes());
+        }
+        mRowCache.spreadTextBlockGroups(changedRows);
+        for (int index = 0; index < visibleRows; index++) {
+            final int row = topRow + index;
+            cursorSpanFor(span, cursorBlock, row, cursorRow, cursorCol, cursorVisible);
+            final int cursorX = span.column;
+            int selx1 = -1, selx2 = -1;
+            if (row >= selectionY1 && row <= selectionY2) {
+                if (row == selectionY1)
+                    selx1 = selectionX1;
+                selx2 = (row == selectionY2) ? selectionX2 : columns;
+            }
+            final TerminalRow lineObject =
+                screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
+            final boolean changed = changedRows[index];
+            final boolean carriesAnImage = mRowCache.rowCarriesAnImage(index);
+            final android.graphics.RenderNode background = nodes.background(index);
+            final android.graphics.RenderNode glyphs = nodes.glyphs(index);
+            final android.graphics.RenderNode images = nodes.images(index);
+            background.setPosition(0, 0, viewWidth, viewHeight);
+            glyphs.setPosition(0, 0, viewWidth, viewHeight);
+            images.setPosition(0, 0, viewWidth, viewHeight);
+            // Symbol expansion and glyph overhang both reach past the cells they were measured
+            // for, and the canvas the node is replayed into already carries the pane's own clip.
+            background.setClipToBounds(false);
+            glyphs.setClipToBounds(false);
+            images.setClipToBounds(false);
+            final float heightOffset = mFontLineSpacingAndAscent + (index + 1) * mFontLineSpacing;
+            if (carriesAnImage) {
+                // The pixels a placeholder or a bitmap cell draws from are replaced without any
+                // input the cache compares moving, so this node is re-recorded whenever the
+                // emulator says those pixels moved — a cell walk and a drawBitmap each, no shaping
+                // and no measuring. An animation flips frames far more slowly than the display
+                // draws them, so most frames of an animating row answer no here and replay both
+                // nodes. The glyph node above it keeps its recording either way.
+                if (changed || !images.hasDisplayList()
+                    || mRowCache.rowImagesMoved(index, placementGeneration, mImageGenerations)) {
+                    mRowCache.beginRowImages(index, placementGeneration);
+                    mRecordingImagesForRow = index;
+                    Canvas imagesInto = images.beginRecording(viewWidth, viewHeight);
+                    try {
+                        drawRowImages(mEmulator, imagesInto, lineObject, palette, heightOffset,
+                            columns, cursorX, cursorVisible, cursorShape, horizontalOffset);
+                    } finally {
+                        images.endRecording();
+                        mRecordingImagesForRow = -1;
+                    }
+                    imageRowsRecorded++;
                 }
-                final char charAtIndex = line[currentCharIndex];
-                final boolean charIsHighsurrogate = Character.isHighSurrogate(charAtIndex);
-                final int charsForCodePoint = charIsHighsurrogate ? 2 : 1;
-                final int codePoint = charIsHighsurrogate ? Character.toCodePoint(charAtIndex, line[currentCharIndex + 1]) : charAtIndex;
-                final long style = lineObject.getStyle(column);
-                final int decorationColor = rowHasDecorationColors ? lineObject.getDecorationColor(column) : TextStyle.DECORATION_COLOR_DEFAULT;
-                final int hyperlinkId = rowHasHyperlinks ? lineObject.getHyperlinkId(column) : 0;
-                if (TextStyle.isBitmap(style)) {
+            } else if (images.hasDisplayList()) {
+                // The frame a row stops carrying an image is the last one it costs anything.
+                images.discardDisplayList();
+            }
+            if (!changed && background.hasDisplayList() && glyphs.hasDisplayList()) continue;
+            Canvas into = background.beginRecording(viewWidth, viewHeight);
+            try {
+                drawRowBackgroundAndCursor(into, lineObject, palette, heightOffset, columns,
+                    cursorX, span.columns, span.lastRow, cursorShape, selection, row,
+                    boldWithBright, reverseVideo, horizontalOffset, cursorColor);
+            } finally {
+                background.endRecording();
+            }
+            into = glyphs.beginRecording(viewWidth, viewHeight);
+            try {
+                drawRowGlyphs(mEmulator, into, lineObject, palette, heightOffset, columns, cursorX,
+                    span.columns, cursorVisible, cursorShape, selx1, selx2, boldWithBright,
+                    reverseVideo, horizontalOffset, true, mUrlUnderlines.segmentsFor(index));
+                // The block a row heads reaches down over the rows beneath it. Nodes are recorded
+                // in the view's own coordinates and never clipped to their row, so the tall layer
+                // D4 asks for is this one node — which is why the whole group was dirtied above.
+                drawRowTextBlocks(into, screen, lineObject, palette, heightOffset, row, topRow,
+                    columns, cursorX, span.columns, cursorShape, selection, boldWithBright,
+                    reverseVideo, horizontalOffset);
+            } finally {
+                glyphs.endRecording();
+            }
+            recorded++;
+        }
+        for (int index = 0; index < visibleRows; index++)
+            canvas.drawRenderNode(nodes.background(index));
+        for (int index = 0; index < visibleRows; index++)
+            canvas.drawRenderNode(nodes.glyphs(index));
+        // Images last, over the cells the glyph pass deliberately left blank, which is the order
+        // kitty paints in. Only a row that carries one holds a display list here.
+        for (int index = 0; index < visibleRows; index++) {
+            final android.graphics.RenderNode images = nodes.images(index);
+            if (images.hasDisplayList()) canvas.drawRenderNode(images);
+        }
+        mRowsRecordedLastFrame = recorded;
+        mImageRowsRecordedLastFrame = imageRowsRecorded;
+    }
+
+    /**
+     * Draw one row's glyphs, decorations, synthesized geometry and images, in the run segmentation
+     * the whole loop shares. The row's cell backgrounds and its cursor block were laid down by an
+     * earlier pass over every row, so nothing here paints a fill.
+     *
+     * @param imagesRecordedSeparately when set, image cells are left to {@link #drawRowImages} and
+     *     this pass only flushes the run to their left and steps over them — the cells still end up
+     *     blank, exactly as they are when the image is drawn here, and the image is drawn over them
+     *     from the row's own node afterwards. The direct path (software canvas, or a bypassed row
+     *     cache) passes false and draws everything inline in one walk.
+     */
+    private void drawRowGlyphs(TerminalEmulator mEmulator, Canvas canvas, TerminalRow lineObject,
+                               int[] palette, float heightOffset, int columns, int cursorX,
+                               int cursorColumns,
+                               boolean cursorVisible, int cursorShape, int selx1, int selx2,
+                               boolean boldWithBright, boolean reverseVideo,
+                               float horizontalOffset, boolean imagesRecordedSeparately,
+                               @Nullable int[] urlSegments) {
+        final char[] line = lineObject.mText;
+        final int charsUsedInLine = lineObject.getSpaceUsed();
+        long lastRunStyle = 0;
+        boolean lastRunInsideCursor = false;
+        boolean lastRunInsideSelection = false;
+        int lastRunStartColumn = -1;
+        int lastRunStartIndex = 0;
+        boolean lastRunFontWidthMismatch = false;
+        int lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
+        int lastRunHyperlinkId = 0;
+        Typeface lastRunSymbolTypeface = null;
+        Typeface lastRunFallbackTypeface = null;
+        // The settings the run's matched symbol map resolved to; null outside a symbol run.
+        String lastRunSymbolFeatures = null;
+        String lastRunSymbolVariations = null;
+        // Raised by the cells that flush the run to their left and paint themselves — image,
+        // placeholder, synthesized glyph, expanded symbol — so the next iteration starts a
+        // fresh run at the cell after them.
+        boolean startFreshRun = false;
+        int currentCharIndex = 0;
+        float measuredWidthForRun = 0.f;
+        // Both live in side tables on the row rather than in the style long, so they are only
+        // consulted for the rows that have them.
+        final boolean rowHasDecorationColors = lineObject.hasDecorationColors();
+        final boolean rowHasHyperlinks = lineObject.hasHyperlinks();
+        // Same reasoning again for the text sizing records: only a row that carries a block pays.
+        final boolean rowHasTextSizes = lineObject.hasTextSizes();
+        KittyUnicodePlaceholder.Cell previousPlaceholder = null;
+        int previousPlaceholderColumn = -2;
+        for (int column = 0; column < columns; ) {
+            if (startFreshRun) {
+                measuredWidthForRun = 0.f;
+                lastRunStyle = 0;
+                lastRunInsideCursor = false;
+                lastRunInsideSelection = false;
+                lastRunStartColumn = column;
+                lastRunStartIndex = currentCharIndex;
+                lastRunFontWidthMismatch = false;
+                lastRunDecorationColor = TextStyle.DECORATION_COLOR_DEFAULT;
+                lastRunHyperlinkId = 0;
+                lastRunSymbolTypeface = null;
+                lastRunFallbackTypeface = null;
+                lastRunSymbolFeatures = null;
+                lastRunSymbolVariations = null;
+                startFreshRun = false;
+            }
+            final char charAtIndex = line[currentCharIndex];
+            final boolean charIsHighsurrogate = Character.isHighSurrogate(charAtIndex);
+            final int charsForCodePoint = charIsHighsurrogate ? 2 : 1;
+            final int codePoint = charIsHighsurrogate ? Character.toCodePoint(charAtIndex, line[currentCharIndex + 1]) : charAtIndex;
+            final long style = lineObject.getStyle(column);
+            final int decorationColor = rowHasDecorationColors ? lineObject.getDecorationColor(column) : TextStyle.DECORATION_COLOR_DEFAULT;
+            final int hyperlinkId = rowHasHyperlinks ? lineObject.getHyperlinkId(column) : 0;
+            if (rowHasTextSizes && lineObject.isTextSizeCell(column)) {
+                // A text sizing block is drawn as one piece by drawRowTextBlocks, after this pass,
+                // because its ink reaches outside the row's own line box. Here every one of its
+                // cells only breaks the run: the anchor keeps the whole text in one cluster and
+                // every other cell of the block is a blank that must not be shaped.
+                previousPlaceholder = null;
+                previousPlaceholderColumn = -2;
+                if (column > 0 && column != lastRunStartColumn) {
+                    final int columnWidthSinceLastRun = column - lastRunStartColumn;
+                    final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
+                    int runCursorColor = lastRunInsideCursor
+                        ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
+                    boolean invertRunTextColor = lastRunInsideCursor
+                        && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+                    drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                        columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                        measuredWidthForRun, runCursorColor, cursorShape, lastRunStyle,
+                        boldWithBright, reverseVideo || invertRunTextColor
+                            || lastRunInsideSelection,
+                        horizontalOffset, lastRunDecorationColor,
+                        lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
+                        lastRunFallbackTypeface, lastRunSymbolFeatures,
+                        lastRunSymbolVariations, false);
+                }
+                column += 1;
+                // The anchor's text is one cluster of any length at stored width 1, so the row's
+                // own column index is the only safe way past it.
+                currentCharIndex = lineObject.findStartOfColumn(column);
+                startFreshRun = true;
+                continue;
+            }
+            if (TextStyle.isBitmap(style)) {
+                previousPlaceholder = null;
+                previousPlaceholderColumn = -2;
+                // Flush the text run accumulated to the left of this image cell. Without this
+                // a row that mixes text and image cells — which a z<0 kitty placement produces
+                // routinely — silently dropped its text.
+                if (column > 0 && column != lastRunStartColumn) {
+                    final int columnWidthSinceLastRun = column - lastRunStartColumn;
+                    final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
+                    int cursorColor = lastRunInsideCursor ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
+                    boolean invertCursorTextColor = lastRunInsideCursor
+                        && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+                    drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                        columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                        measuredWidthForRun, cursorColor, cursorShape, lastRunStyle,
+                        boldWithBright, reverseVideo || invertCursorTextColor
+                            || lastRunInsideSelection,
+                        horizontalOffset, lastRunDecorationColor,
+                        lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
+                        lastRunFallbackTypeface, lastRunSymbolFeatures,
+                        lastRunSymbolVariations, false);
+                }
+                if (!imagesRecordedSeparately)
+                    drawBitmapCell(canvas, mEmulator, codePoint, style, column, heightOffset,
+                        horizontalOffset);
+                column += 1;
+                currentCharIndex += charsForCodePoint;
+                startFreshRun = true;
+                continue;
+            }
+            if (codePoint == KittyUnicodePlaceholder.CODE_POINT) {
+                // A placeholder remains normal text in the buffer (so tmux and editors can
+                // move it), but its grapheme is renderer control data rather than a glyph.
+                if (column > 0 && column != lastRunStartColumn) {
+                    final int columnWidthSinceLastRun = column - lastRunStartColumn;
+                    final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
+                    int runCursorColor = lastRunInsideCursor
+                        ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
+                    boolean invertRunTextColor = lastRunInsideCursor
+                        && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+                    drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                        columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                        measuredWidthForRun, runCursorColor, cursorShape, lastRunStyle,
+                        boldWithBright, reverseVideo || invertRunTextColor
+                            || lastRunInsideSelection,
+                        horizontalOffset, lastRunDecorationColor,
+                        lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
+                        lastRunFallbackTypeface, lastRunSymbolFeatures,
+                        lastRunSymbolVariations, false);
+                }
+                int clusterEnd = placeholderClusterEnd(lineObject, line,
+                    currentCharIndex + charsForCodePoint, charsUsedInLine);
+                if (imagesRecordedSeparately) {
+                    // Not even decoded here: the slice and the cursor drawn over it are the image
+                    // node's business, and this pass is the one worth not repeating per frame.
                     previousPlaceholder = null;
                     previousPlaceholderColumn = -2;
-                    // Flush the text run accumulated to the left of this image cell. Without this
-                    // a row that mixes text and image cells — which a z<0 kitty placement produces
-                    // routinely — silently dropped its text.
-                    if (column > 0 && column != lastRunStartColumn) {
-                        final int columnWidthSinceLastRun = column - lastRunStartColumn;
-                        final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
-                        int cursorColor = lastRunInsideCursor ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
-                        boolean invertCursorTextColor = lastRunInsideCursor
-                            && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
-                        drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
-                            columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
-                            measuredWidthForRun, cursorColor, cursorShape, lastRunStyle,
-                            boldWithBright, reverseVideo || invertCursorTextColor
-                                || lastRunInsideSelection,
-                            horizontalOffset, lastRunDecorationColor,
-                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
-                            lastRunFallbackTypeface, lastRunSymbolFeatures,
-                            lastRunSymbolVariations, false);
-                    }
-                    Bitmap bm = mEmulator.getScreen().getSixelBitmap(codePoint, style);
-                    if (bm != null) {
-                        float left = horizontalOffset + column * mFontWidth;
-                        float top = heightOffset - mFontLineSpacing;
-                        mSixelRect.set(left, top, left + mFontWidth, top + mFontLineSpacing);
-                        canvas.drawBitmap(mEmulator.getScreen().getSixelBitmap(codePoint, style), mEmulator.getScreen().getSixelRect(codePoint, style), mSixelRect, null);
-                    }
-                    column += 1;
-                    currentCharIndex += charsForCodePoint;
-                    startFreshRun = true;
-                    continue;
-                }
-                if (codePoint == KittyUnicodePlaceholder.CODE_POINT) {
-                    // A placeholder remains normal text in the buffer (so tmux and editors can
-                    // move it), but its grapheme is renderer control data rather than a glyph.
-                    if (column > 0 && column != lastRunStartColumn) {
-                        final int columnWidthSinceLastRun = column - lastRunStartColumn;
-                        final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
-                        int runCursorColor = lastRunInsideCursor
-                            ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
-                        boolean invertRunTextColor = lastRunInsideCursor
-                            && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
-                        drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
-                            columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
-                            measuredWidthForRun, runCursorColor, cursorShape, lastRunStyle,
-                            boldWithBright, reverseVideo || invertRunTextColor
-                                || lastRunInsideSelection,
-                            horizontalOffset, lastRunDecorationColor,
-                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
-                            lastRunFallbackTypeface, lastRunSymbolFeatures,
-                            lastRunSymbolVariations, false);
-                    }
-                    int clusterEnd = currentCharIndex + charsForCodePoint;
-                    while (clusterEnd < charsUsedInLine
-                        && lineObject.getDisplayWidthAt(clusterEnd) <= 0) {
-                        clusterEnd += Character.isHighSurrogate(line[clusterEnd]) ? 2 : 1;
-                    }
+                } else {
                     KittyUnicodePlaceholder.Cell inherited = previousPlaceholderColumn == column - 1
                         ? previousPlaceholder : null;
-                    KittyUnicodePlaceholder.Cell placeholderCell = KittyUnicodePlaceholder.decode(
-                        line, currentCharIndex + charsForCodePoint, clusterEnd,
-                        TextStyle.decodeForeColor(style), decorationColor,
-                        TextStyle.DECORATION_COLOR_DEFAULT, inherited);
+                    KittyUnicodePlaceholder.Cell placeholderCell = drawPlaceholderCell(canvas,
+                        mEmulator, line, currentCharIndex + charsForCodePoint, clusterEnd, style,
+                        decorationColor, inherited, column, heightOffset, horizontalOffset);
                     if (placeholderCell != null) {
                         previousPlaceholder = placeholderCell;
                         previousPlaceholderColumn = column;
-                        if (mEmulator.getKittyImagePlaceholder(placeholderCell.imageId,
-                            placeholderCell.placementId, mKittyPlaceholder)) {
-                            drawKittyPlaceholderCell(canvas, placeholderCell, column, heightOffset,
-                                horizontalOffset);
-                        }
                     } else {
                         previousPlaceholder = null;
                         previousPlaceholderColumn = -2;
@@ -772,26 +1396,114 @@ public final class TerminalRenderer {
                     if (cursorX == column && cursorVisible)
                         drawPlaceholderCursor(canvas, column, heightOffset, horizontalOffset,
                             cursorShape, palette[TextStyle.COLOR_INDEX_CURSOR]);
-                    column++;
-                    currentCharIndex = clusterEnd;
-                    startFreshRun = true;
-                    continue;
                 }
-                previousPlaceholder = null;
-                previousPlaceholderColumn = -2;
-                final int codePointWcWidth = lineObject.getDisplayWidthAt(currentCharIndex);
-                final boolean insideCursor = (cursorX == column || (codePointWcWidth == 2 && cursorX == column + 1));
-                final boolean insideSelection = column >= selx1 && column <= selx2;
-                final int effect = TextStyle.decodeEffect(style);
-                final boolean cellBold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
-                    | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
-                final boolean cellItalic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
-                final int faceStyle = (cellBold ? 1 : 0) | (cellItalic ? 2 : 0);
-                if (mBoxDrawingPolicy.synthesizes(codePoint)) {
-                    // Geometry, not a glyph: flush the run accumulated to the left of this cell
-                    // exactly as an image cell does, then draw the ink and start a fresh run.
-                    // The policy outranks any symbol_map here — the managed nerd-font map spans
-                    // the whole PUA, and matching it must not silently turn synthesis off.
+                column++;
+                currentCharIndex = clusterEnd;
+                startFreshRun = true;
+                continue;
+            }
+            previousPlaceholder = null;
+            previousPlaceholderColumn = -2;
+            final int codePointWcWidth = lineObject.getDisplayWidthAt(currentCharIndex);
+            final boolean insideCursor = cursorX >= 0
+                && ((column >= cursorX && column < cursorX + cursorColumns)
+                    || (codePointWcWidth == 2 && cursorX == column + 1));
+            final boolean insideSelection = column >= selx1 && column <= selx2;
+            final int effect = TextStyle.decodeEffect(style);
+            final boolean cellBold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
+                | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
+            final boolean cellItalic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
+            final int faceStyle = (cellBold ? 1 : 0) | (cellItalic ? 2 : 0);
+            if (mBoxDrawingPolicy.synthesizes(codePoint)) {
+                // Geometry, not a glyph: flush the run accumulated to the left of this cell
+                // exactly as an image cell does, then draw the ink and start a fresh run.
+                // The policy outranks any symbol_map here — the managed nerd-font map spans
+                // the whole PUA, and matching it must not silently turn synthesis off.
+                if (column > 0 && column != lastRunStartColumn) {
+                    final int columnWidthSinceLastRun = column - lastRunStartColumn;
+                    final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
+                    int runCursorColor = lastRunInsideCursor
+                        ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
+                    boolean invertRunTextColor = lastRunInsideCursor
+                        && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+                    drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                        columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                        measuredWidthForRun, runCursorColor, cursorShape, lastRunStyle,
+                        boldWithBright, reverseVideo || invertRunTextColor
+                            || lastRunInsideSelection,
+                        horizontalOffset, lastRunDecorationColor,
+                        lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
+                        lastRunFallbackTypeface, lastRunSymbolFeatures,
+                        lastRunSymbolVariations, false);
+                }
+                final int cellColumns = Math.max(1, codePointWcWidth);
+                if ((effect & TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) == 0) {
+                    final boolean invertCellTextColor = insideCursor
+                        && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
+                    drawSynthesizedCell(canvas, codePoint, column, cellColumns, heightOffset,
+                        horizontalOffset, resolveInkColor(style, palette, boldWithBright,
+                            reverseVideo || invertCellTextColor || insideSelection));
+                }
+                column += cellColumns;
+                currentCharIndex += charsForCodePoint;
+                while (currentCharIndex < charsUsedInLine
+                    && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
+                    currentCharIndex += Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
+                }
+                startFreshRun = true;
+                continue;
+            }
+            final SymbolMap symbolMap = symbolMapWithGlyphFor(codePoint);
+            final Typeface symbolTypeface = symbolMap == null ? null : symbolMap.typeface;
+            final String symbolFeatures = symbolFeaturesOf(symbolMap);
+            final String symbolVariations = symbolVariationsOf(symbolMap);
+            final Typeface fallbackTypeface = symbolTypeface == null
+                ? fallbackTypefaceFor(codePoint, cellBold, cellItalic) : null;
+            configureFont(cellBold, cellItalic, symbolTypeface, fallbackTypeface,
+                symbolVariations);
+            // Check if the measured text width for this code point is not the same as that expected by wcwidth().
+            // This could happen for some fonts which are not truly monospace, or for more exotic characters such as
+            // smileys which android font renders as wide.
+            // If this is detected, we draw this code point scaled to match what wcwidth() expects.
+            final float measuredCodePointWidth = (symbolTypeface == null
+                && fallbackTypeface == null
+                && codePoint < mAsciiMeasures[faceStyle].length)
+                ? mAsciiMeasures[faceStyle][codePoint]
+                : mTextPaint.measureText(line, currentCharIndex, charsForCodePoint);
+            final boolean fontWidthMismatch = Math.abs(measuredCodePointWidth / mFontWidth - codePointWcWidth) > 0.01;
+            // Kitty's private-use expansion (its fonts.c): a PUA symbol whose own glyph is
+            // wider than one cell, and which is followed by blanks that paint the same, is
+            // drawn across those cells instead of being squeezed into a single narrow square.
+            // The blanks are consumed; the background pass already painted their fill.
+            final int wantedColumns = symbolTypeface != null && codePointWcWidth == 1
+                && isPrivateUse(codePoint) && !insideCursor && !insideSelection
+                ? symbolExpansionColumns(measuredCodePointWidth, mFontWidth,
+                    mSymbolExpansion.maxColumnsFor(codePoint))
+                : 1;
+            if (wantedColumns > 1) {
+                int expandedColumns = 1;
+                int blankIndex = currentCharIndex + charsForCodePoint;
+                while (expandedColumns < wantedColumns && column + expandedColumns < columns
+                    && blankIndex < charsUsedInLine
+                    && isExpansionBlank(line[blankIndex])
+                    && lineObject.getDisplayWidthAt(blankIndex) == 1
+                    && !(cursorX >= 0 && column + expandedColumns >= cursorX
+                        && column + expandedColumns < cursorX + cursorColumns)
+                    && !(column + expandedColumns >= selx1
+                        && column + expandedColumns <= selx2)
+                    && blankCellPaintsAlike(style,
+                        lineObject.getStyle(column + expandedColumns),
+                        palette, boldWithBright, reverseVideo)
+                    && (rowHasDecorationColors
+                        ? lineObject.getDecorationColor(column + expandedColumns)
+                        : TextStyle.DECORATION_COLOR_DEFAULT) == decorationColor
+                    && (rowHasHyperlinks
+                        ? lineObject.getHyperlinkId(column + expandedColumns) : 0)
+                        == hyperlinkId) {
+                    expandedColumns++;
+                    blankIndex++;
+                }
+                if (expandedColumns > 1) {
                     if (column > 0 && column != lastRunStartColumn) {
                         final int columnWidthSinceLastRun = column - lastRunStartColumn;
                         final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
@@ -809,177 +1521,368 @@ public final class TerminalRenderer {
                             lastRunFallbackTypeface, lastRunSymbolFeatures,
                             lastRunSymbolVariations, false);
                     }
-                    final int cellColumns = Math.max(1, codePointWcWidth);
-                    if ((effect & TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) == 0) {
-                        final boolean invertCellTextColor = insideCursor
-                            && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
-                        drawSynthesizedCell(canvas, codePoint, column, cellColumns, heightOffset,
-                            horizontalOffset, resolveInkColor(style, palette, boldWithBright,
-                                reverseVideo || invertCellTextColor || insideSelection));
-                    }
-                    column += cellColumns;
-                    currentCharIndex += charsForCodePoint;
+                    drawTextRun(canvas, line, palette, heightOffset, column, expandedColumns,
+                        currentCharIndex, charsForCodePoint, measuredCodePointWidth, 0,
+                        cursorShape, style, boldWithBright, reverseVideo, horizontalOffset,
+                        decorationColor, hyperlinkId != 0, 0, symbolTypeface, null,
+                        symbolFeatures, symbolVariations, false);
+                    column += expandedColumns;
+                    currentCharIndex = blankIndex;
                     while (currentCharIndex < charsUsedInLine
                         && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
-                        currentCharIndex += Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
+                        currentCharIndex +=
+                            Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
                     }
                     startFreshRun = true;
                     continue;
                 }
-                final SymbolMap symbolMap = symbolMapFor(codePoint);
-                final Typeface symbolTypeface = symbolMap == null ? null : symbolMap.typeface;
-                final String symbolFeatures = symbolFeaturesOf(symbolMap);
-                final String symbolVariations = symbolVariationsOf(symbolMap);
-                final Typeface fallbackTypeface = symbolTypeface == null
-                    ? fallbackTypefaceFor(codePoint, cellBold, cellItalic) : null;
-                configureFont(cellBold, cellItalic, symbolTypeface, fallbackTypeface,
-                    symbolVariations);
-                // Check if the measured text width for this code point is not the same as that expected by wcwidth().
-                // This could happen for some fonts which are not truly monospace, or for more exotic characters such as
-                // smileys which android font renders as wide.
-                // If this is detected, we draw this code point scaled to match what wcwidth() expects.
-                final float measuredCodePointWidth = (symbolTypeface == null
-                    && fallbackTypeface == null
-                    && codePoint < mAsciiMeasures[faceStyle].length)
-                    ? mAsciiMeasures[faceStyle][codePoint]
-                    : mTextPaint.measureText(line, currentCharIndex, charsForCodePoint);
-                final boolean fontWidthMismatch = Math.abs(measuredCodePointWidth / mFontWidth - codePointWcWidth) > 0.01;
-                // Kitty's private-use expansion (its fonts.c): a PUA symbol whose own glyph is
-                // wider than one cell, and which is followed by blanks that paint the same, is
-                // drawn across those cells instead of being squeezed into a single narrow square.
-                // The blanks are consumed; the background pass already painted their fill.
-                final int wantedColumns = symbolTypeface != null && codePointWcWidth == 1
-                    && isPrivateUse(codePoint) && !insideCursor && !insideSelection
-                    ? symbolExpansionColumns(measuredCodePointWidth, mFontWidth,
-                        mSymbolExpansion.maxColumnsFor(codePoint))
-                    : 1;
-                if (wantedColumns > 1) {
-                    int expandedColumns = 1;
-                    int blankIndex = currentCharIndex + charsForCodePoint;
-                    while (expandedColumns < wantedColumns && column + expandedColumns < columns
-                        && blankIndex < charsUsedInLine
-                        && isExpansionBlank(line[blankIndex])
-                        && lineObject.getDisplayWidthAt(blankIndex) == 1
-                        && cursorX != column + expandedColumns
-                        && !(column + expandedColumns >= selx1
-                            && column + expandedColumns <= selx2)
-                        && blankCellPaintsAlike(style,
-                            lineObject.getStyle(column + expandedColumns),
-                            palette, boldWithBright, reverseVideo)
-                        && (rowHasDecorationColors
-                            ? lineObject.getDecorationColor(column + expandedColumns)
-                            : TextStyle.DECORATION_COLOR_DEFAULT) == decorationColor
-                        && (rowHasHyperlinks
-                            ? lineObject.getHyperlinkId(column + expandedColumns) : 0)
-                            == hyperlinkId) {
-                        expandedColumns++;
-                        blankIndex++;
-                    }
-                    if (expandedColumns > 1) {
-                        if (column > 0 && column != lastRunStartColumn) {
-                            final int columnWidthSinceLastRun = column - lastRunStartColumn;
-                            final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
-                            int runCursorColor = lastRunInsideCursor
-                                ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
-                            boolean invertRunTextColor = lastRunInsideCursor
-                                && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
-                            drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
-                                columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
-                                measuredWidthForRun, runCursorColor, cursorShape, lastRunStyle,
-                                boldWithBright, reverseVideo || invertRunTextColor
-                                    || lastRunInsideSelection,
-                                horizontalOffset, lastRunDecorationColor,
-                                lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
-                                lastRunFallbackTypeface, lastRunSymbolFeatures,
-                                lastRunSymbolVariations, false);
-                        }
-                        drawTextRun(canvas, line, palette, heightOffset, column, expandedColumns,
-                            currentCharIndex, charsForCodePoint, measuredCodePointWidth, 0,
-                            cursorShape, style, boldWithBright, reverseVideo, horizontalOffset,
-                            decorationColor, hyperlinkId != 0, 0, symbolTypeface, null,
-                            symbolFeatures, symbolVariations, false);
-                        column += expandedColumns;
-                        currentCharIndex = blankIndex;
-                        while (currentCharIndex < charsUsedInLine
-                            && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
-                            currentCharIndex +=
-                                Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
-                        }
-                        startFreshRun = true;
-                        continue;
-                    }
-                }
-                if (style != lastRunStyle || insideCursor != lastRunInsideCursor
-                    || insideSelection != lastRunInsideSelection || fontWidthMismatch
-                    || lastRunFontWidthMismatch || decorationColor != lastRunDecorationColor
-                    || hyperlinkId != lastRunHyperlinkId
-                    || symbolTypeface != lastRunSymbolTypeface
-                    || fallbackTypeface != lastRunFallbackTypeface
-                    || !sameSymbolSettings(symbolFeatures, symbolVariations,
-                        lastRunSymbolFeatures, lastRunSymbolVariations)) {
-                    if (column == 0 || column == lastRunStartColumn) {
-                        // Skip first column as there is nothing to draw, just record the current style.
-                    } else {
-                        final int columnWidthSinceLastRun = column - lastRunStartColumn;
-                        final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
-                        int cursorColor = lastRunInsideCursor ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
-                        boolean invertCursorTextColor = false;
-                        if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
-                            invertCursorTextColor = true;
-                        }
-                        drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
-                            columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
-                            measuredWidthForRun, cursorColor, cursorShape, lastRunStyle,
-                            boldWithBright, reverseVideo || invertCursorTextColor
-                                || lastRunInsideSelection,
-                            horizontalOffset, lastRunDecorationColor,
-                            lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
-                            lastRunFallbackTypeface, lastRunSymbolFeatures,
-                            lastRunSymbolVariations, false);
-                    }
-                    measuredWidthForRun = 0.f;
-                    lastRunStyle = style;
-                    lastRunInsideCursor = insideCursor;
-                    lastRunInsideSelection = insideSelection;
-                    lastRunStartColumn = column;
-                    lastRunStartIndex = currentCharIndex;
-                    lastRunFontWidthMismatch = fontWidthMismatch;
-                    lastRunDecorationColor = decorationColor;
-                    lastRunHyperlinkId = hyperlinkId;
-                    lastRunSymbolTypeface = symbolTypeface;
-                    lastRunFallbackTypeface = fallbackTypeface;
-                    lastRunSymbolFeatures = symbolFeatures;
-                    lastRunSymbolVariations = symbolVariations;
-                }
-                measuredWidthForRun += measuredCodePointWidth;
-                column += codePointWcWidth;
-                currentCharIndex += charsForCodePoint;
-                while (currentCharIndex < charsUsedInLine
-                    && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
-                    // Eat combining chars so that they are treated as part of the last non-combining code point,
-                    // instead of e.g. being considered inside the cursor in the next run.
-                    currentCharIndex += Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
-                }
             }
-            // A row that ends on one of those cells has already flushed everything before it.
-            if (!startFreshRun) {
-                final int columnWidthSinceLastRun = columns - lastRunStartColumn;
-                final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
-                int cursorColor = lastRunInsideCursor ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
-                boolean invertCursorTextColor = false;
-                if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
-                    invertCursorTextColor = true;
+            if (style != lastRunStyle || insideCursor != lastRunInsideCursor
+                || insideSelection != lastRunInsideSelection || fontWidthMismatch
+                || lastRunFontWidthMismatch || decorationColor != lastRunDecorationColor
+                || hyperlinkId != lastRunHyperlinkId
+                || symbolTypeface != lastRunSymbolTypeface
+                || fallbackTypeface != lastRunFallbackTypeface
+                || !sameSymbolSettings(symbolFeatures, symbolVariations,
+                    lastRunSymbolFeatures, lastRunSymbolVariations)) {
+                if (column == 0 || column == lastRunStartColumn) {
+                    // Skip first column as there is nothing to draw, just record the current style.
+                } else {
+                    final int columnWidthSinceLastRun = column - lastRunStartColumn;
+                    final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
+                    int cursorColor = lastRunInsideCursor ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
+                    boolean invertCursorTextColor = false;
+                    if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
+                        invertCursorTextColor = true;
+                    }
+                    drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                        columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                        measuredWidthForRun, cursorColor, cursorShape, lastRunStyle,
+                        boldWithBright, reverseVideo || invertCursorTextColor
+                            || lastRunInsideSelection,
+                        horizontalOffset, lastRunDecorationColor,
+                        lastRunHyperlinkId != 0, 0, lastRunSymbolTypeface,
+                        lastRunFallbackTypeface, lastRunSymbolFeatures,
+                        lastRunSymbolVariations, false);
                 }
-                drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
-                    columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
-                    measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright,
-                    reverseVideo || invertCursorTextColor || lastRunInsideSelection,
-                    horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0, 0,
-                    lastRunSymbolTypeface, lastRunFallbackTypeface, lastRunSymbolFeatures,
-                    lastRunSymbolVariations, false);
+                measuredWidthForRun = 0.f;
+                lastRunStyle = style;
+                lastRunInsideCursor = insideCursor;
+                lastRunInsideSelection = insideSelection;
+                lastRunStartColumn = column;
+                lastRunStartIndex = currentCharIndex;
+                lastRunFontWidthMismatch = fontWidthMismatch;
+                lastRunDecorationColor = decorationColor;
+                lastRunHyperlinkId = hyperlinkId;
+                lastRunSymbolTypeface = symbolTypeface;
+                lastRunFallbackTypeface = fallbackTypeface;
+                lastRunSymbolFeatures = symbolFeatures;
+                lastRunSymbolVariations = symbolVariations;
+            }
+            measuredWidthForRun += measuredCodePointWidth;
+            column += codePointWcWidth;
+            currentCharIndex += charsForCodePoint;
+            while (currentCharIndex < charsUsedInLine
+                && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
+                // Eat combining chars so that they are treated as part of the last non-combining code point,
+                // instead of e.g. being considered inside the cursor in the next run.
+                currentCharIndex += Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
             }
         }
-        drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
+        // A row that ends on one of those cells has already flushed everything before it.
+        if (!startFreshRun) {
+            final int columnWidthSinceLastRun = columns - lastRunStartColumn;
+            final int charsSinceLastRun = currentCharIndex - lastRunStartIndex;
+            int cursorColor = lastRunInsideCursor ? mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] : 0;
+            boolean invertCursorTextColor = false;
+            if (lastRunInsideCursor && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK) {
+                invertCursorTextColor = true;
+            }
+            drawTextRun(canvas, line, palette, heightOffset, lastRunStartColumn,
+                columnWidthSinceLastRun, lastRunStartIndex, charsSinceLastRun,
+                measuredWidthForRun, cursorColor, cursorShape, lastRunStyle, boldWithBright,
+                reverseVideo || invertCursorTextColor || lastRunInsideSelection,
+                horizontalOffset, lastRunDecorationColor, lastRunHyperlinkId != 0, 0,
+                lastRunSymbolTypeface, lastRunFallbackTypeface, lastRunSymbolFeatures,
+                lastRunSymbolVariations, false);
+        }
+        if (urlSegments != null)
+            drawUrlUnderlines(canvas, lineObject, urlSegments, heightOffset, horizontalOffset);
+    }
+
+    /**
+     * Draw the kitty text sizing blocks (OSC 66) this row is responsible for, after its own
+     * glyphs. A block is drawn as one piece and reaches outside the row's line box, which is why
+     * it cannot be part of the run walk: the anchor holds the whole text and every other cell of
+     * the block is a blank that {@link #drawRowGlyphs} steps over.
+     *
+     * <p>A block belongs to its anchor's row. The one exception is a block whose anchor has
+     * scrolled above the top of the pane: the first visible row it covers draws it instead, from
+     * the anchor's position, and the clip cuts off the part that is no longer on screen.
+     */
+    private void drawRowTextBlocks(Canvas canvas, TerminalBuffer screen, TerminalRow lineObject,
+                                   int[] palette, float y, int externalRow, int topRow,
+                                   int columns, int cursorX, int cursorColumns, int cursorShape,
+                                   Selection selection, boolean boldWithBright,
+                                   boolean reverseVideo, float horizontalOffset) {
+        if (!lineObject.hasTextSizes()) return;
+        for (int column = 0; column < columns; column++) {
+            if (!lineObject.isTextSizeCell(column)) continue;
+            // Null is an orphan whose anchor has left the transcript: its cells stay blank.
+            final TerminalBuffer.TextBlock block = screen.getTextBlockAt(externalRow, column);
+            if (block == null || column != block.column) continue;
+            if (block.row != externalRow
+                && !(externalRow == topRow && block.row < topRow)) continue;
+            final boolean insideCursor = cursorColumns > 1 && cursorX == block.column;
+            // A block is one selection unit, so its anchor cell answers for all of it.
+            final boolean insideSelection = selection.coversAnchor(block.row, block.column);
+            final boolean invert = reverseVideo || insideSelection
+                || (insideCursor
+                    && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK);
+            drawTextBlock(canvas, screen, block, lineObject, palette, y, externalRow,
+                horizontalOffset, boldWithBright, invert, 0);
+        }
+    }
+
+    /**
+     * Draw one block: its text at {@code scale} times the terminal's own text size — cut by the
+     * {@code n/d} fraction when one was asked for — aligned inside the block by its {@code v} and
+     * {@code h} keys and clipped to it, with the decorations its style carries along its bottom
+     * edge. Its cell backgrounds were painted by the background pass like any other cell's, since
+     * every cell of a block carries the anchor's style.
+     *
+     * @param lineObject any row the block covers; every one of its cells carries the anchor's
+     *     style, decoration colour and hyperlink id.
+     * @param y          the bottom of {@code externalRow}, in the renderer's own coordinates.
+     * @param foregroundOverride a colour the extra-cursor overlay imposes, or 0.
+     */
+    private void drawTextBlock(Canvas canvas, TerminalBuffer screen,
+                               TerminalBuffer.TextBlock block, TerminalRow lineObject,
+                               int[] palette, float y, int externalRow, float horizontalOffset,
+                               boolean boldWithBright, boolean invert, int foregroundOverride) {
+        final String text = screen.getTextBlockText(block);
+        if (text.isEmpty()) return;
+        final long style = lineObject.getStyle(block.column);
+        final int effect = TextStyle.decodeEffect(style);
+        if ((effect & TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) != 0) return;
+        final float blockLeft = TextBlockGeometry.left(horizontalOffset, mFontWidth, block.column);
+        final float blockWidth = TextBlockGeometry.width(mFontWidth, block.columns);
+        final float blockTop = TextBlockGeometry.top(y, mFontLineSpacing,
+            externalRow - block.row);
+        final float blockHeight = TextBlockGeometry.height(mFontLineSpacing, block.rows);
+        final float blockBottom = blockTop + blockHeight;
+        int foreColor = (int) (resolveRunColors(style, palette, boldWithBright, invert) >>> 32);
+        if ((effect & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0) foreColor = dimColor(foreColor);
+        if (foregroundOverride != 0) foreColor = foregroundOverride;
+        final boolean bold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
+            | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
+        final boolean italic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
+        final float sizeScale = TextBlockGeometry.sizeScale(block.scale, block.fractionNumerator,
+            block.fractionDenominator, block.demoted);
+        canvas.save();
+        final String previousFeatures = mTextPaint.getFontFeatureSettings();
+        final String runFeatures = mFontFeatures.forRun(bold, italic, false);
+        final boolean changedFeatures = !sameString(previousFeatures, runFeatures);
+        try {
+            canvas.clipRect(blockLeft, blockTop, blockLeft + blockWidth, blockBottom);
+            configureFont(bold, italic, null, null, null);
+            if (changedFeatures) mTextPaint.setFontFeatureSettings(runFeatures);
+            mTextPaint.setTextSize(mTextSize * sizeScale);
+            try {
+                final float advance = mTextPaint.measureText(text);
+                final float boxHeight = TextBlockGeometry.boxHeight(mFontLineSpacing, sizeScale);
+                final float boxTop = TextBlockGeometry.alignedTop(blockTop, blockHeight, boxHeight,
+                    block.verticalAlign);
+                mTextPaint.setUnderlineText(false);
+                mTextPaint.setStrikeThruText(false);
+                mTextPaint.setColor(foreColor);
+                canvas.drawText(text,
+                    TextBlockGeometry.alignedLeft(blockLeft, blockWidth, advance,
+                        block.horizontalAlign),
+                    TextBlockGeometry.baseline(boxTop, mFontLineSpacing, mFontBaselineDescent,
+                        sizeScale), mTextPaint);
+            } finally {
+                mTextPaint.setTextSize(mTextSize);
+                if (changedFeatures) mTextPaint.setFontFeatureSettings(previousFeatures);
+            }
+            // Decorations run along the block's own bottom edge rather than the anchor row's, so a
+            // link or an underlined heading is marked once, under all of it.
+            int underlineStyle = TextStyle.decodeUnderlineStyle(style);
+            final boolean hyperlink = lineObject.hasHyperlinks()
+                && lineObject.getHyperlinkId(block.column) != 0;
+            if (underlineStyle == TextStyle.UNDERLINE_STYLE_NONE
+                && (((effect & TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0) || hyperlink))
+                underlineStyle = TextStyle.UNDERLINE_STYLE_SINGLE;
+            if (underlineStyle != TextStyle.UNDERLINE_STYLE_NONE) {
+                final int decorationColor = lineObject.hasDecorationColors()
+                    ? lineObject.getDecorationColor(block.column)
+                    : TextStyle.DECORATION_COLOR_DEFAULT;
+                int lineColor = foreColor;
+                if (decorationColor != TextStyle.DECORATION_COLOR_DEFAULT) {
+                    lineColor = ((decorationColor & 0xff000000) == 0xff000000)
+                        ? decorationColor : palette[decorationColor];
+                }
+                drawUnderline(canvas, blockLeft, blockLeft + blockWidth, blockBottom,
+                    mFontBaselineDescent, underlineStyle, lineColor);
+            }
+            if ((effect & TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH) != 0)
+                drawStrikethrough(canvas, blockLeft, blockLeft + blockWidth, blockBottom,
+                    foreColor);
+        } finally {
+            canvas.restore();
+        }
+    }
+
+    /**
+     * The curly underline under each detected URL of a row, drawn after its glyphs so it sits on
+     * top of them like any other decoration. Cells that already carry an OSC 8 hyperlink keep
+     * their single underline instead: one mark per link.
+     */
+    private void drawUrlUnderlines(Canvas canvas, TerminalRow lineObject, int[] segments,
+                                   float heightOffset, float horizontalOffset) {
+        final boolean rowHasHyperlinks = lineObject.hasHyperlinks();
+        for (int i = 0; i + 1 < segments.length; i += 2) {
+            final int start = segments[i];
+            final int end = segments[i + 1];
+            if (rowHasHyperlinks && lineObject.getHyperlinkId(start) != 0) continue;
+            final float left = horizontalOffset + start * mFontWidth;
+            final float right = horizontalOffset + end * mFontWidth;
+            drawUnderline(canvas, left, right, heightOffset, mFontBaselineDescent,
+                TextStyle.UNDERLINE_STYLE_CURLY, mUrlUnderlineColor);
+        }
+    }
+
+    /**
+     * Draw one row's image cells — kitty placeholder slices and sixel or legacy bitmaps — and
+     * nothing else.
+     *
+     * <p>This is the whole point of the third row node. An animation replaces the pixels behind a
+     * placeholder without touching a single char of the row, so the glyph pass has nothing new to
+     * say and its recording is replayed; only this walk runs again. It shares the cell stepping of
+     * {@link #drawRowGlyphs} but none of its run segmentation: no advances are measured, no
+     * typeface is configured, no text is shaped.
+     *
+     * <p>Only ever called for a row {@link RowRenderCache#rowCarriesAnImage} reported, which is
+     * every row whose text holds a placeholder or whose styles hold a bitmap cell — the same two
+     * conditions the branches below test, so no image and no placeholder cursor can be missed.
+     */
+    private void drawRowImages(TerminalEmulator mEmulator, Canvas canvas, TerminalRow lineObject,
+                               int[] palette, float heightOffset, int columns, int cursorX,
+                               boolean cursorVisible, int cursorShape, float horizontalOffset) {
+        final char[] line = lineObject.mText;
+        final int charsUsedInLine = lineObject.getSpaceUsed();
+        final boolean rowHasDecorationColors = lineObject.hasDecorationColors();
+        KittyUnicodePlaceholder.Cell previousPlaceholder = null;
+        int previousPlaceholderColumn = -2;
+        int currentCharIndex = 0;
+        for (int column = 0; column < columns && currentCharIndex < charsUsedInLine; ) {
+            final char charAtIndex = line[currentCharIndex];
+            final boolean charIsHighsurrogate = Character.isHighSurrogate(charAtIndex);
+            final int charsForCodePoint = charIsHighsurrogate ? 2 : 1;
+            final int codePoint = charIsHighsurrogate
+                ? Character.toCodePoint(charAtIndex, line[currentCharIndex + 1]) : charAtIndex;
+            final long style = lineObject.getStyle(column);
+            if (TextStyle.isBitmap(style)) {
+                previousPlaceholder = null;
+                previousPlaceholderColumn = -2;
+                drawBitmapCell(canvas, mEmulator, codePoint, style, column, heightOffset,
+                    horizontalOffset);
+                column += 1;
+                currentCharIndex += charsForCodePoint;
+                continue;
+            }
+            if (codePoint == KittyUnicodePlaceholder.CODE_POINT) {
+                final int clusterEnd = placeholderClusterEnd(lineObject, line,
+                    currentCharIndex + charsForCodePoint, charsUsedInLine);
+                final int decorationColor = rowHasDecorationColors
+                    ? lineObject.getDecorationColor(column) : TextStyle.DECORATION_COLOR_DEFAULT;
+                final KittyUnicodePlaceholder.Cell inherited =
+                    previousPlaceholderColumn == column - 1 ? previousPlaceholder : null;
+                final KittyUnicodePlaceholder.Cell placeholderCell = drawPlaceholderCell(canvas,
+                    mEmulator, line, currentCharIndex + charsForCodePoint, clusterEnd, style,
+                    decorationColor, inherited, column, heightOffset, horizontalOffset);
+                if (placeholderCell != null) {
+                    previousPlaceholder = placeholderCell;
+                    previousPlaceholderColumn = column;
+                } else {
+                    previousPlaceholder = null;
+                    previousPlaceholderColumn = -2;
+                }
+                // Kitty specifies that the cursor is drawn over the image, so it belongs here.
+                if (cursorX == column && cursorVisible)
+                    drawPlaceholderCursor(canvas, column, heightOffset, horizontalOffset,
+                        cursorShape, palette[TextStyle.COLOR_INDEX_CURSOR]);
+                column++;
+                currentCharIndex = clusterEnd;
+                continue;
+            }
+            previousPlaceholder = null;
+            previousPlaceholderColumn = -2;
+            column += Math.max(1, lineObject.getDisplayWidthAt(currentCharIndex));
+            currentCharIndex += charsForCodePoint;
+            while (currentCharIndex < charsUsedInLine
+                && lineObject.getDisplayWidthAt(currentCharIndex) <= 0) {
+                currentCharIndex += Character.isHighSurrogate(line[currentCharIndex]) ? 2 : 1;
+            }
+        }
+    }
+
+    /**
+     * Where the placeholder grapheme that begins at {@code afterCodePoint} ends: its diacritics are
+     * zero-width continuations of the cluster, so they belong to the same cell.
+     */
+    private static int placeholderClusterEnd(TerminalRow lineObject, char[] line,
+                                             int afterCodePoint, int charsUsedInLine) {
+        int clusterEnd = afterCodePoint;
+        while (clusterEnd < charsUsedInLine && lineObject.getDisplayWidthAt(clusterEnd) <= 0)
+            clusterEnd += Character.isHighSurrogate(line[clusterEnd]) ? 2 : 1;
+        return clusterEnd;
+    }
+
+    /**
+     * Decode the placeholder cluster in {@code [start, end)} and, when its placement is still on
+     * screen, draw the image slice it addresses.
+     *
+     * @return the decoded cell, which the next column inherits its unspecified fields from, or null
+     *     when the cluster does not decode to one.
+     */
+    @Nullable
+    private KittyUnicodePlaceholder.Cell drawPlaceholderCell(Canvas canvas,
+                                                             TerminalEmulator mEmulator,
+                                                             char[] line, int start, int end,
+                                                             long style, int decorationColor,
+                                                             @Nullable
+                                                             KittyUnicodePlaceholder.Cell inherited,
+                                                             int column, float heightOffset,
+                                                             float horizontalOffset) {
+        final KittyUnicodePlaceholder.Cell cell = KittyUnicodePlaceholder.decode(line, start, end,
+            TextStyle.decodeForeColor(style), decorationColor,
+            TextStyle.DECORATION_COLOR_DEFAULT, inherited);
+        if (cell == null) return null;
+        final boolean resolved =
+            mEmulator.getKittyImagePlaceholder(cell.imageId, cell.placementId, mKittyPlaceholder);
+        if (mRecordingImagesForRow >= 0) {
+            // Reported whether or not it resolved: a cell whose image has not arrived draws
+            // nothing, and the row has to be recorded again on the frame it does arrive.
+            mRowCache.noteRowImage(mRecordingImagesForRow, cell.imageId, resolved
+                ? mKittyPlaceholder.generation
+                : mEmulator.getKittyImageGeneration(cell.imageId));
+        }
+        if (resolved) drawKittyPlaceholderCell(canvas, cell, column, heightOffset, horizontalOffset);
+        return cell;
+    }
+
+    /** Draw the sixel or legacy bitmap slice one image cell holds. */
+    private void drawBitmapCell(Canvas canvas, TerminalEmulator mEmulator, int codePoint,
+                                long style, int column, float heightOffset,
+                                float horizontalOffset) {
+        final TerminalBuffer screen = mEmulator.getScreen();
+        final Bitmap bitmap = screen.getSixelBitmap(codePoint, style);
+        if (bitmap == null) return;
+        final float left = horizontalOffset + column * mFontWidth;
+        final float top = heightOffset - mFontLineSpacing;
+        mSixelRect.set(left, top, left + mFontWidth, top + mFontLineSpacing);
+        canvas.drawBitmap(bitmap, screen.getSixelRect(codePoint, style), mSixelRect, null);
     }
 
     /** Draw the image slice addressed by one placeholder cell, clipped to that cell. */
@@ -1374,8 +2277,10 @@ public final class TerminalRenderer {
      * mirrors the run segmentation in {@link #render} so both passes agree on every cell's style.
      */
     private void drawRowBackgroundAndCursor(Canvas canvas, TerminalRow lineObject, int[] palette,
-                                            float y, int columns, int cursorX, int cursorShape,
-                                            int selx1, int selx2, boolean boldWithBright,
+                                            float y, int columns, int cursorX, int cursorColumns,
+                                            boolean cursorLastRow, int cursorShape,
+                                            Selection selection, int externalRow,
+                                            boolean boldWithBright,
                                             boolean reverseVideo, float horizontalOffset,
                                             int cursorColor) {
         final char[] line = lineObject.mText;
@@ -1385,6 +2290,11 @@ public final class TerminalRenderer {
         int pendingStartColumn = -1;
         int pendingEndColumn = -1;
         int pendingColor = 0;
+        // Where the cursor's own shape goes, collected here and painted after the fills: over a
+        // block it spans many cells, and a bar or an underline must be drawn once for the whole
+        // span rather than once per cell.
+        int cursorDrawColumn = -1;
+        int cursorDrawColumns = 1;
         int currentCharIndex = 0;
         for (int column = 0; column < columns; ) {
             final char charAtIndex = line[currentCharIndex];
@@ -1401,8 +2311,12 @@ public final class TerminalRenderer {
             }
             final int codePointWcWidth = lineObject.getDisplayWidthAt(currentCharIndex);
             final int cellColumns = Math.max(1, codePointWcWidth);
-            final boolean insideCursor = cursorX == column || (codePointWcWidth == 2 && cursorX == column + 1);
-            final boolean insideSelection = column >= selx1 && column <= selx2;
+            final boolean insideCursor = cursorX >= 0
+                && ((column >= cursorX && column < cursorX + cursorColumns)
+                    || (codePointWcWidth == 2 && cursorX == column + 1));
+            // A cell of a block is filled when its anchor is, which is how the rows under a tall
+            // block come to be highlighted at all: the selection itself never reaches them.
+            final boolean insideSelection = selection.covers(lineObject, externalRow, column);
             final boolean invertCursorTextColor = insideCursor
                 && cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BLOCK;
             final int backColor = (int) resolveRunColors(style, palette, boldWithBright,
@@ -1414,15 +2328,10 @@ public final class TerminalRenderer {
                 }
                 if (backColor != defaultBackColor)
                     drawCellRect(canvas, column, column + cellColumns, top, y, horizontalOffset, backColor, mTextPaint);
-                float left = horizontalOffset + column * mFontWidth;
-                float right = left + cellColumns * mFontWidth;
-                float cursorTop = top;
-                if (cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE)
-                    cursorTop = y - mFontLineSpacing / 4f;
-                else if (cursorShape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR)
-                    right -= ((right - left) * 3) / 4f;
-                mTextPaint.setColor(cursorColor);
-                canvas.drawRect(left, cursorTop, right, y, mTextPaint);
+                if (cursorDrawColumn == -1) {
+                    cursorDrawColumn = column;
+                    cursorDrawColumns = cellColumns;
+                }
             } else if (backColor != defaultBackColor) {
                 if (pendingStartColumn != -1 && pendingColor == backColor) {
                     pendingEndColumn = column + cellColumns;
@@ -1446,6 +2355,22 @@ public final class TerminalRenderer {
         }
         if (pendingStartColumn != -1)
             drawCellRect(canvas, pendingStartColumn, pendingEndColumn, top, y, horizontalOffset, pendingColor, mTextPaint);
+        if (cursorDrawColumn != -1) {
+            // Over a block the span is the block's, so the fill covers all of it, the bar stands at
+            // its left edge and the underline is drawn only on the row that is its bottom.
+            final boolean overBlock = cursorColumns > 1;
+            final int shapeColumn = overBlock ? cursorX : cursorDrawColumn;
+            final int shapeColumns = overBlock ? cursorColumns : cursorDrawColumns;
+            final float left = TextBlockGeometry.left(horizontalOffset, mFontWidth, shapeColumn);
+            final float width = TextBlockGeometry.width(mFontWidth, shapeColumns);
+            final float barWidth = overBlock ? mFontWidth / 4f : width / 4f;
+            final float[] rect = mBlockCursorRect;
+            if (TextBlockGeometry.cursorRect(cursorShape, left, width, barWidth, top, y,
+                mFontLineSpacing, cursorLastRow, rect)) {
+                mTextPaint.setColor(cursorColor);
+                canvas.drawRect(rect[0], rect[1], rect[2], rect[3], mTextPaint);
+            }
+        }
     }
 
     /**
@@ -1702,6 +2627,14 @@ public final class TerminalRenderer {
             }
 
             float y = mFontLineSpacingAndAscent + (cursor.row - topRow + 1) * mFontLineSpacing;
+            // D2 for the kitty extra cursors too: standing anywhere on a block covers all of it.
+            TerminalBuffer.TextBlock block = screen.getTextBlockAt(cursor.row, cursor.col);
+            if (block != null) {
+                drawExtraCursorOverBlock(canvas, screen, block, row, palette, topRow,
+                    horizontalOffset, boldWithBright, reverseVideo, invertText, shape, cursorColor,
+                    textOverride);
+                continue;
+            }
             if (TextStyle.isBitmap(style)) {
                 drawCursorShape(canvas, horizontalOffset + startColumn * mFontWidth, y,
                     width * mFontWidth, shape, cursorColor);
@@ -1711,7 +2644,7 @@ public final class TerminalRenderer {
             boolean cellBold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
                 | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
             boolean cellItalic = (effect & TextStyle.CHARACTER_ATTRIBUTE_ITALIC) != 0;
-            SymbolMap symbolMap = symbolMapFor(codePoint);
+            SymbolMap symbolMap = symbolMapWithGlyphFor(codePoint);
             Typeface symbolTypeface = symbolMap == null ? null : symbolMap.typeface;
             if (mBoxDrawingPolicy.synthesizes(codePoint)) {
                 // The overlay has to reach the same conclusion as the glyph pass. Drawing this cell
@@ -1772,8 +2705,7 @@ public final class TerminalRenderer {
     @Nullable
     private Typeface variationTypeface(@Nullable Typeface base, @Nullable String variations) {
         if (base == null || variations == null || variations.isEmpty()) return base;
-        String key = variationKey(base, variations);
-        Typeface cached = mVariationTypefaces.get(key);
+        Typeface cached = mVariationTypefaces.get(base, variations);
         if (cached != null) return cached;
         Typeface resolved = base;
         try {
@@ -1786,21 +2718,8 @@ public final class TerminalRenderer {
         } catch (RuntimeException ignored) {
             // An unsupported axis must never take terminal rendering down; keep the base face.
         }
-        mVariationTypefaces.put(key, resolved);
+        mVariationTypefaces.put(base, variations, resolved);
         return resolved;
-    }
-
-    /**
-     * The {@link #mVariationTypefaces} key of one (face, axes) pair. Both halves matter: two symbol
-     * maps naming the same font with different axes are two instances, and one font with the same
-     * axes reached from two maps is one instance.
-     */
-    private static String variationKey(@Nullable Typeface base, @Nullable String variations) {
-        return variationKey(System.identityHashCode(base), variations);
-    }
-
-    static String variationKey(int baseIdentity, @Nullable String variations) {
-        return baseIdentity + "\0" + variations;
     }
 
     /**
@@ -1908,16 +2827,105 @@ public final class TerminalRenderer {
             || (codePoint >= 0x100000 && codePoint <= 0x10FFFD);
     }
 
-    /** The map a code point draws from, kept whole so the run can use its own settings. */
+    /**
+     * The map a code point draws from, kept whole so the run can use its own settings.
+     *
+     * <p>Called once per cell, so the answer is reached without walking the list wherever that is
+     * possible: outside the union of every range there can be no match, and inside the range of the
+     * map the previous cell matched — when no later map overlaps that one — the answer is that same
+     * map. Everything else falls through to the ordered scan, where a later range still wins.
+     */
     @Nullable
-    private SymbolMap symbolMapFor(int codePoint) {
+    SymbolMap symbolMapFor(int codePoint) {
+        final int index = symbolMapIndexFor(codePoint);
+        return index < 0 ? null : mSymbolMaps[index];
+    }
+
+    /**
+     * The map that draws this code point, or null when the cell belongs to the normal chain.
+     *
+     * <p>A mapped range wider than its font's cmap is the common case — the app's own drop-in maps
+     * the whole private-use area to one symbols face, and a Nerd Font's coverage of it is full of
+     * holes — so the map that owns a range is not always the map that can draw it. The winner is
+     * the latest map whose range covers the code point <em>and</em> whose face has the glyph, so a
+     * narrow map declared under a broad one still draws its own icons. This is what makes
+     * precedence work as written: the broad drop-in outranks an earlier narrow map for every code
+     * point it can actually draw, and hands back the ones it cannot.
+     *
+     * <p>Only when no covering map can draw the code point does the cell go to
+     * {@link #fallbackTypefaceFor} and then to Android's own fallback, as any other cell would.
+     */
+    @Nullable
+    SymbolMap symbolMapWithGlyphFor(int codePoint) {
+        final int index = symbolMapIndexFor(codePoint);
+        if (index < 0) return null;
+        if (drawable(index, codePoint)) return mSymbolMaps[index];
+        // Only reached for a code point the owning map has no glyph for, which used to be a tofu,
+        // so the scan back costs nothing that was previously being spent well.
+        for (int i = index - 1; i >= 0; i--) {
+            SymbolMap map = mSymbolMaps[i];
+            if (codePoint >= map.firstCodePoint && codePoint <= map.lastCodePoint
+                && drawable(i, codePoint)) return map;
+        }
+        return null;
+    }
+
+    private boolean drawable(int index, int codePoint) {
+        return mSymbolGlyphs == null
+            || mSymbolGlyphs.covers(mSymbolMapFaceIndex[index], codePoint, mSymbolCoverage);
+    }
+
+    private int symbolMapIndexFor(int codePoint) {
+        if (codePoint < mSymbolMapsFirstCodePoint || codePoint > mSymbolMapsLastCodePoint)
+            return -1;
+        final int last = mLastSymbolMapIndex;
+        if (last >= 0 && codePoint >= mSymbolMaps[last].firstCodePoint
+            && codePoint <= mSymbolMaps[last].lastCodePoint) return last;
         // Repeated directives are ordered; a later overlapping range wins.
         for (int i = mSymbolMaps.length - 1; i >= 0; i--) {
             SymbolMap map = mSymbolMaps[i];
-            if (codePoint >= map.firstCodePoint && codePoint <= map.lastCodePoint)
-                return map;
+            if (codePoint >= map.firstCodePoint && codePoint <= map.lastCodePoint) {
+                if (mSymbolMapIsExclusive[i]) mLastSymbolMapIndex = i;
+                return i;
+            }
         }
-        return null;
+        return -1;
+    }
+
+    /**
+     * The extra-cursor overlay over a text sizing block: the cursor shape across every row of the
+     * block — filled, a bar down its left edge, or an underline along its bottom — and then the
+     * block's own text again on top, in whatever colour the overlay imposes.
+     */
+    private void drawExtraCursorOverBlock(Canvas canvas, TerminalBuffer screen,
+                                          TerminalBuffer.TextBlock block, TerminalRow lineObject,
+                                          int[] palette, int topRow, float horizontalOffset,
+                                          boolean boldWithBright, boolean reverseVideo,
+                                          boolean invertText, int shape, int cursorColor,
+                                          int textOverride) {
+        final float blockLeft = TextBlockGeometry.left(horizontalOffset, mFontWidth, block.column);
+        final float blockWidth = TextBlockGeometry.width(mFontWidth, block.columns);
+        final float[] rect = mBlockCursorRect;
+        final long style = lineObject.getStyle(block.column);
+        final int overlayBackground = (int) resolveRunColors(style, palette, boldWithBright,
+            reverseVideo || invertText);
+        for (int i = 0; i < block.rows; i++) {
+            final float rowBottom = mFontLineSpacingAndAscent
+                + (block.row + i - topRow + 1) * mFontLineSpacing;
+            final float rowTop = rowBottom - mFontLineSpacing;
+            if (overlayBackground != palette[TextStyle.COLOR_INDEX_BACKGROUND]) {
+                mTextPaint.setColor(overlayBackground);
+                canvas.drawRect(blockLeft, rowTop, blockLeft + blockWidth, rowBottom, mTextPaint);
+            }
+            if (TextBlockGeometry.cursorRect(shape, blockLeft, blockWidth, mFontWidth / 4f,
+                rowTop, rowBottom, mFontLineSpacing, i == block.rows - 1, rect)) {
+                mTextPaint.setColor(cursorColor);
+                canvas.drawRect(rect[0], rect[1], rect[2], rect[3], mTextPaint);
+            }
+        }
+        drawTextBlock(canvas, screen, block, lineObject, palette,
+            mFontLineSpacingAndAscent + (block.row - topRow + 1) * mFontLineSpacing, block.row,
+            horizontalOffset, boldWithBright, reverseVideo || invertText, textOverride);
     }
 
     private static int resolveCellColor(int color, int[] palette) {
@@ -2022,6 +3030,46 @@ public final class TerminalRenderer {
         mTextPaint.setColor(color);
         canvas.drawRect(left, center - mStrikethroughThickness / 2f,
             right, center + mStrikethroughThickness / 2f, mTextPaint);
+    }
+
+    /**
+     * How many of the visible rows the last frame had to draw again. Everything else was replayed
+     * from the recording it already had.
+     */
+    int rowsRecordedLastFrame() {
+        return mRowsRecordedLastFrame;
+    }
+
+    /**
+     * How many of the visible rows the last frame re-recorded image draws for. Zero on the direct
+     * path, where a row's images are drawn inline with its glyphs.
+     */
+    int imageRowsRecordedLastFrame() {
+        return mImageRowsRecordedLastFrame;
+    }
+
+    /** How many rows currently hold a recording, for tests. */
+    int cachedRowCount() {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q
+            || mRowNodes == null)
+            return 0;
+        return mRowNodes.size();
+    }
+
+    /**
+     * Drop the per-row recordings this renderer holds. A renderer that has been replaced never
+     * draws again, and its display lists hold on to every bitmap and paint they recorded.
+     */
+    public void release() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q
+            && mRowNodes != null) {
+            mRowNodes.discard();
+        }
+        mRowNodes = null;
+        mRowCache.invalidate();
+        mImageGenerationSource = null;
+        mRowsRecordedLastFrame = 0;
+        mImageRowsRecordedLastFrame = 0;
     }
 
     /** @return true when the flag changed, so the caller can skip a needless invalidate */

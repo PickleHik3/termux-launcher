@@ -11,6 +11,10 @@ import android.os.SystemClock;
 import androidx.annotation.Nullable;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -83,6 +87,9 @@ final class KittyGraphicsProtocol {
             case 'd': case 'q': case 'p': case 'a': case 'c':
                 return STREAM_BUFFER;
         }
+        // t=f/t=t carry a file path, not pixels: a handful of bytes the buffered path reads (and
+        // answers) whole, and t=s still has to reach its ENOSYS answer in uploadTargetFor.
+        if (command.medium != 'd') return STREAM_BUFFER;
         Upload target = uploadTargetFor(command);
         if (target == null) return STREAM_REJECT;
         streamUpload = target;
@@ -171,13 +178,7 @@ final class KittyGraphicsProtocol {
             return;
         }
         upload = null;
-        if (target.command.action == 'f') {
-            submitFrame(target.command, target.data.toByteArray());
-        } else if (target.command.format == 100) {
-            submitPng(target.command, target.data.toByteArray());
-        } else {
-            submitRaw(target.command, target.data.toByteArray());
-        }
+        dispatchCompleted(target);
     }
 
     /**
@@ -242,8 +243,8 @@ final class KittyGraphicsProtocol {
             reply(command, "EINVAL:U is only valid for display commands", true, false);
             return null;
         }
-        if (command.medium != 'd') {
-            reply(command, "ENOSYS:only direct transmission is supported", true, false);
+        if (!isSupportedMedium(command.medium)) {
+            reply(command, "ENOSYS:unsupported transmission medium", true, false);
             return null;
         }
         if (command.format != 100 && command.format != 24 && command.format != 32) {
@@ -335,17 +336,121 @@ final class KittyGraphicsProtocol {
             return;
         }
         upload = null;
+        dispatchCompleted(target);
+    }
+
+    /**
+     * A completed transmission's payload, dispatched to the right submit path. For t=f/t=t the
+     * bytes collected were a file path and the pixels come from that file instead.
+     */
+    private void dispatchCompleted(Upload target) {
+        byte[] transmitted = target.data.toByteArray();
+        if (target.command.medium != 'd') {
+            transmitted = readTransmissionFile(target.command, transmitted, false);
+            if (transmitted == null) return; // readTransmissionFile already answered.
+        }
         if (target.command.action == 'f') {
-            submitFrame(target.command, target.data.toByteArray());
+            submitFrame(target.command, transmitted);
         } else if (target.command.format == 100) {
-            submitPng(target.command, target.data.toByteArray());
+            submitPng(target.command, transmitted);
         } else {
-            submitRaw(target.command, target.data.toByteArray());
+            submitRaw(target.command, transmitted);
         }
     }
 
+    private static boolean isSupportedMedium(char medium) {
+        return medium == 'd' || medium == 'f' || medium == 't';
+    }
+
+    /**
+     * Resolve a file transmission ({@code t=f}, and {@code t=t} for a file the terminal consumes):
+     * the payload was the base64 of a path, and the pixel data is that file's contents windowed by
+     * {@code O=} (offset) and {@code S=} (size). Returns null after replying when the file cannot be
+     * used. Reading is synchronous, exactly as a direct payload's bytes arrive synchronously —
+     * nothing downstream can start without the PNG header — so it is held to a regular file and to
+     * the same {@link #MAX_TRANSMITTED_BYTES} ceiling: a FIFO or a device node would otherwise park
+     * the terminal thread forever on a read that never ends.
+     */
+    @Nullable
+    private byte[] readTransmissionFile(Command command, byte[] pathBytes, boolean always) {
+        String path = new String(pathBytes, StandardCharsets.UTF_8);
+        if (path.isEmpty()) {
+            reply(command, "EINVAL:file transmission requires a path", true, always);
+            return null;
+        }
+        File file;
+        try {
+            file = new File(path).getCanonicalFile();
+        } catch (IOException | SecurityException e) {
+            reply(command, "EBADF:cannot read transmission file", true, always);
+            return null;
+        }
+        // t=t hands the file over, but the restriction the spec puts on it is on the deletion, not
+        // on the read — a client that may name a path for t=f may name the same path for t=t. So an
+        // unsafe path is read and left alone rather than refused: only a file written for this
+        // protocol, in a temporary directory, is ever deleted.
+        boolean deletable = command.medium == 't' && isProtocolTempFile(file);
+        byte[] data = null;
+        String error = null;
+        try {
+            if (!file.isFile()) {
+                error = "EBADF:cannot read transmission file";
+            } else {
+                long length = file.length();
+                long offset = command.fileOffset;
+                long wanted = command.fileSize > 0
+                    ? Math.min((long) command.fileSize, Math.max(0, length - offset))
+                    : Math.max(0, length - offset);
+                if (offset < 0 || offset > length || wanted <= 0) {
+                    error = "EINVAL:file transmission window is empty";
+                } else if (wanted > MAX_TRANSMITTED_BYTES) {
+                    error = "ENOSPC:image exceeds transmission limit";
+                } else {
+                    data = new byte[(int) wanted];
+                    try (RandomAccessFile input = new RandomAccessFile(file, "r")) {
+                        input.seek(offset);
+                        input.readFully(data);
+                    }
+                }
+            }
+        } catch (IOException | RuntimeException | OutOfMemoryError e) {
+            data = null;
+            error = "EBADF:cannot read transmission file";
+        } finally {
+            // Deleted whether or not it could be read: the client handed the file over.
+            if (deletable) //noinspection ResultOfMethodCallIgnored
+                file.delete();
+        }
+        if (data == null) {
+            reply(command, error, true, always);
+            return null;
+        }
+        return data;
+    }
+
+    /**
+     * kitty only deletes a {@code t=t} file whose path carries the protocol marker and sits in a
+     * temporary directory. On Android the platform temporary
+     * directory is the package's own {@code files/usr/tmp} — what {@code $TMPDIR} points at inside
+     * the app's shell — so it counts alongside the desktop's {@code /tmp} and {@code /dev/shm}.
+     */
+    private static boolean isProtocolTempFile(File file) {
+        String path = file.getPath();
+        if (!path.contains("tty-graphics-protocol")) return false;
+        return isUnder(path, "/tmp") || isUnder(path, "/dev/shm")
+            || isUnder(path, System.getenv("TMPDIR"))
+            || isUnder(path, System.getProperty("java.io.tmpdir"))
+            || path.contains("/files/usr/tmp/");
+    }
+
+    private static boolean isUnder(String path, @Nullable String root) {
+        if (root == null || root.isEmpty()) return false;
+        String prefix = root.endsWith("/") ? root : root + "/";
+        return path.startsWith(prefix);
+    }
+
     private void handleQuery(Command command, String payload) {
-        if (command.medium != 'd') {
+        if (!isSupportedMedium(command.medium)) {
             reply(command, "ENOSYS:unsupported transmission medium", true, true);
             return;
         }
@@ -355,6 +460,12 @@ final class KittyGraphicsProtocol {
         } catch (IllegalArgumentException e) {
             reply(command, "EINVAL:invalid base64 payload", true, true);
             return;
+        }
+        if (command.medium != 'd') {
+            // A query names a file exactly as a transmission does — including the temp-file rule
+            // and the deletion, so a probing client leaves no scratch file behind.
+            decoded = readTransmissionFile(command, decoded, true);
+            if (decoded == null) return; // readTransmissionFile already answered.
         }
         if (command.compression != 0 && command.compression != 'z') {
             reply(command, "ENOSYS:unsupported compression", true, true);
@@ -795,7 +906,13 @@ final class KittyGraphicsProtocol {
         out.sourceHeight = placement.sourceHeight;
         out.columns = placement.columns;
         out.rows = placement.rows;
+        out.generation = entry.pixelGeneration;
         return true;
+    }
+
+    /** The pixel generation of a stored image, 0 when there is none; see {@link #getPlaceholder}. */
+    long imageGeneration(long imageId) {
+        return store.generationOf(imageId);
     }
 
     boolean hasVirtualPlacement(long imageId, long placementId) {
@@ -948,6 +1065,7 @@ final class KittyGraphicsProtocol {
                             store.replaceFrameBitmap(entry, targetNumber, frameBitmap, byteCount);
                             if (command.z != 0)
                                 KittyImageStore.setFrameGap(entry, targetNumber, Math.max(0, command.z));
+                            // Inside a posted update, which notifies the client on its own.
                             if (targetNumber == entry.currentFrame + 1) renderAnimationFrame(entry);
                         } else {
                             int gap = command.z > 0 ? command.z
@@ -986,6 +1104,8 @@ final class KittyGraphicsProtocol {
             && command.displayColumns - 1 != entry.currentFrame) {
             entry.currentFrame = command.displayColumns - 1;
             entry.frameShownAtUptime = SystemClock.uptimeMillis();
+            KittyImageStore.notePixelsChanged(entry);
+            // The client asked for this frame in the escape stream, which notifies on its own.
             renderAnimationFrame(entry);
         }
         String state = command.values.get('s');
@@ -1131,9 +1251,12 @@ final class KittyGraphicsProtocol {
     /** Fast-forward every animation to where it would have been, composite once, and resume. */
     private void resumeAnimations() {
         long now = SystemClock.uptimeMillis();
+        boolean redraw = false;
         for (KittyImageStore.Entry entry : store.entries()) {
-            if (KittyImageStore.catchUpAnimation(entry, now)) renderAnimationFrame(entry);
+            if (KittyImageStore.catchUpAnimation(entry, now) && !renderAnimationFrame(entry))
+                redraw = true;
         }
+        if (redraw) output.onScreenChanged();
         scheduleAnimationTick();
     }
 
@@ -1154,14 +1277,32 @@ final class KittyGraphicsProtocol {
     private void animationTick() {
         animationTickScheduled = false;
         long now = SystemClock.uptimeMillis();
+        boolean redraw = false;
+        // Asked at most once a tick, and only when a placeholder-displayed animation flipped.
+        Boolean placeholderCellsOnScreen = null;
         for (KittyImageStore.Entry entry : store.entries()) {
             // The frame index advances whether or not anything can see it — that is what keeps a
             // scrolled-away animation in step, and keeps the scheduler from finding a deadline
-            // permanently in the past and spinning on it. Only the composite, which is the
-            // expensive half, waits until there is a cell on screen to composite into.
-            if (KittyImageStore.advanceAnimation(entry, now) && emulator.isKittyImageOnScreen(entry.id))
-                renderAnimationFrame(entry);
+            // permanently in the past and spinning on it. Only showing the frame, which is the
+            // expensive half, waits until there is a cell on screen to show it in.
+            if (!KittyImageStore.advanceAnimation(entry, now)) continue;
+            boolean onScreen = emulator.isKittyImageOnScreen(entry.id);
+            if (!onScreen && !entry.virtualPlacements.isEmpty()) {
+                if (placeholderCellsOnScreen == null)
+                    placeholderCellsOnScreen = emulator.isAnyKittyPlaceholderCellOnScreen();
+                onScreen = placeholderCellsOnScreen;
+            }
+            if (!onScreen) continue;
+            // A placement re-composites off the update thread and asks for the redraw itself when
+            // its new pixels are swapped in; an image displayed through Unicode placeholders is
+            // drawn straight out of the store, so for that one the flip is the whole change.
+            if (!renderAnimationFrame(entry)) redraw = true;
         }
+        // At most one redraw request per tick, and none for a tick that only moved a scrolled-away
+        // animation along or that re-composited placements. The tick is armed at the earliest frame
+        // deadline across every animation, so what reaches the view is one redraw per frame the
+        // user can actually see change.
+        if (redraw) output.onScreenChanged();
         scheduleAnimationTick();
     }
 
@@ -1241,11 +1382,11 @@ final class KittyGraphicsProtocol {
      * nothing. Displaced immutable bitmaps are dropped to the garbage collector, never recycled,
      * because the render thread may still be uploading them.
      */
-    private void renderAnimationFrame(KittyImageStore.Entry entry) {
+    private boolean renderAnimationFrame(KittyImageStore.Entry entry) {
         final Bitmap frame = KittyImageStore.frameBitmap(entry, entry.currentFrame + 1);
-        if (frame == null) return;
+        if (frame == null) return false;
         final List<TerminalBitmap> placements = emulator.kittyPlacementsFor(entry.id);
-        if (placements.isEmpty()) return;
+        if (placements.isEmpty()) return false;
         final Bitmap[] buffers = new Bitmap[placements.size()];
         for (int i = 0; i < placements.size(); i++) {
             TerminalBitmap placement = placements.get(i);
@@ -1275,6 +1416,7 @@ final class KittyGraphicsProtocol {
                 }
             }
             output.postTerminalUpdate(() -> {
+                boolean swapped = false;
                 for (int i = 0; i < placements.size(); i++) {
                     Bitmap fresh = buffers[i];
                     if (fresh == null) continue;
@@ -1282,9 +1424,14 @@ final class KittyGraphicsProtocol {
                     Bitmap old = placement.bitmap;
                     placement.bitmap = fresh;
                     placement.kittyBackBuffer = (old != null && old.isMutable()) ? old : null;
+                    swapped = true;
                 }
+                // The pixels of a placement are replaced under an unchanged cell style, so the
+                // renderer cannot see this any other way.
+                if (swapped) emulator.noteKittyPlacementPixelsReplaced();
             });
         });
+        return true;
     }
 
     /**
@@ -1704,6 +1851,8 @@ final class KittyGraphicsProtocol {
         final int cellOffsetY;
         final int z;
         final int placeholder;
+        final int fileSize;
+        final int fileOffset;
 
         private Command(Map<Character, String> values) {
             this.values = values;
@@ -1730,6 +1879,9 @@ final class KittyGraphicsProtocol {
             cellOffsetY = integer(values, 'Y', 0);
             z = integer(values, 'z', 0);
             placeholder = integer(values, 'U', 0);
+            // t=f/t=t window into the named file: S bytes from offset O, 0 meaning "to the end".
+            fileSize = integer(values, 'S', 0);
+            fileOffset = integer(values, 'O', 0);
             if (quiet < 0 || quiet > 2) throw new IllegalArgumentException("invalid q value");
         }
 

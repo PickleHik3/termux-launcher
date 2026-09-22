@@ -13,6 +13,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.SuggestionBarView;
+import com.termux.app.chrome.ChromeShade;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedFolderItem;
@@ -122,14 +123,18 @@ public final class AppDrawerFolderCellView extends AppDrawerAppCellView {
             TextView count = countBadge;
             if (count == null) {
                 count = new TextView(getContext());
-                count.setTextColor(Color.WHITE);
                 count.setTextSize(8f);
                 count.setGravity(Gravity.CENTER);
-                count.setBackgroundColor(0xB8000000);
                 countBadge = count;
                 mosaic.addView(count, new FrameLayout.LayoutParams(miniPx, miniPx,
                     Gravity.TOP | Gravity.START));
             }
+            // The badge is its own plate rather than a wash, so it flips whole: a near-black disc
+            // is a hole punched through a light drawer, and its text follows the plate it is on.
+            int plate = ChromeShade.plate(0xB8000000, 0xB8FFFFFF);
+            count.setBackgroundColor(plate);
+            count.setTextColor(ChromeShade.onPlate(plate, ChromeShade.nominalGlass(),
+                com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT));
             count.setText("+" + (folder.apps.size() - 3));
             applySlotGeometry(count, miniPx, padPx + miniPx + gapPx, padPx + miniPx + gapPx);
             count.setVisibility(VISIBLE);

@@ -407,7 +407,21 @@ public final class WeatherController {
     @NonNull
     public static String formatTemp(double celsius, boolean fahrenheit) {
         if (Double.isNaN(celsius)) return "--°";
-        return Math.round(fahrenheit ? celsius * 9 / 5 + 32 : celsius) + "°";
+        return roundedTemp(celsius, fahrenheit) + "°";
+    }
+
+    /**
+     * Same reading as {@link #formatTemp}, without the degree glyph or unit — for the side status
+     * bar's chip, which has no room to spare beside the icon.
+     */
+    @NonNull
+    public static String formatTempBare(double celsius, boolean fahrenheit) {
+        if (Double.isNaN(celsius)) return "--";
+        return String.valueOf(roundedTemp(celsius, fahrenheit));
+    }
+
+    private static long roundedTemp(double celsius, boolean fahrenheit) {
+        return Math.round(fahrenheit ? celsius * 9 / 5 + 32 : celsius);
     }
 
     /**

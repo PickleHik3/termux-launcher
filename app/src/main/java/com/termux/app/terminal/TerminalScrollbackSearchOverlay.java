@@ -22,7 +22,8 @@ import java.util.List;
  * The fallback scrollback search, for the one case the find strip cannot serve: no in-app keyboard
  * to type a query into, and hence nothing on screen to aim its three input channels at.
  *
- * <p>Shaped to match the strip that replaced it — a bare bar on the dock's edge, no plane backdrop,
+ * <p>Shaped to match the strip that replaced it — a bare bar on the terminal's own bottom edge, no
+ * plane backdrop,
  * mono query with the count at the trailing end — so the fallback looks like the thing it stands in
  * for rather than like the full-screen list it used to be. The transcript stays visible above it;
  * the only thing it gives up versus the strip is the in-place highlighting, which is why it lists
@@ -161,10 +162,10 @@ public final class TerminalScrollbackSearchOverlay {
         };
 
         resize.run();
-        // No heading: this is a bar sitting on the dock, and the field's own hint already says what
+        // No heading: this is a bar on the terminal's edge, and the field's own hint already says what
         // it searches. A title row would spend a fifth of the bar's height repeating it.
         sheet.show("", body, false, sink, null, false,
-            TerminalSheetController.Placement.aboveDockBare());
+            TerminalSheetController.Placement.terminalFoot());
     }
 
     private static void choose(@NonNull TerminalSheetController sheet, @NonNull RowJump jump,

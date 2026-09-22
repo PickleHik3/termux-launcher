@@ -38,6 +38,15 @@ public abstract class TerminalOutput {
     public abstract void onPasteTextFromClipboard();
 
     /**
+     * Ask the terminal client for the text on the clipboard, for an OSC 52 query
+     * ({@code ESC ] 52 ; c ; ? BEL}). The default has no client to ask, so it answers as if the
+     * clipboard were empty rather than leaving the query unanswered.
+     */
+    public String onReadTextFromClipboard() {
+        return null;
+    }
+
+    /**
      * Notify the terminal client that a bell character (ASCII 7, bell, BEL, \a, ^G)) has been received.
      */
     public abstract void onBell();
@@ -53,6 +62,39 @@ public abstract class TerminalOutput {
     }
 
     /**
+     * Notify the terminal client of a whole desktop-notification request — {@code OSC 99} — with
+     * everything the program said about it: a name to close or replace it by, how urgent it is,
+     * whether it wants to be told the user tapped it.
+     *
+     * <p>The default passes the words along the older, plainer path, so a client that only knows
+     * how to show a title and a body keeps working.
+     */
+    public void onKittyNotification(KittyNotification notification) {
+        onNotification(notification.getTitle(), notification.getBody());
+    }
+
+    /** Take down the notification the program named, if it is still up. */
+    public void onKittyNotificationClose(String id) {
+    }
+
+    /**
+     * The running program asked for a mouse pointer shape — {@code OSC 22} — or, with null, for
+     * the terminal's own again. The default has no pointer to change.
+     */
+    public void onPointerShapeChanged(String shape) {
+    }
+
+    /**
+     * Ask the terminal client to redraw, for a change to what is on screen that it has no other
+     * way to notice — the pixels behind a kitty animation's cells, which move without a single
+     * cell or byte of the screen buffer changing. Everything the emulator parses already reaches
+     * the client through the screen-update path; this is the one thing that does not. The default
+     * has no client to tell.
+     */
+    public void onScreenChanged() {
+    }
+
+    /**
      * Return work produced off-thread to the terminal's serialized update thread. Test outputs that do not own a
      * looper may use this default; a live {@link TerminalSession} overrides it and posts to its main-thread handler.
      */
@@ -62,9 +104,12 @@ public abstract class TerminalOutput {
 
     /**
      * Run work on the terminal's serialized update thread after a delay, used to drive
-     * terminal-side kitty graphics animation. The default drops the request — an environment
-     * without a looper has no way to wait, and running it synchronously would spin the animation
-     * scheduler — so tests drive frame advancement explicitly instead.
+     * terminal-side kitty graphics animation. The delayed work asks for a redraw itself, through
+     * {@link #onScreenChanged}, if it changed anything visible — the animation scheduler wakes at
+     * the next frame deadline, and a tick that finds nothing to flip must not cost a frame. The
+     * default drops the request — an environment without a looper has no way to wait, and running
+     * it synchronously would spin the animation scheduler — so tests drive frame advancement
+     * explicitly instead.
      */
     public void postTerminalUpdateDelayed(Runnable update, long delayMillis) {
     }

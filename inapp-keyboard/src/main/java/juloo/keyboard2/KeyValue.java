@@ -957,6 +957,22 @@ public final class KeyValue implements Comparable<KeyValue>
       int d = toolId.compareTo(snd.toolId);
       return d != 0 ? d : _symbol.compareTo(snd._symbol);
     }
+
+    /** [KeyValue.hashCode] delegates here, and two equal tool keys are separate instances:
+        [getKeyByName] builds a new one every call. Without this, a tool key put in a
+        [HashMap]/[HashSet] of keys — which is how the enabled extra keys reach
+        [KeyboardData.addExtraKeys] — could never be found again by an equal key. */
+    @Override
+    public int hashCode()
+    {
+      return toolId.hashCode() * 31 + _symbol.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+      return obj instanceof LauncherTool && compareTo((LauncherTool)obj) == 0;
+    }
   }
 
   public static final class Macro implements Comparable<Macro>, Describe

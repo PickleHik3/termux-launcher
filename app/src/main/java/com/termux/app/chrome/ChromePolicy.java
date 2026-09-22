@@ -49,6 +49,27 @@ public final class ChromePolicy {
     }
 
     /**
+     * Whether that one expanded dock+keyboard surface is the material on screen yet, so the
+     * keyboard-local coat of the same glass can come off.
+     *
+     * <p>Two things can hold it back, and only one of them always applies. The geometry does: until
+     * the shared surface has actually laid out over the keyboard as well, taking the local coat off
+     * uncovers the wallpaper. The blurred crop only applies when there is a frame to blur — with the
+     * blur at 0, or under a live wallpaper that leaves Android holding no still, the tint alone is
+     * the whole material and there is no crop to wait for.</p>
+     *
+     * <p>Waiting for one anyway is what made the keyboard read darker than the band above it: the
+     * expanded surface already paints the dock's glass under the keyboard, and the local coat
+     * painted the same translucent glass again on top. Two coats of one material is a visibly
+     * darker keyboard, and no amount of matching the two recipes could have closed it.</p>
+     */
+    public static boolean unifiedKeyboardSurfaceIsTheMaterial(boolean geometryReady,
+                                                              boolean blurEnabled,
+                                                              boolean cropReady) {
+        return geometryReady && (!blurEnabled || cropReady);
+    }
+
+    /**
      * Where the keyboard's "space under the keys" allowance lands, as a bottom margin under the
      * surface. Floating, the glass is a capsule that has to wrap the keys, so the allowance is a
      * taller gap under it and the whole surface lifts; padding there would leave an empty band of
@@ -141,5 +162,20 @@ public final class ChromePolicy {
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.BLUR, 0);
         }
+    }
+
+    /**
+     * Whether a {@code ComponentCallbacks2} trim level is real pressure, worth dropping the
+     * pre-blurred wallpaper frames for. {@code TRIM_MEMORY_BACKGROUND} is not: the activity
+     * manager sends it to the home process on every ordinary departure to another app, with memory
+     * at its normal level, and rebuilding the frames on the way back cost a 481 ms frame (Pong,
+     * 2026-09-09). {@code TRIM_MEMORY_MODERATE} and {@code TRIM_MEMORY_COMPLETE} only arrive when
+     * the system is short and this process is far enough down the list to be reaped next — and
+     * since API 34 they are not delivered at all (ComponentCallbacks2: "Apps are not notified of
+     * this level since API level 34"), which makes a launcher on a current release keep its frames
+     * until its own cache budget evicts them.
+     */
+    public static boolean trimReleasesBlurFrames(int trimLevel) {
+        return trimLevel >= android.content.ComponentCallbacks2.TRIM_MEMORY_MODERATE;
     }
 }

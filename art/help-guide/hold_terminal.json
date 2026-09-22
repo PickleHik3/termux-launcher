@@ -1,0 +1,51 @@
+{
+  "id": "hold_terminal",
+  "crop": [
+    [
+      0,
+      302,
+      1080,
+      1116
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.6002957399905426,
+      "kind": "tap",
+      "points": [
+        540,
+        860
+      ],
+      "duration": 0.75
+    },
+    {
+      "t": 2.3502957399905426,
+      "kind": "swipe",
+      "points": [
+        540,
+        860,
+        540,
+        1280
+      ],
+      "duration": 1.1
+    },
+    {
+      "t": 4.096705217991257,
+      "kind": "swipe",
+      "points": [
+        540,
+        900,
+        540,
+        900
+      ],
+      "duration": 1.9
+    }
+  ],
+  "duration": 12.05,
+  "bytes": 1706854,
+  "width": 1080,
+  "height": 1116,
+  "video": "hold_terminal.mp4",
+  "poster": "hold_terminal.jpg",
+  "source": "pong 1080x2412@420 native"
+}

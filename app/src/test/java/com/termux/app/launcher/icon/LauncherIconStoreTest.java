@@ -23,6 +23,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
@@ -286,5 +288,56 @@ public class LauncherIconStoreTest {
         int loadsBefore = loads.size();
         store.artwork(entry("app0", null));
         assertEquals(loadsBefore + 1, loads.size());
+    }
+
+    // ------------------------------------------------------------------ icon-pack identity
+
+    /** What is held here is already pack-treated, so the key has to say which pack treated it. */
+    @Test
+    public void twoPacksHoldingOneApp_doNotShareAKey() {
+        assertNotEquals(
+            LauncherIconStore.artworkKey(ref("a"), "com.pack.a:3"),
+            LauncherIconStore.artworkKey(ref("a"), "com.pack.b:3"));
+        assertNotEquals(
+            LauncherIconStore.artworkKey(ref("a"), "com.pack.a:3"),
+            LauncherIconStore.artworkKey(ref("a"), "com.pack.a:4"));
+        assertEquals(
+            LauncherIconStore.artworkKey(ref("a"), null),
+            LauncherIconStore.artworkKey(ref("a"), ""));
+        assertNotEquals(
+            LauncherIconStore.artworkKey(ref("a"), "com.pack.a:3"),
+            LauncherIconStore.artworkKey(ref("b"), "com.pack.a:3"));
+    }
+
+    @Test
+    public void changingTheIdentity_dropsArtworkHeldUnderTheOldOne() {
+        LauncherIconStore store = store(0, artwork(64));
+
+        store.artwork(ref("a"));
+        assertEquals(1, loads.size());
+        assertEquals(1, loads.size());
+
+        assertTrue(store.setIconPackIdentity("com.pack.a:3"));
+        assertEquals("com.pack.a:3", store.iconPackIdentity());
+        assertEquals(0, store.sizeBytes());
+
+        store.artwork(ref("a"));
+        assertEquals("the pack moved, so the artwork is loaded again", 2, loads.size());
+
+        // Re-stating the same identity keeps the warm store.
+        assertFalse(store.setIconPackIdentity("com.pack.a:3"));
+        store.artwork(ref("a"));
+        assertEquals(2, loads.size());
+    }
+
+    /** Primed artwork lands under the same key a read looks for. */
+    @Test
+    public void primedArtworkIsFoundUnderTheCurrentIdentity() {
+        LauncherIconStore store = store(0, artwork(64));
+        store.setIconPackIdentity("com.pack.a:3");
+
+        store.prime(ref("a"), artwork(64));
+        assertNotNull(store.artwork(ref("a")));
+        assertTrue("priming means the loader is never asked", loads.isEmpty());
     }
 }

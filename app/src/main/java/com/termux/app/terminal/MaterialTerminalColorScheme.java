@@ -1,16 +1,20 @@
 package com.termux.app.terminal;
 
 import android.content.Context;
+import android.content.res.Configuration;
 import android.graphics.Color;
+import android.view.ContextThemeWrapper;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.color.utilities.Hct;
 import com.termux.R;
+import com.termux.app.theme.templates.PaletteSet;
 import com.termux.shared.errors.Error;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
@@ -20,6 +24,7 @@ import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 
@@ -28,6 +33,55 @@ public final class MaterialTerminalColorScheme {
     private static final String LOG_TAG = "MaterialTerminalColorScheme";
     private static final String MATERIAL_COLORS_PROPERTIES_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors.properties";
     private static final String MATERIAL_COLORS_SHELL_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors.sh";
+
+    /**
+     * The two mode files beside them. Same format, same keys, same writers — only {@code mode} is
+     * fixed rather than derived, so a tool can source one of these to dress itself for the mode it
+     * is about to be in. The two files above stay exactly what they were: the active palette, which
+     * is what {@code config.fish} and every older consumer reads.
+     */
+    private static final String MATERIAL_COLORS_DARK_PROPERTIES_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-dark.properties";
+    private static final String MATERIAL_COLORS_DARK_SHELL_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-dark.sh";
+    private static final String MATERIAL_COLORS_LIGHT_PROPERTIES_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-light.properties";
+    private static final String MATERIAL_COLORS_LIGHT_SHELL_PATH = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/material-colors-light.sh";
+
+    /**
+     * Canonical ANSI hues for slots 1–6 — red, green, yellow, blue, magenta, cyan — before
+     * harmonization. These are what makes a green read as green; the theme supplies everything else.
+     */
+    private static final double[] ANSI_HUE_ANCHORS = {25d, 145d, 85d, 255d, 330d, 195d};
+
+    /**
+     * How far the palette's chroma may travel. The floor keeps a near-grey wallpaper from producing
+     * six indistinguishable slots; the ceiling keeps a vivid one from producing the 2014-accent neon
+     * this replaced. Between them the slots are exactly as saturated as the theme is.
+     */
+    private static final double ANSI_CHROMA_MIN = 28d;
+    private static final double ANSI_CHROMA_MAX = 52d;
+
+    /**
+     * How much chroma the neutral slots and the foreground carry.
+     *
+     * <p>They come off the neutral palette, so left alone they are the surface hue at almost no
+     * chroma — a grey ladder on a grey background, which is what the retired
+     * {@code material-terminal-white.fish} was painting over on the phone. The floor is the warm
+     * nudge itself: a neutral with no chroma cannot lean anywhere. The ceiling keeps it a neutral —
+     * above it the ladder starts reading as a seventh accent.
+     */
+    private static final double NEUTRAL_CHROMA_MIN = 8d;
+    private static final double NEUTRAL_CHROMA_MAX = 12d;
+
+    /**
+     * Where the neutrals lean: the warm side of the wheel, around parchment. The surface hue is
+     * pulled halfway toward it and never further than {@link #NEUTRAL_MAX_ROTATION}, so a theme
+     * already warm barely moves and a cold blue one warms without turning yellow. The background is
+     * not nudged — it is the chrome's own surface, and the terminal has to sit on it.
+     */
+    private static final double NEUTRAL_WARM_HUE = 75d;
+    private static final double NEUTRAL_MAX_ROTATION = 20d;
+
+    /** Material's {@code Blend.harmonize} ceiling: never rotate a hue more than this far. */
+    private static final double HARMONIZE_MAX_ROTATION = 15d;
 
     private MaterialTerminalColorScheme() {}
 
@@ -45,28 +99,29 @@ public final class MaterialTerminalColorScheme {
     public static Properties create(@NonNull Context context, @NonNull TerminalContrastLevel level) {
         Properties props = new Properties();
 
-        int background = materialColor(context, com.google.android.material.R.attr.colorSurface,
+        int surface = materialColor(context, com.google.android.material.R.attr.colorSurface,
             R.color.termux_surface_base);
         int foreground = materialColor(context, com.google.android.material.R.attr.colorOnSurface,
             R.color.termux_on_surface);
         int primary = materialColor(context, com.google.android.material.R.attr.colorPrimary,
             R.color.termux_primary);
-        int secondary = materialColor(context, com.google.android.material.R.attr.colorSecondary,
-            R.color.termux_secondary);
-        int tertiary = materialColor(context, com.google.android.material.R.attr.colorTertiary,
-            R.color.termux_primary);
-        int error = materialColor(context, com.google.android.material.R.attr.colorError,
-            R.color.termux_error);
-        int errorContainer = materialColor(context, com.google.android.material.R.attr.colorErrorContainer,
-            R.color.termux_error_container);
-        int neutral = materialColor(context, com.google.android.material.R.attr.colorSurfaceVariant,
-            R.color.termux_surface_panel);
-        int subtleText = materialColor(context, com.google.android.material.R.attr.colorOnSurfaceVariant,
-            R.color.termux_on_surface_variant);
+        // Raw, not materialColor: the anchor is only replaced when the theme really carries an error
+        // role. An app-resource fallback would be a colour of ours, not one of the theme's, and the
+        // whole point of the substitution is to keep red inside the theme's own tonal system.
+        int themeError = MaterialColors.getColor(context, com.google.android.material.R.attr.colorError, 0);
 
-        boolean dark = perceivedBrightness(background) < 128;
-        background = surfaceTone(background, level);
+        boolean dark = perceivedBrightness(surface) < 128;
+        // Read before the tone move so a surface pushed to tone 4 or 99 — where HCT cannot hold much
+        // chroma — still reports the neutral hue the rest of the theme was built from.
+        Hct surfaceHct = Hct.fromInt(surface);
+        Hct primaryHct = Hct.fromInt(primary);
 
+        int background = surfaceTone(surface, level);
+
+        // The foreground is a neutral too — the same nudge as slots 0/7/8/15, before the legibility
+        // search, which keeps hue and chroma and only moves tone. The cursor is an accent and is
+        // left alone.
+        foreground = warmNeutral(foreground, surfaceHct.getHue());
         foreground = contrastTone(foreground, background, level.foregroundRatio);
         primary = contrastTone(primary, background, level.cursorRatio);
 
@@ -74,31 +129,199 @@ public final class MaterialTerminalColorScheme {
         props.setProperty("foreground", hex(foreground));
         props.setProperty("cursor", hex(primary));
 
-        props.setProperty("color0", hex(dark ? darken(neutral, 0.72f) : darken(subtleText, 0.38f)));
-        props.setProperty("color1", hex(tintToward(error, errorContainer, dark ? 0.12f : 0.18f)));
-        props.setProperty("color2", hex(materialAnsi("#5CF19E", "#00753B", secondary, dark)));
-        props.setProperty("color3", hex(materialAnsi("#FFD740", "#855000", tertiary, dark)));
-        props.setProperty("color4", hex(materialAnsi("#40C4FF", "#005FA8", primary, dark)));
-        props.setProperty("color5", hex(materialAnsi("#FF4081", "#9C2764", primary, dark)));
-        props.setProperty("color6", hex(materialAnsi("#64FCDA", "#00746C", secondary, dark)));
-        props.setProperty("color7", hex(dark ? lighten(neutral, 0.72f) : darken(neutral, 0.54f)));
+        props.putAll(ansiSlots(primaryHct.getHue(), primaryHct.getChroma(),
+            themeError != 0 ? Hct.fromInt(themeError).getHue() : ANSI_HUE_ANCHORS[0],
+            surfaceHct.getHue(), surfaceHct.getChroma(), dark));
 
-        props.setProperty("color8", hex(dark ? lighten(neutral, 0.34f) : darken(subtleText, 0.18f)));
-        props.setProperty("color9", hex(dark ? lighten(error, 0.22f) : lighten(error, 0.16f)));
-        props.setProperty("color10", hex(materialAnsi("#B9F6CA", "#00844A", secondary, dark)));
-        props.setProperty("color11", hex(materialAnsi("#FFE57F", "#956000", tertiary, dark)));
-        props.setProperty("color12", hex(materialAnsi("#80D8FF", "#006DAF", primary, dark)));
-        props.setProperty("color13", hex(materialAnsi("#FF80AB", "#AD3774", primary, dark)));
-        props.setProperty("color14", hex(materialAnsi("#A7FDEB", "#008078", secondary, dark)));
-        props.setProperty("color15", hex(foreground));
-
-        for (int i = 0; i < 16; i++) {
-            String key = "color" + i;
-            int value = Color.parseColor(props.getProperty(key));
-            props.setProperty(key, hex(contrastTone(value, background, level.ansiRatio)));
-        }
+        applyAnsiContrastFloor(props, background, level);
 
         return props;
+    }
+
+    /**
+     * The legibility floor, per slot.
+     *
+     * <p>Not every ANSI slot is text. Black and white are what a TUI fills a panel with, and a floor
+     * that treats them as glyph colours lifts both to the same mid tone as everything else — which is
+     * how ANSI black stopped being dark and started matching bright black. So slots 0, 7 and 15 are
+     * exempt — bright white is a fill exactly as much as white is, and holding it to a text ratio is
+     * what used to drag it down into the dark end of the neutral ladder; slot 8 keeps a fixed 3.0:1
+     * because it really is text — dim text, the one thing the level must not be allowed to brighten
+     * into ordinary text; the rest take the level's ratio.
+     */
+    @VisibleForTesting
+    static double ansiFloor(int slot, @NonNull TerminalContrastLevel level) {
+        if (slot == 0 || slot == 7 || slot == 15) return 0d;
+        if (slot == 8) return 3.0d;
+        return level.ansiRatio;
+    }
+
+    /** {@link #ansiFloor} over all sixteen slots, in place. */
+    @VisibleForTesting
+    static void applyAnsiContrastFloor(@NonNull Properties props, @ColorInt int background,
+                                       @NonNull TerminalContrastLevel level) {
+        for (int slot = 0; slot < 16; slot++) {
+            double floor = ansiFloor(slot, level);
+            if (floor <= 0d) continue;
+            String key = "color" + slot;
+            props.setProperty(key,
+                hex(contrastTone(Color.parseColor(props.getProperty(key)), background, floor)));
+        }
+    }
+
+    /**
+     * The sixteen ANSI slots as one Material 3 tonal system, with no {@code Context} in sight.
+     *
+     * <p>Every accent slot is the same colour three ways: the theme's own chroma, a tone band chosen
+     * by the background, and a hue that is the canonical ANSI anchor pulled toward the theme. That is
+     * what makes the set read as one palette rather than six borrowed accents — the older derivation
+     * blended fixed 2014 Material anchors toward the roles, which ignored the wallpaper's chroma
+     * entirely and left every terminal with the same neon green.
+     *
+     * <p>{@code redHue} is passed in rather than taken from {@link #ANSI_HUE_ANCHORS} so a theme that
+     * carries an error role can spend it here: red is the one ANSI slot Material already has an
+     * opinion about.
+     */
+    @NonNull
+    @VisibleForTesting
+    static Properties ansiSlots(double sourceHue, double sourceChroma, double redHue,
+                                double neutralHue, double neutralChroma, boolean dark) {
+        Properties slots = new Properties();
+        double chroma = Math.max(ANSI_CHROMA_MIN, Math.min(ANSI_CHROMA_MAX, sourceChroma));
+        double normalTone = dark ? 80d : 40d;
+        double brightTone = dark ? 90d : 30d;
+        for (int slot = 1; slot <= 6; slot++) {
+            double hue = harmonizeHue(slot == 1 ? redHue : ANSI_HUE_ANCHORS[slot - 1], sourceHue);
+            slots.setProperty("color" + slot, hex(Hct.from(hue, chroma, normalTone).toInt()));
+            slots.setProperty("color" + (slot + 8), hex(Hct.from(hue, chroma, brightTone).toInt()));
+        }
+        // One ladder, both modes: black, bright black, white, bright white climb in tone whichever
+        // way round the background is. The light column used to end at tone 10, which made bright
+        // white the darkest neutral of the four and collapsed "black on bright white" into one
+        // colour; the accent bands above still flip with the background, the neutrals do not.
+        //
+        // The hue is the surface's, warmed; the chroma is held inside the neutral band. Tones are
+        // untouched by either — the ladder is the ladder whatever colour it is made of.
+        double warm = warmNeutralHue(neutralHue);
+        double neutral = warmNeutralChroma(neutralChroma);
+        slots.setProperty("color0", hex(Hct.from(warm, neutral, 25d).toInt()));
+        slots.setProperty("color8", hex(Hct.from(warm, neutral, dark ? 45d : 50d).toInt()));
+        slots.setProperty("color7", hex(Hct.from(warm, neutral, dark ? 80d : 75d).toInt()));
+        slots.setProperty("color15", hex(Hct.from(warm, neutral, dark ? 96d : 92d).toInt()));
+        return slots;
+    }
+
+    /**
+     * {@code surfaceHue} leaning toward {@link #NEUTRAL_WARM_HUE}: halfway there, at most
+     * {@link #NEUTRAL_MAX_ROTATION}. A surface already at the warm hue does not move at all.
+     */
+    @VisibleForTesting
+    static double warmNeutralHue(double surfaceHue) {
+        return blendHue(surfaceHue, NEUTRAL_WARM_HUE, NEUTRAL_MAX_ROTATION);
+    }
+
+    /** {@code chroma} inside the neutral band — raised to the floor, held under the ceiling. */
+    @VisibleForTesting
+    static double warmNeutralChroma(double chroma) {
+        return Math.max(NEUTRAL_CHROMA_MIN, Math.min(NEUTRAL_CHROMA_MAX, chroma));
+    }
+
+    /** {@code color} rebuilt as a warm neutral: the nudged hue and band chroma at its own tone. */
+    @ColorInt
+    private static int warmNeutral(@ColorInt int color, double surfaceHue) {
+        Hct source = Hct.fromInt(color);
+        return Hct.from(warmNeutralHue(surfaceHue), warmNeutralChroma(source.getChroma()),
+            source.getTone()).toInt();
+    }
+
+    /**
+     * {@code anchor} rotated toward {@code source} by half the angle between them, at most 15°.
+     *
+     * <p>The rule and both numbers are Material's {@code Blend.harmonize}, applied to the hue alone:
+     * the slot keeps the chroma and tone this palette assigns it, and only its hue is pulled into the
+     * theme. Halving the distance is what makes the pull proportional — a hue already near the
+     * theme's barely moves, a hue on the far side moves the full 15° and no further, so a green stays
+     * a green.
+     */
+    @VisibleForTesting
+    static double harmonizeHue(double anchor, double source) {
+        return blendHue(anchor, source, HARMONIZE_MAX_ROTATION);
+    }
+
+    /** {@code anchor} rotated halfway toward {@code source}, capped at {@code maxRotation}. */
+    private static double blendHue(double anchor, double source, double maxRotation) {
+        double rotation = Math.min(differenceDegrees(anchor, source) * 0.5d, maxRotation);
+        return sanitizeDegrees(anchor + rotation * rotationDirection(anchor, source));
+    }
+
+    /** Shortest angle between two hues, 0–180. */
+    private static double differenceDegrees(double first, double second) {
+        return 180d - Math.abs(Math.abs(first - second) - 180d);
+    }
+
+    /** {@code +1} to reach {@code to} by increasing {@code from}, {@code -1} by decreasing it. */
+    private static double rotationDirection(double from, double to) {
+        return sanitizeDegrees(to - from) <= 180d ? 1d : -1d;
+    }
+
+    private static double sanitizeDegrees(double degrees) {
+        double wrapped = degrees % 360d;
+        return wrapped < 0d ? wrapped + 360d : wrapped;
+    }
+
+    /**
+     * The whole export: the active palette plus a dark and a light one.
+     *
+     * <p>Both halves are the same derivation as the active one, run against a configuration context
+     * with the {@code UI_MODE_NIGHT_*} bits forced and re-themed with the activity's own DayNight
+     * theme — the trick {@code TermuxApplication}'s background refresh already uses. Dynamic colours
+     * are pure resource qualifiers ({@code values-v31} / {@code values-night-v31}), so a forced
+     * configuration resolves the other mode's roles exactly as the activity would in it; no activity
+     * and no recreation is involved.
+     *
+     * <p>Must run on a thread that may resolve theme attributes and resources — in practice the main
+     * thread, like every other {@link #create} call.
+     */
+    @NonNull
+    public static PaletteSet createPaletteSet(@NonNull Context context,
+                                              @NonNull TerminalContrastLevel level) {
+        return createPaletteSet(context, level, create(context, level));
+    }
+
+    /**
+     * As {@link #createPaletteSet(Context, TerminalContrastLevel)}, for a caller that has already
+     * built the active terminal palette and handed it to the terminal — the exported files then
+     * describe exactly the colours the sessions took, rather than a second derivation of them.
+     */
+    @NonNull
+    public static PaletteSet createPaletteSet(@NonNull Context context,
+                                              @NonNull TerminalContrastLevel level,
+                                              @NonNull Properties activeTerminalProps) {
+        Properties active = createMaterialRoleProperties(context, activeTerminalProps, level);
+        return PaletteSet.of(active,
+            paletteForNightMode(context, level, Configuration.UI_MODE_NIGHT_YES),
+            paletteForNightMode(context, level, Configuration.UI_MODE_NIGHT_NO));
+    }
+
+    /** The export as it would be with {@code nightMode} forced, or {@code null} if that failed. */
+    @Nullable
+    private static Properties paletteForNightMode(@NonNull Context context,
+                                                  @NonNull TerminalContrastLevel level,
+                                                  int nightMode) {
+        try {
+            Configuration configuration = new Configuration(context.getResources().getConfiguration());
+            configuration.uiMode = (configuration.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | nightMode;
+            Context themed = new ContextThemeWrapper(
+                context.createConfigurationContext(configuration),
+                R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+            return createMaterialRoleProperties(themed, create(themed, level), level);
+        } catch (RuntimeException e) {
+            // A palette for the mode the user is not in is worth having, never worth failing the
+            // refresh for: the active one is what the terminal is about to wear.
+            Logger.logStackTraceWithMessage(LOG_TAG,
+                "Cannot derive the palette for uiMode night " + nightMode, e);
+            return null;
+        }
     }
 
     /**
@@ -170,10 +393,78 @@ public final class MaterialTerminalColorScheme {
         putMaterialColor(props, "outline_variant", context, com.google.android.material.R.attr.colorOutlineVariant,
             R.color.termux_outline_variant);
 
+        // The rest of noctalia's 48-role set. Material Components 1.12.0 defines all of these
+        // attributes on its own M3 themes, but a theme that does not derive from one of those
+        // (or an old dynamic-color theme) can leave any of them unresolved; MaterialColors.getColor
+        // then hands back the sentinel below instead of throwing, and we fall back to the nearest
+        // role already in this map rather than to a made-up app resource, so the exported file is
+        // always complete even off such a theme.
+        putRoleColor(props, "primary_fixed", context,
+            com.google.android.material.R.attr.colorPrimaryFixed, "primary_container");
+        putRoleColor(props, "primary_fixed_dim", context,
+            com.google.android.material.R.attr.colorPrimaryFixedDim, "primary");
+        putRoleColor(props, "on_primary_fixed", context,
+            com.google.android.material.R.attr.colorOnPrimaryFixed, "on_primary_container");
+        putRoleColor(props, "on_primary_fixed_variant", context,
+            com.google.android.material.R.attr.colorOnPrimaryFixedVariant, "on_primary_container");
+        putRoleColor(props, "secondary_fixed", context,
+            com.google.android.material.R.attr.colorSecondaryFixed, "secondary_container");
+        putRoleColor(props, "secondary_fixed_dim", context,
+            com.google.android.material.R.attr.colorSecondaryFixedDim, "secondary");
+        putRoleColor(props, "on_secondary_fixed", context,
+            com.google.android.material.R.attr.colorOnSecondaryFixed, "on_secondary_container");
+        putRoleColor(props, "on_secondary_fixed_variant", context,
+            com.google.android.material.R.attr.colorOnSecondaryFixedVariant, "on_secondary_container");
+        putRoleColor(props, "tertiary_fixed", context,
+            com.google.android.material.R.attr.colorTertiaryFixed, "tertiary_container");
+        putRoleColor(props, "tertiary_fixed_dim", context,
+            com.google.android.material.R.attr.colorTertiaryFixedDim, "tertiary");
+        putRoleColor(props, "on_tertiary_fixed", context,
+            com.google.android.material.R.attr.colorOnTertiaryFixed, "on_tertiary_container");
+        putRoleColor(props, "on_tertiary_fixed_variant", context,
+            com.google.android.material.R.attr.colorOnTertiaryFixedVariant, "on_tertiary_container");
+        putRoleColor(props, "surface_dim", context,
+            com.google.android.material.R.attr.colorSurfaceDim, "surface");
+        putRoleColor(props, "surface_bright", context,
+            com.google.android.material.R.attr.colorSurfaceBright, "surface");
+        putRoleColor(props, "surface_container_lowest", context,
+            com.google.android.material.R.attr.colorSurfaceContainerLowest, "surface");
+        putRoleColor(props, "surface_container_low", context,
+            com.google.android.material.R.attr.colorSurfaceContainerLow, "surface");
+        putRoleColor(props, "background", context,
+            android.R.attr.colorBackground, "surface");
+        putRoleColor(props, "on_background", context,
+            com.google.android.material.R.attr.colorOnBackground, "on_surface");
+        putRoleColor(props, "inverse_surface", context,
+            com.google.android.material.R.attr.colorSurfaceInverse, "on_surface");
+        putRoleColor(props, "inverse_on_surface", context,
+            com.google.android.material.R.attr.colorOnSurfaceInverse, "surface");
+        putRoleColor(props, "inverse_primary", context,
+            com.google.android.material.R.attr.colorPrimaryInverse, "primary");
+        // Not theme attributes: noctalia expects a literal black for both regardless of contrast.
+        props.setProperty("shadow", "#000000");
+        props.setProperty("scrim", "#000000");
+
         props.setProperty("contrast_level", level.value);
         for (String key : terminalProps.stringPropertyNames()) {
             props.setProperty("terminal_" + key, terminalProps.getProperty(key));
         }
+
+        // noctalia's terminal_* names, as byte-identical aliases of the keys above.
+        String[] ansiNames = {"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"};
+        for (int i = 0; i < ansiNames.length; i++) {
+            props.setProperty("terminal_normal_" + ansiNames[i], props.getProperty("terminal_color" + i));
+            props.setProperty("terminal_bright_" + ansiNames[i], props.getProperty("terminal_color" + (i + 8)));
+        }
+        props.setProperty("terminal_cursor_text", props.getProperty("terminal_background"));
+        props.setProperty("terminal_selection_fg", props.getProperty("on_surface_variant"));
+        props.setProperty("terminal_selection_bg", props.getProperty("surface_variant"));
+
+        // dark below tone 50, light at or above it — the same split MaterialTerminalColorScheme
+        // already uses internally via perceivedBrightness, but expressed in HCT tone since that is
+        // what the rest of this export is built from.
+        double backgroundTone = Hct.fromInt(Color.parseColor(terminalProps.getProperty("background"))).getTone();
+        props.setProperty("mode", backgroundTone < 50 ? "dark" : "light");
 
         return props;
     }
@@ -182,10 +473,57 @@ public final class MaterialTerminalColorScheme {
      * Write the exported palette files. Takes the finished properties rather than a {@link Context}
      * because this runs on a writer thread: resolving theme attributes and reading resources off the
      * main thread is not safe, so all of that has to have happened before the hand-off.
+     *
+     * <p>Not a public entry point for a refresh: call
+     * {@code ThemeTemplates.exportPaletteAndRunPassAsync}, which owns the one thread these writes and
+     * the template pass that follows them share.
      */
     public static void writeMaterialColorFiles(@NonNull Properties props) {
         writeFile(MATERIAL_COLORS_PROPERTIES_PATH, toPropertiesText(props));
         writeFile(MATERIAL_COLORS_SHELL_PATH, toShellExports(props));
+    }
+
+    /**
+     * The active palette's two files, plus one pair per mode the set actually carries.
+     *
+     * <p>A set with only an active palette — the from-scheme path, which has one palette by
+     * definition — writes only the two active files and leaves any mode files a previous dynamic
+     * pass left behind alone: they are stale either way, and deleting a file a user's config may be
+     * sourcing is the worse of the two.
+     */
+    public static void writeMaterialColorFiles(@NonNull PaletteSet palettes) {
+        writeMaterialColorFiles(palettes.active());
+        if (palettes.hasDark())
+            writeModeFiles(MATERIAL_COLORS_DARK_PROPERTIES_PATH, MATERIAL_COLORS_DARK_SHELL_PATH,
+                palettes.dark(), PaletteSet.MODE_DARK);
+        if (palettes.hasLight())
+            writeModeFiles(MATERIAL_COLORS_LIGHT_PROPERTIES_PATH, MATERIAL_COLORS_LIGHT_SHELL_PATH,
+                palettes.light(), PaletteSet.MODE_LIGHT);
+    }
+
+    private static void writeModeFiles(@NonNull String propertiesPath, @NonNull String shellPath,
+                                       @NonNull Properties palette, @NonNull String mode) {
+        Properties fixed = withMode(palette, mode);
+        writeFile(propertiesPath, toPropertiesText(fixed));
+        writeFile(shellPath, toShellExports(fixed));
+    }
+
+    /**
+     * {@code palette} with {@code mode} stated rather than derived.
+     *
+     * <p>The mode file says what it is for. The derived value is the same in every ordinary case —
+     * the dark palette's background really is dark — but a theme can hand back a light surface under
+     * {@code values-night}, and a file named {@code -dark} that says {@code mode=light} is a trap for
+     * the config reading it. The palette handed in is not modified: it is the one the caller may
+     * still be rendering templates from.
+     */
+    @NonNull
+    @VisibleForTesting
+    static Properties withMode(@NonNull Properties palette, @NonNull String mode) {
+        Properties copy = new Properties();
+        copy.putAll(palette);
+        copy.setProperty("mode", mode);
+        return copy;
     }
 
     /**
@@ -307,7 +645,8 @@ public final class MaterialTerminalColorScheme {
     }
 
     @ColorInt
-    private static int surfaceTone(@ColorInt int color, @NonNull TerminalContrastLevel level) {
+    @VisibleForTesting
+    static int surfaceTone(@ColorInt int color, @NonNull TerminalContrastLevel level) {
         boolean dark = perceivedBrightness(color) < 128;
         Hct source = Hct.fromInt(color);
         double tone;
@@ -340,15 +679,57 @@ public final class MaterialTerminalColorScheme {
         props.setProperty(key, hex(materialColor(context, attr, fallbackRes)));
     }
 
-    private static void writeFile(@NonNull String path, @NonNull String content) {
+    /**
+     * Like {@link #putMaterialColor}, but for the roles that have no app resource of their own to
+     * fall back to: an unresolved attribute copies the value already recorded under
+     * {@code fallbackKey} instead. {@code fallbackKey} must already be in {@code props}.
+     */
+    private static void putRoleColor(@NonNull Properties props, @NonNull String key, @NonNull Context context,
+                                     int attr, @NonNull String fallbackKey) {
+        int resolved = MaterialColors.getColor(context, attr, 0);
+        int value = resolved != 0 ? resolved : Color.parseColor(props.getProperty(fallbackKey));
+        props.setProperty(key, hex(value));
+    }
+
+    /**
+     * Replace the file at {@code path} in one step.
+     *
+     * <p>Written to a sibling temp file and renamed over the target, because these files are sourced
+     * rather than read: a shell that starts while a plain truncating write is half done sources a
+     * file cut off mid-line, and the prompt it builds from it is wrong until something rewrites the
+     * palette. A rename within the directory swaps the whole file or none of it, so a shell either
+     * gets the old palette or the new one.
+     */
+    @VisibleForTesting
+    static void writeFile(@NonNull String path, @NonNull String content) {
         if (alreadyOnDisk(path, content)) return;
-        Error error = FileUtils.writeTextToFile(path, path, StandardCharsets.UTF_8, content, false);
+        Error error = FileUtils.createParentDirectoryFile(LOG_TAG + " palette file parent", path);
         if (error != null) {
             Logger.logErrorExtended(LOG_TAG, error.toString());
+            return;
+        }
+        java.io.File target = new java.io.File(path);
+        java.io.File temp = new java.io.File(target.getParentFile(), target.getName() + ".new");
+        try (java.io.OutputStream out = new java.io.FileOutputStream(temp)) {
+            out.write(content.getBytes(StandardCharsets.UTF_8));
+            out.flush();
+        } catch (java.io.IOException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG,
+                "Cannot write \"" + temp.getAbsolutePath() + "\"", e);
+            //noinspection ResultOfMethodCallIgnored
+            temp.delete();
+            return;
+        }
+        if (!temp.renameTo(target)) {
+            Logger.logError(LOG_TAG, "Cannot move \"" + temp.getAbsolutePath() + "\" onto \""
+                + path + "\"");
+            //noinspection ResultOfMethodCallIgnored
+            temp.delete();
         }
     }
 
-    private static String toPropertiesText(@NonNull Properties props) {
+    @VisibleForTesting
+    static String toPropertiesText(@NonNull Properties props) {
         StringBuilder builder = new StringBuilder();
         builder.append("# Generated by Termux. Do not edit.\n");
         ArrayList<String> keys = sortedKeys(props);
@@ -358,13 +739,21 @@ public final class MaterialTerminalColorScheme {
         return builder.toString();
     }
 
-    private static String toShellExports(@NonNull Properties props) {
+    /**
+     * The shell half of the export.
+     *
+     * <p>Keys are upper-cased against {@link Locale#ROOT}, never the device's. A Turkish locale maps
+     * {@code i} to a dotted capital I, so {@code primary} came out as {@code PRİMARY} — not a shell
+     * identifier at all, and the whole file stopped sourcing for that user.
+     */
+    @VisibleForTesting
+    static String toShellExports(@NonNull Properties props) {
         StringBuilder builder = new StringBuilder();
         builder.append("# Generated by Termux. Source this file from shell scripts.\n");
         ArrayList<String> keys = sortedKeys(props);
         for (String key : keys) {
             builder.append("export TERMUX_MATERIAL_")
-                .append(key.toUpperCase().replace('.', '_').replace('-', '_'))
+                .append(key.toUpperCase(Locale.ROOT).replace('.', '_').replace('-', '_'))
                 .append("='")
                 .append(props.getProperty(key))
                 .append("'\n");
@@ -384,44 +773,6 @@ public final class MaterialTerminalColorScheme {
 
     private static String hex(@ColorInt int color) {
         return String.format("#%06X", color & 0x00FFFFFF);
-    }
-
-    @ColorInt
-    private static int materialAnsi(String darkBaseHex, String lightBaseHex, @ColorInt int materialColor, boolean dark) {
-        int semanticBase = Color.parseColor(dark ? darkBaseHex : lightBaseHex);
-        // Light palettes need the ANSI hue to remain distinct. A stronger
-        // Material blend makes greens, blues and cyans converge into gray.
-        return tintToward(semanticBase, materialColor, dark ? 0.42f : 0.18f);
-    }
-
-    @ColorInt
-    private static int tintToward(@ColorInt int base, @ColorInt int target, float amount) {
-        float[] baseHsv = new float[3];
-        float[] targetHsv = new float[3];
-        Color.colorToHSV(base, baseHsv);
-        Color.colorToHSV(target, targetHsv);
-        baseHsv[1] = Math.max(0f, Math.min(1f, baseHsv[1] * (1f - amount) + targetHsv[1] * amount));
-        baseHsv[2] = Math.max(0f, Math.min(1f, baseHsv[2] * (1f - amount) + targetHsv[2] * amount));
-        return blend(Color.HSVToColor(baseHsv), target, amount * 0.45f);
-    }
-
-    @ColorInt
-    private static int lighten(@ColorInt int color, float amount) {
-        return blend(color, Color.WHITE, amount);
-    }
-
-    @ColorInt
-    private static int darken(@ColorInt int color, float amount) {
-        return blend(color, Color.BLACK, amount);
-    }
-
-    @ColorInt
-    private static int blend(@ColorInt int from, @ColorInt int to, float amount) {
-        float clamped = Math.max(0f, Math.min(1f, amount));
-        int red = Math.round(Color.red(from) + (Color.red(to) - Color.red(from)) * clamped);
-        int green = Math.round(Color.green(from) + (Color.green(to) - Color.green(from)) * clamped);
-        int blue = Math.round(Color.blue(from) + (Color.blue(to) - Color.blue(from)) * clamped);
-        return Color.rgb(red, green, blue);
     }
 
     private static int perceivedBrightness(@ColorInt int color) {

@@ -43,6 +43,37 @@ public class WindowActivityRingTest {
             WindowActivityRing.LAZY_TICK_MS * WindowActivityRing.LAZY_STEPS);
     }
 
+    /**
+     * The smooth arc used to be redrawn once per vsync, which on a 120 Hz panel is 154 redraws of
+     * every working pill per turn. It now moves on a clock of its own, and the angle it draws at a
+     * given moment is unchanged: the tick decides how many positions the arc visits, never how fast
+     * it goes round.
+     */
+    @Test
+    public void theSmoothArcTicksAboutThirtyTimesASecondAtUnchangedSpeed() {
+        assertTrue("a tick of " + WindowActivityRing.SMOOTH_TICK_MS + "ms would read as stepping",
+            WindowActivityRing.SMOOTH_TICK_MS <= 40L);
+        assertTrue("a tick of " + WindowActivityRing.SMOOTH_TICK_MS + "ms is back on the vsync clock",
+            WindowActivityRing.SMOOTH_TICK_MS >= 25L);
+        // Enough stops that a ring a few pixels wide reads as gliding, and far fewer than a turn's
+        // worth of vsyncs.
+        assertTrue("steps " + WindowActivityRing.SMOOTH_STEPS, WindowActivityRing.SMOOTH_STEPS >= 32);
+        assertTrue("steps " + WindowActivityRing.SMOOTH_STEPS, WindowActivityRing.SMOOTH_STEPS < 120);
+        // Still coarser than smooth and finer than lazy: one clock, two rates.
+        assertTrue(WindowActivityRing.SMOOTH_TICK_MS < WindowActivityRing.LAZY_TICK_MS);
+
+        // The angle at a given elapsed time is what it always was: one full clockwise turn per
+        // SPIN_MS, whoever asks for the redraw.
+        assertEquals(WindowActivityRing.START_DEG,
+            WindowActivityRing.indeterminateStartDeg(WindowActivityRing.phase(0L)), .001f);
+        assertEquals(WindowActivityRing.START_DEG + 180f,
+            WindowActivityRing.indeterminateStartDeg(WindowActivityRing.phase(SPIN / 2)), .001f);
+        for (long ms = 0; ms < SPIN * 3; ms += 11) {
+            assertEquals("a turn later is the same angle", WindowActivityRing.phase(ms),
+                WindowActivityRing.phase(ms + SPIN), .0005f);
+        }
+    }
+
     @Test
     public void aReportedPercentageFillsTheRingAndIsClamped() {
         assertEquals(0f, WindowActivityRing.determinateSweepDeg(0), .001f);

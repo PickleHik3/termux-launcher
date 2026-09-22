@@ -1,0 +1,218 @@
+package com.termux.app.statusbar;
+
+import android.app.Activity;
+import android.app.Application;
+import android.os.Build;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.LinearLayout;
+
+import com.termux.R;
+import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.terminal.TerminalWindowBar;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertSame;
+
+/**
+ * The bar is moved, not rebuilt: one host and one set of views travel between the content column,
+ * where a row lives, and the root container, where a column does.
+ */
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
+public class StatusBarEdgeArrangementTest {
+
+    private Activity mActivity;
+    private StatusBarSwipeLayout mHost;
+    private LinearLayout mColumn;
+    private FrameLayout mContainer;
+    private View mContentRoot;
+    private View mRail;
+
+    @Before public void setUp() {
+        mActivity = Robolectric.buildActivity(Activity.class).setup().get();
+        mHost = new StatusBarSwipeLayout(mActivity, null);
+        mHost.setId(R.id.terminal_window_bar_host);
+
+        mColumn = new LinearLayout(mActivity);
+        mColumn.setOrientation(LinearLayout.VERTICAL);
+        mColumn.addView(mHost, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 96));
+        View terminal = new View(mActivity);
+        mColumn.addView(terminal, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        mContainer = new FrameLayout(mActivity);
+        mContentRoot = new View(mActivity);
+        mContainer.addView(mContentRoot);
+        mContainer.addView(mColumn);
+        mRail = new View(mActivity);
+        mContainer.addView(mRail);
+        mActivity.setContentView(mContainer);
+    }
+
+    @Test public void aRowSpansItsStackAndTakesTheThicknessOffItsDepth() {
+        StatusBarEdgeArrangement.band(mHost, Edge.TOP, 96);
+        assertEquals(96, mHost.getLayoutParams().height);
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, mHost.getLayoutParams().width);
+
+        StatusBarEdgeArrangement.band(mHost, Edge.BOTTOM, 32);
+        assertEquals(32, mHost.getLayoutParams().height);
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, mHost.getLayoutParams().width);
+    }
+
+    @Test public void aColumnSpansTheScreenAndTakesItsThicknessOffTheWidth() {
+        StatusBarEdgeArrangement.band(mHost, Edge.RIGHT, 76);
+        assertEquals(76, mHost.getLayoutParams().width);
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, mHost.getLayoutParams().height);
+
+        // And back to a row: one host, one set of params, turned rather than rebuilt.
+        StatusBarEdgeArrangement.band(mHost, Edge.TOP, 32);
+        assertEquals(32, mHost.getLayoutParams().height);
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, mHost.getLayoutParams().width);
+    }
+
+    @Test public void theStylesOwnScreenMarginsSurviveTheTurn() {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 96);
+        params.setMargins(7, 5, 7, 3);
+        mHost.setLayoutParams(params);
+        StatusBarEdgeArrangement.band(mHost, Edge.LEFT, 76);
+        LinearLayout.LayoutParams after = (LinearLayout.LayoutParams) mHost.getLayoutParams();
+        assertEquals(7, after.leftMargin);
+        assertEquals(5, after.topMargin);
+        assertEquals(3, after.bottomMargin);
+    }
+
+    @Test public void aColumnStandsTheSameContentOnItsSideAndTheRowStandsItBack() {
+        LinearLayout row = new LinearLayout(mActivity);
+        row.setId(R.id.terminal_status_row);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        mHost.addView(row, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 24));
+
+        PlaceContentStrip strip = new PlaceContentStrip(mActivity, null);
+        strip.setId(R.id.terminal_status_place_content);
+        row.addView(strip, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+
+        TerminalWindowBar windows = new TerminalWindowBar(mActivity, null);
+        windows.setId(R.id.terminal_window_bar);
+        strip.addView(windows, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+
+        StatusBarWindowColumn windowColumn = new StatusBarWindowColumn(mActivity, null);
+        windowColumn.setId(R.id.terminal_status_window_column);
+        windowColumn.setVisibility(View.GONE);
+        strip.addView(windowColumn, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        LinearLayout stats = new LinearLayout(mActivity);
+        stats.setId(R.id.terminal_status_stats_cluster);
+        stats.setOrientation(LinearLayout.HORIZONTAL);
+        StatusBarWidgetView cpu = new StatusBarWidgetView(mActivity);
+        stats.addView(cpu, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        row.addView(stats, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        StatusBarEdgeArrangement.apply(mHost, Edge.LEFT);
+        assertEquals(LinearLayout.VERTICAL, row.getOrientation());
+        assertEquals(LinearLayout.VERTICAL, strip.getOrientation());
+        assertEquals(LinearLayout.VERTICAL, stats.getOrientation());
+        assertEquals(LinearLayout.VERTICAL, cpu.getOrientation());
+        assertEquals("the row's pills make way for the chip column",
+            View.GONE, windows.getVisibility());
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, stats.getLayoutParams().width);
+        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, stats.getLayoutParams().height);
+
+        StatusBarEdgeArrangement.apply(mHost, Edge.BOTTOM);
+        assertEquals(LinearLayout.HORIZONTAL, row.getOrientation());
+        assertEquals(LinearLayout.HORIZONTAL, strip.getOrientation());
+        assertEquals(LinearLayout.HORIZONTAL, cpu.getOrientation());
+        assertEquals("and the chip column makes way for the pills",
+            View.GONE, windowColumn.getVisibility());
+        assertEquals(ViewGroup.LayoutParams.WRAP_CONTENT, stats.getLayoutParams().width);
+        assertEquals(ViewGroup.LayoutParams.MATCH_PARENT, stats.getLayoutParams().height);
+    }
+
+
+    @Test public void aStatOnItsSideKeepsTheBarsMiddleLineAndItsGapTurnsWithIt() {
+        LinearLayout row = new LinearLayout(mActivity);
+        row.setId(R.id.terminal_status_row);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        mHost.addView(row, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 24));
+
+        LinearLayout stats = new LinearLayout(mActivity);
+        stats.setId(R.id.terminal_status_stats_cluster);
+        stats.setOrientation(LinearLayout.HORIZONTAL);
+        stats.setPaddingRelative(8, 0, 0, 0);
+        row.addView(stats, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        StatusBarWidgetView cpu = new StatusBarWidgetView(mActivity);
+        stats.addView(cpu, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        MaterialDotSeparatorView dot = new MaterialDotSeparatorView(mActivity, null);
+        LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(3, 3);
+        dotParams.gravity = Gravity.CENTER_VERTICAL;
+        dotParams.setMargins(2, 0, 2, 0);
+        stats.addView(dot, dotParams);
+        StatusBarWidgetView ram = new StatusBarWidgetView(mActivity);
+        LinearLayout.LayoutParams ramParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT);
+        ramParams.setMarginStart(8);
+        stats.addView(ram, ramParams);
+
+        StatusBarEdgeArrangement.apply(mHost, Edge.LEFT);
+        assertEquals("a row's centre_vertical has no horizontal part: the dot would fall to the"
+                + " column's edge", Gravity.CENTER_HORIZONTAL,
+            ((LinearLayout.LayoutParams) dot.getLayoutParams()).gravity);
+        assertEquals(Gravity.CENTER_HORIZONTAL,
+            ((LinearLayout.LayoutParams) ram.getLayoutParams()).gravity);
+        assertEquals("the gap before the stat is now above it",
+            8, ((LinearLayout.LayoutParams) ram.getLayoutParams()).topMargin);
+        assertEquals(0, ((LinearLayout.LayoutParams) ram.getLayoutParams()).getMarginStart());
+        assertEquals("the dot keeps a gap at both ends", 2,
+            ((LinearLayout.LayoutParams) dot.getLayoutParams()).topMargin);
+        assertEquals(2, ((LinearLayout.LayoutParams) dot.getLayoutParams()).bottomMargin);
+        assertEquals("the cluster's own clearance is at the bar's leading end", 8,
+            stats.getPaddingTop());
+        assertEquals(0, stats.getPaddingStart());
+
+        StatusBarEdgeArrangement.apply(mHost, Edge.TOP);
+        assertEquals(Gravity.CENTER_VERTICAL,
+            ((LinearLayout.LayoutParams) dot.getLayoutParams()).gravity);
+        assertEquals("and back along the row it came from",
+            8, ((LinearLayout.LayoutParams) ram.getLayoutParams()).getMarginStart());
+        assertEquals(0, ((LinearLayout.LayoutParams) ram.getLayoutParams()).topMargin);
+        assertEquals(8, stats.getPaddingStart());
+        assertEquals(0, stats.getPaddingTop());
+    }
+
+    @Test public void theClockLeadsTheRowOnBothRowEdges() {
+        // Updated with P10: the row keeps the screen edge its bar stands on, so the widget slot
+        // leads it on a bottom bar too — this asserted the mirror that lifted the row off the edge.
+        FrameLayout slot = new FrameLayout(mActivity);
+        slot.setId(R.id.terminal_top_widget_area);
+        mHost.addView(slot, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 68, Gravity.BOTTOM));
+
+        StatusBarEdgeArrangement.apply(mHost, Edge.BOTTOM);
+        assertEquals(Gravity.TOP, ((FrameLayout.LayoutParams) slot.getLayoutParams()).gravity);
+        assertEquals(View.VISIBLE, slot.getVisibility());
+
+        StatusBarEdgeArrangement.apply(mHost, Edge.TOP);
+        assertEquals(Gravity.TOP, ((FrameLayout.LayoutParams) slot.getLayoutParams()).gravity);
+    }
+}

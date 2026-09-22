@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The shell's quietest line: an unchosen segment's outline, and anything else that has to be
+     there without being read. On-surface at 18%, so it follows the user's terminal colours the
+     way every other ink in the editors does. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:alpha="0.18" android:color="?attr/termuxColorOnSurface" />
+</selector>

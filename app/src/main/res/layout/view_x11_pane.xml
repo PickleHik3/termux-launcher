@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The pane wall's Display page: the embedded X server's surface, dressed like a terminal pane.
+     It wears the Canvas surface's glass slab like the Widgets page and the panes do, behind the
+     display's own surface, and keeps the rim, the radius and the gap. The corner mask paints what
+     sits behind the page over the four arcs, because the surface is composited outside the view
+     hierarchy and no parent clip can round it (there is no public SurfaceView corner radius at
+     compileSdk 36) — which is also what rounds the slab, since this frame cannot clip. -->
+<com.termux.app.x11.X11PaneFrame xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+    <!-- This page's glass: the shared pre-blurred wallpaper frame drawn through the page's own
+         rect, with the surface tint and film grain over it, exactly as a terminal pane's slab.
+         Hidden unless the terminal glass is on (PaneGlass.apply). It sits behind the display,
+         whose SurfaceView punches its own rect out of the window while it is on screen, so the
+         slab is what shows through the empty state and around the arcs. -->
+    <com.termux.app.terminal.PaneGlassBackdropView
+        android:id="@+id/x11_pane_glass"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
+    <com.termux.x11.LorieView
+        android:id="@+id/x11_display_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:defaultFocusHighlightEnabled="false" />
+
+    <com.termux.app.terminal.PaneGlassBackdropView
+        android:id="@+id/x11_pane_corner_mask"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:importantForAccessibility="no"
+        android:visibility="gone" />
+
+    <!-- Shown whenever no server is running, which is the state a home screen rests in: the
+         launcher never starts one on its own. -->
+    <LinearLayout
+        android:id="@+id/x11_pane_empty"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:paddingHorizontal="24dp">
+
+        <TextView
+            android:id="@+id/x11_pane_empty_message"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textSize="14sp"
+            android:textColor="?attr/termuxColorOnSurfaceVariant"
+            android:text="@string/termux_x11_no_display" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/x11_pane_start"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="36dp"
+            android:textSize="12sp"
+            android:text="@string/termux_x11_start_display" />
+
+        <!-- D9's offer. Out only in the plain "nothing running" state, and only while a
+             container is found that is not set up and the user has not already turned this
+             situation down; the offer is a button the user goes to, never a dialog that arrives. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/x11_pane_setup"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="36dp"
+            android:textSize="12sp"
+            android:visibility="gone"
+            android:text="@string/distro_setup_offer" />
+
+        <!-- Only out while the message names a package the user still has to install; it is the
+             tappable route to the guide the message points at. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/x11_pane_guide"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minHeight="36dp"
+            android:textSize="12sp"
+            android:visibility="gone"
+            android:text="@string/termux_x11_read_guide" />
+    </LinearLayout>
+</com.termux.app.x11.X11PaneFrame>

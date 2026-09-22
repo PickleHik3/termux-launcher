@@ -194,7 +194,7 @@ strings -a out-vaj/fastfetch | grep -o "/data/data/[^\"]*" | sort -u
 The build fails outright if the polyfill did not take the prefix, because a binary that keeps the
 default one would resolve the home directory to another edition's.
 
-`setup-launcher` installs the asset matching the edition it runs in — `fastfetch-aarch64` for
+The tlstore catalog installs the asset matching the edition it runs in — `fastfetch-aarch64` for
 `com.termux`, `fastfetch-io.vaj.tl-aarch64` for `io.vaj.tl` — and skips the item with a build hint
 when nothing is published for that prefix.
 

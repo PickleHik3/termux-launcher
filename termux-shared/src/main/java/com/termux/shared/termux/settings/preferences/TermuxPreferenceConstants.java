@@ -171,6 +171,124 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED = true;
 
+        /** The widget pane's grid: how many columns across and rows down a page has. */
+        public static final String KEY_APP_LAUNCHER_WIDGET_GRID_COLUMNS = "app_launcher_widget_grid_columns";
+
+        public static final int DEFAULT_APP_LAUNCHER_WIDGET_GRID_COLUMNS = 4;
+
+        public static final int MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS = 2;
+
+        public static final int MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS = 8;
+
+        public static final String KEY_APP_LAUNCHER_WIDGET_GRID_ROWS = "app_launcher_widget_grid_rows";
+
+        public static final int DEFAULT_APP_LAUNCHER_WIDGET_GRID_ROWS = 5;
+
+        public static final int MIN_APP_LAUNCHER_WIDGET_GRID_ROWS = 2;
+
+        public static final int MAX_APP_LAUNCHER_WIDGET_GRID_ROWS = 12;
+
+        /**
+         * Defines the key for the embedded Linux display: the wall's Display page, the
+         * {@code termux-x11} command the launcher writes into the prefix, and the display
+         * settings. Off until the user asks for it — a home screen that never wants a display
+         * should pay nothing for one.
+         */
+        public static final String KEY_X11_DISPLAY_ENABLED = "x11_display_enabled";
+
+        public static final boolean DEFAULT_X11_DISPLAY_ENABLED = false;
+
+        /** Command line the "Start display" button and the start-up opt-in run. */
+        public static final String KEY_X11_DISPLAY_COMMAND = "x11_display_command";
+
+        public static final String DEFAULT_X11_DISPLAY_COMMAND = "termux-x11 :0";
+
+        /** Run the start command when the launcher's service comes up. Off: a home screen that never asked for a display pays nothing for one. */
+        public static final String KEY_X11_DISPLAY_AUTOSTART = "x11_display_autostart";
+
+        public static final boolean DEFAULT_X11_DISPLAY_AUTOSTART = false;
+
+        /** Put {@code DISPLAY} into new shells while a display is running. Off, as Termux:X11 never did it. */
+        public static final String KEY_X11_SET_DISPLAY_ENV = "x11_set_display_env";
+
+        public static final boolean DEFAULT_X11_SET_DISPLAY_ENV = false;
+
+        /** The X screen's dots per inch when the launcher starts the server; 0 leaves it to the server. */
+        public static final String KEY_X11_DISPLAY_DPI = "x11_display_dpi";
+
+        public static final int DEFAULT_X11_DISPLAY_DPI = 0;
+
+        /**
+         * Raise the keyboard when a tap on the display lands on a text field, and put it down
+         * when the next tap lands elsewhere. Only read while the touch mode is Touchscreen.
+         */
+        public static final String KEY_X11_KEYBOARD_FOLLOWS_TEXT = "x11_keyboard_follows_text";
+
+        public static final boolean DEFAULT_X11_KEYBOARD_FOLLOWS_TEXT = true;
+
+        /**
+         * Type into the display with the phone's own keyboard instead of the launcher's. Read on
+         * the Display place only; the terminal keeps the launcher's keyboard either way.
+         */
+        public static final String KEY_X11_ANDROID_KEYBOARD = "x11_android_keyboard";
+
+        public static final boolean DEFAULT_X11_ANDROID_KEYBOARD = false;
+
+        /** Pass {@code -legacy-drawing} when the launcher starts the server. */
+        public static final String KEY_X11_LEGACY_DRAWING = "x11_legacy_drawing";
+
+        public static final boolean DEFAULT_X11_LEGACY_DRAWING = false;
+
+        /** Pass {@code -force-bgra} when the launcher starts the server. */
+        public static final String KEY_X11_FORCE_BGRA = "x11_force_bgra";
+
+        public static final boolean DEFAULT_X11_FORCE_BGRA = false;
+
+        /** List the prefix's Linux apps in the app drawer, to be run on the display. */
+        public static final String KEY_X11_DRAWER_APPS = "x11_drawer_apps";
+
+        public static final boolean DEFAULT_X11_DRAWER_APPS = true;
+
+        /** The window manager the launcher starts with the server, so windows open full size. Empty for none. */
+        public static final String KEY_X11_WINDOW_MANAGER = "x11_window_manager";
+
+        public static final String DEFAULT_X11_WINDOW_MANAGER = "openbox";
+
+        /** Set once the phone-sized defaults (text size, touch mode) have been written on first turn-on. */
+        public static final String KEY_X11_DEFAULTS_APPLIED = "x11_defaults_applied";
+
+        /**
+         * Whether the keyboard was up the last time the user left the Display place. Retired: every
+         * place remembers its own, and this is read once to carry the old answer over.
+         */
+        public static final String KEY_X11_KEYBOARD_SHOWN = "x11_keyboard_shown";
+
+        /**
+         * The mark the status bar's Display badge wears: the Termux X11 glyph for native apps, or
+         * the glyph of the proot distribution the display is used for.
+         */
+        public static final String KEY_X11_RUNTIME_BADGE = "x11_runtime_badge";
+
+        /**
+         * Where the extra keys sit while the Display place is showing: along the bottom as usual,
+         * or as a column on one screen edge so the display keeps its height. The Display page's row
+         * still carries this key, but the answer lives in the per-place layout store.
+         */
+        public static final String KEY_X11_EXTRA_KEYS_SIDE = "x11_extra_keys_side";
+
+        public static final String X11_EXTRA_KEYS_SIDE_BOTTOM = "bottom";
+
+        public static final String X11_EXTRA_KEYS_SIDE_LEFT = "left";
+
+        public static final String X11_EXTRA_KEYS_SIDE_RIGHT = "right";
+
+        public static final String DEFAULT_X11_EXTRA_KEYS_SIDE = X11_EXTRA_KEYS_SIDE_BOTTOM;
+
+        public static final String DEFAULT_X11_RUNTIME_BADGE = "termux";
+
+        /** The place the pane wall last rested on; the home screen comes back to it. */
+        public static final String KEY_WALL_LAST_PAGE = "wall_last_page";
+
         /**
          * Defines the key for the launcher / terminal-only use case the user picked. Stored rather
          * than derived from the surface switches: the surfaces stay individually settable after a
@@ -228,6 +346,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_APP_LAUNCHER_BAR_HEIGHT = "app_launcher_bar_height";
 
         public static final float DEFAULT_APP_LAUNCHER_BAR_HEIGHT = 2.18f;
+
+        public static final float MIN_APP_LAUNCHER_BAR_HEIGHT = 0.4f;
+
+        public static final float MAX_APP_LAUNCHER_BAR_HEIGHT = 3.0f;
 
         /**
          * Defines the visual surface style for the app launcher dock.
@@ -375,6 +497,22 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_WALLPAPER_BACKDROP_DIM = 0;
 
         /**
+         * Extra magnification (percent) applied to the wallpaper copy the glass surfaces blur, so
+         * it lands where the system draws the wallpaper behind the app. 100 means no compensation.
+         *
+         * <p>It is a setting rather than a constant because the magnification a ROM applies at
+         * composite time turned out to depend on the wallpaper: a stored 1328x2654 wallpaper needed
+         * 103 on Nothing OS, a 1400x3100 one about 108. The shipped defaults are the measured
+         * per-manufacturer starting points, resolved by
+         * {@link TermuxAppSharedPreferences#defaultWallpaperRenderZoom(String)}.
+         */
+        public static final String KEY_WALLPAPER_RENDER_ZOOM = "wallpaper_render_zoom";
+        public static final int DEFAULT_WALLPAPER_RENDER_ZOOM = 100;
+        public static final int DEFAULT_WALLPAPER_RENDER_ZOOM_NOTHING_OS = 103;
+        public static final int MIN_WALLPAPER_RENDER_ZOOM = 90;
+        public static final int MAX_WALLPAPER_RENDER_ZOOM = 120;
+
+        /**
          * Gap between tiled terminal panes in dp — the surface editor's Inner padding. The old
          * fixed 1dp hairline is the default; with the glass panes on, the gap is what makes each
          * pane read as its own floating terminal rather than a cell of one sheet.
@@ -422,6 +560,14 @@ public final class TermuxPreferenceConstants {
         /** Animate the terminal cursor between its old and new cell instead of jumping. */
         public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
         public static final boolean DEFAULT_TERMINAL_CURSOR_TRAIL = true;
+
+        /** Whether an OSC 52 query ("ESC ] 52 ; c ; ? BEL") may read the Android clipboard. */
+        public static final String KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = "terminal_osc52_clipboard_read_enabled";
+        public static final boolean DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = true;
+
+        /** Whether copying a wrapped row trims its trailing padding spaces like an unwrapped row. */
+        public static final String KEY_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES = "terminal_trim_wrapped_trailing_spaces";
+        public static final boolean DEFAULT_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES = true;
 
         /**
          * Defines the key for showing focused app names while scrubbing the dock.
@@ -557,6 +703,15 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_IN_APP_KEYBOARD_KEY_SOUND_ENABLED = false;
 
         /**
+         * Defines the key for whether a pressed key is shown floating above the finger, with the
+         * key's other characters around it.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_KEY_POPUP =
+            "in_app_keyboard_key_popup";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_KEY_POPUP = true;
+
+        /**
          * Defines the key for whether the built-in keyboard learns where the user's taps land
          * and nudges presses near a key boundary onto the key they usually mean. Off by
          * default: it is the home screen's keyboard, and the model is learned from the user's
@@ -664,6 +819,72 @@ public final class TermuxPreferenceConstants {
         public static final float MIN_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 0.0f;
 
         public static final float MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP = 24.0f;
+
+        /**
+         * Defines how wide a floating keyboard is, as a fraction of the width it could take.
+         * Landscape and portrait keep their own value: the fraction that leaves a landscape
+         * keyboard comfortably thumb-sized leaves a portrait one too narrow to type on, so each
+         * orientation has both its own key and its own default rather than falling back to the
+         * other's.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE =
+            "in_app_keyboard_floating_width_scale";
+
+        public static final String KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE_LANDSCAPE =
+            "in_app_keyboard_floating_width_scale_landscape";
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE = 0.90f;
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE_LANDSCAPE = 0.60f;
+
+        // Narrower than a third of the screen stops being a keyboard, and a full-width float is a
+        // docked keyboard that has left the edge — both ends are reachable on purpose.
+        public static final float MIN_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE = 0.35f;
+
+        public static final float MAX_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE = 1.0f;
+
+        /**
+         * Defines how tall a floating keyboard's rows are, as a multiplier on the height the
+         * keyboard would have docked. Per orientation for the same reason as the width: a float
+         * sized for a landscape thumb-reach is not the one a portrait float wants. Multiplies the
+         * height scale rather than replacing it, so the height the user set for the docked
+         * keyboard is still the starting point a float is grown or shrunk from.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE =
+            "in_app_keyboard_floating_height_scale";
+
+        public static final String KEY_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE_LANDSCAPE =
+            "in_app_keyboard_floating_height_scale_landscape";
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE = 1.0f;
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE_LANDSCAPE = 1.0f;
+
+        // A float is the keyboard the user has already sized, nudged: far enough either way to
+        // matter, not far enough to make the keys untappable or to fill the screen.
+        public static final float MIN_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE = 0.6f;
+
+        public static final float MAX_IN_APP_KEYBOARD_FLOATING_HEIGHT_SCALE = 1.6f;
+
+        /**
+         * Defines the gap a split keyboard parts its rows by, as a fraction of the keyboard's
+         * width. Per orientation for the same reason as the floating width: a landscape keyboard
+         * is wide enough to give a quarter of itself away, a portrait one is not.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION =
+            "in_app_keyboard_split_gap_fraction";
+
+        public static final String KEY_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION_LANDSCAPE =
+            "in_app_keyboard_split_gap_fraction_landscape";
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION = 0.12f;
+
+        public static final float DEFAULT_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION_LANDSCAPE = 0.25f;
+
+        /** No gap is a docked keyboard; half the width would leave nothing to type on. */
+        public static final float MIN_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION = 0.0f;
+
+        public static final float MAX_IN_APP_KEYBOARD_SPLIT_GAP_FRACTION = 0.45f;
 
         /**
          * Defines the extra air in dp under the last key row, inside the keyboard's own surface.
@@ -1064,6 +1285,13 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL = "default";
 
         /**
+         * Defines the key for which shipped theme templates the user has turned on, as a set of
+         * template ids. Templates the user drops into ~/.termux/theme-templates are not listed here:
+         * they apply because they are there.
+         */
+        public static final String KEY_THEME_TEMPLATES_ENABLED = "theme_templates_enabled";
+
+        /**
          * Defines the key for whether the system wallpaper should be used.
          */
         public static final String KEY_USE_SYSTEM_WALLPAPER = "use_system_wallpaper";
@@ -1078,6 +1306,97 @@ public final class TermuxPreferenceConstants {
             "wallpaper_read_permission_prompted";
 
         public static final boolean DEFAULT_VALUE_WALLPAPER_READ_PERMISSION_PROMPTED = false;
+
+        /**
+         * Defines the key for whether the first-run "turn on the Linux display" prompt has been
+         * shown. Asked at most once, on the first-launch chain only.
+         */
+        public static final String KEY_DISPLAY_ENABLE_PROMPTED =
+            "display_enable_prompted";
+
+        public static final boolean DEFAULT_VALUE_DISPLAY_ENABLE_PROMPTED = false;
+
+        /**
+         * Whether the first-run permission chain (wallpaper, display, weather) has run to its end
+         * once. It runs on the first launch only; everything it asks is reachable from Settings.
+         */
+        public static final String KEY_FIRST_RUN_CHAIN_DONE = "first_run_chain_done";
+
+        public static final boolean DEFAULT_VALUE_FIRST_RUN_CHAIN_DONE = false;
+
+        /**
+         * Whether the first-run permissions card has been shown and answered. An install that
+         * already went through the old chain of dialogs sees the card once, and only while
+         * something on it is still ungranted; after Continue it is never offered again.
+         */
+        public static final String KEY_FIRST_RUN_PERMISSIONS_CARD_SEEN =
+            "first_run_permissions_card_seen";
+
+        public static final boolean DEFAULT_VALUE_FIRST_RUN_PERMISSIONS_CARD_SEEN = false;
+
+        /**
+         * The version of the first-boot tour the user has been through, or 0. Versioned rather
+         * than a flag so a later run can be offered to someone who saw an earlier one; an install
+         * that already has a launcher on it is never shown a run it did not opt into.
+         */
+        /**
+         * Whether the one-time card asking whether to take this release's key row has been
+         * answered. The trailing number is this release's asking: a later release that wants to
+         * ask again bumps it, and everyone is offered the new row once more.
+         */
+        public static final String KEY_EXTRA_KEYS_DEFAULT_OFFERED = "extra_keys_default_offered_1";
+
+        public static final boolean DEFAULT_VALUE_EXTRA_KEYS_DEFAULT_OFFERED = false;
+
+        /**
+         * The key row the user had before they accepted this release's row, one entry per toolbar
+         * page, so the editor can offer it back as a preset. Empty until the card is accepted; it
+         * survives applying the preset, which only fills the editor's draft.
+         */
+        public static final String[] KEY_PREVIOUS_EXTRA_KEYS = {
+            "previous_extra_keys",
+            "previous_extra_keys_2",
+        };
+
+        public static final String DEFAULT_VALUE_PREVIOUS_EXTRA_KEYS = "";
+
+        public static final String KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION =
+            "first_boot_tour_completed_version";
+        public static final int DEFAULT_FIRST_BOOT_TOUR_COMPLETED_VERSION = 0;
+
+        /**
+         * The version of the run an unfinished tour belongs to, or 0 for one started before the
+         * version was recorded. The card number alone says nothing across an update: card 3 of
+         * one run and card 3 of the next are different lessons.
+         */
+        public static final String KEY_FIRST_BOOT_TOUR_RUN_VERSION = "first_boot_tour_run_version";
+        public static final int DEFAULT_FIRST_BOOT_TOUR_RUN_VERSION = 0;
+
+        /**
+         * The card an unfinished run is on, or -1. The launcher is the home screen and is killed
+         * and restarted under the user constantly, so the run is written through on every move and
+         * resumes where it was rather than starting over.
+         */
+        public static final String KEY_FIRST_BOOT_TOUR_STEP = "first_boot_tour_step";
+        public static final int DEFAULT_FIRST_BOOT_TOUR_STEP = -1;
+
+        /** How many of the current card's gestures have been observed. */
+        public static final String KEY_FIRST_BOOT_TOUR_STEP_STAGE = "first_boot_tour_step_stage";
+        public static final int DEFAULT_FIRST_BOOT_TOUR_STEP_STAGE = 0;
+
+        /** Whether the user skipped past a card in the run they are on. */
+        public static final String KEY_FIRST_BOOT_TOUR_SKIPPED = "first_boot_tour_skipped";
+        public static final boolean DEFAULT_FIRST_BOOT_TOUR_SKIPPED = false;
+
+        /**
+         * Whether the one-time migration that folds a completed run of the removed footage
+         * onboarding into {@link #KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION} has already run. Guarded
+         * by its own flag, never by the completed version itself, since Replay legitimately zeroes
+         * that version and must not be read back as "never migrated".
+         */
+        public static final String KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED =
+            "first_boot_tour_legacy_onboarding_migrated";
+        public static final boolean DEFAULT_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED = false;
     }
 
     /**

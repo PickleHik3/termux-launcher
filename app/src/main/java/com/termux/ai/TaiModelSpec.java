@@ -183,13 +183,31 @@ public final class TaiModelSpec {
         this.sourceCapabilities = Collections.unmodifiableSet(sourceCaps);
         this.endpointCapabilities = Collections.unmodifiableSet(endpointCaps);
         this.capabilities = this.endpointCapabilities;
-        this.endpointContextWindow = endpointContextWindow > 0 ? endpointContextWindow : defaultEndpointContextWindowFor(id, this.backend);
+        int requestedContext = endpointContextWindow > 0 ? endpointContextWindow : defaultEndpointContextWindowFor(id, this.backend);
+        int artifactLimit = BACKEND_LITERT_LM.equals(this.backend) ? TaiContextWindowPolicy.artifactContextLimit(localPath) : 0;
+        if (runtimeProfile != null && runtimeProfile.maxContextTokens > 0)
+            artifactLimit = artifactLimit > 0 ? Math.min(artifactLimit, runtimeProfile.maxContextTokens) : runtimeProfile.maxContextTokens;
+        this.endpointContextWindow = artifactLimit > 0 ? Math.min(requestedContext, artifactLimit) : requestedContext;
         this.sourceContextWindow = sourceContextWindow > 0 ? sourceContextWindow : this.endpointContextWindow;
         this.contextWindow = this.endpointContextWindow;
         this.defaultMaxOutputTokens = defaultMaxOutputTokens > 0 ? defaultMaxOutputTokens : defaultMaxOutputTokensFor(id, this.backend);
         this.recommendedRamGb = Math.max(0, recommendedRamGb);
         this.sha256 = sha256;
         this.toolMode = normalizedToolMode(toolMode, this.backend, endpointCaps);
+    }
+
+    /**
+     * The same model with a different endpoint context window. Used by
+     * {@link TaiContextWindowPolicy} to size the runtime and the advertised window per device
+     * without touching the stored catalog or registry entry.
+     */
+    @NonNull
+    public TaiModelSpec withEndpointContextWindow(int newEndpointContextWindow) {
+        if (newEndpointContextWindow <= 0 || newEndpointContextWindow == endpointContextWindow) return this;
+        return new TaiModelSpec(id, displayName, roleHint, source, localPath, license, sizeBytes,
+            sourceCapabilities, builtInCatalogEntry, runtimeProfile, backend, format, architecture,
+            quantization, newEndpointContextWindow, sourceContextWindow, defaultMaxOutputTokens,
+            recommendedRamGb, sha256, endpointCapabilities, toolMode);
     }
 
     @NonNull
@@ -218,7 +236,8 @@ public final class TaiModelSpec {
         json.put("endpointCapabilities", capabilityArray(endpointCapabilities));
         json.put("sourceCapabilities", capabilityArray(sourceCapabilities));
         json.put("toolMode", toolMode == null ? JSONObject.NULL : toolMode);
-        json.put("capabilitiesVerified", builtInCatalogEntry);
+        json.put("capabilitiesVerified", false);
+        json.put("capabilityVerification", "declared");
         json.put("capabilitySource", builtInCatalogEntry ? "catalog" : "import_or_user_metadata");
         return json;
     }

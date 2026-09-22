@@ -10,39 +10,12 @@
             app:defaultValue="launcher" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/settings_surfaces_header">
-        <Preference
-            app:key="customize_dock_surface"
-            app:icon="@drawable/ic_symbol_palette"
-            app:persistent="false"
-            app:title="@string/settings_customize_dock_title"
-            app:summary="@string/settings_customize_dock_summary" />
-    </PreferenceCategory>
-
     <PreferenceCategory app:title="@string/settings_pinned_apps_header">
-        <SwitchPreferenceCompat
-            app:key="app_launcher_apps_row_enabled"
-            app:title="@string/settings_show_pinned_apps_title"
-            app:summary="@string/settings_show_pinned_apps_summary"
-            android:defaultValue="true" />
-        <SwitchPreferenceCompat
-            app:key="app_launcher_az_row_enabled"
-            app:title="@string/settings_show_az_index_title"
-            app:summary="@string/settings_show_az_index_summary"
-            app:dependency="app_launcher_apps_row_enabled"
-            android:defaultValue="true" />
         <SwitchPreferenceCompat
             app:key="app_launcher_row_haptics"
             app:title="@string/settings_app_index_haptics_title"
             app:summary="@string/settings_app_index_haptics_summary"
-            app:dependency="app_launcher_apps_row_enabled"
             android:defaultValue="true" />
-        <com.termux.app.fragments.settings.SegmentedPillPreference
-            app:key="app_launcher_dock_rail_side"
-            app:title="@string/settings_dock_rail_side_title"
-            app:summary="@string/settings_dock_rail_side_summary"
-            app:dependency="app_launcher_apps_row_enabled"
-            app:defaultValue="left" />
         <Preference
             app:key="app_launcher_default_buttons"
             app:title="@string/settings_edit_pinned_apps_title"
@@ -54,7 +27,6 @@
             app:key="app_launcher_notification_dots"
             app:title="@string/settings_notification_dots_title"
             app:summary="@string/termux_app_launcher_notification_dots_summary"
-            app:dependency="app_launcher_apps_row_enabled"
             android:defaultValue="false" />
         <SwitchPreferenceCompat
             app:key="app_launcher_notification_history"
@@ -65,7 +37,6 @@
             app:key="app_launcher_most_used_page"
             app:title="@string/settings_most_used_page_title"
             app:summary="@string/settings_most_used_page_summary"
-            app:dependency="app_launcher_apps_row_enabled"
             android:defaultValue="false" />
     </PreferenceCategory>
 
@@ -115,6 +86,10 @@
             app:entries="@array/app_launcher_az_lock_method_entries"
             app:entryValues="@array/app_launcher_az_lock_method_values"
             app:useSimpleSummaryProvider="true" />
+        <Preference
+            app:key="app_launcher_help"
+            app:title="@string/help_settings_title"
+            app:summary="@string/help_settings_summary" />
         <SwitchPreferenceCompat
             app:key="show_in_recents_when_not_default"
             app:title="@string/settings_show_recents_title"

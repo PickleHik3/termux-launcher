@@ -37,8 +37,9 @@ import java.util.TimeZone;
  * with the seconds and period folded onto its baseline, and — in the full form — a date row that
  * ends in a hairline running to the right gutter, so the clock lines up with the status row below
  * instead of stopping at an arbitrary width. Colors come from the Material roles
- * ({@code termuxColorPrimary} / {@code termuxColorSecondary} / {@code termuxColorOnSurface}), which
- * are wallpaper-derived, rather than per-face literals.
+ * ({@code termuxColorPrimary} / {@code termuxColorSecondary} / {@code termuxColorOnSurface}, plus
+ * the primary container pair for the flip leaves), which are wallpaper-derived, rather than
+ * per-face literals.
  *
  * <p>The widget reports its content width so the slot can hand the remaining space to media or
  * pinned notifications, and it compresses through {@link TopPaneClockForm} instead of ever changing
@@ -138,7 +139,6 @@ public final class TerminalClockWidget extends View {
     private ClockSnapshot mSnapshot;
     private boolean mTickerRunning;
     private boolean mUseAmPm;
-    private float mFullPresentationProgress;
 
     private int mPrimary;
     private int mSecondary;
@@ -154,6 +154,13 @@ public final class TerminalClockWidget extends View {
     private int mSurfacePanelHigh;
     private int mSurfacePanelHighest;
     private int mOutlineVariant;
+    private int mOnSurfaceVariant;
+    private int mPrimaryContainer;
+    private int mOnPrimaryContainer;
+    private int mFlipBase;
+    private int mFlipSecondsInk;
+    private int mFlipDateInk;
+    private int mFlipRuleColor;
     private final int[] mUpperFlipColors = new int[4];
     private final int[] mLowerFlipColors = new int[4];
     private final int[] mHingeFlipColors = new int[7];
@@ -233,17 +240,6 @@ public final class TerminalClockWidget extends View {
         return mForm;
     }
 
-    /** Host-owned presentation channel; the clock itself owns no competing animation loop. */
-    public void setFullPresentationProgress(float progress) {
-        float clamped = Float.isFinite(progress) ? Math.max(0f, Math.min(1f, progress)) : 0f;
-        if (Math.abs(clamped - mFullPresentationProgress) < .0001f) return;
-        mFullPresentationProgress = clamped;
-        requestLayout();
-        invalidate();
-    }
-
-    public float getFullPresentationProgress() { return mFullPresentationProgress; }
-
     public void setUseAmPm(boolean useAmPm) {
         if (mUseAmPm == useAmPm) return;
         mUseAmPm = useAmPm;
@@ -267,6 +263,7 @@ public final class TerminalClockWidget extends View {
 
     @Override
     protected void onDetachedFromWindow() {
+        mHighRefresh = -1;
         stopTicker();
         removeCallbacks(mSyncTicker);
         super.onDetachedFromWindow();
@@ -332,6 +329,15 @@ public final class TerminalClockWidget extends View {
         mOutlineVariant = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorOutlineVariant,
             ContextCompat.getColor(context, R.color.termux_outline_variant));
+        mOnSurfaceVariant = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+            ContextCompat.getColor(context, R.color.termux_on_surface_variant));
+        mPrimaryContainer = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorPrimaryContainer,
+            ContextCompat.getColor(context, R.color.termux_primary_container));
+        mOnPrimaryContainer = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnPrimaryContainer,
+            ContextCompat.getColor(context, R.color.termux_on_primary_container));
         mPrimaryLine = alpha(mPrimary, .45f);
         mSecondaryQuiet = alpha(mSecondary, .5f);
         mDateInk = alpha(mOnSurface, .62f);
@@ -341,20 +347,36 @@ public final class TerminalClockWidget extends View {
         resolveFlipColors();
     }
 
-    /** Card stock and hardware stay inside the resolved Material surface family. */
+    /**
+     * Glass stock. Both leaves are translucent {@code primaryContainer} sheets over the bar's own
+     * glass, with the rim in {@code primary}; the digits stay {@code onSurface}. The hinge clips
+     * and seam keep the neutral hardware of the original stock — coloured clips read as paint,
+     * not metal — so the theme colour lives in the leaves alone.
+     *
+     * <p>The card is painted in two passes — a whole-card base that casts the shadow, then the
+     * leaf gradients over it — so every leaf colour here is chosen to stack on {@link #mFlipBase}
+     * rather than to stand alone.
+     */
     private void resolveFlipColors() {
         // Any repalette retires the cached gradients; they carry the old colours.
         mFlipShaderGeneration++;
         mDarkFlipStock = ColorUtils.calculateLuminance(mSurfaceBase) < .5;
+        int pc = mPrimaryContainer, on = mOnPrimaryContainer;
+        // The leaves are surface stock with a breath of the theme's container colour, so the
+        // face reads as part of the bar's chrome rather than a primary-coloured badge. Digits
+        // stay onSurface like every other face; the hinge hardware stays neutral.
+        int leaf = ColorUtils.blendARGB(mDarkFlipStock ? mSurfacePanelHigh : mSurfacePanel,
+            pc, .22f);
+        mFlipBase = alpha(leaf, .5f);
         if (mDarkFlipStock) {
-            mUpperFlipColors[0] = mSurfacePanel;
-            mUpperFlipColors[1] = mSurfacePanelHigh;
-            mUpperFlipColors[2] = mSurfacePanelHighest;
-            mUpperFlipColors[3] = ColorUtils.blendARGB(mSurfaceBase, Color.BLACK, .35f);
-            mLowerFlipColors[0] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .22f);
-            mLowerFlipColors[1] = mSurfacePanelHighest;
-            mLowerFlipColors[2] = mSurfacePanelHigh;
-            mLowerFlipColors[3] = ColorUtils.blendARGB(mSurfacePanelHigh, mSurfacePanel, .35f);
+            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .08f), .5f);
+            mUpperFlipColors[1] = alpha(leaf, .46f);
+            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(leaf, Color.BLACK, .16f), .5f);
+            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, Color.BLACK, .42f), .56f);
+            mLowerFlipColors[0] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .2f), .54f);
+            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .06f), .48f);
+            mLowerFlipColors[2] = alpha(leaf, .46f);
+            mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, Color.BLACK, .16f), .5f);
             mHingeFlipColors[0] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .45f);
             mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .25f);
             mHingeFlipColors[2] = mSurfacePanelHighest;
@@ -363,21 +385,20 @@ public final class TerminalClockWidget extends View {
             mHingeFlipColors[5] = ColorUtils.blendARGB(mSurfacePanelHigh,
                 mSurfacePanelHighest, .35f);
             mHingeFlipColors[6] = ColorUtils.blendARGB(mSurfaceBase, Color.BLACK, .35f);
-            mFlipRim = Color.argb(199, 0, 0, 0);
-            mFlipSeam = Color.BLACK;
-            mFlipShadow = Color.argb(128, 0, 0, 0);
+            mFlipRim = alpha(mOutlineVariant, .6f);
+            mFlipSeam = alpha(Color.BLACK, .85f);
+            mFlipShadow = Color.argb(70, 0, 0, 0);
             mFlipClipOutline = Color.BLACK;
             mFlipClipShadow = Color.argb(128, 0, 0, 0);
         } else {
-            mUpperFlipColors[0] = mSurfaceBase;
-            mUpperFlipColors[1] = mSurfacePanel;
-            mUpperFlipColors[2] = mSurfacePanelHigh;
-            mUpperFlipColors[3] = mOutlineVariant;
-            mLowerFlipColors[0] = ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .82f);
-            mLowerFlipColors[1] = ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .3f);
-            mLowerFlipColors[2] = mSurfacePanelHigh;
-            mLowerFlipColors[3] = ColorUtils.blendARGB(mSurfacePanelHigh,
-                mSurfacePanelHighest, .4f);
+            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .5f), .55f);
+            mUpperFlipColors[1] = alpha(leaf, .5f);
+            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(leaf, on, .05f), .52f);
+            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, on, .14f), .58f);
+            mLowerFlipColors[0] = alpha(Color.WHITE, .55f);
+            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .35f), .5f);
+            mLowerFlipColors[2] = alpha(leaf, .5f);
+            mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, on, .05f), .52f);
             mHingeFlipColors[0] = Color.WHITE;
             mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .35f);
             mHingeFlipColors[2] = ColorUtils.blendARGB(mOutlineVariant, mSurfaceBase, .5f);
@@ -385,15 +406,16 @@ public final class TerminalClockWidget extends View {
             mHingeFlipColors[4] = ColorUtils.blendARGB(mOutlineVariant, mOnSurface, .18f);
             mHingeFlipColors[5] = ColorUtils.blendARGB(mOutlineVariant, mSurfaceBase, .35f);
             mHingeFlipColors[6] = ColorUtils.blendARGB(mOutlineVariant, mOnSurface, .38f);
-            mFlipRim = alpha(mOnSurface, .22f);
-            mFlipSeam = alpha(mOnSurface, .55f);
-            mFlipShadow = alpha(mOnSurface, .3f);
+            mFlipRim = alpha(mOutlineVariant, .8f);
+            mFlipSeam = alpha(mOnSurface, .45f);
+            mFlipShadow = alpha(mOnSurface, .12f);
             mFlipClipOutline = alpha(mOnSurface, .34f);
             mFlipClipShadow = alpha(mOnSurface, .22f);
         }
+        mFlipSecondsInk = alpha(mOnSurfaceVariant, .85f);
+        mFlipDateInk = mOnSurfaceVariant;
+        mFlipRuleColor = alpha(mOutlineVariant, .8f);
     }
-
-    // ---- Measurement ------------------------------------------------------
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
@@ -494,9 +516,10 @@ public final class TerminalClockWidget extends View {
                 return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f)
                     + stackedMetaWidth(9f, mediumTypeface());
             default:
-                // 15dp cards x4 + 1.5dp intra-pair gaps x2 + 4dp hour/minute gap.
+                // 15dp cards x4 + 1.5dp intra-pair gaps x2 + 4dp hour/minute gap, then the meta
+                // column plus the ink that glyphs and the card shadow carry past their advance.
                 return dp(67f) + dp(4f)
-                    + stackedMetaWidth(9.5f, Typeface.DEFAULT);
+                    + stackedMetaWidth(9.5f, Typeface.DEFAULT) + dp(2f);
         }
     }
 
@@ -516,7 +539,22 @@ public final class TerminalClockWidget extends View {
      * shrunk) to match it, so the column is exactly as wide as the seconds on every face.
      */
     private float stackedMetaWidth(float secondsDp, Typeface secondsFace) {
-        return spacedTextWidth(mSnapshot.ss, secondsFace, secondsDp, 0f);
+        // Measured on the widest digit pair the face can show, not on this second's digits: a
+        // proportional face makes "11" narrower than "44", and a column that breathed with the
+        // seconds shoved the minute cards sideways once a second.
+        return widestDigitsWidth(2, secondsFace, secondsDp);
+    }
+
+    /** Width of {@code count} copies of the face's widest digit at this size. */
+    private float widestDigitsWidth(int count, Typeface typeface, float textDp) {
+        mPaint.setTypeface(typeface);
+        mPaint.setLetterSpacing(0f);
+        mPaint.setTextSize(dp(textDp));
+        float widest = 0f;
+        for (char digit = '0'; digit <= '9'; digit++) {
+            widest = Math.max(widest, mPaint.measureText(String.valueOf(digit)));
+        }
+        return widest * count;
     }
 
     private float fullFlipMetaWidth() {
@@ -560,26 +598,91 @@ public final class TerminalClockWidget extends View {
                 drawFull(canvas, now);
                 break;
         }
-        if (hasRunningAnimation(now)) postInvalidateOnAnimation();
+        if (hasRunningAnimation(now)) requestAnimationFrame();
+    }
+
+    /**
+     * Asks for the next frame of a running flip. On a display that refreshes faster than 60 Hz
+     * the next vsync is asked for on a 60 Hz cadence instead: a 340 ms card flip does not read any
+     * differently at 120 frames a second than at 60, and the seconds card flips every second of
+     * the day, so on the phone's 120 Hz panel that one animation was a third of all the frames the
+     * launcher drew while idle (measured 2026-09-17). Everything else about the flip — its timing,
+     * its curve — is a function of the clock, not of the frame count.
+     */
+    private void requestAnimationFrame() {
+        if (isHighRefreshDisplay()) {
+            postInvalidateDelayed(HIGH_REFRESH_FRAME_MS);
+        } else {
+            postInvalidateOnAnimation();
+        }
+    }
+
+    /** One 60 Hz frame, the cadence a flip is drawn at on faster panels. */
+    private static final long HIGH_REFRESH_FRAME_MS = 16L;
+    /** -1 unknown, 0 no, 1 yes; asked of the display once, it does not change while attached. */
+    private int mHighRefresh = -1;
+
+    private boolean isHighRefreshDisplay() {
+        if (mHighRefresh < 0) {
+            android.view.Display display = getDisplay();
+            float rate = display == null ? 60f : display.getRefreshRate();
+            if (display == null) return false; // not attached yet: decide next time
+            mHighRefresh = rate > 70f ? 1 : 0;
+        }
+        return mHighRefresh == 1;
     }
 
     /**
      * The slot lays this view out at the pane's full available width (so alignment can place the
-     * clock left/center/right within it), which leaves blank space beside the painted face. Gate
-     * the click listener to that painted region instead of the whole laid-out view.
+     * clock left/center/right within it), which leaves blank space beside and below the painted
+     * face. Gate the click listener to the time digits instead of the whole laid-out view: the
+     * date row and the slack under it sit directly over the status row's window chips, and a tap
+     * meant for a chip must not open the clock app.
      */
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN
-            && !isInsidePaintedContent(event.getX(), event.getY())) {
+            && !isInsideTapTarget(event.getX(), event.getY())) {
             return false;
         }
         return super.onTouchEvent(event);
     }
 
-    private boolean isInsidePaintedContent(float x, float y) {
+    @VisibleForTesting
+    boolean isInsideTapTarget(float x, float y) {
         float[] painted = paintedXRangePx();
-        return x >= painted[0] && x <= painted[1];
+        if (x < painted[0] || x > painted[1]) return false;
+        float[] band = tapYRangePx();
+        return y >= band[0] && y <= band[1];
+    }
+
+    /**
+     * Vertical extent of the tap target, as {top, bottom} in view pixels: the time band alone in
+     * FULL form — the digits, not the date row beneath them — and the painted column in the
+     * compact forms, which draw no date row of their own.
+     */
+    private float[] tapYRangePx() {
+        if (mSnapshot == null) return new float[] {0f, getHeight()};
+        switch (mForm) {
+            case MONO_CHIP: {
+                float rowHeight = dp(17f);
+                float top = Math.max(0f, (getHeight() - rowHeight) / 2f);
+                return new float[] {top, top + rowHeight};
+            }
+            case COMPACT: {
+                float columnDp = compactColumnHeightDp();
+                float scale = Math.min(1f, getHeight() / dp(columnDp));
+                float top = Math.max(0f, (getHeight() - dp(columnDp) * scale) / 2f);
+                return new float[] {top, top + dp(columnDp) * scale};
+            }
+            default: {
+                float bandDp = fullBandHeightDp();
+                float columnDp = bandDp + fullDateGapDp() + fullDateBlockDp();
+                float scale = Math.min(1f, getHeight() / dp(columnDp));
+                float top = Math.max(0f, (getHeight() - dp(columnDp) * scale) / 2f);
+                return new float[] {top, top + dp(bandDp) * scale};
+            }
+        }
     }
 
     /**
@@ -654,6 +757,29 @@ public final class TerminalClockWidget extends View {
     }
 
     /**
+     * Center Y, in view pixels, of the FULL-form time band — the digits' line, above the date
+     * row — so the status bar's place icon can sit beside the time on its line rather than on
+     * the slot's. -1 in any other form.
+     */
+    public float fullBandCenterYPx() {
+        if (mForm != TopPaneClockForm.FULL || getHeight() <= 0) return -1f;
+        float bandDp = fullBandHeightDp();
+        float columnDp = bandDp + fullDateGapDp() + fullDateBlockDp();
+        float scale = Math.min(1f, getHeight() / dp(columnDp));
+        float translate = Math.max(0f, (getHeight() - dp(columnDp) * scale) / 2f);
+        return translate + dp(bandDp / 2f) * scale;
+    }
+
+    /** Height, in view pixels, of the FULL-form time band; -1 in any other form. */
+    public float fullBandHeightPx() {
+        if (mForm != TopPaneClockForm.FULL || getHeight() <= 0) return -1f;
+        float bandDp = fullBandHeightDp();
+        float columnDp = bandDp + fullDateGapDp() + fullDateBlockDp();
+        float scale = Math.min(1f, getHeight() / dp(columnDp));
+        return dp(bandDp) * scale;
+    }
+
+    /**
      * Center Y, in view pixels, of the FULL-form date hairline — for the slot's edge-to-edge
      * extensions. -1 when the current form/style draws no hairline (compact forms, tape).
      */
@@ -713,6 +839,13 @@ public final class TerminalClockWidget extends View {
     private void drawCompact(Canvas canvas, long now) {
         float columnDp = compactColumnHeightDp();
         float scale = Math.min(1f, getHeight() / dp(columnDp));
+        // The slot can hand the clock less than its face paints (a wide meta column beside a
+        // media strip); rather than let the trailing glyphs fall off the edge, the whole face
+        // shrinks to the width it was given.
+        float content = compactContentWidth();
+        if (content > 0f && getWidth() > 0 && getWidth() < content * scale) {
+            scale = getWidth() / content;
+        }
         canvas.save();
         canvas.translate(0f, Math.max(0f, (getHeight() - dp(columnDp) * scale) / 2f));
         canvas.scale(scale, scale);
@@ -835,7 +968,7 @@ public final class TerminalClockWidget extends View {
 
         mFillPaint.setShader(null);
         mFillPaint.setStyle(Paint.Style.FILL);
-        mFillPaint.setColor(mUpperFlipColors[0]);
+        mFillPaint.setColor(mFlipBase);
         // Below API 28 hardware setShadowLayer is text-only; API 26/27 are shadowless (accepted).
         mFillPaint.setShadowLayer(dp(3.2f), 0f, dp(1.06f), mFlipShadow);
         canvas.drawRoundRect(card, dp(1.5f), dp(1.5f), mFillPaint);
@@ -996,7 +1129,7 @@ public final class TerminalClockWidget extends View {
         mPaint.setTypeface(condensedBoldTypeface());
         mPaint.setLetterSpacing(0f);
         mPaint.setTextSize(dp(10.6f));
-        mPaint.setColor(mSecondaryQuiet);
+        mPaint.setColor(mFlipSecondsInk);
         mPaint.setTextAlign(Paint.Align.CENTER);
         canvas.drawText(String.valueOf(digit), cell.centerX(), baseline, mPaint);
         canvas.restore();
@@ -1024,10 +1157,10 @@ public final class TerminalClockWidget extends View {
         // alignment: flanked when centered, one long run to the side the date has left free.
         float textX = dateRowTextX(right, textWidth, 7.5f);
         drawLabel(canvas, mSnapshot.date, textX, baseline(top, dp(11.7f), face, 9.2f), 9.2f,
-            face, .31f, alpha(mOnSurface, mDarkFlipStock ? .68f : .7f));
+            face, .31f, mFlipDateInk);
         float ruleY = top + dp(11.7f) / 2f;
         mFillPaint.setShader(null);
-        mFillPaint.setColor(mRuleColor);
+        mFillPaint.setColor(mFlipRuleColor);
         if (textX - gap > 0f) canvas.drawRect(0f, ruleY - .5f, textX - gap,
             ruleY + .5f, mFillPaint);
         if (textX + textWidth + gap < right) canvas.drawRect(textX + textWidth + gap,
@@ -1062,7 +1195,7 @@ public final class TerminalClockWidget extends View {
 
         mFillPaint.setShader(null);
         mFillPaint.setStyle(Paint.Style.FILL);
-        mFillPaint.setColor(mUpperFlipColors[0]);
+        mFillPaint.setColor(mFlipBase);
         mFillPaint.setShadowLayer(dp(2.2f), 0f, dp(.7f), mFlipShadow);
         canvas.drawRoundRect(card, dp(1f), dp(1f), mFillPaint);
         mFillPaint.clearShadowLayer();

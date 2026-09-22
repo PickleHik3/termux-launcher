@@ -380,7 +380,6 @@ public class SurfaceInheritanceTest {
 
         preferences.migrateSurfaceInheritance();
 
-        assertFalse(preferences.isTerminalBorderEnabled());
         assertEquals(1, preferences.getTerminalPaneGap());
         assertEquals(0, preferences.getTerminalCornerRadius());
     }
@@ -396,8 +395,6 @@ public class SurfaceInheritanceTest {
         assertEquals(10, preferences.getExtraKeysBlurRadius());
         assertEquals(39, preferences.getDockGlassGrain());
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
-        assertFalse("the border was off before the Docked theme turned it on",
-            preferences.isTerminalBorderEnabled());
         assertEquals(0, preferences.getTerminalCornerRadius());
         assertEquals(1, preferences.getTerminalPaneGap());
     }

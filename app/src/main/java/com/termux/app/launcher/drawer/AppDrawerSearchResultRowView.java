@@ -15,6 +15,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
+import com.termux.app.chrome.ChromeShade;
+
 /**
  * The categories drawer's search-result row: icon at the left, the app name over its category name
  * at the right, on a softly washed 16dp-radius row — the redesign mock's list presentation.
@@ -33,7 +35,10 @@ public final class AppDrawerSearchResultRowView extends AppDrawerAppCellView {
     private static final float NAME_SP = 15f;
     private static final float CATEGORY_SP = 11f;
     private static final float RADIUS_DP = 16f;
-    /** Row washes from the mock: rest 3%, pressed 9%, white over the dark glass. */
+    /**
+     * Row washes from the mock: rest 3%, pressed 9%, white over the dark glass. Seeds — on the
+     * light band both vanish, and with them the only thing saying which row the finger is on.
+     */
     private static final int REST_FILL = 0x08FFFFFF;
     private static final int PRESSED_FILL = 0x17FFFFFF;
     /** Category line at 45% of the name's colour. */
@@ -79,15 +84,25 @@ public final class AppDrawerSearchResultRowView extends AppDrawerAppCellView {
         addView(column, columnParams);
     }
 
+    /**
+     * The washes are resolved against the chrome's polarity, which moves on a theme or wallpaper
+     * change; a row that outlives one would otherwise keep the old mode's background.
+     */
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        setBackground(rowBackground(getResources().getDisplayMetrics().density));
+    }
+
     @NonNull
     private static StateListDrawable rowBackground(float density) {
         float radius = RADIUS_DP * density;
         GradientDrawable pressed = new GradientDrawable();
         pressed.setCornerRadius(radius);
-        pressed.setColor(PRESSED_FILL);
+        pressed.setColor(ChromeShade.stateFill(PRESSED_FILL, REST_FILL));
         GradientDrawable rest = new GradientDrawable();
         rest.setCornerRadius(radius);
-        rest.setColor(REST_FILL);
+        rest.setColor(ChromeShade.fill(REST_FILL));
         StateListDrawable background = new StateListDrawable();
         background.addState(new int[] {android.R.attr.state_pressed}, pressed);
         background.addState(new int[0], rest);

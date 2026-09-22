@@ -55,16 +55,15 @@ public class LauncherCtlNotificationStoreTest {
     public void jsonl_rotatesOnceItPassesTheByteCeiling() throws Exception {
         File jsonl = LauncherCtlStorage.getNotificationsJsonlFile();
         jsonl.getParentFile().mkdirs();
-        byte[] filler = new byte[(int) LauncherCtlNotificationStore.MAX_JSONL_BYTES + 1];
-        java.util.Arrays.fill(filler, (byte) 'x');
-        Files.write(jsonl.toPath(), filler);
+        long overCeiling = LauncherCtlNotificationStore.MAX_JSONL_BYTES + 1;
+        fillTo(jsonl, overCeiling);
 
         LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
         store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
 
         File rotated = new File(jsonl.getParentFile(), jsonl.getName() + ".1");
         assertTrue(rotated.isFile());
-        assertEquals(filler.length, rotated.length());
+        assertEquals(overCeiling, rotated.length());
         // The live stream restarts from the event that triggered the rotation.
         assertEquals(1, Files.readAllLines(jsonl.toPath(), StandardCharsets.UTF_8).size());
     }
@@ -73,13 +72,12 @@ public class LauncherCtlNotificationStoreTest {
     public void jsonl_keepsAtMostOneRotation() throws Exception {
         File jsonl = LauncherCtlStorage.getNotificationsJsonlFile();
         jsonl.getParentFile().mkdirs();
-        byte[] filler = new byte[(int) LauncherCtlNotificationStore.MAX_JSONL_BYTES + 1];
-        java.util.Arrays.fill(filler, (byte) 'x');
+        long overCeiling = LauncherCtlNotificationStore.MAX_JSONL_BYTES + 1;
         LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
 
-        Files.write(jsonl.toPath(), filler);
+        fillTo(jsonl, overCeiling);
         store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
-        Files.write(jsonl.toPath(), filler);
+        fillTo(jsonl, overCeiling);
         store.insertEvent(event("posted", 2000L, "pkg2", "B", ""));
 
         File[] streams = jsonl.getParentFile().listFiles((dir, name) -> name.startsWith(jsonl.getName()));
@@ -215,4 +213,15 @@ public class LauncherCtlNotificationStoreTest {
         }
         file.delete();
     }
+    /**
+     * Makes the stream exactly {@code bytes} long without holding those bytes in memory. The
+     * rotation looks only at the file's length, and building a 4 MB array (twice, with the write's
+     * own copy) ran the shared test JVM out of heap in the full suite.
+     */
+    private static void fillTo(File file, long bytes) throws java.io.IOException {
+        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, "rw")) {
+            raf.setLength(bytes);
+        }
+    }
+
 }

@@ -7,7 +7,6 @@ import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.os.Build;
-import android.view.Gravity;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
@@ -22,7 +21,7 @@ import org.robolectric.annotation.ConscryptMode;
 import org.robolectric.util.ReflectionHelpers;
 
 /**
- * Where the drawer sits in the back-press chain.
+ * Where the app drawer sits in the back-press chain.
  *
  * <p>The order is the whole feature here: the palette is transient and can be summoned over the
  * drawer, so it keeps the first slot; the drawer is a full-screen plane and both consumers under it
@@ -74,25 +73,6 @@ public class TermuxActivityBackOrderTest {
         // The branch is guarded on the field, not on the lazy accessor: a back press on a session
         // that never pulled the drawer down must not build one.
         assertNull(ReflectionHelpers.getField(activity, "mAppDrawerController"));
-        // Split panes are the default, and they retire the legacy sessions drawer: the sessions
-        // panel under the status pill replaces it, so back must leave it shut.
-        assertFalse(activity.getDrawer().isDrawerOpen(Gravity.LEFT));
-    }
-
-    @Test
-    public void backStillOpensTheLegacySessionsDrawerInCompatibilityMode() {
-        TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
-        activity.setContentView(R.layout.activity_termux);
-        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
-            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(activity);
-        ReflectionHelpers.setField(activity, "mPreferences", preferences);
-        preferences.setCompatibilityModeEnabled(true);
-        try {
-            activity.onBackPressed();
-            assertTrue(activity.getDrawer().isDrawerOpen(Gravity.LEFT));
-        } finally {
-            preferences.setCompatibilityModeEnabled(false);
-        }
     }
 
     // ------------------------------------------------------------------ back inside the drawer
@@ -111,8 +91,6 @@ public class TermuxActivityBackOrderTest {
             controller.getSearchController().hasQuery());
         assertTrue("a search that had something in it must not also close the drawer",
             controller.isOpen());
-        // …and the press was consumed here, not passed down the chain.
-        assertFalse(activity.getDrawer().isDrawerOpen(Gravity.LEFT));
     }
 
     @Test
@@ -126,7 +104,6 @@ public class TermuxActivityBackOrderTest {
         activity.onBackPressed();
 
         assertFalse(controller.isOpen());
-        assertFalse(activity.getDrawer().isDrawerOpen(Gravity.LEFT));
     }
 
     @Test

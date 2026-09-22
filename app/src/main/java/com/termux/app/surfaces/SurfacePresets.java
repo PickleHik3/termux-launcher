@@ -67,24 +67,23 @@ public final class SurfacePresets {
                 look.put(TermuxAppSharedPreferences.surfaceOverrideKey(
                     SurfaceSlot.DOCK, SurfaceProperty.OPACITY),
                     TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY);
-                look.put(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, Boolean.TRUE);
                 look.put(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS,
                     TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS);
                 look.put(TERMUX_APP.KEY_TERMINAL_PANE_GAP, TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
             }),
         preset("frost", R.string.termux_surface_preset_frost,
             SegmentedPillPreference.VALUE_ROUNDED, TERMUX_APP.SURFACE_MATERIAL_FROST, 50, 28, 14,
-            look -> look.put(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, Boolean.TRUE)),
+            look -> { }),
         preset("solid", R.string.termux_surface_preset_solid,
             SegmentedPillPreference.VALUE_DEFAULT, TERMUX_APP.SURFACE_MATERIAL_SOLID, 78, 0, 12,
             look -> {
-                look.put(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, Boolean.TRUE);
                 look.put(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS, 0);
                 look.put(TERMUX_APP.KEY_TERMINAL_PANE_GAP, TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
             }),
         preset("minimal", R.string.termux_surface_preset_minimal,
             SegmentedPillPreference.VALUE_ROUNDED, TERMUX_APP.SURFACE_MATERIAL_GLASS, 0, 20, 12,
-            look -> look.put(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, Boolean.FALSE))
+            // The frame is always on now, so the bare look is the glass alone.
+            look -> { })
     ));
 
     private interface Extras {

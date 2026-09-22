@@ -1,0 +1,53 @@
+{
+  "id": "status",
+  "crop": [
+    [
+      0,
+      115,
+      1080,
+      360
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.6003127050062176,
+      "kind": "swipe",
+      "points": [
+        540,
+        170,
+        540,
+        420
+      ],
+      "duration": 0.6
+    },
+    {
+      "t": 4.328226279001683,
+      "kind": "swipe",
+      "points": [
+        620,
+        341,
+        1040,
+        341
+      ],
+      "duration": 0.6
+    },
+    {
+      "t": 7.311867982003605,
+      "kind": "swipe",
+      "points": [
+        1000,
+        341,
+        500,
+        341
+      ],
+      "duration": 0.6
+    }
+  ],
+  "duration": 10.58,
+  "bytes": 864228,
+  "width": 1080,
+  "height": 360,
+  "video": "status.mp4",
+  "poster": "status.jpg",
+  "source": "pong 1080x2412@420 native"
+}

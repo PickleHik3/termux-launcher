@@ -9,6 +9,13 @@
     <PreferenceCategory app:title="@string/settings_root_launcher_header">
 
         <Preference
+            app:key="layout"
+            app:icon="@drawable/ic_symbol_grid_view"
+            app:title="@string/settings_destination_layout"
+            app:summary="@string/settings_destination_layout_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.LayoutPreferencesFragment" />
+
+        <Preference
             app:key="appearance"
             app:icon="@drawable/ic_symbol_palette"
             app:title="@string/settings_destination_appearance"
@@ -16,11 +23,18 @@
             app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment" />
 
         <Preference
-            app:key="terminal_status"
+            app:key="terminal"
             app:icon="@drawable/ic_symbol_terminal"
-            app:title="@string/settings_destination_terminal_status"
-            app:summary="@string/settings_destination_terminal_status_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TerminalStatusPreferencesFragment" />
+            app:title="@string/settings_destination_terminal"
+            app:summary="@string/settings_destination_terminal_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TerminalPreferencesFragment" />
+
+        <Preference
+            app:key="status_bar"
+            app:icon="@drawable/ic_symbol_notifications"
+            app:title="@string/settings_destination_status_bar"
+            app:summary="@string/settings_destination_status_bar_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment" />
 
         <Preference
             app:key="keyboard_input"
@@ -35,6 +49,13 @@
             app:title="@string/settings_destination_launcher_apps"
             app:summary="@string/settings_destination_launcher_apps_summary"
             app:fragment="com.termux.app.fragments.settings.termux.LauncherPreferencesFragment" />
+
+        <Preference
+            app:key="display"
+            app:icon="@drawable/ic_symbol_desktop_windows"
+            app:title="@string/settings_destination_display"
+            app:summary="@string/settings_destination_display_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment" />
 
     </PreferenceCategory>
 

@@ -20,6 +20,8 @@ public abstract class TerminalTestCase extends TestCase {
 		final ByteArrayOutputStream baos = new ByteArrayOutputStream();
 		public final List<ChangedTitle> titleChanges = new ArrayList<>();
 		public final List<String> clipboardPuts = new ArrayList<>();
+		/** What an OSC 52 read query ({@code ESC ] 52 ; c ; ?}) should answer with; null answers empty. */
+		public String clipboardContents = null;
 		public int bellsRung = 0;
 		public int colorsChanged = 0;
 		public final List<String[]> notifications = new ArrayList<>();
@@ -54,6 +56,35 @@ public abstract class TerminalTestCase extends TestCase {
         public void onPasteTextFromClipboard() {
         }
 
+        @Override
+        public String onReadTextFromClipboard() {
+            return clipboardContents;
+        }
+
+		/** Whole OSC 99 requests handed over, in the order they finished. */
+		public final List<KittyNotification> kittyNotifications = new ArrayList<>();
+
+		/** Names of notifications the program asked to take down again. */
+		public final List<String> kittyNotificationCloses = new ArrayList<>();
+
+		/** Every pointer shape asked for by OSC 22; null means "the terminal's own". */
+		public final List<String> pointerShapes = new ArrayList<>();
+
+		@Override
+		public void onKittyNotification(KittyNotification notification) {
+			kittyNotifications.add(notification);
+		}
+
+		@Override
+		public void onKittyNotificationClose(String id) {
+			kittyNotificationCloses.add(id);
+		}
+
+		@Override
+		public void onPointerShapeChanged(String shape) {
+			pointerShapes.add(shape);
+		}
+
 		@Override
 		public void onBell() {
 			bellsRung++;
@@ -62,6 +93,14 @@ public abstract class TerminalTestCase extends TestCase {
 		@Override
 		public void onColorsChanged() {
 			colorsChanged++;
+		}
+
+		/** How many times the emulator asked the client for a redraw of its own accord. */
+		public int screenChanges = 0;
+
+		@Override
+		public void onScreenChanged() {
+			screenChanges++;
 		}
 
         /**
@@ -191,7 +230,11 @@ public abstract class TerminalTestCase extends TestCase {
 					codePoint = c;
 				}
 				assertFalse("Screen should never contain unassigned characters", Character.getType(codePoint) == Character.UNASSIGNED);
-				int width = WcWidth.width(codePoint);
+				// A text sizing block keeps its whole text in one cell, so on those rows only the
+				// stored width says how many columns a character really took.
+				int width = lines[i].hasTextSizes()
+						? lines[i].getDisplayWidthAt(j - (Character.isSupplementaryCodePoint(codePoint) ? 1 : 0))
+						: WcWidth.width(codePoint);
 				assertFalse("The first column should not start with combining character", currentColumn == 0 && width < 0);
 				if (width > 0) currentColumn += width;
 			}

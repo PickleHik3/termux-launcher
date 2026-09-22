@@ -551,6 +551,57 @@ public class TerminalKeyEventHandlerTest {
     }
 
     @Test
+    public void aDispatchedValueIsOfferedToTheInterceptorFirst() {
+        // The extra-keys row's paste key comes in this way, so on the Display place it reaches
+        // the display rather than the terminal behind it.
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        mHandler.dispatchKeyValue(KeyValue.getKeyByName("paste"));
+
+        assertEquals(1, intercepted.size());
+        assertEquals(KeyValue.Editing.PASTE, intercepted.get(0).getEditing());
+        assertEquals(0, mHost.pastes);
+    }
+
+    @Test
+    public void aSlidersFirstTickIsOfferedToTheInterceptorToo() {
+        // A space-bar swipe on the Display place must not leave its first arrow in the shell.
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        mHandler.key_down(KeyValue.sliderKey(KeyValue.Slider.Cursor_left, 1), false);
+
+        assertEquals(1, intercepted.size());
+        assertEquals(KeyValue.Slider.Cursor_left, intercepted.get(0).getSlider());
+        assertEquals(1, intercepted.get(0).getSliderRepeat());
+        assertEquals(0, mTerminal.keyCodes.size());
+    }
+
+    @Test
+    public void anOfferedValueNeverReachesTheTerminal() {
+        assertFalse(mHandler.offerToInterceptor(KeyValue.getKeyByName("paste"), false, false, false));
+        assertEquals(0, mHost.pastes);
+
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> true);
+        assertTrue(mHandler.offerToInterceptor(KeyValue.getKeyByName("paste"), false, false, false));
+        assertEquals(0, mHost.pastes);
+    }
+
+    @Test
+    public void aDispatchedValueReachesTheTerminalWhenNothingClaimsIt() {
+        mHandler.dispatchKeyValue(KeyValue.getKeyByName("paste"));
+
+        assertEquals(1, mHost.pastes);
+    }
+
+    @Test
     public void undoSendsReadlineUndoControlSequence() {
         mHandler.key_up(KeyValue.getKeyByName("undo"), Pointers.Modifiers.EMPTY);
 
@@ -690,7 +741,7 @@ public class TerminalKeyEventHandlerTest {
         }
 
         @Override
-        public void openKeyboardSettings() {
+        public void openLauncherSettings() {
             settings++;
         }
 

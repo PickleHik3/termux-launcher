@@ -1,10 +1,11 @@
 package com.termux.terminal;
 
 import android.graphics.Bitmap;
-import android.util.Base64;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Objects;
@@ -180,6 +181,9 @@ public final class TerminalEmulator {
     /** ESC seen while in {@link #ESC_APC_IGNORE}. */
     private static final int ESC_APC_IGNORE_ESCAPE = 30;
 
+    /** Escape processing: "CSI parameters #", the color stack's XTPUSHCOLORS/XTPOPCOLORS/XTREPORTCOLORS. */
+    private static final int ESC_CSI_HASH = 31;
+
     /** The number of parameter arguments including colon separated sub-parameters. */
     static final int MAX_ESCAPE_PARAMETERS = 32;
 
@@ -271,6 +275,55 @@ public final class TerminalEmulator {
      */
     private static final int DECSET_BIT_RECTANGULAR_CHANGEATTRIBUTE = 1 << 12;
 
+    /**
+     * DECSET 2031 - color preference notifications, as in kitty and Contour. While the mode is set
+     * the terminal reports, unasked, whenever its default background flips between dark and light,
+     * so that a program can restyle itself with the terminal instead of guessing from $COLORFGBG.
+     */
+    private static final int DECSET_BIT_COLOR_PREFERENCE_NOTIFICATIONS = 1 << 13;
+
+    /**
+     * The dark/light class of the default background as it was last reported under mode 2031. It is
+     * primed when the mode is enabled, so that only a later flip produces a report and a color
+     * change that keeps the class produces none.
+     */
+    private boolean mLastReportedDark;
+
+    /**
+     * DECSET 2026 - synchronized output, as in kitty, iTerm2 and Contour. While the mode is set the
+     * screen the client sees is the one from before the mode was set: the emulator keeps parsing,
+     * but no screen update is delivered, so a program that repaints in several writes shows one
+     * finished frame instead of a half-drawn one.
+     */
+    private static final int DECSET_BIT_SYNCHRONIZED_UPDATE = 1 << 14;
+
+    /**
+     * DECSET 2048 - in-band resize notifications, as in kitty. While the mode is set every resize
+     * tells the program its new size in rows, columns and pixels, so it need not race SIGWINCH with
+     * a size query.
+     */
+    private static final int DECSET_BIT_IN_BAND_RESIZE_NOTIFICATIONS = 1 << 15;
+
+    /**
+     * How long a synchronized update may hold the screen. The hold is a promise the program has to
+     * keep, and a program that dies, blocks or simply forgets between "begin" and "end" would
+     * otherwise freeze the pane for good; after this long the held frame is delivered and the mode
+     * is treated as ended, which is the bounded hold kitty applies for the same reason.
+     */
+    static final long SYNCHRONIZED_UPDATE_TIMEOUT_MILLIS = 150;
+
+    /** Overridable so tests need not sleep for {@link #SYNCHRONIZED_UPDATE_TIMEOUT_MILLIS}. */
+    private long mSynchronizedUpdateTimeoutMillis = SYNCHRONIZED_UPDATE_TIMEOUT_MILLIS;
+
+    /** Wall-clock time at which the current synchronized update stops holding the screen. */
+    private long mSynchronizedUpdateDeadline;
+
+    /**
+     * The directory the shell last reported with OSC 7, or null if it never did. Only a
+     * {@code file://} URI for this machine is accepted, and its path is percent-decoded.
+     */
+    private String mReportedWorkingDirectory;
+
     private String mTitle;
 
     private final Stack<String> mTitleStack = new Stack<>();
@@ -360,6 +413,53 @@ public final class TerminalEmulator {
     private final TerminalOutput mSession;
 
     private final KittyGraphicsProtocol mKittyGraphics;
+
+    /** Desktop notifications a program asked for with {@code OSC 99}. */
+    private final KittyNotifications mKittyNotifications = new KittyNotifications();
+
+    /**
+     * The text of the last {@code OSC 66} block written, or null when the last thing written was
+     * ordinary text. REP repeats a block just as it repeats a character.
+     */
+    private String mLastTextBlockText;
+
+    /** The packed size record of {@link #mLastTextBlockText}. */
+    private int mLastTextBlockRecord;
+
+    /**
+     * What a finished {@code OSC 99} request does: the whole notification goes to the client, and
+     * the answer to a query goes back down the pty to the program that asked.
+     */
+    private final KittyNotifications.Handler mKittyNotificationHandler = new KittyNotifications.Handler() {
+
+        @Override
+        public void show(KittyNotification notification) {
+            mSession.onKittyNotification(notification);
+        }
+
+        @Override
+        public void close(String id) {
+            mSession.onKittyNotificationClose(id);
+        }
+
+        @Override
+        public void write(String escapeSequence) {
+            mSession.write(escapeSequence);
+        }
+    };
+
+    /**
+     * The mouse pointer shape a program asked for with {@code OSC 22}, or null when it wants the
+     * terminal's own. The names are the CSS/X11 ones — {@code text}, {@code pointer},
+     * {@code wait}, {@code crosshair} and the rest.
+     */
+    private String mPointerShape;
+
+    /** Shapes set aside by {@code OSC 22 ; >}, newest last, so a program can put one back. */
+    private final ArrayList<String> mPointerShapeStack = new ArrayList<>();
+
+    /** See {@link #getKittyPlacementGeneration()}. */
+    private long mKittyPlacementGeneration;
 
     TerminalSessionClient mClient;
 
@@ -718,6 +818,12 @@ public final class TerminalEmulator {
                 return DECSET_BIT_MOUSE_PROTOCOL_SGR;
             case 2004:
                 return DECSET_BIT_BRACKETED_PASTE_MODE;
+            case 2026:
+                return DECSET_BIT_SYNCHRONIZED_UPDATE;
+            case 2031:
+                return DECSET_BIT_COLOR_PREFERENCE_NOTIFICATIONS;
+            case 2048:
+                return DECSET_BIT_IN_BAND_RESIZE_NOTIFICATIONS;
             default:
                 return -1;
         }
@@ -796,10 +902,15 @@ public final class TerminalEmulator {
 
     public void resize(int columns, int rows, int cellWidthPixels, int cellHeightPixels,
                        boolean keepCursorAtBottom) {
+        boolean cellSizeChanged = mCellWidthPixels != cellWidthPixels || mCellHeightPixels != cellHeightPixels;
         this.mCellWidthPixels = cellWidthPixels;
         this.mCellHeightPixels = cellHeightPixels;
 
         if (mRows == rows && mColumns == columns) {
+            // A font size change moves the pixel size without moving the grid, and mode 2048 reports
+            // pixels too, so it is still a resize as far as the program is concerned.
+            if (cellSizeChanged)
+                sendInBandResizeReport();
             return;
         } else if (columns < 2 || rows < 2) {
             throw new IllegalArgumentException("rows=" + rows + ", columns=" + columns);
@@ -827,6 +938,122 @@ public final class TerminalEmulator {
             mRightMargin = mColumns;
         }
         resizeScreen(keepCursorAtBottom);
+        sendInBandResizeReport();
+    }
+
+    /**
+     * Tell the program its new size, if it asked for that with mode 2048: "CSI 48 ; rows ; columns ;
+     * height ; width t", where the two pixel figures are those of the whole text area, the same ones
+     * XTWINOPS 14 reports.
+     */
+    private void sendInBandResizeReport() {
+        if (!isDecsetInternalBitSet(DECSET_BIT_IN_BAND_RESIZE_NOTIFICATIONS))
+            return;
+        mSession.write(String.format(Locale.US, "\033[48;%d;%d;%d;%dt",
+            mRows, mColumns, mRows * mCellHeightPixels, mColumns * mCellWidthPixels));
+    }
+
+    /**
+     * Whether a synchronized update (mode 2026) is holding screen updates back from the client right
+     * now. A hold whose timeout has passed ends here, so the caller that asks is also the one that
+     * unfreezes the screen — there is no separate expiry path to keep in step with this one.
+     */
+    public boolean isScreenUpdateHeld() {
+        if (!isDecsetInternalBitSet(DECSET_BIT_SYNCHRONIZED_UPDATE))
+            return false;
+        if (System.currentTimeMillis() >= mSynchronizedUpdateDeadline) {
+            setDecsetinternalBit(DECSET_BIT_SYNCHRONIZED_UPDATE, false);
+            mSynchronizedUpdateDeadline = 0;
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Milliseconds until the current hold ends by itself, for a client that wants to wake up then.
+     * Zero when nothing is held.
+     */
+    public long screenUpdateHoldRemainingMillis() {
+        if (!isScreenUpdateHeld())
+            return 0;
+        return Math.max(0, mSynchronizedUpdateDeadline - System.currentTimeMillis());
+    }
+
+    /** Visible for tests, which must not sleep out a real 150 ms hold. */
+    void setSynchronizedUpdateTimeoutMillisForTests(long timeoutMillis) {
+        mSynchronizedUpdateTimeoutMillis = timeoutMillis;
+    }
+
+    /**
+     * The directory the shell last reported with OSC 7, or null if it never did. The launcher opens
+     * a new pane here rather than reading /proc, which only ever knew the shell's own directory and
+     * not, for instance, where an ssh session or a subshell had got to.
+     */
+    public String getReportedWorkingDirectory() {
+        return mReportedWorkingDirectory;
+    }
+
+    /**
+     * Take the directory from an OSC 7 "file://host/path" report. Anything else — another scheme,
+     * another machine's host, an undecodable path — leaves the remembered directory alone, since a
+     * pane opening in the wrong place is worse than one opening in the default place.
+     */
+    private void setReportedWorkingDirectory(String uri) {
+        if (uri == null || uri.isEmpty()) {
+            mReportedWorkingDirectory = null;
+            return;
+        }
+        if (!uri.regionMatches(true, 0, "file://", 0, 7)) {
+            Logger.logWarn(mClient, LOG_TAG, "Ignoring OSC 7 with a non-file URI");
+            return;
+        }
+        String hostAndPath = uri.substring(7);
+        int pathStart = hostAndPath.indexOf('/');
+        if (pathStart < 0) {
+            Logger.logWarn(mClient, LOG_TAG, "Ignoring OSC 7 without a path");
+            return;
+        }
+        String host = hostAndPath.substring(0, pathStart);
+        if (!(host.isEmpty() || host.equalsIgnoreCase("localhost"))) {
+            // A remote shell's directory does not exist on this device.
+            Logger.logWarn(mClient, LOG_TAG, "Ignoring OSC 7 for another host");
+            return;
+        }
+        String path = percentDecode(hostAndPath.substring(pathStart));
+        if (path != null && !path.isEmpty())
+            mReportedWorkingDirectory = path;
+    }
+
+    /**
+     * Percent-decode a URI path into a file path. Unlike URLDecoder this leaves "+" alone, which in
+     * a path is a plus sign and not a space, and it rejects a malformed escape rather than guessing.
+     */
+    private static String percentDecode(String path) {
+        if (path.indexOf('%') < 0)
+            return path;
+        ByteArrayOutputStream decoded = new ByteArrayOutputStream(path.length());
+        for (int i = 0; i < path.length(); i++) {
+            char c = path.charAt(i);
+            if (c == '%') {
+                if (i + 2 >= path.length())
+                    return null;
+                int hi = Character.digit(path.charAt(i + 1), 16);
+                int lo = Character.digit(path.charAt(i + 2), 16);
+                if (hi < 0 || lo < 0)
+                    return null;
+                decoded.write((hi << 4) | lo);
+                i += 2;
+            } else if (c < 0x80) {
+                decoded.write(c);
+            } else {
+                // Already-literal non-ASCII, kept whole so a surrogate pair survives the round trip.
+                int codePoint = path.codePointAt(i);
+                byte[] utf8 = new String(Character.toChars(codePoint)).getBytes(StandardCharsets.UTF_8);
+                decoded.write(utf8, 0, utf8.length);
+                i += Character.charCount(codePoint) - 1;
+            }
+        }
+        return new String(decoded.toByteArray(), StandardCharsets.UTF_8);
     }
 
     private void resizeScreen() {
@@ -899,6 +1126,23 @@ public final class TerminalEmulator {
         this.mCursorBlinkState = cursorBlinkState;
     }
 
+    /**
+     * Whether copying a selection that includes a wrapped row trims that row's trailing padding
+     * spaces the same way an unwrapped row is trimmed. Consulted by both {@link #mMainBuffer} and
+     * {@link #mAltBuffer}, which hold no preferences access of their own; the app pushes the
+     * "Trim trailing spaces on wrapped lines" setting here on every new session and again whenever
+     * the preference changes.
+     */
+    public void setTrimWrappedTrailingSpaces(boolean trimWrappedTrailingSpaces) {
+        mMainBuffer.setTrimWrappedTrailingSpaces(trimWrappedTrailingSpaces);
+        mAltBuffer.setTrimWrappedTrailingSpaces(trimWrappedTrailingSpaces);
+    }
+
+    /** @see #setTrimWrappedTrailingSpaces(boolean) */
+    public boolean isTrimWrappedTrailingSpaces() {
+        return mMainBuffer.isTrimWrappedTrailingSpaces();
+    }
+
     public boolean isKeypadApplicationMode() {
         return isDecsetInternalBitSet(DECSET_BIT_APPLICATION_KEYPAD);
     }
@@ -939,6 +1183,10 @@ public final class TerminalEmulator {
      * @param length the number of bytes in the array to process
      */
     public void append(byte[] buffer, int length) {
+        // The app pushes a new palette by resetting the emulator's colors directly rather than
+        // through an escape sequence, so a mode 2031 report can fall due between two sequences.
+        // Noticing it here costs a flag test per pty read while the mode is off, which it usually is.
+        notifyColorPreferenceIfChanged();
         int i = 0;
         while (i < length) {
             // The kitty payload fast path: hand whole runs of plain ASCII to the streaming decoder
@@ -1191,6 +1439,9 @@ public final class TerminalEmulator {
                     case ESC_CSI_EQUAL:
                         doCsiEqual(b);
                         break;
+                    case ESC_CSI_HASH:
+                        doCsiHash(b);
+                        break;
                     case ESC_CSI_LESSTHAN:
                         doCsiLessThan(b);
                         break;
@@ -1391,6 +1642,10 @@ public final class TerminalEmulator {
                             if (mode == 47 || mode == 1047 || mode == 1049) {
                                 // This state is carried by mScreen pointer.
                                 value = (mScreen == mAltBuffer) ? 1 : 2;
+                            } else if (mode == 2026) {
+                                // A hold that ran past its timeout has already ended, whether or not
+                                // the program got around to resetting the mode; report what is true.
+                                value = isScreenUpdateHeld() ? 1 : 2;
                             } else {
                                 int internalBit = mapDecSetBitToInternalBit(mode);
                                 if (internalBit != -1) {
@@ -1906,6 +2161,11 @@ public final class TerminalEmulator {
                         // Extended Cursor Position (DECXCPR - http://www.vt100.net/docs/vt510-rm/DECXCPR). Page=1.
                         mSession.write(String.format(Locale.US, "\033[?%d;%d;1R", mCursorRow + 1, mCursorCol + 1));
                         break;
+                    case 996:
+                        // Color preference query, answered whether or not mode 2031 is set:
+                        // "CSI ? 997 ; 1 n" for a dark default background, ";2" for a light one.
+                        mSession.write(colorPreferenceReport(isDefaultBackgroundDark()));
+                        break;
                     default:
                         finishSequence();
                         return;
@@ -2086,6 +2346,28 @@ public final class TerminalEmulator {
             case 2004:
                 // Bracketed paste mode - setting bit is enough.
                 break;
+            case 2026:
+                // Synchronized output. Setting it starts the hold and arms its timeout; resetting it
+                // ends the hold and hands the client the one update the whole frame is worth.
+                if (setting) {
+                    mSynchronizedUpdateDeadline = System.currentTimeMillis() + mSynchronizedUpdateTimeoutMillis;
+                } else {
+                    mSynchronizedUpdateDeadline = 0;
+                    mSession.onScreenChanged();
+                }
+                break;
+            case 2031:
+                // Color preference notifications. Enabling primes the remembered class so that the
+                // first flip after this point is reported and the current state is not re-announced.
+                if (setting)
+                    mLastReportedDark = isDefaultBackgroundDark();
+                break;
+            case 2048:
+                // In-band resize notifications. Enabling reports the current size at once, so a
+                // program that just asked does not have to wait for a resize to learn it.
+                if (setting)
+                    sendInBandResizeReport();
+                break;
             default:
                 unknownParameter(externalBit);
                 break;
@@ -2099,6 +2381,36 @@ public final class TerminalEmulator {
      * this parameter byte are ignored as before.
      * </p>
      */
+    /**
+     * Process byte while in the {@link #ESC_CSI_HASH} escape state, "ESC [ ... #": the xterm color
+     * stack, which a program uses to borrow the palette and hand it back.
+     *
+     * <ul>
+     * <li>{@code CSI Ps # P} — XTPUSHCOLORS, save the palette, optionally into a given slot.</li>
+     * <li>{@code CSI Ps # Q} — XTPOPCOLORS, restore it.</li>
+     * <li>{@code CSI # R} — XTREPORTCOLORS, answer "CSI ? index ; count # Q".</li>
+     * </ul>
+     */
+    private void doCsiHash(int b) {
+        switch(b) {
+            case 'P':
+                mColors.pushPalette(getArg0(0));
+                break;
+            case 'Q':
+                if (mColors.popPalette(getArg0(0))) {
+                    mSession.onColorsChanged();
+                    notifyColorPreferenceIfChanged();
+                }
+                break;
+            case 'R':
+                mSession.write(String.format(Locale.US, "\033[?%d;%d#Q",
+                    mColors.getColorStackIndex(), mColors.getColorStackCount()));
+                break;
+            default:
+                parseArg(b);
+        }
+    }
+
     private void doCsiEqual(int b) {
         switch(b) {
             case 'u':
@@ -2552,6 +2864,9 @@ public final class TerminalEmulator {
             case '$':
                 continueSequence(ESC_CSI_DOLLAR);
                 break;
+            case '#':
+                continueSequence(ESC_CSI_HASH);
+                break;
             case '*':
                 continueSequence(ESC_CSI_ARGS_ASTERIX);
                 break;
@@ -2757,9 +3072,16 @@ public final class TerminalEmulator {
                 break;
             case // Repeat the preceding graphic character Ps times (REP).
             'b':
+                final int numRepeat = getArg0(1);
+                if (mLastTextBlockText != null) {
+                    // The last thing written was a sized block, so that is what repeats.
+                    final String repeatedText = mLastTextBlockText;
+                    final int repeatedRecord = mLastTextBlockRecord;
+                    for (int i = 0; i < numRepeat; i++) writeTextSizeBlock(repeatedText, repeatedRecord);
+                    break;
+                }
                 if (mLastEmittedCodePoint == -1)
                     break;
-                final int numRepeat = getArg0(1);
                 for (int i = 0; i < numRepeat; i++) emitCodePoint(mLastEmittedCodePoint);
                 break;
             case // Primary Device Attributes (http://www.vt100.net/docs/vt510-rm/DA1) if argument is missing or zero.
@@ -3196,6 +3518,11 @@ public final class TerminalEmulator {
                         // Leave the exit code unknown rather than failing the sequence.
                     }
                 }
+                // The command is over, so any progress it reported is over with it. A program that
+                // is killed, or that simply forgets the closing "OSC 9;4;0", would otherwise leave
+                // its window's pill turning a progress ring for work that has finished.
+                mProgressState = PROGRESS_STATE_NONE;
+                mProgressValue = 0;
                 break;
             default:
                 if (LOG_ESCAPE_SEQUENCES)
@@ -3253,8 +3580,15 @@ public final class TerminalEmulator {
                                 unknownSequence(b);
                                 return;
                             } else {
-                                mColors.tryParseColor(colorIndex, textParameter.substring(parsingPairStart, i));
-                                mSession.onColorsChanged();
+                                String indexedColorSpec = textParameter.substring(parsingPairStart, i);
+                                if ("?".equals(indexedColorSpec)) {
+                                    // Report the color in the same form xterm does, so that the reply
+                                    // can be fed straight back as a set.
+                                    mSession.write("\033]4;" + colorIndex + ";" + rgbColorSpec(mColors.mCurrentColors[colorIndex]) + bellOrStringTerminator);
+                                } else {
+                                    mColors.tryParseColor(colorIndex, indexedColorSpec);
+                                    mSession.onColorsChanged();
+                                }
                                 colorIndex = -1;
                                 parsingPairStart = -1;
                             }
@@ -3286,14 +3620,11 @@ public final class TerminalEmulator {
                             String colorSpec = textParameter.substring(lastSemiIndex, charIndex);
                             if ("?".equals(colorSpec)) {
                                 // Report current color in the same format xterm and gnome-terminal does.
-                                int rgb = mColors.mCurrentColors[specialIndex];
-                                int r = (65535 * ((rgb & 0x00FF0000) >> 16)) / 255;
-                                int g = (65535 * ((rgb & 0x0000FF00) >> 8)) / 255;
-                                int b = (65535 * ((rgb & 0x000000FF))) / 255;
-                                mSession.write("\033]" + value + ";rgb:" + String.format(Locale.US, "%04x", r) + "/" + String.format(Locale.US, "%04x", g) + "/" + String.format(Locale.US, "%04x", b) + bellOrStringTerminator);
+                                mSession.write("\033]" + value + ";" + rgbColorSpec(mColors.mCurrentColors[specialIndex]) + bellOrStringTerminator);
                             } else {
                                 mColors.tryParseColor(specialIndex, colorSpec);
                                 mSession.onColorsChanged();
+                                notifyColorPreferenceIfChanged();
                             }
                             specialIndex++;
                             if (endOfInput || (specialIndex > TextStyle.COLOR_INDEX_CURSOR) || ++charIndex >= textParameter.length())
@@ -3305,18 +3636,34 @@ public final class TerminalEmulator {
                     }
                 }
                 break;
+            case // The shell reporting its directory: "7;file://$host/$path".
+            7:
+                setReportedWorkingDirectory(textParameter);
+                break;
             case // Semantic hyperlink: "8;$params;$uri". An empty $uri closes the current link.
             8:
                 setCurrentHyperlink(textParameter);
                 break;
-            case // Manipulate Selection Data. Skip the optional first selection parameter(s).
+            case // Manipulate Selection Data: "$selection;$base64" writes, "$selection;?" queries.
             52:
-                int startIndex = textParameter.indexOf(";") + 1;
-                try {
-                    String clipboardText = new String(Base64.decode(textParameter.substring(startIndex), Base64.DEFAULT), StandardCharsets.UTF_8);
-                    mSession.onCopyTextToClipboard(clipboardText);
-                } catch (Exception e) {
-                    Logger.logError(mClient, LOG_TAG, "OSC Manipulate selection, invalid string '" + textParameter + "'");
+                int selectionEnd = textParameter.indexOf(";");
+                String clipboardSelection = selectionEnd < 0 ? "" : textParameter.substring(0, selectionEnd);
+                if (clipboardSelection.isEmpty()) clipboardSelection = "c";
+                String clipboardPayload = selectionEnd < 0 ? textParameter : textParameter.substring(selectionEnd + 1);
+                if ("?".equals(clipboardPayload)) {
+                    // A waiting program must not be left hanging: answer empty rather than nothing
+                    // when there is no client, the setting is off, or the clipboard is unset.
+                    String clipboardText = mSession.onReadTextFromClipboard();
+                    String encoded = (clipboardText == null || clipboardText.isEmpty()) ? "" :
+                        Base64.getEncoder().encodeToString(clipboardText.getBytes(StandardCharsets.UTF_8));
+                    mSession.write("\033]52;" + clipboardSelection + ";" + encoded + bellOrStringTerminator);
+                } else {
+                    try {
+                        String clipboardText = new String(Base64.getMimeDecoder().decode(clipboardPayload), StandardCharsets.UTF_8);
+                        mSession.onCopyTextToClipboard(clipboardText);
+                    } catch (Exception e) {
+                        Logger.logError(mClient, LOG_TAG, "OSC Manipulate selection, invalid string '" + textParameter + "'");
+                    }
                 }
                 break;
             case // Shell integration marks: "133;A" prompt, "133;B" command, "133;C" output, "133;D[;code]" done.
@@ -3331,6 +3678,7 @@ public final class TerminalEmulator {
                 if (textParameter.isEmpty()) {
                     mColors.reset();
                     mSession.onColorsChanged();
+                    notifyColorPreferenceIfChanged();
                 } else {
                     int lastIndex = 0;
                     for (int charIndex = 0; ; charIndex++) {
@@ -3340,6 +3688,7 @@ public final class TerminalEmulator {
                                 int colorToReset = Integer.parseInt(textParameter.substring(lastIndex, charIndex));
                                 mColors.reset(colorToReset);
                                 mSession.onColorsChanged();
+                                notifyColorPreferenceIfChanged();
                                 if (endOfInput)
                                     break;
                                 charIndex++;
@@ -3359,6 +3708,7 @@ public final class TerminalEmulator {
             112:
                 mColors.reset(TextStyle.COLOR_INDEX_FOREGROUND + (value - 110));
                 mSession.onColorsChanged();
+                notifyColorPreferenceIfChanged();
                 break;
             case // Reset highlight color.
             119:
@@ -3463,6 +3813,22 @@ public final class TerminalEmulator {
                     mSession.onNotification(null, textParameter);
                 }
                 break;
+            case 22:
+                // The mouse pointer shape a program wants while it is running: a text bar for an
+                // editor, a busy pointer for a long job, a hand over something to click.
+                setPointerShapeFromOsc(textParameter);
+                break;
+            case 66:
+                // Text drawn larger than one cell: the program says how many times normal size and
+                // how wide, and the terminal keeps a rectangle of cells for it.
+                doTextSizing(textParameter);
+                break;
+            case 99:
+                // The rich desktop notification. Unlike OSC 9 and OSC 777 this one carries a
+                // proper request — a name to replace or close it by, how urgent it is, whether
+                // the program wants to hear that the user tapped it — and it may arrive in pieces.
+                mKittyNotifications.handle(textParameter, mKittyNotificationHandler);
+                break;
             case 777: {
                 // rxvt-unicode's notification: 777;notify;title;body.
                 String[] parts = textParameter.split(";", 3);
@@ -3479,6 +3845,163 @@ public final class TerminalEmulator {
             mITermImage = null;
         }
         finishSequence();
+    }
+
+    /** How many pointer shapes a program may set aside at once with {@code OSC 22 ; >}. */
+    private static final int MAX_POINTER_SHAPE_STACK = 16;
+
+    /**
+     * {@code OSC 22} in its three forms: a plain name sets the shape, a leading {@code >} sets the
+     * current one aside first, and a leading {@code <} puts the last one back. An empty name asks
+     * for the terminal's own pointer again.
+     */
+    private void setPointerShapeFromOsc(String parameter) {
+        String request = parameter == null ? "" : parameter.trim();
+        if (request.startsWith(">")) {
+            if (mPointerShapeStack.size() < MAX_POINTER_SHAPE_STACK)
+                mPointerShapeStack.add(mPointerShape == null ? "" : mPointerShape);
+            String shape = normalizePointerShape(request.substring(1));
+            // ">" on its own only sets the current shape aside; it does not change it.
+            if (shape != null) setPointerShape(shape);
+            return;
+        }
+        if (request.startsWith("<")) {
+            int count = 1;
+            String rest = request.substring(1).trim();
+            if (!rest.isEmpty()) {
+                try {
+                    count = Math.max(1, Integer.parseInt(rest));
+                } catch (NumberFormatException e) {
+                    count = 1;
+                }
+            }
+            String restored = mPointerShape;
+            for (int i = 0; i < count && !mPointerShapeStack.isEmpty(); i++)
+                restored = mPointerShapeStack.remove(mPointerShapeStack.size() - 1);
+            setPointerShape(restored == null || restored.isEmpty() ? null : restored);
+            return;
+        }
+        setPointerShape(normalizePointerShape(request));
+    }
+
+    /** A shape name is a plain word; anything else is read as "give me the usual pointer". */
+    private static String normalizePointerShape(String name) {
+        if (name == null) return null;
+        String trimmed = name.trim();
+        if (trimmed.isEmpty() || trimmed.length() > 64) return null;
+        for (int i = 0; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            boolean plain = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                || (c >= '0' && c <= '9') || c == '-' || c == '_';
+            if (!plain) return null;
+        }
+        return trimmed.toLowerCase(Locale.US);
+    }
+
+    private void setPointerShape(String shape) {
+        if (Objects.equals(mPointerShape, shape)) return;
+        mPointerShape = shape;
+        mSession.onPointerShapeChanged(shape);
+    }
+
+    /**
+     * The mouse pointer shape the running program asked for, or null when it wants the terminal's
+     * own. See {@link #setPointerShapeFromOsc(String)}.
+     */
+    public String getPointerShape() {
+        return mPointerShape;
+    }
+
+    /**
+     * The user tapped a notification this terminal put up. Tells the program, when it asked to
+     * hear about it; {@code button} is 0 for the notification itself.
+     */
+    public void kittyNotificationActivated(String id, int button) {
+        if (id == null) return;
+        String report = mKittyNotifications.activated(id, button);
+        if (report != null) mSession.write(report);
+    }
+
+    /** A notification this terminal put up went away without being tapped. */
+    public void kittyNotificationClosed(String id) {
+        if (id == null) return;
+        String report = mKittyNotifications.closed(id);
+        if (report != null) mSession.write(report);
+    }
+
+    /**
+     * Handle one {@code OSC 66}. With a forced width the whole text is one block; without one every
+     * character becomes a block of its own, which is what a program drawing a heading sends.
+     */
+    private void doTextSizing(String args) {
+        KittyTextSizing.Request request = KittyTextSizing.parse(args);
+        if (request == null) return;
+        if (request.width > 0) {
+            // Text wider than the cells the program asked for is cut, not shrunk.
+            String text = KittyTextSizing.cutToCells(request.text, request.width);
+            if (text.isEmpty()) return;
+            writeTextSizeBlock(text, packTextSizeRecord(request, request.width));
+        } else {
+            for (String grapheme : KittyTextSizing.splitGraphemes(request.text)) {
+                int cellWidth = Math.min(Math.max(1, KittyTextSizing.measureCells(grapheme)),
+                    KittyTextSizing.MAX_WIDTH);
+                writeTextSizeBlock(grapheme, packTextSizeRecord(request, cellWidth));
+            }
+        }
+    }
+
+    private int packTextSizeRecord(KittyTextSizing.Request request, int cellWidth) {
+        return KittyTextSizing.packRecord(request.scale, cellWidth, request.numerator,
+            request.denominator, request.verticalAlign, request.horizontalAlign, false);
+    }
+
+    /**
+     * Put one sized block at the cursor and move the cursor past it, on the same row. A block that
+     * cannot fit the screen at all is thrown away and the cursor stays where it is.
+     */
+    private void writeTextSizeBlock(String text, int record) {
+        final int blockRows = KittyTextSizing.rowsOf(record);
+        final int blockColumns = KittyTextSizing.columnsOf(record);
+        if (blockColumns > mRightMargin - mLeftMargin || blockRows > mBottomMargin - mTopMargin)
+            return;
+        final boolean autoWrap = isDecsetInternalBitSet(DECSET_BIT_AUTOWRAP);
+        if (mCursorCol + blockColumns > mRightMargin) {
+            // Like a wide character, a block that does not fit goes to the next line whole.
+            if (!autoWrap) return;
+            mScreen.setLineWrap(mCursorRow);
+            mCursorCol = mLeftMargin;
+            if (mCursorRow + 1 < mBottomMargin) {
+                mCursorRow++;
+            } else {
+                scrollDownOneLine();
+            }
+        }
+        int rowsBelowMargin = mCursorRow + blockRows - mBottomMargin;
+        for (int i = 0; i < rowsBelowMargin; i++) scrollDownOneLine();
+        final int topRow = (rowsBelowMargin > 0) ? mCursorRow - rowsBelowMargin : mCursorRow;
+        final int anchorColumn = mCursorCol;
+        if (mInsertMode) {
+            int destinationColumn = anchorColumn + blockColumns;
+            if (destinationColumn < mRightMargin)
+                mScreen.blockCopy(anchorColumn, topRow, mRightMargin - destinationColumn, 1,
+                    destinationColumn, topRow);
+        }
+        mScreen.writeTextBlock(anchorColumn, topRow, text, record, getStyle(), mUnderlineColor,
+            mCurrentHyperlinkId);
+        mLastTextBlockText = text;
+        mLastTextBlockRecord = record;
+        mLastEmittedCodePoint = -1;
+        // A combining mark arriving next belongs to the block's text, so point the grapheme
+        // tracking at the anchor cell the way an ordinary write points it at the cell it filled.
+        mGraphemeClusterer.accept(text.codePointBefore(text.length()), false);
+        mLastGraphemeRow = topRow;
+        mLastGraphemeColumn = anchorColumn;
+        mCursorRow = topRow;
+        if (autoWrap) mAboutToAutoWrap = (anchorColumn == mRightMargin - blockColumns);
+        mCursorCol = Math.min(anchorColumn + blockColumns, mRightMargin - 1);
+        mLastGraphemeCursorRow = mCursorRow;
+        mLastGraphemeCursorCol = mCursorCol;
+        mLastGraphemeAboutToAutoWrap = mAboutToAutoWrap;
     }
 
     private void blockClear(int sx, int sy, int w) {
@@ -3762,6 +4285,7 @@ public final class TerminalEmulator {
             case ESC_CSI_UNSUPPORTED_INTERMEDIATE_BYTE:
             case ESC_CSI_EQUAL:
             case ESC_CSI_LESSTHAN:
+            case ESC_CSI_HASH:
                 return true;
             default:
                 return false;
@@ -3851,6 +4375,7 @@ public final class TerminalEmulator {
      */
     private void emitCodePoint(int codePoint) {
         mLastEmittedCodePoint = codePoint;
+        mLastTextBlockText = null;
         if (mUseLineDrawingUsesG0 ? mUseLineDrawingG0 : mUseLineDrawingG1) {
             // http://www.vt100.net/docs/vt102-ug/table5-15.html.
             switch(codePoint) {
@@ -4130,8 +4655,11 @@ public final class TerminalEmulator {
         mSavedDecSetFlags = mSavedStateMain.mSavedDecFlags = mSavedStateAlt.mSavedDecFlags = mCurrentDecSetFlags;
         // XXX: Should we set terminal driver back to IUTF8 with termios?
         mUtf8Index = mUtf8ToFollow = 0;
+        mSynchronizedUpdateDeadline = 0;
+        mColors.clearStack();
         mColors.reset();
         mSession.onColorsChanged();
+        mLastReportedDark = isDefaultBackgroundDark();
         ESC_P_escape = false;
         ESC_P_sixel = false;
         mOscStringMaxLength = MAX_STRING_SEQUENCE_LENGTH;
@@ -4146,12 +4674,74 @@ public final class TerminalEmulator {
         mIgnoreCrLfForOsc = false;
         mITermImage = null;
         mKittyGraphics.reset();
+        mKittyNotifications.reset();
+        mPointerShapeStack.clear();
+        setPointerShape(null);
         clearExtraCursors();
         mExtraCursorColor.type = mExtraCursorColor.value = 0;
         mExtraCursorTextColor.type = mExtraCursorTextColor.value = 0;
     }
 
+    /**
+     * Whether the current default background counts as dark, by the WCAG relative luminance of its
+     * sRGB components: kitty derives the same binary answer from the background and never reports
+     * "unknown".
+     */
+    private boolean isDefaultBackgroundDark() {
+        return relativeLuminance(mColors.mCurrentColors[TextStyle.COLOR_INDEX_BACKGROUND]) < 0.5;
+    }
+
+    static double relativeLuminance(int color) {
+        double r = linearizeSrgbComponent((color >> 16) & 0xFF);
+        double g = linearizeSrgbComponent((color >> 8) & 0xFF);
+        double b = linearizeSrgbComponent(color & 0xFF);
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    }
+
+    private static double linearizeSrgbComponent(int component) {
+        double c = component / 255.0;
+        return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+
+    /** The color preference report, "CSI ? 997 ; 1 n" for dark and "CSI ? 997 ; 2 n" for light. */
+    private static String colorPreferenceReport(boolean dark) {
+        return "\033[?997;" + (dark ? 1 : 2) + "n";
+    }
+
+    /**
+     * Report a dark/light flip of the default background to the program, once per flip, but only
+     * while mode 2031 is set. A color change that keeps the class is silent.
+     */
+    private void notifyColorPreferenceIfChanged() {
+        if (!isDecsetInternalBitSet(DECSET_BIT_COLOR_PREFERENCE_NOTIFICATIONS))
+            return;
+        boolean dark = isDefaultBackgroundDark();
+        if (dark == mLastReportedDark)
+            return;
+        mLastReportedDark = dark;
+        mSession.write(colorPreferenceReport(dark));
+    }
+
+    /**
+     * Reload the default palette after the app changed the color scheme, reporting the flip to a
+     * program that asked for mode 2031. The app has no other way into the emulator's colors.
+     */
+    public void resetColorsToScheme() {
+        mColors.reset();
+        mSession.onColorsChanged();
+        notifyColorPreferenceIfChanged();
+    }
+
+    /** Formats a color as xterm's "rgb:RRRR/GGGG/BBBB", 16 bits per channel. */
+    private static String rgbColorSpec(int color) {
+        int r = (65535 * ((color & 0x00FF0000) >> 16)) / 255;
+        int g = (65535 * ((color & 0x0000FF00) >> 8)) / 255;
+        int b = (65535 * ((color & 0x000000FF))) / 255;
+        return String.format(Locale.US, "rgb:%04x/%04x/%04x", r, g, b);
+    }
+
     private void resetGraphemeTracking() {
+        mLastTextBlockText = null;
         mGraphemeClusterer.reset();
         mLastGraphemeRow = mLastGraphemeColumn = -1;
         mLastGraphemeCursorRow = mLastGraphemeCursorCol = -1;
@@ -4166,6 +4756,30 @@ public final class TerminalEmulator {
     public boolean getKittyImagePlaceholder(long imageId, long placementId,
                                             KittyImagePlaceholder out) {
         return mKittyGraphics.getPlaceholder(imageId, placementId, out);
+    }
+
+    /**
+     * The pixel generation of a stored kitty image — see {@link KittyImagePlaceholder#generation}
+     * — without resolving a placement. 0 when there is no such image, so a renderer that asked
+     * about an id whose image had not arrived yet sees the answer move when it does.
+     */
+    public long getKittyImageGeneration(long imageId) {
+        return mKittyGraphics.imageGeneration(imageId);
+    }
+
+    /**
+     * Bumped whenever an animation frame flip replaces the pixels of a placed kitty image in
+     * place. Placements are drawn from {@link TerminalBuffer#getSixelBitmap}, keyed by a cell
+     * style that does not move when the bitmap behind it is swapped, so this is the only thing a
+     * renderer can compare for a row holding bitmap cells. Sixel and iTerm images never move it:
+     * their pixels are written once, so a row showing one is recorded once.
+     */
+    public long getKittyPlacementGeneration() {
+        return mKittyPlacementGeneration;
+    }
+
+    void noteKittyPlacementPixelsReplaced() {
+        mKittyPlacementGeneration++;
     }
 
     boolean hasKittyVirtualPlacement(long imageId, long placementId) {
@@ -4232,6 +4846,12 @@ public final class TerminalEmulator {
     boolean isKittyImageOnScreen(long imageId) {
         if (mTopRowProvider == null) return true;
         return mScreen.hasKittyImageInRows(imageId, mTopRowProvider.topRow(), mRows);
+    }
+
+    /** Whether any U+10EEEE cell is in view, the coarse test for placeholder-displayed images. */
+    boolean isAnyKittyPlaceholderCellOnScreen() {
+        if (mTopRowProvider == null) return true;
+        return mScreen.hasKittyPlaceholderCellInRows(mTopRowProvider.topRow(), mRows);
     }
 
     /**

@@ -1,0 +1,34 @@
+{
+  "id": "setup",
+  "crop": [
+    [
+      0,
+      380,
+      600,
+      130
+    ],
+    [
+      0,
+      930,
+      600,
+      300
+    ]
+  ],
+  "events": [
+    {
+      "t": 2.500277257000562,
+      "kind": "tap",
+      "points": [
+        300,
+        473
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 6.93,
+  "bytes": 68830,
+  "width": 600,
+  "height": 430,
+  "video": "setup.mp4",
+  "poster": "setup.jpg"
+}

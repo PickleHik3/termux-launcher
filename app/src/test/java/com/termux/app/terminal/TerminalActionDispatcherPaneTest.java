@@ -164,6 +164,72 @@ public class TerminalActionDispatcherPaneTest {
         assertEquals(400, dispatcher.execute("pane.focus", new JSONObject()).getInt("_statusCode"));
     }
 
+    /**
+     * The full pane API against a real pane controller, with the host stopped (alive, not
+     * visible) exactly as it is once the user switches away from the launcher: open, list, focus,
+     * write, read and close must all keep working, and ownership must still gate write/read/close
+     * exactly as it does while visible.
+     */
+    @Test
+    public void fullPaneLifecycleWorksWithTheHostStoppedAndOwnershipStillApplies() throws JSONException {
+        TerminalSession usersShell = host.controller.getActiveSession();
+        host.visible = false;
+
+        JSONObject opened = dispatcher.execute("pane.open", new JSONObject()
+            .put("command", new JSONArray().put("make")).put("tag", "claude"));
+        assertTrue(opened.toString(), opened.getBoolean("ok"));
+        String id = opened.getJSONObject("pane").getString("id");
+
+        // Ownership is unaffected by visibility: the user's own shell is still off-limits.
+        JSONObject refused = dispatcher.execute("pane.write", new JSONObject()
+            .put("id", usersShell.mHandle).put("text", "rm -rf /"));
+        assertEquals("not_owned", refused.getString("error"));
+
+        JSONObject list = dispatcher.execute("pane.list", new JSONObject());
+        assertTrue(list.toString(), list.getBoolean("ok"));
+        assertEquals(id, list.getString("activePane"));
+
+        JSONObject focus = dispatcher.execute("pane.focus", new JSONObject().put("id", usersShell.mHandle));
+        assertTrue(focus.toString(), focus.getBoolean("ok"));
+        assertSame(usersShell, host.controller.getActiveSession());
+
+        JSONObject write = dispatcher.execute("pane.write", new JSONObject()
+            .put("id", id).put("text", "ls").put("enter", true));
+        assertTrue(write.toString(), write.getBoolean("ok"));
+
+        JSONObject read = dispatcher.execute("pane.read", new JSONObject().put("id", id));
+        assertTrue(read.toString(), read.getBoolean("ok"));
+
+        JSONObject close = dispatcher.execute("pane.close", new JSONObject().put("id", id));
+        assertTrue(close.toString(), close.getBoolean("ok"));
+        assertFalse(AgentPaneRegistry.getInstance().isOwned(id));
+
+        // No hint toast for any of the above: the host was never visible.
+        assertFalse(host.called("showTerminalActionHint"));
+    }
+
+    /** A foreground-only tool run through the same stopped host must still be refused. */
+    @Test
+    public void aForegroundOnlyToolStillRefusesOnTheStoppedHost() throws JSONException {
+        host.visible = false;
+        JSONObject result = dispatcher.execute("pane.split_vertical", new JSONObject());
+        assertEquals(409, result.getInt("_statusCode"));
+        assertEquals("activity_not_running", result.getString("error"));
+    }
+
+    /** Once the host is destroyed outright, the pane routes fail exactly like everything else. */
+    @Test
+    public void aDestroyedHostRefusesEveryPaneRoute() throws JSONException {
+        host.visible = false;
+        host.alive = false;
+        for (String tool : new String[]{"pane.open", "pane.list", "pane.focus", "pane.write",
+                "pane.read", "pane.close"}) {
+            JSONObject result = dispatcher.execute(tool, new JSONObject().put("id", "whatever"));
+            assertEquals(tool, 409, result.getInt("_statusCode"));
+            assertEquals(tool, "activity_not_running", result.getString("error"));
+        }
+    }
+
     @Test
     public void lastLines_keepsTheNewestLinesAndDropsTrailingBlanks() {
         assertEquals("c\nd", TerminalActionDispatcher.lastLines("a\nb\nc\nd\n\n", 2));

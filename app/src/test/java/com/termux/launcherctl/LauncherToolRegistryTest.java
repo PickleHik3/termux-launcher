@@ -31,7 +31,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void agentOnlyTools_haveNoUiMetadata() {
         String[] agentOnly = {"workspace.save", "workspace.load", "workspace.list", "workspace.delete",
-            "pane.layout", "pane.move_to_edge"};
+            "pane.list", "pane.open", "pane.focus", "pane.close", "pane.write", "pane.read"};
         for (String name : agentOnly) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertNotNull(name, tool);
@@ -50,7 +50,7 @@ public class LauncherToolRegistryTest {
             "session.close_current", "session.browser", "session.panel", "session.clone_current",
             "pane.equalize", "pane.rotate", "pane.next_layout", "pane.toggle_float",
             "terminal.toggle_scratchpad", "workspace.picker", "workspace.save_prompt",
-            "extrakeys.edit"};
+            "extrakeys.edit", "pane.layout", "pane.move_to_edge", "wall.go"};
         for (String name : terminalTools) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertNotNull(name, tool);
@@ -62,8 +62,11 @@ public class LauncherToolRegistryTest {
         // session.rename when the rename vocabulary was straightened out, then by extrakeys.edit,
         // the row editor's in-terminal entry, then by terminal.select_at_cursor and
         // terminal.select_all, which gave selection an entry point outside a long-press, and
-        // finally by the keyboard layout pair.
-        assertEquals(68, registry.getUiTools().size());
+        // then by the keyboard layout pair, then by the four keyboard-type and
+        // keyboard-visibility tools, and finally by pane.layout, pane.move_to_edge and wall.go,
+        // whose one enum argument the palette and the extra-keys picker both offer as a row per
+        // value rather than as a prompt, and by app.open_help, the command palette's door to help.
+        assertEquals(80, registry.getUiTools().size());
     }
 
     @Test
@@ -143,7 +146,7 @@ public class LauncherToolRegistryTest {
         String[] navigation = {"terminal.state", "pane.focus_direction", "pane.resize",
             "window.next", "window.previous", "session.next", "session.previous",
             "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge",
-            "pane.next_layout", "session.browser"};
+            "pane.next_layout", "session.browser", "wall.go"};
         for (String name : navigation) {
             LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
             assertEquals(name, LauncherToolRegistry.ToolRisk.LOW, tool.risk);
@@ -205,15 +208,17 @@ public class LauncherToolRegistryTest {
         assertEquals(4, move.schema.optJSONObject("properties")
             .optJSONObject("edge").optJSONArray("enum").length());
         assertEquals("edge", move.schema.optJSONArray("required").optString(0));
-        assertFalse(layout.hasUiMetadata());
-        assertFalse(move.hasUiMetadata());
+        // A bounded enum is offerable: both surfaces that bind an action list a row per value,
+        // so these two carry UI metadata despite their required argument.
+        assertTrue(layout.hasUiMetadata());
+        assertTrue(move.hasUiMetadata());
         assertTrue(equalize.hasUiMetadata());
         assertTrue(rotate.hasUiMetadata());
         assertFalse(equalize.requiresConfirmation);
         assertFalse(rotate.requiresConfirmation);
 
-        // next_layout takes no argument, so unlike pane.layout it can carry UI metadata and a
-        // binding. It is the only layout action bound by default.
+        // next_layout takes no argument, so unlike pane.layout it needs no chosen value on the
+        // row that runs it. It is the only layout action bound by default.
         LauncherToolRegistry.ToolMetadata next = registry.getTool("pane.next_layout");
         assertNotNull(next);
         assertTrue(next.hasUiMetadata());
@@ -291,10 +296,17 @@ public class LauncherToolRegistryTest {
 
     private static LauncherToolRegistry.ActionContext context(boolean splits, boolean session,
                                                              boolean selection) {
+        return context(splits, session, selection, false);
+    }
+
+    private static LauncherToolRegistry.ActionContext context(boolean splits, boolean session,
+                                                             boolean selection,
+                                                             boolean inAppKeyboard) {
         return new LauncherToolRegistry.ActionContext() {
             @Override public boolean isSplitPanesEnabled() { return splits; }
             @Override public boolean hasCurrentSession() { return session; }
             @Override public boolean hasSelectedText() { return selection; }
+            @Override public boolean isInAppKeyboardEnabled() { return inAppKeyboard; }
         };
     }
 
@@ -456,6 +468,51 @@ public class LauncherToolRegistryTest {
     }
 
     @Test
+    public void keyboardFormTools_areUserFacingUnboundAndNeedTheInAppKeyboard() {
+        // Unbound by default on purpose: the type is a choice most installs make once, and the
+        // key is offered on the extra-keys row and in the keyboard's own catalogue instead.
+        for (String name : new String[]{"keyboard.cycle_form", "keyboard.set_form",
+                "keyboard.show", "keyboard.hide"}) {
+            LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
+            assertNotNull(name, tool);
+            assertEquals(name, LauncherToolRegistry.CATEGORY_KEYBOARD, tool.category);
+            assertTrue(name + " needs a titleRes", tool.titleRes != 0);
+            assertTrue(name + " needs a descriptionRes", tool.descriptionRes != 0);
+            assertEquals(name, LauncherToolRegistry.ToolRisk.LOW, tool.risk);
+            assertFalse(name, tool.requiresConfirmation);
+            assertTrue(name + " must stay unbound", tool.defaultBindings.isEmpty());
+            assertFalse(name + " needs the in-app keyboard",
+                tool.availabilityIn(context(true, true)).available);
+            assertTrue(name + " is available with it",
+                tool.availabilityIn(context(true, true, false, true)).available);
+        }
+    }
+
+    @Test
+    public void keyboardFormSchemas_constrainTheirValues() {
+        JSONObject cycle = registry.getTool("keyboard.cycle_form").schema;
+        JSONArray direction = cycle.optJSONObject("properties")
+            .optJSONObject("direction").optJSONArray("enum");
+        assertEquals(2, direction.length());
+        assertNull("a direction-less cycle steps forward", cycle.optJSONArray("required"));
+
+        LauncherToolRegistry.ToolMetadata set = registry.getTool("keyboard.set_form");
+        assertEquals("form", set.schema.optJSONArray("required").optString(0));
+        assertEquals(3, set.schema.optJSONObject("properties")
+            .optJSONObject("form").optJSONArray("enum").length());
+
+        for (String name : new String[]{"keyboard.show", "keyboard.hide"}) {
+            JSONObject schema = registry.getTool(name).schema;
+            assertNull(name + " asks for nothing", schema.optJSONArray("required"));
+            JSONArray source = schema.optJSONObject("properties")
+                .optJSONObject("source").optJSONArray("enum");
+            assertEquals(name, 2, source.length());
+            assertEquals(name, "manual", schema.optJSONObject("properties")
+                .optJSONObject("source").optString("default"));
+        }
+    }
+
+    @Test
     public void killAction_isNotDuplicated() {
         // pane.kill_focused already terminates the focused shell; a separate
         // session.kill would be the same call under a second name.
@@ -466,7 +523,7 @@ public class LauncherToolRegistryTest {
     @Test
     public void terminalActions_groupByCategory() {
         java.util.Map<String, List<LauncherToolRegistry.ToolMetadata>> grouped = registry.getUiToolsByCategory();
-        assertEquals(9, grouped.size());
+        assertEquals(10, grouped.size());
         // Exact per-group counts churn with every added action; assert the
         // invariant instead: every grouped tool is a UI tool and vice versa.
         int total = 0;

@@ -92,12 +92,14 @@ See [Getting Started](docs/en/Launcher_Getting_Started.md) for the setup flow.
 
 ### Quick start script
 
-[`setup-launcher`](docs/en/examples/setup-launcher) install my personal shell setup (fish, Oh My Posh with wallpaper Material colors, zoxide, eza, Neovim + AstroNvim, and the binaries — sigye, the animated-logo fastfetch, kitten). Every config it replaces gets a timestamped `.bak` first.
+`tlstore`, the launcher's own tool store, installs my personal shell setup (fish, Oh My Posh with wallpaper Material colors, zoxide, eza and a couple of fish plugins), a Neovim colour scheme that follows your wallpaper, the binaries — sigye, the animated-logo fastfetch, kitten — and Claude Code. A config file of yours is never replaced without showing you the change and asking first, and whatever it does replace gets a timestamped `.bak`. It's already on your phone — no download needed:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/docs/en/examples/setup-launcher
-sh setup-launcher
+tlstore shell
+tlstore install
 ```
+
+The first line installs the shell setup in one go; the second opens a picker for everything else, including Claude Code. See the [tlstore guide](docs/en/Tlstore.md) for the full command list.
 
 Its highly recommended that you use the in-app font picker (**Settings › Terminal › Font**) to install a nerd font since it will configure it properly for seamless font rendering using kitty protocol related features.
 
@@ -107,6 +109,7 @@ Its highly recommended that you use the in-app font picker (**Settings › Termi
 
 In-repo references:
 
+- [Programs and agents inside the terminal](docs/en/Programs_Inside_The_Terminal.md): **read this before assuming stock Termux behaviour** from a script or an AI agent running in a pane: the extra environment variables, the escape sequences the terminal accepts, `launcherctl`, and the one `am start` that must never be run.
 - [Local AI API](docs/en/LauncherCtl_API.md): OpenAI/Ollama-compatible localhost endpoint, app launch, model management, auth, and route tables.
 - [Termux AI](docs/en/Termux_AI.md): local model setup, `tai`, OpenAI-compatible clients, and troubleshooting.
 - [Building showcase tools](docs/en/Building_Terminal_Showcase_Tools.md): reproducible recipes for Sigye and animated-Kitty Fastfetch, on device and cross-built.

@@ -30,11 +30,13 @@ public final class TaiCatalogControlsPreference extends Preference {
     public interface OnControlsListener {
         void onBackendSelected(@NonNull String backend);
         void onInstallSelected(@NonNull String install);
+        void onSortSelected(@NonNull String sort);
         void onSearchSubmitted(@NonNull String query);
     }
 
     private String backendValue = BACKEND_ALL;
     private String installValue = INSTALL_ALL;
+    private String sortValue = "downloaded";
     private String searchText = "";
     @Nullable private OnControlsListener listener;
 
@@ -53,6 +55,14 @@ public final class TaiCatalogControlsPreference extends Preference {
         this.listener = listener;
     }
 
+    public void setValues(String backend, String install, String sort, String search) {
+        backendValue = backend;
+        installValue = install;
+        sortValue = sort;
+        searchText = search;
+        notifyChanged();
+    }
+
     @Override
     public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
@@ -60,6 +70,22 @@ public final class TaiCatalogControlsPreference extends Preference {
         TextView install = (TextView) holder.findViewById(R.id.tai_catalog_install_pill);
         EditText search = (EditText) holder.findViewById(R.id.tai_catalog_search_input);
 
+        TextView sort = (TextView) holder.findViewById(R.id.tai_catalog_sort_pill);
+        if (sort != null) {
+            sort.setText(sortLabel(sortValue));
+            sort.setOnClickListener(v -> {
+                PopupMenu menu = new PopupMenu(sort.getContext(), sort);
+                String[] values = {"downloaded", "name", "size"};
+                for (int i = 0; i < values.length; i++) menu.getMenu().add(0, i, i, sortLabel(values[i]));
+                menu.setOnMenuItemClickListener(item -> {
+                    sortValue = values[item.getItemId()];
+                    sort.setText(sortLabel(sortValue));
+                    if (listener != null) listener.onSortSelected(sortValue);
+                    return true;
+                });
+                menu.show();
+            });
+        }
         if (backend != null) {
             backend.setText(backendLabel(backendValue));
             backend.setOnClickListener(v -> showBackendMenu(backend));
@@ -109,6 +135,11 @@ public final class TaiCatalogControlsPreference extends Preference {
             return true;
         });
         menu.show();
+    }
+
+    private String sortLabel(String value) {
+        return getContext().getString("name".equals(value) ? R.string.termux_ai_sort_name
+            : "size".equals(value) ? R.string.termux_ai_sort_size : R.string.termux_ai_sort_downloaded);
     }
 
     @NonNull

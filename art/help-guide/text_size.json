@@ -1,0 +1,63 @@
+{
+  "id": "text_size",
+  "crop": [
+    [
+      0,
+      40,
+      600,
+      420
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.8001272950023122,
+      "kind": "swipe",
+      "points": [
+        200,
+        450,
+        110,
+        450
+      ],
+      "duration": 0.8
+    },
+    {
+      "t": 0.8001272950023122,
+      "kind": "swipe",
+      "points": [
+        400,
+        450,
+        490,
+        450
+      ],
+      "duration": 0.8
+    },
+    {
+      "t": 6.017239554999833,
+      "kind": "swipe",
+      "points": [
+        110,
+        450,
+        200,
+        450
+      ],
+      "duration": 0.8
+    },
+    {
+      "t": 6.017239554999833,
+      "kind": "swipe",
+      "points": [
+        490,
+        450,
+        400,
+        450
+      ],
+      "duration": 0.8
+    }
+  ],
+  "duration": 11.47,
+  "bytes": 189729,
+  "width": 600,
+  "height": 420,
+  "video": "text_size.mp4",
+  "poster": "text_size.jpg"
+}

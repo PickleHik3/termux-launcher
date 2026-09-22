@@ -338,6 +338,39 @@ public class KeyboardGeometryChoreographerTest {
     }
 
     @Test
+    public void aDockedKeyboardIsCappedAgainstTheContentRootItIsMeasuredIn() {
+        mSurface.keyboardContainer.measuredHeight = 420;
+
+        assertEquals(420, mChoreographer.measureHeightPx());
+        assertEquals("measured against the full content root, not the accessory stack",
+            1080, mSurface.keyboardContainer.getMeasuredWidth());
+        assertEquals(1920, mChoreographer.heightCapReferencePx());
+    }
+
+    @Test
+    public void aFloatingKeyboardReservesNoStackHeightAndIsCappedAgainstItsFrame() {
+        mSurface.keyboardContainer.measuredHeight = 420;
+        mChoreographer.measureHeightPx();
+        int passesWhileDocked = mSurface.keyboardContainer.measurePasses;
+
+        mSurface.floatingReference =
+            new KeyboardGeometryChoreographer.HostReference(648, 1600);
+
+        // The frame draws over the place rather than standing in the stack, so there is nothing
+        // for the stack to reserve and nothing for the content root to give back.
+        assertEquals(0, mChoreographer.measureHeightPx());
+        // And the frame, not the content root, is what the fractional height cap is a share of.
+        assertEquals(1600, mChoreographer.heightCapReferencePx());
+        assertEquals("the frame's own layout pass measures it",
+            passesWhileDocked, mSurface.keyboardContainer.measurePasses);
+
+        // Docked again, the stack reserves it again.
+        mSurface.floatingReference = null;
+        assertEquals(420, mChoreographer.measureHeightPx());
+        assertEquals(1920, mChoreographer.heightCapReferencePx());
+    }
+
+    @Test
     public void previewInvalidationDropsTheBoundsKeyTooBecauseThoseDoNotChange() {
         mSurface.keyboardContainer.measuredHeight = 420;
         assertEquals(420, mChoreographer.measureHeightPx());
@@ -484,6 +517,8 @@ public class KeyboardGeometryChoreographerTest {
         final List<String> geometryReasons = new ArrayList<>();
         final List<Posted> posted = new ArrayList<>();
 
+        @Nullable KeyboardGeometryChoreographer.HostReference floatingReference;
+
         boolean glassSurface;
         boolean blurEnabled = true;
         boolean backdropReady;
@@ -522,6 +557,12 @@ public class KeyboardGeometryChoreographerTest {
         @Override
         public View attachedKeyboardView() {
             return null;
+        }
+
+        @Nullable
+        @Override
+        public KeyboardGeometryChoreographer.HostReference floatingKeyboardReference() {
+            return floatingReference;
         }
 
         @NonNull

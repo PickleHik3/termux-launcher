@@ -21,8 +21,7 @@ public class StylePreferencesInstrumentationTest {
     private static final String[] STYLE_PREFERENCE_KEYS = {
             "use_system_wallpaper",
             "terminal_background_opacity",
-            "app_bar_opacity",
-            "sessions_opacity"
+            "app_bar_opacity"
     };
 
     @Rule

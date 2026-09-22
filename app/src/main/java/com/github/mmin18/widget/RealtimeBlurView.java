@@ -138,11 +138,14 @@ public class RealtimeBlurView extends View {
     public void setOverlayColor(int color) {
         if (mOverlayColor != color) {
             mOverlayColor = color;
+            // The tint is baked into the capture, so a resting view has to take one more.
+            mHasCapture = false;
             invalidate();
         }
     }
 
     private void releaseBitmap() {
+        mHasCapture = false;
         if (mBitmapToBlur != null) {
             mBitmapToBlur.recycle();
             mBitmapToBlur = null;
@@ -262,11 +265,49 @@ public class RealtimeBlurView extends View {
      * can rest it and resume when its own geometry starts moving again.
      */
     private boolean mUpdatesPaused;
+    /** True once the current bitmaps hold a capture; a paused view without one still captures. */
+    private boolean mHasCapture;
+    /** Set by {@link #refreshThenRest()}: take one more capture, then pause. */
+    private boolean mRestAfterCapture;
 
     public void setUpdatesPaused(boolean paused) {
+        if (!paused) mRestAfterCapture = false;
         if (mUpdatesPaused == paused) return;
         mUpdatesPaused = paused;
         if (!paused) invalidate();
+    }
+
+    /**
+     * Takes one fresh capture on the next frame and rests on it. For a surface whose backdrop
+     * only changes when its own geometry does: it asks for this when it settles, and again after
+     * anything that moved what is behind it, instead of re-rasterising the decor every frame.
+     *
+     * <p>A resting view is never left showing a frame from another size, tint or blur radius: a
+     * change to any of those, or a return to visibility, clears the capture and the next pre-draw
+     * takes a new one even while paused.
+     */
+    public void refreshThenRest() {
+        mRestAfterCapture = true;
+        mUpdatesPaused = false;
+        invalidate();
+    }
+
+    /** Visible for tests: whether the pre-draw hook is currently skipping captures. */
+    public boolean isUpdatesPaused() {
+        return mUpdatesPaused;
+    }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        mHasCapture = false;
+    }
+
+    @Override
+    public void onVisibilityAggregated(boolean isVisible) {
+        super.onVisibilityAggregated(isVisible);
+        // Whatever was behind this view while it was hidden may have changed under it.
+        if (isVisible) mHasCapture = false;
     }
 
     private final ViewTreeObserver.OnPreDrawListener mPreDrawListener = new ViewTreeObserver.OnPreDrawListener() {
@@ -275,7 +316,8 @@ public class RealtimeBlurView extends View {
             int[] locations = new int[2];
             Bitmap oldBmp = BLUR_ON_GPU ? mBitmapToBlur : mBlurredBitmap;
             View decor = mDecorView;
-            if (decor != null && !mUpdatesPaused && isShown() && prepare()) {
+            boolean stale = !mHasCapture || mDirty;
+            if (decor != null && (!mUpdatesPaused || stale) && isShown() && prepare()) {
                 boolean redrawBitmap = (BLUR_ON_GPU ? mBitmapToBlur : mBlurredBitmap) != oldBmp;
 
                 decor.getLocationOnScreen(locations);
@@ -309,8 +351,13 @@ public class RealtimeBlurView extends View {
                 }
 
                 blur(mBitmapToBlur, mBlurredBitmap);
+                mHasCapture = true;
+                if (mRestAfterCapture) {
+                    mRestAfterCapture = false;
+                    mUpdatesPaused = true;
+                }
 
-                if (redrawBitmap || mDifferentRoot) {
+                if (redrawBitmap || mDifferentRoot || stale) {
                     invalidate();
                 }
             }

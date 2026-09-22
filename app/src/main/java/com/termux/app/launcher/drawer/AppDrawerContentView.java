@@ -138,6 +138,11 @@ public final class AppDrawerContentView extends FrameLayout
     private final LauncherCategoryOverrideStore mCategoryOverrides;
     private final LauncherCategoryAssignmentSource mCategoryAssignments;
     private final AppDrawerCategoryClassifier mCategoryClassifier;
+    /** What the last category pass classified, so an identical rebind skips the pipeline. */
+    @Nullable private List<String> mClassifiedIds;
+    private long mClassifiedUsageVersion = -1L;
+    private long mClassifiedAtMs;
+    private static final long CLASSIFY_REUSE_WINDOW_MS = 60_000L;
     private final AppDrawerCloseArmingPolicy mPolicy = new AppDrawerCloseArmingPolicy();
     private final NestedScrollingParentHelper mParentHelper = new NestedScrollingParentHelper(this);
     /**
@@ -488,11 +493,45 @@ public final class AppDrawerContentView extends FrameLayout
         if (hasQuery()) return;
         // An external edit or a finished sort run rewrites app-categories.conf behind our back.
         mCategoryAssignments.invalidate();
-        setCategoryBuckets(mCategoryClassifier.classify(mVisibleResults, mUsageStats,
-            AppDrawerSystemRoleResolver.resolve(getContext()), System.currentTimeMillis()));
-        logCategoryDebugReport();
+        classifyCatalogue(mVisibleResults, true);
         if (mViewType == AppDrawerViewType.CATEGORIES)
             mCategoryView.submitBuckets(mCategoryBuckets);
+    }
+
+    /**
+     * Runs the category pipeline over {@code catalogue}, unless the last run saw the same apps, the
+     * same usage history and happened within {@link #CLASSIFY_REUSE_WINDOW_MS}.
+     *
+     * <p>Every open rebinds the grid, and a rebind pushes the catalogue and then re-applies the
+     * results, so the pipeline ran two or three times per pull on identical input — each run a
+     * PackageManager round trip per default role plus a usage ranking, on the frame the gesture
+     * began. A slow device lost the drag to that stall. Overrides bypass the memo through
+     * {@code force}; time only enters the pipeline through the recently-added window and the usage
+     * decay, and neither moves inside the reuse window.
+     */
+    private void classifyCatalogue(@NonNull List<LauncherAppEntry> catalogue, boolean force) {
+        long now = System.currentTimeMillis();
+        long usageVersion = mUsageStats.version();
+        if (!force && mClassifiedIds != null && usageVersion == mClassifiedUsageVersion
+            && now - mClassifiedAtMs >= 0 && now - mClassifiedAtMs < CLASSIFY_REUSE_WINDOW_MS
+            && sameCatalogue(catalogue, mClassifiedIds))
+            return;
+        setCategoryBuckets(mCategoryClassifier.classify(catalogue, mUsageStats,
+            AppDrawerSystemRoleResolver.resolve(getContext()), now));
+        logCategoryDebugReport();
+        List<String> ids = new ArrayList<>(catalogue.size());
+        for (LauncherAppEntry entry : catalogue) ids.add(entry.appRef.stableId());
+        mClassifiedIds = ids;
+        mClassifiedUsageVersion = usageVersion;
+        mClassifiedAtMs = now;
+    }
+
+    private static boolean sameCatalogue(@NonNull List<LauncherAppEntry> catalogue,
+                                         @NonNull List<String> ids) {
+        if (catalogue.size() != ids.size()) return false;
+        for (int i = 0; i < ids.size(); i++)
+            if (!ids.get(i).equals(catalogue.get(i).appRef.stableId())) return false;
+        return true;
     }
 
     private void logCategoryDebugReport() {
@@ -1010,9 +1049,7 @@ public final class AppDrawerContentView extends FrameLayout
         // package refreshes, direct search-controller fixtures and query-clear all on the same
         // atomic model path; ranked non-empty results never replace the category model.
         if (!hasQuery()) {
-            setCategoryBuckets(mCategoryClassifier.classify(results, mUsageStats,
-                AppDrawerSystemRoleResolver.resolve(getContext()), System.currentTimeMillis()));
-            logCategoryDebugReport();
+            classifyCatalogue(results, false);
         }
         // The list identity changed under whatever menu was open, and every cell it was anchored to
         // is about to be rebound.

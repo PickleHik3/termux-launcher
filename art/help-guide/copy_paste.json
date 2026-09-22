@@ -1,0 +1,59 @@
+{
+  "id": "copy_paste",
+  "crop": [
+    [
+      0,
+      40,
+      600,
+      600
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.8002568520023488,
+      "kind": "swipe",
+      "points": [
+        60,
+        112,
+        60,
+        112
+      ],
+      "duration": 0.7
+    },
+    {
+      "t": 4.668318629002897,
+      "kind": "tap",
+      "points": [
+        55,
+        60
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 8.033301313000266,
+      "kind": "swipe",
+      "points": [
+        300,
+        600,
+        300,
+        600
+      ],
+      "duration": 0.7
+    },
+    {
+      "t": 11.955988205001631,
+      "kind": "tap",
+      "points": [
+        294,
+        555
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 15.87,
+  "bytes": 111956,
+  "width": 600,
+  "height": 600,
+  "video": "copy_paste.mp4",
+  "poster": "copy_paste.jpg"
+}

@@ -17,6 +17,9 @@ public final class Theme
   public final int colorKeyActivated;
   public final int colorKeyAction;
   public final int colorKeySpaceBar;
+  /** Background of an Action-role key that is not the actual editor action (enter) key —
+      modifiers, backspace, arrows, layout switch, config. See {@link Palette#functionKeyBackground}. */
+  public final int colorKeyFunction;
 
   public final int lockedColor;
   public final int activatedColor;
@@ -29,6 +32,10 @@ public final class Theme
   public final int actionSubLabelColor;
   public final int actionSecondaryLabelColor;
   public final int actionGreyedLabelColor;
+  public final int functionLabelColor;
+  public final int functionSubLabelColor;
+  public final int functionSecondaryLabelColor;
+  public final int functionGreyedLabelColor;
   /** Left-to-right gradient stops for the indicator strip, or null when disabled. */
   public final int[] indicatorColors;
   /** Overlays composited over each key fill as a top-to-bottom gradient; 0 disables. */
@@ -55,6 +62,7 @@ public final class Theme
     colorKeyActivated = palette.activatedKeyBackground;
     colorKeyAction = palette.actionKeyBackground;
     colorKeySpaceBar = palette.spaceBarBackground;
+    colorKeyFunction = palette.functionKeyBackground;
     labelColor = palette.labelColor;
     subLabelColor = palette.subLabelColor;
     secondaryLabelColor = adjustLight(palette.labelColor, palette.secondaryDimming);
@@ -63,6 +71,10 @@ public final class Theme
     actionSubLabelColor = palette.actionSubLabelColor;
     actionSecondaryLabelColor = adjustLight(palette.actionLabelColor, palette.secondaryDimming);
     actionGreyedLabelColor = adjustLight(palette.actionLabelColor, palette.greyedDimming);
+    functionLabelColor = palette.functionLabelColor;
+    functionSubLabelColor = palette.functionLabelColor;
+    functionSecondaryLabelColor = adjustLight(palette.functionLabelColor, palette.secondaryDimming);
+    functionGreyedLabelColor = adjustLight(palette.functionLabelColor, palette.greyedDimming);
     indicatorColors = palette.indicatorColors;
     keyGradientTopOverlay = palette.keyGradientTopOverlay;
     keyGradientBottomOverlay = palette.keyGradientBottomOverlay;
@@ -138,6 +150,14 @@ public final class Theme
     /** Overlays composited over each key fill as a top-to-bottom gradient; 0 disables. */
     public final int keyGradientTopOverlay;
     public final int keyGradientBottomOverlay;
+    /** Background of an Action-role key that is not the actual enter/editor-action key —
+        modifiers, backspace, arrows, layout switch, config. Local addition: upstream's single
+        Action role has no slot distinguishing "function key" from "the action key itself"; see
+        inapp-keyboard/UPSTREAM.md. Defaults to {@link #keyBackground} for callers that do not
+        set it, so an unmigrated palette renders function keys like ordinary letter keys. */
+    public final int functionKeyBackground;
+    /** Label (and sub-label) color for a function key; see {@link #functionKeyBackground}. */
+    public final int functionLabelColor;
 
     public Palette(int keyboardBackground, int keyBackground,
         int actionKeyBackground, int spaceBarBackground,
@@ -195,6 +215,28 @@ public final class Theme
         int actionLabelColor, int actionSubLabelColor, int[] indicatorColors,
         int keyGradientTopOverlay, int keyGradientBottomOverlay)
     {
+      this(keyboardBackground, keyBackground, actionKeyBackground,
+          spaceBarBackground, activatedKeyBackground, labelColor, subLabelColor,
+          activatedLabelColor, pressedLabelColor, lockedModifierColor,
+          borderColor, borderEnabled, borderWidth, borderRadius, opacity,
+          secondaryDimming, greyedDimming, actionLabelColor, actionSubLabelColor,
+          indicatorColors, keyGradientTopOverlay, keyGradientBottomOverlay,
+          keyBackground, labelColor);
+    }
+
+    /** Full constructor; every shorter overload defaults the function-key colors to the
+        letter-key ones so an unmigrated caller renders function keys like ordinary keys. */
+    public Palette(int keyboardBackground, int keyBackground,
+        int actionKeyBackground, int spaceBarBackground,
+        int activatedKeyBackground, int labelColor, int subLabelColor,
+        int activatedLabelColor, int pressedLabelColor,
+        int lockedModifierColor, int borderColor, boolean borderEnabled,
+        float borderWidth, float borderRadius, float opacity,
+        float secondaryDimming, float greyedDimming,
+        int actionLabelColor, int actionSubLabelColor, int[] indicatorColors,
+        int keyGradientTopOverlay, int keyGradientBottomOverlay,
+        int functionKeyBackground, int functionLabelColor)
+    {
       if (borderWidth < 0f || borderRadius < 0f)
         throw new IllegalArgumentException("Border dimensions must not be negative");
       if (opacity < 0f || opacity > 1f)
@@ -226,6 +268,8 @@ public final class Theme
       this.indicatorColors = indicatorColors == null ? null : indicatorColors.clone();
       this.keyGradientTopOverlay = keyGradientTopOverlay;
       this.keyGradientBottomOverlay = keyGradientBottomOverlay;
+      this.functionKeyBackground = functionKeyBackground;
+      this.functionLabelColor = functionLabelColor;
     }
 
     static Palette fromStyle(Context context, AttributeSet attrs)
@@ -268,6 +312,9 @@ public final class Theme
     public final Key key;
     public final Key key_activated;
     public final Key key_action;
+    /** The Action role's non-enter keys — modifiers, backspace, arrows, layout switch, config.
+        See {@link Key#Key} and {@link Palette#functionKeyBackground}. */
+    public final Key key_function;
     public final Key key_space_bar;
     public final Key key_suggestion;
 
@@ -287,15 +334,17 @@ public final class Theme
       margin_top = config.marginTopPx + vertical_margin / 2f;
       margin_left = horizontal_margin / 2f;
       key = new Key(theme, config, false, KeyboardData.Key.Role.Normal,
-          keyCornerRadiusOverridePx, keyOpacityOverride);
+          keyCornerRadiusOverridePx, keyOpacityOverride, false);
       key_action = new Key(theme, config, false, KeyboardData.Key.Role.Action,
-          keyCornerRadiusOverridePx, keyOpacityOverride);
+          keyCornerRadiusOverridePx, keyOpacityOverride, false);
+      key_function = new Key(theme, config, false, KeyboardData.Key.Role.Action,
+          keyCornerRadiusOverridePx, keyOpacityOverride, true);
       key_space_bar = new Key(theme, config, false, KeyboardData.Key.Role.Space_bar,
-          keyCornerRadiusOverridePx, keyOpacityOverride);
+          keyCornerRadiusOverridePx, keyOpacityOverride, false);
       key_activated = new Key(theme, config, true, KeyboardData.Key.Role.Normal,
-          keyCornerRadiusOverridePx, keyOpacityOverride);
+          keyCornerRadiusOverridePx, keyOpacityOverride, false);
       key_suggestion = new Key(theme, config, false, KeyboardData.Key.Role.Suggestion,
-          keyCornerRadiusOverridePx, keyOpacityOverride);
+          keyCornerRadiusOverridePx, keyOpacityOverride, false);
       indication_paint = init_label_paint(config.labelFont);
       indication_paint.setColor(theme.subLabelColor);
     }
@@ -340,6 +389,20 @@ public final class Theme
           KeyboardData.Key.Role role, float keyCornerRadiusOverridePx,
           float keyOpacityOverride)
       {
+        this(theme, config, activated, role, keyCornerRadiusOverridePx,
+            keyOpacityOverride, false);
+      }
+
+      /**
+       * [functionStyle] selects the function-key rendition of the Action role — every
+       * Action-role key except the actual enter/editor-action key, which the host
+       * (Keyboard2View) tells apart at draw time by inspecting the key's value, since
+       * upstream layouts give both the same role. See {@link Palette#functionKeyBackground}.
+       */
+      public Key(Theme theme, Config config, boolean activated,
+          KeyboardData.Key.Role role, float keyCornerRadiusOverridePx,
+          float keyOpacityOverride, boolean functionStyle)
+      {
         border_radius = keyCornerRadiusOverridePx >= 0f
             ? keyCornerRadiusOverridePx
             : (config.bordersEnabled ? config.borderRadiusPx : theme.keyBorderRadius);
@@ -357,7 +420,7 @@ public final class Theme
           switch (role)
           {
             case Action:
-              bg_color = theme.colorKeyAction;
+              bg_color = functionStyle ? theme.colorKeyFunction : theme.colorKeyAction;
               border_width = config.bordersEnabled
                   ? config.borderWidthPx : theme.keyBorderWidthAction;
               break;
@@ -378,14 +441,31 @@ public final class Theme
           }
           alpha = config.keyOpacity;
         }
-        boolean actionRole = role == KeyboardData.Key.Role.Action
-            || role == KeyboardData.Key.Role.Space_bar;
-        labelColor = actionRole ? theme.actionLabelColor : theme.labelColor;
-        subLabelColor = actionRole ? theme.actionSubLabelColor : theme.subLabelColor;
-        secondaryLabelColor = actionRole
-            ? theme.actionSecondaryLabelColor : theme.secondaryLabelColor;
-        greyedLabelColor = actionRole
-            ? theme.actionGreyedLabelColor : theme.greyedLabelColor;
+        // Space_bar shares the letter keys' tone (see InAppKeyboardPaletteFactory), so it reads
+        // its label from the same source as Normal; only the true action/enter key — Action
+        // role, not function-styled — uses the dedicated action label colors.
+        boolean actionRole = role == KeyboardData.Key.Role.Action && !functionStyle;
+        if (functionStyle)
+        {
+          labelColor = theme.functionLabelColor;
+          subLabelColor = theme.functionSubLabelColor;
+          secondaryLabelColor = theme.functionSecondaryLabelColor;
+          greyedLabelColor = theme.functionGreyedLabelColor;
+        }
+        else if (actionRole)
+        {
+          labelColor = theme.actionLabelColor;
+          subLabelColor = theme.actionSubLabelColor;
+          secondaryLabelColor = theme.actionSecondaryLabelColor;
+          greyedLabelColor = theme.actionGreyedLabelColor;
+        }
+        else
+        {
+          labelColor = theme.labelColor;
+          subLabelColor = theme.subLabelColor;
+          secondaryLabelColor = theme.secondaryLabelColor;
+          greyedLabelColor = theme.greyedLabelColor;
+        }
         // A host-set absolute opacity replaces the theme/config translucency stack entirely,
         // so 100% really is opaque even when the theme keys are glass. Pressed (activated)
         // caps keep their theme look so press feedback stays distinct, and roles the theme

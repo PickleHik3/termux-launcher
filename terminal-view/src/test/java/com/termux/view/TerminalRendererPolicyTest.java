@@ -11,7 +11,6 @@ import com.termux.terminal.TextStyle;
 
 import org.junit.Test;
 
-import java.util.HashMap;
 
 public class TerminalRendererPolicyTest {
 
@@ -92,23 +91,6 @@ public class TerminalRendererPolicyTest {
                 TerminalRenderer.symbolSetting(null, shared), "'wght' 600"));
         assertTrue("text runs carry no symbol settings and must not be split",
             TerminalRenderer.sameSymbolSettings(null, null, null, null));
-    }
-
-    @Test
-    public void variationCacheKeepsOneEntryPerFaceAndAxisSetAndReusesItOnRepeatedLookups() {
-        HashMap<String, String> cache = new HashMap<>();
-        final int base = 4711;
-        cache.put(TerminalRenderer.variationKey(base, "'wght' 600"), "bold instance");
-        cache.put(TerminalRenderer.variationKey(base, "'wght' 300"), "light instance");
-
-        assertEquals("one base face with two axis sets must be two instances", 2, cache.size());
-        assertEquals("bold instance",
-            cache.get(TerminalRenderer.variationKey(base, "'wght' 600")));
-        cache.put(TerminalRenderer.variationKey(base, "'wght' 600"), "bold instance");
-        assertEquals("a repeated lookup must hit the instance already built", 2, cache.size());
-        assertNotEquals("two base faces with one axis set must be two instances",
-            TerminalRenderer.variationKey(base, "'wght' 600"),
-            TerminalRenderer.variationKey(base + 1, "'wght' 600"));
     }
 
     @Test

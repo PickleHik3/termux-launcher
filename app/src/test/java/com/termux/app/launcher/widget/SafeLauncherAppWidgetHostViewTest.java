@@ -1,6 +1,8 @@
 package com.termux.app.launcher.widget;
 
 import android.app.Application;
+import android.appwidget.AppWidgetHostView;
+import android.appwidget.AppWidgetProviderInfo;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.BitmapDrawable;
@@ -18,16 +20,27 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.Implementation;
+import org.robolectric.annotation.Implements;
+import org.robolectric.annotation.RealObject;
+import org.robolectric.shadows.ShadowAppWidgetHostView;
+import org.robolectric.util.reflector.Direct;
+import org.robolectric.util.reflector.ForType;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.robolectric.util.reflector.Reflector.reflector;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.S, application = Application.class)
@@ -132,6 +145,141 @@ public class SafeLauncherAppWidgetHostViewTest {
             android.R.layout.simple_list_item_1));
         assertEquals("a genuine provider update gets one new attempt", 2, updateAttempts[0]);
         assertFalse(view.isShowingLocalError());
+    }
+
+    /**
+     * Robolectric replaces {@link AppWidgetHostView#updateAppWidget} with a plain inflate that
+     * knows nothing about executors, error views or content tracking, so the executor-backed
+     * apply path is only reachable by calling the real framework method. {@code setAppWidget} is
+     * called through as well, because the real path reads the provider info it stores.
+     */
+    @Implements(AppWidgetHostView.class)
+    public static class FrameworkApplyShadow extends ShadowAppWidgetHostView {
+        @ForType(AppWidgetHostView.class)
+        interface Direct1 {
+            @Direct void updateAppWidget(RemoteViews views);
+            @Direct void setAppWidget(int appWidgetId, AppWidgetProviderInfo info);
+        }
+
+        @RealObject AppWidgetHostView real;
+
+        @Implementation
+        @Override protected void setAppWidget(int appWidgetId, AppWidgetProviderInfo info) {
+            super.setAppWidget(appWidgetId, info);
+            reflector(Direct1.class, real).setAppWidget(appWidgetId, info);
+        }
+
+        @Implementation
+        @Override protected void updateAppWidget(RemoteViews remoteViews) {
+            reflector(Direct1.class, real).updateAppWidget(remoteViews);
+        }
+    }
+
+    @Test
+    @Config(shadows = FrameworkApplyShadow.class)
+    public void executorDefersProviderInflationPastTheUpdateCall() {
+        List<String> failures = new ArrayList<>();
+        SafeLauncherAppWidgetHostView view = boundView(failures);
+        ArrayDeque<Runnable> inflations = new ArrayDeque<>();
+        view.setExecutor(inflations::add);
+
+        view.updateAppWidget(provider(view));
+        assertEquals("inflation must not run on the caller's thread", 0, view.getChildCount());
+        assertEquals(1, inflations.size());
+
+        pump(inflations);
+        assertEquals(1, view.getChildCount());
+        assertFalse(view.isShowingLocalError());
+        assertEquals(0, failures.size());
+    }
+
+    @Test
+    @Config(shadows = FrameworkApplyShadow.class)
+    public void asyncInflationFailureThenTheSameLayoutAgainFailsAndRecovers() {
+        List<String> events = new ArrayList<>();
+        SafeLauncherAppWidgetHostView view = new SafeLauncherAppWidgetHostView(
+            ApplicationProvider.getApplicationContext(),
+            new SafeLauncherAppWidgetHostView.FailureListener() {
+                @Override public void onRenderFailure(int id, String phase) { events.add(phase); }
+                @Override public void onRenderRecovered(int id) { events.add("recovered"); }
+            });
+        view.setAppWidget(7, WidgetTestFixtures.info(false));
+        ArrayDeque<Runnable> inflations = new ArrayDeque<>();
+        view.setExecutor(inflations::add);
+
+        view.updateAppWidget(provider(view));
+        pump(inflations);
+        View providerChild = view.getChildAt(0);
+
+        // Layout id 0 inflates on the executor and fails there, not in updateAppWidget.
+        view.updateAppWidget(new RemoteViews(view.getContext().getPackageName(), 0));
+        assertFalse("the failure is only known once the executor has run",
+            view.isShowingLocalError());
+        pump(inflations);
+        assertTrue(view.isShowingLocalError());
+        assertEquals(Collections.singletonList("framework"), events);
+        assertEquals(1, view.getChildCount());
+        assertNotSame(providerChild, view.getChildAt(0));
+        assertNotNull(view.getChildAt(0).getContentDescription());
+
+        // Same layout id as the render that worked: the framework would otherwise reapply it onto
+        // the error tile and the widget would never come back.
+        view.updateAppWidget(provider(view));
+        pump(inflations);
+        assertFalse(view.isShowingLocalError());
+        assertEquals(Arrays.asList("framework", "recovered"), events);
+        assertEquals(1, view.getChildCount());
+        assertNotSame(providerChild, view.getChildAt(0));
+        assertNull(view.getChildAt(0).getTag());
+    }
+
+    @Test
+    @Config(shadows = FrameworkApplyShadow.class)
+    public void measureFailureReplacesTheProviderViewInThatFrameDespiteTheExecutor() {
+        List<String> failures = new ArrayList<>();
+        SafeLauncherAppWidgetHostView view = boundView(failures);
+        ArrayDeque<Runnable> inflations = new ArrayDeque<>();
+        view.setExecutor(inflations::add);
+        view.updateAppWidget(provider(view));
+        pump(inflations);
+        View providerChild = view.getChildAt(0);
+
+        view.setBoundaryProbeForTests(phase -> {
+            if ("measure".equals(phase)) throw new RuntimeException("provider");
+        });
+        int exact = View.MeasureSpec.makeMeasureSpec(120, View.MeasureSpec.EXACTLY);
+        view.measure(exact, exact);
+
+        assertTrue(view.isShowingLocalError());
+        assertEquals(1, view.getChildCount());
+        assertNotSame(providerChild, view.getChildAt(0));
+        assertEquals(1, failures.size());
+        assertTrue("the tile must not be queued on the executor", inflations.isEmpty());
+
+        view.setBoundaryProbeForTests(null);
+        view.updateAppWidget(provider(view));
+        assertEquals("later provider updates still go to the executor", 1, inflations.size());
+        pump(inflations);
+        assertFalse(view.isShowingLocalError());
+    }
+
+    private static SafeLauncherAppWidgetHostView boundView(List<String> failures) {
+        SafeLauncherAppWidgetHostView view = view(failures);
+        view.setAppWidget(7, WidgetTestFixtures.info(false));
+        return view;
+    }
+
+    private static RemoteViews provider(View view) {
+        return new RemoteViews(view.getContext().getPackageName(),
+            android.R.layout.simple_list_item_1);
+    }
+
+    /** Runs the queued inflations, then the main looper the framework applies them on. */
+    private static void pump(ArrayDeque<Runnable> inflations) {
+        while (!inflations.isEmpty()) {
+            inflations.poll().run();
+            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        }
     }
 
     private static SafeLauncherAppWidgetHostView view(List<String> failures) {

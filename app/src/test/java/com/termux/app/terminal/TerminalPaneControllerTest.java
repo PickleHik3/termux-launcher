@@ -11,6 +11,8 @@ import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.chrome.CornerTabGeometry;
+import com.termux.app.chrome.CornerZones;
 import com.termux.terminal.TerminalSession;
 import com.termux.view.TerminalView;
 
@@ -30,6 +32,7 @@ import org.robolectric.util.ReflectionHelpers;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -72,10 +75,19 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
-    public void interactionOverlay_isAbsentForLonePaneButPersistsWhileMaximized() {
-        assertFalse(TerminalPaneController.shouldShowInteractionOverlay(1, false));
+    public void interactionOverlay_coversEveryPaneTreeButNotAnEmptyOne() {
+        assertFalse(TerminalPaneController.shouldShowInteractionOverlay(0, false));
+        assertTrue(TerminalPaneController.shouldShowInteractionOverlay(1, false));
         assertTrue(TerminalPaneController.shouldShowInteractionOverlay(2, false));
         assertTrue(TerminalPaneController.shouldShowInteractionOverlay(1, true));
+    }
+
+    @Test
+    public void lonePane_isOneUnsplitPaneOnly() {
+        assertTrue(TerminalPaneController.isLonePane(1, false));
+        assertFalse(TerminalPaneController.isLonePane(2, false));
+        assertFalse(TerminalPaneController.isLonePane(1, true));
+        assertFalse(TerminalPaneController.isLonePane(0, false));
     }
 
     @Test
@@ -88,20 +100,168 @@ public class TerminalPaneControllerTest {
             TerminalPaneController.snapFirstWeightToCell(2f, 1000f, 1.9f, 100f), .001f);
     }
 
+    /**
+     * A pane is taken hold of by its corners now, so the pane a touch resolves to follows the
+     * corner it landed in — and the middle of a shared seam, which used to arm a resize down its
+     * whole length, belongs to the terminals on both sides of it.
+     */
     @Test
-    public void touchedBorderIndex_preservesOriginalPaneOwnershipAtSharedDivider() {
+    public void paneOwnership_followsTheCornerAndLeavesTheSeamAlone() {
         java.util.List<RectF> panes = Arrays.asList(
             new RectF(0f, 0f, 499f, 500f),
             new RectF(501f, 0f, 1000f, 500f));
 
-        assertEquals(0, TerminalPaneController.touchedBorderIndex(
-            panes, 1, 498f, 250f, 12f));
-        assertEquals(1, TerminalPaneController.touchedBorderIndex(
-            panes, 0, 502f, 250f, 12f));
-        assertEquals(0, TerminalPaneController.touchedBorderIndex(
-            panes, 0, 500f, 250f, 12f));
-        assertEquals(1, TerminalPaneController.touchedBorderIndex(
-            panes, 1, 500f, 250f, 12f));
+        CornerZones.Hit first = CornerZones.pick(panes, 1, 495f, 5f, 32f, 6f);
+        assertEquals("the pane the finger is on", 0, first.index);
+        assertEquals(CornerZones.TOP_RIGHT, first.corner);
+
+        CornerZones.Hit second = CornerZones.pick(panes, 0, 505f, 495f, 32f, 6f);
+        assertEquals(1, second.index);
+        assertEquals(CornerZones.BOTTOM_LEFT, second.corner);
+
+        // The divider's own empty pixels at a corner go to the focused pane.
+        assertEquals(0, CornerZones.pick(panes, 0, 500f, 5f, 32f, 6f).index);
+        assertEquals(1, CornerZones.pick(panes, 1, 500f, 5f, 32f, 6f).index);
+
+        assertNull("the middle of the seam is the terminals'",
+            CornerZones.pick(panes, 0, 500f, 250f, 32f, 6f));
+        assertNull("and so is the middle of a pane's edge",
+            CornerZones.pick(panes, 0, 250f, 499f, 32f, 6f));
+    }
+
+    /**
+     * Which seams a pane corner drags: the one it is the end of, both where two cross, and none
+     * belonging to a split it is not part of.
+     */
+    @Test
+    public void cornerDragsSeam_takesTheSeamsItsOwnCornerSitsOn() {
+        // A vertical seam at x = 500, running the full height of a split from y = 0 to y = 500.
+        assertTrue("the corner is the seam's end",
+            TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 499f, 0f, 14f));
+        assertTrue("and its other end",
+            TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 501f, 500f, 14f));
+        assertFalse("the pane's far corner is not on it",
+            TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 0f, 0f, 14f));
+        assertFalse("a corner in another branch only lines up by accident",
+            TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 499f, 900f, 14f));
+    }
+
+    /**
+     * A touch on the seam between two panes raises the tab out of the touched pane's own corner on
+     * the side the finger is on — the tab hangs off the edge the user is touching, never across the
+     * divider onto the neighbour and never at the pane's far edge.
+     */
+    @Test
+    public void dividerTouch_raisesTheTabAtTheCornerTheFingerIsOn() {
+        // A vertical seam at x = 500 between two side-by-side panes.
+        RectF left = new RectF(0f, 0f, 499f, 500f);
+        RectF right = new RectF(501f, 0f, 1000f, 500f);
+        assertEquals(CornerZones.TOP_RIGHT,
+            TerminalPaneController.cornerNearestPoint(left, 500f, 5f));
+        assertEquals(CornerZones.TOP_LEFT,
+            TerminalPaneController.cornerNearestPoint(right, 500f, 5f));
+        assertEquals(CornerZones.BOTTOM_RIGHT,
+            TerminalPaneController.cornerNearestPoint(left, 500f, 495f));
+        assertEquals(CornerZones.BOTTOM_LEFT,
+            TerminalPaneController.cornerNearestPoint(right, 500f, 495f));
+
+        // A horizontal seam at y = 250 between two stacked panes.
+        RectF top = new RectF(0f, 0f, 1000f, 249f);
+        RectF bottom = new RectF(0f, 251f, 1000f, 500f);
+        assertEquals(CornerZones.BOTTOM_LEFT,
+            TerminalPaneController.cornerNearestPoint(top, 5f, 250f));
+        assertEquals(CornerZones.TOP_LEFT,
+            TerminalPaneController.cornerNearestPoint(bottom, 5f, 250f));
+        assertEquals(CornerZones.BOTTOM_RIGHT,
+            TerminalPaneController.cornerNearestPoint(top, 995f, 250f));
+        assertEquals(CornerZones.TOP_RIGHT,
+            TerminalPaneController.cornerNearestPoint(bottom, 995f, 250f));
+    }
+
+    /**
+     * A pane dropped or swapped rather than touched puts its tab at the top corner nearest where
+     * the finger let go, and keeps the wall's default corner when it has no frame to measure.
+     */
+    @Test
+    public void droppedPane_takesTheTopCornerNearestTheDrop() {
+        RectF pane = new RectF(0f, 0f, 500f, 500f);
+        assertEquals(CornerZones.TOP_LEFT,
+            TerminalPaneController.dropCorner(pane, 10f, 480f, CornerZones.TOP_RIGHT));
+        assertEquals(CornerZones.TOP_RIGHT,
+            TerminalPaneController.dropCorner(pane, 490f, 480f, CornerZones.TOP_LEFT));
+        assertEquals("a drop is answered at the top whichever half of the pane it landed in",
+            CornerZones.TOP_RIGHT,
+            TerminalPaneController.dropCorner(pane, 490f, 10f, CornerZones.TOP_LEFT));
+        assertEquals("a pane with no frame keeps the wall's default corner",
+            CornerZones.TOP_RIGHT,
+            TerminalPaneController.dropCorner(null, 10f, 10f, CornerZones.TOP_RIGHT));
+    }
+
+    /**
+     * And the border it lines up inside is the one that pane actually paints: the glass rim, the
+     * 1dp stroke a plain pane wears while it shares the wall, or nothing at all when it is alone
+     * and paints no border for the tab to line up against.
+     */
+    @Test
+    public void paneBorderStroke_isTheLineThePanePaints() {
+        assertEquals("the glass rim at 1x density",
+            1.25f, TerminalPaneController.paneBorderStrokePx(true, false, 1f), .001f);
+        assertEquals("and it never thins below a pixel",
+            1f, TerminalPaneController.paneBorderStrokePx(true, false, 0.5f), .001f);
+        assertEquals("a plain pane sharing the wall wears pane_active_border's 1dp",
+            2f, TerminalPaneController.paneBorderStrokePx(false, true, 2f), .001f);
+        assertEquals("a lone plain pane paints no border at all",
+            0f, TerminalPaneController.paneBorderStrokePx(false, false, 2f), .001f);
+    }
+
+    /**
+     * And the tab that corner produces lies inside the pane on both axes, flush against the side
+     * its corner is on — its outer edge is the pane's own border, which is what keeps one line
+     * around frame and tab together instead of two beside each other.
+     */
+    @Test
+    public void dividerTab_landsFlushInThePanesOwnCorner() {
+        RectF left = new RectF(0f, 0f, 499f, 500f);
+        RectF right = new RectF(501f, 0f, 1000f, 500f);
+        RectF top = new RectF(0f, 0f, 1000f, 249f);
+        RectF bottom = new RectF(0f, 251f, 1000f, 500f);
+        assertTabInsidePane(left, TerminalPaneController.cornerNearestPoint(left, 500f, 5f), 0f);
+        assertTabInsidePane(right,
+            TerminalPaneController.cornerNearestPoint(right, 500f, 495f), 0f);
+        assertTabInsidePane(top, TerminalPaneController.cornerNearestPoint(top, 995f, 250f), 0f);
+        assertTabInsidePane(bottom,
+            TerminalPaneController.cornerNearestPoint(bottom, 5f, 250f), 0f);
+        // A plain split pane's 1dp stroke, and a glass pane's rim: the tab lands inside the line.
+        assertTabInsidePane(left, CornerZones.TOP_RIGHT, 1f);
+        assertTabInsidePane(left, CornerZones.TOP_RIGHT,
+            TerminalPaneController.paneBorderStrokePx(true, false, 1f));
+        // A pane narrower than the tab asked for keeps it inside as well.
+        assertTabInsidePane(new RectF(0f, 0f, 60f, 500f), CornerZones.BOTTOM_LEFT, 1f);
+    }
+
+    /** The pane's tab at one corner, laid out the way the overlay lays it out, inside its pane. */
+    private static void assertTabInsidePane(RectF pane, int corner, float borderPx) {
+        float[] widths = {30f, 30f, 30f};
+        RectF tab = new RectF();
+        RectF[] buttons = {new RectF(), new RectF(), new RectF()};
+        CornerTabGeometry.layout(corner, pane, widths, 3, 8f, 5f, 32f, borderPx, 3f, 8f, 1f,
+            tab, buttons);
+        assertFalse("the tab has to exist to be inside anything", tab.isEmpty());
+        if (CornerZones.isLeft(corner)) {
+            assertEquals("the tab is flush inside the pane's own border",
+                pane.left + borderPx, tab.left, .001f);
+        } else {
+            assertEquals("the tab is flush inside the pane's own border",
+                pane.right - borderPx, tab.right, .001f);
+        }
+        assertTrue("never past the pane's sides",
+            tab.left >= pane.left - .001f && tab.right <= pane.right + .001f);
+        assertTrue("and never past its top or bottom once it is fully out",
+            tab.top >= pane.top - .001f && tab.bottom <= pane.bottom + .001f);
+        for (RectF button : buttons) {
+            assertTrue("every button sits in the tab",
+                button.left >= tab.left - .001f && button.right <= tab.right + .001f);
+        }
     }
 
     @Test
@@ -325,8 +485,8 @@ public class TerminalPaneControllerTest {
         assertTrue(controller.applyLayout(TerminalPaneController.LAYOUT_DWINDLE));
         assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
 
-        // The caller asked for side by side; a portrait pane stacks regardless.
-        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+        // No axis asked: a portrait pane stacks.
+        assertTrue(controller.splitAuto());
         TerminalPaneController.Split root = (TerminalPaneController.Split) window.root;
         assertEquals(LinearLayout.VERTICAL, root.orientation);
         assertTrue(root.b instanceof TerminalPaneController.Leaf);
@@ -334,7 +494,7 @@ public class TerminalPaneControllerTest {
 
         // The new (focused) pane is 600x500: wider than tall, so its split goes side by side.
         layoutHost(host, 600, 1000);
-        assertTrue(controller.split(LinearLayout.VERTICAL));
+        assertTrue(controller.splitAuto());
         root = (TerminalPaneController.Split) window.root;
         assertEquals(LinearLayout.VERTICAL, root.orientation);
         TerminalPaneController.Split lower = (TerminalPaneController.Split) root.b;
@@ -342,7 +502,7 @@ public class TerminalPaneControllerTest {
 
         // 300x500 stacks again.
         layoutHost(host, 600, 1000);
-        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+        assertTrue(controller.splitAuto());
         lower = (TerminalPaneController.Split) ((TerminalPaneController.Split) window.root).b;
         assertEquals(LinearLayout.VERTICAL, ((TerminalPaneController.Split) lower.b).orientation);
         assertEquals(4, controller.shellsOf(window).size());
@@ -355,6 +515,31 @@ public class TerminalPaneControllerTest {
         assertEquals(LinearLayout.HORIZONTAL, ((TerminalPaneController.Split) root.b).orientation);
         assertTrue(((TerminalPaneController.Split) root.b).b instanceof TerminalPaneController.Leaf);
         assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
+    }
+
+    /** A split rebuilds only the branch it touched; the other pane is never detached. */
+    @Test
+    public void aSplitLeavesTheUntouchedPaneInItsContainer() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        TerminalSession first = controller.getActiveSession();
+        assertTrue(controller.split(LinearLayout.VERTICAL));
+        android.view.View firstFrame =
+            (android.view.View) controller.getViewForSession(first).getParent();
+        android.view.ViewGroup rootContainer = (android.view.ViewGroup) firstFrame.getParent();
+        assertSame("the tiled tree is the host's first child", host.getChildAt(0), rootContainer);
+
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+
+        assertEquals(3, controller.shellsOf(window).size());
+        assertSame("the root container is reused", rootContainer, host.getChildAt(0));
+        assertSame("the first pane kept its slot", rootContainer, firstFrame.getParent());
+        assertSame(firstFrame, rootContainer.getChildAt(0));
+        assertEquals(3, rootContainer.getChildCount());
     }
 
     @Test
@@ -377,19 +562,40 @@ public class TerminalPaneControllerTest {
         assertEquals(0.5f, root.weightB, 0f);
 
         // A keyboard resize hand-shapes the other layouts out of management; dwindle keeps every
-        // ratio anyway, so it stays dwindle and the next split still follows the aspect rule.
+        // ratio anyway, so it stays dwindle and an axis-less split still follows the aspect rule.
         assertTrue(controller.resizeActive(android.view.KeyEvent.KEYCODE_DPAD_UP));
         assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
         layoutHost(host, 600, 1000);
-        // Whatever shape the resize left the focused pane in, the split must follow its aspect,
-        // not the requested axis — so ask for both and expect the aspect's answer each time.
         android.view.View frame = (android.view.View) controller.getViewForSession(
             controller.getActiveSession()).getParent();
         int expected = DwindleTilingPolicy.splitOrientationFor(frame.getWidth(), frame.getHeight());
-        assertTrue(controller.split(expected == LinearLayout.HORIZONTAL
-            ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL));
+        assertTrue(controller.splitAuto());
         assertEquals(expected, window.active.parent.orientation);
         assertEquals(TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
+    }
+
+    @Test
+    public void dwindle_honoursAnAxisTheSplitKeysAskFor() {
+        // The two split keys are directions. Under dwindle they used to be one key with two
+        // names: a portrait pane stacked for both, a landscape one went side by side for both.
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.applyLayout(TerminalPaneController.LAYOUT_DWINDLE));
+
+        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+        TerminalPaneController.Split root = (TerminalPaneController.Split) window.root;
+        assertEquals("side by side on a portrait pane, because that is what was asked",
+            LinearLayout.HORIZONTAL, root.orientation);
+
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.split(LinearLayout.VERTICAL));
+        TerminalPaneController.Split inner = (TerminalPaneController.Split) root.b;
+        assertEquals(LinearLayout.VERTICAL, inner.orientation);
+        assertEquals("the policy stays on; only the axis was the caller's",
+            TerminalPaneController.LAYOUT_DWINDLE, controller.activeLayoutPolicy());
     }
 
     @Test
@@ -1187,6 +1393,57 @@ public class TerminalPaneControllerTest {
             this.window = window;
             this.sessions = sessions;
         }
+    }
+
+    /**
+     * The glass pass runs twice a frame behind every chrome apply, and the usual reason it runs —
+     * a freshly blurred wallpaper frame — re-paints the slabs without moving a single corner. So
+     * it re-shapes the panes only when the shape itself moved.
+     */
+    @Test
+    public void aRepeatedPaneGlassPassLeavesThePaneShapeAlone() {
+        TerminalPaneController controller = newController();
+        TerminalSession session = terminal();
+        controller.showWindow(controller.newWindow(session));
+        controller.setSurfaceStyle(new FakePaneSurfaceStyle(12f));
+        Map<TerminalSession, PaneContentFrame> frames =
+            ReflectionHelpers.getField(controller, "mPaneFrames");
+        PaneContentFrame frame = frames.get(session);
+        assertEquals("the first pass shapes the pane", 12f, paneShapeRadius(frame), 0f);
+
+        // Only the shape pass writes this back, so a hand-set value survives a pass that skips it.
+        frame.setPaneShape(0f, false);
+        controller.setSurfaceStyle(new FakePaneSurfaceStyle(12f));
+        assertEquals("nothing moved, so the panes were not re-shaped",
+            0f, paneShapeRadius(frame), 0f);
+
+        controller.setSurfaceStyle(new FakePaneSurfaceStyle(24f));
+        assertEquals("a moved radius does reach them", 24f, paneShapeRadius(frame), 0f);
+    }
+
+    private static float paneShapeRadius(@NonNull PaneContentFrame frame) {
+        return ReflectionHelpers.getField(frame, "mRequestedRadiusPx");
+    }
+
+    /** Glass on, with one tunable: the radius, which is the pane's shape. */
+    private static final class FakePaneSurfaceStyle implements PaneSurfaceStyle {
+        private final float radiusPx;
+
+        FakePaneSurfaceStyle(float radiusPx) {
+            this.radiusPx = radiusPx;
+        }
+
+        @Override public boolean isPaneGlassActive() { return true; }
+        @Override public android.graphics.Bitmap paneGlassBlurFrame() { return null; }
+        @Override public android.graphics.Rect paneGlassBlurFrameRect() {
+            return new android.graphics.Rect(0, 0, 100, 200);
+        }
+        @Override public android.graphics.ColorFilter paneGlassFrostFilter() { return null; }
+        @Override public int paneGlassTintColor() { return 0x40000000; }
+        @Override public android.graphics.drawable.Drawable paneGlassGrainLayer() { return null; }
+        @Override public int paneGlassGrainStrength() { return 0; }
+        @Override public float paneGlassCornerRadiusPx() { return radiusPx; }
+        @Override public int paneGapDp() { return 4; }
     }
 
     private static TerminalPaneController newController() {

@@ -6,7 +6,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.widget.EditText;
 
-import com.termux.app.statusbar.TopStatusBarState;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -21,10 +20,12 @@ import static org.junit.Assert.*;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.S, application = Application.class)
 public class WidgetPanePagingTest {
-    @Test public void menuAddPageAppendsSwitchesAndRemoveReturns() {
+    @Test public void theAddedPageIsWhereASwipeGoesAndRemoveGivesItBack() {
         Fixture fixture = new Fixture();
         assertEquals(0, fixture.controller.currentPage());
         fixture.controller.menuAddPage();
+        assertEquals("the + turns to the page it added", 1, fixture.controller.currentPage());
+        fixture.controller.setCurrentPage(1);
         assertEquals(2, fixture.repository.pageCount());
         assertEquals(1, fixture.controller.currentPage());
         assertEquals(1, fixture.pane.currentPage());
@@ -35,9 +36,11 @@ public class WidgetPanePagingTest {
 
     @Test public void renderShowsOnlyTheCurrentPagesCellsAndFullCloseResetsToPageZero() {
         Fixture fixture = new Fixture();
-        fixture.controller.menuAddPage();
+        assertEquals(1, fixture.repository.addPage());
         assertTrue(fixture.repository.putRecord(record(1, new WidgetCellRect(0, 0, 1, 1), 0)));
         assertTrue(fixture.repository.putRecord(record(2, new WidgetCellRect(0, 0, 1, 1), 1)));
+        fixture.controller.onWidgetRepositoryChanged(
+            LauncherWidgetHostController.AddResult.IGNORED);
         fixture.controller.setCurrentPage(0);
         assertNotNull(fixture.pane.grid().cellForId(1));
         assertNull("page-1 widget must not render on page 0",
@@ -46,8 +49,8 @@ public class WidgetPanePagingTest {
         assertNotNull(fixture.pane.grid().cellForId(2));
         assertNull(fixture.pane.grid().cellForId(1));
 
-        fixture.controller.onFullFrame(0f);
-        assertEquals("the pane always reopens on page 0", 0, fixture.controller.currentPage());
+        fixture.controller.onWallPageShown(false);
+        assertEquals("the page always reopens on page 0", 0, fixture.controller.currentPage());
     }
 
     @Test public void menuAddWidgetOpensPickerAndNewWidgetsLandOnTheVisiblePage() {
@@ -56,15 +59,17 @@ public class WidgetPanePagingTest {
         assertTrue(fixture.pane.picker().isOpen());
         fixture.pane.picker().closeImmediate();
 
-        fixture.controller.menuAddPage();
+        // Page 0 holds a widget of its own, so the page the new one lands on keeps its number.
+        assertTrue(fixture.repository.putRecord(record(9, new WidgetCellRect(3, 4, 4, 5), 0)));
+        assertEquals(1, fixture.repository.addPage());
         fixture.platform.directBind = true;
         LauncherWidgetHostController.AddResult result = fixture.widgets.beginAdd(
             WidgetTestFixtures.info(false), new WidgetCellRect(0, 0, 1, 1), 1,
             fixture.repository.revision(), new Bundle(), null);
         assertEquals(LauncherWidgetHostController.AddResult.READY, result);
-        assertEquals(1, fixture.repository.records().size());
+        assertEquals(2, fixture.repository.records().size());
         assertEquals("the reservation's page is durable end-to-end",
-            1, fixture.repository.records().get(0).page);
+            1, fixture.repository.records().get(1).page);
     }
 
     @Test public void cellRelaysProviderEditorFocusToTheHost() {
@@ -111,11 +116,9 @@ public class WidgetPanePagingTest {
             activity.setContentView(pane);
             controller = new WidgetPaneController(pane, widgets, new WidgetPaneController.Host() {
                 @Override public boolean reducedMotion() { return true; }
-                @Override public boolean isFullEngaged() { return true; }
-                @Override public TopStatusBarState fullPriorState() {
-                    return TopStatusBarState.EXPANDED;
-                }
-                @Override public void restoreFull(TopStatusBarState prior) { }
+                @Override public boolean isWidgetSurfaceShowing() { return true; }
+                @Override public void captureWidgetSurfaceOrigin() { }
+                @Override public void restoreWidgetSurfaceOrigin() { }
             });
         }
     }

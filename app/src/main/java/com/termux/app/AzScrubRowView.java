@@ -18,7 +18,12 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatTextView;
 
+import com.termux.app.chrome.GlassInk;
+import com.termux.app.chrome.OnGlass;
+import com.termux.app.launcher.az.AzBarFrame;
+import com.termux.app.launcher.az.AzLetterTrack;
 import com.termux.app.launcher.az.AzScrubGesture;
+import com.termux.app.place.PlaceLayout.Edge;
 
 import java.util.Arrays;
 import java.util.LinkedHashSet;
@@ -72,18 +77,36 @@ public final class AzScrubRowView extends AppCompatTextView {
     @Nullable private ScrubCallback callback;
     private int currentSelectionIndex = 0;
     private final Paint letterPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    // Crisp dark outline drawn under each (light) letter so it stays legible over both light and dark
-    // wallpaper regions — a sharp stroke, unlike the old blurry drop-shadow which read as fuzzy.
+    // The halo stroke drawn under each letter: a sharp edge on the far side of the band from the
+    // fill, so a letter keeps its shape where the wallpaper under it matches it. Which side that is
+    // and how much of it is drawn are GlassInk's answer, not a constant.
     private final Paint letterOutlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Rect glyphRect = new Rect();
     private final Paint.FontMetrics letterFontMetrics = new Paint.FontMetrics();
     private final int[] locationOnScreen = new int[2];
-    private float activeTouchX = -1f;
+    /**
+     * The edge the bar stands on. Along the bottom — where the gesture was written — the letters
+     * run across the width and the wave lifts them up; on any other edge the same arithmetic is
+     * turned or mirrored by {@link AzBarFrame}, with the glyphs left upright.
+     */
+    @NonNull private Edge barEdge = Edge.BOTTOM;
+    /** Where the finger is along the letters: across a row's width, down a column's height. */
+    private float activeTouchAlong = -1f;
     private float waveStrength = 0f;
     private int accentColor = Color.WHITE;
-    // Softer than pure black: a desaturated near-black that keeps letters legible over any
-    // wallpaper without the harsh hard-edged look the old #000 stroke had.
-    private static final int OUTLINE_DARK = 0xFF1A1F2A;
+    /**
+     * The opaque colour the letters were measured to stand on, pushed in from what {@code ChromeInk}
+     * sampled under this row, or {@link Color#TRANSPARENT} before anything has been measured. Which
+     * side the halo goes and how much of it there is both come off this; see
+     * {@link #setGlassBackdrop}.
+     */
+    private int glassBackdrop = Color.TRANSPARENT;
+    /** The halo the current backdrop and fill colours resolve to; recomputed only when they move. */
+    private int haloRestingColor = withAlpha(GlassInk.HALO_DARK, 195);
+    private int haloFocusColor = withAlpha(GlassInk.HALO_DARK, 215);
+    private int haloCacheBackdrop = Color.WHITE;
+    private int haloCacheBase;
+    private int haloCacheFocus;
     // A slow "sword-glint" sweep position (runs off-screen to off-screen) that, while the row is
     // touched, brushes a soft material-colour shimmer across every letter's outline in turn.
     private float shimmerPhase = 0f;
@@ -91,19 +114,27 @@ public final class AzScrubRowView extends AppCompatTextView {
     @Nullable private ValueAnimator shimmerAnimator;
     @Nullable private ValueAnimator settleAnimator;
     private long lastTapUpTimeMs;
-    private float lastTapUpX = Float.NaN;
+    private float lastTapUpAlong = Float.NaN;
     private int doubleTapTimeoutMs;
     private int doubleTapSlopPx;
     private boolean suppressUpScrub;
     @NonNull private InteractionMode interactionMode = InteractionMode.WAVE_TRACK;
     @Nullable private Character lockedInlineLetter;
     private int activeLetterIndex = -1;
-    static final float LETTER_SLOT_HYSTERESIS_RATIO = 0.22f;
+    static final float LETTER_SLOT_HYSTERESIS_RATIO = AzLetterTrack.SLOT_HYSTERESIS_RATIO;
     private boolean interactionRenderActive;
     private boolean rowHapticsEnabled = true;
     private int lastHapticLetterIndex = -1;
-    /** Touchable dead space under the letters, given by the dock when this row is its bottom one. */
+    /** Touchable dead space beside the letters, on the side the bar stands on. */
     private int chinPaddingPx;
+    /**
+     * Which face of the bar the matches are on, as {@code AzPreviewTargetPolicy.Side}: false is the
+     * away face, where the pinned apps row has always been, and true the face against the screen's
+     * rim, which is where the row stands once the user orders it outside the letters.
+     */
+    private boolean previewTrackOutward;
+    /** Touchable air beside the letters, on the side away from the rim the bar stands on. */
+    private int crownPaddingPx;
     /**
      * True while the letters are not what the finger is choosing — it has climbed off this row and
      * is picking an icon out of the apps row, which ticks for itself.
@@ -129,7 +160,7 @@ public final class AzScrubRowView extends AppCompatTextView {
         setText("");
         setSingleLine(true);
         setTextSize(11f);
-        setPadding(0, dp(1), 0, dp(1));
+        applyEdgePadding();
         setClickable(true);
         updateInteractionRenderLayer(false);
         letterPaint.setTextAlign(Paint.Align.CENTER);
@@ -145,22 +176,95 @@ public final class AzScrubRowView extends AppCompatTextView {
     }
 
     /**
-     * Dead space under the letters, as bottom padding. The letters are placed off the bottom of the
-     * content box, so padding lifts them clear of the dock's rim and leaves the space below them
-     * inside the row — space that takes a touch like any other part of it.
+     * Dead space beside the letters, as padding on the side the bar stands on. The letters are
+     * placed off that side of the content box, so the padding lifts them clear of the dock's rim
+     * and leaves the space beyond them inside the bar — space that takes a touch like the rest.
      */
     public void setChinPaddingPx(int paddingPx) {
         int chin = Math.max(0, paddingPx);
         if (chin == chinPaddingPx)
             return;
         chinPaddingPx = chin;
-        setPadding(getPaddingLeft(), getPaddingTop(), getPaddingRight(), dp(1) + chin);
+        applyEdgePadding();
         invalidate();
     }
 
-    /** The band the letters are drawn in: this row's height without the chin under them. */
-    public int letterBandHeightPx() {
-        return Math.max(0, getHeight() - chinPaddingPx);
+    /**
+     * Stands the letters on {@code edge}: a row across the top or the bottom, a column down either
+     * side. Everything that follows — the chin's side, the wave's direction, which axis a touch is
+     * read along — comes off this one value, so there is no second layout to keep in step.
+     */
+    public void setBarEdge(@NonNull Edge edge) {
+        if (barEdge == edge)
+            return;
+        barEdge = edge;
+        applyEdgePadding();
+        activeTouchAlong = -1f;
+        activeLetterIndex = -1;
+        invalidate();
+    }
+
+    @NonNull
+    public Edge barEdge() {
+        return barEdge;
+    }
+
+    /** True while the letters are stacked down a column rather than laid along a row. */
+    public boolean isVerticalBar() {
+        return barEdge.isOnSide();
+    }
+
+    /**
+     * Air over the letters, as padding on the side away from the rim the bar stands on: the dock's
+     * row wears it when no apps row stands above it, so the letters are not hard under the glass's
+     * top edge. Like the chin it stays inside the bar and takes a touch like the rest.
+     */
+    public void setCrownPaddingPx(int paddingPx) {
+        int crown = Math.max(0, paddingPx);
+        if (crown == crownPaddingPx)
+            return;
+        crownPaddingPx = crown;
+        applyEdgePadding();
+        invalidate();
+    }
+
+    /** The 1dp of air the letters keep, plus the chin and the crown, on the bar's two sides. */
+    private void applyEdgePadding() {
+        int air = dp(1);
+        int chin = air + chinPaddingPx;
+        int crown = air + crownPaddingPx;
+        switch (barEdge) {
+            case TOP:
+                setPadding(0, chin, 0, crown);
+                break;
+            case LEFT:
+                setPadding(chin, 0, crown, 0);
+                break;
+            case RIGHT:
+                setPadding(crown, 0, chin, 0);
+                break;
+            case BOTTOM:
+            default:
+                setPadding(0, crown, 0, chin);
+                break;
+        }
+    }
+
+    /**
+     * Which side of the letters the matches fill, so the overshoot that picks one of them is
+     * measured towards the band it is picking from rather than always off the bar's away face.
+     *
+     * @param outward {@code AzPreviewTargetPolicy.Side#isOutward()} for the place on screen
+     */
+    public void setPreviewTrackOutward(boolean outward) {
+        if (previewTrackOutward == outward)
+            return;
+        previewTrackOutward = outward;
+    }
+
+    /** The band the letters are drawn in: the bar's thickness without the chin and crown beside them. */
+    public int letterBandThicknessPx() {
+        return Math.max(0, (isVerticalBar() ? getWidth() : getHeight()) - chinPaddingPx - crownPaddingPx);
     }
 
     private int dp(int value) {
@@ -171,29 +275,74 @@ public final class AzScrubRowView extends AppCompatTextView {
         return value * getResources().getDisplayMetrics().density;
     }
 
-    // Letters span the full row width (no inset). Kept as a band helper so the draw and the
-    // touch->letter mapping stay derived from one place.
-    private float letterInsetPx() {
-        return 0f;
+    // The letters span the bar's whole length, with no inset. Which length that is — a row's
+    // width or a column's height — is the only thing the draw and the touch mapping ask.
+    private float letterTrackLengthPx() {
+        return Math.max(1f, isVerticalBar() ? getHeight() : getWidth());
     }
 
-    private float letterContentWidth() {
-        return Math.max(1f, getWidth() - (letterInsetPx() * 2f));
+    private float letterSlotSizePx() {
+        return AzLetterTrack.slotSizePx(letterTrackLengthPx(), visibleLetters.length);
     }
 
-    private float letterSlotWidth() {
-        return letterContentWidth() / Math.max(1, visibleLetters.length);
+    private float letterCenterAlongPx(int index) {
+        return AzLetterTrack.centerPx(index, letterTrackLengthPx(), visibleLetters.length);
     }
 
-    private float letterCenterX(int index) {
-        float slot = letterSlotWidth();
-        return letterInsetPx() + (slot * index) + (slot * 0.5f);
+    private int indexForAlong(float alongPx) {
+        return AzLetterTrack.indexAt(alongPx, letterTrackLengthPx(), visibleLetters.length);
     }
 
-    private int indexForTouchX(float x) {
-        int len = Math.max(1, visibleLetters.length);
-        int index = (int) (((x - letterInsetPx()) / letterContentWidth()) * len);
-        return Math.max(0, Math.min(len - 1, index));
+    /** The frame that turns this bar's own touch points into the canonical bottom-bar ones. */
+    @NonNull
+    private AzBarFrame localFrame() {
+        return AzBarFrame.of(barEdge, getWidth(), getHeight());
+    }
+
+    /**
+     * The x a letter's glyph is centred on. A row centres it on its slot along the width; a column
+     * centres it across the visible band and lets the wave carry it away from the edge, which is
+     * sideways there rather than up.
+     */
+    private float letterDrawX(float alongCenterPx, float waveLiftPx) {
+        if (!isVerticalBar())
+            return alongCenterPx;
+        float band = Math.max(1f, getWidth() - getPaddingLeft() - getPaddingRight());
+        return barEdge == Edge.LEFT
+            ? getPaddingLeft() + (band * 0.5f) + waveLiftPx
+            : getWidth() - getPaddingRight() - (band * 0.5f) - waveLiftPx;
+    }
+
+    /**
+     * The baseline a letter sits on, for whatever text size {@code letterPaint} currently holds.
+     * A horizontal bar centres each glyph on the bar's own centre line and lets the wave carry it
+     * away from the edge; a column centres each glyph on its own slot down the bar.
+     */
+    private float letterDrawBaseline(float alongCenterPx, float waveLiftPx) {
+        letterPaint.getFontMetrics(letterFontMetrics);
+        if (isVerticalBar()) {
+            return alongCenterPx - ((letterFontMetrics.ascent + letterFontMetrics.descent) * 0.5f);
+        }
+        return horizontalLetterBaselinePx(getHeight(), letterFontMetrics.ascent,
+            letterFontMetrics.descent, waveLiftPx, barEdge);
+    }
+
+    /**
+     * Where a glyph sits on a horizontal bar: centred on the view's full-height centre line, chin
+     * included, with the scrub wave riding on top of that. The lift always carries the letter away
+     * from the screen edge the bar is docked against — down from a top bar, up from a bottom one.
+     *
+     * @param heightPx the bar's whole height, padding and chin included
+     * @param ascent   the font's ascent, negative as {@link android.graphics.Paint.FontMetrics}
+     *                 reports it
+     * @param descent  the font's descent, positive
+     * @param liftPx   how far the wave carries this letter, never negative
+     * @param edge     the screen edge the bar is docked against
+     */
+    static float horizontalLetterBaselinePx(float heightPx, float ascent, float descent,
+                                            float liftPx, @NonNull Edge edge) {
+        float centred = (heightPx * 0.5f) - ((ascent + descent) * 0.5f);
+        return edge == Edge.TOP ? centred + liftPx : centred - liftPx;
     }
 
 
@@ -206,21 +355,22 @@ public final class AzScrubRowView extends AppCompatTextView {
 
         int baseColor = getCurrentTextColor();
         int focusColor = resolveFocusLetterColor();
+        refreshHalos(baseColor, focusColor);
         letterPaint.setColor(baseColor);
         float baseTextSize = getTextSize();
         letterPaint.setTextSize(baseTextSize);
-        float contentBottom = height - getPaddingBottom();
-        float slot = letterSlotWidth();
-        float anchorX = activeTouchX < 0f ? (width * 0.5f) : activeTouchX;
+        float trackLength = letterTrackLengthPx();
+        float slot = letterSlotSizePx();
+        float anchorAlong = activeTouchAlong < 0f ? (trackLength * 0.5f) : activeTouchAlong;
         float waveAmplitude = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK ? 0f : (dp(15) * waveStrength);
-        int activeIndex = resolveActiveIndex(anchorX);
+        int activeIndex = resolveActiveIndex(anchorAlong);
         boolean hasInlineFocus = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
             && waveStrength > 0.01f
-            && (activeTouchX >= 0f || lockedInlineLetter != null);
+            && (activeTouchAlong >= 0f || lockedInlineLetter != null);
 
         for (int i = 0; i < visibleLetters.length; i++) {
-            float x = letterCenterX(i);
-            float distance = Math.abs(x - anchorX) / Math.max(1f, slot);
+            float along = letterCenterAlongPx(i);
+            float distance = Math.abs(along - anchorAlong) / Math.max(1f, slot);
             float envelope = (float) Math.exp(-(distance * distance) * 0.85f);
             float waveLift = (float) Math.sin(Math.min(1f, envelope) * (Math.PI * 0.5f)) * waveAmplitude;
             boolean activeFocus = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
@@ -235,8 +385,8 @@ public final class AzScrubRowView extends AppCompatTextView {
                 : (1f + (0.34f * envelope * waveStrength));
             letterPaint.setTextSize(baseTextSize * scale);
             applyLetterWeight(envelope, activeFocus);
-            letterPaint.getFontMetrics(letterFontMetrics);
-            float baseline = (contentBottom - dp(2) - letterFontMetrics.descent) - waveLift;
+            float baseline = letterDrawBaseline(along, waveLift);
+            float x = letterDrawX(along, waveLift);
             if (activeFocus) {
                 letterPaint.setColor(focusColor);
             } else {
@@ -245,9 +395,9 @@ public final class AzScrubRowView extends AppCompatTextView {
                     : clamp01(envelope * waveStrength * 0.72f);
                 letterPaint.setColor(blendColors(baseColor, focusColor, colorProgress));
             }
-            // Crisp outline pass under the fill: a sharp dark stroke that keeps the light letter
-            // readable on any wallpaper, replacing the fuzzy drop-shadow. Constant width so the
-            // stroke never thickens enough to fill the letters' inner holes (no "bloat").
+            // Halo pass under the fill: a sharp stroke on the far side of the band from the letter,
+            // so the glyph has an edge wherever the wallpaper happens to match it. Constant width
+            // so the stroke never thickens enough to fill the letters' inner holes (no "bloat").
             String glyph = visibleGlyphs[i];
             float density = getResources().getDisplayMetrics().density;
             letterOutlinePaint.setTextSize(letterPaint.getTextSize());
@@ -255,16 +405,20 @@ public final class AzScrubRowView extends AppCompatTextView {
             letterOutlinePaint.setStrokeWidth(density * 1.4f);
             // Sword-glint shimmer: a soft material-accent highlight that the sweep brushes across
             // each outline in turn. Gaussian falloff around the sweep position; soothing, capped.
-            int outlineBase = OUTLINE_DARK;
+            // The blend only ever moves the halo towards a mid accent, which is towards the band it
+            // is drawn on, so a glint can lower the halo's contrast but never raise it past the
+            // glyph's — the ceiling in the resolved alpha holds through the sweep.
+            int outlineBase = activeFocus ? haloFocusColor : haloRestingColor;
             if (shimmerActive) {
-                float lx = x / width;
+                float lx = along / trackLength;
                 float d = (lx - shimmerPhase) / 0.16f;
                 float glint = (float) Math.exp(-(d * d));
                 if (glint > 0.001f) {
-                    outlineBase = blendColors(OUTLINE_DARK, accentColor, clamp01(glint) * 0.6f);
+                    outlineBase = blendColors(outlineBase,
+                        withAlpha(accentColor, Color.alpha(outlineBase)), clamp01(glint) * 0.6f);
                 }
             }
-            letterOutlinePaint.setColor(withAlpha(outlineBase, activeFocus ? 215 : 195));
+            letterOutlinePaint.setColor(outlineBase);
             canvas.drawText(glyph, x, baseline, letterOutlinePaint);
             canvas.drawText(glyph, x, baseline, letterPaint);
         }
@@ -354,6 +508,63 @@ public final class AzScrubRowView extends AppCompatTextView {
         invalidate();
     }
 
+    /**
+     * What the letters stand on, as the chrome measured it: the opaque colour behind this row once
+     * the wallpaper, the launcher's dim and any glass over them are composited.
+     *
+     * <p>The row itself draws no glass — its background is transparent — so this is the only way it
+     * can know whether it is standing on something light or something dark, and the halo cannot be
+     * decided without it. {@link Color#TRANSPARENT} means nothing has been measured yet, and the
+     * letters keep the dark halo they have always had until something has.</p>
+     */
+    public void setGlassBackdrop(int surfaceColor) {
+        if (glassBackdrop == surfaceColor) {
+            return;
+        }
+        glassBackdrop = surfaceColor;
+        invalidate();
+    }
+
+    /** The opaque colour the letters were last told they stand on; {@code 0} until measured. */
+    public int glassBackdrop() {
+        return glassBackdrop;
+    }
+
+    /** The halo drawn under a resting letter right now, alpha included. For tests and for measuring. */
+    public int restingHaloColor() {
+        refreshHalos(getCurrentTextColor(), resolveFocusLetterColor());
+        return haloRestingColor;
+    }
+
+    /** The halo drawn under the focused letter right now, alpha included. */
+    public int focusHaloColor() {
+        refreshHalos(getCurrentTextColor(), resolveFocusLetterColor());
+        return haloFocusColor;
+    }
+
+    /**
+     * Resolves the two halos, and only when one of the three colours they depend on has moved: the
+     * search behind {@link GlassInk#haloAlpha} walks up to 195 alpha steps and this is called from
+     * {@link #onDraw}, which runs on every frame of the scrub.
+     */
+    private void refreshHalos(int baseColor, int focusColor) {
+        if (haloCacheBackdrop == glassBackdrop && haloCacheBase == baseColor
+            && haloCacheFocus == focusColor) {
+            return;
+        }
+        haloCacheBackdrop = glassBackdrop;
+        haloCacheBase = baseColor;
+        haloCacheFocus = focusColor;
+        if (Color.alpha(glassBackdrop) == 0) {
+            // Nothing measured yet: exactly what the row drew before the backdrop was ever sampled.
+            haloRestingColor = withAlpha(GlassInk.HALO_DARK, 195);
+            haloFocusColor = withAlpha(GlassInk.HALO_DARK, 215);
+            return;
+        }
+        haloRestingColor = GlassInk.halo(baseColor, glassBackdrop, false);
+        haloFocusColor = GlassInk.focusHalo(focusColor, baseColor, glassBackdrop);
+    }
+
     public void setInteractionMode(@NonNull InteractionMode mode) {
         if (interactionMode == mode && (mode != InteractionMode.WAVE_TRACK || lockedInlineLetter == null)) {
             return;
@@ -388,10 +599,10 @@ public final class AzScrubRowView extends AppCompatTextView {
             return false;
         }
 
-        float width = Math.max(1f, getWidth());
-        float slot = letterSlotWidth();
-        float anchorX = activeTouchX < 0f ? (width * 0.5f) : activeTouchX;
-        int activeIndex = resolveActiveIndex(anchorX);
+        float trackLength = letterTrackLengthPx();
+        float slot = letterSlotSizePx();
+        float anchorAlong = activeTouchAlong < 0f ? (trackLength * 0.5f) : activeTouchAlong;
+        int activeIndex = resolveActiveIndex(anchorAlong);
         int index = indexOfVisibleLetter(letter);
         if (index < 0) {
             index = activeIndex;
@@ -401,8 +612,8 @@ public final class AzScrubRowView extends AppCompatTextView {
         }
 
         boolean activeFocus = index == activeIndex;
-        float x = letterCenterX(index);
-        float distance = Math.abs(x - anchorX) / Math.max(1f, slot);
+        float along = letterCenterAlongPx(index);
+        float distance = Math.abs(along - anchorAlong) / Math.max(1f, slot);
         float envelope = (float) Math.exp(-(distance * distance) * 0.85f);
         float waveLift = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
             ? 0f
@@ -417,9 +628,8 @@ public final class AzScrubRowView extends AppCompatTextView {
             : (1f + (0.34f * envelope * waveStrength));
         letterPaint.setTextSize(baseTextSize * scale);
         applyLetterWeight(envelope, activeFocus);
-
-        letterPaint.getFontMetrics(letterFontMetrics);
-        float baseline = (getHeight() - getPaddingBottom() - dp(2) - letterFontMetrics.descent) - waveLift;
+        float baseline = letterDrawBaseline(along, waveLift);
+        float x = letterDrawX(along, waveLift);
         String label = visibleGlyphs[index];
         glyphRect.setEmpty();
         letterPaint.getTextBounds(label, 0, label.length(), glyphRect);
@@ -436,8 +646,13 @@ public final class AzScrubRowView extends AppCompatTextView {
         } else {
             glyphWidth = Math.max(dp(8), glyphWidth);
         }
-        float padX = Math.max(dp(3), Math.min(dp(5), slot * 0.10f));
-        float padY = Math.max(dp(2), Math.min(dp(4), Math.max(1f, glyphBottom - glyphTop) * 0.22f));
+        // The glass is padded from its slot along the bar and from the glyph across it, whichever
+        // axis each of those happens to be: a column's slot is its height, a row's is its width.
+        float glyphAcross = isVerticalBar() ? glyphWidth : (glyphBottom - glyphTop);
+        float padAlong = Math.max(dp(3), Math.min(dp(5), slot * 0.10f));
+        float padAcross = Math.max(dp(2), Math.min(dp(4), Math.max(1f, glyphAcross) * 0.22f));
+        float padX = isVerticalBar() ? padAcross : padAlong;
+        float padY = isVerticalBar() ? padAlong : padAcross;
         float glassLeft = Math.max(0f, glyphLeft - padX);
         float glassRight = Math.min(getWidth(), glyphRight + padX);
         float glassTop = Math.max(0f, glyphTop - padY);
@@ -465,13 +680,25 @@ public final class AzScrubRowView extends AppCompatTextView {
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (callback == null) return super.onTouchEvent(event);
-        float x = Math.max(0f, Math.min(getWidth(), event.getX()));
-        char letter = pickLetter(x, event.getActionMasked() != MotionEvent.ACTION_DOWN);
-        // Measured against the letter band, not the row: the chin under the letters is touchable
-        // space, and letting it stretch the step would retune the drag-up selection behind the
-        // user's back the moment the extra-keys row is hidden.
+        // Read in the canonical frame the gesture is written in: "along" the letters, and "away"
+        // from the bar, whichever screen axes those are on this edge. A bottom bar is the frame
+        // itself, so this is the identity there.
+        AzBarFrame frame = localFrame();
+        float alongRaw = frame.canonicalX(event.getX(), event.getY());
+        float awayRaw = frame.canonicalY(event.getX(), event.getY());
+        float along = Math.max(0f, Math.min(letterTrackLengthPx(), alongRaw));
+        char letter = pickLetter(along, event.getActionMasked() != MotionEvent.ACTION_DOWN);
+        // Measured against the letter band, not the whole bar: the chin beside the letters is
+        // touchable space, and letting it stretch the step would retune the drag-up selection
+        // behind the user's back the moment the extra-keys row is hidden.
+        //
+        // The overshoot is how far past the bar the finger has carried, towards the matches. That
+        // is off the away face for the arrangement this was written for, and off the rim face when
+        // the stack puts the row outside the letters, so the step is signed rather than negated.
+        float barThicknessPx = isVerticalBar() ? getWidth() : getHeight();
+        float overshoot = previewTrackOutward ? (awayRaw - barThicknessPx) : -awayRaw;
         int selectionIndex = Math.max(0,
-            (int) ((-event.getY()) / Math.max(dp(12f), letterBandHeightPx() / 2f)));
+            (int) (overshoot / Math.max(dp(12f), letterBandThicknessPx() / 2f)));
         currentSelectionIndex = selectionIndex;
 
         switch (event.getActionMasked()) {
@@ -479,7 +706,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                 stopSettleAnimation();
                 startShimmer();
                 updateInteractionRenderLayer(true);
-                activeTouchX = x;
+                activeTouchAlong = along;
                 activeLetterIndex = indexOfVisibleLetter(letter);
                 lastHapticLetterIndex = activeLetterIndex;
                 waveStrength = 1f;
@@ -491,15 +718,15 @@ public final class AzScrubRowView extends AppCompatTextView {
                 invalidate();
                 long now = event.getEventTime();
                 boolean isDoubleTap = (now - lastTapUpTimeMs) <= doubleTapTimeoutMs
-                    && !Float.isNaN(lastTapUpX)
-                    && Math.abs(x - lastTapUpX) <= doubleTapSlopPx;
+                    && !Float.isNaN(lastTapUpAlong)
+                    && Math.abs(along - lastTapUpAlong) <= doubleTapSlopPx;
                 if (isDoubleTap) {
                     suppressUpScrub = true;
                     callback.onDoubleTap();
                     return true;
                 }
                 suppressUpScrub = false;
-                callback.onScrub(letter, currentSelectionIndex, event.getX(), event.getY(),
+                callback.onScrub(letter, currentSelectionIndex, alongRaw, awayRaw,
                     event.getRawX(), event.getRawY(), event.getEventTime(), GesturePhase.DOWN);
                 return true;
             case MotionEvent.ACTION_MOVE:
@@ -507,11 +734,11 @@ public final class AzScrubRowView extends AppCompatTextView {
                 boolean crossedLetterBoundary = RowHapticTickHelper.isBoundaryCrossing(
                     lastHapticLetterIndex, nextHapticLetterIndex);
                 lastHapticLetterIndex = nextHapticLetterIndex;
-                activeTouchX = x;
+                activeTouchAlong = along;
                 waveStrength = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK ? 0.92f : 1f;
                 updateInteractionLayerOffset();
                 invalidate();
-                callback.onScrub(letter, currentSelectionIndex, event.getX(), event.getY(),
+                callback.onScrub(letter, currentSelectionIndex, alongRaw, awayRaw,
                     event.getRawX(), event.getRawY(), event.getEventTime(), GesturePhase.MOVE);
                 // Ticked after the callback, not before it: the gesture advances in there, and this
                 // sample is what decides whose row the finger is on. Asking first would tick a
@@ -523,9 +750,9 @@ public final class AzScrubRowView extends AppCompatTextView {
             case MotionEvent.ACTION_UP:
                 lastHapticLetterIndex = -1;
                 lastTapUpTimeMs = event.getEventTime();
-                lastTapUpX = x;
+                lastTapUpAlong = along;
                 if (!suppressUpScrub) {
-                    callback.onScrub(letter, currentSelectionIndex, event.getX(), event.getY(),
+                    callback.onScrub(letter, currentSelectionIndex, alongRaw, awayRaw,
                         event.getRawX(), event.getRawY(), event.getEventTime(), GesturePhase.UP);
                 }
                 suppressUpScrub = false;
@@ -534,7 +761,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                     animateWaveRelease();
                 } else {
                     waveStrength = 0f;
-                    activeTouchX = -1f;
+                    activeTouchAlong = -1f;
                     activeLetterIndex = -1;
                     stopShimmer();
                     updateInteractionRenderLayer(false);
@@ -550,7 +777,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                     animateWaveRelease();
                 } else {
                     waveStrength = 0f;
-                    activeTouchX = -1f;
+                    activeTouchAlong = -1f;
                     activeLetterIndex = -1;
                     stopShimmer();
                     updateInteractionRenderLayer(false);
@@ -566,7 +793,7 @@ public final class AzScrubRowView extends AppCompatTextView {
         stopSettleAnimation();
         if (!isAttachedToWindow()) {
             waveStrength = 0f;
-            activeTouchX = -1f;
+            activeTouchAlong = -1f;
             stopShimmer();
             updateInteractionRenderLayer(false);
             invalidate();
@@ -583,7 +810,7 @@ public final class AzScrubRowView extends AppCompatTextView {
             @Override
             public void onAnimationEnd(android.animation.Animator animation) {
                 waveStrength = 0f;
-                activeTouchX = -1f;
+                activeTouchAlong = -1f;
                 stopShimmer();
                 updateInteractionRenderLayer(false);
                 invalidate();
@@ -650,27 +877,17 @@ public final class AzScrubRowView extends AppCompatTextView {
         }
     }
 
-    private char pickLetter(float x, boolean applyHysteresis) {
-        float slotWidth = letterSlotWidth();
-        int index = indexForTouchX(x);
+    private char pickLetter(float alongPx, boolean applyHysteresis) {
+        int index;
         if (interactionMode == InteractionMode.WAVE_TRACK) {
-            if (activeLetterIndex < 0 || !applyHysteresis) {
-                activeLetterIndex = index;
-            } else if (Math.abs(index - activeLetterIndex) > 1) {
-                activeLetterIndex = index;
-            } else if (index != activeLetterIndex) {
-                float boundary = letterInsetPx() + (Math.max(index, activeLetterIndex) * slotWidth);
-                float hysteresis = slotWidth * LETTER_SLOT_HYSTERESIS_RATIO;
-                if (index > activeLetterIndex) {
-                    if (x >= (boundary + hysteresis)) {
-                        activeLetterIndex = index;
-                    }
-                } else if (x <= (boundary - hysteresis)) {
-                    activeLetterIndex = index;
-                }
-            }
+            // A stale index survives a shorter alphabet by one slot, and indexing the letters with
+            // it would throw in the middle of a scrub, so it is dropped rather than carried.
+            int last = activeLetterIndex >= visibleLetters.length ? -1 : activeLetterIndex;
+            activeLetterIndex = AzLetterTrack.indexWithHysteresis(alongPx, last,
+                letterTrackLengthPx(), visibleLetters.length, applyHysteresis);
             index = activeLetterIndex;
         } else {
+            index = indexForAlong(alongPx);
             activeLetterIndex = index;
         }
         return visibleLetters[index];
@@ -695,8 +912,8 @@ public final class AzScrubRowView extends AppCompatTextView {
         return glyphs;
     }
 
-    private int resolveActiveIndex(float anchorX) {
-        int activeIndex = indexForTouchX(anchorX);
+    private int resolveActiveIndex(float anchorAlong) {
+        int activeIndex = indexForAlong(anchorAlong);
         if (interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK && lockedInlineLetter != null) {
             int lockedIndex = indexOfVisibleLetter(lockedInlineLetter);
             if (lockedIndex >= 0) {
@@ -710,9 +927,19 @@ public final class AzScrubRowView extends AppCompatTextView {
         setTranslationY(0f);
     }
 
+    /**
+     * The letter under the finger: the accent made vivid, then made legible on what the row is
+     * actually standing on. The vivid step is the identity — a lifted, slightly bleached accent —
+     * and it stays a seed; whether that seed is bright enough to read is not its business, and on a
+     * light band the answer used to be no.
+     */
     private int resolveFocusLetterColor() {
-        int vivid = boostColor(accentColor, 1.34f, 1.18f);
-        return blendColors(vivid, Color.WHITE, 0.22f);
+        int vivid = blendColors(boostColor(accentColor, 1.34f, 1.18f), Color.WHITE, 0.22f);
+        if (Color.alpha(glassBackdrop) == 0) return vivid;
+        // The same side as the letters around it: a focused letter that resolved the other way
+        // would be the one glyph on the row drawn in the opposite polarity.
+        return GlassInk.legibleOn(glassBackdrop, vivid,
+            GlassInk.isPaleSide(getCurrentTextColor(), glassBackdrop), OnGlass.TARGET_LARGE_TEXT);
     }
 
 

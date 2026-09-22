@@ -9,10 +9,12 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.res.Configuration;
 import android.content.pm.LauncherApps;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Process;
+import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 
@@ -31,6 +33,8 @@ import java.util.UUID;
 public final class LauncherWidgetHostController implements LauncherAppWidgetHost.Callback {
     public static final int REQUEST_BIND_APPWIDGET = 4714;
     public static final int REQUEST_CONFIGURE_APPWIDGET = 4715;
+    /** Reopening a placed widget's own settings; deliberately not the add flow's request code. */
+    public static final int REQUEST_RECONFIGURE_APPWIDGET = 4716;
 
     public enum Capability { AVAILABLE, UNSUPPORTED }
     public enum AddResult {
@@ -79,6 +83,8 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     private final Capability capability;
     private final Map<Integer, AppWidgetHostView> hostViews = new HashMap<>();
     private final Set<String> resumedPendingTokens = new HashSet<>();
+    /** The day or night the cached host views were built against. */
+    private int hostViewNightMode;
     private boolean listening;
     @Nullable private Listener listener;
 
@@ -101,9 +107,55 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
             supported = false;
         }
         capability = supported ? Capability.AVAILABLE : Capability.UNSUPPORTED;
+        hostViewNightMode = nightMode();
+    }
+
+    private int nightMode() {
+        try {
+            return activity.getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK;
+        } catch (RuntimeException exception) {
+            return Configuration.UI_MODE_NIGHT_UNDEFINED;
+        }
+    }
+
+    /**
+     * Throws away host views built in the other day/night, so the next render makes them again.
+     *
+     * <p>A hosted widget's light or dark comes from the Configuration of the context its host view
+     * was built with, and {@code AppWidgetHostView} has no configuration hook of its own: once
+     * inflated it keeps whatever theme it was born in. Recreating the activity is what normally
+     * rebuilds these, since {@code uiMode} is not among its configChanges — but a launcher that is
+     * merely resumed after the mode changed, or one whose own night-mode setting moved without a
+     * recreate, would otherwise keep showing widgets in yesterday's theme.
+     *
+     * @return true when views were dropped and the pane needs to draw again.
+     */
+    private boolean discardHostViewsBuiltInAnotherMode() {
+        int night = nightMode();
+        if (night == hostViewNightMode) return false;
+        hostViewNightMode = night;
+        boolean held = !hostViews.isEmpty();
+        hostViews.clear();
+        return held;
     }
 
     @NonNull public Capability capability() { return capability; }
+
+    /**
+     * Adopts the grid the user set in Settings, re-laying widgets that no longer fit, and tells the
+     * pane to redraw. Out-of-range values are pulled into the grid's bounds rather than refused.
+     */
+    public boolean applyGrid(int rows, int columns) {
+        WidgetGridDefinition next = new WidgetGridDefinition(
+            Math.max(WidgetGridDefinition.MIN_ROWS, Math.min(WidgetGridDefinition.MAX_ROWS, rows)),
+            Math.max(WidgetGridDefinition.MIN_COLUMNS,
+                Math.min(WidgetGridDefinition.MAX_COLUMNS, columns)));
+        if (next.equals(repository.gridDefinition())) return true;
+        boolean applied = repository.setGridDefinition(next);
+        if (applied) notifyChanged(AddResult.IGNORED);
+        return applied;
+    }
     @NonNull public LauncherWidgetRepository repository() { return repository; }
     @NonNull public LauncherAppWidgetHost host() { return host; }
     public void setListener(@Nullable Listener value) { listener = value; }
@@ -148,6 +200,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
             // A partial framework/service initialization is retried on the next onStart.
         }
         reconcileProviders();
+        if (discardHostViewsBuiltInAnotherMode()) notifyChanged(AddResult.IGNORED);
     }
 
     public void onStop() {
@@ -237,8 +290,57 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         }
     }
 
-    /** @return true only for the two widget request codes, even when the durable result is stale. */
+    /**
+     * Whether this widget already on the page has settings of its own that can be reopened.
+     * Providers that never opted in to being reconfigured are not offered it; see
+     * {@link WidgetConfigurePolicy#reconfigurable}.
+     */
+    public boolean canReconfigure(int appWidgetId) {
+        LauncherWidgetRecord record = repository.get(appWidgetId);
+        if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return false;
+        try {
+            AppWidgetProviderInfo info = platform.getInfo(appWidgetId);
+            if (info == null || !providerMatches(record, info)) return false;
+            return WidgetConfigurePolicy.reconfigurable(info.configure,
+                Build.VERSION.SDK_INT >= 28 ? info.widgetFeatures : 0, Build.VERSION.SDK_INT,
+                info.configure != null
+                    && platform.configureActivityAvailable(info.configure, info.getProfile()));
+        } catch (RuntimeException exception) {
+            return false;
+        }
+    }
+
+    /**
+     * Sends a placed widget back to its provider's own settings screen, with the ID it already
+     * has. Nothing about the launcher's record changes here and no result can delete the widget:
+     * this is not the add transaction, so a user who backs out of the settings screen keeps the
+     * widget exactly as it was.
+     */
+    @NonNull
+    public AddResult reconfigureWidget(int appWidgetId) {
+        if (!canReconfigure(appWidgetId)) return AddResult.IGNORED;
+        LauncherWidgetRecord record = repository.get(appWidgetId);
+        if (record == null) return AddResult.IGNORED;
+        try {
+            platform.launchConfiguration(appWidgetId, REQUEST_RECONFIGURE_APPWIDGET,
+                record.sizeOptions());
+            return AddResult.STARTED;
+        } catch (ActivityNotFoundException | SecurityException exception) {
+            return AddResult.CONFIGURATION_UNAVAILABLE;
+        } catch (RuntimeException exception) {
+            return AddResult.FAILED;
+        }
+    }
+
+    /** @return true only for the widget request codes, even when the durable result is stale. */
     public boolean handleActivityResult(int requestCode, int resultCode, @Nullable Intent data) {
+        if (requestCode == REQUEST_RECONFIGURE_APPWIDGET) {
+            // The provider rewrote its own state, not ours. Either way the widget stays, so this
+            // reports the flow finished well: the pane re-renders and brings its surface back,
+            // and nothing here can delete an ID.
+            notifyChanged(AddResult.READY);
+            return true;
+        }
         if (requestCode != REQUEST_BIND_APPWIDGET && requestCode != REQUEST_CONFIGURE_APPWIDGET) {
             return false;
         }
@@ -355,8 +457,21 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
 
     @Nullable
     public AppWidgetHostView createHostView(int appWidgetId) {
+        Trace.beginSection("Widgets.createHostView");
+        try {
+            return doCreateHostView(appWidgetId);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    @Nullable
+    private AppWidgetHostView doCreateHostView(int appWidgetId) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return null;
+        // Every host view is asked for through here, so this is the one place a stale one can be
+        // caught whatever brought the render about.
+        discardHostViewsBuiltInAnotherMode();
         AppWidgetHostView existing = hostViews.get(appWidgetId);
         if (existing != null) return existing;
         try {

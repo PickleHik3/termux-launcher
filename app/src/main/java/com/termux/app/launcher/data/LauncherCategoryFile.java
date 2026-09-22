@@ -31,6 +31,14 @@ import java.util.Map;
  * still loads. Section names are kept verbatim rather than validated against the current drawer
  * taxonomy, because free-form category titles are coming and an old binary must not silently eat
  * a section it does not recognise yet.
+ *
+ * <p><b>One name this file cannot mean what it says.</b> {@code x11:linux} (the reserved package
+ * every Linux app shares, {@code X11Apps.PACKAGE}) is not a real app, so a line assigning it never
+ * came from a person choosing a category for one app — it is either a categoriser run that had to
+ * guess a single category for every Linux app at once, or a hand edit copying that mistake. This
+ * class still parses such a line like any other; it is {@link LauncherCategoryAssignmentSource}
+ * that declines to honour it when reading the file back (an explicit in-app drag, stored
+ * separately, still wins).
  */
 public final class LauncherCategoryFile {
 

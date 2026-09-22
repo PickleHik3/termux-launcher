@@ -164,6 +164,12 @@ public final class ExtraKeyDetailSheet {
         body.addView(labelField(context.getString(R.string.settings_extra_keys_sheet_label),
             context.getString(R.string.settings_extra_keys_sheet_label_hint), key));
 
+        body.addView(sectionLabel(context.getString(R.string.settings_extra_keys_color)));
+        body.addView(ExtraKeyColorSwatches.build(context, key.color, role -> {
+            key.color = role;
+            changed(false);
+        }));
+
         body.addView(sectionLabel(context.getString(R.string.settings_extra_keys_sheet_swipe_up)));
         if (key.popup == null) {
             body.addView(selectorRow(context.getString(R.string.settings_extra_keys_sheet_none),

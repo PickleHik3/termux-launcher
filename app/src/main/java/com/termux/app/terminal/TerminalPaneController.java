@@ -12,17 +12,21 @@ import android.graphics.drawable.Drawable;
 import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.os.Trace;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
-import android.view.animation.DecelerateInterpolator;
 import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -36,9 +40,16 @@ import androidx.core.graphics.ColorUtils;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.DockPlankController;
+import com.termux.app.chrome.CornerBracket;
+import com.termux.app.chrome.CornerHold;
+import com.termux.app.chrome.CornerTabGeometry;
+import com.termux.app.chrome.CornerTabGlyphs;
+import com.termux.app.chrome.CornerZones;
+import com.termux.app.wall.PaneControlsView;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TextStyle;
+import com.termux.view.HoldTiming;
 import com.termux.view.TerminalView;
 
 import java.util.ArrayList;
@@ -68,8 +79,10 @@ public class TerminalPaneController {
     public static final String LAYOUT_HORIZONTAL = "horizontal";
     public static final String LAYOUT_VERTICAL = "vertical";
     /**
-     * Hyprland-style automatic tiling: every new pane halves the pane it was split from along that
-     * pane's longer side, and a pane dragged onto another halves the target the same way. Unlike
+     * Hyprland-style automatic tiling: a new pane asked for without an axis halves the pane it was
+     * split from along that pane's longer side, and a pane dragged onto another halves the target
+     * the same way. A split asked for with an axis — the horizontal and vertical split keys — takes
+     * that axis, as Hyprland's preselect does; the policy decides only where nobody said. Unlike
      * the other layouts it is incremental — the tree is never rebuilt from the pane list, so the
      * shape the user grew (and every divider they dragged) survives each split and close.
      */
@@ -132,11 +145,8 @@ public class TerminalPaneController {
     private static final int FLOAT_PILL_BUTTON_DP = 44;
     /** Above tiled panes and the interaction overlay, below the 6dp key chord overlay. */
     private static final int FLOAT_ELEVATION_DP = 4;
-    /**
-     * Matches pane_active_border.xml's corner radius, so the content clip and its border ring
-     * agree. Also the radius a tiled pane wears while that stroke is its frame.
-     */
-    private static final int FLOAT_CORNER_RADIUS_DP = 6;
+    /** Matches pane_active_border.xml's stroke width: the line a corner tab lines up against. */
+    private static final float STOCK_PANE_BORDER_DP = 1f;
     /** How far the resize glow reaches in from the pane's edge. */
     private static final float GLOW_DEPTH_DP = 12f;
     /** Peak alpha of the glow body, at the edge itself. */
@@ -145,30 +155,6 @@ public class TerminalPaneController {
     private static final int GLOW_RAMP_STEPS = 12;
     /** How long after the last resize keypress to commit the resize (mirrors touch drag-end). */
     private static final long RESIZE_KEY_FINISH_DELAY_MS = 220L;
-
-    /**
-     * How the panes dress themselves as glass. Supplied by the activity, which owns the shared
-     * pre-blurred wallpaper frame, the terminal tint and the surface-editor preferences; the
-     * controller only asks what to paint and how far apart to sit.
-     */
-    public interface PaneSurfaceStyle {
-        /** True while each pane should carry its own glass slab (frost, tint, grain, rim). */
-        boolean isPaneGlassActive();
-        /** The shared pre-blurred wallpaper frame at the configured radius, or null for none. */
-        @Nullable android.graphics.Bitmap paneGlassBlurFrame();
-        /** That frame's rect in screen coordinates. */
-        @NonNull android.graphics.Rect paneGlassBlurFrameRect();
-        /** Vibrancy filter applied to the frost, shared with every other glass surface. */
-        @Nullable android.graphics.ColorFilter paneGlassFrostFilter();
-        /** The terminal tint painted over the frost. */
-        int paneGlassTintColor();
-        /** Film grain layer for one pane, or null while grain is off. */
-        @Nullable android.graphics.drawable.Drawable paneGlassGrainLayer();
-        /** Corner radius of a pane slab, in px. */
-        float paneGlassCornerRadiusPx();
-        /** Gap between tiled panes, in dp — the surface editor's Inner padding. */
-        int paneGapDp();
-    }
 
     /** Callbacks into the hosting activity. */
     public interface Host {
@@ -190,6 +176,17 @@ public class TerminalPaneController {
          * panes are on screen can refresh from one place.
          */
         default void onPanesRendered() {}
+        /** A pane's corner controls — move, maximize, close — are now on screen. */
+        default void onPaneControlsShown() {}
+        default void showHelpOverlay() {}
+        /** Those controls are going away again, however the user asked for that. */
+        default void onPaneControlsDismissed() {}
+        /** The lone pane's corner asked for the Appearance editor. */
+        default void openSurfaceEditor() {}
+        /** The lone pane's corner asked for the Layout editor. */
+        default void openLayoutEditor() {}
+        /** The launcher's settings, asked for from the pane corner's tab. */
+        default void openSettings() {}
         /** Default working directory when a cwd can't be derived. */
         String defaultCwd();
         /** Spawn a new shell carrying a session name; defaults to an unnamed shell. */
@@ -297,7 +294,7 @@ public class TerminalPaneController {
     private final Map<TerminalSession, TerminalView> mPaneViews = new HashMap<>();
     /** Live border drawable + focus state per pane, so a focus flip can crossfade and a
      *  redundant re-render can leave a mid-flight crossfade untouched instead of snapping it. */
-    private final Map<TerminalSession, PaneBorderState> mBorderStates = new HashMap<>();
+    private final Map<TerminalSession, PaneRim> mBorderStates = new HashMap<>();
     private final Map<Split, LinearLayout> mSplitLayouts = new HashMap<>();
     /** The split a keybind resize burst is adjusting, while the finish is still debounced. */
     @Nullable private Split mPendingKeyResizeSplit;
@@ -317,8 +314,6 @@ public class TerminalPaneController {
     /** Fallback gap between tiled panes when no surface style is attached. */
     private static final int DIVIDER_DP = 1;
 
-    /** Radius a pane slab takes when the style has no opinion. */
-    private static final int PANE_GLASS_RADIUS_DP = 10;
 
     public TerminalPaneController(Host host, FrameLayout hostView, LayoutInflater inflater) {
         mHost = host;
@@ -788,6 +783,33 @@ public class TerminalPaneController {
         return mActiveWindow != null && mActiveWindow.active != null ? mActiveWindow.active.session : null;
     }
 
+    /** Whether every pane treats touch as the mouse; see {@link TerminalView#setTouchMouseMode}. */
+    private boolean mTouchMouseMode;
+
+    /** Turn mouse mode on or off for every pane there is and every pane to come. */
+    public void setTouchMouseMode(boolean enabled) {
+        mTouchMouseMode = enabled;
+        for (TerminalView view : mPaneViews.values()) view.setTouchMouseMode(enabled);
+    }
+
+    public boolean isTouchMouseMode() {
+        return mTouchMouseMode;
+    }
+
+    /** Help also dismisses the maximised pane's normally persistent tab. */
+    public void dismissControlsForHelp() {
+        mInteractionOverlay.dismissControlsForHelp();
+    }
+
+    /**
+     * The ? of the corner tab that is up, in screen coordinates, or false when no tab is showing.
+     * The tab draws its buttons rather than laying them out as views, so nothing outside this
+     * controller can find that one.
+     */
+    public boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
+        return mInteractionOverlay.helpButtonRectOnScreen(out);
+    }
+
     @Nullable public TerminalView getActivePaneView() {
         TerminalSession s = getActiveSession();
         return s == null ? null : mPaneViews.get(s);
@@ -915,11 +937,23 @@ public class TerminalPaneController {
         return split(dwindleOrientationFor(anchor));
     }
 
+    /**
+     * Split the focused pane along the axis the caller asked for. Honoured under every layout,
+     * dwindle included: the two split keys exist to say a direction, and a policy that overrode
+     * them made them one key with two names (both stacked in portrait, both side by side in
+     * landscape). Only {@link #splitAuto} and the paths with no axis to offer ask the policy.
+     */
     public boolean split(int orientation) {
         if (mActiveWindow == null || mActiveWindow.active == null) return false;
         Leaf oldLeaf = splitAnchor(mActiveWindow);
         String cwd = oldLeaf.session.getCwd();
-        TerminalSession newSession = mHost.createShell(cwd != null ? cwd : mHost.defaultCwd());
+        TerminalSession newSession;
+        Trace.beginSection("Panes.createShell");
+        try {
+            newSession = mHost.createShell(cwd != null ? cwd : mHost.defaultCwd());
+        } finally {
+            Trace.endSection();
+        }
         if (newSession == null) return false;
         insertPane(oldLeaf, newSession, orientation, true);
         return true;
@@ -960,9 +994,8 @@ public class TerminalPaneController {
                             int orientation, boolean focus) {
         Leaf newLeaf = new Leaf(newSession);
         newLeaf.fontSize = inheritableFontSize(oldLeaf);
-        // Dwindle decides the axis itself: the caller's orientation is whatever key or button was
-        // pressed, but under this policy a pane always halves along its longer side.
-        if (isDwindleManaged(mActiveWindow)) orientation = dwindleOrientationFor(oldLeaf);
+        // The axis is the caller's: an explicit split key says it outright, and the axis-less
+        // paths (splitAuto, addPane) have already asked the dwindle rule for it.
         Split split = new Split();
         split.orientation = orientation;
         split.a = oldLeaf;
@@ -979,7 +1012,13 @@ public class TerminalPaneController {
         if (focus) mActiveWindow.active = newLeaf;
         // Captured before the re-render detaches it: the divider reveal needs the pane's surface
         // as it looked while it still owned the whole region the split is about to share.
-        Bitmap revealSnapshot = captureSplitRevealSnapshot(oldLeaf.session);
+        RevealSnapshot revealSnapshot;
+        Trace.beginSection("Panes.snapshot");
+        try {
+            revealSnapshot = captureSplitRevealSnapshot(oldLeaf.session);
+        } finally {
+            Trace.endSection();
+        }
         Rect revealOrigin = revealSnapshot != null
             ? boundsInHost(mPaneFrames.get(oldLeaf.session)) : null;
         // A managed window re-tiles around the new pane instead of keeping the binary split that
@@ -1679,12 +1718,7 @@ public class TerminalPaneController {
      * resolver on every focus change, which is every tap on a pane.
      */
     private boolean arePaneAnimationsEnabled() {
-        try {
-            return Build.VERSION.SDK_INT < Build.VERSION_CODES.O
-                || android.animation.ValueAnimator.areAnimatorsEnabled();
-        } catch (Throwable t) {
-            return true;
-        }
+        return PaneRim.animationsEnabled();
     }
 
     /** Plays the float entry animation queued by {@link #toggleScratchpad}. */
@@ -2031,6 +2065,15 @@ public class TerminalPaneController {
     // --- Rendering ---
 
     private void render() {
+        Trace.beginSection("Panes.render");
+        try {
+            doRender();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doRender() {
         // A re-render invalidates the geometry a running divider reveal was easing toward.
         cancelSplitReveal();
         // Weights first, so the tree is built already grown; the pane-move animation carries the
@@ -2038,26 +2081,42 @@ public class TerminalPaneController {
         if (mFocusGrowAnimator != null) mFocusGrowAnimator.cancel();
         applyFocusGrowth(false);
         captureMoveOrigins();
-        mHostView.removeAllViews();
+        // The tiled tree is the host's first child; everything above it (interaction overlay,
+        // floats, motion overlay) is rebuilt below, the tree itself is reconciled in place.
+        View previousTree = mHostView.getChildCount() > 0 ? mHostView.getChildAt(0) : null;
+        for (int i = mHostView.getChildCount() - 1; i >= 1; i--) mHostView.removeViewAt(i);
         mSplitLayouts.clear();
         mFloatContainers.clear();
         // Whatever the scratchpad's hide animation was holding has just been detached; its guard
         // must not outlive it or the scratchpad can never be shown again.
         mHidingScratchpadLeaf = null;
         if (mActiveWindow == null) {
+            mHostView.removeAllViews();
             mHost.onPanesRendered();
             return;
         }
-        View built = mMaximizedLeaf != null
-            ? paneFrameFor(mMaximizedLeaf.session) : buildView(mActiveWindow.root);
-        mHostView.addView(built, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        View built = reconcile(previousTree,
+            mMaximizedLeaf != null ? mMaximizedLeaf : mActiveWindow.root);
+        if (built != previousTree) {
+            mHostView.removeAllViews();
+            mHostView.addView(built, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
         if (mInteractionOverlay.getParent() instanceof ViewGroup) {
             ((ViewGroup) mInteractionOverlay.getParent()).removeView(mInteractionOverlay);
+        }
+        View controls = mInteractionOverlay.controlsView();
+        if (controls.getParent() instanceof ViewGroup) {
+            ((ViewGroup) controls.getParent()).removeView(controls);
         }
         int paneCount = leavesOf(mActiveWindow.root).size();
         if (shouldShowInteractionOverlay(paneCount, mMaximizedLeaf != null)) {
             mHostView.addView(mInteractionOverlay, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+            // Straight above the overlay, where the tab has always been drawn: over the panes and
+            // under the floats. It is never clickable, so the overlay below still gets every
+            // touch and remains the one thing deciding what a finger on a pane meant.
+            mHostView.addView(controls, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             mInteractionOverlay.onTreeRendered();
         }
@@ -2119,8 +2178,6 @@ public class TerminalPaneController {
 
     /** How long a pane takes to slide from where it was to where the layout put it. */
     private static final long PANE_MOVE_MS = 340L;
-    /** Focus border crossfade; a state change, so faster than any structural motion. */
-    private static final long FOCUS_BORDER_MS = 160L;
 
     /** Screen bounds of every live pane frame, captured just before a re-render replaces them. */
     private final Map<TerminalSession, Rect> mMoveOrigins = new HashMap<>();
@@ -2188,7 +2245,12 @@ public class TerminalPaneController {
     // --- Pane appearance / disappearance / cursor travel ---
 
     /** Hyprland-ish open: the pane pops in from slightly small rather than blinking into place. */
-    private static final long PANE_ENTER_MS = 280L;
+    /**
+     * Entry and split-reveal motion. 280 ms read as a wait: on Pong a Ctrl+Alt+H had its new pane
+     * on screen ~126 ms after the key and then spent 280 ms easing the divider — three quarters of
+     * the time between the key and the pane "landing" was this animation (2026-09-09).
+     */
+    private static final long PANE_ENTER_MS = 170L;
     private static final float PANE_ENTER_SCALE = 0.92f;
 
     /**
@@ -2226,7 +2288,7 @@ public class TerminalPaneController {
      * How long the divider takes to sweep in. Long enough to read as geometry forming, short
      * enough that the ~300 ms shell start after it feels like part of the same gesture.
      */
-    private static final long SPLIT_REVEAL_MS = 280L;
+    private static final long SPLIT_REVEAL_MS = PANE_ENTER_MS;
     /** Bounds agreement below this is layout noise, not a moved edge. */
     private static final int SPLIT_REVEAL_SLACK_PX = 2;
 
@@ -2238,18 +2300,19 @@ public class TerminalPaneController {
      * pure overlay — exactly the window-switch snapshot discipline, applied to a split.
      */
     private static final class SplitRevealDrawable extends Drawable {
-        final Bitmap bitmap;
+        final RevealSnapshot snapshot;
         final Rect clip = new Rect();
 
-        SplitRevealDrawable(@NonNull Bitmap bitmap) {
-            this.bitmap = bitmap;
+        SplitRevealDrawable(@NonNull RevealSnapshot snapshot) {
+            this.snapshot = snapshot;
         }
 
         @Override
         public void draw(@NonNull Canvas canvas) {
             canvas.save();
             canvas.clipRect(clip);
-            canvas.drawBitmap(bitmap, getBounds().left, getBounds().top, null);
+            canvas.translate(getBounds().left, getBounds().top);
+            snapshot.draw(canvas);
             canvas.restore();
         }
 
@@ -2258,18 +2321,69 @@ public class TerminalPaneController {
         @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
 
+    /**
+     * A frozen copy of a pane's surface: on a hardware window a recorded display list, which costs
+     * the draw ops and no pixels; otherwise a bitmap. The bitmap path was 32 ms of a split's 73 ms
+     * key handler on Pong (2026-09-09): a full-pane ARGB allocation plus a software render of the
+     * terminal, spent on the animation before the new pane could appear.
+     */
+    private static final class RevealSnapshot {
+        @Nullable final Bitmap bitmap;
+        @Nullable final Object node;
+
+        RevealSnapshot(@Nullable Bitmap bitmap, @Nullable Object node) {
+            this.bitmap = bitmap;
+            this.node = node;
+        }
+
+        /** Draws at the canvas origin; the caller has translated to the pane's bounds. */
+        void draw(@NonNull Canvas canvas) {
+            if (node != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                && canvas.isHardwareAccelerated()) {
+                canvas.drawRenderNode((android.graphics.RenderNode) node);
+            } else if (bitmap != null && !bitmap.isRecycled()) {
+                canvas.drawBitmap(bitmap, 0f, 0f, null);
+            }
+        }
+
+        void release() {
+            if (bitmap != null) bitmap.recycle();
+            if (node != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                ((android.graphics.RenderNode) node).discardDisplayList();
+        }
+    }
+
     /** The old pane's surface as drawn right now, or null when the reveal cannot run. */
     @Nullable
-    private Bitmap captureSplitRevealSnapshot(@NonNull TerminalSession session) {
+    private RevealSnapshot captureSplitRevealSnapshot(@NonNull TerminalSession session) {
         if (!arePaneAnimationsEnabled()) return null;
         FrameLayout frame = mPaneFrames.get(session);
         if (frame == null || !frame.isLaidOut()
             || frame.getWidth() <= 0 || frame.getHeight() <= 0) return null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && frame.isHardwareAccelerated()) {
+            android.graphics.RenderNode node = new android.graphics.RenderNode("SplitReveal");
+            node.setPosition(0, 0, frame.getWidth(), frame.getHeight());
+            // The terminal must record its glyphs, not its row nodes: those are re-recorded the
+            // moment the pane reflows, and the reveal has to keep showing what was there before.
+            TerminalView view = mPaneViews.get(session);
+            if (view != null) view.setRowCacheBypassed(true);
+            try {
+                Canvas recording = node.beginRecording(frame.getWidth(), frame.getHeight());
+                try {
+                    frame.draw(recording);
+                } finally {
+                    node.endRecording();
+                }
+            } finally {
+                if (view != null) view.setRowCacheBypassed(false);
+            }
+            return new RevealSnapshot(null, node);
+        }
         try {
             Bitmap snapshot = Bitmap.createBitmap(frame.getWidth(), frame.getHeight(),
                 Bitmap.Config.ARGB_8888);
             frame.draw(new Canvas(snapshot));
-            return snapshot;
+            return new RevealSnapshot(snapshot, null);
         } catch (OutOfMemoryError e) {
             return null;
         }
@@ -2294,7 +2408,7 @@ public class TerminalPaneController {
      * the new pane from the shared edge outward. Falls back to the plain entry pop whenever the
      * layout policy re-tiled the old pane somewhere the sweep cannot explain.
      */
-    private void animateSplitReveal(@Nullable Bitmap snapshot, @Nullable Rect origin,
+    private void animateSplitReveal(@Nullable RevealSnapshot snapshot, @Nullable Rect origin,
                                     @NonNull TerminalSession oldSession,
                                     @Nullable TerminalSession newSession) {
         if (snapshot == null || origin == null) {
@@ -2305,7 +2419,7 @@ public class TerminalPaneController {
             Rect settled = boundsInHost(mPaneFrames.get(oldSession));
             int movedEdge = splitRevealMovedEdge(origin, settled);
             if (settled == null || movedEdge == 0) {
-                snapshot.recycle();
+                snapshot.release();
                 animatePaneEntry(newSession);
                 return;
             }
@@ -2334,7 +2448,7 @@ public class TerminalPaneController {
             animator.addListener(new AnimatorListenerAdapter() {
                 @Override public void onAnimationEnd(Animator a) {
                     mHostView.getOverlay().remove(reveal);
-                    snapshot.recycle();
+                    snapshot.release();
                     if (mSplitRevealAnimator == a) mSplitRevealAnimator = null;
                 }
             });
@@ -2418,7 +2532,7 @@ public class TerminalPaneController {
         int rim = MaterialColors.getColor(mHostView.getContext(),
             com.google.android.material.R.attr.colorOutlineVariant,
             ContextCompat.getColor(mHostView.getContext(), R.color.termux_outline_variant));
-        mMotionOverlay.ghostPane(bounds, paneGlassRadiusPx(), fill, rim);
+        mMotionOverlay.ghostPane(bounds, paneRadiusPx(), fill, rim);
     }
 
     /**
@@ -2662,17 +2776,30 @@ public class TerminalPaneController {
 
     /** The configured gap between tiled panes, in dp. */
     private int paneGapDp() {
-        return mSurfaceStyle != null ? Math.max(0, mSurfaceStyle.paneGapDp()) : DIVIDER_DP;
+        return PaneGlass.gapDp(mSurfaceStyle, DIVIDER_DP);
     }
 
-    private float paneGlassRadiusPx() {
-        float radius = mSurfaceStyle != null ? mSurfaceStyle.paneGlassCornerRadiusPx() : 0f;
-        return radius > 0f ? radius : dp(PANE_GLASS_RADIUS_DP);
+    /**
+     * The radius every pane in this window wears: the terminal's own corner radius, glass or not,
+     * floating or docked, alone or split (see {@link PaneCornerRadius}). One number, so the slab,
+     * the frame's clip, the rim, the drag glow and the corner tab cannot round differently.
+     */
+    private float paneRadiusPx() {
+        float density = mHostView.getResources().getDisplayMetrics().density;
+        if (mSurfaceStyle == null)
+            return PaneGlass.radiusPx(null, density);
+        return PaneCornerRadius.radiusPx(mSurfaceStyle.paneCornerRadiusDp(),
+            mSurfaceStyle.paneGlassCornerRadiusPx(), density);
     }
 
     private boolean paneGlassActive() {
-        return mSurfaceStyle != null && mSurfaceStyle.isPaneGlassActive();
+        return PaneGlass.isActive(mSurfaceStyle);
     }
+
+    /** What the last {@link #applyPaneGlass()} shaped the panes for; a repeat re-shapes nothing. */
+    private boolean mDressedGlassActive;
+    private float mDressedGlassRadiusPx = Float.NaN;
+    private int mDressedGlassPaneCount = -1;
 
     /**
      * Dress (or undress) every live pane frame as a glass slab. Idempotent and cheap: the backdrop
@@ -2680,60 +2807,113 @@ public class TerminalPaneController {
      * tick and on every frost refresh.
      */
     public void applyPaneGlass() {
-        boolean glass = paneGlassActive();
-        float radiusPx = paneGlassRadiusPx();
+        float radiusPx = paneRadiusPx();
+        boolean active = paneGlassActive();
+        // NaN and -1: the first pass always shapes the panes, whatever the style turns out to be.
         for (FrameLayout frame : mPaneFrames.values()) {
             PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
             if (backdrop == null) continue;
-            if (!glass) {
-                backdrop.setVisibility(View.GONE);
+            if (!PaneGlass.apply(mSurfaceStyle, frame, backdrop, radiusPx))
                 releasePanePlank(frame);
-                continue;
-            }
-            // Against the pane's own size, not the window's: after four or five splits a pane is a
-            // few rows tall and the window's radius would be half of it.
-            float paneRadiusPx = PaneShape.radiusForBounds(radiusPx,
-                frame.getWidth(), frame.getHeight());
-            backdrop.setGlass(mSurfaceStyle.paneGlassBlurFrame(),
-                mSurfaceStyle.paneGlassBlurFrameRect(), mSurfaceStyle.paneGlassTintColor(),
-                mSurfaceStyle.paneGlassGrainLayer(), paneRadiusPx,
-                mSurfaceStyle.paneGlassFrostFilter());
-            backdrop.setVisibility(View.VISIBLE);
         }
+        // The corner tab is cut from the same glass as the pane it grows out of, and re-dressed
+        // in the same pass, so a new frost frame reaches the tab as it reaches the slabs.
+        if (mInteractionOverlay != null)
+            PaneGlass.dressTab(mSurfaceStyle, mInteractionOverlay.controlsView());
         // The clip that keeps the terminal's rectangular cell backgrounds from poking past the
         // slab's corners is part of the pane's shape, which updateActiveBorders owns for every
         // pane, glass or not — it runs on every render, and this does not.
-        updateActiveBorders();
+        //
+        // Only when the shape moved, though: this pass runs twice a frame behind every chrome
+        // apply, and a new wallpaper frame (the usual reason it runs) re-paints the slabs without
+        // moving one corner. Everything else that pass reads — focus, the float set, a maximized
+        // pane — reaches it from render() and the focus paths, which call it themselves.
+        boolean shapeMoved = active != mDressedGlassActive || radiusPx != mDressedGlassRadiusPx
+            || mPaneFrames.size() != mDressedGlassPaneCount;
+        mDressedGlassActive = active;
+        mDressedGlassRadiusPx = radiusPx;
+        mDressedGlassPaneCount = mPaneFrames.size();
+        if (shapeMoved) updateActiveBorders();
     }
 
-    private View buildView(Node node) {
+    /**
+     * Brings the view tree for {@code node} into being, reusing {@code existing} wherever its shape
+     * already matches: a pane frame that is already in its slot stays there, a split container
+     * keeps its children and only takes new weights and orientation, and only the branch a split,
+     * a close or a re-tile actually changed is built afresh. The old render detached every pane on
+     * every call — 27 ms of the 82 ms a Ctrl+Alt+H spent before its first frame on Pong
+     * (2026-09-09), for panes that had not moved — and each re-attach cost the view its layout.
+     */
+    private View reconcile(@Nullable View existing, @NonNull Node node) {
         if (node instanceof Leaf) {
-            return paneFrameFor(((Leaf) node).session);
+            TerminalSession session = ((Leaf) node).session;
+            PaneContentFrame frame = mPaneFrames.get(session);
+            if (frame != null && existing == frame) {
+                // A cached frame may still carry a half-finished entry animation's alpha/scale.
+                resetFrameTransform(frame);
+                refreshAttachedPaneView(session);
+                return frame;
+            }
+            return paneFrameFor(session);
         }
         Split split = (Split) node;
-        LinearLayout ll = new LinearLayout(mHostView.getContext());
-        mSplitLayouts.put(split, ll);
-        ll.setOrientation(split.orientation);
-        ll.setClipChildren(false);
-        ll.setClipToPadding(false);
         boolean vertical = split.orientation == LinearLayout.VERTICAL;
         int match = LinearLayout.LayoutParams.MATCH_PARENT;
-
-        View va = buildView(split.a);
-        View vb = buildView(split.b);
-        ll.addView(va, new LinearLayout.LayoutParams(
-            vertical ? match : 0, vertical ? 0 : match, split.weightA));
-        View divider = new View(mHostView.getContext());
-        divider.setBackground(ContextCompat.getDrawable(mHostView.getContext(),
-            R.drawable.pane_divider));
-        // Inner padding: the gap is what turns two panes into two slabs rather than one sheet with
-        // a line through it, so it is user-tunable rather than the old fixed hairline.
         int gapPx = dp(paneGapDp());
-        ll.addView(divider, new LinearLayout.LayoutParams(
-            vertical ? match : gapPx, vertical ? gapPx : match));
-        ll.addView(vb, new LinearLayout.LayoutParams(
-            vertical ? match : 0, vertical ? 0 : match, split.weightB));
+        LinearLayout ll = existing instanceof LinearLayout
+            && ((LinearLayout) existing).getChildCount() == 3
+            && ((LinearLayout) existing).getOrientation() == split.orientation
+            ? (LinearLayout) existing : null;
+        if (ll == null) {
+            ll = new LinearLayout(mHostView.getContext());
+            ll.setOrientation(split.orientation);
+            ll.setClipChildren(false);
+            ll.setClipToPadding(false);
+            View divider = new View(mHostView.getContext());
+            divider.setTag(com.termux.R.id.help_split_divider, Boolean.TRUE);
+            divider.setBackground(ContextCompat.getDrawable(mHostView.getContext(),
+                R.drawable.pane_divider));
+            ll.addView(reconcile(null, split.a), new LinearLayout.LayoutParams(
+                vertical ? match : 0, vertical ? 0 : match, split.weightA));
+            // Inner padding: the gap is what turns two panes into two slabs rather than one sheet
+            // with a line through it, so it is user-tunable rather than the old fixed hairline.
+            ll.addView(divider, new LinearLayout.LayoutParams(
+                vertical ? match : gapPx, vertical ? gapPx : match));
+            ll.addView(reconcile(null, split.b), new LinearLayout.LayoutParams(
+                vertical ? match : 0, vertical ? 0 : match, split.weightB));
+        } else {
+            View oldA = ll.getChildAt(0);
+            View oldB = ll.getChildAt(2);
+            // Reconciling a child may pull a frame out of this container into a new nested one,
+            // so both are resolved before either slot is touched.
+            View newA = reconcile(oldA, split.a);
+            View newB = reconcile(oldB, split.b);
+            placeSplitChild(ll, oldA, newA, 0, vertical, split.weightA);
+            placeSplitChild(ll, oldB, newB, 2, vertical, split.weightB);
+            ViewGroup.LayoutParams dividerParams = ll.getChildAt(1).getLayoutParams();
+            dividerParams.width = vertical ? match : gapPx;
+            dividerParams.height = vertical ? gapPx : match;
+            ll.getChildAt(1).setLayoutParams(dividerParams);
+        }
+        mSplitLayouts.put(split, ll);
         return ll;
+    }
+
+    /** Puts {@code child} into slot {@code index} of a reused split container, with its weight. */
+    private static void placeSplitChild(@NonNull LinearLayout ll, @Nullable View old,
+                                        @NonNull View child, int index, boolean vertical,
+                                        float weight) {
+        int match = LinearLayout.LayoutParams.MATCH_PARENT;
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            vertical ? match : 0, vertical ? 0 : match, weight);
+        if (child == old) {
+            child.setLayoutParams(params);
+            return;
+        }
+        int oldIndex = old == null ? -1 : ll.indexOfChild(old);
+        if (oldIndex >= 0) ll.removeViewAt(oldIndex);
+        if (child.getParent() instanceof ViewGroup) ((ViewGroup) child.getParent()).removeView(child);
+        ll.addView(child, Math.min(index, ll.getChildCount()), params);
     }
 
     private FrameLayout paneFrameFor(TerminalSession session) {
@@ -2742,6 +2922,8 @@ public class TerminalPaneController {
             frame = (PaneContentFrame) mInflater.inflate(R.layout.view_terminal_pane, mHostView, false);
             TerminalView view = frame.findViewById(R.id.terminal_view);
             if (mHostSurfaceResizeDepth > 0) view.setTerminalSizeUpdatesPaused(true);
+            // A pane beside this one already measured these fonts at this size; start from it.
+            view.adoptFontFrom(anyFontInitializedPaneView());
             mHost.configurePaneView(view);
             view.setOnTouchListener((v, ev) -> {
                 if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
@@ -2754,16 +2936,8 @@ public class TerminalPaneController {
             mHost.configureAttachedPaneView(view, session);
             mPaneFrames.put(session, frame);
             mPaneViews.put(session, view);
-            PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
-            if (backdrop != null) {
-                // A pane moves for reasons that never redraw it (a sibling's divider drag, a float
-                // being dragged, the host resizing under the keyboard), and the frost is positioned
-                // in screen space, so every move has to re-aim the matrix.
-                backdrop.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or2, ob) -> {
-                    if (l != ol || t != ot || r != or2 || b != ob)
-                        ((PaneGlassBackdropView) v).invalidateGlassPosition();
-                });
-            }
+            (view).setTouchMouseMode(mTouchMouseMode);
+            PaneGlass.followLayout(frame.findViewById(R.id.terminal_pane_glass));
             applyPaneGlass();
         } else {
             // A cached frame may still carry a half-finished entry animation's alpha/scale.
@@ -2771,16 +2945,29 @@ public class TerminalPaneController {
             if (frame.getParent() instanceof ViewGroup)
                 ((ViewGroup) frame.getParent()).removeView(frame);
         }
-        TerminalView attachedView = mPaneViews.get(session);
-        if (attachedView != null) {
-            mHost.configureAttachedPaneView(attachedView, session);
-            // Reapply the pane's pinned zoom after the host stamped its default, so re-showing a
-            // window (or any re-render) can't fold every pane back to the app-wide size.
-            Window owner = windowOf(session);
-            Leaf leaf = owner == null ? null : findLeafInWindow(owner, session);
-            if (leaf != null && leaf.fontSize > 0) attachedView.setTextSize(leaf.fontSize);
-        }
+        refreshAttachedPaneView(session);
         return frame;
+    }
+
+    /** Any live pane view whose fonts are set, to seed a new pane's renderer from; null if none. */
+    @Nullable
+    private TerminalView anyFontInitializedPaneView() {
+        for (TerminalView candidate : mPaneViews.values()) {
+            if (candidate != null && candidate.isFontInitialized()) return candidate;
+        }
+        return null;
+    }
+
+    /** The per-render re-stamp of a pane's view: the host's defaults, then the pane's own zoom. */
+    private void refreshAttachedPaneView(TerminalSession session) {
+        TerminalView attachedView = mPaneViews.get(session);
+        if (attachedView == null) return;
+        mHost.configureAttachedPaneView(attachedView, session);
+        // Reapply the pane's pinned zoom after the host stamped its default, so re-showing a
+        // window (or any re-render) can't fold every pane back to the app-wide size.
+        Window owner = windowOf(session);
+        Leaf leaf = owner == null ? null : findLeafInWindow(owner, session);
+        if (leaf != null && leaf.fontSize > 0) attachedView.setTextSize(leaf.fontSize);
     }
 
     /** The focused pane's pinned font size, or 0 while it follows the app-wide default. */
@@ -2802,8 +2989,8 @@ public class TerminalPaneController {
     }
 
     private void detachPaneView(TerminalSession session) {
-        PaneBorderState borderState = mBorderStates.remove(session);
-        if (borderState != null && borderState.animator != null) borderState.animator.cancel();
+        PaneRim rim = mBorderStates.remove(session);
+        if (rim != null) rim.cancel();
         FrameLayout frame = mPaneFrames.remove(session);
         releasePanePlank(frame);
         mPaneViews.remove(session);
@@ -2827,162 +3014,35 @@ public class TerminalPaneController {
             PaneContentFrame frame = mPaneFrames.get(paneSession);
             if (frame == null) continue;
             boolean floating = floatingSessions.contains(paneSession);
-            // The pane's shape, and with it the clearance the terminal is laid out inside: the
-            // glass slab's radius, the float's card, or the focus stroke's own arc. Only glass
-            // clips here — a float clips on its own wrapper and a stroke does not clip at all —
-            // but all three round the same corners over the same cells.
+            // The pane's shape, and with it the clearance the terminal is laid out inside. One
+            // radius for every pane, whatever is edging it — the glass slab, the float's card, the
+            // focus stroke's own arc — since all of them round the same corners over the same
+            // cells. Only glass clips here: a float clips on its own wrapper and a stroke does not
+            // clip at all.
             boolean glassShape = paneGlassActive();
-            float shapeRadiusPx = glassShape ? paneGlassRadiusPx()
-                : (floating || split || mMaximizedLeaf != null) ? dp(FLOAT_CORNER_RADIUS_DP) : 0f;
-            frame.setPaneShape(shapeRadiusPx, glassShape);
+            frame.setPaneShape(paneRadiusPx(), glassShape);
             if (!split && mMaximizedLeaf == null && !floating && !glassShape) {
-                PaneBorderState gone = mBorderStates.remove(paneSession);
-                if (gone != null && gone.animator != null) gone.animator.cancel();
-                frame.setForeground(null);
+                PaneRim gone = mBorderStates.remove(paneSession);
+                if (gone != null) gone.clear(frame);
+                else frame.setForeground(null);
                 continue;
             }
-            boolean isActive = paneSession == activeSession;
-            boolean glass = glassShape;
             // Same Material primary hue for every pane, but the focused pane's border is at full
             // strength while the rest are dimmed — an unambiguous, theme-proof focus cue. On glass
             // the stroke gives way to the shared lit rim, which is the slab's own edge; a drawn
             // outline over frost reads as a box sitting on the material.
-            int focusedTint = 0;
-            int unfocusedTint = 0;
-            float radius = 0f;
-            if (glass) {
-                // Unlike the dock's white glass edge, a pane's rim is also its focus indicator, so
-                // it carries a Material colour and a wide alpha spread: the focused pane glows in
-                // the accent, the rest fall back to a dim neutral outline. A white rim at two
-                // alphas could not say which pane has the keyboard.
-                focusedTint = MaterialColors.getColor(mHostView.getContext(),
-                    com.google.android.material.R.attr.colorPrimary,
-                    ContextCompat.getColor(mHostView.getContext(), R.color.termux_primary));
-                unfocusedTint = MaterialColors.getColor(mHostView.getContext(),
-                    com.google.android.material.R.attr.colorOutlineVariant,
-                    ContextCompat.getColor(mHostView.getContext(), R.color.termux_outline_variant));
-                radius = paneGlassRadiusPx();
-            }
-            PaneBorderState state = mBorderStates.get(paneSession);
-            // Reuse the live drawable when nothing but focus can have changed. A focus flip then
-            // crossfades it in place, and an unchanged re-render (every render calls this) leaves
-            // a mid-flight crossfade running instead of stamping the end state over it.
-            boolean reusable = state != null && state.drawable != null
-                && state.glass == glass && frame.getForeground() == state.drawable
-                && (!glass || (state.focusedTint == focusedTint
-                    && state.unfocusedTint == unfocusedTint && state.radius == radius));
-            if (reusable) {
-                if (state.active != isActive) {
-                    state.active = isActive;
-                    animateBorderFocus(state);
-                }
-                continue;
-            }
-            if (state != null && state.animator != null) state.animator.cancel();
-            state = new PaneBorderState();
-            state.glass = glass;
-            state.active = isActive;
-            state.focusedTint = focusedTint;
-            state.unfocusedTint = unfocusedTint;
-            state.radius = radius;
-            if (glass) {
-                state.currentTint = isActive ? focusedTint : unfocusedTint;
-                state.drawable = new com.termux.app.GlassRimDrawable(
-                    mHostView.getResources().getDisplayMetrics().density, radius,
-                    state.currentTint);
-                state.drawable.setAlpha(isActive ? GLASS_FOCUSED_ALPHA : GLASS_UNFOCUSED_ALPHA);
-            } else {
-                android.graphics.drawable.Drawable border = ContextCompat.getDrawable(
-                    mHostView.getContext(), R.drawable.pane_active_border);
-                if (border != null) {
-                    border = border.mutate();
-                    border.setAlpha(isActive ? STOCK_FOCUSED_ALPHA : STOCK_UNFOCUSED_ALPHA);
-                }
-                state.drawable = border;
-            }
-            frame.setForeground(state.drawable);
-            if (state.drawable != null) mBorderStates.put(paneSession, state);
-            else mBorderStates.remove(paneSession);
+            PaneRim rim = mBorderStates.get(paneSession);
+            if (rim == null) rim = new PaneRim();
+            if (rim.apply(frame, glassShape, paneRadiusPx(), paneSession == activeSession))
+                mBorderStates.put(paneSession, rim);
+            else
+                mBorderStates.remove(paneSession);
         }
         applyCursorOwnership();
         // The float handle pill dims with focus like the pane borders do.
         for (FloatingPaneContainer container : mFloatContainers.values()) container.invalidate();
     }
 
-    private static final int GLASS_FOCUSED_ALPHA = 255;
-    private static final int GLASS_UNFOCUSED_ALPHA = 110;
-    private static final int STOCK_FOCUSED_ALPHA = 255;
-    private static final int STOCK_UNFOCUSED_ALPHA = 64;
-
-    /** See {@link #mBorderStates}. */
-    private static final class PaneBorderState {
-        android.graphics.drawable.Drawable drawable;
-        boolean glass;
-        boolean active;
-        int focusedTint;
-        int unfocusedTint;
-        int currentTint;
-        float radius;
-        ValueAnimator animator;
-    }
-
-    /**
-     * Crossfades a pane border between its focused and unfocused treatment instead of snapping.
-     * Alpha and (on glass) rim hue move together, so the eye gets a short motion path across the
-     * layout on "move pane focus" even though no geometry changes. Starts from wherever the
-     * drawable currently is, so an interrupted crossfade reverses smoothly.
-     */
-    private void animateBorderFocus(PaneBorderState state) {
-        final android.graphics.drawable.Drawable border = state.drawable;
-        // Read the mid-flight values before cancelling: a reversed crossfade continues from
-        // wherever the rim currently is. The superseded animator's end listener checks
-        // state.animator so it cannot stamp its own end state over these.
-        final int fromAlpha = border.getAlpha();
-        final int fromTint = state.currentTint;
-        if (state.animator != null) {
-            ValueAnimator superseded = state.animator;
-            state.animator = null;
-            superseded.cancel();
-        }
-        final int toAlpha = state.glass
-            ? (state.active ? GLASS_FOCUSED_ALPHA : GLASS_UNFOCUSED_ALPHA)
-            : (state.active ? STOCK_FOCUSED_ALPHA : STOCK_UNFOCUSED_ALPHA);
-        final int toTint = state.active ? state.focusedTint : state.unfocusedTint;
-        if (!arePaneAnimationsEnabled()) {
-            border.setAlpha(toAlpha);
-            if (state.glass && border instanceof com.termux.app.GlassRimDrawable) {
-                state.currentTint = toTint;
-                ((com.termux.app.GlassRimDrawable) border).setTint(toTint);
-            }
-            return;
-        }
-        final boolean tinted = state.glass && border instanceof com.termux.app.GlassRimDrawable;
-        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(FOCUS_BORDER_MS);
-        animator.setInterpolator(PaneMotionOverlayView.standardInterpolator());
-        animator.addUpdateListener(a -> {
-            float fraction = (float) a.getAnimatedValue();
-            border.setAlpha(Math.round(fromAlpha + (toAlpha - fromAlpha) * fraction));
-            if (tinted) {
-                state.currentTint = ColorUtils.blendARGB(fromTint, toTint, fraction);
-                ((com.termux.app.GlassRimDrawable) border).setTint(state.currentTint);
-            }
-        });
-        animator.addListener(new android.animation.AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(android.animation.Animator animation) {
-                if (state.animator != animation) return; // superseded by a newer crossfade
-                state.animator = null;
-                border.setAlpha(toAlpha);
-                if (tinted) {
-                    state.currentTint = toTint;
-                    ((com.termux.app.GlassRimDrawable) border).setTint(toTint);
-                }
-            }
-        });
-        state.animator = animator;
-        animator.start();
-    }
 
     private void focusActiveView() {
         if (!mHost.shouldTerminalTakeFocus()) return;
@@ -2995,8 +3055,22 @@ public class TerminalPaneController {
         return Math.max(min, Math.min(total - min, candidate));
     }
 
+    /**
+     * Whether the pane tree answers touches at its corners at all. A split does, for its seams
+     * and each pane's move/maximize/close tab; a maximized pane does, for its own tab; and a
+     * lone pane does too, for the one thing its corner offers — the surface editor.
+     */
     static boolean shouldShowInteractionOverlay(int paneCount, boolean maximized) {
-        return maximized || paneCount > 1;
+        return maximized || paneCount >= 1;
+    }
+
+    /**
+     * Whether the window is a single, unsplit pane. Its corner tab is a shortcut to the surface
+     * editor rather than the pane controls, which only mean something once there is a second pane
+     * to move against, cover or leave behind.
+     */
+    static boolean isLonePane(int paneCount, boolean maximized) {
+        return !maximized && paneCount == 1;
     }
 
     static float snapFirstWeightToCell(float total, float availablePixels,
@@ -3009,33 +3083,60 @@ public class TerminalPaneController {
         return clampFirstWeight(total, total * snappedPixels / availablePixels);
     }
 
-    static int touchedBorderIndex(@NonNull List<RectF> panes, int activeIndex,
-                                  float x, float y, float threshold) {
-        int contained = -1;
-        int activeCandidate = -1;
-        int nearest = -1;
-        float containedDistance = Float.MAX_VALUE;
-        float nearestDistance = Float.MAX_VALUE;
-        for (int i = 0; i < panes.size(); i++) {
-            RectF rect = panes.get(i);
-            if (rect == null || x < rect.left - threshold || x > rect.right + threshold
-                || y < rect.top - threshold || y > rect.bottom + threshold) continue;
-            float edgeDistance = Math.min(
-                Math.min(Math.abs(x - rect.left), Math.abs(x - rect.right)),
-                Math.min(Math.abs(y - rect.top), Math.abs(y - rect.bottom)));
-            if (edgeDistance > threshold) continue;
-            if (rect.contains(x, y) && edgeDistance < containedDistance) {
-                contained = i;
-                containedDistance = edgeDistance;
-            }
-            if (activeIndex == i) activeCandidate = i;
-            if (edgeDistance < nearestDistance) {
-                nearest = i;
-                nearestDistance = edgeDistance;
-            }
-        }
-        if (contained >= 0) return contained;
-        return activeCandidate >= 0 ? activeCandidate : nearest;
+    /**
+     * Whether a pane corner drags this seam: the corner's own point has to line up with the seam
+     * on the seam's axis, and to lie within the split's extent along the other one — a corner in
+     * another branch of the tree is not the end of this seam, however well it happens to line up.
+     *
+     * @param seam where the seam sits on its own axis
+     * @param extentStart the split layout's near edge on the other axis
+     * @param extentEnd its far edge on that axis
+     * @param cornerOnSeamAxis the corner's coordinate on the seam's axis
+     * @param cornerOnOtherAxis the corner's coordinate on the other one
+     */
+    static boolean cornerDragsSeam(float seam, float extentStart, float extentEnd,
+                                   float cornerOnSeamAxis, float cornerOnOtherAxis,
+                                   float threshold) {
+        return Math.abs(cornerOnSeamAxis - seam) <= threshold
+            && cornerOnOtherAxis >= extentStart - threshold
+            && cornerOnOtherAxis <= extentEnd + threshold;
+    }
+
+    /**
+     * How wide the border a pane paints is — the line a corner tab lines up against, not the
+     * bounding box behind it. Glass wears {@link com.termux.app.GlassRimRenderer}'s rim; a plain
+     * pane that shares the wall wears {@code R.drawable.pane_active_border}, a 1dp stroke; a lone
+     * plain pane paints no border at all and there is nothing to line up against.
+     */
+    static float paneBorderStrokePx(boolean glass, boolean rounded, float density) {
+        if (glass) return com.termux.app.GlassRimRenderer.strokePx(density);
+        return rounded ? density * STOCK_PANE_BORDER_DP : 0f;
+    }
+
+    /**
+     * The corner of {@code pane} a point belongs to: the nearer half in each axis. A touch on a
+     * divider raises the tab out of this corner, so it hangs off the pane edge the finger is
+     * actually on and never reaches back across the seam onto the neighbour.
+     *
+     * <p>The point may lie outside the pane — the empty pixels of a divider belong to the panes on
+     * either side of it — which is why this compares against the pane's middle rather than asking
+     * whether the pane contains it.
+     */
+    static int cornerNearestPoint(@NonNull RectF pane, float x, float y) {
+        boolean left = x <= pane.centerX();
+        if (y <= pane.centerY()) return left ? CornerZones.TOP_LEFT : CornerZones.TOP_RIGHT;
+        return left ? CornerZones.BOTTOM_LEFT : CornerZones.BOTTOM_RIGHT;
+    }
+
+    /**
+     * Where the tab goes on a pane nobody took by the corner — one dropped somewhere new, or
+     * swapped with its neighbour. It comes out of the top corner nearest the point the finger let
+     * go at, so it lands on the side of the pane the hand is already on, and falls back to
+     * {@code fallback} when the pane has no frame to measure.
+     */
+    static int dropCorner(@Nullable RectF pane, float x, float y, int fallback) {
+        if (pane == null || pane.width() <= 0f) return fallback;
+        return x <= pane.centerX() ? CornerZones.TOP_LEFT : CornerZones.TOP_RIGHT;
     }
 
     private void setAllPaneSizeUpdatesPaused(boolean paused, boolean keepBottom) {
@@ -3051,32 +3152,55 @@ public class TerminalPaneController {
         }
     }
 
-    /** Transparent interaction layer: generous border hit targets without thick layout dividers. */
+    /**
+     * Transparent interaction layer: generous border hit targets without thick layout dividers.
+     *
+     * <p>A corner square here is <em>held</em>, not tapped. The terminal is the one surface whose
+     * own program draws into its corners, so a touch that lands in a square is handed straight to
+     * the pane's {@link TerminalView} and only becomes this overlay's once the finger has rested
+     * for {@link HoldTiming#holdTimeoutMs()}; see {@link CornerHold}. The Widgets and Display
+     * frames hold their corners the same way, on squares of the same
+     * {@link CornerZones#PANE_SIZE_DP}.
+     *
+     * <p>The corner tab itself is not drawn here. It is a {@link PaneControlsView}, the same view
+     * the Widgets and Display pages carry, told where the held pane is by a frame source; this
+     * overlay keeps the touches, as those pages keep theirs, and asks the view which button a
+     * finger landed on. That is what lets the tab hold a list of buttons of any length instead of
+     * the four slots it used to have, and scale them down on a narrow pane the way the pages' do.
+     */
     private final class PaneInteractionOverlay extends View {
 
-        private static final int ACTION_NONE = -1;
+        private static final int ACTION_NONE = PaneControlsView.ACTION_NONE;
         private static final int ACTION_MOVE_PANE = 0;
         private static final int ACTION_MAXIMIZE = 1;
         private static final int ACTION_CLOSE = 2;
+        /** Open the Appearance editor on this place. */
+        private static final int ACTION_SURFACE_EDITOR = 3;
+        private static final int ACTION_HELP = 4;
+        /** Open the Layout editor on this place. */
+        private static final int ACTION_LAYOUT_EDITOR = 5;
+        private static final int ACTION_SETTINGS = 6;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
         private final RectF mHandleRect = new RectF();
-        /** Scratch for pane rects read while drawing, and one for the control-tab geometry pass. */
+        /** Scratch for pane rects read while drawing. */
         private final RectF mDrawPaneRect = new RectF();
         private final RectF mDrawDropHalfRect = new RectF();
         private final RectF mGlowClipRect = new RectF();
         private final RectF mGlowBorderRect = new RectF();
+        /** Scratch for the pane rect the tab's frame source answers with. */
         private final RectF mGeometryPaneRect = new RectF();
         /** Scratch for pane rects read while hit-testing a touch stream. */
         private final RectF mHitPaneRect = new RectF();
-        private final Path mPath = new Path();
-        private final RectF mControlRect = new RectF();
-        private final RectF[] mControlButtons = {new RectF(), new RectF(), new RectF()};
+        /** The tab itself, laid over the whole host and pointed at whichever pane was tapped. */
+        private final PaneControlsView mControls;
 
         @Nullable private Split mXSplit;
         @Nullable private Split mYSplit;
-        @Nullable private Leaf mBorderTapLeaf;
+        @Nullable private Leaf mCornerTapLeaf;
+        /** Which of that leaf's corners the finger is on, or {@link CornerZones#NONE}. */
+        private int mPressedCorner = CornerZones.NONE;
         @Nullable private Leaf mControlLeaf;
         @Nullable private Leaf mMovingLeaf;
         @Nullable private Leaf mMoveTarget;
@@ -3088,13 +3212,24 @@ public class TerminalPaneController {
         private float mXWeightB;
         private float mYWeightA;
         private float mYWeightB;
-        private float mControlProgress;
         private boolean mDraggingDivider;
-        private boolean mBorderPressed;
+        private boolean mCornerPressed;
         private boolean mTouchMoved;
-        private boolean mControlsShown;
         private int mPressedControlAction = ACTION_NONE;
-        @Nullable private ValueAnimator mControlAnimator;
+        /** Who owns a finger down in a corner square: the program under it, or this corner. */
+        private final CornerHold mHold = new CornerHold();
+        /**
+         * The pane's terminal while the corner has not claimed the gesture. A sibling view that
+         * returns false on the down never sees the rest of the stream, so the square cannot let a
+         * touch fall through — it keeps it and hands the terminal a copy of every event instead.
+         */
+        @Nullable private TerminalView mForwardTarget;
+        /**
+         * Its own handler rather than {@link View#postDelayed}: a detached view queues those until
+         * it is attached, and the hold has to fire whether or not this overlay is on screen yet.
+         */
+        private final Handler mHoldHandler = new Handler(Looper.getMainLooper());
+        private final Runnable mHoldElapsed = this::onHoldElapsed;
 
         PaneInteractionOverlay() {
             super(mHostView.getContext());
@@ -3103,26 +3238,113 @@ public class TerminalPaneController {
             setFocusable(false);
             setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
             setContentDescription("Pane resize and controls");
+            mControls = new PaneControlsView(mHostView.getContext());
+            mControls.setListener(this::runControlAction);
+            // The tab hangs off the pane the finger asked at, not off this overlay, and the pane
+            // may move or be shaped again under a tab already out — so it is read afresh rather
+            // than pushed in.
+            mControls.setFrameSource(frame -> {
+                RectF pane = mControlLeaf == null ? null : paneRect(mControlLeaf, mGeometryPaneRect);
+                if (pane == null) return false;
+                frame.bounds.set(pane);
+                frame.radiusPx = controlCornerRadiusPx();
+                frame.borderPx = controlBorderStrokePx();
+                return true;
+            });
+            applyControlActions();
+        }
+
+        /** The tab, so the controller can hang it off the host beside this overlay. */
+        @NonNull
+        PaneControlsView controlsView() {
+            return mControls;
+        }
+
+        /**
+         * A pane's own tab always redraws with the overlay: the two are one picture, and the pane
+         * under the tab moves while this overlay is the thing being dragged.
+         */
+        @Override
+        public void invalidate() {
+            super.invalidate();
+            if (mControls != null) mControls.invalidate();
+        }
+
+        /**
+         * What the tab carries, for the pane it is out on. Alone, a pane has nothing to move,
+         * maximise or close, so it offers the two editor doors instead — Appearance and Layout,
+         * the pair every place on the wall carries; maximised, it has no neighbour to swap with.
+         * Help closes every one of them.
+         */
+        private void applyControlActions() {
+            List<PaneControlsView.Action> actions = new ArrayList<>(4);
+            if (isLonePane()) {
+                actions.add(PaneControlsView.Action.glyph(ACTION_SURFACE_EDITOR,
+                    CornerTabGlyphs.APPEARANCE));
+                actions.add(PaneControlsView.Action.glyph(ACTION_LAYOUT_EDITOR,
+                    CornerTabGlyphs.LAYOUT));
+            } else {
+                if (mMaximizedLeaf == null) {
+                    actions.add(PaneControlsView.Action.drawn(ACTION_MOVE_PANE, this::drawMoveMark,
+                        PaneControlsView.TINT_TERTIARY));
+                }
+                actions.add(PaneControlsView.Action.drawn(ACTION_MAXIMIZE, this::drawMaximizeMark));
+                actions.add(PaneControlsView.Action.drawn(ACTION_CLOSE, this::drawCloseMark,
+                    PaneControlsView.TINT_ERROR));
+            }
+            // The launcher's settings, one tap from the tab on every place, as the display's tab
+            // already offers them.
+            actions.add(PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS));
+            actions.add(PaneControlsView.Action.label(ACTION_HELP,
+                CornerTabGlyphs.help(getContext())));
+            mControls.setActions(actions);
+        }
+
+        /** The grip: two rules, the handle a pane is dragged onto another by. */
+        private void drawMoveMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                  @NonNull Paint paint, float density) {
+            float cx = button.centerX();
+            float cy = button.centerY();
+            canvas.drawLine(cx - dp(4), cy - dp(2.5f), cx + dp(4), cy - dp(2.5f), paint);
+            canvas.drawLine(cx - dp(4), cy + dp(2.5f), cx + dp(4), cy + dp(2.5f), paint);
+        }
+
+        /** The box, with the two arrows folding it back in once the pane is maximised. */
+        private void drawMaximizeMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                      @NonNull Paint paint, float density) {
+            float cx = button.centerX();
+            float cy = button.centerY();
+            float inset = mMaximizedLeaf == null ? dp(4) : dp(3.5f);
+            canvas.drawRect(cx - inset, cy - inset, cx + inset, cy + inset, paint);
+            if (mMaximizedLeaf != null) {
+                canvas.drawLine(cx - dp(5), cy + dp(2), cx - dp(2), cy + dp(5), paint);
+                canvas.drawLine(cx + dp(5), cy - dp(2), cx + dp(2), cy - dp(5), paint);
+            }
+        }
+
+        private void drawCloseMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                   @NonNull Paint paint, float density) {
+            float cx = button.centerX();
+            float cy = button.centerY();
+            canvas.drawLine(cx - dp(4), cy - dp(4), cx + dp(4), cy + dp(4), paint);
+            canvas.drawLine(cx + dp(4), cy - dp(4), cx - dp(4), cy + dp(4), paint);
         }
 
         void onTreeRendered() {
             resetTouchState();
-            // A dismiss still in flight would overwrite whatever is assigned below on its next
-            // frame, fading the controls off a pane that has just been maximized.
-            if (mControlAnimator != null) {
-                mControlAnimator.cancel();
-                mControlAnimator = null;
-            }
+            // What the tab carries follows the tree: a pane that has just been split has a
+            // neighbour to move onto, and a maximized one has none.
+            applyControlActions();
             if (mMaximizedLeaf != null) {
                 mControlLeaf = mMaximizedLeaf;
-                mControlsShown = true;
-                mControlProgress = 1f;
+                // A dismiss still in flight would fade the tab off a pane that has just been
+                // maximized, so this is the state asserted rather than animated towards.
+                mControls.showNow(mControls.corner());
             } else if (mControlLeaf != null
                 && (mActiveWindow == null || findLeafIn(mActiveWindow.root,
                     mControlLeaf.session) == null)) {
                 mControlLeaf = null;
-                mControlsShown = false;
-                mControlProgress = 0f;
+                mControls.dismissNow();
             }
             invalidate();
         }
@@ -3147,37 +3369,30 @@ public class TerminalPaneController {
                         return true;
                     }
 
-                    if (mControlsShown && mMaximizedLeaf == null) dismissControls();
-                    findDividerTargets(x, y);
-                    // Resolve pane ownership from the touched border before falling back to the
-                    // nearest pane. This is important for the original pane: the empty pixels in
-                    // a shared divider otherwise tend to resolve to the newly-created neighbour.
-                    mBorderTapLeaf = leafAtTouchedBorder(x, y);
-                    if (mBorderTapLeaf == null) mBorderTapLeaf = leafAtOrNearest(x, y);
-                    if (mXSplit != null || mYSplit != null) {
-                        mDraggingDivider = true;
-                        beginHostSurfaceResize();
-                        if (mXSplit != null) {
-                            mXWeightA = mXSplit.weightA;
-                            mXWeightB = mXSplit.weightB;
-                        }
-                        if (mYSplit != null) {
-                            mYWeightA = mYSplit.weightA;
-                            mYWeightB = mYSplit.weightB;
-                        }
-                        focusLeaf(mBorderTapLeaf);
-                        getParent().requestDisallowInterceptTouchEvent(true);
-                        invalidate();
-                        return true;
-                    }
-                    if (mBorderTapLeaf != null && isNearPaneBorder(mBorderTapLeaf, x, y)) {
-                        mBorderPressed = true;
-                        focusLeaf(mBorderTapLeaf);
-                        getParent().requestDisallowInterceptTouchEvent(true);
-                        invalidate();
-                        return true;
-                    }
-                    return false;
+                    if (mControls.isControlsShown() && mMaximizedLeaf == null) dismissControls();
+                    // A pane is taken hold of by its corners, never by an edge: the edges are the
+                    // terminal's own, down to the last column. Ownership is resolved from the
+                    // corner the finger is actually in, which matters for the original pane —
+                    // the empty pixels in a shared divider otherwise tend to resolve to the
+                    // neighbour created after it.
+                    mPressedCorner = findTouchedCorner(x, y);
+                    if (mPressedCorner == CornerZones.NONE) return false;
+                    // Which seams that corner sits on: one at the end of a seam, both where two
+                    // cross, none at a corner the host's own edge makes. Read now, because the
+                    // seam the hold will resize is the one under the finger when it landed.
+                    findCornerDividerTargets();
+                    // The corner claims nothing yet. Until the hold fires the program under the
+                    // square gets every event, so a tap on tmux's clock or vim's ruler reaches
+                    // the thing that drew it.
+                    mHold.down(x, y, ViewConfiguration.get(getContext()).getScaledTouchSlop(),
+                        dp(3), mXSplit != null || mYSplit != null);
+                    // Armed before the terminal sees anything: the pane focuses itself off the
+                    // forwarded down, and whatever that stirs up must not find half a gesture.
+                    aimForwardingAtTerminal();
+                    mHoldHandler.postDelayed(mHoldElapsed, HoldTiming.holdTimeoutMs());
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                    forwardToTerminal(event);
+                    return true;
 
                 case MotionEvent.ACTION_MOVE:
                     if (mMovingLeaf != null) {
@@ -3201,10 +3416,24 @@ public class TerminalPaneController {
                         invalidate();
                         return true;
                     }
-                    if (mBorderTapLeaf != null) {
+                    if (mHold.isTracking()) {
+                        CornerHold.Move moved = mHold.move(x, y);
+                        if (moved == CornerHold.Move.ABANDONED) releaseHoldToTerminal();
+                        if (mHold.forwardsToTerminal()) {
+                            forwardToTerminal(event);
+                            return true;
+                        }
                         mHandleX = x;
                         mHandleY = y;
-                        mTouchMoved |= distance(x, y, mDownX, mDownY) > dp(3);
+                        mTouchMoved |= moved == CornerHold.Move.COMMITTED
+                            || moved == CornerHold.Move.DRAGGING;
+                        // The tick belongs to the drag starting, not to every pixel of it.
+                        if (moved == CornerHold.Move.COMMITTED && mDraggingDivider)
+                            performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                        if (mDraggingDivider) {
+                            applySplitDrag(mXSplit, x - mDownX, mXWeightA, mXWeightB);
+                            applySplitDrag(mYSplit, y - mDownY, mYWeightA, mYWeightB);
+                        }
                         invalidate();
                         return true;
                     }
@@ -3222,41 +3451,70 @@ public class TerminalPaneController {
                                 && retileDroppedPane(source, target, targetRect, x, y)) {
                                 mControlLeaf = source;
                                 render();
-                                showControls(source);
+                                showControls(source, x, y);
                                 mHost.onActivePaneChanged();
                                 mHost.onTreesChanged();
                             } else {
-                                swapPanePositions(source, target);
+                                swapPanePositions(source, target, x, y);
                             }
                         } else {
-                            showControls(source);
+                            showControls(source, x, y);
                         }
                         return true;
                     }
                     if (mPressedControlAction != ACTION_NONE) {
                         int action = mPressedControlAction;
-                        Leaf leaf = mControlLeaf;
                         boolean activate = !mTouchMoved && controlActionAt(x, y) == action;
                         resetTouchState();
-                        if (activate && leaf != null) performControlAction(action, leaf);
+                        if (activate) {
+                            // The same tick the Widgets and Display tabs give their buttons.
+                            performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                            mControls.activate(action);
+                        }
                         return true;
                     }
-                    if (mDraggingDivider || mBorderTapLeaf != null) {
-                        Leaf leaf = mBorderTapLeaf;
-                        boolean resized = mDraggingDivider && mTouchMoved;
+                    if (mHold.isTracking()) {
+                        CornerHold.Lift lift = mHold.lift();
+                        if (lift == CornerHold.Lift.NOTHING) {
+                            // The program kept this one. Let it finish its own gesture.
+                            forwardToTerminal(event);
+                            resetTouchState();
+                            return true;
+                        }
+                        Leaf leaf = mCornerTapLeaf;
+                        // Read before the reset clears it: the tab comes out of the corner the
+                        // finger actually asked at.
+                        int corner = mPressedCorner;
+                        boolean resized = lift == CornerHold.Lift.COMMIT_RESIZE;
                         if (resized) {
                             snapSplitToCellGrid(mXSplit);
                             snapSplitToCellGrid(mYSplit);
                         }
                         if (mDraggingDivider) finishHostSurfaceResizeKeepingBottom();
                         resetTouchState();
-                        showControls(leaf);
+                        if (corner == CornerZones.NONE && leaf != null) {
+                            RectF touched = paneRect(leaf, mHitPaneRect);
+                            if (touched != null) corner = cornerNearestPoint(touched, x, y);
+                        }
+                        showControls(leaf, corner);
                         if (resized) mHost.onTreesChanged();
                         return true;
                     }
                     return false;
 
+                case MotionEvent.ACTION_POINTER_DOWN:
+                    // Two fingers on a terminal are a scroll or a pinch, never a hold: the corner
+                    // lets go and the program gets both of them.
+                    if (mHold.secondFinger()) releaseHoldToTerminal();
+                    if (mHold.forwardsToTerminal()) forwardToTerminal(event);
+                    return mHold.isTracking();
+
+                case MotionEvent.ACTION_POINTER_UP:
+                    if (mHold.forwardsToTerminal()) forwardToTerminal(event);
+                    return mHold.isTracking();
+
                 case MotionEvent.ACTION_CANCEL:
+                    if (mHold.forwardsToTerminal()) forwardToTerminal(event);
                     if (mDraggingDivider) finishHostSurfaceResizeKeepingBottom();
                     resetTouchState();
                     invalidate();
@@ -3266,8 +3524,16 @@ public class TerminalPaneController {
             }
         }
 
-        private void performControlAction(int action, @NonNull Leaf leaf) {
-            if (action == ACTION_MAXIMIZE) {
+        /** One button run, told to us by the tab the way every page on the wall is told. */
+        private void runControlAction(int action) {
+            Leaf leaf = mControlLeaf;
+            if (leaf == null) return;
+            if (action == ACTION_HELP) {
+                // Help first, the tab second: help reads the ? to hang its own buttons beside it,
+                // and dismisses every tab on the wall on its way up.
+                mHost.showHelpOverlay();
+                dismissControlsForHelp();
+            } else if (action == ACTION_MAXIMIZE) {
                 mMaximizedLeaf = mMaximizedLeaf == null ? leaf : null;
                 mActiveWindow.active = leaf;
                 render();
@@ -3275,17 +3541,27 @@ public class TerminalPaneController {
             } else if (action == ACTION_CLOSE) {
                 dismissControls();
                 leaf.session.finishIfRunning();
+            } else if (action == ACTION_SETTINGS) {
+                dismissControls();
+                mHost.openSettings();
+            } else if (action == ACTION_SURFACE_EDITOR) {
+                dismissControls();
+                mHost.openSurfaceEditor();
+            } else if (action == ACTION_LAYOUT_EDITOR) {
+                dismissControls();
+                mHost.openLayoutEditor();
             }
         }
 
-        private void swapPanePositions(@NonNull Leaf source, @NonNull Leaf target) {
+        private void swapPanePositions(@NonNull Leaf source, @NonNull Leaf target,
+                                       float dropX, float dropY) {
             TerminalSession moved = source.session;
             source.session = target.session;
             target.session = moved;
             mActiveWindow.active = target;
             mControlLeaf = target;
             render();
-            showControls(target);
+            showControls(target, dropX, dropY);
             mHost.onActivePaneChanged();
             mHost.onTreesChanged();
         }
@@ -3297,6 +3573,113 @@ public class TerminalPaneController {
             applyFocusGrowth(true);
             focusActiveView();
             mHost.onActivePaneChanged();
+        }
+
+        /**
+         * The hold time passed with the finger still where it landed. The corner takes the gesture
+         * from here: the program is told its touch is over, the hand is told the hold was heard,
+         * and the rest of the stream stays in this overlay.
+         */
+        private void onHoldElapsed() {
+            if (!mHold.holdElapsed()) return;
+            cancelTerminalGesture();
+            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            focusLeaf(mCornerTapLeaf);
+            if (mXSplit != null || mYSplit != null) {
+                mDraggingDivider = true;
+                beginHostSurfaceResize();
+                if (mXSplit != null) {
+                    mXWeightA = mXSplit.weightA;
+                    mXWeightB = mXSplit.weightB;
+                }
+                if (mYSplit != null) {
+                    mYWeightA = mYSplit.weightA;
+                    mYWeightB = mYSplit.weightB;
+                }
+            } else {
+                mCornerPressed = true;
+            }
+            invalidate();
+        }
+
+        /** The terminal behind the corner square the finger landed in, if it has one. */
+        @Nullable
+        private TerminalView cornerTerminalView() {
+            return mCornerTapLeaf == null ? null : mPaneViews.get(mCornerTapLeaf.session);
+        }
+
+        /**
+         * Point the forwarding at the touched pane. The view is told the finger is exempt as it is
+         * aimed, so it never starts a hold of its own for a touch this corner may take at
+         * {@link HoldTiming#holdTimeoutMs()}.
+         */
+        private void aimForwardingAtTerminal() {
+            mForwardTarget = cornerTerminalView();
+            if (mForwardTarget != null) mForwardTarget.setHoldExempt(true);
+        }
+
+        /**
+         * A copy of one event in the terminal's own coordinates. Both views are read off the
+         * screen rather than off the layout, so a pane the motion overlay has moved out from under
+         * its frame still gets the touch where the finger actually is.
+         */
+        private void forwardToTerminal(@NonNull MotionEvent event) {
+            TerminalView view = mForwardTarget;
+            if (view == null) return;
+            int[] overlay = location(this);
+            int[] target = location(view);
+            MotionEvent copy = MotionEvent.obtainNoHistory(event);
+            copy.offsetLocation(overlay[0] - target[0], overlay[1] - target[1]);
+            view.dispatchTouchEvent(copy);
+            copy.recycle();
+        }
+
+        /**
+         * Tell the terminal the touch it has been tracking is over. A cancel is the one ending
+         * that leaves nothing behind — no click, no selection, no reported button — which is what
+         * a finger that turned out to be a corner hold owes the program.
+         */
+        private void cancelTerminalGesture() {
+            TerminalView view = mForwardTarget;
+            if (view == null) return;
+            long now = SystemClock.uptimeMillis();
+            MotionEvent cancel =
+                MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0f, 0f, 0);
+            view.dispatchTouchEvent(cancel);
+            cancel.recycle();
+            endForwardingToTerminal();
+        }
+
+        /**
+         * The finger travelled, or a second one landed, before the hold could fire. The gesture is
+         * the program's: keep handing it every event — it has had them all along — and let its own
+         * holds run again.
+         */
+        private void releaseHoldToTerminal() {
+            mHoldHandler.removeCallbacks(mHoldElapsed);
+            if (mForwardTarget != null) mForwardTarget.setHoldExempt(false);
+        }
+
+        private void endForwardingToTerminal() {
+            if (mForwardTarget == null) return;
+            mForwardTarget.setHoldExempt(false);
+            mForwardTarget = null;
+        }
+
+        /**
+         * The seams the pane corner under the finger sits on. The corner's own point on the pane
+         * is what is matched against each seam, not the finger's — so the whole square drags
+         * whatever that corner is the end of, rather than only the part of it near the seam.
+         */
+        private void findCornerDividerTargets() {
+            mXSplit = null;
+            mYSplit = null;
+            if (mCornerTapLeaf == null || mPressedCorner == CornerZones.NONE) return;
+            RectF pane = paneRect(mCornerTapLeaf, mHitPaneRect);
+            if (pane == null) return;
+            findDividerTargets(
+                CornerZones.isLeft(mPressedCorner) ? pane.left : pane.right,
+                CornerZones.isTop(mPressedCorner) ? pane.top : pane.bottom);
         }
 
         private void findDividerTargets(float x, float y) {
@@ -3320,7 +3703,7 @@ public class TerminalPaneController {
                 if (split.orientation == LinearLayout.HORIZONTAL) {
                     float boundary = dividerLocation[0] - host[0] + divider.getWidth() / 2f;
                     float distance = Math.abs(x - boundary);
-                    if (distance <= threshold && y >= top - threshold && y <= bottom + threshold
+                    if (cornerDragsSeam(boundary, top, bottom, x, y, threshold)
                         && distance < bestX) {
                         bestX = distance;
                         mXSplit = split;
@@ -3328,7 +3711,7 @@ public class TerminalPaneController {
                 } else {
                     float boundary = dividerLocation[1] - host[1] + divider.getHeight() / 2f;
                     float distance = Math.abs(y - boundary);
-                    if (distance <= threshold && x >= left - threshold && x <= right + threshold
+                    if (cornerDragsSeam(boundary, left, right, y, x, threshold)
                         && distance < bestY) {
                         bestY = distance;
                         mYSplit = split;
@@ -3382,14 +3765,14 @@ public class TerminalPaneController {
         }
 
         /**
-         * Return the leaf whose border was actually touched. A point inside a pane wins over an
-         * equally-near pane across the divider; for the divider's exact centre, the focused pane
-         * wins. This makes the first/original pane as reachable as every pane created after it.
+         * Takes note of the pane whose corner was touched, and returns which corner it was. A
+         * point inside a pane wins over an equally-near pane across the divider; for the
+         * divider's own empty pixels, the focused pane wins. This makes the first pane of a split
+         * as reachable as every pane created after it.
          */
-        @Nullable
-        private Leaf leafAtTouchedBorder(float x, float y) {
-            if (mActiveWindow == null) return null;
-            float threshold = dp(12);
+        private int findTouchedCorner(float x, float y) {
+            mCornerTapLeaf = null;
+            if (mActiveWindow == null) return CornerZones.NONE;
             List<Leaf> leaves = new ArrayList<>();
             List<RectF> panes = new ArrayList<>();
             int activeIndex = -1;
@@ -3400,8 +3783,13 @@ public class TerminalPaneController {
                 leaves.add(leaf);
                 panes.add(rect);
             }
-            int index = touchedBorderIndex(panes, activeIndex, x, y, threshold);
-            return index < 0 ? null : leaves.get(index);
+            // The terminal's squares are the big ones: they are held rather than tapped, and a
+            // touch that does not rest costs the program nothing.
+            CornerZones.Hit hit = CornerZones.pick(panes, activeIndex, x, y,
+                CornerZones.paneSizePx(getResources().getDisplayMetrics().density), dp(6));
+            if (hit == null) return CornerZones.NONE;
+            mCornerTapLeaf = leaves.get(hit.index);
+            return hit.corner;
         }
 
         @Nullable
@@ -3422,14 +3810,6 @@ public class TerminalPaneController {
                 }
             }
             return best;
-        }
-
-        private boolean isNearPaneBorder(@NonNull Leaf leaf, float x, float y) {
-            RectF rect = paneRect(leaf, mHitPaneRect);
-            if (rect == null) return false;
-            float threshold = dp(12);
-            return Math.min(Math.min(Math.abs(x - rect.left), Math.abs(x - rect.right)),
-                Math.min(Math.abs(y - rect.top), Math.abs(y - rect.bottom))) <= threshold;
         }
 
         /** Allocating form, for callers that keep several pane rects alive at once. */
@@ -3461,83 +3841,105 @@ public class TerminalPaneController {
             return location;
         }
 
-        private void showControls(@Nullable Leaf leaf) {
+        /**
+         * The tab on a pane nobody took by the corner — one dropped somewhere new, or swapped with
+         * its neighbour. There is no touched corner to answer, so it comes out of the top corner
+         * nearest where the finger let go: the same {@link CornerTabGeometry} rule as every other
+         * tab, aimed at the side of the pane the hand is already on.
+         */
+        private void showControls(@Nullable Leaf leaf, float dropX, float dropY) {
+            RectF pane = leaf == null ? null : paneRect(leaf, mHitPaneRect);
+            showControls(leaf, dropCorner(pane, dropX, dropY, defaultControlCorner()));
+        }
+
+        /** Where a tab nobody aimed goes, the same corner every page on the wall defaults to. */
+        private int defaultControlCorner() {
+            return CornerZones.corner(true, false,
+                getLayoutDirection() == LAYOUT_DIRECTION_RTL);
+        }
+
+        /**
+         * The tab out of one corner. It comes out of the corner the finger asked at, as the
+         * Widgets and Display pages' do, and one already out at another corner starts again from
+         * the new one rather than sliding across.
+         */
+        private void showControls(@Nullable Leaf leaf, int corner) {
             if (leaf == null || !shouldShowInteractionOverlay(
                 mActiveWindow == null ? 0 : leavesOf(mActiveWindow.root).size(),
                 mMaximizedLeaf != null)) return;
             mControlLeaf = leaf;
-            mControlsShown = true;
-            animateControlProgress(1f, false);
+            applyControlActions();
+            mControls.show(corner == CornerZones.NONE ? defaultControlCorner() : corner);
+            mHost.onPaneControlsShown();
+        }
+
+        private void dismissControlsForHelp() {
+            if (mControls.isControlsShown()) mHost.onPaneControlsDismissed();
+            mControlLeaf = null;
+            mControls.dismissNow();
+            invalidate();
         }
 
         private void dismissControls() {
             if (mMaximizedLeaf != null) return;
-            animateControlProgress(0f, true);
-        }
-
-        private void animateControlProgress(float target, boolean clearOnEnd) {
-            if (mControlAnimator != null) mControlAnimator.cancel();
-            mControlAnimator = ValueAnimator.ofFloat(mControlProgress, target);
-            mControlAnimator.setDuration(190L);
-            mControlAnimator.setInterpolator(new DecelerateInterpolator(1.8f));
-            mControlAnimator.addUpdateListener(animation -> {
-                mControlProgress = (Float) animation.getAnimatedValue();
-                invalidate();
-            });
-            mControlAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
-                @Override public void onAnimationEnd(android.animation.Animator animation) {
-                    if (clearOnEnd && mControlProgress <= 0f) {
-                        mControlsShown = false;
-                        mControlLeaf = null;
-                    }
-                }
-            });
-            mControlAnimator.start();
+            if (mControls.isControlsShown()) mHost.onPaneControlsDismissed();
+            mControls.dismiss();
         }
 
         private int controlActionAt(float x, float y) {
-            if (!mControlsShown || mControlLeaf == null || mControlProgress < .35f) {
-                return ACTION_NONE;
-            }
-            computeControlGeometry();
-            if (mMaximizedLeaf != null) {
-                if (mControlButtons[0].contains(x, y)) return ACTION_MAXIMIZE;
-                if (mControlButtons[1].contains(x, y)) return ACTION_CLOSE;
-            } else {
-                if (mControlButtons[0].contains(x, y)) return ACTION_MOVE_PANE;
-                if (mControlButtons[1].contains(x, y)) return ACTION_MAXIMIZE;
-                if (mControlButtons[2].contains(x, y)) return ACTION_CLOSE;
-            }
-            return ACTION_NONE;
+            if (mControlLeaf == null) return ACTION_NONE;
+            return mControls.actionAt(x, y);
         }
 
-        private void computeControlGeometry() {
-            RectF pane = mControlLeaf == null ? null : paneRect(mControlLeaf, mGeometryPaneRect);
-            if (pane == null) {
-                mControlRect.setEmpty();
-                return;
+        /** The trailing button of the tab that is up — always the ? — in screen coordinates. */
+        boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
+            if (mControlLeaf == null || !mControls.actionBounds(ACTION_HELP, mHelpButtonBounds)) {
+                return false;
             }
-            int count = mMaximizedLeaf == null ? 3 : 2;
-            float button = dp(22.4f);
-            float width = button * count + dp(4.8f);
-            float right = pane.right - dp(3);
-            float left = Math.max(pane.left + dp(3), right - width);
-            float height = dp(24);
-            float top = pane.top - height * (1f - mControlProgress);
-            mControlRect.set(left, top, right, top + height);
-            for (int i = 0; i < mControlButtons.length; i++) mControlButtons[i].setEmpty();
-            float x = left + dp(2.4f);
-            for (int i = 0; i < count; i++) {
-                mControlButtons[i].set(x, top, x + button, top + dp(22));
-                x += button;
-            }
+            int[] host = location(mControls);
+            out.set(Math.round(mHelpButtonBounds.left) + host[0],
+                Math.round(mHelpButtonBounds.top) + host[1],
+                Math.round(mHelpButtonBounds.right) + host[0],
+                Math.round(mHelpButtonBounds.bottom) + host[1]);
+            return !out.isEmpty();
         }
+        private final RectF mHelpButtonBounds = new RectF();
+
+        private boolean isLonePane() {
+            return TerminalPaneController.isLonePane(
+                mActiveWindow == null ? 0 : leavesOf(mActiveWindow.root).size(),
+                mMaximizedLeaf != null);
+        }
+
+        /** Whether this pane paints a rounded border at all — a split, a maximized pane, a float. */
+        private boolean controlPaneRounded() {
+            return tiledPaneCount() > 1 || mMaximizedLeaf != null
+                || (mActiveWindow != null && mControlLeaf != null
+                    && mActiveWindow.floating.contains(mControlLeaf));
+        }
+
+        /** The pane's own corner radius under the tab — the one radius every pane wears. */
+        private float controlCornerRadiusPx() {
+            return paneRadiusPx();
+        }
+
+        /** The border the pane paints, which is the line the tab lines up inside. */
+        private float controlBorderStrokePx() {
+            return paneBorderStrokePx(paneGlassActive(), controlPaneRounded(),
+                getResources().getDisplayMetrics().density);
+        }
+
+        /**
+         * The tint the pane's own slab wears, which the tab fills itself with so it reads as the
+         * pane's frame grown rather than a panel laid over it. A pane with no slab answers nothing
+         * and the tab keeps the theme's panel colour, which is what holds the buttons off the
+         * terminal underneath.
+         */
 
         @Override
         protected void onDraw(Canvas canvas) {
             super.onDraw(canvas);
-            if (!mDraggingDivider && !mBorderPressed && mMovingLeaf == null
-                && !(mControlsShown && mControlLeaf != null && mControlProgress > 0f)) {
+            if (!mDraggingDivider && !mCornerPressed && mMovingLeaf == null) {
                 // Nothing of ours to draw. Resolving theme colours before this check meant an overlay
                 // that draws nothing still did two theme lookups on every pass.
                 return;
@@ -3551,7 +3953,7 @@ public class TerminalPaneController {
                 // The edge being dragged glows on the focused pane instead of drawing a slab down
                 // the divider: a resize is a change to *this* pane's edge, and a 3dp accent line
                 // over the seam read as a second, thicker border appearing out of nowhere.
-                RectF focused = paneRect(mBorderTapLeaf, mDrawPaneRect);
+                RectF focused = paneRect(mCornerTapLeaf, mDrawPaneRect);
                 if (focused != null) {
                     drawEdgeGlow(canvas, focused, primary, edgeBandFor(focused, mXSplit, true));
                     drawEdgeGlow(canvas, focused, primary, edgeBandFor(focused, mYSplit, false));
@@ -3567,19 +3969,8 @@ public class TerminalPaneController {
                     canvas.drawRoundRect(mHandleRect, dp(2), dp(2), mPaint);
                 }
             }
-            if (mBorderPressed && mBorderTapLeaf != null && !mDraggingDivider) {
-                RectF border = paneRect(mBorderTapLeaf, mDrawPaneRect);
-                if (border != null) {
-                    // Grabbed but not yet moved: the whole border of the focused pane glows, so the
-                    // pane that will resize is named without drawing a frame around it.
-                    drawEdgeGlow(canvas, border, primary, null);
-                    mPaint.setStyle(Paint.Style.FILL);
-                    mPaint.setColor(tertiary);
-                    mHandleRect.set(mHandleX - dp(5), mHandleY - dp(2),
-                        mHandleX + dp(5), mHandleY + dp(2));
-                    canvas.drawRoundRect(mHandleRect, dp(2), dp(2), mPaint);
-                }
-            }
+            // A held corner draws nothing of its own: the buzz says the hold took, and the tab that
+            // follows says which corner. A bracket here outlived the touch and read as a smudge.
             if (mMovingLeaf != null && mMoveTarget != null && mMoveTarget != mMovingLeaf) {
                 RectF target = paneRect(mMoveTarget, mDrawPaneRect);
                 if (target != null) {
@@ -3602,9 +3993,6 @@ public class TerminalPaneController {
                         canvas.drawRect(target, mPaint);
                     }
                 }
-            }
-            if (mControlsShown && mControlLeaf != null && mControlProgress > 0f) {
-                drawControls(canvas, primary, tertiary);
             }
         }
 
@@ -3649,10 +4037,10 @@ public class TerminalPaneController {
         private void drawEdgeGlow(Canvas canvas, @NonNull RectF pane, int color,
                                   @Nullable RectF clip) {
             float depth = dp(GLOW_DEPTH_DP);
-            // The glow must trace the ring the pane already draws. With glass on that ring is the
-            // rim at the glass radius (up to 14dp); drawing the glow at the stock 6dp put a second
-            // arc inside every corner — a visible double border for the whole grab and drag.
-            float radius = paneGlassActive() ? paneGlassRadiusPx() : dp(FLOAT_CORNER_RADIUS_DP);
+            // The glow must trace the ring the pane already draws: drawing it at a radius of its
+            // own put a second arc inside every corner — a visible double border for the whole
+            // grab and drag.
+            float radius = paneRadiusPx();
             int saved = canvas.save();
             // Clip to the pane so the blur falls off inward only: light spilling across the seam
             // would read as the neighbour lighting up too.
@@ -3686,97 +4074,18 @@ public class TerminalPaneController {
             canvas.restoreToCount(saved);
         }
 
-        private void drawControls(Canvas canvas, int primary, int tertiary) {
-            computeControlGeometry();
-            if (mControlRect.isEmpty()) return;
-            int surface = MaterialColors.getColor(getContext(),
-                com.termux.shared.R.attr.termuxColorSurfacePanel,
-                ContextCompat.getColor(getContext(), R.color.termux_surface_panel));
-            RectF pane = paneRect(mControlLeaf, mDrawPaneRect);
-            if (pane == null) return;
-            float paneTop = pane.top;
-            float radius = dp(4);
-            int canvasState = canvas.save();
-            // The tab is revealed through the pane's top edge. Clipping here is what makes the
-            // closing motion disappear back into the frame instead of floating above the pane.
-            canvas.clipRect(pane.left, paneTop - dp(1), pane.right, pane.bottom);
-
-            mPath.reset();
-            mPath.moveTo(mControlRect.left, paneTop);
-            mPath.lineTo(mControlRect.right, paneTop);
-            mPath.lineTo(mControlRect.right, mControlRect.bottom - radius);
-            mPath.quadTo(mControlRect.right, mControlRect.bottom,
-                mControlRect.right - radius, mControlRect.bottom);
-            mPath.lineTo(mControlRect.left + radius, mControlRect.bottom);
-            mPath.quadTo(mControlRect.left, mControlRect.bottom,
-                mControlRect.left, mControlRect.bottom - radius);
-            mPath.close();
-            mPaint.setStyle(Paint.Style.FILL);
-            mPaint.setColor(ColorUtils.setAlphaComponent(surface,
-                Math.round(232f * mControlProgress)));
-            canvas.drawPath(mPath, mPaint);
-
-            mPath.reset();
-            mPath.moveTo(mControlRect.left - dp(5), paneTop);
-            mPath.lineTo(mControlRect.left, paneTop);
-            mPath.lineTo(mControlRect.left, mControlRect.bottom - radius);
-            mPath.quadTo(mControlRect.left, mControlRect.bottom,
-                mControlRect.left + radius, mControlRect.bottom);
-            mPath.lineTo(mControlRect.right - radius, mControlRect.bottom);
-            mPath.quadTo(mControlRect.right, mControlRect.bottom,
-                mControlRect.right, mControlRect.bottom - radius);
-            mPath.lineTo(mControlRect.right, paneTop);
-            mPath.lineTo(mControlRect.right + dp(5), paneTop);
-            mPaint.setStyle(Paint.Style.STROKE);
-            mPaint.setStrokeWidth(dp(1));
-            mPaint.setStrokeCap(Paint.Cap.ROUND);
-            mPaint.setStrokeJoin(Paint.Join.ROUND);
-            mPaint.setColor(ColorUtils.setAlphaComponent(primary,
-                Math.round(225f * mControlProgress)));
-            canvas.drawPath(mPath, mPaint);
-
-            int count = mMaximizedLeaf == null ? 3 : 2;
-            for (int i = 0; i < count; i++) {
-                int action = mMaximizedLeaf == null ? i : i + 1;
-                RectF button = mControlButtons[i];
-                mPaint.setStyle(Paint.Style.STROKE);
-                mPaint.setStrokeCap(Paint.Cap.ROUND);
-                mPaint.setStrokeWidth(dp(1.35f));
-                mPaint.setColor(ColorUtils.setAlphaComponent(
-                    action == ACTION_MOVE_PANE ? tertiary : action == ACTION_CLOSE
-                        ? MaterialColors.getColor(getContext(),
-                            com.termux.shared.R.attr.termuxColorError, Color.RED) : primary,
-                    Math.round(255f * mControlProgress)));
-                float cx = button.centerX();
-                float cy = button.centerY();
-                if (action == ACTION_MOVE_PANE) {
-                    canvas.drawLine(cx - dp(4), cy - dp(2.5f), cx + dp(4), cy - dp(2.5f), mPaint);
-                    canvas.drawLine(cx - dp(4), cy + dp(2.5f), cx + dp(4), cy + dp(2.5f), mPaint);
-                } else if (action == ACTION_MAXIMIZE) {
-                    float inset = mMaximizedLeaf == null ? dp(4) : dp(3.5f);
-                    canvas.drawRect(cx - inset, cy - inset, cx + inset, cy + inset, mPaint);
-                    if (mMaximizedLeaf != null) {
-                        canvas.drawLine(cx - dp(5), cy + dp(2), cx - dp(2), cy + dp(5), mPaint);
-                        canvas.drawLine(cx + dp(5), cy - dp(2), cx + dp(2), cy - dp(5), mPaint);
-                    }
-                } else {
-                    canvas.drawLine(cx - dp(4), cy - dp(4), cx + dp(4), cy + dp(4), mPaint);
-                    canvas.drawLine(cx + dp(4), cy - dp(4), cx - dp(4), cy + dp(4), mPaint);
-                }
-            }
-            mPaint.setStrokeCap(Paint.Cap.BUTT);
-            mPaint.setStrokeJoin(Paint.Join.MITER);
-            canvas.restoreToCount(canvasState);
-        }
-
         private void resetTouchState() {
+            mHoldHandler.removeCallbacks(mHoldElapsed);
+            mHold.reset();
+            endForwardingToTerminal();
             mXSplit = null;
             mYSplit = null;
-            mBorderTapLeaf = null;
+            mCornerTapLeaf = null;
+            mPressedCorner = CornerZones.NONE;
             mMovingLeaf = null;
             mMoveTarget = null;
             mDraggingDivider = false;
-            mBorderPressed = false;
+            mCornerPressed = false;
             mTouchMoved = false;
             mPressedControlAction = ACTION_NONE;
         }
@@ -3788,17 +4097,25 @@ public class TerminalPaneController {
 
     /**
      * Chrome around one floating pane: a transparent top handle row holding a floating pill
-     * (drag = move, tap = expand into action buttons) and a bottom-right grip band (resize).
-     * The panel surface starts at the terminal's top edge, so nothing extends under the pill.
-     * Move/resize deliberately never start from the terminal content itself — long-press
-     * plus drag there is mouse-drag reporting (TerminalView.armTouchMouseDragFromLongPress) and
-     * must keep reaching the shell — so only these chrome regions ever intercept.
+     * (tap = expand into action buttons), a top-leading corner it is moved from and a
+     * bottom-trailing corner it is resized from. The panel surface starts at the terminal's top
+     * edge, so nothing extends under the pill.
+     *
+     * <p>The whole handle row used to move the float. It moves from its top-leading corner now,
+     * like every other frame on the wall, and the pill keeps only the tap that opens its actions
+     * — an affordance that is drawn has to answer, so the pill is still touchable where it is
+     * drawn. Move and resize deliberately never start from the terminal content itself —
+     * long-press plus drag there is mouse-drag reporting
+     * (TerminalView.armTouchMouseDragFromLongPress) and must keep reaching the shell — so only
+     * these chrome regions ever intercept.
      */
     private final class FloatingPaneContainer extends FrameLayout {
 
         private static final int DRAG_NONE = 0;
         private static final int DRAG_MOVE = 1;
         private static final int DRAG_RESIZE = 2;
+        /** The pill: it takes the touch so the terminal does not, but the float never moves. */
+        private static final int DRAG_PILL = 3;
 
         private static final int PILL_ACTION_NONE = 0;
         private static final int PILL_ACTION_CLOSE = 1;
@@ -3809,6 +4126,7 @@ public class TerminalPaneController {
         /** Scratch for the pill grip and its glyphs, redrawn on every frame a float is on screen. */
         private final RectF mChromeScratch = new RectF();
         private final Runnable mCollapsePill = this::collapsePill;
+        private final CornerBracket mBracket = new CornerBracket();
         private int mDragMode = DRAG_NONE;
         private float mDownRawX;
         private float mDownRawY;
@@ -3835,8 +4153,7 @@ public class TerminalPaneController {
             }
             // pane_active_border is a foreground stroke, not a clip — without this the terminal's
             // own rectangular cell-background fill pokes a black triangle past each rounded corner.
-            final float cornerRadiusPx = paneGlassActive()
-                ? paneGlassRadiusPx() : dp(FLOAT_CORNER_RADIUS_DP);
+            final float cornerRadiusPx = paneRadiusPx();
             content.setClipToOutline(true);
             content.setOutlineProvider(new ViewOutlineProvider() {
                 @Override public void getOutline(View view, Outline outline) {
@@ -3903,6 +4220,11 @@ public class TerminalPaneController {
                         }
                         return true;
                     }
+                    if (mDragMode == DRAG_PILL) {
+                        if (Math.hypot(event.getRawX() - mDownRawX, event.getRawY() - mDownRawY)
+                                > dp(6)) mDragMoved = true;
+                        return true;
+                    }
                     if (mDragMode == DRAG_NONE || mDownFrac == null) return false;
                     float hostWidth = mHostView.getWidth();
                     float hostHeight = mHostView.getHeight();
@@ -3940,7 +4262,8 @@ public class TerminalPaneController {
                         else invalidate();
                         return true;
                     }
-                    if (mDragMode == DRAG_MOVE && !mDragMoved) togglePill();
+                    if ((mDragMode == DRAG_MOVE || mDragMode == DRAG_PILL) && !mDragMoved)
+                        togglePill();
                     endDrag();
                     return true;
                 case MotionEvent.ACTION_CANCEL:
@@ -3960,6 +4283,10 @@ public class TerminalPaneController {
             mDownRawX = event.getRawX();
             mDownRawY = event.getRawY();
             mDragMoved = false;
+            if (mDragMode == DRAG_PILL) {
+                getParent().requestDisallowInterceptTouchEvent(true);
+                return;
+            }
             // Seed from what is on screen when the float is currently clamped, so a drag that
             // starts while the host is short does not teleport back to the remembered shape. The
             // MOVE branch still writes floatFrac: a deliberate gesture IS new intent.
@@ -4041,10 +4368,20 @@ public class TerminalPaneController {
             else finishHostSurfaceResizeKeepingBottom();
         }
 
+        /**
+         * Resize from the bottom-trailing corner, move from the top-leading one, and the pill in
+         * between keeps its own tap. Everything else on the float is the terminal's.
+         */
         private int dragModeAt(float x, float y) {
-            if (x >= getWidth() - dp(FLOAT_GRIP_DP) && y >= getHeight() - dp(FLOAT_GRIP_DP))
-                return DRAG_RESIZE;
-            if (y <= dp(FLOAT_HANDLE_DP)) return DRAG_MOVE;
+            float grip = dp(FLOAT_GRIP_DP);
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            if (y >= getHeight() - grip
+                && (rtl ? x <= grip : x >= getWidth() - grip)) return DRAG_RESIZE;
+            if (y <= grip && (rtl ? x >= getWidth() - grip : x <= grip)) return DRAG_MOVE;
+            RectF pill = pillRect();
+            pill.inset(-dp(8), -dp(6));
+            pill.top = 0f;
+            if (pill.contains(x, y)) return DRAG_PILL;
             return DRAG_NONE;
         }
 
@@ -4074,6 +4411,14 @@ public class TerminalPaneController {
                 mChromePaint.setStrokeWidth(Math.max(1f, dp(1f)));
                 mChromePaint.setColor(ColorUtils.setAlphaComponent(outlineVariant, 0x66));
                 canvas.drawRoundRect(pill, radius, radius, mChromePaint);
+            }
+            if (mDragMode == DRAG_MOVE) {
+                // The corner under the finger, marked for as long as the finger is on it.
+                mChromeScratch.set(0f, 0f, getWidth(), getHeight());
+                mBracket.draw(canvas, CornerZones.corner(true, true,
+                        getLayoutDirection() == LAYOUT_DIRECTION_RTL), mChromeScratch,
+                    getResources().getDisplayMetrics().density,
+                    CornerBracket.color(getContext()));
             }
             int chromeAlpha = active ? 200 : 90;
             mChromePaint.setStyle(Paint.Style.FILL);

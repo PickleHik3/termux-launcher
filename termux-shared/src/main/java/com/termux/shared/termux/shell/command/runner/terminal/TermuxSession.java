@@ -14,6 +14,7 @@ import com.termux.shared.errors.Errno;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.shell.command.environment.IShellEnvironment;
 import com.termux.shared.shell.ShellUtils;
+import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalSessionClient;
 import java.io.File;
@@ -123,6 +124,11 @@ public class TermuxSession {
         HashMap<String, String> environment = shellEnvironmentClient.setupShellCommandEnvironment(currentPackageContext, executionCommand);
         if (additionalEnvironment != null)
             environment.putAll(additionalEnvironment);
+        // The pane id is minted here rather than inside TerminalSession because the shell's
+        // environment is built before the session object exists, and the shell has to be able to
+        // name its own pane: `launcherctl agent ...` reads it straight out of the environment.
+        String paneHandle = java.util.UUID.randomUUID().toString();
+        environment.put(TermuxShellEnvironment.ENV_LAUNCHER_PANE, paneHandle);
         List<String> environmentList = ShellEnvironmentUtils.convertEnvironmentToEnviron(environment);
         Collections.sort(environmentList);
         String[] environmentArray = environmentList.toArray(new String[0]);
@@ -134,7 +140,7 @@ public class TermuxSession {
         Logger.logDebugExtended(LOG_TAG, executionCommand.toString());
         Logger.logVerboseExtended(LOG_TAG, "\"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession Environment:\n" + Joiner.on("\n").join(environmentArray));
         Logger.logDebug(LOG_TAG, "Running \"" + executionCommand.getCommandIdAndLabelLogString() + "\" TermuxSession");
-        TerminalSession terminalSession = new TerminalSession(executionCommand.executable, executionCommand.workingDirectory, executionCommand.arguments, environmentArray, executionCommand.terminalTranscriptRows, terminalSessionClient);
+        TerminalSession terminalSession = new TerminalSession(executionCommand.executable, executionCommand.workingDirectory, executionCommand.arguments, environmentArray, executionCommand.terminalTranscriptRows, terminalSessionClient, paneHandle);
         if (executionCommand.shellName != null) {
             terminalSession.mSessionName = executionCommand.shellName;
         }

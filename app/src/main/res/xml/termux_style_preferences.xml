@@ -45,11 +45,23 @@
             app:entries="@array/terminal_contrast_entries"
             app:entryValues="@array/terminal_contrast_values"
             android:defaultValue="default" />
+        <MultiSelectListPreference
+            app:key="theme_templates_enabled"
+            app:title="@string/settings_theme_templates_title"
+            app:summary="@string/settings_theme_templates_summary_none" />
         <SwitchPreferenceCompat
             app:key="use_system_wallpaper"
             app:title="@string/settings_wallpaper_title"
             app:summary="@string/termux_use_system_wallpaper_summary"
             android:defaultValue="true" />
+        <SeekBarPreference
+            app:key="wallpaper_render_zoom"
+            app:title="@string/settings_wallpaper_alignment_title"
+            app:summary="@string/settings_wallpaper_alignment_summary"
+            app:showSeekBarValue="true"
+            app:min="90"
+            android:max="120"
+            android:defaultValue="100" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_icon_appearance_header">
@@ -70,17 +82,35 @@
             app:summary="@string/termux_app_launcher_pinned_icon_pack_summary" />
     </PreferenceCategory>
 
-    <!-- Deliberately last: the sessions drawer is a legacy surface (it only exists with split
-         panes off), so its one styling control sits at the bottom rather than in the surface
-         editor, which tunes the surfaces the launcher actually ships on. -->
-    <PreferenceCategory app:title="@string/settings_sessions_sidebar_header">
+    <PreferenceCategory app:key="keyboard_appearance" app:title="@string/settings_keyboard_look_header">
+        <Preference
+            app:key="customize_keyboard_surface"
+            app:icon="@drawable/ic_symbol_palette"
+            app:persistent="false"
+            app:title="@string/settings_customize_keyboard_title"
+            app:summary="@string/settings_customize_keyboard_summary" />
+        <ListPreference
+            app:key="in_app_keyboard_theme"
+            app:entries="@array/termux_in_app_keyboard_theme_entries"
+            app:entryValues="@array/termux_in_app_keyboard_theme_values"
+            app:useSimpleSummaryProvider="true"
+            app:title="@string/termux_in_app_keyboard_theme_title" />
+        <Preference
+            app:key="in_app_keyboard_color_scheme_editor"
+            app:icon="@drawable/ic_symbol_palette"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment"
+            app:summary="@string/settings_keyboard_colors_summary"
+            app:title="@string/settings_keyboard_colors_title" />
+        <Preference
+            app:key="in_app_keyboard_font"
+            app:title="@string/settings_typeface_title" />
         <SeekBarPreference
-            app:key="sessions_opacity"
-            app:title="@string/settings_sessions_opacity_title"
-            app:summary="@string/settings_sessions_opacity_summary"
+            app:key="in_app_keyboard_bottom_padding"
+            app:title="@string/settings_keyboard_bottom_padding_title"
+            app:summary="@string/settings_keyboard_bottom_padding_summary"
             app:showSeekBarValue="true"
-            android:max="100"
-            android:defaultValue="50" />
+            android:max="48"
+            android:defaultValue="0" />
     </PreferenceCategory>
 
 </PreferenceScreen>

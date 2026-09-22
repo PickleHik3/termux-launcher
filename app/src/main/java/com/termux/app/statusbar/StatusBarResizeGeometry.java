@@ -45,19 +45,4 @@ public final class StatusBarResizeGeometry {
         return new Row(rowHeight, rowTop, expansion, 0f, expansion);
     }
 
-    /** Explicit expanded-to-FULL geometry; normal two-state output above remains unchanged. */
-    public static Row calculateFull(int surfaceHeight, int expandedSurfaceHeight,
-                                    int fullSurfaceHeight, int expandedRowHeight,
-                                    int expandedBottomMargin) {
-        int range = Math.max(1, fullSurfaceHeight - expandedSurfaceHeight);
-        float fullExpansion = FullStatusBarGeometry.finiteUnit(
-            (surfaceHeight - expandedSurfaceHeight) / (float) range);
-        // The spring-written surface height is the row's authoritative moving edge. The resolved
-        // FULL target can briefly be stale while parent/accessory relayout is being delivered; it
-        // is useful for normalized progress but must never clamp real child geometry.
-        int actualSurface = Math.max(0, surfaceHeight);
-        int top = Math.max(0, actualSurface - Math.max(0, expandedBottomMargin)
-            - Math.max(0, expandedRowHeight));
-        return new Row(Math.max(0, expandedRowHeight), top, 1f, fullExpansion, 1f);
-    }
 }

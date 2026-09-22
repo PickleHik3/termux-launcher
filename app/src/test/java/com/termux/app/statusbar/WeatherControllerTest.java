@@ -107,6 +107,20 @@ public class WeatherControllerTest {
         assertEquals("--°", WeatherController.formatTemp(Double.NaN, true));
     }
 
+    @Test
+    public void formatTempBare_sameRoundingWithoutTheDegreeGlyph() {
+        // The side status bar's chip has no room for the glyph or the unit, but agrees with
+        // formatTemp on the number itself.
+        assertEquals("22", WeatherController.formatTempBare(21.6, false));
+        assertEquals("71", WeatherController.formatTempBare(21.6, true));
+        assertEquals("0", WeatherController.formatTempBare(0.0, false));
+        assertEquals("32", WeatherController.formatTempBare(0.0, true));
+        assertEquals("-4", WeatherController.formatTempBare(-3.9, false));
+        assertEquals("25", WeatherController.formatTempBare(-3.9, true));
+        assertEquals("--", WeatherController.formatTempBare(Double.NaN, false));
+        assertEquals("--", WeatherController.formatTempBare(Double.NaN, true));
+    }
+
     /**
      * The (label, glyph, day animation, night animation) every code Open-Meteo reports resolved to
      * before the three cascades became one table. Glyphs are Nerd Font private-use code points.

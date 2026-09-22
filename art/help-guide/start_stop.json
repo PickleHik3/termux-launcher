@@ -1,0 +1,49 @@
+{
+  "id": "start_stop",
+  "crop": [
+    [
+      0,
+      302,
+      1080,
+      1260
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.600240660001873,
+      "kind": "swipe",
+      "points": [
+        16,
+        395,
+        16,
+        395
+      ],
+      "duration": 0.8
+    },
+    {
+      "t": 4.730310751998331,
+      "kind": "tap",
+      "points": [
+        75,
+        435
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 7.5055043539905455,
+      "kind": "tap",
+      "points": [
+        842,
+        1422
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 12.19,
+  "bytes": 1250415,
+  "width": 1080,
+  "height": 1260,
+  "video": "start_stop.mp4",
+  "poster": "start_stop.jpg",
+  "source": "pong 1080x2412@420 native"
+}

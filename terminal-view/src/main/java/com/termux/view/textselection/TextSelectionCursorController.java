@@ -33,6 +33,9 @@ public class TextSelectionCursorController implements CursorController {
 
     private int mSelX1 = -1, mSelX2 = -1, mSelY1 = -1, mSelY2 = -1;
 
+    /** The selection's four corners, reused so a drag costs no allocation per event. */
+    private final int[] mSnapScratch = new int[4];
+
     private ActionMode mActionMode;
 
     public final int ACTION_COPY = 1;
@@ -95,6 +98,27 @@ public class TextSelectionCursorController implements CursorController {
         mSelX1 = mSelX2 = columnAndRow[0];
         mSelY1 = mSelY2 = columnAndRow[1];
         expandSelectionToWord();
+        snapSelectionToTextBlocks();
+    }
+
+    /**
+     * D5: a text sizing block is one selection unit, so an end of the selection that lands inside
+     * one is pushed out to that block's corner. The highlight then covers the whole block on every
+     * row it spans and the handles sit at its corners; copying yields its text once either way.
+     */
+    private void snapSelectionToTextBlocks() {
+        if (terminalView.mEmulator == null)
+            return;
+        mSnapScratch[0] = mSelX1;
+        mSnapScratch[1] = mSelY1;
+        mSnapScratch[2] = mSelX2;
+        mSnapScratch[3] = mSelY2;
+        if (!TextBlockSelection.snap(terminalView.mEmulator.getScreen(), mSnapScratch))
+            return;
+        mSelX1 = mSnapScratch[0];
+        mSelY1 = mSnapScratch[1];
+        mSelX2 = mSnapScratch[2];
+        mSelY2 = mSnapScratch[3];
     }
 
     /**
@@ -136,6 +160,7 @@ public class TextSelectionCursorController implements CursorController {
         mSelY1 = mSelY2 = Math.max(0,
             Math.min(terminalView.mEmulator.getCursorRow(), terminalView.mEmulator.mRows - 1));
         expandSelectionToWord();
+        snapSelectionToTextBlocks();
         mStartHandle.positionAtCursor(mSelX1, mSelY1, true);
         mEndHandle.positionAtCursor(mSelX2 + 1, mSelY2, true);
         if (!mIsSelectingText)
@@ -344,6 +369,7 @@ public class TextSelectionCursorController implements CursorController {
             }
             mSelX2 = getValidCurX(screen, mSelY2, mSelX2);
         }
+        snapSelectionToTextBlocks();
         terminalView.invalidate();
     }
 

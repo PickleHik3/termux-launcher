@@ -32,6 +32,70 @@ XTVERSION reports `termux-launcher(version)`. XTSMGRAPHICS reports the Sixel col
 geometry for the current screen. Capability detectors such as chafa and notcurses can therefore pick
 a supported renderer instead of relying on a conservative terminal-name fallback.
 
+### Telling a TUI it is in kitty
+
+Some programs skip the probe and only switch on their kitty features when the environment says
+`TERM_PROGRAM=kitty`. Neovim 0.12 image plugins such as md-render.nvim and image.nvim are the common
+case: they read the variable, find `termux-launcher`, and draw nothing. The terminal speaks the
+protocols anyway, so the fix is to tell those programs what they want to hear.
+
+Per program, which keeps the rest of the shell honest:
+
+```sh
+TERM_PROGRAM=kitty nvim README.md        # bash, zsh, fish 3.1+
+```
+
+As an alias or abbreviation so you never type it:
+
+```sh
+alias nn='TERM_PROGRAM=kitty nvim'                 # bash or zsh, in ~/.bashrc or ~/.zshrc
+abbr -a nn "TERM_PROGRAM=kitty nvim"               # fish, in ~/.config/fish/conf.d/*.fish
+```
+
+For every program, in the shell rc:
+
+```sh
+export TERM_PROGRAM=kitty
+```
+
+What changes and what does not:
+
+- Programs that gate pictures or the keyboard protocol on the variable start using them. Both work
+  here.
+- The XTVERSION reply stays `termux-launcher(version)`, so features that check the real terminal
+  version stay off; md-render.nvim, for one, enables text sizing only for a kitty version, even
+  though the terminal supports it (see [Text sizing](#text-sizing-osc-66)). Nothing pretends to be
+  a kitty release it is not.
+- `TERM_PROGRAM_VERSION` still carries the launcher's version; a program that reads both will see a
+  kitty name with a version such as 0.2.37. Some turn features off for a version that old; others
+  compare it against kitty release gates that mean nothing here.
+- Neovim 0.13 and newer sends the graphics query instead of reading the variable, and the terminal
+  answers it. Once your Neovim is 0.13 the variable is only there for older tools.
+
+Why the launcher does not set it for you, and why the per-program form is the one to prefer:
+
+- Programs that see `kitty` stop asking and start assuming the whole kitty feature set. They then
+  send what the launcher does not have: shared-memory image transfer (`t=s`, impossible on
+  Android, so the picture fails instead of falling back to a file; `kitten icat` picks this path
+  when it believes it is local), file transfer over OSC 5113, and kitty's remote-control
+  commands. A program that queries gets a true answer; a program that trusts the name gets a
+  broken feature.
+- The launcher loses its own name. Scripts branch on `TERM_PROGRAM=termux-launcher` to know they
+  are inside the launcher; the tlstore installer does, to skip its download path when it is
+  already home. Exporting `kitty` shell-wide breaks that check and any user script written the
+  same way.
+- Some Neovim, tmux and shell setups switch to kitty-only key handling or kitty's shell
+  integration hooks on the name alone and expect behaviour the launcher only partly matches; the
+  symptom is stuck modifiers or odd prompts rather than a clean fallback.
+- Bug reports lose their terminal. A problem seen here gets filed upstream as "works in kitty",
+  and the launcher is invisible in it.
+
+The per-program wrapper above gives the sniffing program what it wants and leaves everything else
+truthful. Reach for the shell-wide export only if most of what you run is such a program, and
+expect the four points above.
+
+The in-app Help has the same one-line recipe under **Pictures in the terminal**.
+
 ## Kitty keyboard protocol
 
 Supported negotiation includes:
@@ -95,9 +159,52 @@ See [Building terminal showcase tools](Building_Terminal_Showcase_Tools.md).
 Existing Sixel and iTerm bitmap rendering remain available alongside Kitty graphics. Applications can
 choose their preferred protocol from capability replies or explicit command-line options.
 
+## Color scheme notifications
+
+Programs can follow the terminal between dark and light instead of guessing from `$COLORFGBG`.
+
+- `CSI ? 996 n` asks for the current preference. The reply is `CSI ? 997 ; 1 n` when the default
+  background is dark and `CSI ? 997 ; 2 n` when it is light, and it is sent whether or not the
+  notification mode below is enabled.
+- `CSI ? 2031 h` turns on unsolicited notifications and `CSI ? 2031 l` turns them off. While the mode
+  is on, the same `CSI ? 997 ; Ps n` report is sent once each time the default background crosses
+  between dark and light, whether the change came from the app's color scheme, from `OSC 11`, or from
+  a reset such as `OSC 111` or `OSC 104`. A color change that stays on the same side is silent.
+  `CSI ? 2031 $ p` (DECRQM) answers with the mode's state, and a terminal reset turns it back off.
+- `OSC 4 ; <index> ; ? ST` reports an indexed color as `OSC 4 ; <index> ; rgb:RRRR/GGGG/BBBB ST`,
+  matching the existing `OSC 10`, `OSC 11` and `OSC 12` query replies.
+
+nvim 0.11, fish 4.3 and tmux 3.6 use these reports to restyle themselves when the terminal's scheme
+changes.
+
+## Text sizing (OSC 66)
+
+`ESC ] 66 ; s=2 ; Heading ESC \` draws "Heading" twice as large, across two rows and twice the
+columns. The keys follow kitty's text sizing protocol: `s` 1 to 7 is the scale and the number of
+rows the text takes; `w` 0 to 7 forces a width in cells before scaling (0 measures the text);
+`n` and `d` draw the text at n/d of the block height, with `v` (0 top, 1 bottom, 2 centre) and
+`h` (0 left, 1 right, 2 centre) placing it inside the block. With `w` unset every character is its
+own block; with `w` set the whole text is one block and anything past `w` cells is cut.
+
+What a program can rely on:
+
+- The cursor moves `s × w` cells to the right on the same row, so the usual detection, writing a
+  `w=2` character and reading the cursor position, answers "supported". No environment variable is
+  involved.
+- Writing over the top-left cell of a block removes the whole block; writing over any other cell
+  blanks that cell. Erase, insert and delete sequences and scrolling inside a region remove every
+  block they touch. A block larger than the screen is discarded.
+- The cursor covers the whole block when it stands on any of its cells. Selecting any part of a
+  block selects all of it, and copying yields its text once.
+- When the pane becomes too narrow for a block, the text is shown at normal size on its first row
+  and grows back when the pane is wide enough again. Rotating the phone keeps blocks whole.
+
+Full-screen programs redraw on resize anyway; the narrow-pane rule matters only for text already in
+the scrollback.
+
 ## Current boundaries
 
-- Shared-memory and file-based Kitty transmissions are not implemented.
+- File (`t=f`) and temporary-file (`t=t`) transmissions are accepted; a `t=t` file is deleted only when its path carries `tty-graphics-protocol` and sits in a temporary directory. Shared-memory (`t=s`) transmission is not implemented: Android has no `shm_open`.
 - Unsupported or excessive requests return bounded protocol errors rather than consuming unbounded
   memory.
 - Image geometry follows terminal cells, so changing a pane's size or font metrics may cause the

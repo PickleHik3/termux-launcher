@@ -1,0 +1,30 @@
+{
+  "id": "fix_shortcuts",
+  "crop": [
+    [
+      0,
+      0,
+      600,
+      700
+    ]
+  ],
+  "events": [
+    {
+      "t": 5.371325592001085,
+      "kind": "swipe",
+      "points": [
+        300,
+        1000,
+        300,
+        600
+      ],
+      "duration": 0.6
+    }
+  ],
+  "duration": 9.13,
+  "bytes": 229490,
+  "width": 600,
+  "height": 700,
+  "video": "fix_shortcuts.mp4",
+  "poster": "fix_shortcuts.jpg"
+}

@@ -73,30 +73,17 @@ public final class AppDrawerGestureArbiter {
         public final boolean noActivePickup;
         /** The drawer is neither open nor already animating. */
         public final boolean drawerIdle;
-        /** The transient FULL status pane is neither open nor transitioning. */
-        public final boolean fullStatusPaneClosed;
-
         /** The portrait dock: {@code portrait} false is the landscape row that is {@code GONE}. */
         public Eligibility(boolean drawerEnabled, boolean searchEmpty, boolean azInactive,
                            boolean portrait, boolean surfaceEditorClosed, boolean paletteClosed,
                            boolean noActivePickup, boolean drawerIdle) {
-            this(drawerEnabled, searchEmpty, azInactive, portrait, surfaceEditorClosed, paletteClosed,
-                noActivePickup, drawerIdle, true);
-        }
-
-        /** The portrait dock: {@code portrait} false is the landscape row that is {@code GONE}. */
-        public Eligibility(boolean drawerEnabled, boolean searchEmpty, boolean azInactive,
-                           boolean portrait, boolean surfaceEditorClosed, boolean paletteClosed,
-                           boolean noActivePickup, boolean drawerIdle,
-                           boolean fullStatusPaneClosed) {
             this(drawerEnabled, searchEmpty, azInactive, portrait ? Pull.DOWN : Pull.NONE,
-                surfaceEditorClosed, paletteClosed, noActivePickup, drawerIdle, fullStatusPaneClosed);
+                surfaceEditorClosed, paletteClosed, noActivePickup, drawerIdle);
         }
 
         public Eligibility(boolean drawerEnabled, boolean searchEmpty, boolean azInactive,
                            @NonNull Pull pull, boolean surfaceEditorClosed, boolean paletteClosed,
-                           boolean noActivePickup, boolean drawerIdle,
-                           boolean fullStatusPaneClosed) {
+                           boolean noActivePickup, boolean drawerIdle) {
             this.drawerEnabled = drawerEnabled;
             this.searchEmpty = searchEmpty;
             this.azInactive = azInactive;
@@ -105,26 +92,24 @@ public final class AppDrawerGestureArbiter {
             this.paletteClosed = paletteClosed;
             this.noActivePickup = noActivePickup;
             this.drawerIdle = drawerIdle;
-            this.fullStatusPaneClosed = fullStatusPaneClosed;
         }
 
         /** Every veto clear, for an already-open plane or its full-width pager. */
         @NonNull
         public static Eligibility allClear() {
-            return new Eligibility(true, true, true, Pull.DOWN, true, true, true, true, true);
+            return new Eligibility(true, true, true, Pull.DOWN, true, true, true, true);
         }
 
         /** @return true when every veto is clear and the drawer may claim a drag along its pull. */
         public boolean drawerEligible() {
             return drawerEnabled && searchEmpty && azInactive && pull != Pull.NONE
-                && surfaceEditorClosed && paletteClosed && noActivePickup && drawerIdle
-                && fullStatusPaneClosed;
+                && surfaceEditorClosed && paletteClosed && noActivePickup && drawerIdle;
         }
     }
 
     /** Every veto set, used before the first {@link #begin} so a stray move can never claim. */
     private static final Eligibility INELIGIBLE =
-        new Eligibility(false, false, false, Pull.NONE, false, false, false, false, false);
+        new Eligibility(false, false, false, Pull.NONE, false, false, false, false);
 
     private Claim mClaim = Claim.PENDING;
     @NonNull private Eligibility mEligibility = INELIGIBLE;
@@ -175,13 +160,41 @@ public final class AppDrawerGestureArbiter {
     }
 
     /**
-     * Evaluates the move point against the snapshot taken at {@link #begin}.
+     * Latches {@link Claim#DRAWER_DRAG} for a stream another surface held first and has now given
+     * up — a badged icon's quick reply, once the finger has travelled past its own short window
+     * ({@code NotificationSwipePolicy.handsOff}). Honours the one-way latch, so it cannot take a
+     * stream a child already owns.
+     */
+    @NonNull
+    public Claim claimDrawer() {
+        if (mClaim == Claim.PENDING) mClaim = Claim.DRAWER_DRAG;
+        return mClaim;
+    }
+
+    /**
+     * Evaluates the move point against the snapshot taken at {@link #begin}, for a surface whose
+     * pages run across it — every row that lies down.
      *
      * @param slopPx {@code ViewConfiguration.getScaledTouchSlop()}
      * @return the (possibly newly latched) claim
      */
     @NonNull
     public Claim evaluate(float x, float y, float slopPx) {
+        return evaluate(x, y, slopPx, false);
+    }
+
+    /**
+     * The same, told which way this surface's pages run.
+     *
+     * <p>A rail pages up and down, because up and down is the axis its slots are laid along; its
+     * drawer pull runs sideways and is the scrolling host's to claim, so the two never contest one
+     * drag. The dominance cone is the one the lying-down row is already tuned with, applied to
+     * whichever axis the pages are on, and the pull's own axis is still never the page's.
+     *
+     * @param pageVertical whether a page swipe on this surface travels up and down
+     */
+    @NonNull
+    public Claim evaluate(float x, float y, float slopPx, boolean pageVertical) {
         if (mClaim != Claim.PENDING) return mClaim;
 
         float dx = x - mDownX;
@@ -201,11 +214,14 @@ public final class AppDrawerGestureArbiter {
                 return mClaim;
             }
         }
-        // The page swipe belongs to the portrait dock's pager. A horizontal pull is the landscape
-        // rail, which has no pager and whose sideways axis is the pull's own: running this test
-        // there would latch — and so deaden — every sideways drag that fell short of the drawer's
+        // The page swipe runs along the row's own slots. It is never run on the pull's own axis:
+        // there it would latch — and so deaden — every drag that fell short of the drawer's
         // slightly longer threshold, which is most of a slow swipe.
-        if (!isHorizontal(mEligibility.pull) && adx >= slopPx && adx > ady * PAGE_DOMINANCE) {
+        float alongPage = pageVertical ? ady : adx;
+        float acrossPage = pageVertical ? adx : ady;
+        boolean pullOwnsPageAxis = pageVertical
+            ? mEligibility.pull == Pull.DOWN : isHorizontal(mEligibility.pull);
+        if (!pullOwnsPageAxis && alongPage >= slopPx && alongPage > acrossPage * PAGE_DOMINANCE) {
             mClaim = Claim.PAGE_SWIPE;
             return mClaim;
         }

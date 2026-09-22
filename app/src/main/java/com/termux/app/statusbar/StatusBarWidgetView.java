@@ -10,6 +10,7 @@ import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -41,6 +42,17 @@ public final class StatusBarWidgetView extends LinearLayout {
     private boolean mAccent;
     private boolean mMuted;
     @NonNull private ColorRole mColorRole = ColorRole.PRIMARY;
+    /**
+     * What the chrome measured this widget's band and decided its label, its icon and its muted
+     * state have to be drawn in. Null until the bar has been measured — before the first wallpaper
+     * sample, and in a preview or a test that never wires the chrome — and then the widget draws
+     * what it always drew.
+     */
+    @Nullable private Integer mLabelInk;
+    @Nullable private Integer mIconInk;
+    @Nullable private Integer mMutedInk;
+    /** The stats share a floor so a value ticking between widths does not shift its neighbours. */
+    private static final int MIN_WIDTH_WITH_VALUE_DP = 34;
 
     public StatusBarWidgetView(Context context) {
         this(context, null);
@@ -55,7 +67,7 @@ public final class StatusBarWidgetView extends LinearLayout {
         setClipToPadding(false);
         setClipChildren(false);
         setPadding(dp(5), dp(1), dp(5), dp(1));
-        setMinimumWidth(dp(34));
+        setMinimumWidth(dp(MIN_WIDTH_WITH_VALUE_DP));
 
         mIcon = new ImageView(context);
         mIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
@@ -77,15 +89,33 @@ public final class StatusBarWidgetView extends LinearLayout {
 
         mValue = new TextView(context);
         mValue.setGravity(Gravity.CENTER_VERTICAL);
-        mValue.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
-        mValue.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         mValue.setIncludeFontPadding(false);
         mValue.setSingleLine(true);
         LayoutParams valueParams = new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT);
         valueParams.setMarginStart(dp(2));
         addView(mValue, valueParams);
 
+        applyTier();
         applyColors();
+    }
+
+    /**
+     * Stacks the mark over its value instead of setting them side by side, for the status bar
+     * standing in a column: there the widget has a finger's width and a whole column of height.
+     */
+    public void setStacked(boolean stacked) {
+        int orientation = stacked ? VERTICAL : HORIZONTAL;
+        if (getOrientation() == orientation) return;
+        setOrientation(orientation);
+        setGravity(stacked ? Gravity.CENTER : Gravity.CENTER_VERTICAL);
+        setMinimumWidth(stacked ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP));
+        setPadding(dp(stacked ? 1 : 5), dp(stacked ? 3 : 1), dp(stacked ? 1 : 5),
+            dp(stacked ? 3 : 1));
+        mValue.setGravity(stacked ? Gravity.CENTER : Gravity.CENTER_VERTICAL);
+        LayoutParams valueParams = (LayoutParams) mValue.getLayoutParams();
+        valueParams.setMarginStart(stacked ? 0 : dp(2));
+        valueParams.topMargin = stacked ? dp(1) : 0;
+        mValue.setLayoutParams(valueParams);
     }
 
     /** Material vector resource shown before the value. */
@@ -179,7 +209,15 @@ public final class StatusBarWidgetView extends LinearLayout {
         super.onDetachedFromWindow();
     }
 
+    /**
+     * The text after the icon. An empty value leaves the widget an icon alone: the text and its
+     * margin go, and so does the minimum width the stats share, which would otherwise hold
+     * twenty-odd dp of nothing to the right of the glyph.
+     */
     public void setValue(@NonNull CharSequence value) {
+        boolean empty = android.text.TextUtils.isEmpty(value);
+        mValue.setVisibility(empty ? GONE : VISIBLE);
+        setMinimumWidth(empty ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP));
         if (android.text.TextUtils.equals(mValue.getText(), value)) return;
         mValue.setText(value);
     }
@@ -188,6 +226,33 @@ public final class StatusBarWidgetView extends LinearLayout {
     public void setColorRole(@NonNull ColorRole colorRole) {
         if (mColorRole == colorRole) return;
         mColorRole = colorRole;
+        applyTier();
+        applyColors();
+    }
+
+    /** Which tier this widget is, so a caller resolving the bar's ink knows which hue to ask for. */
+    @NonNull
+    public ColorRole colorRole() {
+        return mColorRole;
+    }
+
+    /**
+     * What the chrome says this widget's label, icon and muted state read as on the band it is
+     * standing on — each already resolved against the measured backdrop at its own contrast tier,
+     * so the widget spends no alpha of its own on any of them.
+     *
+     * <p>The hierarchy between the three widgets does not live here: it is {@link StatusBarInk}'s
+     * weight and size, applied in {@link #applyTier()}, and it costs no contrast. This is only the
+     * colour, and every tier's colour clears its own floor.</p>
+     */
+    public void setInk(@ColorInt int labelInk, @ColorInt int iconInk, @ColorInt int mutedInk) {
+        if (mLabelInk != null && mLabelInk == labelInk && mIconInk != null && mIconInk == iconInk
+            && mMutedInk != null && mMutedInk == mutedInk) {
+            return;
+        }
+        mLabelInk = labelInk;
+        mIconInk = iconInk;
+        mMutedInk = mutedInk;
         applyColors();
     }
 
@@ -228,11 +293,39 @@ public final class StatusBarWidgetView extends LinearLayout {
         // grouping, so individual pill backgrounds only add visual noise.
         setBackground(null);
 
+        // Measured ink wins outright. It was resolved on what this band is really drawn over and
+        // it carries whatever alpha that leaves room for, so laying the tier's old alpha over it
+        // would spend exactly the contrast it was resolved to find.
+        if (mLabelInk != null && mIconInk != null && mMutedInk != null) {
+            int label = mMuted ? mMutedInk : mLabelInk;
+            int icon = mMuted ? mMutedInk : mIconInk;
+            ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(icon));
+            mGlyph.setTextColor(icon);
+            mValue.setTextColor(label);
+            return;
+        }
+
         int alpha = mMuted ? 120 : mAccent ? 255 : 238;
         ImageViewCompat.setImageTintList(mIcon,
             ColorStateList.valueOf(ColorUtils.setAlphaComponent(roleColor, alpha)));
         mGlyph.setTextColor(ColorUtils.setAlphaComponent(roleColor, alpha));
         mValue.setTextColor(ColorUtils.setAlphaComponent(roleColor, alpha));
+    }
+
+    /**
+     * The tier's weight and size. Since 2026-09-17 all three tiers share the temperature's, so
+     * this is one answer applied three times; the hierarchy is hue and order.
+     */
+    private void applyTier() {
+        mValue.setTextSize(TypedValue.COMPLEX_UNIT_SP,
+            StatusBarInk.textSizeSpFor(mColorRole));
+        int weight = StatusBarInk.weightFor(mColorRole);
+        // The two-argument form so a heavy tier would be bold even where the platform has no bold
+        // cut of the medium face: TextView then asks the paint for it rather than dropping it. At
+        // today's one shared weight (400) this resolves to the plain face for every tier.
+        mValue.setTypeface(
+            Typeface.create(weight >= 500 ? "sans-serif-medium" : "sans-serif", Typeface.NORMAL),
+            weight >= 700 ? Typeface.BOLD : Typeface.NORMAL);
     }
 
     private int dp(int value) {

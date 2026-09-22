@@ -100,6 +100,39 @@ public class InAppKeyboardExtraKeysTest {
         assertFalse(defaults.containsKey(KeyValue.getKeyByName("€")));
     }
 
+    /**
+     * The keyboard-type key is offered in the same catalogue as the keyboard's own keys, and it is
+     * off until the user picks it: a key that changed the keyboard's shape on every fresh install
+     * would be a shape nobody asked for.
+     */
+    @Test
+    public void theKeyboardTypeKeyIsOfferedAndOffByDefault() {
+        assertTrue("offered in the catalogue",
+            java.util.Arrays.asList(InAppKeyboardExtraKeys.catalog())
+                .contains(InAppKeyboardExtraKeys.KEY_CYCLE_KEYBOARD_FORM));
+        assertFalse("off by default",
+            InAppKeyboardExtraKeys.defaultEnabled(InAppKeyboardExtraKeys.KEY_CYCLE_KEYBOARD_FORM));
+        assertFalse(InAppKeyboardExtraKeys.defaultStoredValue()
+            .contains(InAppKeyboardExtraKeys.KEY_CYCLE_KEYBOARD_FORM));
+        // Named by what it does, not by the generic tool glyph its cap would draw.
+        assertEquals("Keyboard type",
+            InAppKeyboardExtraKeys.displayName(InAppKeyboardExtraKeys.KEY_CYCLE_KEYBOARD_FORM));
+    }
+
+    /** Picked, it merges into the layout like any other catalogue key. */
+    @Test
+    public void theKeyboardTypeKeyMergesIntoTheLayoutWhenPicked() {
+        Map<KeyValue, KeyboardData.PreferredPos> resolved =
+            InAppKeyboardExtraKeys.resolve(InAppKeyboardExtraKeys.KEY_CYCLE_KEYBOARD_FORM);
+        KeyValue key = KeyValue.getKeyByName(InAppKeyboardExtraKeys.KEY_CYCLE_KEYBOARD_FORM);
+        assertNotNull(key);
+        assertTrue(resolved.containsKey(key));
+
+        KeyboardData modified = LayoutModifier.modify(layout,
+            options(InAppKeyboardExtraKeys.KEY_CYCLE_KEYBOARD_FORM), resources);
+        assertTrue(modified.getKeys().containsKey(key));
+    }
+
     @Test
     public void modifyNeverMutatesTheSharedSourceLayout() {
         KeyboardData first = LayoutModifier.modify(layout, options("copy"), resources);

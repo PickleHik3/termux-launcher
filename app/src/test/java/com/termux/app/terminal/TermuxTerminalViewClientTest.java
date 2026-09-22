@@ -18,6 +18,7 @@ import java.io.IOException;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -106,14 +107,14 @@ public class TermuxTerminalViewClientTest {
     }
 
     @Test
-    public void copyModeLocksTheDrawer() throws IOException {
+    public void copyModeRaisesTheSelectionLegendAndTakesItDownAgain() throws IOException {
         FakeTerminalHost host = host();
         TermuxTerminalViewClient client = client(host);
 
         client.copyModeChanged(true);
-        assertTrue(host.drawerLocked);
+        assertEquals(com.termux.app.terminal.TerminalModeHintCard.Mode.SELECTION, host.modeHint);
         client.copyModeChanged(false);
-        assertFalse(host.drawerLocked);
+        assertNull(host.modeHint);
     }
 
     @Test
@@ -167,6 +168,59 @@ public class TermuxTerminalViewClientTest {
             size = next;
         }
         throw new AssertionError("font size never settled");
+    }
+
+    // ---- What the Display page may claim ---------------------------------------------------
+
+    private static KeyEvent ctrlAlt(int keyCode) {
+        return new KeyEvent(0L, 0L, KeyEvent.ACTION_DOWN, keyCode, 0,
+            KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON
+                | KeyEvent.META_ALT_ON | KeyEvent.META_ALT_LEFT_ON);
+    }
+
+    @Test
+    public void aBoundCtrlAltStrokeIsTheLaunchers() throws IOException {
+        TerminalKeyBindingResolver.installConfigForTesting(TerminalBindingConfig.parse(
+            "map ctrl+alt+f11 send-text x\n",
+            com.termux.launcherctl.LauncherToolRegistry.getInstance(), true));
+        try {
+            TermuxTerminalViewClient client = client(host());
+
+            assertTrue(client.consumeLauncherChord(ctrlAlt(KeyEvent.KEYCODE_F11)));
+        } finally {
+            TerminalKeyBindingResolver.resetForTesting();
+        }
+    }
+
+    @Test
+    public void anUnboundCtrlAltStrokeIsLeftToTheDisplay() throws IOException {
+        TerminalKeyBindingResolver.installConfigForTesting(TerminalBindingConfig.parse(
+            "map ctrl+alt+f11 send-text x\n",
+            com.termux.launcherctl.LauncherToolRegistry.getInstance(), true));
+        try {
+            TermuxTerminalViewClient client = client(host());
+            KeyEvent stroke = ctrlAlt(KeyEvent.KEYCODE_F12);
+            assertEquals("the stroke this test relies on being unbound",
+                TerminalKeyBindingResolver.Step.Kind.NONE,
+                TerminalKeyBindingResolver.getInstance().advance(stroke,
+                    TerminalActionDispatcher.getInstance().actionContext()).kind);
+
+            // The terminal swallows it (its historical contract); a desktop on the Display page
+            // gets to see its own Ctrl+Alt+T.
+            assertFalse(client.consumeLauncherChord(stroke));
+        } finally {
+            TerminalKeyBindingResolver.resetForTesting();
+        }
+    }
+
+    @Test
+    public void aStrokeWithoutBothModifiersIsNeverTheLaunchers() throws IOException {
+        TermuxTerminalViewClient client = client(host());
+
+        assertFalse(client.consumeLauncherChord(new KeyEvent(0L, 0L, KeyEvent.ACTION_DOWN,
+            KeyEvent.KEYCODE_C, 0, KeyEvent.META_CTRL_ON | KeyEvent.META_CTRL_LEFT_ON)));
+        assertFalse(client.consumeLauncherChord(new KeyEvent(0L, 0L, KeyEvent.ACTION_DOWN,
+            KeyEvent.KEYCODE_TAB, 0, KeyEvent.META_ALT_ON | KeyEvent.META_ALT_LEFT_ON)));
     }
 
     private static TermuxTerminalViewClient client(@NonNull FakeTerminalHost host) {

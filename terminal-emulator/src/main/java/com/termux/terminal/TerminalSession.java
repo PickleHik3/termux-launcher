@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.os.Handler;
 import android.os.Message;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
@@ -42,7 +43,12 @@ public final class TerminalSession extends TerminalOutput {
 
     private static final int MSG_PROCESS_EXITED = 4;
 
-    public final String mHandle = UUID.randomUUID().toString();
+    /**
+     * Stable id for this pane, used by everything outside the emulator that has to name one. It is
+     * accepted from the caller so the same value can be exported into the shell's own environment,
+     * which is created before this object is.
+     */
+    public final String mHandle;
 
     TerminalEmulator mEmulator;
 
@@ -116,6 +122,11 @@ public final class TerminalSession extends TerminalOutput {
     private static final String LOG_TAG = "TerminalSession";
 
     public TerminalSession(String shellPath, String cwd, String[] args, String[] env, Integer transcriptRows, TerminalSessionClient client) {
+        this(shellPath, cwd, args, env, transcriptRows, client, null);
+    }
+
+    public TerminalSession(String shellPath, String cwd, String[] args, String[] env, Integer transcriptRows, TerminalSessionClient client, String handle) {
+        this.mHandle = handle == null || handle.isEmpty() ? UUID.randomUUID().toString() : handle;
         this.mShellPath = shellPath;
         this.mCwd = cwd;
         this.mArgs = args;
@@ -299,10 +310,34 @@ public final class TerminalSession extends TerminalOutput {
 
     /**
      * Notify the {@link #mClient} that the screen has changed.
+     *
+     * <p>A synchronized update (private mode 2026) holds the notification back: the emulator keeps
+     * parsing, but the client goes on showing the frame from before the hold began, so a program
+     * repainting in several writes never shows half a frame. The hold is bounded — see
+     * {@link TerminalEmulator#SYNCHRONIZED_UPDATE_TIMEOUT_MILLIS} — and this is the only place that
+     * arms the wake-up for it, so a program that dies between "begin" and "end" cannot leave the
+     * pane frozen: the held frame is delivered when the deadline passes whether or not another byte
+     * ever arrives. Everything else the client hears about — the bell, the title, colors,
+     * notifications — goes its own way and is not held.
      */
     protected void notifyScreenUpdate() {
+        if (mEmulator != null && mEmulator.isScreenUpdateHeld()) {
+            // One wake-up per hold: re-posting on every write would push the deadline out forever.
+            mMainThreadHandler.removeCallbacks(mSynchronizedUpdateRelease);
+            mMainThreadHandler.postDelayed(mSynchronizedUpdateRelease,
+                mEmulator.screenUpdateHoldRemainingMillis() + 1);
+            return;
+        }
+        mMainThreadHandler.removeCallbacks(mSynchronizedUpdateRelease);
         mClient.onTextChanged(this);
     }
+
+    /**
+     * Deliver the frame a synchronized update has been holding, once its timeout has passed. Going
+     * back through {@link #notifyScreenUpdate()} keeps one path to the client: if the hold somehow
+     * still stands, this re-arms instead of painting.
+     */
+    private final Runnable mSynchronizedUpdateRelease = this::notifyScreenUpdate;
 
     /**
      * Reset state for terminal emulator state.
@@ -312,15 +347,19 @@ public final class TerminalSession extends TerminalOutput {
         notifyScreenUpdate();
     }
 
+    private static final ShellTerminator.ProcessTable PROCESS_TABLE = new ProcSessionTable();
+
     /**
-     * Finish this terminal session by hanging up the shell's whole process group, then killing it if
-     * it is still there.
+     * Finish this terminal session by hanging up every process group in the shell's session, then
+     * killing whatever the session still holds.
      *
-     * <p>Signalling the group rather than the single pid is what stops a pane's background jobs
-     * outliving it: the native child setsid()s before opening the slave pty, so its pid is its own
-     * group leader and every descendant inherits the group. All six kill sites funnel through here
-     * and every one of them wants group semantics — including TermuxSession.killIfExecuting, whose
-     * background RunCommand shells are setsid'd the same way — so no call site changes.
+     * <p>The session, not the shell's process group, is what covers a pane's jobs: an interactive
+     * shell with job control gives every foreground and background job a group of its own, so a
+     * group signal reached none of them. The native child setsid()s before opening the slave pty,
+     * so the session id is the shell's pid and every descendant keeps it. All six kill sites funnel
+     * through here and every one of them wants these semantics — including
+     * TermuxSession.killIfExecuting, whose background RunCommand shells are setsid'd the same way —
+     * so no call site changes.
      *
      * <p>Safe from MSG_PROCESS_EXITED, the UI and TermuxService alike: the escalation is posted to
      * the main looper, and mShellPid is set to -1 by cleanupResources on that same thread.
@@ -328,7 +367,7 @@ public final class TerminalSession extends TerminalOutput {
     public void finishIfRunning() {
         if (!isRunning()) return;
         ShellTerminator.terminate(mShellPid, OsConstants.SIGHUP, OsConstants.SIGKILL,
-            this::sendSignal, mMainThreadHandler::postDelayed, () -> mShellPid);
+            this::sendSignal, mMainThreadHandler::postDelayed, PROCESS_TABLE, () -> mShellPid);
     }
 
     private boolean sendSignal(int pid, int signal) {
@@ -390,6 +429,11 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     @Override
+    public String onReadTextFromClipboard() {
+        return mClient.onReadTextFromClipboard(this);
+    }
+
+    @Override
     public void onBell() {
         mClient.onBell(this);
     }
@@ -397,6 +441,36 @@ public final class TerminalSession extends TerminalOutput {
     @Override
     public void onNotification(String title, String body) {
         mClient.onNotification(this, title, body);
+    }
+
+    @Override
+    public void onKittyNotification(KittyNotification notification) {
+        mClient.onKittyNotification(this, notification);
+    }
+
+    @Override
+    public void onKittyNotificationClose(String id) {
+        mClient.onKittyNotificationClose(this, id);
+    }
+
+    @Override
+    public void onPointerShapeChanged(String shape) {
+        mClient.onPointerShapeChanged(this, shape);
+    }
+
+    /**
+     * The user tapped a notification this shell put up, or its button number. Answers the program
+     * when it asked to be told.
+     */
+    public void notificationActivated(String id, int button) {
+        TerminalEmulator emulator = getEmulator();
+        if (emulator != null) emulator.kittyNotificationActivated(id, button);
+    }
+
+    /** A notification this shell put up went away without being tapped. */
+    public void notificationClosed(String id) {
+        TerminalEmulator emulator = getEmulator();
+        if (emulator != null) emulator.kittyNotificationClosed(id);
     }
 
     @Override
@@ -413,13 +487,16 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     @Override
+    public void onScreenChanged() {
+        notifyScreenUpdate();
+    }
+
+    @Override
     public void postTerminalUpdateDelayed(Runnable update, long delayMillis) {
-        // The runnable posted is a wrapper, so the caller's own runnable is used as the message
-        // token — that is what makes the post withdrawable by identity below.
-        mMainThreadHandler.postAtTime(() -> {
-            update.run();
-            notifyScreenUpdate();
-        }, update, SystemClock.uptimeMillis() + delayMillis);
+        // The runnable is also its own message token, which is what makes the post withdrawable
+        // by identity below. Nothing is notified here: an animation tick asks for its own redraw,
+        // and only when a frame someone can see actually moved.
+        mMainThreadHandler.postAtTime(update, update, SystemClock.uptimeMillis() + delayMillis);
     }
 
     @Override
@@ -432,9 +509,25 @@ public final class TerminalSession extends TerminalOutput {
     }
 
     /**
+     * The directory the shell last reported with OSC 7, or null if it never did. It is the shell's
+     * own answer, so it follows the shell into places /proc cannot see, and it is null whenever the
+     * shell integration is not loaded — callers fall back to {@link #getCwd()}.
+     */
+    public String getReportedWorkingDirectory() {
+        return (mEmulator == null) ? null : mEmulator.getReportedWorkingDirectory();
+    }
+
+    /**
      * Returns the shell's working directory or null if it was unavailable.
      */
     public String getCwd() {
+        // What the shell says beats what /proc knows: OSC 7 follows a subshell, and /proc only ever
+        // knew the session's own process. It is trusted only while it still names a folder on this
+        // device, so a stale or invented report falls through to the reading below.
+        String reported = getReportedWorkingDirectory();
+        if (reported != null && new File(reported).isDirectory()) {
+            return reported;
+        }
         if (mShellPid < 1) {
             return null;
         }
@@ -482,7 +575,15 @@ public final class TerminalSession extends TerminalOutput {
         public void handleMessage(Message msg) {
             int bytesRead = mProcessToTerminalIOQueue.read(mReceiveBuffer, false);
             if (bytesRead > 0) {
-                mEmulator.append(mReceiveBuffer, bytesRead);
+                // Named in system traces so the parsing's share of the UI thread can be read next
+                // to Terminal.render and the frame clock: this is the emulator's only entry point
+                // for shell output, and it runs on the main thread by design.
+                Trace.beginSection("Terminal.append");
+                try {
+                    mEmulator.append(mReceiveBuffer, bytesRead);
+                } finally {
+                    Trace.endSection();
+                }
                 notifyScreenUpdate();
             }
             if (msg.what == MSG_PROCESS_EXITED) {

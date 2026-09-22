@@ -32,11 +32,24 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     int dockBlurRadiusDp = 12;
     int statusBlurRadiusDp = 12;
     int orientation = Configuration.ORIENTATION_PORTRAIT;
+    int glassBase = 0xFF1C1B1F;
+    int accent = 0xFF3366FF;
+    int dim = android.graphics.Color.TRANSPARENT;
     @NonNull final Rect frameRect = new Rect(0, 0, 100, 200);
     int systemWallpaperId = 3;
     boolean managedSource;
     boolean blurHealthy = true;
     @NonNull ChromeSpec spec = new ChromeSpec(true, false, 0, true, true, false, true, 1f, 12);
+
+    /**
+     * The chrome the apply itself asks for, which is how the Activity's apply behaves: it re-cuts
+     * crops, dresses panes and completes the keyboard's reveal protocol, and any of those can say
+     * something went stale. Set {@link #chrome} for the request to reach the renderer.
+     */
+    @Nullable ChromeRenderer chrome;
+    int applyRequestsScopes;
+    /** How many more applies make that request; the default lets every apply make it. */
+    int applyRequestsRemaining = Integer.MAX_VALUE;
 
     // ---- what the test observes
     @NonNull final List<ChromeSpec> applied = new ArrayList<>();
@@ -52,10 +65,16 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
         return context;
     }
 
+    /**
+     * The chrome views a test wants found, by id. Empty by default: with no inflated layout every
+     * view-touching path must no-op safely, and that is what most of these tests drive.
+     */
+    @NonNull final java.util.Map<Integer, View> views = new java.util.HashMap<>();
+
     @Nullable
     @Override
     public View findChromeView(int viewId) {
-        return null;   // no inflated layout: every view-touching path must no-op safely
+        return views.get(viewId);
     }
 
     @Nullable
@@ -76,12 +95,17 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
 
     @Override
     public int glassBaseColor() {
-        return 0xFF1C1B1F;
+        return glassBase;
     }
 
     @Override
     public int accentColor() {
-        return 0xFF3366FF;
+        return accent;
+    }
+
+    @Override
+    public int wallpaperDimColor() {
+        return dim;
     }
 
     @Override
@@ -123,10 +147,10 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
 
     @Nullable
     @Override
-    public Bitmap captureWallpaperFrame(@NonNull Rect frameRect, @NonNull View wallpaperFrame) {
+    public WallpaperBlurCache.FrameCapture beginCapture(@NonNull Rect frameRect, @NonNull View wallpaperFrame) {
         captureCount++;
-        return Bitmap.createBitmap(Math.max(1, frameRect.width()), Math.max(1, frameRect.height()),
-            Bitmap.Config.ARGB_8888);
+        return WallpaperBlurCache.FrameCapture.ready(Bitmap.createBitmap(Math.max(1, frameRect.width()),
+            Math.max(1, frameRect.height()), Bitmap.Config.ARGB_8888));
     }
 
     @Nullable
@@ -157,11 +181,6 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     }
 
     @Override
-    public boolean fullStatusBarEngaged() {
-        return fullStatusBar;
-    }
-
-    @Override
     public int effectiveDockBlurRadiusDp() {
         return dockBlurRadiusDp;
     }
@@ -180,6 +199,10 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     @Override
     public void applyChromeSpec(@NonNull ChromeSpec spec) {
         applied.add(spec);
+        if (chrome != null && applyRequestsScopes != 0 && applyRequestsRemaining > 0) {
+            applyRequestsRemaining--;
+            chrome.requestSync(applyRequestsScopes);
+        }
     }
 
     @Override

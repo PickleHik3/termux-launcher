@@ -36,7 +36,6 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -72,6 +71,7 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
     private BackendFilter backendFilter = BackendFilter.ALL;
     private String installFilter = TaiCatalogControlsPreference.INSTALL_ALL;
     private String searchQuery = "";
+    private String sortOrder = "downloaded";
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -81,6 +81,13 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         preferenceManager.setSharedPreferencesName(TaiSettings.PREFS_NAME);
         setPreferencesFromResource(R.xml.termux_ai_model_catalog_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
+        SharedPreferences prefs = preferenceManager.getSharedPreferences();
+        if (prefs != null) {
+            backendFilter = BackendFilter.fromValue(prefs.getString("tai_catalog_backend", "all"));
+            installFilter = prefs.getString("tai_catalog_install", "all");
+            sortOrder = prefs.getString("tai_catalog_sort", "downloaded");
+        }
+        if (savedInstanceState != null) searchQuery = savedInstanceState.getString("tai_catalog_search", "");
         configureControls(context);
         refreshCatalogRows(context);
     }
@@ -107,16 +114,26 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
     private void configureControls(Context context) {
         TaiCatalogControlsPreference controls = findPreference("tai_catalog_controls");
         if (controls == null) return;
+        controls.setValues(backendFilter.value, installFilter, sortOrder, searchQuery);
         controls.setOnControlsListener(new TaiCatalogControlsPreference.OnControlsListener() {
             @Override
             public void onBackendSelected(@NonNull String backend) {
                 backendFilter = BackendFilter.fromValue(backend);
+                saveControl("tai_catalog_backend", backend);
                 refreshCatalogRows(context);
             }
 
             @Override
             public void onInstallSelected(@NonNull String install) {
                 installFilter = install;
+                saveControl("tai_catalog_install", install);
+                refreshCatalogRows(context);
+            }
+
+            @Override
+            public void onSortSelected(@NonNull String value) {
+                sortOrder = value;
+                saveControl("tai_catalog_sort", value);
                 refreshCatalogRows(context);
             }
 
@@ -126,6 +143,17 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
                 refreshCatalogRows(context);
             }
         });
+    }
+
+    @Override
+    public void onSaveInstanceState(@NonNull Bundle state) {
+        super.onSaveInstanceState(state);
+        state.putString("tai_catalog_search", searchQuery);
+    }
+
+    private void saveControl(String key, String value) {
+        SharedPreferences prefs = getPreferenceManager().getSharedPreferences();
+        if (prefs != null) prefs.edit().putString(key, value).apply();
     }
 
     private void refreshCatalogRows(Context context) {
@@ -158,7 +186,7 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         List<TaiModelCatalog.CatalogEntry> entries = sortForDisplay(
             filterByInstallStatus(
                 filterEntries(all, backendFilter, searchQuery, installed, capabilities),
-                installed));
+                installed), installed.keySet(), downloads, activeModelId, sortOrder);
         if (entries.isEmpty()) {
             Preference empty = new Preference(context);
             empty.setIconSpaceReserved(false);
@@ -168,24 +196,43 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
             results.addPreference(empty);
             return;
         }
+        int order = 0;
         for (TaiModelCatalog.CatalogEntry entry : entries) {
-            results.addPreference(buildRow(context, entry, installed.get(entry.modelId),
-                findDownload(downloads, entry.modelId), activeModelId));
+            TaiModelPreference row = buildRow(context, entry, installed.get(entry.modelId),
+                findDownload(downloads, entry.modelId), activeModelId);
+            row.setOrder(order++);
+            results.addPreference(row);
         }
     }
 
-    /** Recommended models first, then smallest download first; name as a stable tiebreaker. */
-    static List<TaiModelCatalog.CatalogEntry> sortForDisplay(List<TaiModelCatalog.CatalogEntry> entries) {
+    /** Availability first by default; explicit name/size sorts remain stable across refreshes. */
+    static List<TaiModelCatalog.CatalogEntry> sortForDisplay(List<TaiModelCatalog.CatalogEntry> entries,
+            java.util.Set<String> installed, JSONArray downloads, String defaultId, String sort) {
         List<TaiModelCatalog.CatalogEntry> sorted = new ArrayList<>(entries);
-        Collections.sort(sorted, new Comparator<TaiModelCatalog.CatalogEntry>() {
-            @Override
-            public int compare(TaiModelCatalog.CatalogEntry a, TaiModelCatalog.CatalogEntry b) {
-                if (a.recommended != b.recommended) return a.recommended ? -1 : 1;
-                if (a.sizeBytes != b.sizeBytes) return Long.compare(a.sizeBytes, b.sizeBytes);
-                return a.displayName.compareToIgnoreCase(b.displayName);
+        Collections.sort(sorted, (a, b) -> {
+            if (!"name".equals(sort) && !"size".equals(sort)) {
+                int rank = Integer.compare(displayRank(a, installed, downloads, defaultId),
+                    displayRank(b, installed, downloads, defaultId));
+                if (rank != 0) return rank;
             }
+            if ("size".equals(sort)) {
+                long as = a.sizeBytes > 0 ? a.sizeBytes : Long.MAX_VALUE;
+                long bs = b.sizeBytes > 0 ? b.sizeBytes : Long.MAX_VALUE;
+                int size = Long.compare(as, bs);
+                if (size != 0) return size;
+            }
+            int name = a.displayName.compareToIgnoreCase(b.displayName);
+            return name != 0 ? name : a.modelId.compareTo(b.modelId);
         });
         return sorted;
+    }
+
+    private static int displayRank(TaiModelCatalog.CatalogEntry entry, java.util.Set<String> installed,
+                                   JSONArray downloads, String defaultId) {
+        if (installed.contains(entry.modelId)) return entry.modelId.equals(defaultId) ? 0 : 1;
+        JSONObject download = findDownload(downloads, entry.modelId);
+        if (download != null && isActiveDownload(download.optString("status", ""))) return 2;
+        return entry.downloadAvailable ? 3 : 4;
     }
 
     /** Applies the install-status dropdown (All / Installed / Not installed) after backend+search. */
@@ -206,7 +253,6 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         TaiModelPreference row = new TaiModelPreference(context);
         row.setKey(ROW_KEY_PREFIX + entry.modelId);
         row.setTitle(entry.displayName + "  [" + backendLabel(entry.backend) + "]");
-        row.setRecommended(entry.recommended);
         row.setSummary(buildSummary(entry));
         row.setMetaLine(buildMetaLine(entry));
         row.setBackendTone(TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)
@@ -526,7 +572,7 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         if (preferences == null) return;
         preferences.edit().putString(TaiSettings.KEY_ROLE_DEFAULT_ASSISTANT, modelId).apply();
         AppNotice.show(context, R.string.termux_ai_model_active_saved, false);
-        updateRowsInPlace(context);
+        refreshCatalogRows(context);
     }
 
     private void openParameterScreen(@NonNull TaiModelSpec model) {

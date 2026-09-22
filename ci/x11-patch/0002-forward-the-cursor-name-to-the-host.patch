@@ -1,0 +1,179 @@
+Forward the pointer cursor's name to the host.
+
+The launcher's Display page opens the on-screen keyboard when the user taps a text field inside
+the X session, and nothing on the Java side can tell that a tap landed on a text field: the host
+sees a SurfaceView full of pixels, and X tells it nothing about focus or what is under the
+pointer. What the server does know is which cursor the window under the pointer asked for, and
+the Xcursor names of a text caret — "xterm", "text", "ibeam", "vertical-text" — are exactly that
+signal. The name lives in `CursorRec.name`, an Atom in the server's own atom table. XFixes does
+publish it, but only to X clients (`XFixesSelectCursorInput`, `XFixesGetCursorName`), and the
+host is not one; making it one would mean a second X connection and libX11 inside the app process
+to learn something the DDX already has in hand.
+
+So the DDX reports it. `lorie.h` gains `EVENT_CURSOR_NAME_CHANGED`, whose variable-length payload
+works exactly like `EVENT_CLIPBOARD_SEND`'s, and both ends clamp the name to
+`LORIE_CURSOR_NAME_MAX`. `lorieSetCursor` resolves `pCurs->name` through `ValidAtom`/`NameForAtom`
+— no cursor, or one with no name, is the empty string — before the oversize substitution below it
+can swap the cursor out, and sends only when the name changed, so a pointer crossing windows that
+share a cursor stays silent. `lorieActivityConnected` repeats the current name, because a host
+attaching to a running session would otherwise not learn it until the cursor next changed. All of
+this runs on the X server thread, the thread that writes `conn_fd` everywhere else (see
+`DDXNotifyFocusChanged` and `lorieSendClipboardData`), and a name produced while nothing is
+attached is dropped. `activity.cpp` reads the payload and calls
+`LorieView.onCursorNameChanged(String)`, resolved in `nativeInit` beside `resetIme`.
+
+Applies after 0001-look-up-the-host-class-as-LorieHost.patch, whose `nativeInit` hunk this one
+extends. `LorieView` must carry the `@Keep onCursorNameChanged(String)` method or
+`FindMethodOrDie` kills the process on the first view, so the Java half ships in the same commit
+as this patch and the prebuilt built from it.
+
+See x11-server/UPSTREAM.md.
+
+diff --git a/lorie/src/main/cpp/lorie/InitOutput.c b/lorie/src/main/cpp/lorie/InitOutput.c
+index ab7942d..e20afc2 100644
+--- a/lorie/src/main/cpp/lorie/InitOutput.c
++++ b/lorie/src/main/cpp/lorie/InitOutput.c
+@@ -192,9 +192,30 @@ void lorieSetRendererWakeupCond(int fd) {
+     lorieWakeServer();
+ }
+ 
++/*
++ * Name of the cursor last reported to the activity. Only the X server thread touches it: it is the
++ * thread that calls the sprite funcs below and the one that writes the event socket, the same way
++ * DDXNotifyFocusChanged does, so no locking is needed.
++ */
++static char lorieCursorName[LORIE_CURSOR_NAME_MAX + 1] = {0};
++
++static void lorieUpdateCursorName(CursorPtr pCurs) {
++    const char* name = pCurs && ValidAtom(pCurs->name) ? NameForAtom(pCurs->name) : NULL;
++    char current[sizeof(lorieCursorName)] = {0};
++
++    strncpy(current, name ? name : "", sizeof(current) - 1);
++    if (!strcmp(current, lorieCursorName))
++        return;
++
++    strcpy(lorieCursorName, current);
++    lorieSendCursorName(lorieCursorName);
++}
++
+ void lorieActivityConnected(void) {
+     pvfb->state->drawRequested = pvfb->state->cursor.updated = true;
+     lorieSendSharedServerState(pvfb->stateFd);
++    // The cursor does not change just because an activity attached, so tell it what it is showing.
++    lorieSendCursorName(lorieCursorName);
+     lorieRegisterBuffer(LORIE_BUFFER_FROM_PIXMAP(pScreenPtr->devPrivate));
+ }
+ 
+@@ -463,6 +484,9 @@ static void lorieSetCursor(DeviceIntPtr pDev, unused ScreenPtr pScr, CursorPtr p
+     if (!lorieCursorFromMouse(pDev))
+         return;
+ 
++    // The name the client asked for, before the oversize substitution below replaces the cursor.
++    lorieUpdateCursorName(pCurs);
++
+     if (pCurs && (pCurs->bits->width >= 512 || pCurs->bits->height >= 512))
+         // We do not have enough memory allocated for such a big cursor, let's display default "X" cursor
+         pCurs = rootCursor;
+diff --git a/lorie/src/main/cpp/lorie/activity.cpp b/lorie/src/main/cpp/lorie/activity.cpp
+index 60efced..614fae3 100644
+--- a/lorie/src/main/cpp/lorie/activity.cpp
++++ b/lorie/src/main/cpp/lorie/activity.cpp
+@@ -38,7 +38,7 @@ static int64_t nowMs() {
+ 
+ static struct {
+     jclass self;
+-    jmethodID clientConnectedStateChanged, resetIme;
++    jmethodID clientConnectedStateChanged, resetIme, onCursorNameChanged;
+ } MainActivity = {nullptr};
+ 
+ static struct {
+@@ -144,6 +144,7 @@ static jlong nativeInit(JNIEnv *env, jobject thiz) {
+         MainActivity.self = FindClassOrDie(env,  "com/termux/x11/LorieHost");
+         MainActivity.clientConnectedStateChanged = FindMethodOrDie(env, MainActivity.self, "clientConnectedStateChanged", "()V", JNI_FALSE);
+         MainActivity.resetIme = FindMethodOrDie(env, env->GetObjectClass(thiz), "resetIme", "()V", JNI_FALSE);
++        MainActivity.onCursorNameChanged = FindMethodOrDie(env, env->GetObjectClass(thiz), "onCursorNameChanged", "(Ljava/lang/String;)V", JNI_FALSE);
+     }
+ 
+     return (jlong) (intptr_t) new (malloc(sizeof(LorieViewResources))) LorieViewResources(env, thiz);
+@@ -266,6 +267,18 @@ int LorieViewResources::xcallback(int fd, int events) {
+                     env->CallVoidMethod(thiz, MainActivity.resetIme);
+                     break;
+                 }
++                case EVENT_CURSOR_NAME_CHANGED: {
++                    char name[LORIE_CURSOR_NAME_MAX + 1] = {0};
++                    // The server clamps the payload to LORIE_CURSOR_NAME_MAX; clamp again so a
++                    // bogus count can not overflow the buffer.
++                    uint32_t count = e.cursorName.count > LORIE_CURSOR_NAME_MAX ? LORIE_CURSOR_NAME_MAX : e.cursorName.count;
++                    if (count)
++                        read(connFd, name, count);
++                    jstring str = env->NewStringUTF(name);
++                    env->CallVoidMethod(thiz, MainActivity.onCursorNameChanged, str);
++                    env->DeleteLocalRef(str);
++                    break;
++                }
+                 case EVENT_SYNC_REPLY: {
+                     jmethodID id = env->GetMethodID(env->GetObjectClass(thiz), "onSyncReply", "(I)V");
+                     env->CallVoidMethod(thiz, id, (jint) e.sync.serial);
+diff --git a/lorie/src/main/cpp/lorie/cmdentrypoint.cpp b/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
+index 14dd299..7ac5009 100644
+--- a/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
++++ b/lorie/src/main/cpp/lorie/cmdentrypoint.cpp
+@@ -469,6 +469,16 @@ void lorieSendClipboardData(const char* data) {
+     }
+ }
+ 
++void lorieSendCursorName(const char* name) {
++    if (conn_fd != -1) {
++        size_t len = strnlen(name, LORIE_CURSOR_NAME_MAX);
++        lorieEvent e = { .cursorName = { .t = EVENT_CURSOR_NAME_CHANGED, .count = (uint32_t) len } };
++        write(conn_fd, &e, sizeof(e));
++        if (len)
++            write(conn_fd, name, len);
++    }
++}
++
+ void lorieSendSyncReply(uint32_t serial) {
+     if (conn_fd != -1) {
+         lorieEvent e = { .sync = { .t = EVENT_SYNC_REPLY, .serial = serial } };
+diff --git a/lorie/src/main/cpp/lorie/lorie.h b/lorie/src/main/cpp/lorie/lorie.h
+index d0754f7..f55318e 100644
+--- a/lorie/src/main/cpp/lorie/lorie.h
++++ b/lorie/src/main/cpp/lorie/lorie.h
+@@ -17,6 +17,10 @@
+ 
+ #define PORT 7892
+ #define MAGIC "0xDEADBEEF"
++// Longest cursor name reported to the activity, without the terminating zero.
++// The names come from the Xcursor spec ("xterm", "left_ptr", "bottom_left_corner"),
++// but a client can name a cursor anything, so both sides clamp to this.
++#define LORIE_CURSOR_NAME_MAX 64
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -27,6 +31,7 @@ struct lorie_shared_server_state;
+ void lorieConfigureNotify(int width, int height, int framerate, size_t name_size, char* name);
+ void lorieEnableClipboardSync(Bool enable);
+ void lorieSendClipboardData(const char* data);
++void lorieSendCursorName(const char* name);
+ void lorieInitClipboard(void);
+ void lorieRequestClipboard(void);
+ void lorieHandleClipboardAnnounce(void);
+@@ -114,6 +119,7 @@ typedef enum {
+     EVENT_LOCK_KEYS_STATE,
+     EVENT_SYNC,
+     EVENT_SYNC_REPLY,
++    EVENT_CURSOR_NAME_CHANGED,
+ } eventType;
+ 
+ typedef union {
+@@ -165,6 +171,10 @@ typedef union {
+         uint8_t t;
+         uint32_t count;
+     } clipboardSend;
++    struct {
++        uint8_t t;
++        uint32_t count;
++    } cursorName;
+     struct {
+         uint8_t t;
+         uint8_t state; // bit0 = Caps Lock, bit1 = Num Lock, bit2 = Scroll Lock

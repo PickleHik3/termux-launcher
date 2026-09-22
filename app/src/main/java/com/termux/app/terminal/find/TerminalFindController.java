@@ -5,6 +5,7 @@ import android.view.KeyEvent;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.FocuslessKeyIntake;
 
 import java.util.List;
@@ -23,6 +24,14 @@ public final class TerminalFindController extends FocuslessKeyIntake {
 
         /** Called exactly once per session, for yank, escape, dismissal and pause alike. */
         void onFindEnded(@Nullable String yankedText);
+    }
+
+    public TerminalFindController() {
+        super();
+    }
+
+    public TerminalFindController(@NonNull ClipboardText clipboardSource) {
+        super(clipboardSource);
     }
 
     @Nullable private Host host;

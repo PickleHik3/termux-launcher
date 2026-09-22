@@ -11,11 +11,14 @@ import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.privileged.PrivilegedBackendManager;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Resolves, per shell pid, what is running in the foreground of that pane so the window pills can
@@ -27,6 +30,10 @@ import java.util.Map;
  * or su/rish) so they work past Android's hidepid/ptrace restrictions. Results are cached; refreshes
  * are throttled and coalesced so the privileged IPC does not run more than once per
  * {@link #MIN_INTERVAL_MS}.
+ *
+ * <p>A shebang-launched tool (npm's {@code codex}, pip's console-script entry points, ...) reports
+ * as its interpreter, not itself: the kernel rewrites argv to put {@code node} or {@code python}
+ * first. {@link #unwrapInterpreter} recovers the intended name from the script path that follows.
  */
 public final class WindowForegroundResolver {
 
@@ -49,10 +56,23 @@ public final class WindowForegroundResolver {
         public final boolean working;
         /** Its CPU use since the previous poll, as a fraction of one core; -1 when unknown. */
         public final double cpuFraction;
+        /** When this reading was taken, on the caller's clock. See {@link #isWorkingAsOf(long)}. */
+        public final long atMs;
+        /**
+         * When the stretch {@link #cpuFraction} was measured over began — the previous poll — or
+         * -1 when there was no previous reading to take a delta from.
+         */
+        public final long cpuSinceMs;
 
         ForegroundInfo(boolean idle, int foregroundPid, @Nullable String processName,
                        @Nullable String openFile, @NonNull List<String> command,
-                       double cpuFraction) {
+                       double cpuFraction, long atMs) {
+            this(idle, foregroundPid, processName, openFile, command, cpuFraction, -1L, atMs);
+        }
+
+        ForegroundInfo(boolean idle, int foregroundPid, @Nullable String processName,
+                       @Nullable String openFile, @NonNull List<String> command,
+                       double cpuFraction, long cpuSinceMs, long atMs) {
             this.idle = idle;
             this.foregroundPid = foregroundPid;
             this.processName = processName;
@@ -60,8 +80,47 @@ public final class WindowForegroundResolver {
             this.command = Collections.unmodifiableList(new ArrayList<>(command));
             this.cpuFraction = cpuFraction;
             this.working = cpuFraction >= WORKING_CPU_FRACTION;
+            this.cpuSinceMs = cpuSinceMs;
+            this.atMs = atMs;
+        }
+
+        /**
+         * Whether this reading still says the pane is working.
+         *
+         * <p>{@link #working} is a CPU delta between two polls, and it is only true until something
+         * measures otherwise. A reading that has stopped being refreshed — the privileged backend
+         * went away mid-poll, or the poll never came back — must not go on asserting that a command
+         * is running: that is a window pill left turning its ring over a shell that finished long
+         * ago. Past {@link #WORKING_TTL_MS} the answer is no.
+         */
+        public boolean isWorkingAsOf(long nowMs) {
+            return working && nowMs - atMs <= WORKING_TTL_MS;
+        }
+
+        /**
+         * {@link #isWorkingAsOf(long)}, discounting a reading the user typed during. The CPU a
+         * process spends handling keystrokes — an ssh session encrypting them and decrypting the
+         * remote's redraws, a TUI repainting for each — is not a command working, but it is spread
+         * over the whole stretch between two polls, and a grace measured from the last keystroke
+         * cannot see it once the typing stops. A keystroke anywhere inside the measured stretch
+         * makes the reading no evidence either way.
+         *
+         * @param lastInputMs when the user last wrote to the pane; {@code 0} or less when never.
+         */
+        public boolean isWorkingAsOf(long nowMs, long lastInputMs) {
+            if (!isWorkingAsOf(nowMs)) return false;
+            boolean typedDuring = lastInputMs > 0L && cpuSinceMs >= 0L
+                && lastInputMs >= cpuSinceMs && lastInputMs <= atMs;
+            return !typedDuring;
         }
     }
+
+    /**
+     * How long a {@code working} reading stands without being refreshed. Several poll intervals, so
+     * an ordinary late poll does not blink the ring, but bounded, so a poll that never returns
+     * cannot leave it turning for ever.
+     */
+    public static final long WORKING_TTL_MS = 6000L;
 
     /**
      * How much of one core the pane's foreground process has to be using to read as working.
@@ -82,6 +141,9 @@ public final class WindowForegroundResolver {
     }
 
     private static final long MIN_INTERVAL_MS = 1500L;
+
+    /** How long one poll may be outstanding before the next one is allowed to go anyway. */
+    private static final long IN_FLIGHT_TIMEOUT_MS = 8000L;
 
     /** One CPU-time reading for a foreground process, so the next poll can take a delta. */
     private static final class CpuSample {
@@ -104,6 +166,7 @@ public final class WindowForegroundResolver {
 
     private long mLastRunAt;
     private boolean mInFlight;
+    private long mInFlightSince;
 
     public WindowForegroundResolver(@Nullable Listener listener) {
         mListener = listener;
@@ -120,13 +183,19 @@ public final class WindowForegroundResolver {
      * listener fires only if any cached entry changed.
      */
     public void refresh(@NonNull List<Integer> pids, long nowMs) {
-        if (pids.isEmpty() || mInFlight) return;
+        if (pids.isEmpty()) return;
+        // A backend that dies mid-call never completes its future, and the flag it left set would
+        // stop every later poll — freezing the pills on whatever the last reading said. After the
+        // timeout the call is abandoned rather than waited on; a late reply still just updates the
+        // cache.
+        if (mInFlight && nowMs - mInFlightSince < IN_FLIGHT_TIMEOUT_MS) return;
         if (nowMs - mLastRunAt < MIN_INTERVAL_MS) return;
         PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
         if (!manager.isPrivilegedAvailable()) return;
 
         mLastRunAt = nowMs;
         mInFlight = true;
+        mInFlightSince = nowMs;
         String command = buildCommand(pids);
         java.util.List<Integer> asked = new ArrayList<>(pids);
         manager.executeCommand(command).whenComplete((output, error) -> {
@@ -222,12 +291,12 @@ public final class WindowForegroundResolver {
             if ("idle".equals(kind)) {
                 mCpuSamples.remove(pid);
                 next.put(pid, new ForegroundInfo(true, -1, null, null,
-                    Collections.emptyList(), -1d));
+                    Collections.emptyList(), -1d, nowMs));
             } else if ("fg".equals(kind) && parts.length == 4) {
                 int foregroundPid = parseInt(parts[2]);
                 Long ticks = groupTicks.get(foregroundPid);
-                ForegroundInfo info = parseForeground(parts[3], foregroundPid,
-                    cpuFraction(pid, foregroundPid, ticks == null ? -1L : ticks, nowMs));
+                CpuDelta cpu = cpuDelta(pid, foregroundPid, ticks == null ? -1L : ticks, nowMs);
+                ForegroundInfo info = parseForeground(parts[3], foregroundPid, cpu, nowMs);
                 if (info != null) next.put(pid, info);
             }
             // "x" (unreadable) leaves no entry so callers fall back to title/cwd.
@@ -251,12 +320,14 @@ public final class WindowForegroundResolver {
 
     @Nullable
     private static ForegroundInfo parseForeground(@NonNull String payload, int foregroundPid,
-                                                  double cpuFraction) {
+                                                  @NonNull CpuDelta cpu, long atMs) {
         if (payload.isEmpty()) return null;
         String[] argv = payload.split("\t");
         String process = basename(argv[0]);
         if (process.isEmpty()) return null;
         process = process.toLowerCase(Locale.ROOT);
+        String wrapped = unwrapInterpreter(process, argv);
+        if (wrapped != null) process = wrapped;
         String openFile = null;
         if (TerminalWindowBar.isEditor(process)) {
             for (int i = argv.length - 1; i >= 1; i--) {
@@ -268,7 +339,20 @@ public final class WindowForegroundResolver {
         }
         List<String> command = new ArrayList<>();
         Collections.addAll(command, argv);
-        return new ForegroundInfo(false, foregroundPid, process, openFile, command, cpuFraction);
+        return new ForegroundInfo(false, foregroundPid, process, openFile, command, cpu.fraction,
+            cpu.sinceMs, atMs);
+    }
+
+    /** A foreground process's CPU use since the previous poll, and when that poll was. */
+    private static final class CpuDelta {
+        static final CpuDelta NONE = new CpuDelta(-1d, -1L);
+        final double fraction;
+        final long sinceMs;
+
+        CpuDelta(double fraction, long sinceMs) {
+            this.fraction = fraction;
+            this.sinceMs = sinceMs;
+        }
     }
 
     /**
@@ -278,19 +362,21 @@ public final class WindowForegroundResolver {
      * between polls. Reported rather than assumed to be zero: the caller's threshold treats unknown as
      * not-working, and one poll of latency at the start of a command is better than a wrong number.
      */
-    private double cpuFraction(int shellPid, int foregroundPid, long ticks, long nowMs) {
+    @NonNull
+    private CpuDelta cpuDelta(int shellPid, int foregroundPid, long ticks, long nowMs) {
         if (foregroundPid < 1 || ticks < 0) {
             mCpuSamples.remove(shellPid);
-            return -1d;
+            return CpuDelta.NONE;
         }
         CpuSample previous = mCpuSamples.get(shellPid);
         mCpuSamples.put(shellPid, new CpuSample(foregroundPid, ticks, nowMs));
-        if (previous == null || previous.pid != foregroundPid) return -1d;
+        if (previous == null || previous.pid != foregroundPid) return CpuDelta.NONE;
         long elapsedMs = nowMs - previous.atMs;
         // A counter that went backwards means the pid was reused; treat it as a new process.
-        if (elapsedMs <= 0L || ticks < previous.ticks) return -1d;
+        if (elapsedMs <= 0L || ticks < previous.ticks) return CpuDelta.NONE;
         double seconds = elapsedMs / 1000d;
-        return (ticks - previous.ticks) / CLOCK_TICKS_PER_SECOND / seconds;
+        return new CpuDelta((ticks - previous.ticks) / CLOCK_TICKS_PER_SECOND / seconds,
+            previous.atMs);
     }
 
     private static long parseLong(@NonNull String value) {
@@ -313,6 +399,86 @@ public final class WindowForegroundResolver {
         } catch (Throwable ignored) {
         }
         return 100d;
+    }
+
+    /**
+     * Scripting runtimes whose own comm/argv[0] names nothing a user asked for: a shebang line
+     * rewrites argv to put the interpreter first, so {@code codex} (a {@code #!/usr/bin/env node}
+     * script) reports as plain {@code node} — same pill, same icon, for every such tool. Shells are
+     * deliberately excluded: their own glyph already names them, and a shell's argv is at least as
+     * often {@code -c "..."} as a script path.
+     */
+    private static final Set<String> INTERPRETERS = new HashSet<>(Arrays.asList(
+        "node", "nodejs", "bun", "deno", "python", "python3", "python2", "ruby", "perl", "php"));
+
+    /**
+     * The one interpreter flag confidently parseable without knowing the rest of the command line:
+     * Python's {@code -m}, whose value is a module name to run — the identity itself, never a path
+     * to open. Every other flag (an interpreter's own {@code -c}/{@code -e}/{@code --eval}/
+     * {@code -p}/{@code --print}, or anything not recognized at all) takes {@link #unwrapInterpreter}
+     * straight to bailing out: its value could just as easily be a code string or an unrelated flag
+     * argument as a script path, and a wrong guess mislabels the pill worse than the plain
+     * interpreter name it would otherwise show.
+     */
+    private static final String MODULE_FLAG = "-m";
+
+    /** Path segments and bare filenames too generic to stand in for the tool that owns them. */
+    private static final Set<String> GENERIC_ENTRYPOINT_NAMES = new HashSet<>(Arrays.asList(
+        "index", "cli", "main", "app", "run", "start", "server", "__main__", "entry"));
+
+    private static final Set<String> GENERIC_PATH_SEGMENTS = new HashSet<>(Arrays.asList(
+        "bin", "dist", "build", "lib", "libexec", "out", "src", "scripts", ".bin", "node_modules"));
+
+    /**
+     * The real program a scripting runtime was told to run, or null when {@code interpreter} is not
+     * one of {@link #INTERPRETERS}, or the one confidently-parseable shape below does not match.
+     * Recognizes exactly two shapes of {@code argv[1]}: a bare script path — climbed from its
+     * basename toward the tool's own name, so a path whose last segment already names the tool
+     * ({@code bin/codex.js}) resolves on the first try, and a generic entrypoint
+     * ({@code bin/cli.js}, {@code bin/index.js}) climbs past it and past the generic
+     * {@code bin}/{@code dist}-style directory to the package directory beside it — or
+     * {@link #MODULE_FLAG} followed by a module name. Anything else starting with {@code -} bails
+     * out rather than guessing: an eval flag's value is code, not a name, and an argument after an
+     * unrecognized flag could just as easily be that flag's own value as a script path.
+     */
+    @Nullable
+    @VisibleForTesting
+    static String unwrapInterpreter(@NonNull String interpreter, @NonNull String[] argv) {
+        if (!INTERPRETERS.contains(interpreter) || argv.length < 2) return null;
+        String first = argv[1];
+        if (first.isEmpty()) return null;
+        if (first.equals(MODULE_FLAG)) {
+            if (argv.length < 3 || argv[2].isEmpty() || argv[2].startsWith("-")) return null;
+            String normalized = argv[2].toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9._+-]", "");
+            return normalized.isEmpty() ? null : normalized;
+        }
+        if (first.startsWith("-")) return null;
+        String[] segments = first.split("/");
+        for (int i = segments.length - 1; i >= 0; i--) {
+            String segment = segments[i];
+            if (segment.isEmpty()) continue;
+            String candidate = i == segments.length - 1 ? stripScriptExtension(segment) : segment;
+            String normalized = candidate.toLowerCase(Locale.ROOT);
+            if (normalized.equals(interpreter) || normalized.startsWith("@")
+                || GENERIC_ENTRYPOINT_NAMES.contains(normalized)
+                || GENERIC_PATH_SEGMENTS.contains(normalized)) continue;
+            String sanitized = normalized.replaceAll("[^a-z0-9._+-]", "");
+            if (!sanitized.isEmpty()) return sanitized;
+        }
+        return null;
+    }
+
+    @NonNull
+    private static String stripScriptExtension(@NonNull String filename) {
+        int dot = filename.lastIndexOf('.');
+        if (dot <= 0) return filename;
+        switch (filename.substring(dot + 1).toLowerCase(Locale.ROOT)) {
+            case "js": case "mjs": case "cjs": case "ts": case "tsx": case "jsx":
+            case "py": case "rb": case "pl": case "php":
+                return filename.substring(0, dot);
+            default:
+                return filename;
+        }
     }
 
     @NonNull

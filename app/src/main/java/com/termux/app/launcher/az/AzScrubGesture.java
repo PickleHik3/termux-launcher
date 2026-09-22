@@ -151,6 +151,12 @@ public final class AzScrubGesture {
      * its FX layers; {@link #azRowLeftRaw}/{@link #azRowTopRaw}/{@link #azRowHeightPx} are the
      * ungated view metrics the anchor arithmetic and the row-height thresholds use, which is why
      * they are passed separately rather than read off {@link #azRow}.
+     *
+     * <p>{@link #trackSign} is the one thing that was an assumption rather than a measurement: the
+     * matches used to be <em>always</em> on the away side of the letters, because the letters were
+     * always the dock's row with the pinned apps directly above them. It is
+     * {@code AzPreviewTargetPolicy.Side.sign} now, so the row may stand anywhere in the edge's
+     * stack, on either side of the letters, and every threshold below still points at it.
      */
     public static final class Geometry {
 
@@ -166,14 +172,29 @@ public final class AzScrubGesture {
         @NonNull public final Bounds azRow;
         /** The suggestion bar's shown bounds, source of the icon corridor and capture wedge. */
         @NonNull public final Bounds appsRow;
-        /** The extra-keys row's shown bounds, which extends the return band downwards. */
+        /** The extra-keys row's shown bounds; they extend the return band while they lie beyond
+         *  the letters, on the far side from the matches. */
         @NonNull public final Bounds extraKeys;
         /** {@code DisplayMetrics.density}, for the dp-sized tolerances. */
         public final float density;
+        /**
+         * Which way the icon track lies from the letters in the canonical frame: {@code +1} away
+         * from the screen edge the bar stands on — the arrangement the scrub was written for — and
+         * {@code -1} past the letters towards it.
+         */
+        public final float trackSign;
 
+        /** The shipped arrangement: the track on the away side of the letters. */
         public Geometry(float azRowLeftRaw, float azRowTopRaw, float azRowHeightPx,
                         float extraKeysHeightPx, @NonNull Bounds azRow, @NonNull Bounds appsRow,
                         @NonNull Bounds extraKeys, float density) {
+            this(azRowLeftRaw, azRowTopRaw, azRowHeightPx, extraKeysHeightPx, azRow, appsRow,
+                extraKeys, density, 1f);
+        }
+
+        public Geometry(float azRowLeftRaw, float azRowTopRaw, float azRowHeightPx,
+                        float extraKeysHeightPx, @NonNull Bounds azRow, @NonNull Bounds appsRow,
+                        @NonNull Bounds extraKeys, float density, float trackSign) {
             this.azRowLeftRaw = azRowLeftRaw;
             this.azRowTopRaw = azRowTopRaw;
             this.azRowHeightPx = azRowHeightPx;
@@ -182,6 +203,7 @@ public final class AzScrubGesture {
             this.appsRow = appsRow;
             this.extraKeys = extraKeys;
             this.density = density;
+            this.trackSign = trackSign < 0f ? -1f : 1f;
         }
 
         float dp(float dp) {
@@ -196,6 +218,29 @@ public final class AzScrubGesture {
         /** The extra-keys height, falling back to a row-and-a-bit when there is no toolbar. */
         float extraKeysHeight() {
             return extraKeysHeightPx > 0f ? extraKeysHeightPx : (rowHeight() * 1.2f);
+        }
+
+        /**
+         * A touch's depth into the bar measured <em>from the face the matches are on</em>, growing
+         * away from them. It is the letter row's own {@code touchY} in the shipped arrangement and
+         * its mirror when the matches are on the other side, which is what lets one set of
+         * thresholds read both.
+         */
+        float trackDepth(float touchY) {
+            return trackSign > 0f ? touchY : rowHeight() - touchY;
+        }
+
+        /** How far a canonical displacement carries towards the matches. */
+        float towardsTrack(float canonicalDy) {
+            return -canonicalDy * trackSign;
+        }
+
+        /** Whether a band lies beyond the letters on the far side from the matches. */
+        boolean beyondLetters(@NonNull Bounds band) {
+            if (band.isEmpty() || azRow.isEmpty()) return false;
+            float bandCentre = (band.top + band.bottom) * 0.5f;
+            float lettersCentre = (azRow.top + azRow.bottom) * 0.5f;
+            return trackSign * (bandCentre - lettersCentre) > 0f;
         }
     }
 
@@ -304,7 +349,7 @@ public final class AzScrubGesture {
     private float mRecentMotionDx = 0f;
     private float mRecentMotionDy = 0f;
     private long mLastMotionEventTimeMs = 0L;
-    private float mUpwardTravelRefY = 0f;
+    private float mTrackTravelRefDepth = 0f;
     private float mLastScrubTouchX = 0f;
     private float mLastScrubTouchY = 0f;
 
@@ -432,7 +477,7 @@ public final class AzScrubGesture {
             mRecentMotionDx = 0f;
             mRecentMotionDy = 0f;
             mLastMotionEventTimeMs = eventTimeMs;
-            mUpwardTravelRefY = touchY;
+            mTrackTravelRefDepth = g.trackDepth(touchY);
             mLastScrubTouchX = touchX;
             mLastScrubTouchY = touchY;
             track = Track.WAVE;
@@ -449,11 +494,11 @@ public final class AzScrubGesture {
             mLastMotionEventTimeMs = eventTimeMs;
             mLastScrubTouchX = touchX;
             mLastScrubTouchY = touchY;
-            // While still letter-scrubbing horizontally, keep re-anchoring the upward-travel
-            // reference so the climb is measured from where the finger actually turned upward.
+            // While still letter-scrubbing horizontally, keep re-anchoring the travel reference so
+            // the run at the matches is measured from where the finger actually turned towards them.
             if (mMode == Mode.AZ_TRACKING
                 && Math.abs(mRecentMotionDx) > Math.abs(mRecentMotionDy) * SCRUB_HORIZONTAL_DOMINANCE) {
-                mUpwardTravelRefY = touchY;
+                mTrackTravelRefDepth = g.trackDepth(touchY);
             }
         }
 
@@ -469,29 +514,33 @@ public final class AzScrubGesture {
         mActive = true;
 
         float rowHeight = g.rowHeight();
+        // Everything below is in track depth: distance into the bar from the face the matches are
+        // on. For the shipped arrangement that is the letter row's own touchY, so these are the
+        // numbers they always were; mirrored, the same thresholds point the other way.
+        float depth = g.trackDepth(touchY);
         float filterUpperBound = -(rowHeight * 0.10f);
         float filterLowerBound = rowHeight + g.extraKeysHeight() + (rowHeight * 0.25f);
         float unlockThreshold = rowHeight * RETURN_TOUCH_Y_RATIO;
         float unlockMaxBound = filterLowerBound + (rowHeight * 0.18f);
         float minUpwardTravel = Math.max(g.dp(10f), rowHeight * 0.22f);
-        // Intent from the smoothed recent motion vector, travel from the rolling upward reference:
-        // a diagonal thumb arc out of a horizontal scrub locks upward without a vertical climb.
-        boolean recentUpwardDominant = -mRecentMotionDy
+        // Intent from the smoothed recent motion vector, travel from the rolling reference: a
+        // diagonal thumb arc out of a horizontal scrub locks without a straight run at the row.
+        boolean recentUpwardDominant = g.towardsTrack(mRecentMotionDy)
             >= Math.abs(mRecentMotionDx) * UPWARD_DIRECTION_RATIO;
-        boolean upwardIntent = touchY <= (rowHeight * UPWARD_LOCK_TOUCH_Y_RATIO)
-            && (mUpwardTravelRefY - touchY) >= minUpwardTravel
+        boolean upwardIntent = depth <= (rowHeight * UPWARD_LOCK_TOUCH_Y_RATIO)
+            && (mTrackTravelRefDepth - depth) >= minUpwardTravel
             && recentUpwardDominant;
-        // Once the drag starts on the AZ row, keep horizontal letter filtering captured below it.
-        // This matches the visual wave tracking and avoids requiring exact vertical placement.
-        boolean withinAzFilterBand = touchY >= filterUpperBound;
+        // Once the drag starts on the AZ row, keep horizontal letter filtering captured past its
+        // far face. This matches the visual wave tracking and avoids requiring exact placement.
+        boolean withinAzFilterBand = depth >= filterUpperBound;
         boolean enteringUpwardLock = upwardIntent;
         boolean enteringIconTrack = isInAppsRowCorridor(g, rawY) || isInCaptureWedge(g, rawX, rawY);
-        // Locked states are sticky: releasing them needs deliberate downward motion, not mere
-        // position drift near the row boundary while the thumb wanders sideways.
-        boolean recentDownwardDominant = mRecentMotionDy > 0f
-            && mRecentMotionDy >= Math.abs(mRecentMotionDx) * RETURN_DIRECTION_RATIO;
+        // Locked states are sticky: releasing them needs deliberate motion back off the matches,
+        // not mere position drift near the row boundary while the thumb wanders sideways.
+        boolean recentDownwardDominant = g.towardsTrack(mRecentMotionDy) < 0f
+            && -g.towardsTrack(mRecentMotionDy) >= Math.abs(mRecentMotionDx) * RETURN_DIRECTION_RATIO;
         boolean returningToUpwardTrack = recentDownwardDominant
-            && touchY >= unlockThreshold && touchY <= unlockMaxBound;
+            && depth >= unlockThreshold && depth <= unlockMaxBound;
         boolean returningToIconTrack = recentDownwardDominant
             && !isInAppsRowCorridor(g, rawY) && !isInCaptureWedge(g, rawX, rawY)
             && isInReturnBand(g, rawY);
@@ -591,48 +640,69 @@ public final class AzScrubGesture {
         mLockedAnchorRawY = mLastAnchorRawY;
     }
 
-    /** The band around the apps row inside which the finger is picking icons. */
+    /**
+     * The band around the icon track inside which the finger is picking icons. The tolerance is
+     * wider on the side the letters are on — that is where the thumb arrives from — so it is the
+     * track's near face that is generous, whichever face of it that is.
+     */
     private static boolean isInAppsRowCorridor(@NonNull Geometry g, float rawY) {
         if (g.appsRow.isEmpty()) {
             return false;
         }
-        float topTolerance = g.dp(2f);
-        float bottomTolerance = g.dp(4f);
-        return rawY >= (g.appsRow.top - topTolerance) && rawY <= (g.appsRow.bottom + bottomTolerance);
+        float nearTolerance = g.dp(4f);
+        float farTolerance = g.dp(2f);
+        float top = g.appsRow.top - (g.trackSign > 0f ? farTolerance : nearTolerance);
+        float bottom = g.appsRow.bottom + (g.trackSign > 0f ? nearTolerance : farTolerance);
+        return rawY >= top && rawY <= bottom;
     }
 
     /**
-     * The cone that carries a locked letter up into the apps row. Wide enough at the base for a
-     * natural thumb arc (~±45°) instead of demanding a straight vertical rise out of the letter.
+     * The cone that carries a locked letter into the icon track. Wide enough at the base for a
+     * natural thumb arc (~±45°) instead of demanding a straight run out of the letter, and opened
+     * along {@code trackSign} so it points at the row wherever the stack put it.
      */
     private boolean isInCaptureWedge(@NonNull Geometry g, float rawX, float rawY) {
         if (!mHasLockedSelection || g.appsRow.isEmpty()) {
             return false;
         }
-        float startY = mLockedAnchorRawY - g.dp(4f);
-        float topLimit = g.appsRow.top - g.dp(2f);
-        float bottomLimit = g.appsRow.bottom + g.dp(4f);
-        if (rawY > startY || rawY < topLimit || rawY > bottomLimit) {
+        float sign = g.trackSign;
+        float startY = mLockedAnchorRawY - (sign * g.dp(4f));
+        float farLimit = sign > 0f ? g.appsRow.top - g.dp(2f) : g.appsRow.bottom + g.dp(2f);
+        float nearLimit = sign > 0f ? g.appsRow.bottom + g.dp(4f) : g.appsRow.top - g.dp(4f);
+        float travel = sign * (startY - rawY);
+        if (travel < 0f) {
             return false;
         }
-        float wedgeTravel = Math.max(g.dp(24f), startY - topLimit);
-        float progress = Math.max(0f, Math.min(1f, (startY - rawY) / wedgeTravel));
+        if (rawY < Math.min(farLimit, nearLimit) || rawY > Math.max(farLimit, nearLimit)) {
+            return false;
+        }
+        float wedgeTravel = Math.max(g.dp(24f), sign * (startY - farLimit));
+        float progress = Math.max(0f, Math.min(1f, travel / wedgeTravel));
         float targetHalfWidth = Math.max(g.dp(40f), g.appsRow.width() * 0.18f);
         float halfWidth = g.dp(22f) + (targetHalfWidth * progress);
         return Math.abs(rawX - mLockedAnchorRawX) <= halfWidth;
     }
 
-    /** The band around the letter row (and the extra keys under it) that releases an icon lock. */
+    /**
+     * The band around the letter row — and anything standing beyond it, on the far side from the
+     * matches — that releases an icon lock. The extra keys under a bottom bar are that "anything"
+     * in the shipped arrangement. Keys ordered <em>between</em> the letters and the row are not:
+     * a return band stretched over them would drop the lock as the finger set out across them.
+     */
     private static boolean isInReturnBand(@NonNull Geometry g, float rawY) {
         if (g.azRow.isEmpty()) {
             return false;
         }
-        float top = g.azRow.top - g.dp(10f);
-        float bottom = g.azRow.bottom + g.dp(12f);
-        if (!g.extraKeys.isEmpty()) {
-            bottom = Math.max(bottom, g.extraKeys.bottom + g.dp(10f));
+        float sign = g.trackSign;
+        float near = sign > 0f ? g.azRow.top - g.dp(10f) : g.azRow.bottom + g.dp(10f);
+        float far = sign > 0f ? g.azRow.bottom + g.dp(12f) : g.azRow.top - g.dp(12f);
+        if (g.beyondLetters(g.extraKeys)) {
+            float keysFar = sign > 0f
+                ? g.extraKeys.bottom + g.dp(10f)
+                : g.extraKeys.top - g.dp(10f);
+            far = sign > 0f ? Math.max(far, keysFar) : Math.min(far, keysFar);
         }
-        return rawY >= top && rawY <= bottom;
+        return rawY >= Math.min(near, far) && rawY <= Math.max(near, far);
     }
 
     /**

@@ -1,0 +1,64 @@
+{
+  "id": "touchpad",
+  "crop": [
+    [
+      0,
+      302,
+      1080,
+      1116
+    ],
+    [
+      0,
+      1631,
+      1080,
+      720
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.6001549329957925,
+      "kind": "tap",
+      "points": [
+        231,
+        2300
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 3.9472568850032985,
+      "kind": "swipe",
+      "points": [
+        300,
+        1950,
+        650,
+        2100
+      ],
+      "duration": 0.8
+    },
+    {
+      "t": 6.822472529995139,
+      "kind": "tap",
+      "points": [
+        480,
+        2000
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 9.150797522990615,
+      "kind": "tap",
+      "points": [
+        231,
+        1680
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 11.47,
+  "bytes": 748370,
+  "width": 1080,
+  "height": 1836,
+  "video": "touchpad.mp4",
+  "poster": "touchpad.jpg",
+  "source": "pong 1080x2412@420 native"
+}

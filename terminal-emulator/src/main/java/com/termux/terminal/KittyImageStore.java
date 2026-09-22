@@ -87,6 +87,29 @@ final class KittyImageStore {
     /** The gap kitty gives a transmitted frame that did not specify one. */
     static final int DEFAULT_FRAME_GAP_MS = 40;
 
+    /**
+     * Stamps for {@link Entry#pixelGeneration}, monotonic across the process.
+     *
+     * <p>Process-wide rather than per store so a stamp is never reused: the renderer remembers a
+     * generation against an image <em>id</em>, and an id is the client's to delete and transmit
+     * again. A per-store counter would hand the new image a stamp the old one had already been
+     * seen with, and the cell displaying it would stop updating. Every stamp is taken on the
+     * terminal's update thread, the same thread the renderer reads them from.</p>
+     */
+    private static long pixelGenerationSequence;
+
+    /**
+     * Stamp an entry as drawing from different pixels than it did before — a frame flip, frame
+     * data landing or being composed, a placement's crop changing, the image being replaced. It is
+     * what lets the renderer replay a row showing an animation instead of recording it again, so
+     * every change to what {@link KittyGraphicsProtocol#getPlaceholder} would answer has to pass
+     * through here. Deletion needs no stamp: {@link #generationOf} answers 0 for an id that is
+     * gone, which is a value no live entry ever has.
+     */
+    static void notePixelsChanged(Entry entry) {
+        entry.pixelGeneration = ++pixelGenerationSequence;
+    }
+
     /** Animation states, matching the protocol's {@code s} values: 1 stop, 2 loading, 3 running. */
     static final int ANIMATION_STOPPED = 1;
     static final int ANIMATION_LOADING = 2;
@@ -142,6 +165,8 @@ final class KittyImageStore {
         long frameShownAtUptime;
         /** Sum of all frame gaps; an all-gapless animation must never spin. */
         long animationDurationMs;
+        /** Which pixels a placeholder for this image draws from; see {@link #notePixelsChanged}. */
+        long pixelGeneration;
 
         Entry(long id, long number, int width, int height, int byteCount) {
             this.id = id;
@@ -149,6 +174,7 @@ final class KittyImageStore {
             this.width = width;
             this.height = height;
             this.byteCount = byteCount;
+            notePixelsChanged(this);
         }
     }
 
@@ -240,6 +266,7 @@ final class KittyImageStore {
         entry.completed = true;
         totalBytes += byteCount - entry.byteCount;
         entry.byteCount = byteCount;
+        notePixelsChanged(entry);
         return true;
     }
 
@@ -253,6 +280,16 @@ final class KittyImageStore {
         return images.get(id);
     }
 
+    /**
+     * The pixel generation of the image with this id, or 0 when there is no such image. The zero
+     * is load-bearing: a placeholder cell whose image has not arrived yet, or has been deleted,
+     * draws nothing, and the renderer has to see that answer change when it does arrive.
+     */
+    long generationOf(long id) {
+        Entry entry = images.get(id);
+        return entry == null ? 0 : entry.pixelGeneration;
+    }
+
     /** Add a Unicode-placeholder placement prototype; identified pairs replace their predecessor. */
     void putVirtualPlacement(Entry entry, VirtualPlacement placement) {
         if (placement.placementId != 0) {
@@ -262,6 +299,9 @@ final class KittyImageStore {
             }
         }
         entry.virtualPlacements.add(placement);
+        // The crop, the cell grid and which placement a placeholder resolves to are all read back
+        // out of here, so replacing one changes the pixels every cell of it draws.
+        notePixelsChanged(entry);
     }
 
     /** Find an exact virtual placement, or the first one when the placeholder carries no id. */
@@ -281,6 +321,7 @@ final class KittyImageStore {
                 removed++;
             }
         }
+        if (removed > 0) notePixelsChanged(entry);
         return removed;
     }
 
@@ -434,6 +475,7 @@ final class KittyImageStore {
         entry.thinCursor = index + 1;
         // The displayed frame keeps its place; a viewer on the folded one sees the frame before it.
         if (entry.currentFrame > index) entry.currentFrame--;
+        notePixelsChanged(entry);
         return folded.byteCount;
     }
 
@@ -501,6 +543,7 @@ final class KittyImageStore {
         entry.frameShownAtUptime = 0;
         // Only the root frame's gap is left to count.
         entry.animationDurationMs = entry.rootGapMs;
+        notePixelsChanged(entry);
         return freed;
     }
 
@@ -513,6 +556,7 @@ final class KittyImageStore {
 
     /** Replace the pixels of 1-based frame {@code number} after an edit or composition. */
     void replaceFrameBitmap(Entry entry, int number, Bitmap bitmap, int byteCount) {
+        notePixelsChanged(entry);
         if (number == 1) {
             totalBytes += byteCount - entry.byteCount;
             entry.bitmap = bitmap;
@@ -555,6 +599,7 @@ final class KittyImageStore {
         } else if (removedIndex < entry.currentFrame) {
             entry.currentFrame--;
         }
+        notePixelsChanged(entry);
         return true;
     }
 
@@ -592,6 +637,7 @@ final class KittyImageStore {
         }
         entry.currentFrame = index;
         entry.frameShownAtUptime = now;
+        notePixelsChanged(entry);
         return true;
     }
 
@@ -634,7 +680,9 @@ final class KittyImageStore {
             entry.currentFrame = next;
         }
         entry.frameShownAtUptime = now - elapsed;
-        return entry.currentFrame != before;
+        if (entry.currentFrame == before) return false;
+        notePixelsChanged(entry);
+        return true;
     }
 
     /** The uptime the entry's next flip is due at, or -1 when it will not animate on its own. */

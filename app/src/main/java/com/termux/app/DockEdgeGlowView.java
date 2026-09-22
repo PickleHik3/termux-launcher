@@ -12,6 +12,9 @@ import android.view.View;
 
 import androidx.annotation.Nullable;
 
+import com.termux.app.chrome.ChromeInk;
+import com.termux.app.chrome.ChromeShade;
+
 /**
  * Reactive rim glow for the floating glass dock.
  *
@@ -30,6 +33,13 @@ public class DockEdgeGlowView extends View {
     /** Matches DockPlankController.MAX_TILT_DEG — the tilt magnitude that maps to a full hot lobe. */
     private static final float MAX_TILT_DEG = 4f;
 
+    /**
+     * The touch rim's strength, as authored: the accent at 23% alpha, which reads as a lit edge
+     * over dark glass. Over the light band the same accent at the same alpha is nothing, so the
+     * polarity is allowed to raise it — the hue is the dock's own accent and never moves.
+     */
+    private static final int RIM_TOUCH_ALPHA = 58;
+
     private final Paint rimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rimRect = new RectF();
     private final RectF tmpRect = new RectF();
@@ -44,6 +54,18 @@ public class DockEdgeGlowView extends View {
     private float hotAngleDeg = -90f;   // perimeter angle the edge light pools toward (screen space)
     private int launchCollisionColor = accentColor;
     private float launchCollisionLevel;
+
+    /**
+     * The touch rim and the specular as the chrome's polarity restates them, cached against the
+     * snapshot they came from: this view redraws every frame of a press, and the alpha search
+     * behind {@link ChromeShade} walks one step at a time.
+     */
+    private int mShadeRimAlpha = RIM_TOUCH_ALPHA;
+    private int mShadeSpecularTowards = Color.WHITE;
+    @Nullable private ChromeInk.Polarity mShadePolarity;
+    private int mShadeGlass;
+    private int mShadeAccent;
+    private boolean mShadeRead;
 
     // Cached SweepGradient: rebuild only when color/size inputs change.
     private SweepGradient mSweepGradient;
@@ -161,9 +183,10 @@ public class DockEdgeGlowView extends View {
                     Math.max(0f, r - inward), rimPaint);
             }
         }
+        readShade();
         rimPaint.setShader(null);
         rimPaint.setStrokeWidth(density * (1.15f + (0.55f * touch)));
-        rimPaint.setColor(withAlpha(accentColor, Math.round(58f * touch)));
+        rimPaint.setColor(withAlpha(accentColor, Math.round(mShadeRimAlpha * touch)));
         canvas.drawRoundRect(rimRect, r, r, rimPaint);
 
         // Tilt/touch-driven specular: a soft, broad highlight that pools on the edge the glass tips
@@ -173,7 +196,9 @@ public class DockEdgeGlowView extends View {
         if (touch > 0.02f || tiltAmount > 0.02f) {
             float cx = w * 0.5f;
             float cy = h * 0.5f;
-            int specular = lerpColor(accentColor, Color.WHITE, 0.6f);
+            // Caught light on dark glass; on a light dock the same pooling reads as the glass
+            // tipping into shadow, which is what a catch-light is over a bright surface.
+            int specular = lerpColor(accentColor, mShadeSpecularTowards, 0.6f);
             int hot = withAlpha(specular, Math.round(95f * touch * (0.45f + 0.55f * Math.max(tiltAmount, 0.35f))));
             int faint = withAlpha(accentColor, Math.round(28f * touch * (0.45f + 0.55f * tiltAmount)));
             int dim = withAlpha(specular, 0);
@@ -204,6 +229,23 @@ public class DockEdgeGlowView extends View {
             canvas.drawRoundRect(rimRect, r, r, rimPaint);
             rimPaint.setShader(null);
         }
+    }
+
+    /** Re-resolves the rim strength and the specular's direction when the snapshot has moved. */
+    private void readShade() {
+        ChromeInk.Polarity polarity = ChromeShade.polarity();
+        int glass = ChromeShade.nominalGlass();
+        if (mShadeRead && polarity == mShadePolarity && glass == mShadeGlass
+            && accentColor == mShadeAccent) {
+            return;
+        }
+        mShadePolarity = polarity;
+        mShadeGlass = glass;
+        mShadeAccent = accentColor;
+        mShadeRead = true;
+        mShadeRimAlpha = Color.alpha(ChromeShade.tinted(
+            withAlpha(accentColor, RIM_TOUCH_ALPHA), ChromeShade.TARGET_RIM));
+        mShadeSpecularTowards = polarity == ChromeInk.Polarity.DARK_INK ? Color.BLACK : Color.WHITE;
     }
 
     private static int lerpColor(int a, int b, float t) {

@@ -30,7 +30,7 @@ Session
 - A **pane** is one live shell inside a window. Panes can be split recursively in either direction.
 
 Split panes are enabled by default. To restore traditional single-pane Termux behavior, open
-**Settings → Terminal & status → Split-pane controls** and turn the controls off. This closes
+**Settings → Terminal → Split-pane controls** and turn the controls off. This closes
 secondary panes and disables window/pane commands, so finish or save work in those shells first.
 
 The fastest way to discover commands is the **Command palette**:
@@ -53,6 +53,14 @@ The palette is the complete argument-free UI surface:
 | Clipboard | Paste and copy selected text |
 | Appearance | Wallpaper picker/toggle, cursor-trail toggle, and Glass Lab |
 | App | Settings destinations, drawer controls, command palette, action sheet, and key inspector |
+
+Programs in the terminal — a Neovim or tmux clipboard provider, for example — can also read what
+you last copied on Android, through the OSC 52 escape sequence. Turn this off under
+**Settings → Terminal → Let programs read the clipboard** if you would rather they could not.
+
+Copying a selection that runs onto a wrapped line drops that line's trailing padding, the same as
+any other line, keeping one space if it broke mid-word. Turn this off under **Settings → Terminal
+→ Trim trailing spaces on wrapped lines** to copy wrapped lines exactly as shown, padding included.
 
 The long-press **Terminal action sheet** remains deliberately short: command palette, URL picker,
 share transcript, wallpaper controls, Glass Lab, settings, reset terminal, and kill process. Use the
@@ -124,7 +132,7 @@ floating pane and its bounds.
 With split panes enabled, the top terminal status surface contains a horizontal window strip. Tap a
 window chip to switch directly, or tap its `+` button to create a window. Labels prefer an editor's
 open-file basename, then the foreground process, then the working-directory/title fallback. Tap the
-session indicator to open or close the sessions drawer. The strip is hidden in single-pane
+session indicator to open or close the sessions panel. The strip is hidden in single-pane
 compatibility mode.
 
 The following layouts act on the current window without restarting any shell:
@@ -143,7 +151,7 @@ The following layouts act on the current window without restarting any shell:
 through `grid`, `dwindle`, `tall`, `fat`, `horizontal`, `vertical`, and `stack`, in that order. A window
 with no layout applied yet jumps to `grid`, so a single press never hides panes behind `stack`.
 
-**Automatic tiling** in Settings → Terminal & Status → Sessions and panes makes `dwindle` the layout
+**Automatic tiling** in Settings → Terminal → Sessions and panes makes `dwindle` the layout
 every new window starts under. **Focused pane grows** (same section) gives the focused pane 70% of
 every split on its way to the window edge, animated, whichever layout is in use — tap a pane and it
 becomes the big one.
@@ -437,7 +445,8 @@ any key slot can carry a launcher action written `tool:<registry id>` — option
 Slots are `key1` NW, `key2` NE, `key3` SW, `key4` SE, `key5` W, `key6` E, `key7` N, `key8` S — the
 keyboard's own eight swipe directions, unchanged. A `tool:` key reaches the same dispatcher as a
 keybind and a palette row, so every tool in the registry is available on every slot with no
-per-tool code and no separate binding syntax.
+per-tool code and no separate binding syntax. The tools follow the place you are on: on the
+Display place `window.next` and `window.previous` step through the apps open on the display.
 
 The shipped defaults are in `inapp-keyboard/src/main/res/xml/bottom_row.xml`; the north swipe takes
 over the keyboard's layout-switch gesture and `switch_forward` is dropped, while plain east/west stay
@@ -470,6 +479,43 @@ swap says where it landed, and the numeric and Greek/math pads are unchanged: th
 ring, they keep their own keys on the Ctrl cap, and the text key returns to whichever layout the
 ring is on.
 
+### Keyboard types
+
+The keyboard is docked along the bottom of the screen by default. Two other types are stored
+beside it: **Floating**, a narrower keyboard over the content that you place where you want it,
+and **Split**, the same bottom keyboard with every row parted in the middle for two thumbs. The
+choice belongs to the place and the orientation — the terminal in landscape can float while Home
+in portrait stays docked — and Settings ▸ Layout ▸ **Keyboard type** is where it is picked. How
+wide a float is, how tall it is, and how far a split parts are on Settings ▸ Keyboard, one value
+per orientation. Dragging the handle in the bottom-left corner of a floating keyboard resizes it
+in place — out to the left makes it wider and up makes its rows taller, so the right and bottom
+edges stay where they are — and writes the same two values.
+A floating keyboard is a solid panel in the theme's own colour rather than glass, so it reads as
+a card over whatever it is parked on. So are the split halves, and a docked keyboard on a place it
+lies over rather than shrinks — Home, and the Linux display in overlay mode — while the keyboard
+docked under the terminal keeps the dock's glass.
+
+```text
+map ctrl+alt+f keyboard.cycle_form                      # docked, floating, split, round again
+map ctrl+alt+shift+f keyboard.cycle_form direction=backward
+map --label Floating ctrl+alt+g keyboard.set_form floating
+map ctrl+alt+k keyboard.show                            # and keyboard.hide
+```
+
+On a keyboard key the cycle is `tool:keyboard.cycle_form` in any slot, and **Next keyboard type**
+is offered in Settings ▸ Keyboard ▸ Extra keys and in the extra-keys row editor, off until you
+pick it. The palette's Keyboard section lists the three types with the one in use marked.
+`keyboard.show` and `keyboard.hide` take `source=manual` or `source=focus`, which is how a script
+that watches for text focus says the keyboard is opening on its own rather than because someone
+asked; both need the launcher on screen.
+
+The parting of a split keyboard is not part of the keyboard: what is behind the keyboard shows
+through it and takes taps, so on Home and on the display you can reach the wall between your
+thumbs. On the terminal the keyboard makes room for itself rather than lying over it, so there is
+nothing behind the parting to reach. In mouse mode the parting widens to make room for the
+touchpad and both halves keep typing, narrowing back to your own setting when mouse mode goes
+off; a keyboard too narrow to part that far keeps the touchpad over the whole of it.
+
 ### Modal keymaps
 
 A root key can enter a named mode. The mode can time out, decide what an unknown key does, and stay
@@ -495,7 +541,7 @@ toast summary. The file is limited to 256 KiB, 4,096 lines, and 4,096 characters
 
 There are three ways to set the terminal font, listed here by how much work they are, least first:
 
-1. **The in-app picker** — **Settings → Appearance → Terminal fonts**. Downloads a font family and
+1. **The in-app picker** — **Settings → Look → Terminal fonts**. Downloads a font family and
    writes `~/.termux/fonts.d/10-launcher.conf` for you.
 2. **`~/.termux/font.ttf`** plus the optional `~/.termux/font-italic.ttf`, which is also what
    Termux:Styling writes.
@@ -509,7 +555,7 @@ therefore continue to work untouched, and so does a `fonts.conf` written before 
 
 ### The in-app font picker
 
-**Settings → Appearance → Terminal fonts** installs a complete multi-face font without a shell.
+**Settings → Look → Terminal fonts** installs a complete multi-face font without a shell.
 
 - **Families** is the install path, and the only one. A curated family list — Maple Mono, Hack,
   JetBrains Mono, Fira Code, Victor Mono, Cascadia Code and more — each with its download
@@ -821,7 +867,7 @@ label. Paste one into **display** in the extra-keys editor, or into `extra-keys`
 escapes are not interpreted and could not reach the astral ranges anyway. The editor re-spans the
 field as you type, so an icon is drawn rather than boxed while you are still editing it.
 
-**Finding an icon.** The glyph picker (**Settings → Terminal & status → Edit extra keys**, then a
+**Finding an icon.** The glyph picker (**Settings → Keyboard → Edit extra keys**, then a
 key's glyph field) ships the whole bundled set: **10,512 icons**, searchable by name (`keyboard`),
 by family (`md`, `fa`, `oct`, `cod`, `dev`, `weather`), or by exact Nerd Font name
 (`nf-md-folder`). Browsing shows a shelf of the set with the rest behind search, because a grid of
@@ -933,7 +979,7 @@ shortcut, including the one you might later assign to it.
 
 ### A shortcut reaches the shell instead of the app
 
-- Check whether **Settings → Terminal & status → Split-pane controls** changes the shortcut's
+- Check whether **Settings → Terminal → Split-pane controls** changes the shortcut's
   meaning.
 - Open **Key inspector** and press the shortcut.
 - Check `~/.termux/termux-launcher-bindings.conf` for an override or `unmap`.
@@ -943,7 +989,7 @@ shortcut, including the one you might later assign to it.
 
 - Check `ls ~/.termux/fonts.d/`. A drop-in is read before `fonts.conf`, so a directive you set there
   wins — but a directive only present in a drop-in is still active. `10-launcher.conf` is written by
-  the in-app picker; remove it from **Settings → Appearance → Terminal fonts → Use font.ttf /
+  the in-app picker; remove it from **Settings → Look → Terminal fonts → Use font.ttf /
   Termux:Styling**, not by hand-editing it, since the next picker action rewrites it.
 - Use `path=` for downloaded font files; Android may not know their family name.
 - Check that Termux can read the file and that it is non-empty and below 64 MiB.

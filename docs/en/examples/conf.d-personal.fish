@@ -5,11 +5,11 @@
 # its own, with nix-on-droid shortcuts in place of the package ones and the sshd
 # autostart hook — see the launcher template in the nix-on-droid flake.
 #
-# setup-launcher installs this once (from the conf.d-personal.fish example) and
-# never overwrites it, so edits here survive re-runs. The launcher's own
-# settings live in ~/.config/fish/config.fish, which the installer does replace
-# (with a timestamped .bak). Delete this file and re-run setup-launcher to get
-# a fresh copy.
+# tlstore installs this once (from the conf.d-personal.fish example) and never
+# overwrites it, so edits here survive an update. The launcher's own settings
+# live in ~/.config/fish/config.fish, which tlstore does replace (with a
+# timestamped .bak). Delete this file and run `tlstore install fish-shell` to
+# get a fresh copy.
 #
 # Load order: fish reads conf.d/*.fish (alphabetically) BEFORE config.fish. So
 # PATH additions and Material colors from the launcher config are not in place

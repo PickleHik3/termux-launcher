@@ -5,12 +5,13 @@ import android.graphics.PointF;
 import android.view.KeyEvent;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.ListView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxService;
+import com.termux.app.notice.AppNoticeItem;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
@@ -56,9 +57,6 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     /** Mirrors the terminal view key logging toggle onto the activity root view. */
     void setRootViewLoggingEnabled(boolean enabled);
-
-    /** Locks the drawer closed, e.g. while a selection is being copied. */
-    void setDrawerLocked(boolean locked);
 
     /**
      * Shows the legend for a modal terminal mode on the terminal's top-trailing corner, or takes it
@@ -125,6 +123,28 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** The layout id the ring stands on, or {@code main} while there is no keyboard. */
     @NonNull String activeInAppKeyboardLayout();
 
+    /**
+     * The keyboard type the place on screen resolves to in the orientation it is being held in.
+     * Docked while nothing has been stored, which is also the answer before the wall exists.
+     */
+    @NonNull KeyboardForm keyboardForm();
+
+    /**
+     * Stores a keyboard type for the place and orientation on screen and re-runs the geometry that
+     * depends on it. False when there are no preferences to store it in yet.
+     */
+    boolean setKeyboardForm(@NonNull KeyboardForm form);
+
+    /**
+     * Raises the in-app keyboard. {@code fromFocus} separates a text field that took focus from a
+     * person asking, so a policy that opened the keyboard itself can tell its own doing from the
+     * user's; false when there is no keyboard to raise.
+     */
+    boolean showInAppKeyboard(boolean fromFocus);
+
+    /** Puts the in-app keyboard down, with the same distinction. */
+    boolean hideInAppKeyboard(boolean fromFocus);
+
     // --- Keybind hints ---
 
     boolean isKeybindHintPopupVisible();
@@ -137,25 +157,8 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** What the hint slab documents right now: a held or latched prefix, or null for nothing. */
     void setHardwareKeybindHintPrefix(@Nullable String prefix, boolean shift);
 
-    /** The pending-chord indicator. */
-    @NonNull KeyChordUi keyChordUi();
-
     /** The click a cancelled chord plays. */
     void playKeyChordCancelledSound();
-
-    /** The small indicator shown while a multi-stroke binding is pending or has just run. */
-    interface KeyChordUi {
-
-        void show(@NonNull String normalizedSequence);
-
-        void showMode(@NonNull String mode);
-
-        void showAction(@NonNull String stroke, @NonNull String name);
-
-        void showFailure(@NonNull String stroke, @NonNull String message);
-
-        void hide();
-    }
 
     // --- Notices and surfaces ---
 
@@ -221,6 +224,18 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** Whether the host is in the foreground, i.e. between onStart and onStop. */
     boolean isVisible();
 
+    /**
+     * Whether the terminal place's pixels can be on screen: the wall rests on the terminal, or it
+     * is moving and the terminal may be sliding into or out of the frame. False only while another
+     * place — Widgets, Display — is at rest in front of it.
+     *
+     * <p>Coarser than {@link #isVisible()}, which is the activity's own foreground state: the
+     * activity can be fully in the foreground with the terminal a whole page away.
+     */
+    default boolean isTerminalPlaceOnScreen() {
+        return true;
+    }
+
     /** Says which action just ran, once it has run. */
     void showTerminalActionHint(@NonNull String toolName);
 
@@ -248,6 +263,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     boolean applyPaneLayout(@NonNull String layout);
 
     boolean cyclePaneLayout();
+
+    /**
+     * Show one of the pane wall's places. Accepts a name (widgets, terminal, display) or a
+     * direction (left, right); false when this install does not have that place.
+     */
+    boolean goToWallPage(@NonNull String page);
 
     /** The retained automatic layout, or null when the window is manually managed. */
     @Nullable String activePaneLayoutPolicy();
@@ -281,6 +302,13 @@ public interface TerminalHost extends SoftKeyboardPolicy {
         return null;
     }
 
+    /**
+     * An AI coding agent's own report about the pane it runs in, from {@code launcherctl agent}.
+     * {@code state} null clears the pane and hands it back to the screen rules.
+     */
+    default void reportAgentStatus(@NonNull TerminalSession pane, @Nullable String agent,
+                                   @Nullable AgentStatus.State state) {}
+
     // --- Shells ---
 
     /** The service holding every live shell, or null while it is not bound. */
@@ -289,13 +317,21 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** Marks output activity on a shell, which is tmux's monitor-activity. */
     void noteShellActivity(@Nullable TerminalSession session);
 
+    /** Asks for one coalesced repaint of the window chips, without counting anything as activity. */
+    default void scheduleWindowBarRefresh() {}
+
     /** Marks a shell as wanting attention, e.g. after a bell. */
     void noteShellAttention(@NonNull TerminalSession session);
 
     void clearShellAttention(int shellPid);
 
     /** The corner chip that reports a session switch, an exit, or a refused split. */
-    void showSessionSwitchIndicator(@Nullable String text);
+    /**
+     * Raises a notice the terminal is the subject of, held for as long as its kind is worth
+     * reading. Goes quiet inside {@code runWithoutNotices}, so an operation that is visible in
+     * itself does not narrate itself as well.
+     */
+    void showTerminalNotice(@Nullable String text, @NonNull AppNoticeItem.Hold hold);
 
     /** Re-reads the standing rows for shells running in the background. */
     void syncBackgroundProcessStack();
@@ -331,15 +367,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
         /** The name of {@code shell}'s session, or null when it is unnamed. */
         @Nullable String nameOf(@Nullable TerminalSession shell);
-
-        /** The drawer's session list view, or null while the drawer is not inflated. */
-        @Nullable ListView listView();
     }
 
-    /** Rebuilds the drawer rows from the live session/window/pane topology. */
+    /** Rebuilds the visible session list from the live session/window/pane topology. */
     void rebuildDrawerSessions();
 
-    /** Tells the drawer adapter its rows changed. */
+    /** Tells the window bar and the sessions browser their rows changed. */
     void notifySessionListUpdated();
 
     /** Shows the session's tab and focuses the pane displaying it. */
@@ -399,10 +432,6 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** Opens the rename editor for {@code target}. */
     boolean beginTerminalRename(@NonNull TerminalRenameTarget target);
 
-    void openDrawer();
-
-    void closeDrawers();
-
     // --- Workspaces ---
 
     @NonNull TerminalWorkspace saveWorkspace(@NonNull String requestedName, boolean overwrite,
@@ -443,6 +472,15 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     void openSettings();
 
+    /** Opens help for the place the wall is resting on — the same help the corner tabs open. */
+    void showHelpOverlay();
+
+    /**
+     * Opens the help centre on its own screen, the way Settings does. A host that has no such
+     * screen falls back to the overlay.
+     */
+    default void openHelpScreen() { showHelpOverlay(); }
+
     void openLookAndFeel();
 
     void openAppsBar();
@@ -450,6 +488,25 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     void showCommandPalette();
 
     void showExtraKeysRowEditor();
+
+    /** Flip mouse mode; returns the new state. */
+
+    boolean toggleMouseMode();
+
+    /**
+     * The keyboard key while mouse mode's touchpad holds the keyboard frame on the Display place:
+     * it swaps the frame's content — touchpad or keyboard — instead of putting the frame away.
+     * True when it was taken and the keyboard should be left alone.
+     */
+    boolean toggleDisplayFrameKeyboard();
+
+    /**
+     * True while the Display place is typed into with the phone's own keyboard. That keyboard
+     * answers a request there whether or not the launcher's own keyboard is switched on.
+     */
+    default boolean displayTakesSystemKeyboard() {
+        return false;
+    }
 
     /** Toggles the key inspector, answering whether it is now open. */
     boolean toggleKeyInspector();

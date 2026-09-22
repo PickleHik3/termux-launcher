@@ -114,39 +114,39 @@ public class AppNoticeTest {
 
     /**
      * The "what did that key just do" read-out used to be its own chip in the terminal's corner.
-     * On the shared pill it has to behave like a read-out, not a message: a second hint replaces the
+     * On the shared pill it has to behave like a read-out, not a message: a second one replaces the
      * first in place rather than queueing a {@code +1} behind it.
      */
     @Test
-    public void aHintReplacesTheHintBeforeItInsteadOfQueueing() {
+    public void aReadoutReplacesTheOneBeforeItInsteadOfQueueing() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
-        AppNotice.hint(activity, "Copy");
+        AppNotice.readout(activity, "Copy");
         AppNoticeHostView host = AppNotice.hostFor(activity);
         assertNotNull(host);
         assertEquals("Copy", String.valueOf(host.activeItem().title));
         assertTrue(host.activeItem().fleeting);
-        assertEquals(AppNoticeHostView.HOLD_HINT_MS, host.activeItem().durationMs);
+        assertEquals(AppNoticeItem.Hold.READOUT.ms, host.activeItem().durationMs);
 
-        AppNotice.hint(activity, "Paste");
+        AppNotice.readout(activity, "Paste");
         assertEquals("Paste", String.valueOf(host.activeItem().title));
         assertEquals("Paste", String.valueOf(host.getContentDescription()));
         assertEquals(View.GONE, ((LinearLayout) host).getChildAt(3).getVisibility());
     }
 
-    /** A hint never delays a real message, and never shows up late behind one. */
+    /** A read-out never delays a real message, and never shows up late behind one. */
     @Test
-    public void aHintYieldsToRealNotices() {
+    public void aReadoutYieldsToRealNotices() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         AppNoticeHostView host = AppNotice.hostFor(activity);
         assertNotNull(host);
         AppNotice.show(activity, "Saved");
-        AppNotice.hint(activity, "Copy");
+        AppNotice.readout(activity, "Copy");
         // Dropped: by the time the pill is free it would describe an action long forgotten.
         assertEquals("Saved", String.valueOf(host.activeItem().title));
         assertEquals(View.GONE, ((LinearLayout) host).getChildAt(3).getVisibility());
 
         host.clear();
-        AppNotice.hint(activity, "Copy");
+        AppNotice.readout(activity, "Copy");
         AppNotice.show(activity, "Saved");
         // The message takes the pill at once rather than waiting out the read-out's hold.
         assertEquals("Saved", String.valueOf(host.activeItem().title));
@@ -194,12 +194,12 @@ public class AppNoticeTest {
         AppNoticeHostView host = AppNotice.hostFor(activity);
         assertNotNull(host);
         layoutContent(activity);
-        assertEquals(80 + gapPx(activity), topMarginOf(host));
+        assertEquals(80 + gapPx(activity), bandTopOf(host));
 
         chrome.getLayoutParams().height = 40;
         chrome.requestLayout();
         layoutContent(activity);
-        assertEquals(40 + gapPx(activity), topMarginOf(host));
+        assertEquals(40 + gapPx(activity), bandTopOf(host));
     }
 
     /** No chrome to clear: the pill sits at the top of the content it was given. */
@@ -209,7 +209,7 @@ public class AppNoticeTest {
         AppNoticeHostView host = AppNotice.hostFor(activity);
         assertNotNull(host);
         layoutContent(activity);
-        assertEquals(gapPx(activity), topMarginOf(host));
+        assertEquals(gapPx(activity), bandTopOf(host));
     }
 
     /**
@@ -253,7 +253,8 @@ public class AppNoticeTest {
 
     /**
      * The pill is centred: it is a notice about what just happened, not a label belonging to the
-     * corner it used to hang in, and it reads the same on every screen.
+     * corner it used to hang in, and it reads the same on every screen — over the whole terminal
+     * area when there is one, over the whole window when there is not.
      */
     @Test
     public void thePillIsCentredInTheRowItLandsIn() {
@@ -289,8 +290,13 @@ public class AppNoticeTest {
         return Math.round(8f * activity.getResources().getDisplayMetrics().density);
     }
 
-    private static int topMarginOf(View host) {
-        return ((ViewGroup.MarginLayoutParams) host.getLayoutParams()).topMargin;
+    /**
+     * Where the pill's band sits. The pill hangs inside a frame rather than straight in the content
+     * root, because inside the terminal that frame is what clips its entrance at the rim.
+     */
+    private static int bandTopOf(View host) {
+        View band = (View) host.getParent();
+        return ((ViewGroup.MarginLayoutParams) band.getLayoutParams()).topMargin;
     }
 
     private static int measuredHeightOf(AppNoticeHostView host) {

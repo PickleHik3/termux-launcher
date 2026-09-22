@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The knob: an 18dp accent disc inside a 2dp ring of the card's own fill, so it reads as sitting
+     on the track rather than painted onto it. Flat, with no shadow layer: a shadow would need room
+     outside the drawable's bounds and the row has none to give. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item>
+        <shape android:shape="oval">
+            <size
+                android:width="22dp"
+                android:height="22dp" />
+            <solid android:color="?attr/termuxColorSurfaceBase" />
+        </shape>
+    </item>
+
+    <item
+        android:bottom="2dp"
+        android:left="2dp"
+        android:right="2dp"
+        android:top="2dp">
+        <shape android:shape="oval">
+            <size
+                android:width="18dp"
+                android:height="18dp" />
+            <solid android:color="?attr/termuxColorPrimary" />
+        </shape>
+    </item>
+</layer-list>

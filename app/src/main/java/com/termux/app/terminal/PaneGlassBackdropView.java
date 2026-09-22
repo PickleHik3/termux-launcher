@@ -40,8 +40,21 @@ public final class PaneGlassBackdropView extends View {
     @Nullable private Bitmap mFrame;
     @Nullable private BitmapShader mFrameShader;
     @Nullable private Drawable mGrain;
+    /** The grain strength {@link #mGrain} was built from: a fresh drawable is not comparable. */
+    private int mGrainStrength;
+    @Nullable private ColorFilter mFrostFilter;
+    /** False until the first {@link #setGlass} call, so the defaults are never mistaken for a dress. */
+    private boolean mDressed;
     private int mTintColor;
     private float mRadiusPx;
+    /** Non-zero while this view paints only the corner arcs of an opaque page. */
+    private float mCornerMaskRadiusPx;
+    /** Painted in the arcs over the frame, or alone when there is none: a corner is never left open. */
+    private int mCornerMaskFallbackColor = android.graphics.Color.TRANSPARENT;
+    @Nullable private android.graphics.Path mCornerMaskPath;
+    private int mCornerMaskWidth;
+    private int mCornerMaskHeight;
+    private float mCornerMaskPathRadius;
     private int mLastLeft = Integer.MIN_VALUE;
     private int mLastTop = Integer.MIN_VALUE;
     private int mLastWidth = -1;
@@ -59,14 +72,33 @@ public final class PaneGlassBackdropView extends View {
     }
 
     /**
-     * @param frame     shared pre-blurred wallpaper frame, or null for a tint-and-grain-only pane
-     * @param frameRect that frame's rect in screen coordinates
-     * @param grain     tiled grain layer, or null when grain is off
+     * Dress this pane, or leave it exactly as it is.
+     *
+     * <p>Every chrome apply re-dresses every pane, and there are two applies to a frame; a page
+     * change cost 78 of these passes, 174 ms, for panes whose glass had not moved (Pong,
+     * 2026-09-09). So a re-dress with the frame the pane is already drawing, at the same rect,
+     * tint, grain, radius and filter, is not a re-dress: it returns without building a shader or
+     * invalidating, and the pane keeps the matrix it had. The frame is compared by identity, never
+     * by pixels — a newly blurred frame is a new bitmap, which is what makes that sound.</p>
+     *
+     * @param frame         shared pre-blurred wallpaper frame, or null for a tint-and-grain-only pane
+     * @param frameRect     that frame's rect in screen coordinates
+     * @param grain         tiled grain layer, or null when grain is off
+     * @param grainStrength what {@code grain} was built from; a fresh drawable compares equal to
+     *                      nothing, so this is the grain's identity
+     * @return true when this call actually re-dressed the pane
      */
-    public void setGlass(@Nullable Bitmap frame, @NonNull Rect frameRect, int tintColor,
-                         @Nullable Drawable grain, float radiusPx,
-                         @Nullable ColorFilter frostFilter) {
-        mFrame = frame != null && !frame.isRecycled() ? frame : null;
+    public boolean setGlass(@Nullable Bitmap frame, @NonNull Rect frameRect, int tintColor,
+                            @Nullable Drawable grain, int grainStrength, float radiusPx,
+                            @Nullable ColorFilter frostFilter) {
+        Bitmap live = frame != null && !frame.isRecycled() ? frame : null;
+        if (mDressed && live == mFrame && mTintColor == tintColor && mRadiusPx == radiusPx
+            && mGrainStrength == grainStrength && (mGrain == null) == (grain == null)
+            && mFrostFilter == frostFilter && mFrameRect.equals(frameRect)) {
+            return false;
+        }
+        mDressed = true;
+        mFrame = live;
         // CLAMP, and drawn as a shader rather than as a bitmap: the cached frame does not always
         // reach the full width of the screen (it is downsampled for the blur, and on ROMs that
         // magnify the wallpaper it is captured against a compensated rect), and a plain drawBitmap
@@ -79,13 +111,40 @@ public final class PaneGlassBackdropView extends View {
         mFrameRect.set(frameRect);
         mTintColor = tintColor;
         mGrain = grain;
+        mGrainStrength = grainStrength;
         mRadiusPx = radiusPx;
+        mFrostFilter = frostFilter;
         mFramePaint.setColorFilter(frostFilter);
         mLastLeft = Integer.MIN_VALUE;   // force the matrix to be rebuilt against the new frame
         invalidate();
+        return true;
     }
 
     /** Recompute the frame matrix on the next draw; call after this pane has moved. */
+    /**
+     * Paint only the four corner arcs, and skip the tint and grain.
+     *
+     * <p>For a page whose content is an opaque surface the system composites outside the view
+     * hierarchy — the X display — so no parent clip can round it. The arcs are painted over the
+     * surface with what sits behind the page instead, which rounds the page's corners for the
+     * same cost as any other draw.
+     *
+     * @param radiusPx the corner radius to cut, or 0 to go back to painting the whole slab
+     */
+    public void setCornerMaskRadius(float radiusPx) {
+        float resolved = Math.max(0f, radiusPx);
+        if (mCornerMaskRadiusPx == resolved) return;
+        mCornerMaskRadiusPx = resolved;
+        invalidate();
+    }
+
+    /** The colour laid over the arcs: the wall's dim over its wallpaper, or a flat colour alone. */
+    public void setCornerMaskFallbackColor(int color) {
+        if (mCornerMaskFallbackColor == color) return;
+        mCornerMaskFallbackColor = color;
+        invalidate();
+    }
+
     public void invalidateGlassPosition() {
         mLastLeft = Integer.MIN_VALUE;
         invalidate();
@@ -97,7 +156,10 @@ public final class PaneGlassBackdropView extends View {
         int height = getHeight();
         if (width <= 0 || height <= 0) return;
         int save = canvas.save();
-        if (mRadiusPx > 0f) {
+        if (mCornerMaskRadiusPx > 0f) {
+            // Everything outside the rounded page, which is exactly the four arcs.
+            canvas.clipPath(cornerMaskPath(width, height));
+        } else if (mRadiusPx > 0f) {
             mClipRect.set(0f, 0f, width, height);
             canvas.clipRect(mClipRect);   // the round clip is the parent frame's; this bounds ours
         }
@@ -118,13 +180,23 @@ public final class PaneGlassBackdropView extends View {
             }
             canvas.drawRect(0f, 0f, width, height, mFramePaint);
         }
-        if (android.graphics.Color.alpha(mTintColor) > 0) {
-            mTintPaint.setColor(mTintColor);
-            canvas.drawRect(0f, 0f, width, height, mTintPaint);
-        }
-        if (mGrain != null) {
-            mGrain.setBounds(0, 0, width, height);
-            mGrain.draw(canvas);
+        // A corner mask stands in for what is behind the page, so it takes neither the pane
+        // tint nor the grain: those belong to a pane's own slab, and the page has none. It takes
+        // the wall's own colour over the frame - the dim the root wears - or alone.
+        if (mCornerMaskRadiusPx > 0f) {
+            if (android.graphics.Color.alpha(mCornerMaskFallbackColor) > 0) {
+                mTintPaint.setColor(mCornerMaskFallbackColor);
+                canvas.drawRect(0f, 0f, width, height, mTintPaint);
+            }
+        } else {
+            if (android.graphics.Color.alpha(mTintColor) > 0) {
+                mTintPaint.setColor(mTintColor);
+                canvas.drawRect(0f, 0f, width, height, mTintPaint);
+            }
+            if (mGrain != null) {
+                mGrain.setBounds(0, 0, width, height);
+                mGrain.draw(canvas);
+            }
         }
         canvas.restoreToCount(save);
     }
@@ -140,6 +212,28 @@ public final class PaneGlassBackdropView extends View {
      * inside the pane then travels with the pane, which is what glass does.
      */
     // Package-private so the regression test can pin it directly.
+    /** Rebuilt only when the size or the radius changes, never per draw. */
+    @NonNull
+    private android.graphics.Path cornerMaskPath(int width, int height) {
+        if (mCornerMaskPath != null && mCornerMaskWidth == width && mCornerMaskHeight == height
+            && mCornerMaskPathRadius == mCornerMaskRadiusPx) {
+            return mCornerMaskPath;
+        }
+        float radius = PaneShape.radiusForBounds(mCornerMaskRadiusPx, width, height);
+        android.graphics.Path path = mCornerMaskPath == null
+            ? new android.graphics.Path() : mCornerMaskPath;
+        path.reset();
+        path.addRect(0f, 0f, width, height, android.graphics.Path.Direction.CW);
+        path.addRoundRect(0f, 0f, width, height, radius, radius,
+            android.graphics.Path.Direction.CCW);
+        path.setFillType(android.graphics.Path.FillType.WINDING);
+        mCornerMaskPath = path;
+        mCornerMaskWidth = width;
+        mCornerMaskHeight = height;
+        mCornerMaskPathRadius = mCornerMaskRadiusPx;
+        return path;
+    }
+
     void layoutOriginOnScreen(@NonNull int[] out) {
         float x = 0f;
         float y = 0f;

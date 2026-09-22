@@ -59,6 +59,8 @@ public final class LauncherIconStore {
     @NonNull private final Resources resources;
     @NonNull private final ArtworkLoader loader;
     @NonNull private final LruCache<String, Drawable> cache;
+    /** Which icon packs produced the held artwork. See {@link #artworkKey}. */
+    @NonNull private String iconPackIdentity = "";
 
     public LauncherIconStore(@NonNull Resources resources, int memoryClassMb,
                              @NonNull ArtworkLoader loader) {
@@ -89,11 +91,39 @@ public final class LauncherIconStore {
         return artwork(entry.appRef);
     }
 
+    /**
+     * Tells the store which icon packs the artwork it loads comes from, and drops everything held
+     * under a different answer. Keyed the same way as {@link DockIconCache}, and for the same
+     * reason: the artwork here is already icon-pack-treated, so a pack switch makes it stale, and
+     * nothing but the key can guarantee that a missed invalidation does not resurrect it.
+     *
+     * @return true when the identity actually moved, and the store was therefore dropped.
+     */
+    public boolean setIconPackIdentity(@Nullable String identity) {
+        String next = identity == null ? "" : identity;
+        if (iconPackIdentity.equals(next)) return false;
+        iconPackIdentity = next;
+        invalidateAll();
+        return true;
+    }
+
+    /** The identity the held artwork was keyed under. */
+    @NonNull
+    public String iconPackIdentity() {
+        return iconPackIdentity;
+    }
+
+    /** The store key for one app under one icon-pack configuration. Pure, so it can be tested. */
+    @NonNull
+    public static String artworkKey(@NonNull AppRef ref, @Nullable String iconPackIdentity) {
+        return (iconPackIdentity == null ? "" : iconPackIdentity) + "|" + ref.stableId();
+    }
+
     /** The held or freshly loaded artwork for one app. */
     @Nullable
     public Drawable artwork(@Nullable AppRef ref) {
         if (ref == null) return null;
-        String key = ref.stableId();
+        String key = artworkKey(ref, iconPackIdentity);
         Drawable held = cache.get(key);
         if (held != null) return held;
         Drawable loaded = shrink(loader.load(ref));
@@ -109,7 +139,7 @@ public final class LauncherIconStore {
     public void prime(@Nullable AppRef ref, @Nullable Drawable artwork) {
         if (ref == null || artwork == null) return;
         Drawable retained = shrink(artwork);
-        if (retained != null) cache.put(ref.stableId(), retained);
+        if (retained != null) cache.put(artworkKey(ref, iconPackIdentity), retained);
     }
 
     /** Drops every held drawable; the next read reloads at the current icon-pack treatment. */

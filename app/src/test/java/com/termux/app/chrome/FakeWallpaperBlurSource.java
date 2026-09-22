@@ -56,12 +56,12 @@ final class FakeWallpaperBlurSource implements WallpaperBlurCache.Source {
 
     @Nullable
     @Override
-    public Bitmap captureWallpaperFrame(@NonNull Rect frameRect, @NonNull View wallpaperFrame) {
+    public WallpaperBlurCache.FrameCapture beginCapture(@NonNull Rect frameRect, @NonNull View wallpaperFrame) {
         captureCount++;
         Bitmap bitmap = Bitmap.createBitmap(Math.max(1, frameRect.width()),
             Math.max(1, frameRect.height()), Bitmap.Config.ARGB_8888);
         captured.add(bitmap);
-        return bitmap;
+        return WallpaperBlurCache.FrameCapture.ready(bitmap);
     }
 
     @Nullable

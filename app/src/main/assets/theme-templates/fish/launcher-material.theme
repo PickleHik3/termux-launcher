@@ -1,0 +1,126 @@
+# name: 'Launcher Material'
+#
+# Rendered by Termux Launcher - do not edit.
+#
+# One theme, three sections: fish paints from [light] or [dark] according to
+# what the terminal reports its appearance to be, and from [unknown] when the
+# terminal says nothing. [unknown] holds whichever palette the launcher last
+# rendered for, so a terminal that does not answer still gets the wallpaper's
+# colours rather than none.
+
+[dark]
+# preferred_background: {{ colors.terminal_background.dark.hex_stripped }}
+fish_color_normal {{ colors.terminal_foreground.dark.hex_stripped }}
+fish_color_command {{ colors.terminal_normal_blue.dark.hex_stripped }}
+fish_color_keyword {{ colors.terminal_normal_magenta.dark.hex_stripped }}
+fish_color_quote {{ colors.terminal_normal_green.dark.hex_stripped }}
+fish_color_redirection {{ colors.terminal_normal_cyan.dark.hex_stripped }}
+fish_color_end {{ colors.terminal_bright_magenta.dark.hex_stripped }}
+fish_color_error {{ colors.error.dark.hex_stripped }}
+fish_color_param {{ colors.terminal_normal_white.dark.hex_stripped }}
+fish_color_option {{ colors.terminal_bright_cyan.dark.hex_stripped }}
+fish_color_comment {{ colors.terminal_bright_black.dark.hex_stripped }}
+fish_color_operator {{ colors.terminal_normal_yellow.dark.hex_stripped }}
+fish_color_escape {{ colors.terminal_bright_magenta.dark.hex_stripped }}
+fish_color_autosuggestion {{ colors.outline.dark.hex_stripped }}
+fish_color_selection {{ colors.on_surface_variant.dark.hex_stripped }} --background={{ colors.surface_variant.dark.hex_stripped }}
+fish_color_search_match --background={{ colors.secondary_container.dark.hex_stripped }}
+fish_color_history_current --bold
+fish_color_valid_path --underline
+fish_color_cancel -r
+fish_color_cwd {{ colors.primary.dark.hex_stripped }}
+fish_color_cwd_root {{ colors.error.dark.hex_stripped }}
+fish_color_user {{ colors.terminal_normal_green.dark.hex_stripped }}
+fish_color_host {{ colors.primary.dark.hex_stripped }}
+fish_color_host_remote {{ colors.terminal_normal_yellow.dark.hex_stripped }}
+fish_color_status {{ colors.error.dark.hex_stripped }}
+fish_pager_color_progress {{ colors.on_surface_variant.dark.hex_stripped }} --background={{ colors.surface_container_high.dark.hex_stripped }}
+fish_pager_color_prefix {{ colors.primary.dark.hex_stripped }} --bold --underline
+fish_pager_color_completion {{ colors.on_surface.dark.hex_stripped }}
+fish_pager_color_description {{ colors.outline.dark.hex_stripped }}
+fish_pager_color_selected_background --background={{ colors.secondary_container.dark.hex_stripped }}
+fish_pager_color_selected_prefix {{ colors.primary.dark.hex_stripped }} --bold
+fish_pager_color_selected_completion {{ colors.on_secondary_container.dark.hex_stripped }}
+fish_pager_color_selected_description {{ colors.on_secondary_container.dark.hex_stripped }}
+fish_pager_color_secondary_background --background={{ colors.surface_container.dark.hex_stripped }}
+fish_pager_color_secondary_prefix {{ colors.primary.dark.hex_stripped }}
+fish_pager_color_secondary_completion {{ colors.on_surface.dark.hex_stripped }}
+fish_pager_color_secondary_description {{ colors.outline.dark.hex_stripped }}
+
+[light]
+# preferred_background: {{ colors.terminal_background.light.hex_stripped }}
+fish_color_normal {{ colors.terminal_foreground.light.hex_stripped }}
+fish_color_command {{ colors.terminal_normal_blue.light.hex_stripped }}
+fish_color_keyword {{ colors.terminal_normal_magenta.light.hex_stripped }}
+fish_color_quote {{ colors.terminal_normal_green.light.hex_stripped }}
+fish_color_redirection {{ colors.terminal_normal_cyan.light.hex_stripped }}
+fish_color_end {{ colors.terminal_bright_magenta.light.hex_stripped }}
+fish_color_error {{ colors.error.light.hex_stripped }}
+fish_color_param {{ colors.terminal_normal_white.light.hex_stripped }}
+fish_color_option {{ colors.terminal_bright_cyan.light.hex_stripped }}
+fish_color_comment {{ colors.terminal_bright_black.light.hex_stripped }}
+fish_color_operator {{ colors.terminal_normal_yellow.light.hex_stripped }}
+fish_color_escape {{ colors.terminal_bright_magenta.light.hex_stripped }}
+fish_color_autosuggestion {{ colors.outline.light.hex_stripped }}
+fish_color_selection {{ colors.on_surface_variant.light.hex_stripped }} --background={{ colors.surface_variant.light.hex_stripped }}
+fish_color_search_match --background={{ colors.secondary_container.light.hex_stripped }}
+fish_color_history_current --bold
+fish_color_valid_path --underline
+fish_color_cancel -r
+fish_color_cwd {{ colors.primary.light.hex_stripped }}
+fish_color_cwd_root {{ colors.error.light.hex_stripped }}
+fish_color_user {{ colors.terminal_normal_green.light.hex_stripped }}
+fish_color_host {{ colors.primary.light.hex_stripped }}
+fish_color_host_remote {{ colors.terminal_normal_yellow.light.hex_stripped }}
+fish_color_status {{ colors.error.light.hex_stripped }}
+fish_pager_color_progress {{ colors.on_surface_variant.light.hex_stripped }} --background={{ colors.surface_container_high.light.hex_stripped }}
+fish_pager_color_prefix {{ colors.primary.light.hex_stripped }} --bold --underline
+fish_pager_color_completion {{ colors.on_surface.light.hex_stripped }}
+fish_pager_color_description {{ colors.outline.light.hex_stripped }}
+fish_pager_color_selected_background --background={{ colors.secondary_container.light.hex_stripped }}
+fish_pager_color_selected_prefix {{ colors.primary.light.hex_stripped }} --bold
+fish_pager_color_selected_completion {{ colors.on_secondary_container.light.hex_stripped }}
+fish_pager_color_selected_description {{ colors.on_secondary_container.light.hex_stripped }}
+fish_pager_color_secondary_background --background={{ colors.surface_container.light.hex_stripped }}
+fish_pager_color_secondary_prefix {{ colors.primary.light.hex_stripped }}
+fish_pager_color_secondary_completion {{ colors.on_surface.light.hex_stripped }}
+fish_pager_color_secondary_description {{ colors.outline.light.hex_stripped }}
+
+[unknown]
+# preferred_background: {{ colors.terminal_background.default.hex_stripped }}
+fish_color_normal {{ colors.terminal_foreground.default.hex_stripped }}
+fish_color_command {{ colors.terminal_normal_blue.default.hex_stripped }}
+fish_color_keyword {{ colors.terminal_normal_magenta.default.hex_stripped }}
+fish_color_quote {{ colors.terminal_normal_green.default.hex_stripped }}
+fish_color_redirection {{ colors.terminal_normal_cyan.default.hex_stripped }}
+fish_color_end {{ colors.terminal_bright_magenta.default.hex_stripped }}
+fish_color_error {{ colors.error.default.hex_stripped }}
+fish_color_param {{ colors.terminal_normal_white.default.hex_stripped }}
+fish_color_option {{ colors.terminal_bright_cyan.default.hex_stripped }}
+fish_color_comment {{ colors.terminal_bright_black.default.hex_stripped }}
+fish_color_operator {{ colors.terminal_normal_yellow.default.hex_stripped }}
+fish_color_escape {{ colors.terminal_bright_magenta.default.hex_stripped }}
+fish_color_autosuggestion {{ colors.outline.default.hex_stripped }}
+fish_color_selection {{ colors.on_surface_variant.default.hex_stripped }} --background={{ colors.surface_variant.default.hex_stripped }}
+fish_color_search_match --background={{ colors.secondary_container.default.hex_stripped }}
+fish_color_history_current --bold
+fish_color_valid_path --underline
+fish_color_cancel -r
+fish_color_cwd {{ colors.primary.default.hex_stripped }}
+fish_color_cwd_root {{ colors.error.default.hex_stripped }}
+fish_color_user {{ colors.terminal_normal_green.default.hex_stripped }}
+fish_color_host {{ colors.primary.default.hex_stripped }}
+fish_color_host_remote {{ colors.terminal_normal_yellow.default.hex_stripped }}
+fish_color_status {{ colors.error.default.hex_stripped }}
+fish_pager_color_progress {{ colors.on_surface_variant.default.hex_stripped }} --background={{ colors.surface_container_high.default.hex_stripped }}
+fish_pager_color_prefix {{ colors.primary.default.hex_stripped }} --bold --underline
+fish_pager_color_completion {{ colors.on_surface.default.hex_stripped }}
+fish_pager_color_description {{ colors.outline.default.hex_stripped }}
+fish_pager_color_selected_background --background={{ colors.secondary_container.default.hex_stripped }}
+fish_pager_color_selected_prefix {{ colors.primary.default.hex_stripped }} --bold
+fish_pager_color_selected_completion {{ colors.on_secondary_container.default.hex_stripped }}
+fish_pager_color_selected_description {{ colors.on_secondary_container.default.hex_stripped }}
+fish_pager_color_secondary_background --background={{ colors.surface_container.default.hex_stripped }}
+fish_pager_color_secondary_prefix {{ colors.primary.default.hex_stripped }}
+fish_pager_color_secondary_completion {{ colors.on_surface.default.hex_stripped }}
+fish_pager_color_secondary_description {{ colors.outline.default.hex_stripped }}

@@ -23,10 +23,17 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Bounded parser for the optional {@code ~/.termux/fonts.conf} file and the optional
- * {@code ~/.termux/fonts.d/*.conf} drop-in directory. The drop-ins are read first in ascending
- * filename order and {@code fonts.conf} last, so the user's own file always wins the existing
- * last-duplicate-wins rule.
+ * Bounded parser for the terminal's font configuration, read from three places in one pass.
+ *
+ * <p>In load order: {@code ~/.config/kitty/kitty.conf}, then {@code ~/.termux/fonts.d/*.conf} in
+ * ascending filename order, then {@code ~/.termux/fonts.conf}. One accumulator carries the whole
+ * load, so the existing last-duplicate-wins rule makes the user's own files beat everything a
+ * kitty-shaped tool wrote — and beat the app's own managed drop-in as before.
+ *
+ * <p>kitty.conf is a whole terminal's configuration, only a handful of whose directives are about
+ * fonts, so it is read leniently: a directive this parser does not know is skipped in silence
+ * there and reported everywhere else. A malformed <em>font</em> directive is reported wherever it
+ * is written.
  */
 public final class TerminalFontConfig {
 
@@ -35,12 +42,26 @@ public final class TerminalFontConfig {
     public static final String DROP_IN_DIR_NAME = "fonts.d";
     public static final String DROP_IN_DIR_PATH =
         TermuxConstants.TERMUX_DATA_HOME_DIR_PATH + "/" + DROP_IN_DIR_NAME;
+    /** kitty's own config directory, as kitty itself resolves it without an environment. */
+    public static final String KITTY_DIR_PATH =
+        TermuxConstants.TERMUX_HOME_DIR_PATH + "/.config/kitty";
+    public static final String KITTY_FILE_NAME = "kitty.conf";
+    public static final String KITTY_FILE_PATH = KITTY_DIR_PATH + "/" + KITTY_FILE_NAME;
     private static final String DROP_IN_SUFFIX = ".conf";
     private static final long MAX_FILE_BYTES = 64 * 1024;
     private static final int MAX_DROP_IN_FILES = 32;
     /** Aggregate budget for the drop-ins only: the user's own fonts.conf is never squeezed out. */
     private static final long MAX_DROP_IN_TOTAL_BYTES = 256 * 1024;
+    /** Aggregate budget for everything one kitty.conf pulls in with {@code include}. */
+    private static final long MAX_INCLUDE_TOTAL_BYTES = 256 * 1024;
+    private static final int MAX_INCLUDE_FILES = 16;
     private static final int MAX_LINES = 512;
+    /**
+     * kitty.conf is a whole terminal's configuration and kitty's own generated sample runs to
+     * thousands of lines, so it is bounded by its byte allowance rather than by the line count a
+     * file of font directives needs.
+     */
+    private static final int MAX_KITTY_LINES = 8192;
     private static final int MAX_LINE_CHARS = 4096;
     private static final int MAX_FAMILY_CHARS = 128;
     private static final int MAX_SYMBOL_MAPS = 256;
@@ -56,6 +77,11 @@ public final class TerminalFontConfig {
     private static final int BOX_DRAWING_SCALE_VALUES = 4;
     private static final int MAX_BOX_DRAWING_SCALE = 8;
     private static final String NAME_PREFIX = "name=";
+    private static final String PATH_PREFIX = "path=";
+    private static final String FAMILY_PREFIX = "family=";
+    /** kitty's four include forms; only the plain one can be honoured without a shell. */
+    private static final List<String> INCLUDE_DIRECTIVES =
+        Arrays.asList("include", "globinclude", "envinclude", "geninclude");
 
     public enum Face { REGULAR, BOLD, ITALIC, BOLD_ITALIC }
 
@@ -248,17 +274,46 @@ public final class TerminalFontConfig {
         }
     }
 
-    /** One {@code font_features}/{@code font_variations} line that named a symbol map. */
+    /** One {@code font_features}/{@code font_variations} line whose target is not a face. */
     private static final class NamedSetting {
         @NonNull final String name;
         @NonNull final String settings;
         @NonNull final String where;
+        /** A target that matches nothing is only worth reporting outside kitty.conf. */
+        final boolean lenient;
 
-        NamedSetting(@NonNull String name, @NonNull String settings, @NonNull String where) {
+        NamedSetting(@NonNull String name, @NonNull String settings, @NonNull String where,
+                     boolean lenient) {
             this.name = name;
             this.settings = settings;
             this.where = where;
+            this.lenient = lenient;
         }
+    }
+
+    /**
+     * One file of a load: how it names itself in errors, how strict it is, and where its
+     * {@code include} lines resolve.
+     *
+     * <p>{@code includeDir} is null once includes are spent, which is what keeps kitty's
+     * {@code include} one level deep.
+     */
+    private static final class Source {
+        @NonNull final String prefix;
+        final boolean lenient;
+        @Nullable final File includeDir;
+
+        Source(@NonNull String prefix, boolean lenient, @Nullable File includeDir) {
+            this.prefix = prefix;
+            this.lenient = lenient;
+            this.includeDir = includeDir;
+        }
+    }
+
+    /** The strict, include-less source every {@code ~/.termux} file is parsed as. */
+    @NonNull
+    private static Source strict(@Nullable String prefix) {
+        return new Source(prefix == null ? "" : prefix, false, null);
     }
 
     /** Mutable state shared by every file of one load, so later files override earlier ones. */
@@ -282,13 +337,15 @@ public final class TerminalFontConfig {
         PowerlineMode powerlineSymbols = PowerlineMode.SYNTHESIZE;
         int symbolRangeCount;
         boolean filePresent;
+        long includeBudget = MAX_INCLUDE_TOTAL_BYTES;
+        int includeCount;
     }
 
     private TerminalFontConfig() {}
 
     @NonNull
     public static Result load() {
-        return load(new File(DROP_IN_DIR_PATH), new File(FILE_PATH));
+        return load(new File(KITTY_FILE_PATH), new File(DROP_IN_DIR_PATH), new File(FILE_PATH));
     }
 
     /** Loads the {@code fonts.d} directory sitting next to the given {@code fonts.conf}. */
@@ -301,7 +358,30 @@ public final class TerminalFontConfig {
 
     @NonNull
     static Result load(@NonNull File dropInDir, @NonNull File file) {
+        return load(null, dropInDir, file);
+    }
+
+    /**
+     * Reads kitty.conf, then the drop-ins, then {@code fonts.conf} into one accumulator.
+     *
+     * <p>kitty.conf is read outside the drop-in budget, on its own allowance, exactly as
+     * {@code fonts.conf} is: neither the app's fragments nor a pile of third-party drop-ins can
+     * push another source out of the load.
+     */
+    @NonNull
+    static Result load(@Nullable File kittyConf, @NonNull File dropInDir, @NonNull File file) {
         Accumulator accumulator = new Accumulator();
+        if (kittyConf != null && kittyConf.exists()) {
+            String prefix = KITTY_FILE_NAME + ": ";
+            String kitty = read(kittyConf, prefix, MAX_KITTY_LINES, accumulator.errors);
+            if (kitty != null) {
+                // A kitty.conf alone is an active configuration for the same reason a drop-in is:
+                // the loader still falls back for every face it leaves unset.
+                accumulator.filePresent = true;
+                File parent = kittyConf.getAbsoluteFile().getParentFile();
+                parse(accumulator, kitty, new Source(prefix, true, parent));
+            }
+        }
         long budget = MAX_DROP_IN_TOTAL_BYTES;
         for (File dropIn : dropInFiles(dropInDir, accumulator.errors)) {
             String prefix = DROP_IN_DIR_NAME + "/" + dropIn.getName() + ": ";
@@ -317,14 +397,14 @@ public final class TerminalFontConfig {
             // A drop-in alone counts as an active configuration; the loader still falls back to
             // font.ttf and monospace whenever a face is left unset, exactly as with no files.
             accumulator.filePresent = true;
-            parse(accumulator, content, prefix);
+            parse(accumulator, content, strict(prefix));
         }
         // The user's own file is read outside that budget and keeps its own 64 KiB allowance, so
         // no set of drop-ins can push ~/.termux/fonts.conf out of the load.
         if (!file.exists()) return finish(accumulator);
         accumulator.filePresent = true;
         String content = read(file, "", accumulator.errors);
-        if (content != null) parse(accumulator, content, null);
+        if (content != null) parse(accumulator, content, strict(null));
         return finish(accumulator);
     }
 
@@ -376,9 +456,15 @@ public final class TerminalFontConfig {
         return a.length - b.length;
     }
 
-    /** Reads one bounded config file; null means the file was skipped and errors explains why. */
     @Nullable
     private static String read(@NonNull File file, @NonNull String prefix,
+                               @NonNull List<String> errors) {
+        return read(file, prefix, MAX_LINES, errors);
+    }
+
+    /** Reads one bounded config file; null means the file was skipped and errors explains why. */
+    @Nullable
+    private static String read(@NonNull File file, @NonNull String prefix, int maxLines,
                                @NonNull List<String> errors) {
         if (!file.isFile()) {
             errors.add(prefix + file.getPath() + " is not a regular file");
@@ -394,8 +480,8 @@ public final class TerminalFontConfig {
             String line;
             int count = 0;
             while ((line = reader.readLine()) != null) {
-                if (++count > MAX_LINES) {
-                    errors.add(prefix + "font config exceeds " + MAX_LINES + " lines");
+                if (++count > maxLines) {
+                    errors.add(prefix + "font config exceeds " + maxLines + " lines");
                     return null;
                 }
                 if (line.length() > MAX_LINE_CHARS) {
@@ -416,26 +502,56 @@ public final class TerminalFontConfig {
     static Result parse(@NonNull String content, boolean filePresent) {
         Accumulator accumulator = new Accumulator();
         accumulator.filePresent = filePresent;
-        parse(accumulator, content, null);
+        parse(accumulator, content, strict(null));
         return finish(accumulator);
     }
 
-    /** Parses one file into the shared accumulator; prefix names the file in every error. */
+    /** Parses one file into the shared accumulator; the source names it in every error. */
     private static void parse(@NonNull Accumulator accumulator, @NonNull String content,
-                              @Nullable String prefix) {
+                              @NonNull Source source) {
         List<String> errors = accumulator.errors;
         String[] lines = content.split("\\r?\\n", -1);
         for (int i = 0; i < lines.length; i++) {
-            String where = (prefix == null ? "" : prefix) + "line " + (i + 1);
+            final int firstLine = i + 1;
+            // kitty's line syntax: a line is a comment only when its first non-blank character is
+            // '#', and a following line that starts with '\' continues this one.
+            String line = lines[i].trim();
+            while (i + 1 < lines.length) {
+                String next = lines[i + 1];
+                int at = 0;
+                while (at < next.length() && Character.isWhitespace(next.charAt(at))) at++;
+                if (at >= next.length() || next.charAt(at) != '\\') break;
+                line = line + next.substring(at + 1);
+                i++;
+            }
+            if (line.isEmpty() || line.charAt(0) == '#') continue;
+            String where = source.prefix + "line " + firstLine;
             List<String> words;
             try {
-                words = words(lines[i]);
+                words = words(line);
             } catch (IllegalArgumentException e) {
                 errors.add(where + ": " + e.getMessage());
                 continue;
             }
             if (words.isEmpty()) continue;
-            if ("modify_font".equalsIgnoreCase(words.get(0))) {
+            String directive = words.get(0).toLowerCase(Locale.US);
+            if (INCLUDE_DIRECTIVES.contains(directive)) {
+                // Only a plain include can be honoured: a glob, an environment variable or a
+                // generated block all need a shell this parser does not have at load time.
+                if ("include".equals(directive) && source.includeDir != null)
+                    include(accumulator, source, words, where);
+                else if (!source.lenient)
+                    errors.add(where + ": unknown directive '" + words.get(0) + "'");
+                continue;
+            }
+            if ("modify_font".equals(directive)) {
+                // kitty's modify_font size scales one named font rather than the cell, which has
+                // no meaning for a terminal that draws every face at the one cell size.
+                if (words.size() >= 3 && "size".equalsIgnoreCase(words.get(1))) {
+                    if (!source.lenient)
+                        errors.add(where + ": modify_font size is not supported");
+                    continue;
+                }
                 if (words.size() != 3) {
                     errors.add(where + ": expected modify_font metric value");
                     continue;
@@ -453,16 +569,16 @@ public final class TerminalFontConfig {
                 if (adjustment != null) accumulator.metrics.put(metric, adjustment);
                 continue;
             }
-            if ("font_variations".equalsIgnoreCase(words.get(0))) {
+            if ("font_variations".equals(directive)) {
                 if (words.size() < 3) {
                     errors.add(where + ": expected font_variations target and one or more axes");
                     continue;
                 }
                 FontTarget target = fontTarget(words.get(1));
                 String name = target == null ? words.get(1) : null;
-                if (name != null && !isSymbolMapName(name)) {
+                if (name != null && !isTargetName(name)) {
                     errors.add(where + ": variation target must be regular, bold, italic,"
-                        + " bold_italic, symbols, or a symbol_map name");
+                        + " bold_italic, symbols, a symbol_map name or a configured family");
                     continue;
                 }
                 if (words.size() == 3 && "none".equalsIgnoreCase(words.get(2))) {
@@ -473,19 +589,21 @@ public final class TerminalFontConfig {
                 String settings = parseVariationSettings(words, 2, where, errors);
                 if (settings == null) continue;
                 if (target != null) accumulator.fontVariations.put(target, settings);
-                else putNamed(accumulator.namedVariations, name, settings, where, errors);
+                else putNamed(accumulator.namedVariations, name, settings, where, source, errors);
                 continue;
             }
-            if ("font_features".equalsIgnoreCase(words.get(0))) {
+            if ("font_features".equals(directive)) {
+                // kitty's own default value: the directive exists but names nothing.
+                if (words.size() == 2 && "none".equalsIgnoreCase(words.get(1))) continue;
                 if (words.size() < 3) {
                     errors.add(where + ": expected font_features target and one or more features");
                     continue;
                 }
                 FontTarget target = fontTarget(words.get(1));
                 String name = target == null ? words.get(1) : null;
-                if (name != null && !isSymbolMapName(name)) {
+                if (name != null && !isTargetName(name)) {
                     errors.add(where + ": feature target must be regular, bold, italic,"
-                        + " bold_italic, symbols, or a symbol_map name");
+                        + " bold_italic, symbols, a symbol_map name or a configured family");
                     continue;
                 }
                 if (words.size() == 3 && "none".equalsIgnoreCase(words.get(2))) {
@@ -496,10 +614,10 @@ public final class TerminalFontConfig {
                 String settings = parseFeatureSettings(words, 2, where, errors);
                 if (settings == null) continue;
                 if (target != null) accumulator.fontFeatures.put(target, settings);
-                else putNamed(accumulator.namedFeatures, name, settings, where, errors);
+                else putNamed(accumulator.namedFeatures, name, settings, where, source, errors);
                 continue;
             }
-            if ("disable_ligatures".equalsIgnoreCase(words.get(0))) {
+            if ("disable_ligatures".equals(directive)) {
                 if (words.size() != 2) {
                     errors.add(where + ": expected disable_ligatures never, cursor, or always");
                     continue;
@@ -512,7 +630,7 @@ public final class TerminalFontConfig {
                 }
                 continue;
             }
-            if ("box_drawing".equalsIgnoreCase(words.get(0))) {
+            if ("box_drawing".equals(directive)) {
                 if (words.size() != 2) {
                     errors.add(where + ": expected box_drawing synthesize or font");
                     continue;
@@ -525,12 +643,12 @@ public final class TerminalFontConfig {
                 }
                 continue;
             }
-            if ("box_drawing_scale".equalsIgnoreCase(words.get(0))) {
+            if ("box_drawing_scale".equals(directive)) {
                 BoxDrawingScale scale = parseBoxDrawingScale(words, 1, where, errors);
                 if (scale != null) accumulator.boxDrawingScale = scale;
                 continue;
             }
-            if ("powerline_symbols".equalsIgnoreCase(words.get(0))) {
+            if ("powerline_symbols".equals(directive)) {
                 if (words.size() != 2) {
                     errors.add(where + ": expected powerline_symbols font or synthesize");
                     continue;
@@ -543,7 +661,7 @@ public final class TerminalFontConfig {
                 }
                 continue;
             }
-            if ("narrow_symbols".equalsIgnoreCase(words.get(0))) {
+            if ("narrow_symbols".equals(directive)) {
                 // narrow_symbols <ranges> [cells], kitty's own syntax. Without a count the ranges
                 // are pinned to a single cell, which is the point of the directive.
                 if (words.size() < 2 || words.size() > 3) {
@@ -577,25 +695,33 @@ public final class TerminalFontConfig {
                 accumulator.narrowSymbols.add(new NarrowSymbolsSpec(narrowRanges, cells));
                 continue;
             }
-            if ("symbol_map".equalsIgnoreCase(words.get(0))) {
+            if ("symbol_map".equals(directive)) {
                 String name = null;
                 int names = 0;
+                boolean prefixed = false;
                 List<String> arguments = new ArrayList<>();
                 for (int word = 1; word < words.size(); word++) {
-                    if (words.get(word).startsWith(NAME_PREFIX)) {
-                        name = words.get(word).substring(NAME_PREFIX.length());
+                    String value = words.get(word);
+                    if (value.startsWith(NAME_PREFIX)) {
+                        name = value.substring(NAME_PREFIX.length());
                         names++;
+                        prefixed = true;
                     } else {
-                        arguments.add(words.get(word));
+                        if (value.startsWith(PATH_PREFIX) || value.startsWith(FAMILY_PREFIX))
+                            prefixed = true;
+                        arguments.add(value);
                     }
                 }
                 if (names > 1) {
                     errors.add(where + ": symbol_map accepts one name= value");
                     continue;
                 }
-                if (arguments.size() != 2) {
-                    errors.add(where
-                        + ": expected symbol_map ranges and one path= or family= value");
+                // kitty writes the family as bare trailing words; our own path=/family=/name=
+                // prefixes, when any of them is present, keep the two-argument shape they had.
+                if (prefixed ? arguments.size() != 2 : arguments.size() < 2) {
+                    errors.add(where + (prefixed
+                        ? ": expected symbol_map ranges and one path= or family= value"
+                        : ": expected symbol_map ranges and a font family"));
                     continue;
                 }
                 if (name != null && !isSymbolMapName(name)) {
@@ -613,7 +739,9 @@ public final class TerminalFontConfig {
                     continue;
                 }
                 List<CodePointRange> ranges = parseRanges(arguments.get(0), where, errors);
-                FaceSpec font = parseSource(arguments.get(1), where, errors);
+                // kitty: ' '.join(parts[1:]) — the rest of the line is one family name.
+                FaceSpec font = prefixed ? parseSource(arguments.get(1), where, errors)
+                    : parseFamily(join(arguments, 1), where, errors);
                 if (ranges == null || font == null) continue;
                 if (accumulator.symbolRangeCount + ranges.size() > MAX_SYMBOL_RANGES) {
                     errors.add(where + ": symbol range count exceeds " + MAX_SYMBOL_RANGES);
@@ -625,7 +753,7 @@ public final class TerminalFontConfig {
                 if (name != null) accumulator.symbolMapNames.put(name.toLowerCase(Locale.US), name);
                 continue;
             }
-            if ("fallback_font".equalsIgnoreCase(words.get(0))) {
+            if ("fallback_font".equals(directive)) {
                 if (words.size() != 2) {
                     errors.add(where + ": expected fallback_font and one path= or family= value");
                     continue;
@@ -638,40 +766,179 @@ public final class TerminalFontConfig {
                 if (fallback != null) accumulator.fallbackFonts.add(fallback);
                 continue;
             }
-            if (words.size() != 2) {
-                errors.add(where + ": expected a face and one path= or family= value");
+            Face face = face(directive);
+            if (face != null) {
+                parseFace(accumulator, face, words, where);
                 continue;
             }
-            Face face = face(words.get(0));
-            if (face == null) {
+            // kitty.conf is hundreds of directives about everything but fonts; only a file that
+            // exists purely to configure them can call an unknown one a mistake.
+            if (!source.lenient)
                 errors.add(where + ": unknown directive '" + words.get(0) + "'");
-                continue;
-            }
-            FaceSpec source = parseSource(words.get(1), where, errors);
-            if (source != null) accumulator.faces.put(face, source);
         }
     }
 
-    /** Records a font_features/font_variations line that named a map, last duplicate winning. */
+    /**
+     * One {@code font_family} / {@code bold_font} / {@code italic_font} / {@code bold_italic_font}
+     * line, in any of the three shapes kitty accepts plus our {@code path=} extension.
+     *
+     * <p>{@code auto} leaves the slot unset, which is exactly kitty's "let the terminal choose":
+     * the loader then falls back to {@code font.ttf} and finally to the platform monospace face. A
+     * value whose first word carries no {@code =} is a bare family name, spaces and all. Otherwise
+     * every word is a {@code key=value} pair: {@code family} and our {@code path} name the face,
+     * {@code postscript_name} and {@code full_name} are read as a family name because a family is
+     * the only thing Android can be asked for, {@code style} is already carried by the slot the
+     * directive picked, {@code features} is this face's {@code font_features} and any remaining
+     * {@code tag=number} is one of its {@code font_variations} axes.
+     */
+    private static void parseFace(@NonNull Accumulator accumulator, @NonNull Face face,
+                                  @NonNull List<String> words, @NonNull String where) {
+        List<String> errors = accumulator.errors;
+        if (words.size() < 2) {
+            errors.add(where + ": expected a face and one path= or family= value");
+            return;
+        }
+        if (words.size() == 2 && "auto".equalsIgnoreCase(words.get(1))) {
+            accumulator.faces.remove(face);
+            return;
+        }
+        if (words.get(1).indexOf('=') < 0) {
+            FaceSpec bare = parseFamily(join(words, 1), where, errors);
+            if (bare != null) accumulator.faces.put(face, bare);
+            return;
+        }
+        FaceSpec named = null;
+        FaceSpec described = null;
+        String featureText = null;
+        LinkedHashMap<String, String> axes = new LinkedHashMap<>();
+        for (int word = 1; word < words.size(); word++) {
+            String item = words.get(word);
+            int equals = item.indexOf('=');
+            if (equals <= 0) {
+                errors.add(where + ": expected key=value in the font spec, not '" + item + "'");
+                return;
+            }
+            String key = item.substring(0, equals).toLowerCase(Locale.US);
+            String value = item.substring(equals + 1);
+            if ("path".equals(key) || "family".equals(key)) {
+                named = parseSource(item, where, errors);
+                if (named == null) return;
+            } else if ("postscript_name".equals(key) || "full_name".equals(key)) {
+                described = parseFamily(value, where, errors);
+                if (described == null) return;
+            } else if ("style".equals(key) || "variable_name".equals(key)) {
+                continue;
+            } else if ("features".equals(key)) {
+                featureText = value;
+            } else if (isFeatureTag(key) && isNumber(value)) {
+                axes.remove(key);
+                axes.put(key, value);
+            } else {
+                errors.add(where + ": unknown font spec key '" + key + "'");
+                return;
+            }
+        }
+        FaceSpec resolved = named != null ? named : described;
+        if (resolved == null) {
+            errors.add(where + ": font source must start with path= or family=");
+            return;
+        }
+        accumulator.faces.put(face, resolved);
+        FontTarget target = FontTarget.valueOf(face.name());
+        if (featureText != null) {
+            String settings = parseFeatureSettings(whitespaceWords(featureText), 0, where, errors);
+            if (settings != null) accumulator.fontFeatures.put(target, settings);
+        }
+        if (!axes.isEmpty()) {
+            List<String> pairs = new ArrayList<>(axes.size());
+            for (Map.Entry<String, String> axis : axes.entrySet())
+                pairs.add(axis.getKey() + "=" + axis.getValue());
+            String settings = parseVariationSettings(pairs, 0, where, errors);
+            if (settings != null) accumulator.fontVariations.put(target, settings);
+        }
+    }
+
+    /** Reads one {@code include}, resolved against the kitty config directory and bounded. */
+    private static void include(@NonNull Accumulator accumulator, @NonNull Source source,
+                                @NonNull List<String> words, @NonNull String where) {
+        List<String> errors = accumulator.errors;
+        if (words.size() != 2 || source.includeDir == null) {
+            errors.add(where + ": expected include and one path");
+            return;
+        }
+        if (accumulator.includeCount >= MAX_INCLUDE_FILES) {
+            errors.add(where + ": include count exceeds " + MAX_INCLUDE_FILES);
+            return;
+        }
+        File target = new File(expandPath(words.get(1)));
+        if (!target.isAbsolute()) target = new File(source.includeDir, words.get(1));
+        if (!target.exists()) {
+            errors.add(where + ": include " + words.get(1) + " does not exist");
+            return;
+        }
+        // The rule fonts.d already follows: a config file may not be a link out of its directory.
+        try {
+            if (!isInside(target.getCanonicalFile(), source.includeDir.getCanonicalFile())) {
+                errors.add(where + ": include " + words.get(1)
+                    + " resolves outside the kitty config directory");
+                return;
+            }
+        } catch (IOException e) {
+            errors.add(where + ": cannot resolve include " + words.get(1) + ": " + e.getMessage());
+            return;
+        }
+        if (target.length() > accumulator.includeBudget) {
+            errors.add(where + ": include set exceeds " + MAX_INCLUDE_TOTAL_BYTES + " bytes");
+            return;
+        }
+        String prefix = source.prefix + words.get(1) + ": ";
+        String content = read(target, prefix, MAX_KITTY_LINES, errors);
+        if (content == null) return;
+        accumulator.includeBudget -= target.length();
+        accumulator.includeCount++;
+        // A null include directory is what stops this at one level; kitty nests without limit.
+        parse(accumulator, content, new Source(prefix, source.lenient, null));
+    }
+
+    private static boolean isInside(@NonNull File file, @NonNull File root) {
+        for (File at = file.getParentFile(); at != null; at = at.getParentFile())
+            if (at.equals(root)) return true;
+        return false;
+    }
+
+    /** Records a font_features/font_variations line whose target is not a face, last one winning. */
     private static void putNamed(@NonNull Map<String, NamedSetting> settings,
                                  @NonNull String name, @NonNull String value,
-                                 @NonNull String where, @NonNull List<String> errors) {
+                                 @NonNull String where, @NonNull Source source,
+                                 @NonNull List<String> errors) {
         String key = name.toLowerCase(Locale.US);
         if (settings.size() >= MAX_NAMED_TARGETS && !settings.containsKey(key)) {
             errors.add(where + ": named font target count exceeds " + MAX_NAMED_TARGETS);
             return;
         }
         settings.remove(key);
-        settings.put(key, new NamedSetting(name, value, where));
+        settings.put(key, new NamedSetting(name, value, where, source.lenient));
     }
 
     @NonNull
     private static Result finish(@NonNull Accumulator accumulator) {
-        // A map may be declared in a file loaded after the font_features line that names it, so
-        // undeclared names can only be reported once every file of the load has been parsed.
-        resolveNamed(accumulator.namedFeatures, accumulator.symbolMapNames, "font_features",
+        // A map or a face may be declared in a file loaded after the font_features line that names
+        // it, so a target can only be matched once every file of the load has been parsed.
+        Map<String, Face> faceFamilies = new LinkedHashMap<>();
+        for (Map.Entry<Face, FaceSpec> entry : accumulator.faces.entrySet())
+            if (entry.getValue().type == SourceType.FAMILY)
+                faceFamilies.put(entry.getValue().value.toLowerCase(Locale.US), entry.getKey());
+        Map<String, String> symbolFamilies = new LinkedHashMap<>();
+        for (SymbolMapSpec map : accumulator.symbolMaps)
+            if (map.font.type == SourceType.FAMILY)
+                symbolFamilies.put(map.font.value.toLowerCase(Locale.US), map.font.value);
+        LinkedHashMap<String, String> familyFeatures = new LinkedHashMap<>();
+        LinkedHashMap<String, String> familyVariations = new LinkedHashMap<>();
+        resolveNamed(accumulator.namedFeatures, accumulator.symbolMapNames, faceFamilies,
+            symbolFamilies, accumulator.fontFeatures, familyFeatures, "font_features",
             accumulator.errors);
-        resolveNamed(accumulator.namedVariations, accumulator.symbolMapNames, "font_variations",
+        resolveNamed(accumulator.namedVariations, accumulator.symbolMapNames, faceFamilies,
+            symbolFamilies, accumulator.fontVariations, familyVariations, "font_variations",
             accumulator.errors);
         String sharedFeatures = accumulator.fontFeatures.get(FontTarget.SYMBOLS);
         String sharedVariations = accumulator.fontVariations.get(FontTarget.SYMBOLS);
@@ -684,8 +951,13 @@ public final class TerminalFontConfig {
             namedVariations.put(entry.getKey(), entry.getValue().settings);
         for (SymbolMapSpec map : accumulator.symbolMaps) {
             String key = map.name == null ? null : map.name.toLowerCase(Locale.US);
+            String familyKey = map.font.type == SourceType.FAMILY
+                ? map.font.value.toLowerCase(Locale.US) : null;
             String features = key == null ? null : namedFeatures.get(key);
+            if (features == null && familyKey != null) features = familyFeatures.get(familyKey);
             String variations = key == null ? null : namedVariations.get(key);
+            if (variations == null && familyKey != null)
+                variations = familyVariations.get(familyKey);
             symbolMaps.add(new SymbolMapSpec(map.name, map.ranges, map.font,
                 features == null ? sharedFeatures : features,
                 variations == null ? sharedVariations : variations));
@@ -698,17 +970,76 @@ public final class TerminalFontConfig {
             accumulator.errors);
     }
 
+    /**
+     * Settles every target that is not a face: a {@code symbol_map name=} keeps its own entry, and
+     * anything else gets one more chance against the family names this load configured.
+     *
+     * <p>kitty's target is a PostScript name, which is the closest thing a kitty user has to "this
+     * font", so a target that matches a configured family is applied to the face or the symbol
+     * maps that use it. An explicit face target always outranks a family match. What matches
+     * nothing is a mistake worth reporting outside kitty.conf and noise inside it.
+     */
     private static void resolveNamed(@NonNull Map<String, NamedSetting> settings,
                                      @NonNull Map<String, String> declared,
+                                     @NonNull Map<String, Face> faceFamilies,
+                                     @NonNull Map<String, String> symbolFamilies,
+                                     @NonNull Map<FontTarget, String> faceTargets,
+                                     @NonNull Map<String, String> familyTargets,
                                      @NonNull String directive, @NonNull List<String> errors) {
         Iterator<Map.Entry<String, NamedSetting>> entries = settings.entrySet().iterator();
         while (entries.hasNext()) {
             NamedSetting setting = entries.next().getValue();
-            if (declared.containsKey(setting.name.toLowerCase(Locale.US))) continue;
-            errors.add(setting.where + ": " + directive + " names undeclared symbol map '"
-                + setting.name + "'");
+            String key = setting.name.toLowerCase(Locale.US);
+            if (declared.containsKey(key)) continue;
+            boolean matched = false;
+            Face face = faceFamilies.get(key);
+            if (face != null) {
+                FontTarget target = FontTarget.valueOf(face.name());
+                if (!faceTargets.containsKey(target)) faceTargets.put(target, setting.settings);
+                matched = true;
+            }
+            if (symbolFamilies.containsKey(key)) {
+                familyTargets.put(key, setting.settings);
+                matched = true;
+            }
+            if (!matched && !setting.lenient)
+                errors.add(setting.where + ": " + directive + " target '" + setting.name
+                    + "' matches no symbol map or configured family");
             entries.remove();
         }
+    }
+
+    /** A font_features/font_variations target may be a symbol map name or a family name. */
+    private static boolean isTargetName(@NonNull String name) {
+        return !name.isEmpty() && name.length() <= MAX_FAMILY_CHARS;
+    }
+
+    private static boolean isNumber(@NonNull String value) {
+        if (value.isEmpty()) return false;
+        try {
+            double parsed = Double.parseDouble(value);
+            return !Double.isNaN(parsed) && !Double.isInfinite(parsed);
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /** kitty joins the rest of the line with single spaces; so does this. */
+    @NonNull
+    private static String join(@NonNull List<String> words, int start) {
+        StringBuilder result = new StringBuilder();
+        for (int i = start; i < words.size(); i++) {
+            if (result.length() > 0) result.append(' ');
+            result.append(words.get(i));
+        }
+        return result.toString();
+    }
+
+    @NonNull
+    private static List<String> whitespaceWords(@NonNull String value) {
+        List<String> result = new ArrayList<>();
+        for (String item : value.trim().split("\\s+")) if (!item.isEmpty()) result.add(item);
+        return result;
     }
 
     private static boolean isSymbolMapName(@NonNull String name) {
@@ -911,31 +1242,38 @@ public final class TerminalFontConfig {
     @Nullable
     private static FaceSpec parseSource(@NonNull String source, @NonNull String where,
                                         @NonNull List<String> errors) {
-        SourceType type;
-        String value;
-        if (source.startsWith("path=")) {
-            type = SourceType.PATH;
-            value = source.substring(5);
-            if (!(value.startsWith("~/") || value.startsWith("/"))) {
-                errors.add(where + ": font paths must be absolute or start with ~/");
-                return null;
-            }
-        } else if (source.startsWith("family=")) {
-            type = SourceType.FAMILY;
-            value = source.substring(7).trim();
-            if (value.length() > MAX_FAMILY_CHARS) {
-                errors.add(where + ": family name exceeds " + MAX_FAMILY_CHARS + " characters");
-                return null;
-            }
-        } else {
+        if (source.startsWith(FAMILY_PREFIX))
+            return parseFamily(source.substring(FAMILY_PREFIX.length()), where, errors);
+        if (!source.startsWith(PATH_PREFIX)) {
             errors.add(where + ": font source must start with path= or family=");
+            return null;
+        }
+        String value = source.substring(PATH_PREFIX.length());
+        if (!(value.startsWith("~/") || value.startsWith("/"))) {
+            errors.add(where + ": font paths must be absolute or start with ~/");
             return null;
         }
         if (value.isEmpty()) {
             errors.add(where + ": font source is empty");
             return null;
         }
-        return new FaceSpec(type, value);
+        return new FaceSpec(SourceType.PATH, value);
+    }
+
+    /** A fontconfig family name, however it was written: bare, {@code family=} or a font spec. */
+    @Nullable
+    private static FaceSpec parseFamily(@NonNull String value, @NonNull String where,
+                                        @NonNull List<String> errors) {
+        String family = value.trim();
+        if (family.length() > MAX_FAMILY_CHARS) {
+            errors.add(where + ": family name exceeds " + MAX_FAMILY_CHARS + " characters");
+            return null;
+        }
+        if (family.isEmpty()) {
+            errors.add(where + ": font source is empty");
+            return null;
+        }
+        return new FaceSpec(SourceType.FAMILY, family);
     }
 
     @Nullable
@@ -984,7 +1322,13 @@ public final class TerminalFontConfig {
         }
     }
 
-    /** Split one config line, allowing quotes and backslash escapes; # starts a comment. */
+    /**
+     * Splits one config line into words, allowing quotes and backslash escapes.
+     *
+     * <p>A {@code #} is an ordinary character here: kitty only treats a line as a comment when its
+     * first non-blank character is {@code #}, which the caller has already decided, and a family
+     * name is entitled to contain one.
+     */
     @NonNull
     private static List<String> words(@NonNull String line) {
         List<String> result = new ArrayList<>();
@@ -1008,8 +1352,6 @@ public final class TerminalFontConfig {
             } else if (c == '\'' || c == '"') {
                 quote = c;
                 started = true;
-            } else if (c == '#') {
-                break;
             } else if (Character.isWhitespace(c)) {
                 if (started) {
                     result.add(word.toString());
