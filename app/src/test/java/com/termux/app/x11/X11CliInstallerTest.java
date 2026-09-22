@@ -395,7 +395,7 @@ public class X11CliInstallerTest {
                 // in Android's shell and has no PATH that would find one.
                 + "server=$PPID\n"
                 + "while kill -0 \"$server\" 2>/dev/null; do\n"
-                + "/system/bin/sleep 3600\n"
+                + "/system/bin/sleep 60\n"
                 + "done\n",
             text(installer.wmScript()));
         assertTrue(installer.wmScript().canExecute());
@@ -427,7 +427,7 @@ public class X11CliInstallerTest {
                 // outlive and no longer: the server, which is its own parent.
                 + "server=$PPID\n"
                 + "while kill -0 \"$server\" 2>/dev/null; do\n"
-                + sleep.getPath() + " 3600\n"
+                + sleep.getPath() + " 60\n"
                 + "done\n",
             text(installer.wmScript()));
         assertTrue(installer.wmScript().canExecute());
@@ -453,7 +453,7 @@ public class X11CliInstallerTest {
         for (String line : script.split("\n")) {
             if (line.contains("sleep ")) {
                 assertTrue("a sleep outside the watch loop would be a leak: " + line,
-                    line.trim().endsWith(" 3600"));
+                    line.trim().endsWith(" 60"));
             }
         }
         assertTrue(script.contains("while kill -0 \"$server\" 2>/dev/null; do"));

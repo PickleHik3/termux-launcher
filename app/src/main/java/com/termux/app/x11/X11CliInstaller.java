@@ -283,12 +283,18 @@ public final class X11CliInstaller {
     }
 
     /**
-     * How long the wrapper sleeps between one look at the server and the next, once it has nothing
-     * else to do. Long enough to cost nothing — one timer an hour, and a sleeping process is not
-     * a running one — and short enough that a wrapper whose server was killed does not sit there
-     * for the rest of the day.
+     * How long the wrapper sleeps between one look at the server and the next.
+     *
+     * <p>This costs nothing in the ordinary life of a display, because the loop it paces is not
+     * reached then: {@code wait} blocks for as long as the window manager runs, with no timer at
+     * all. The loop only runs once the manager has gone — which today means only after a desktop
+     * session stopped it (D1) — so the interval is really "how long a wrapper may outlive the
+     * display that was stopped while a desktop had the manager down". An hour was measured doing
+     * exactly that on Waydroid (2026-09-22) and left the wrapper sitting there long after the
+     * display was gone; a minute bounds it to something nobody will see, and one wakeup a minute
+     * for the rest of a display's life is still nothing beside an X server.
      */
-    private static final String IDLE_SECONDS = "3600";
+    private static final String IDLE_SECONDS = "60";
 
     /**
      * The wrapper's text: start the window manager beside this shell, write down its pid so the
