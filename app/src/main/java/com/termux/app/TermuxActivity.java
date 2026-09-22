@@ -15379,7 +15379,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLinuxAppsSignature = signature;
         // Apps came or went, so a class that resolved to nothing may resolve now.
         if (mDisplayWindowIcons != null) mDisplayWindowIcons.clear();
-        com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this).refreshAsync(null, null);
+        // The same two steps, in the same order, as a package change takes through
+        // refreshSuggestionBarFromPackageState: kick the provider's background rebuild first, then
+        // tell the drawer. The provider parks warm-up callbacks while a rebuild is in flight, so
+        // the drawer's re-registration fires once against the finished snapshot.
+        //
+        // Telling it is the whole point. refreshAsync hands its result to the callback it was
+        // given and to nothing else — there is no listener list — so kicking it with a null
+        // callback, as this did, left a newly installed app sitting in the provider with nothing
+        // to put it on screen: the drawer had already read the old catalogue in bind() on the way
+        // open. It turned up on the next open, or when `termux-reload-settings` came through the
+        // package path, which is what made this look like a reload was required.
+        if (isLauncherCatalogEnabled() && mSuggestionBarView != null) {
+            mSuggestionBarView.refreshAllApps(null);
+        } else {
+            // The drawer's catalogue is not the dock's: it refreshes even with the suggestion bar
+            // switched off or its view not built yet.
+            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this).refreshAsync(null, null);
+        }
+        if (mAppDrawerController != null) {
+            mAppDrawerController.onAppCatalogChanged();
+        }
     }
 
     /**
