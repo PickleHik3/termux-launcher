@@ -22,4 +22,20 @@ allprojects {
     tasks.withType(Delete) {
         delete rootProject.buildDir
     }
+
+    tasks.withType(Test) {
+        // Gradle's default 512m is not enough for the Robolectric suites: they load an
+        // instrumented android-all jar per sandbox, and the forks that lose the race die with an
+        // OutOfMemoryError inside ShadowArscApkAssets9 rather than a test failure.
+        maxHeapSize = '2g'
+
+        // Robolectric extracts its native runtime — the .so, the ICU data and the fonts, ~200 MB —
+        // into java.io.tmpdir, and only its shutdown hook removes it again. A fork that is killed
+        // leaves the copy behind, and on this machine /tmp is a tmpfs, so every orphan is host RAM
+        // the next run cannot have. Give the forks a temp directory under build/ instead: the
+        // leftovers land on disk and `gradlew clean` takes them.
+        def testTmp = layout.buildDirectory.dir("tmp/test-$name").get().asFile
+        doFirst { testTmp.mkdirs() }
+        systemProperty 'java.io.tmpdir', testTmp.absolutePath
+    }
 }

@@ -19365,6 +19365,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Make sure that terminal styling is always applied.
         Intent stylingIntent = new Intent(TERMUX_ACTIVITY.ACTION_RELOAD_STYLE);
         stylingIntent.putExtra(TERMUX_ACTIVITY.EXTRA_RECREATE_ACTIVITY, recreateActivity);
+        // Our own receiver is the only one meant to hear this; without a package an implicit
+        // broadcast is offered to every app on the device. The build's own id, not
+        // TermuxConstants.TERMUX_PACKAGE_NAME — that one is fixed at "com.termux", and an edition
+        // published under another id would be addressing a different app entirely.
+        stylingIntent.setPackage(context.getPackageName());
         context.sendBroadcast(stylingIntent);
     }
 
@@ -19376,7 +19381,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     public static void requestAppDrawerReloadOnNextResume(Context context) {
         sPendingAppDrawerReloadOnNextResume = true;
-        context.sendBroadcast(new Intent(TERMUX_ACTIVITY.ACTION_RELOAD_APP_DRAWER));
+        Intent drawerIntent = new Intent(TERMUX_ACTIVITY.ACTION_RELOAD_APP_DRAWER);
+        drawerIntent.setPackage(context.getPackageName());
+        context.sendBroadcast(drawerIntent);
     }
 
     private static boolean consumePendingStyleReloadRecreateActivity() {
