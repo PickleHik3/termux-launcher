@@ -1,0 +1,489 @@
+<title>Linux Desktop Sessions</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#F4F6F2; --surface:#FFFFFF; --surface-2:#EBEFE8; --ink:#161A17;
+    --muted:#5F6A62; --line:#D6DED3; --line-soft:#E5EAE2;
+    --accent:#1D6A4C; --accent-ink:#FFFFFF; --accent-soft:#DDEFE5;
+    --warn:#8A5714; --warn-soft:#F6EBD8; --stop:#8E3A2D;
+    --shadow:0 1px 2px rgba(20,32,24,.06), 0 8px 24px -16px rgba(20,32,24,.28);
+    --serif:"Newsreader",Georgia,"Times New Roman",serif;
+    --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0F1210; --surface:#171C18; --surface-2:#1E241F; --ink:#E7EDE7;
+      --muted:#93A095; --line:#2A322C; --line-soft:#222A24;
+      --accent:#5DC494; --accent-ink:#0B1410; --accent-soft:#16301F;
+      --warn:#D8A254; --warn-soft:#2B2313; --stop:#E38472;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0F1210; --surface:#171C18; --surface-2:#1E241F; --ink:#E7EDE7;
+    --muted:#93A095; --line:#2A322C; --line-soft:#222A24;
+    --accent:#5DC494; --accent-ink:#0B1410; --accent-soft:#16301F;
+    --warn:#D8A254; --warn-soft:#2B2313; --stop:#E38472;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--bg); color:var(--ink); font-family:var(--sans);
+    font-size:16px; line-height:1.58; margin:0;
+    padding-inline:16px; padding-block:0 72px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:760px; margin-inline:auto}
+  .prose{max-width:64ch}
+
+  /* ---- masthead ---- */
+  header.mast{padding-block:56px 34px; border-bottom:1px solid var(--line)}
+  .kicker{
+    font-family:var(--mono); font-size:11px; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--accent); margin:0 0 14px;
+  }
+  h1{
+    font-family:var(--serif); font-weight:500; font-size:clamp(34px,7vw,52px);
+    line-height:1.06; letter-spacing:-.015em; margin:0 0 16px; text-wrap:balance;
+  }
+  .standfirst{font-size:18px; color:var(--muted); margin:0; max-width:52ch; text-wrap:pretty}
+
+  /* ---- progress strip ---- */
+  .strip{
+    position:sticky; top:env(safe-area-inset-top, 0px); z-index:5;
+    background:color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+    margin-inline:-16px; padding:10px 16px;
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    font-family:var(--mono); font-size:12px; color:var(--muted);
+  }
+  .strip .dots{display:flex; gap:5px}
+  .dot{
+    width:9px; height:9px; border-radius:50%;
+    border:1.5px solid var(--line); background:transparent;
+  }
+  .dot.on{background:var(--accent); border-color:var(--accent)}
+  #saveState{margin-inline-start:auto}
+
+  /* ---- sections ---- */
+  section{padding-block:40px; border-bottom:1px solid var(--line-soft)}
+  section:last-of-type{border-bottom:0}
+  h2{
+    font-family:var(--serif); font-weight:500; font-size:clamp(23px,4vw,30px);
+    line-height:1.2; letter-spacing:-.01em; margin:0 0 4px; text-wrap:balance;
+  }
+  .sec-note{font-size:13px; color:var(--muted); margin:0 0 22px; font-family:var(--mono)}
+  p{margin:0 0 15px}
+  code{
+    font-family:var(--mono); font-size:.87em;
+    background:var(--surface-2); padding:1px 5px; border-radius:4px;
+    overflow-wrap:anywhere;
+  }
+  strong{font-weight:600}
+
+  /* ---- correction ---- */
+  .correction{
+    background:var(--warn-soft); border-inline-start:3px solid var(--warn);
+    border-radius:0 10px 10px 0; padding:20px 22px; margin-block:26px 0;
+  }
+  .correction h3{
+    font-family:var(--sans); font-size:12px; font-weight:600; letter-spacing:.1em;
+    text-transform:uppercase; color:var(--warn); margin:0 0 10px;
+  }
+  .correction p:last-child{margin-bottom:0}
+
+  /* ---- fact list ---- */
+  .facts{list-style:none; margin:0; padding:0; display:grid; gap:1px; background:var(--line-soft); border-radius:12px; overflow:hidden}
+  .facts li{background:var(--surface); padding:16px 18px; display:grid; gap:3px}
+  .facts b{font-weight:600; font-size:15px}
+  .facts span{color:var(--muted); font-size:14.5px}
+
+  /* ---- exec table ---- */
+  .tablewrap{overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:var(--surface)}
+  table{border-collapse:collapse; width:100%; font-size:14px; min-width:460px}
+  th,td{text-align:left; padding:11px 16px; border-bottom:1px solid var(--line-soft)}
+  tr:last-child td{border-bottom:0}
+  th{
+    font-family:var(--mono); font-size:11px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--muted); font-weight:500; background:var(--surface-2);
+  }
+  td.cmd{font-family:var(--mono); font-size:13px}
+  td.verdict{color:var(--muted)}
+
+  /* ---- decisions ---- */
+  .decision{
+    background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:22px; margin-bottom:18px; box-shadow:var(--shadow);
+  }
+  .decision.answered{border-color:var(--accent)}
+  .dhead{display:flex; align-items:baseline; gap:12px; margin-bottom:6px}
+  .dnum{
+    font-family:var(--mono); font-size:12px; font-weight:500; color:var(--accent-ink);
+    background:var(--accent); border-radius:5px; padding:2px 7px; flex:none;
+  }
+  .decision h3{
+    font-family:var(--serif); font-weight:500; font-size:21px; line-height:1.25;
+    margin:0; letter-spacing:-.005em; text-wrap:balance;
+  }
+  .why{color:var(--muted); font-size:14.5px; margin:0 0 18px}
+  .opts{display:grid; gap:8px; margin:0 0 4px}
+  .opt{
+    display:grid; grid-template-columns:auto 1fr; gap:12px; align-items:start;
+    text-align:left; width:100%; font:inherit; color:inherit; cursor:pointer;
+    background:var(--surface-2); border:1.5px solid transparent; border-radius:10px;
+    padding:13px 15px; transition:border-color .12s, background .12s;
+  }
+  .opt:hover{border-color:var(--line)}
+  .opt:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+  .opt[aria-pressed="true"]{background:var(--accent-soft); border-color:var(--accent)}
+  .opt[disabled]{cursor:default; opacity:.65}
+  .tick{
+    width:19px; height:19px; border-radius:50%; border:1.5px solid var(--muted);
+    margin-top:2px; flex:none; display:grid; place-items:center;
+  }
+  .opt[aria-pressed="true"] .tick{border-color:var(--accent); background:var(--accent)}
+  .opt[aria-pressed="true"] .tick::after{
+    content:""; width:7px; height:7px; border-radius:50%; background:var(--accent-ink);
+  }
+  .olabel{display:grid; gap:2px}
+  .olabel b{font-weight:600; font-size:15px}
+  .olabel span{color:var(--muted); font-size:14px}
+  .rec{
+    font-family:var(--mono); font-size:10px; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--accent); border:1px solid var(--accent); border-radius:4px;
+    padding:1px 5px; margin-inline-start:7px; vertical-align:2px; white-space:nowrap;
+  }
+  .note{
+    width:100%; margin-top:12px; font:inherit; font-size:14px; color:inherit;
+    background:var(--bg); border:1px solid var(--line); border-radius:9px;
+    padding:10px 12px; resize:vertical; min-height:42px;
+  }
+  .note:focus-visible{outline:2px solid var(--accent); outline-offset:1px; border-color:var(--accent)}
+  .note::placeholder{color:var(--muted)}
+
+  /* ---- unverified ---- */
+  .caveats{list-style:none; margin:0; padding:0; display:grid; gap:10px}
+  .caveats li{
+    display:grid; grid-template-columns:auto 1fr; gap:11px; align-items:start;
+    font-size:14.5px; color:var(--muted);
+  }
+  .caveats li::before{
+    content:"?"; font-family:var(--mono); font-size:11px; font-weight:500;
+    color:var(--stop); border:1px solid var(--stop); border-radius:50%;
+    width:18px; height:18px; display:grid; place-items:center; margin-top:3px;
+  }
+  footer{padding-block:34px 0; color:var(--muted); font-size:13px; font-family:var(--mono)}
+  footer a{color:var(--accent)}
+  @media (prefers-reduced-motion: reduce){*{transition:none !important}}
+</style>
+
+<div class="wrap">
+  <header class="mast">
+    <p class="kicker">Round brief · 22 Sep 2026</p>
+    <h1>Linux desktops in the app drawer</h1>
+    <p class="standfirst">Install xfce4 or LXQt and nothing appears. Here is why, what it takes to fix, and the seven calls only you can make.</p>
+  </header>
+
+  <div class="strip">
+    <span>Decisions</span>
+    <span class="dots" id="dots"></span>
+    <span id="count">0 of 7</span>
+    <span id="saveState">connecting…</span>
+  </div>
+
+  <section>
+    <h2>First, a correction</h2>
+    <p class="sec-note">I told you the wrong reason earlier today</p>
+    <div class="correction prose">
+      <h3>What I said, and what is actually true</h3>
+      <p>I said the blocker was the <code>Type=XSession</code> field. It is not. Of the nineteen desktops in Termux's X11 repo, <strong>eleven mark their session file <code>Type=Application</code></strong> — xfce, LXQt, MATE and openbox among them — exactly like any ordinary app. Seven use <code>XSession</code>, and one says nothing at all.</p>
+      <p>The real reason is duller: the launcher only ever looks in one folder. Apps live in <code>share/applications</code>; desktops put their session file in <code>share/xsessions</code>, and nothing has ever read that folder. Hand <code>xfce.desktop</code> to today's filter unchanged and it would sail through.</p>
+      <p>So the plumbing is smaller than I made it sound. The work is in the policy — which is what the questions below are about.</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>What is true</h2>
+    <p class="sec-note">Read out of the actual packages, not guessed</p>
+    <ul class="facts">
+      <li><b>Sessions live one folder over.</b><span><code>$PREFIX/share/xsessions</code> in Termux, <code>/usr/share/xsessions</code> inside a distro container. The launcher scans neither.</span></li>
+      <li><b>Only one window manager may run on a screen.</b><span>That is the X protocol itself, not a setting — a second one gets an Access error and dies. The launcher already runs openbox alongside every display.</span></li>
+      <li><b>LXQt is polite about it. XFCE is not.</b><span>LXQt checks whether a window manager is there and skips its own. XFCE starts xfwm4 regardless; xfwm4 finds openbox, says so, and quits — the panel, Thunar and the desktop still come up, but under openbox's maximise-everything rule.</span></li>
+      <li><b>XFCE needs a message bus and starts none.</b><span>LXQt and MATE each start their own. <code>dbus</code> is in Termux's main repo, not the X11 one, so it may not even be installed.</span></li>
+      <li><b>Most desktops ship no icon.</b><span>Ten of nineteen have an <code>Icon</code> key and four of those are empty. Only openbox and IceWM name a real one.</span></li>
+      <li><b>A refused session would be retried as an Electron crash.</b><span>A live bug: anything that exits non-zero within three seconds gets retried with <code>--no-sandbox</code>. A session refused because openbox holds the display does exactly that.</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>What actually starts each one</h2>
+    <p class="sec-note">The literal Exec line from each package on aarch64</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Desktop</th><th>Command</th><th>On top of our openbox</th></tr></thead>
+        <tbody>
+          <tr><td>Xfce</td><td class="cmd">startxfce4</td><td class="verdict">Comes up, looks wrong</td></tr>
+          <tr><td>LXQt</td><td class="cmd">startlxqt</td><td class="verdict">Comes up, stands down politely</td></tr>
+          <tr><td>MATE</td><td class="cmd">mate-session</td><td class="verdict">Not checked</td></tr>
+          <tr><td>Openbox</td><td class="cmd">openbox-session</td><td class="verdict">Refuses — one is already ours</td></tr>
+          <tr><td>i3</td><td class="cmd">i3</td><td class="verdict">Not checked</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="decisions">
+    <h2>The seven calls</h2>
+    <p class="sec-note">Tap an option — it saves straight back to me</p>
+    <div id="dlist"></div>
+  </section>
+
+  <section>
+    <h2>Not checked on a phone</h2>
+    <p class="sec-note">Everything above came from source, scripts and package contents. Nothing was started on pong.</p>
+    <ul class="caveats">
+      <li>Whether XFCE really survives xfwm4 refusing to start. Read from its config, not watched.</li>
+      <li>What MATE, i3 and Plasma do when a window manager is already running.</li>
+      <li>The literal session files inside Debian and Arch containers — only their file lists were confirmed.</li>
+      <li>Cinnamon's start command names a binary the Termux repo does not appear to ship. Possibly just broken.</li>
+    </ul>
+  </section>
+
+  <footer>
+    Full sourcing in <code>project-docs/de-sessions/RESEARCH.md</code> · branch <code>feat/gui-apps-setup-labels</code>
+  </footer>
+</div>
+
+<script>
+(function(){
+  var DECISIONS = [
+    { id:"d1",
+      q:"Does openbox stand down when a desktop starts?",
+      why:"Only one window manager can hold the screen. Leave openbox up and XFCE runs under our maximise-everything rule, which is not what XFCE is meant to look like.",
+      opts:[
+        {k:"a", t:"Leave openbox up, always", d:"Simplest, nothing new to build. LXQt is fine. XFCE looks wrong."},
+        {k:"b", t:"Stop openbox before a desktop starts", d:"The desktop brings its own. Needs a stop-the-window-manager path that does not exist yet.", rec:true},
+        {k:"c", t:"Ask the desktop to replace it", d:"Pass --replace where the desktop supports it. Not all of them do."}
+      ]},
+    { id:"d2",
+      q:"Do we stop a second desktop from starting?",
+      why:"Nothing in X or in the desktops prevents two at once. The result is two panels fighting over the same screen.",
+      opts:[
+        {k:"a", t:"Offer to stop the one that is running", d:"Tap a second desktop and it asks before taking over.", rec:true},
+        {k:"b", t:"Just say no while one is running", d:"A short notice, nothing else happens."},
+        {k:"c", t:"Let them fight", d:"No policy at all."}
+      ]},
+    { id:"d3",
+      q:"Where do desktops sit in the drawer?",
+      why:"They are not apps. One tap takes over the whole display for as long as it runs.",
+      opts:[
+        {k:"a", t:"Their own group, “Desktops”", d:"Separate from Linux apps, so a tap is never a surprise.", rec:true},
+        {k:"b", t:"In Linux apps, with a mark on the tile", d:"One list, the tile says it is a whole desktop."},
+        {k:"c", t:"In Linux apps, unmarked", d:"Nothing distinguishes them."}
+      ]},
+    { id:"d4",
+      q:"Are Wayland sessions in scope?",
+      why:"Termux ships six of them. None can run on our X11 display — XFCE's Wayland session wants labwc and exits without it.",
+      opts:[
+        {k:"a", t:"No, skip them", d:"Cataloguing them would put tiles in the drawer that cannot work.", rec:true},
+        {k:"b", t:"List them, greyed out", d:"Visible, with a line saying why they will not start."},
+        {k:"c", t:"List them like any other", d:"They fail when tapped."}
+      ]},
+    { id:"d5",
+      q:"What does a desktop tile show?",
+      why:"Only openbox and IceWM name an icon. Xfce, MATE and Cinnamon ship an empty one and the rest have none.",
+      opts:[
+        {k:"a", t:"One generic desktop glyph for all of them", d:"Consistent; nothing looks half-finished.", rec:true},
+        {k:"b", t:"Borrow the desktop's own app icon", d:"Xfce's mouse, LXQt's mark — works when the theme has it, blank when it does not."},
+        {k:"c", t:"A letter tile", d:"The same treatment an Android app with no icon gets."}
+      ]},
+    { id:"d6",
+      q:"Do we install dbus for the user?",
+      why:"XFCE needs a message bus and starts none itself. It lives in Termux's main repo, so the GUI-apps command never fetches it.",
+      opts:[
+        {k:"a", t:"Add it to the Setup GUI Apps command", d:"One more package; the screen you just reshaped is where it belongs.", rec:true},
+        {k:"b", t:"Start the bus ourselves when a session needs one", d:"Wrap the command in dbus-launch for the desktops that need it."},
+        {k:"c", t:"Let it fail and say why", d:"A notice naming the missing package."}
+      ]},
+    { id:"d7",
+      q:"Where a package ships several entries, show them all?",
+      why:"IceWM ships two, i3 ships a debug build alongside the real one, e16 ships four — two of which start desktops Termux does not have.",
+      opts:[
+        {k:"a", t:"Show what works, hide what cannot", d:"Screen out the entries whose command is not installed.", rec:true},
+        {k:"b", t:"Show everything the folder holds", d:"No curation; some tiles will fail."},
+        {k:"c", t:"One per package, the main one", d:"A hand-kept list of which entry is the real one."}
+      ]}
+  ];
+
+  var state = {};      // id -> {choice, note}
+  var db = null;
+  var list = document.getElementById("dlist");
+  var dots = document.getElementById("dots");
+  var count = document.getElementById("count");
+  var saveState = document.getElementById("saveState");
+
+  // Build the page at rest: every decision visible, nothing waiting on the network.
+  DECISIONS.forEach(function(d){
+    var card = document.createElement("div");
+    card.className = "decision";
+    card.id = "card-" + d.id;
+
+    var head = document.createElement("div");
+    head.className = "dhead";
+    var num = document.createElement("span");
+    num.className = "dnum";
+    num.textContent = d.id.toUpperCase();
+    var h3 = document.createElement("h3");
+    h3.textContent = d.q;
+    head.appendChild(num); head.appendChild(h3);
+
+    var why = document.createElement("p");
+    why.className = "why";
+    why.textContent = d.why;
+
+    var opts = document.createElement("div");
+    opts.className = "opts";
+    d.opts.forEach(function(o){
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "opt";
+      b.setAttribute("aria-pressed", "false");
+      b.dataset.d = d.id; b.dataset.k = o.k;
+
+      var tick = document.createElement("span");
+      tick.className = "tick";
+
+      var lab = document.createElement("span");
+      lab.className = "olabel";
+      var t = document.createElement("b");
+      t.textContent = o.t;
+      if (o.rec) {
+        var r = document.createElement("span");
+        r.className = "rec";
+        r.textContent = "suggested";
+        t.appendChild(r);
+      }
+      var dd = document.createElement("span");
+      dd.textContent = o.d;
+      lab.appendChild(t); lab.appendChild(dd);
+
+      b.appendChild(tick); b.appendChild(lab);
+      b.addEventListener("click", function(){ choose(d.id, o.k); });
+      opts.appendChild(b);
+    });
+
+    var note = document.createElement("textarea");
+    note.className = "note";
+    note.id = "note-" + d.id;
+    note.rows = 1;
+    note.placeholder = "Something else, or a caveat — optional";
+    note.addEventListener("blur", function(){ saveNote(d.id, note.value); });
+
+    card.appendChild(head); card.appendChild(why);
+    card.appendChild(opts); card.appendChild(note);
+    list.appendChild(card);
+
+    var dot = document.createElement("span");
+    dot.className = "dot";
+    dot.id = "dot-" + d.id;
+    dots.appendChild(dot);
+  });
+
+  function render(){
+    var done = 0;
+    DECISIONS.forEach(function(d){
+      var s = state[d.id] || {};
+      if (s.choice) done++;
+      document.getElementById("dot-" + d.id).classList.toggle("on", !!s.choice);
+      document.getElementById("card-" + d.id).classList.toggle("answered", !!s.choice);
+      var btns = document.querySelectorAll('.opt[data-d="' + d.id + '"]');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].setAttribute("aria-pressed", btns[i].dataset.k === s.choice ? "true" : "false");
+      }
+      var note = document.getElementById("note-" + d.id);
+      if (document.activeElement !== note && typeof s.note === "string" && note.value !== s.note) {
+        note.value = s.note;
+      }
+    });
+    count.textContent = done + " of " + DECISIONS.length;
+  }
+
+  function choose(id, k){
+    if (!db) return;
+    var prev = state[id] || {};
+    if (prev.choice === k) return;                 // one write per real change
+    state[id] = { choice: k, note: prev.note || "" };
+    render();
+    write(id);
+  }
+
+  function saveNote(id, text){
+    if (!db) return;
+    var prev = state[id] || {};
+    if ((prev.note || "") === text) return;
+    state[id] = { choice: prev.choice || "", note: text };
+    write(id);
+  }
+
+  var inflight = {};
+  function write(id){
+    if (inflight[id]) { inflight[id] = "again"; return; }
+    inflight[id] = true;
+    var body = state[id];
+    db.doc("decisions/" + id).set({ choice: body.choice || "", note: body.note || "" })
+      .then(function(){
+        saveState.textContent = "saved";
+      })
+      .catch(function(e){
+        saveState.textContent = (e && e.code === "invalid_argument") ? "read-only" : "not saved";
+        if (e && e.code === "invalid_argument") lockDown();
+      })
+      .then(function(){
+        var again = inflight[id] === "again";
+        inflight[id] = false;
+        if (again) write(id);
+      });
+  }
+
+  function lockDown(){
+    var btns = document.querySelectorAll(".opt");
+    for (var i = 0; i < btns.length; i++) btns[i].disabled = true;
+    var notes = document.querySelectorAll(".note");
+    for (var j = 0; j < notes.length; j++) notes[j].readOnly = true;
+  }
+
+  render();
+
+  if (!window.claude || !window.claude.use) {
+    saveState.textContent = "reply in chat";
+    lockDown();
+    return;
+  }
+
+  window.claude.use("db").then(function(d){
+    if (!d) {
+      saveState.textContent = "reply in chat";
+      lockDown();
+      return;
+    }
+    db = d;
+    saveState.textContent = "ready";
+    // One subscription for the whole set, registered once.
+    db.collection("decisions").onSnapshot(function(snap){
+      snap.docs.forEach(function(doc){
+        var v = doc.data() || {};
+        state[doc.id] = { choice: v.choice || "", note: typeof v.note === "string" ? v.note : "" };
+      });
+      render();
+    }, function(){
+      saveState.textContent = "offline";
+    });
+  }).catch(function(){
+    saveState.textContent = "reply in chat";
+    lockDown();
+  });
+})();
+</script>

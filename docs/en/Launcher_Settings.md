@@ -302,10 +302,10 @@ resolution, text size, clipboard sharing, whether Linux apps are listed in the a
 **Setup GUI Apps** to install some — from the Termux X11 repo or from a full Linux inside it, and
 what your GPU can do for them — and **Hide GUI Apps** to choose which of them stay out of the
 drawer (see [Linux apps from a distro](Linux_Apps_From_A_Distro.md)),
-the mark on the Display place's badge in the status
+the window manager started with the display, the mark on the Display place's badge in the status
 bar, starting the display with the launcher, the start command, pointing new shells at the
-display and two compatibility switches. A line at the foot of the page names the window manager
-that arranges the windows. Where the extra keys
+display and two compatibility switches. A line at the foot of the page says what arranges the
+windows, and that a whole desktop arranges its own. Where the extra keys
 stand while the display is showing, and everything else about its arrangement, lives in
 **Settings → Layout → Display** once the switch above is on. To have the phone try every graphics
 profile and keep the best, run `termux-x11-gpu-setup` in a shell.

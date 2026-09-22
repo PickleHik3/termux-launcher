@@ -241,9 +241,9 @@ Two things make this work:
 
 - **The window manager.** The launcher starts `openbox` with the display (install it with
   `pkg install openbox`) for single apps, with a launcher-owned rule that maximises every window,
-  so windows open full size and dialogs stay on screen. The Display page names it at the foot of
-  the page rather than offering it as a setting. A whole desktop session brings its own window
-  manager instead: openbox steps aside while the desktop runs and comes back once it closes.
+  so windows open full size and dialogs stay on screen. **Window manager** on the Display page is
+  where another command goes, or an empty box for none. A whole desktop session brings its own
+  window manager instead: openbox steps aside while the desktop runs and comes back once it closes.
   Windows fill the display to its rounded corners, as on any rounded desktop, so a terminal that
   wants its first and last cells clear of the arcs pads its own window (`window_padding_width` in
   kitty, `window.padding` in alacritty).

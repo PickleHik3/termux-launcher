@@ -96,6 +96,16 @@
             app:title="@string/settings_x11_hidden_apps_title"
             app:summary="@string/settings_x11_hidden_apps_summary"
             app:fragment="com.termux.app.fragments.settings.termux.HiddenAppsPreferencesFragment" />
+        <!-- Kept as a row (user, 2026-09-22) after the hint alone turned out to be a dead end:
+             this is the only writer of x11_window_manager there has ever been, so removing it left
+             a manager set once and unchangeable. It matters more since D1, which has the manager
+             stand aside while a whole desktop runs. -->
+        <EditTextPreference
+            app:key="x11_window_manager"
+            app:title="@string/settings_x11_window_manager_title"
+            app:dialogMessage="@string/settings_x11_window_manager_summary"
+            android:defaultValue="openbox"
+            app:useSimpleSummaryProvider="true" />
         <ListPreference
             app:key="x11_runtime_badge"
             app:title="@string/settings_x11_runtime_badge_title"
@@ -134,9 +144,9 @@
             android:defaultValue="false" />
     </PreferenceCategory>
 
-    <!-- The window manager is no longer a row (user, 2026-09-22): openbox is what the launcher
-         starts and there was nothing useful to type here. The stored x11_window_manager value and
-         its default are untouched; this only says, once, what is arranging the windows. -->
+    <!-- The plain-words version of the row above, at the foot of the page where someone who is not
+         looking for a setting will still read it: what arranges the windows, and that a whole
+         desktop arranges its own. -->
     <Preference
         app:key="x11_window_manager_hint"
         app:summary="@string/settings_x11_window_manager_hint"

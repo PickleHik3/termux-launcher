@@ -331,7 +331,9 @@
     <string name="settings_x11_hidden_apps_empty">No GUI apps to show yet.</string>
     <string name="settings_x11_runtime_badge_title">Display badge</string>
     <string name="settings_x11_runtime_badge_summary">The mark on the Display place\'s badge in the status bar.</string>
-    <string name="settings_x11_window_manager_hint">Windows on the display are arranged by Openbox.</string>
+    <string name="settings_x11_window_manager_title">Window manager</string>
+    <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
+    <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead.</string>
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
     <string name="termux_x11_app_launch_failed">This app could not be opened.</string>
     <string name="termux_x11_app_gone">That app is no longer installed.</string>
