@@ -3,8 +3,6 @@ package com.termux.app.fragments.settings.termux;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -16,14 +14,10 @@ import androidx.preference.PreferenceManager;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
-import com.termux.app.x11.X11GpuProbe;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.x11.LoriePreferences;
 import com.termux.x11.Prefs;
-
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * The Linux display's page: the switch that turns it on, how touch is read, how big the X screen
@@ -32,6 +26,10 @@ import java.util.concurrent.Executors;
  * <p>The display rows write into the store the display server and {@code termux-x11-preference}
  * read — one store, so the three never disagree — and a running display picks a change up at
  * once. The starting rows are the launcher's own.
+ *
+ * <p>Graphics moved to the Setup GUI Apps screen (user, 2026-09-22), where it ends in a
+ * command on the clipboard like the rest of that screen; the window manager row went with it,
+ * leaving the one line at the foot of this page that names what arranges the windows.
  */
 public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
 
@@ -41,14 +39,6 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
     private static final String KEY_SCALE = "displayScale";
     private static final String KEY_RESOLUTION_EXACT = "displayResolutionExact";
     private static final String KEY_RESOLUTION_CUSTOM = "displayResolutionCustom";
-    private static final String KEY_GPU = "x11_gpu";
-
-    private final ExecutorService probeExecutor = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "x11-gpu-probe");
-        thread.setDaemon(true);
-        return thread;
-    });
-    private final Handler handler = new Handler(Looper.getMainLooper());
 
     @Override
     public void onResume() {
@@ -81,13 +71,6 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
                 return true;
             });
         }
-        probeGpu(context);
-    }
-
-    @Override
-    public void onDestroy() {
-        probeExecutor.shutdownNow();
-        super.onDestroy();
     }
 
     /** Only the size row that the chosen resolution mode reads is shown. */
@@ -113,21 +96,6 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
         row.setSummary(touchscreen
             ? R.string.settings_x11_keyboard_follows_text_summary
             : R.string.settings_x11_keyboard_follows_text_unavailable);
-    }
-
-    /** What this phone's GPU can do for Linux apps, worked out off the main thread. */
-    private void probeGpu(@NonNull Context context) {
-        Context app = context.getApplicationContext();
-        probeExecutor.execute(() -> {
-            X11GpuProbe.Result result = X11GpuProbe.probe(app);
-            handler.post(() -> {
-                Preference gpu = findPreference(KEY_GPU);
-                if (gpu == null || !isAdded()) return;
-                gpu.setSummary(result.recommended() == null
-                    ? getString(R.string.settings_x11_gpu_none)
-                    : getString(R.string.settings_x11_gpu_summary, result.headline()));
-            });
-        });
     }
 
     /**

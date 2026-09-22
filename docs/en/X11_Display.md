@@ -128,7 +128,7 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 ## The keyboard follows text fields
 
 Tap a text field on the display and the keyboard comes up; tap anywhere else and it goes away
-again. It is on by default — Settings → **Display** → **Keyboard follows text fields** — and it
+again. It is on by default — Settings → **Display** → **OSK auto-show** — and it
 only applies in **Touchscreen** touch mode, where a tap lands where you put it. Trackpad and
 Direct touch are unchanged.
 
@@ -207,7 +207,8 @@ the proot's login shell). The launcher never sets these for you.
 
 The launcher can pick for you: `launcherctl x11 gpu` says which row fits this phone and what is
 installed, and `launcherctl x11 gpu --env` prints the exports to paste or `eval`. The same
-answer is at the bottom of the Display page in Settings.
+answer is under **Graphics** on the **Setup GUI Apps** screen, where **Copy the graphics command**
+puts the install line and the exports for this phone straight onto the clipboard.
 
 Or let the phone decide by trying: `termux-x11-gpu-setup` installs the drivers for every row that
 fits this phone, runs a short 3D test with each on a private display, keeps the one that really
@@ -236,15 +237,16 @@ Apps installed inside a distro are listed the same way, under **Linux Apps** in 
 the launcher can set a distro up for you — see [Linux apps from a distro](Linux_Apps_From_A_Distro.md).
 An app whose menu entry asks for a terminal opens in a terminal pane rather than on the display.
 
-Two things make this work and can be changed on the Display page in Settings:
+Two things make this work:
 
-- **Window manager.** The launcher starts a small window manager with the display so windows
-  open full size and dialogs stay on screen. It is `openbox` by default (install it with
-  `pkg install openbox`), with a launcher-owned rule that maximises every window; put another
-  command there, or clear it to have none. Windows fill the display to its rounded corners, as on
+- **The window manager.** The launcher starts `openbox` with the display (install it with
+  `pkg install openbox`), with a launcher-owned rule that maximises every window, so windows open
+  full size and dialogs stay on screen. The Display page names it at the foot of the page rather
+  than offering it as a setting. Windows fill the display to its rounded corners, as on
   any rounded desktop, so a terminal that wants its first and last cells clear of the arcs pads
   its own window (`window_padding_width` in kitty, `window.padding` in alacritty).
-- **Linux apps in the drawer** can be switched off if you would rather start apps from a shell.
+- **Linux apps in the drawer**, on the Display page in Settings, can be switched off if you
+  would rather start apps from a shell.
 
 When an app is started from the drawer, the launcher exports the GPU settings from the table
 below for whichever profile's packages are installed, so a GPU app is accelerated without any

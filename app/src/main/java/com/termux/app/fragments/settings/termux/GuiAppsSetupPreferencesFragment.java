@@ -25,12 +25,15 @@ import com.termux.app.notice.AppNotice;
 import com.termux.app.tour.TourEdition;
 import com.termux.app.x11.DistroSetupStore;
 import com.termux.app.x11.GuiAppsSetup;
+import com.termux.app.x11.X11GpuProbe;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.TermuxConstants;
 
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * "Get GUI apps": the two ways to have an app with a window on this phone, and the one command
@@ -53,9 +56,22 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
     static final String KEY_STARTERS_CATEGORY = "gui_apps_starters_category";
     static final String KEY_COPY = "gui_apps_copy";
     static final String KEY_NIX_DOCS = "gui_apps_nix_docs";
+    static final String KEY_GRAPHICS_CATEGORY = "gui_apps_graphics_category";
+    static final String KEY_GPU = "x11_gpu";
+    static final String KEY_GPU_COPY = "gui_apps_gpu_copy";
 
     /** How long the launcher is given to come forward before the notice is raised on it. */
     private static final long NOTICE_DELAY_MS = 350L;
+
+    /** The GPU probe builds a throwaway GL context, so it is never run on the main thread. */
+    private final ExecutorService probeExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "gui-apps-gpu-probe");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final Handler probeHandler = new Handler(Looper.getMainLooper());
+    /** The last probe's answer, kept so the copy row has something to build a command from. */
+    @Nullable private X11GpuProbe.Result gpuResult;
 
     /** Where nix's "Read the docs" row sends the user; nix has no command for this screen to build. */
     private static final String NIX_DOCS_URL =
@@ -92,6 +108,8 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
             if (starters != null) starters.setVisible(false);
             Preference copy = findPreference(KEY_COPY);
             if (copy != null) copy.setVisible(false);
+            Preference graphics = findPreference(KEY_GRAPHICS_CATEGORY);
+            if (graphics != null) graphics.setVisible(false);
             Preference hint = findPreference(KEY_HINT);
             if (hint != null) hint.setSummary(R.string.settings_gui_apps_nix_card);
             Preference docs = findPreference(KEY_NIX_DOCS);
@@ -113,16 +131,23 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
                 route.setVisible(false);
                 route.setValue(only);
             }
-            applyDistroRow(only);
-            applyBrowserRowVisibility(only, edition);
+            applyRouteRows(only, edition);
             Preference hint = findPreference(KEY_HINT);
             if (hint != null) hint.setSummary(R.string.settings_gui_apps_intro_distro_only);
         } else if (route != null) {
-            applyDistroRow(route.getValue());
-            applyBrowserRowVisibility(route.getValue(), edition);
+            applyRouteRows(route.getValue(), edition);
             route.setOnPreferenceChangeListener((preference, value) -> {
-                applyDistroRow(String.valueOf(value));
-                applyBrowserRowVisibility(String.valueOf(value), edition);
+                applyRouteRows(String.valueOf(value), edition);
+                return true;
+            });
+        }
+        // The Linux to install changes which browser the command fetches, so the hints follow it.
+        ListPreference distro = findPreference(KEY_DISTRO);
+        if (distro != null) {
+            distro.setOnPreferenceChangeListener((preference, value) -> {
+                ListPreference current = findPreference(KEY_ROUTE);
+                applyStarterHints(current == null ? null : current.getValue(),
+                    String.valueOf(value));
                 return true;
             });
         }
@@ -131,6 +156,18 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
             copyCommand(preference.getContext());
             return true;
         });
+        Preference gpuCopy = findPreference(KEY_GPU_COPY);
+        if (gpuCopy != null) gpuCopy.setOnPreferenceClickListener(preference -> {
+            copyGraphicsCommand(preference.getContext());
+            return true;
+        });
+        probeGpu(context);
+    }
+
+    @Override
+    public void onDestroy() {
+        probeExecutor.shutdownNow();
+        super.onDestroy();
     }
 
     /** nix's one extra row: there is no command here, only a page that explains its own way. */
@@ -148,6 +185,67 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
     public void onResume() {
         super.onResume();
         if (getActivity() != null) getActivity().setTitle(R.string.settings_gui_apps_title);
+    }
+
+    /** Everything on the screen that the chosen source decides, in one place. */
+    private void applyRouteRows(@Nullable String route, @NonNull TourEdition edition) {
+        applyDistroRow(route);
+        applyBrowserRowVisibility(route, edition);
+        ListPreference distro = findPreference(KEY_DISTRO);
+        applyStarterHints(route, distro == null ? null : distro.getValue());
+    }
+
+    /**
+     * The Starter Apps rows say which app each tick would fetch, because that is the difference
+     * between the sources and between the distros: a browser on Debian is Firefox ESR and on
+     * Ubuntu it is Falkon.
+     */
+    private void applyStarterHints(@Nullable String route, @Nullable String distro) {
+        GuiAppsSetup.Route resolvedRoute = GuiAppsSetup.Route.of(route);
+        GuiAppsSetup.Distro resolvedDistro = GuiAppsSetup.Distro.of(distro);
+        for (GuiAppsSetup.StarterApp app : GuiAppsSetup.StarterApp.values()) {
+            Preference row = findPreference("gui_apps_starter_" + app.key);
+            // Only the rows the screen still shows; the editor and the terminal have none.
+            if (row == null) continue;
+            row.setSummary(GuiAppsSetup.starterAppName(resolvedRoute, resolvedDistro, app));
+        }
+    }
+
+    /** What this phone's GPU can do for Linux apps, worked out off the main thread. */
+    private void probeGpu(@NonNull Context context) {
+        Context app = context.getApplicationContext();
+        probeExecutor.execute(() -> {
+            X11GpuProbe.Result result = X11GpuProbe.probe(app);
+            probeHandler.post(() -> {
+                if (!isAdded()) return;
+                gpuResult = result;
+                Preference gpu = findPreference(KEY_GPU);
+                if (gpu == null) return;
+                gpu.setSummary(result.recommended() == null
+                    ? getString(R.string.settings_x11_gpu_none)
+                    : getString(R.string.settings_x11_gpu_summary, result.headline()));
+            });
+        });
+    }
+
+    /**
+     * The graphics command onto the clipboard, the same way the setup command goes: Settings
+     * closes so the terminal is in front, and the notice follows it there.
+     *
+     * <p>Nothing happens while the probe is still running - the row has no command to give yet,
+     * and a wrong one would install the wrong driver.
+     */
+    private void copyGraphicsCommand(@NonNull Context context) {
+        X11GpuProbe.Result result = gpuResult;
+        if (result == null) return;
+        Context appContext = context.getApplicationContext();
+        ShareUtils.copyTextToClipboard(appContext,
+            getString(R.string.settings_gui_apps_gpu_clipboard_label), result.toCommand(), null);
+        Activity activity = getActivity();
+        if (activity != null) activity.finish();
+        new Handler(Looper.getMainLooper()).postDelayed(
+            () -> AppNotice.show(appContext, R.string.settings_gui_apps_gpu_copied),
+            NOTICE_DELAY_MS);
     }
 
     /** Which Linux to put inside is only a question for the route that puts one inside. */

@@ -393,7 +393,7 @@ nix-on-droid rollback
 Graphical Linux apps work on this edition, and they arrive the same way
 everything else does: name them in the config and switch. There is no
 `pkg install`, no extra repository, and nothing to copy from the
-launcher's **Get GUI apps** screen — that screen builds a command for the
+launcher's **Setup GUI Apps** screen — that screen builds a command for the
 Termux edition's two routes, neither of which exists here.
 
 Add the app, and `xkeyboard-config` alongside it:

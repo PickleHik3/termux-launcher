@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The Get GUI apps screen: where the apps come from, which Linux to put inside, what to start
-     with, and the one action that puts the command on the clipboard. Which rows are out depends
-     on the edition's routes (GuiAppsSetup.routesFor); GuiAppsSetupPreferencesFragment does that.
-     The nix edition offers no route at all, and gui_apps_nix_docs is its one extra row, hidden
-     here and shown only there. -->
+<!-- The Setup GUI Apps screen: the source the apps come from, which Linux to put inside, what to
+     start with, the graphics this phone can give them, and the two commands it puts on the
+     clipboard. Which rows are out depends on the edition's routes (GuiAppsSetup.routesFor);
+     GuiAppsSetupPreferencesFragment does that. The nix edition offers no route at all, and
+     gui_apps_nix_docs is its one extra row, hidden here and shown only there. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
@@ -31,6 +31,11 @@
         app:entryValues="@array/gui_apps_distro_values"
         app:useSimpleSummaryProvider="true" />
 
+    <!-- Only the two apps that are worth a choice. A text editor and a terminal were dropped
+         (user, 2026-09-22): the phone already has the terminal this command is pasted into, and
+         the launcher's own editor is a tap away. Their StarterApp entries stay in the command
+         builder; with no row here nothing ticks them. The summaries are filled in by the fragment
+         with the app each source would actually fetch. -->
     <PreferenceCategory
         app:key="gui_apps_starters_category"
         app:title="@string/settings_gui_apps_starters_title">
@@ -42,14 +47,6 @@
             app:key="gui_apps_starter_files"
             app:title="@string/settings_gui_apps_starter_files"
             android:defaultValue="true" />
-        <CheckBoxPreference
-            app:key="gui_apps_starter_editor"
-            app:title="@string/settings_gui_apps_starter_editor"
-            android:defaultValue="true" />
-        <CheckBoxPreference
-            app:key="gui_apps_starter_terminal"
-            app:title="@string/settings_gui_apps_starter_terminal"
-            android:defaultValue="false" />
     </PreferenceCategory>
 
     <Preference
@@ -57,6 +54,25 @@
         app:title="@string/settings_gui_apps_copy_title"
         app:summary="@string/settings_gui_apps_copy_summary"
         app:persistent="false" />
+
+    <!-- Graphics lives here rather than on the Display page (user, 2026-09-22): what a phone can
+         draw with is part of getting the apps, and it ends in the same place the rest of this
+         screen does — a command on the clipboard. -->
+    <PreferenceCategory
+        app:key="gui_apps_graphics_category"
+        app:title="@string/settings_x11_category_graphics">
+        <Preference
+            app:key="x11_gpu"
+            app:title="@string/settings_x11_gpu_title"
+            app:summary="@string/settings_x11_gpu_probing"
+            app:selectable="false"
+            app:persistent="false" />
+        <Preference
+            app:key="gui_apps_gpu_copy"
+            app:title="@string/settings_gui_apps_gpu_copy_title"
+            app:summary="@string/settings_gui_apps_gpu_copy_summary"
+            app:persistent="false" />
+    </PreferenceCategory>
 
     <Preference
         app:key="gui_apps_nix_docs"

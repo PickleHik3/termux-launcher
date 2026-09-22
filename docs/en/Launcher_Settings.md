@@ -296,15 +296,16 @@ from the long-press menu on that place.
 
 The Linux display has its own page: the **Display** switch runs a Linux desktop or X11 apps
 as the third place of the home screen — see [The Linux display](X11_Display.md). Under it sit touch
-mode, **Keyboard follows text fields** — the keyboard opens when you tap a text field on the
+mode, **OSK auto-show** — the keyboard opens when you tap a text field on the
 display and closes when you tap elsewhere, on by default and available in Touchscreen touch mode —
 resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer,
-**Get GUI apps** to install some — from Termux itself or from a full Linux inside it — and
-**GUI apps** to choose which of them stay out of the drawer
-(see [Linux apps from a distro](Linux_Apps_From_A_Distro.md)),
-the window manager started with the display, the mark on the Display place's badge in the status
+**Setup GUI Apps** to install some — from the Termux X11 repo or from a full Linux inside it, and
+what your GPU can do for them — and **Hide GUI Apps** to choose which of them stay out of the
+drawer (see [Linux apps from a distro](Linux_Apps_From_A_Distro.md)),
+the mark on the Display place's badge in the status
 bar, starting the display with the launcher, the start command, pointing new shells at the
-display, two compatibility switches, and what your GPU can do for Linux apps. Where the extra keys
+display and two compatibility switches. A line at the foot of the page names the window manager
+that arranges the windows. Where the extra keys
 stand while the display is showing, and everything else about its arrangement, lives in
 **Settings → Layout → Display** once the switch above is on. To have the phone try every graphics
 profile and keep the best, run `termux-x11-gpu-setup` in a shell.

@@ -27,13 +27,20 @@ import com.termux.R;
  */
 public final class DisplayScaleRailView extends View {
 
-    /** How far in from the leading edge the track runs. */
-    private static final float TRACK_X_DP = 16f;
+    private static final float THUMB_RADIUS_DP = 9f;
+    /** How far the slab reaches past the thumb on every side. */
+    private static final float SLAB_PAD_DP = 6f;
+    /**
+     * Clear space between the slab's leading edge and the page's border (user, 2026-09-22): the
+     * slider's container used to sit all but on the terminal's inner border.
+     */
+    private static final float EDGE_GAP_DP = 8f;
+    /** How far in from the leading edge the track runs: enough for the slab and that gap. */
+    private static final float TRACK_X_DP = THUMB_RADIUS_DP + SLAB_PAD_DP + EDGE_GAP_DP;
     /** The band, from the leading edge, a finger has to land in to take the thumb. */
-    private static final float HIT_BAND_DP = 40f;
+    private static final float HIT_BAND_DP = TRACK_X_DP + THUMB_RADIUS_DP + SLAB_PAD_DP + 9f;
     /** Room past the track's ends that still counts as the rail. */
     private static final float HIT_SLOP_DP = 24f;
-    private static final float THUMB_RADIUS_DP = 9f;
 
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mLabelPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -129,7 +136,7 @@ public final class DisplayScaleRailView extends View {
     /** The painted rail, rather than the full-page transparent interaction view. */
     public android.graphics.Rect helpBounds() {
         if (!mShown) return null;
-        float slab = dp(THUMB_RADIUS_DP + 6);
+        float slab = dp(THUMB_RADIUS_DP + SLAB_PAD_DP);
         android.graphics.Rect out = new android.graphics.Rect();
         new RectF(dp(TRACK_X_DP) - slab, trackTop() - slab,
             dp(TRACK_X_DP) + slab, trackBottom() + slab).roundOut(out);
@@ -180,7 +187,7 @@ public final class DisplayScaleRailView extends View {
         // The slab behind the track, so the rail reads over any desktop.
         mPaint.setStyle(Paint.Style.FILL);
         mPaint.setColor(ColorUtils.setAlphaComponent(surface, Math.round(232f * mProgress)));
-        float slab = radius + dp(6);
+        float slab = radius + dp(SLAB_PAD_DP);
         canvas.drawRoundRect(x - slab, top - slab, x + slab, bottom + slab, slab, slab, mPaint);
         mPaint.setStyle(Paint.Style.STROKE);
         mPaint.setStrokeWidth(dp(1));

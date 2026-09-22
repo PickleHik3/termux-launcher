@@ -244,6 +244,35 @@ public final class GuiAppsSetup {
         }
     }
 
+    /**
+     * What {@code app} is called on the screen once {@code route} and {@code distro} are chosen:
+     * the name the user will see in their app drawer afterwards, not the package name.
+     *
+     * <p>The Starter Apps rows carry this as their hint (user, 2026-09-22), because "Browser"
+     * alone does not say whether the command is about to fetch Firefox or Falkon - and on Ubuntu
+     * it is Falkon, for a reason that belongs in {@link Distro} rather than in front of the user.
+     */
+    @NonNull
+    public static String starterAppName(@NonNull Route route, @NonNull Distro distro,
+                                        @NonNull StarterApp app) {
+        return prettyName(route == Route.X11_REPO
+            ? termuxPackageFor(app) : distro.packageFor(app));
+    }
+
+    /** A package name as people write it. Anything unlisted is handed back as it came. */
+    @NonNull
+    private static String prettyName(@NonNull String packageName) {
+        switch (packageName) {
+            case "firefox": return "Firefox";
+            case "firefox-esr": return "Firefox ESR";
+            case "falkon": return "Falkon";
+            case "pcmanfm": return "PCManFM";
+            case "mousepad": return "Mousepad";
+            case "xfce4-terminal": return "Xfce Terminal";
+            default: return packageName;
+        }
+    }
+
     /** Where the chosen account name is written, as a Termux shell spells it. */
     @NonNull
     public static String recordPath(@NonNull Distro distro) {

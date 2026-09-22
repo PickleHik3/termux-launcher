@@ -96,12 +96,6 @@
             app:title="@string/settings_x11_hidden_apps_title"
             app:summary="@string/settings_x11_hidden_apps_summary"
             app:fragment="com.termux.app.fragments.settings.termux.HiddenAppsPreferencesFragment" />
-        <EditTextPreference
-            app:key="x11_window_manager"
-            app:title="@string/settings_x11_window_manager_title"
-            app:dialogMessage="@string/settings_x11_window_manager_summary"
-            android:defaultValue="openbox"
-            app:useSimpleSummaryProvider="true" />
         <ListPreference
             app:key="x11_runtime_badge"
             app:title="@string/settings_x11_runtime_badge_title"
@@ -140,11 +134,12 @@
             android:defaultValue="false" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/settings_x11_category_graphics">
-        <Preference
-            app:key="x11_gpu"
-            app:title="@string/settings_x11_gpu_title"
-            app:summary="@string/settings_x11_gpu_probing"
-            app:selectable="false" />
-    </PreferenceCategory>
+    <!-- The window manager is no longer a row (user, 2026-09-22): openbox is what the launcher
+         starts and there was nothing useful to type here. The stored x11_window_manager value and
+         its default are untouched; this only says, once, what is arranging the windows. -->
+    <Preference
+        app:key="x11_window_manager_hint"
+        app:summary="@string/settings_x11_window_manager_hint"
+        app:selectable="false"
+        app:persistent="false" />
 </PreferenceScreen>

@@ -359,4 +359,31 @@ public class GuiAppsSetupTest {
         assertEquals(label + " single quotes", 0, single % 2);
         assertEquals(label + " double quotes", 0, doubles % 2);
     }
+
+    /**
+     * The Starter Apps hints: the name of the app each tick would actually fetch, which is the
+     * whole reason the rows carry one - Ubuntu's browser is not Debian's.
+     */
+    @Test public void theStarterHintNamesTheBrowserEachChoiceWouldFetch() {
+        assertEquals("Firefox ESR", GuiAppsSetup.starterAppName(
+            GuiAppsSetup.Route.DISTRO, GuiAppsSetup.Distro.DEBIAN, GuiAppsSetup.StarterApp.BROWSER));
+        assertEquals("Falkon", GuiAppsSetup.starterAppName(
+            GuiAppsSetup.Route.DISTRO, GuiAppsSetup.Distro.UBUNTU, GuiAppsSetup.StarterApp.BROWSER));
+        assertEquals("Firefox", GuiAppsSetup.starterAppName(
+            GuiAppsSetup.Route.DISTRO, GuiAppsSetup.Distro.ARCH, GuiAppsSetup.StarterApp.BROWSER));
+        // The X11 route installs Termux's own packages, whatever the distro row happens to say.
+        assertEquals("Firefox", GuiAppsSetup.starterAppName(
+            GuiAppsSetup.Route.X11_REPO, GuiAppsSetup.Distro.UBUNTU,
+            GuiAppsSetup.StarterApp.BROWSER));
+    }
+
+    @Test public void theFileManagerIsTheSameOneEverywhere() {
+        for (GuiAppsSetup.Distro distro : GuiAppsSetup.Distro.values()) {
+            assertEquals("PCManFM", GuiAppsSetup.starterAppName(
+                GuiAppsSetup.Route.DISTRO, distro, GuiAppsSetup.StarterApp.FILE_MANAGER));
+        }
+        assertEquals("PCManFM", GuiAppsSetup.starterAppName(
+            GuiAppsSetup.Route.X11_REPO, GuiAppsSetup.Distro.DEBIAN,
+            GuiAppsSetup.StarterApp.FILE_MANAGER));
+    }
 }

@@ -276,15 +276,15 @@
     <string name="termux_x11_display_settings">Display settings</string>
     <string name="termux_x11_command_taken">Another app\'s display command is installed, so the launcher left its own out; the Linux display guide shows how to switch.</string>
     <string name="distro_setup_offer">Get GUI apps</string>
-    <string name="settings_gui_apps_title">Get GUI apps</string>
+    <string name="settings_gui_apps_title">Setup GUI Apps</string>
     <string name="settings_gui_apps_row_summary">Pick the apps you want and copy the command that installs them.</string>
-    <string name="settings_gui_apps_hint">Apps with windows come either from Termux itself or from a Linux you install inside it. Pick one, tick what you want, then copy the command.</string>
+    <string name="settings_gui_apps_hint">Make your choices below, then copy the command and paste it into the terminal.</string>
     <string name="settings_gui_apps_intro_distro_only">Install a Linux system with a few apps to start with, then copy the command.</string>
-    <string name="settings_gui_apps_route_title">Where the apps come from</string>
+    <string name="settings_gui_apps_route_title">Source</string>
     <string name="settings_gui_apps_route_summary">Termux\'s own apps install in a minute or two. A full Linux takes longer and offers far more.</string>
-    <string name="settings_gui_apps_distro_title">Which Linux</string>
+    <string name="settings_gui_apps_distro_title">Linux Distro</string>
     <string name="settings_gui_apps_distro_summary">Debian is the one to pick unless you already prefer another.</string>
-    <string name="settings_gui_apps_starters_title">Apps to start with</string>
+    <string name="settings_gui_apps_starters_title">Starter Apps</string>
     <string name="settings_gui_apps_starter_browser">Browser</string>
     <string name="settings_gui_apps_starter_files">File manager</string>
     <string name="settings_gui_apps_starter_editor">Text editor</string>
@@ -295,6 +295,10 @@
     <string name="settings_gui_apps_copied">Command copied. Paste it into the terminal and press Enter.</string>
     <string name="settings_gui_apps_nix_card">Add an app such as xfce.mousepad and xkeyboard-config to home.nix, run nix-on-droid switch, and it appears in the app drawer.</string>
     <string name="settings_gui_apps_nix_docs">Read the docs</string>
+    <string name="settings_gui_apps_gpu_copy_title">Copy the graphics command</string>
+    <string name="settings_gui_apps_gpu_copy_summary">Paste it into the terminal to let your apps draw with this phone\'s graphics.</string>
+    <string name="settings_gui_apps_gpu_clipboard_label">Graphics setup</string>
+    <string name="settings_gui_apps_gpu_copied">Graphics command copied. Paste it into the terminal and press Enter.</string>
     <string name="settings_x11_display_title">Display</string>
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
     <string name="permission_x11_display_label">Run a Linux display</string>
@@ -302,7 +306,7 @@
     <string name="settings_x11_touch_mode_title">Touch</string>
     <string name="settings_x11_android_keyboard_title">Use Android keyboard</string>
     <string name="settings_x11_android_keyboard_summary">Type into apps on the display with your phone\'s own keyboard.</string>
-    <string name="settings_x11_keyboard_follows_text_title">Keyboard follows text fields</string>
+    <string name="settings_x11_keyboard_follows_text_title">OSK auto-show</string>
     <string name="settings_x11_keyboard_follows_text_summary">Open the keyboard when you tap a text field and close it when you tap elsewhere.</string>
     <string name="settings_x11_keyboard_follows_text_unavailable">Available in Touchscreen touch mode.</string>
     <string name="settings_x11_resolution_mode_title">Resolution</string>
@@ -320,15 +324,14 @@
     <string name="settings_x11_category_apps">Apps</string>
     <string name="settings_x11_drawer_apps_title">Linux apps in the drawer</string>
     <string name="settings_x11_drawer_apps_summary">List installed Linux apps beside your Android apps; tapping one opens it on the display.</string>
-    <string name="settings_x11_hidden_apps_title">GUI apps</string>
+    <string name="settings_x11_hidden_apps_title">Hide GUI Apps</string>
     <string name="settings_x11_hidden_apps_summary">Choose which Linux GUI apps appear in the app drawer.</string>
     <string name="settings_x11_hidden_apps_hint">Uncheck an app to hide it from the app drawer.</string>
     <string name="settings_x11_hidden_apps_loading">Loading your GUI apps…</string>
     <string name="settings_x11_hidden_apps_empty">No GUI apps to show yet.</string>
     <string name="settings_x11_runtime_badge_title">Display badge</string>
     <string name="settings_x11_runtime_badge_summary">The mark on the Display place\'s badge in the status bar.</string>
-    <string name="settings_x11_window_manager_title">Window manager</string>
-    <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
+    <string name="settings_x11_window_manager_hint">Windows on the display are arranged by Openbox.</string>
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
     <string name="termux_x11_app_launch_failed">This app could not be opened.</string>
     <string name="termux_x11_app_gone">That app is no longer installed.</string>
@@ -345,7 +348,7 @@
     <string name="settings_x11_category_graphics">Graphics</string>
     <string name="settings_x11_gpu_title">Graphics acceleration</string>
     <string name="settings_x11_gpu_probing">Checking what this phone can do…</string>
-    <string name="settings_x11_gpu_summary">%1$s. Run launcherctl x11 gpu --env in a shell for the settings to use.</string>
+    <string name="settings_x11_gpu_summary">%1$s.</string>
     <string name="settings_x11_gpu_none">Linux apps will draw in software on this phone</string>
     <string name="permission_x11_display_description">Lets the display server started from your shell show its screen in the launcher.</string>
     <string name="termux_wall_tile_widgets">Widgets</string>
@@ -1913,7 +1916,7 @@
     <string name="tour_closing_pictures_heading">Pictures</string>
     <string name="tour_closing_pictures_copy">Programs can draw pictures straight into a pane; if an older Neovim will not, Help has the one line it needs.</string>
     <string name="tour_closing_gui_apps_heading">GUI apps</string>
-    <string name="tour_closing_gui_apps_copy">Settings \u2192 Display \u2192 Get GUI apps sets up graphical Linux apps that open from the app drawer.</string>
+    <string name="tour_closing_gui_apps_copy">Settings \u2192 Display \u2192 Setup GUI Apps sets up graphical Linux apps that open from the app drawer.</string>
     <string name="tour_closing_gui_apps_copy_nix">Add an app to home.nix and run nix-on-droid switch — it appears in the app drawer.</string>
     <!-- Shell commands: never translated. -->
     <string name="tour_closing_extras_command" translatable="false">tlstore install fastfetch sigye claude-code kitten</string>
@@ -2229,7 +2232,7 @@
     <string name="help_topic_distro_apps_title">Linux apps in the drawer</string>
     <string name="help_topic_distro_apps_summary">Apps you install in Linux sit in the app drawer beside your Android ones.</string>
     <string name="help_topic_distro_apps_action">Open the app drawer and look under Linux Apps.</string>
-    <string name="help_topic_distro_apps_step1">Get GUI apps, in Settings under Display, installs a Linux system with a few apps to start with.</string>
+    <string name="help_topic_distro_apps_step1">Setup GUI Apps, in Settings under Display, installs a Linux system with a few apps to start with.</string>
     <string name="help_topic_distro_apps_step2">Anything you install afterwards is there when you come back to the launcher.</string>
     <string name="help_topic_distro_apps_step3">A tap opens the app on the display, full size.</string>
     <string name="help_topic_distro_apps_back">Hide one you never open in Settings, under Display.</string>

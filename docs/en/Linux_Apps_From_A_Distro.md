@@ -18,8 +18,8 @@ no browser (none is built for it), and the window manager is `pkg install openbo
 
 ## Set it up in one go
 
-**Settings → Display → Apps → Get GUI apps** builds the command that does this. Choose where the
-apps come from — Termux's own, or a full Linux inside it — tick the ones you want, then tap
+**Settings → Display → Apps → Setup GUI Apps** builds the command that does this. Choose the
+**Source** — the Termux X11 repo, or a proot distro — tick the ones you want, then tap
 **Copy the command**: it goes on the clipboard, a notice tells you it is there, and Settings closes
 so the terminal is in front. Paste it and press Enter.
 
@@ -72,7 +72,7 @@ start.
 ## Hiding the ones you do not want
 
 A distro installs menu entries for helpers and viewers you may never open by hand.
-**Settings → Display → Apps → GUI apps** lists the Linux apps it found; untick one and it
+**Settings → Display → Apps → Hide GUI Apps** lists the Linux apps it found; untick one and it
 leaves the drawer. It is one app at a time, not a whole distro, and it holds across restarts. The
 list holds Linux apps only — your Android apps are not in it.
 
@@ -108,11 +108,11 @@ command when you start them this way. From the drawer the launcher takes care of
 - **No Linux apps in the drawer at all.** Either nothing is installed yet — use **Get GUI
   apps** — or the **Linux apps in the drawer** switch is off. Check too that the distro was
   installed by `proot-distro` 5.x.
-- **One app is missing.** Look in **GUI apps** first. Otherwise the app has no menu entry
+- **One app is missing.** Look in **Hide GUI Apps** first. Otherwise the app has no menu entry
   of its own: command-line programs usually have none, and the launcher lists what the distro's own
   menu lists. Write the entry yourself, below.
 - **An app opens and closes again, or nothing happens.** Most often a fresh distro missing fonts;
-  **Get GUI apps** installs them. To see the app's own complaint, run it by hand:
+  **Setup GUI Apps** installs them. To see the app's own complaint, run it by hand:
   `proot-distro login debian --shared-x11 -e DISPLAY=:0 -- <command>`.
 - **`Failed to connect to the bus`, over and over.** Harmless — apps that print it still open. One
   that genuinely needs a session bus wants `dbus-run-session -- <command>` inside the distro.

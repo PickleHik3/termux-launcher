@@ -184,7 +184,7 @@
     </string-array>
     <string-array name="x11_touch_mode_entries">
         <item>Trackpad</item>
-        <item>Touchscreen</item>
+        <item>Touchscreen (Default, custom behavior)</item>
         <item>Direct touch</item>
     </string-array>
     <string-array name="x11_touch_mode_values">
@@ -202,7 +202,7 @@
     </string-array>
     <string-array name="x11_resolution_mode_entries">
         <item>Same as the screen</item>
-        <item>Scaled</item>
+        <item>Scaled (Default)</item>
         <item>Fixed size</item>
         <item>Custom size</item>
     </string-array>
@@ -213,8 +213,8 @@
         <item>custom</item>
     </string-array>
     <string-array name="gui_apps_route_entries">
-        <item>Termux\'s own apps</item>
-        <item>A full Linux inside</item>
+        <item>Termux X11 repo</item>
+        <item>proot distro</item>
     </string-array>
     <string-array name="gui_apps_route_values">
         <item>x11</item>
