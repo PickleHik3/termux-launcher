@@ -275,8 +275,9 @@ Inside, install a single app as usual, or a whole desktop (`pacman -S xfce4`). N
 starting by hand from here: an app appears in the app drawer under Linux Apps, a desktop appears
 under Desktops, and a tap opens either one — a desktop takes over the display until you close it —
 see [Linux apps from a distro](Linux_Apps_From_A_Distro.md). Starting a desktop by hand still
-works too, the same way termux-x11's own instructions do: `startxfce4`, run after logging in as
-above.
+works too, the same way termux-x11's own instructions do: a desktop needs a message bus and
+`startxfce4` starts none of its own, so run `dbus-launch --exit-with-session startxfce4` after
+logging in as above.
 
 GPU profiles work inside the proot too: install the *distro's* Mesa, export the same
 variables in the proot shell, and — for the `virgl` profiles — keep `virgl_test_server_android`
