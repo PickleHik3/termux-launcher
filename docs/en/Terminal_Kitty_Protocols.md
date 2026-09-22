@@ -67,9 +67,32 @@ What changes and what does not:
   though the terminal supports it (see [Text sizing](#text-sizing-osc-66)). Nothing pretends to be
   a kitty release it is not.
 - `TERM_PROGRAM_VERSION` still carries the launcher's version; a program that reads both will see a
-  kitty name with a non-kitty version. That is the one inconsistency this setting introduces.
+  kitty name with a version such as 0.2.37. Some turn features off for a version that old; others
+  compare it against kitty release gates that mean nothing here.
 - Neovim 0.13 and newer sends the graphics query instead of reading the variable, and the terminal
   answers it. Once your Neovim is 0.13 the variable is only there for older tools.
+
+Why the launcher does not set it for you, and why the per-program form is the one to prefer:
+
+- Programs that see `kitty` stop asking and start assuming the whole kitty feature set. They then
+  send what the launcher does not have: shared-memory image transfer (`t=s`, impossible on
+  Android, so the picture fails instead of falling back to a file; `kitten icat` picks this path
+  when it believes it is local), file transfer over OSC 5113, and kitty's remote-control
+  commands. A program that queries gets a true answer; a program that trusts the name gets a
+  broken feature.
+- The launcher loses its own name. Scripts branch on `TERM_PROGRAM=termux-launcher` to know they
+  are inside the launcher; the tlstore installer does, to skip its download path when it is
+  already home. Exporting `kitty` shell-wide breaks that check and any user script written the
+  same way.
+- Some Neovim, tmux and shell setups switch to kitty-only key handling or kitty's shell
+  integration hooks on the name alone and expect behaviour the launcher only partly matches; the
+  symptom is stuck modifiers or odd prompts rather than a clean fallback.
+- Bug reports lose their terminal. A problem seen here gets filed upstream as "works in kitty",
+  and the launcher is invisible in it.
+
+The per-program wrapper above gives the sniffing program what it wants and leaves everything else
+truthful. Reach for the shell-wide export only if most of what you run is such a program, and
+expect the four points above.
 
 The in-app Help has the same one-line recipe under **Pictures in the terminal**.
 
