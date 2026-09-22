@@ -1,6 +1,8 @@
 package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -53,15 +55,37 @@ public class X11WindowManagerTest {
         return prefix;
     }
 
-    @Test public void termuxIsHandedTheCommandItself() throws IOException {
+    /**
+     * The server ends the display the moment its {@code -xstartup} child exits or is signalled, so
+     * that child is the wrapper on every edition, never the window manager itself.
+     */
+    @Test public void everyEditionIsHandedTheWrapper() throws IOException {
+        File prefix = termuxPrefix();
+        File wrapper = executable(new File(prefix, "bin/termux-x11-wm"));
+
+        assertEquals(wrapper.getPath(), X11WindowManager.xstartup("openbox", prefix, wrapper));
+        assertEquals(wrapper.getPath(),
+            X11WindowManager.xstartup("openbox --config-file /my/rc.xml", prefix, wrapper));
+        // What the wrapper carries: the command itself here, a login line on nix.
+        assertEquals("openbox --config-file " + X11CliInstaller.OPENBOX_RC_PATH,
+            X11WindowManager.startCommand("openbox", prefix));
+        // A command of the user's own is run as written, config file and all.
+        assertEquals("openbox --config-file /my/rc.xml",
+            X11WindowManager.startCommand("openbox --config-file /my/rc.xml", prefix));
+    }
+
+    /**
+     * No wrapper written yet — an install from before there was one on this edition. Termux can
+     * still be handed the command, which is what it always was; the manager is then the server's
+     * own child, and nothing will kill it, because it is the wrapper that records the pid a stop
+     * aims at.
+     */
+    @Test public void termuxWithNoWrapperFallsBackToTheCommandItself() throws IOException {
         File prefix = termuxPrefix();
         File wrapper = new File(prefix, "bin/termux-x11-wm");
 
         assertEquals("openbox --config-file " + X11CliInstaller.OPENBOX_RC_PATH,
             X11WindowManager.xstartup("openbox", prefix, wrapper));
-        // A command of the user's own is run as written, config file and all.
-        assertEquals("openbox --config-file /my/rc.xml",
-            X11WindowManager.xstartup("openbox --config-file /my/rc.xml", prefix, wrapper));
     }
 
     @Test public void nothingConfiguredAndNothingInstalledAreBothNoWindowManager()
@@ -83,9 +107,10 @@ public class X11WindowManagerTest {
         assertEquals(wrapper.getPath(), xstartup);
         assertTrue("the server refuses an argument past about 128 characters",
             X11CliInstaller.WM_SCRIPT_PATH.length() < 128);
-        // The command the wrapper carries is the same one Termux is handed directly.
-        assertEquals("openbox --config-file " + X11CliInstaller.OPENBOX_RC_PATH,
-            X11WindowManager.command("openbox", prefix));
+        // The command the wrapper carries goes through login, which is the whole nix reason for it.
+        assertEquals(new File(prefix, "bin/login").getPath() + " openbox --config-file "
+                + X11CliInstaller.OPENBOX_RC_PATH,
+            X11WindowManager.startCommand("openbox", prefix));
     }
 
     /** No wrapper on disk: the display starts without a manager rather than with a bad argument. */
@@ -103,5 +128,32 @@ public class X11WindowManagerTest {
 
         assertNull(X11WindowManager.xstartup("i3", prefix, wrapper));
         assertEquals(wrapper.getPath(), X11WindowManager.xstartup("openbox", prefix, wrapper));
+    }
+
+    /**
+     * D1: a desktop stops the one pid the launcher's own wrapper wrote down, and nothing else.
+     * No pattern is matched against anything — the display server's own command line carries the
+     * window manager's command as its {@code -xstartup} argument, and a manager the user started
+     * for themselves is never in that file.
+     */
+    @Test public void onlyThePidTheLauncherWroteDownIsStopped() {
+        String stop = X11WindowManager.stopCommand("openbox --config-file "
+            + X11CliInstaller.OPENBOX_RC_PATH);
+        assertNotNull(stop);
+        assertEquals("wm=$(cat '" + X11WindowManager.WM_PID_PATH + "' 2>/dev/null)\n"
+            + "[ -n \"$wm\" ] && kill \"$wm\" 2>/dev/null\n"
+            + "rm -f '" + X11WindowManager.WM_PID_PATH + "'", stop);
+        assertFalse("nothing is matched by name or by command line", stop.contains("pkill"));
+
+        // Any manager the launcher started is ours, however it is configured — the file says so.
+        assertNotNull(X11WindowManager.stopCommand("i3"));
+        assertNull("but there may be no manager at all", X11WindowManager.stopCommand(null));
+    }
+
+    /** An empty pid file — no manager of ours running — kills nothing at all. */
+    @Test public void nothingRecordedMeansNothingIsKilled() {
+        String stop = X11WindowManager.stopCommand("openbox");
+        assertNotNull(stop);
+        assertTrue(stop.contains("[ -n \"$wm\" ] && kill"));
     }
 }

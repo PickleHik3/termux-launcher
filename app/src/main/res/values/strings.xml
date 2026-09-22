@@ -335,6 +335,9 @@
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
     <string name="termux_x11_app_launch_failed">This app could not be opened.</string>
     <string name="termux_x11_app_gone">That app is no longer installed.</string>
+    <string name="termux_x11_session_failed">This desktop could not be opened.</string>
+    <string name="termux_x11_session_replace">Stop %1$s and open %2$s instead?</string>
+    <string name="termux_x11_session_replace_confirm">Open</string>
     <string name="termux_x11_window_unnamed">App</string>
     <string name="settings_x11_autostart_title">Start with the launcher</string>
     <string name="settings_x11_autostart_summary">Start the display whenever the launcher starts.</string>
