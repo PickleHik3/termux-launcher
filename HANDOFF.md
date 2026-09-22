@@ -1,23 +1,18 @@
-# P2 text sizing renderer (feat/text-sizing-draw) - done
+# feat/widget-resize-displace — HANDOFF
 
-## Done
-- `TextBlockGeometry`: block rect, drawn size (s x n/d, 1 when demoted), v/h alignment, baseline,
-  per-row cursor rect, and `selectionCovers` / `cellSelected` - a block's cells take their fill
-  from the anchor cell, which is what highlights the rows under a tall block.
-- `TerminalRenderer`: block cells break the run; `drawRowTextBlocks` / `drawTextBlock` draw each
-  anchor clipped and aligned; cursor covers a block (D2) on both paths and for extra cursors;
-  record loop is compare-then-record for D4; a `Selection` holder replaces the per-row selx pair
-  in the background pass.
-- `RowRenderCache`: `captureTextSizes` (compares the public packed record) and
-  `spreadTextBlockGroups` (D4 B); rows carrying blocks also re-record whenever the selection moves.
-- `TextBlockSelection`: D5, one-row rule - both ends snap to their block's run on its anchor row,
-  put back in stream order over both blocks' corners. A block rectangle cannot be said in a
-  stream selection, so the rows underneath are the renderer's job, not the selection's.
-
-## Next
-- Nothing here. Waydroid re-check of the long-press highlight and of copy is the round's gate.
-
-## Gotchas
-- Snapping an end down to a block's bottom right is what painted a band across the whole row and
-  copied every block on it: a two-row selection is a stream, not a rectangle.
-- Handles stay on the anchor row's cell edges; they are not moved to the block's bottom.
+Done: WidgetEditPolicy.resize costs each candidate rect with the move path's displace(); a
+candidate whose blockers all find a hole is taken and its map returned in Candidate.displaced
+(the "always empty for a resize" doc at :27 is gone). The pane previews it with slideCell and
+commits through commitMove's atomic putRecords batch. Four policy tests + four controller tests.
+In progress: nothing.
+Next: nothing; suite green, ready to merge.
+Gotchas:
+- Two old tests asserted the collision-only behaviour (resizeNeverDisplacesNeighbours,
+  resizeStopsAtNeighborCollision); both replaced, since that behaviour is what the spec changes.
+- endResizeDrag calls commitMove(record, candidate, record.page) rather than duplicating the
+  batch; commitMove was NOT renamed (it sits in the move region the small-fixes phase owns).
+- The full suite runs one test JVM for ~5,590 tests with no maxHeapSize in app/build.gradle, and
+  on this shared box it sits right at the heap cliff: adding Robolectric classes can tip it into
+  OutOfMemoryError in unrelated classes (wall/PaneControlsViewRenderTest). Trimmed the new class
+  to four cases for that reason. `-I <init script with forkEvery = 150>` runs it green in 2m48.
+- No update-deferral calls added anywhere: that is the main session's wiring after the merge.
