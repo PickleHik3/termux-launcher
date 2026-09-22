@@ -63,8 +63,9 @@ What changes and what does not:
 - Programs that gate pictures or the keyboard protocol on the variable start using them. Both work
   here.
 - The XTVERSION reply stays `termux-launcher(version)`, so features that check the real terminal
-  version, such as kitty's text sizing in md-render.nvim, stay off. Nothing pretends to be a kitty
-  release it is not.
+  version stay off; md-render.nvim, for one, enables text sizing only for a kitty version, even
+  though the terminal supports it (see [Text sizing](#text-sizing-osc-66)). Nothing pretends to be
+  a kitty release it is not.
 - `TERM_PROGRAM_VERSION` still carries the launcher's version; a program that reads both will see a
   kitty name with a non-kitty version. That is the one inconsistency this setting introduces.
 - Neovim 0.13 and newer sends the graphics query instead of reading the variable, and the terminal
@@ -152,6 +153,31 @@ Programs can follow the terminal between dark and light instead of guessing from
 
 nvim 0.11, fish 4.3 and tmux 3.6 use these reports to restyle themselves when the terminal's scheme
 changes.
+
+## Text sizing (OSC 66)
+
+`ESC ] 66 ; s=2 ; Heading ESC \` draws "Heading" twice as large, across two rows and twice the
+columns. The keys follow kitty's text sizing protocol: `s` 1 to 7 is the scale and the number of
+rows the text takes; `w` 0 to 7 forces a width in cells before scaling (0 measures the text);
+`n` and `d` draw the text at n/d of the block height, with `v` (0 top, 1 bottom, 2 centre) and
+`h` (0 left, 1 right, 2 centre) placing it inside the block. With `w` unset every character is its
+own block; with `w` set the whole text is one block and anything past `w` cells is cut.
+
+What a program can rely on:
+
+- The cursor moves `s × w` cells to the right on the same row, so the usual detection, writing a
+  `w=2` character and reading the cursor position, answers "supported". No environment variable is
+  involved.
+- Writing over the top-left cell of a block removes the whole block; writing over any other cell
+  blanks that cell. Erase, insert and delete sequences and scrolling inside a region remove every
+  block they touch. A block larger than the screen is discarded.
+- The cursor covers the whole block when it stands on any of its cells. Selecting any part of a
+  block selects all of it, and copying yields its text once.
+- When the pane becomes too narrow for a block, the text is shown at normal size on its first row
+  and grows back when the pane is wide enough again. Rotating the phone keeps blocks whole.
+
+Full-screen programs redraw on resize anyway; the narrow-pane rule matters only for text already in
+the scrollback.
 
 ## Current boundaries
 

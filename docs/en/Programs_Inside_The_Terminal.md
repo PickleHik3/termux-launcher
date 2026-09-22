@@ -49,10 +49,11 @@ Send these and they work. Details and limits live in [Kitty protocols](Terminal_
 | Private mode 2048 | In-band resize reports with cell and pixel sizes |
 | Private mode 2031 | Dark/light theme change notifications |
 | `CSI # P` / `# Q` / `# R` | Push, pop, report the colour palette |
+| OSC 66 | Kitty text sizing: text drawn 2 to 7 times larger across as many rows, a forced cell width, and fractions for sub- and superscripts. Headings in `dawn` |
 | DECSCUSR, SGR 4:3 curly and coloured underlines, focus events, bracketed paste, XTWINOPS 14/16 | As in kitty |
 
-Not there: kitty text sizing (OSC 66), kitty file transfer (OSC 5113), shared-memory image
-transfer (Android has no `shm_open`; fall back to `t=f`).
+Not there: kitty file transfer (OSC 5113), shared-memory image transfer (Android has no
+`shm_open`; fall back to `t=f`).
 
 The shell integration that emits the OSC 133 and OSC 7 marks is written to
 `~/.termux/shell-integration/termux-launcher.{bash,zsh}` on startup; source the one for your shell if
