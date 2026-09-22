@@ -7,6 +7,7 @@ import android.graphics.Outline;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
@@ -169,7 +170,7 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
             Math.round(8 * density), Math.round(16 * density), Math.round(8 * density));
         // The slot is the card's picture of the widget: sized to a template at bind, clipped to the
         // corner the platform gives widget backgrounds, and holding either a host view or a bitmap.
-        FrameLayout slot = new FrameLayout(parent.getContext()); slot.setTag("slot");
+        PreviewSlot slot = new PreviewSlot(parent.getContext()); slot.setTag("slot");
         slot.setClipChildren(true);
         slot.setOutlineProvider(cardOutline(parent.getContext()));
         slot.setClipToOutline(true);
@@ -284,6 +285,9 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
                 }
                 host.setAppWidget(0, item.info);
                 host.updateAppWidget(artwork.remoteViews);
+                // A picture of a widget, not a widget: it says nothing of its own and is not read.
+                host.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+                host.setContentDescription(null);
                 scaleIntoSlot(host, item, cell.template,
                     cell.itemView.getResources().getDisplayMetrics().density);
                 preview.setVisibility(View.GONE);
@@ -342,6 +346,16 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         if (host == null) return;
         if (host.getParent() instanceof ViewGroup) ((ViewGroup) host.getParent()).removeView(host);
         cell.host = null;
+    }
+
+    /**
+     * The slot swallows every touch before its children see it. A preview layout carries the
+     * provider's own clickable views and pending intents, and the card is a card: tapping it adds
+     * the widget. Intercepting without handling leaves the tap to the card itself.
+     */
+    private static final class PreviewSlot extends FrameLayout {
+        PreviewSlot(@NonNull Context context) { super(context); }
+        @Override public boolean onInterceptTouchEvent(MotionEvent event) { return true; }
     }
 
     /**

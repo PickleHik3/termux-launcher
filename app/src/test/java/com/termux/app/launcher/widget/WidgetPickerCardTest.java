@@ -7,6 +7,7 @@ import android.appwidget.AppWidgetProviderInfo;
 import android.content.ComponentName;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Build;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -111,6 +112,34 @@ public class WidgetPickerCardTest {
         ImageView preview = slot.findViewWithTag("preview");
         assertEquals(View.VISIBLE, preview.getVisibility());
         assertNotNull(preview.getDrawable());
+    }
+
+    /**
+     * A preview layout carries the provider's own clickable views. The card must still be the
+     * thing the finger hits, or tapping a widget's own button would add nothing.
+     */
+    @Test public void touchesOnThePreviewBelongToTheCardAndNotToTheProvidersViews() {
+        Harness harness = new Harness(item("Agenda", 4, 2));
+        harness.loader.artwork = WidgetPreviewArtwork.live(WidgetPreviewArtwork.TIER_GENERATED,
+            new RemoteViews(harness.activity.getPackageName(),
+                R.layout.launcher_widget_error_tile));
+        harness.open();
+        ViewGroup slot = (ViewGroup) harness.slotAt(1);
+        final boolean[] childTapped = {false};
+        View trap = new View(harness.activity);
+        trap.setClickable(true);
+        trap.setOnClickListener(view -> childTapped[0] = true);
+        slot.addView(trap, new FrameLayout.LayoutParams(200, 200));
+        slot.measure(View.MeasureSpec.makeMeasureSpec(200, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(200, View.MeasureSpec.EXACTLY));
+        slot.layout(0, 0, 200, 200);
+
+        long now = android.os.SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, 10f, 10f, 0);
+        // Unconsumed, so the event goes on to the card, which is the clickable thing here.
+        assertFalse(slot.dispatchTouchEvent(down));
+        down.recycle();
+        assertFalse(childTapped[0]);
     }
 
     private static AppWidgetHostView hostIn(ViewGroup slot) {
