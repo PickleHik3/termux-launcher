@@ -1,23 +1,29 @@
-# P2 text sizing renderer (feat/text-sizing-draw) - done
+# HANDOFF: feat/widget-small-fixes
 
-## Done
-- `TextBlockGeometry`: block rect, drawn size (s x n/d, 1 when demoted), v/h alignment, baseline,
-  per-row cursor rect, and `selectionCovers` / `cellSelected` - a block's cells take their fill
-  from the anchor cell, which is what highlights the rows under a tall block.
-- `TerminalRenderer`: block cells break the run; `drawRowTextBlocks` / `drawTextBlock` draw each
-  anchor clipped and aligned; cursor covers a block (D2) on both paths and for extra cursors;
-  record loop is compare-then-record for D4; a `Selection` holder replaces the per-row selx pair
-  in the background pass.
-- `RowRenderCache`: `captureTextSizes` (compares the public packed record) and
-  `spreadTextBlockGroups` (D4 B); rows carrying blocks also re-record whenever the selection moves.
-- `TextBlockSelection`: D5, one-row rule - both ends snap to their block's run on its anchor row,
-  put back in stream order over both blocks' corners. A block rectangle cannot be said in a
-  stream selection, so the rows underneath are the renderer's job, not the selection's.
+Done:
+- (4) beginDeferringUpdates/endDeferringUpdates on SafeLauncherAppWidgetHostView, 1000ms
+  auto-release, wired into WidgetPaneController.beginMoveDrag/endMoveDrag only.
+- (6) WidgetCornerPolicy (new, pure) + WidgetCellView wired to it via onLayout/onSizeChanged;
+  respects android:id/background clipToOutline opt-out.
+- (7) LauncherWidgetHostController.onHostSizeCommitted now reads Platform.getOptions(id) (new
+  Platform method, added to AndroidPlatform + WidgetTestFixtures.Platform) and skips the
+  provider write only when the LIVE bundle matches, not the stored one.
+- messageFor's six literal strings moved to strings.xml (widget_unsupported reused as-is,
+  widget_add_busy/widget_configuration_unavailable/widget_storage_failure/widget_add_failed/
+  widget_grid_full added).
 
-## Next
-- Nothing here. Waydroid re-check of the long-press highlight and of copy is the round's gate.
+In progress: nothing left in this phase's scope.
 
-## Gotchas
-- Snapping an end down to a block's bottom right is what painted a band across the whole row and
-  copied every block on it: a two-row selection is a stream, not a rectangle.
-- Handles stay on the anchor row's cell edges; they are not moved to the block's bottom.
+Next: none - contract handed back to the orchestrator for the resize-displace and colour
+phases to build on.
+
+Gotchas:
+- SafeLauncherAppWidgetHostView's timeout uses its own Handler(Looper.getMainLooper()), not
+  View.postDelayed - a mid-drag lift can detach the view from any window, and postDelayed on a
+  detached view only queues until next attach (learned the hard way via a Robolectric idleFor
+  that never fired).
+- WidgetCornerPolicy is a plain pure class but its test needs
+  @RunWith(RobolectricTestRunner.class) anyway: android.graphics.Rect throws "Stub!" on a bare
+  JVM outside Robolectric's shadow.
+- Did not touch resizeDrag/endResizeDrag/WidgetEditPolicy.java (resize-displace phase's) or
+  LauncherWidgetRepository/LauncherWidgetRecord (orientation phase's), per scope.

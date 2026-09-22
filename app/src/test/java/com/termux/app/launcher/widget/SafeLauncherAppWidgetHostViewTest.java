@@ -263,6 +263,59 @@ public class SafeLauncherAppWidgetHostViewTest {
         assertFalse(view.isShowingLocalError());
     }
 
+    @Test public void deferredUpdatesStashOnlyTheLatestAndApplyOnceOnEnd() {
+        List<String> failures = new ArrayList<>();
+        SafeLauncherAppWidgetHostView view = view(failures);
+        int[] applies = {0};
+        view.setBoundaryProbeForTests(phase -> { if ("update".equals(phase)) applies[0]++; });
+
+        view.updateAppWidget(new RemoteViews(view.getContext().getPackageName(),
+            android.R.layout.simple_list_item_1));
+        assertEquals(1, applies[0]);
+
+        view.beginDeferringUpdates();
+        assertTrue(view.isDeferringUpdatesForTests());
+        view.updateAppWidget(new RemoteViews(view.getContext().getPackageName(), 0));
+        view.updateAppWidget(new RemoteViews(view.getContext().getPackageName(),
+            android.R.layout.simple_list_item_1));
+        assertEquals("deferred pushes must not reach the framework", 1, applies[0]);
+
+        view.endDeferringUpdates();
+        assertFalse(view.isDeferringUpdatesForTests());
+        assertEquals("only the latest stashed update is applied, once", 2, applies[0]);
+        assertFalse(view.isShowingLocalError());
+    }
+
+    @Test public void endingADeferralWithNothingStashedAppliesNothing() {
+        List<String> failures = new ArrayList<>();
+        SafeLauncherAppWidgetHostView view = view(failures);
+        int[] applies = {0};
+        view.setBoundaryProbeForTests(phase -> { if ("update".equals(phase)) applies[0]++; });
+
+        view.beginDeferringUpdates();
+        view.endDeferringUpdates();
+        assertEquals(0, applies[0]);
+        assertFalse(view.isDeferringUpdatesForTests());
+    }
+
+    @Test public void deferralReleasesAutomaticallyAfterItsTimeoutSoAGestureCanNeverFreezeIt() {
+        List<String> failures = new ArrayList<>();
+        SafeLauncherAppWidgetHostView view = view(failures);
+        int[] applies = {0};
+        view.setBoundaryProbeForTests(phase -> { if ("update".equals(phase)) applies[0]++; });
+
+        view.beginDeferringUpdates();
+        view.updateAppWidget(new RemoteViews(view.getContext().getPackageName(),
+            android.R.layout.simple_list_item_1));
+        assertEquals(0, applies[0]);
+
+        Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(1001, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertFalse("a dropped gesture must not freeze the widget past the timeout",
+            view.isDeferringUpdatesForTests());
+        assertEquals(1, applies[0]);
+    }
+
     private static SafeLauncherAppWidgetHostView boundView(List<String> failures) {
         SafeLauncherAppWidgetHostView view = view(failures);
         view.setAppWidget(7, WidgetTestFixtures.info(false));

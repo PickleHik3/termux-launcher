@@ -41,6 +41,28 @@ public class LauncherWidgetOptionsIntegrationTest {
         assertEquals(1, platform.optionUpdates);
     }
 
+    @Test public void liveOptionsDivergingFromTheStoredCopyStillForcesTheWrite() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        LauncherWidgetRepository repository = WidgetTestFixtures.repository();
+        repository.putRecord(new LauncherWidgetRecord(6, WidgetTestFixtures.PROVIDER, 0,
+            LauncherWidgetRecord.State.ACTIVE, null, null));
+        WidgetTestFixtures.Platform platform = new WidgetTestFixtures.Platform(activity);
+        platform.info.put(6, WidgetTestFixtures.info(false));
+        LauncherWidgetHostController controller = new LauncherWidgetHostController(activity,
+            repository, platform);
+        assertTrue(controller.onHostSizeCommitted(6, 300, 180, Configuration.ORIENTATION_PORTRAIT));
+        assertEquals(1, platform.optionUpdates);
+
+        // The provider process's own options reset behind our back (a reinstall, an update) while
+        // our stored copy - and the dp size this next commit computes - stayed the same. Comparing
+        // against the stored copy alone would wrongly call this an unchanged, skippable write.
+        platform.liveOptions = new android.os.Bundle();
+
+        assertTrue("a live bundle that no longer matches must still be written",
+            controller.onHostSizeCommitted(6, 300, 180, Configuration.ORIENTATION_PORTRAIT));
+        assertEquals(2, platform.optionUpdates);
+    }
+
     @Test public void synchronousProviderFailureRestoresPriorCommittedOptions() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         LauncherWidgetRepository repository = WidgetTestFixtures.repository();

@@ -60,6 +60,8 @@ final class WidgetTestFixtures {
         int lastConfigureId;
         int lastConfigureRequestCode;
         int optionUpdates;
+        /** What a real device would hand back from {@code getAppWidgetOptions} right now. */
+        Bundle liveOptions;
         boolean feature = true;
         boolean directBind;
         AppWidgetProviderInfo directlyBoundInfo;
@@ -121,7 +123,9 @@ final class WidgetTestFixtures {
         @Override public void updateOptions(int id, Bundle options) {
             if (optionFailure != null) throw optionFailure;
             optionUpdates++; lastOptions = new Bundle(options);
+            liveOptions = new Bundle(options);
         }
+        @Override public Bundle getOptions(int id) { return liveOptions; }
         @Override public long profileSerial(UserHandle profile) { return 0; }
         @Override public boolean configureActivityAvailable(ComponentName configure,
                                                             UserHandle profile) {
