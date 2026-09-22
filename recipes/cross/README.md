@@ -11,11 +11,12 @@ NDK plus a sysroot assembled with `dpkg-deb -x`.
 |---|---|---|
 | `termux-sysroot.sh` | `sysroot/` from published `.deb`s, from any edition's repository | curl, python3, dpkg-deb or ar+bsdtar |
 | `build-fastfetch.sh` | patched Fastfetch with animated Kitty graphics | NDK + CMake + Ninja |
+| `build-dawn.sh` | patched dawn, the markdown writing pad | NDK + CMake |
 | `build-sigye.sh` | patched Sigye clock | rustup `aarch64-linux-android` + NDK |
 | `build-kitten.sh` | kitty's standalone `kitten` client | Go + python3 |
 
-`fastfetch` is built once per launcher edition — see below. If you only want the binaries, they are
-published for `aarch64` at
+`fastfetch` and `dawn` are built once per launcher edition — see below. If you only want the
+binaries, they are published for `aarch64` at
 [termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries) and the
 `tlstore` catalog installs them with a pinned digest. Build them yourself when you want to audit
 the result, target another prefix, or move a pin.
@@ -23,7 +24,9 @@ the result, target another prefix, or move a pin.
 ```sh
 cd /some/scratch/dir
 /path/to/recipes/cross/termux-sysroot.sh
+/path/to/recipes/cross/termux-sysroot.sh libcurl openssl zlib libnghttp2   # dawn
 /path/to/recipes/cross/build-fastfetch.sh
+/path/to/recipes/cross/build-dawn.sh
 /path/to/recipes/cross/build-sigye.sh
 /path/to/recipes/cross/build-kitten.sh
 ```
@@ -34,11 +37,13 @@ same commits as the on-device recipes and carry the same patches.
 ## One build per launcher edition
 
 The editions install under different package names, so their prefixes differ:
-`/data/data/com.termux/files/usr` and `/data/data/io.vaj.tl/files/usr`. That matters for `fastfetch`
-alone: it links `libandroid-glob`, `dlopen`s the image libraries through its own `RUNPATH`, and gets
-its home directory and login shell from `termux-pwd-polyfill.h`. All three are fixed at link time,
-so a build for one prefix does not start under another — the linker cannot find
-`libandroid-glob.so` and the process dies before `main`.
+`/data/data/com.termux/files/usr` and `/data/data/io.vaj.tl/files/usr`. That matters for two of
+these. `fastfetch` links `libandroid-glob`, `dlopen`s the image libraries through its own `RUNPATH`,
+and gets its home directory and login shell from `termux-pwd-polyfill.h`. All three are fixed at
+link time, so a build for one prefix does not start under another — the linker cannot find
+`libandroid-glob.so` and the process dies before `main`. `dawn` is the same story with one library:
+it needs `libcurl`, Termux removes `LD_LIBRARY_PATH` on Android 7+, and so the `RUNPATH` is the only
+thing that finds it.
 
 Build the other editions by pointing both scripts at that edition's repository and prefix. The
 sysroot has to come from the edition's own repository rather than a relocated copy of another,
@@ -50,11 +55,14 @@ TL_SYSROOT=$PWD/sysroot-vaj TL_CACHE=$PWD/debs-vaj \
 TL_SYSROOT=$PWD/sysroot-vaj TL_OUT=$PWD/out-vaj \
     TERMUX_PREFIX=/data/data/io.vaj.tl/files/usr \
     TERMUX_HOME=/data/data/io.vaj.tl/files/home ./build-fastfetch.sh
+TL_SYSROOT=$PWD/sysroot-vaj TL_OUT=$PWD/out-vaj \
+    TERMUX_PREFIX=/data/data/io.vaj.tl/files/usr ./build-dawn.sh
 ```
 
-The result is uploaded as `fastfetch-<package name>-aarch64` (`fastfetch-io.vaj.tl-aarch64`), beside
-the unsuffixed `com.termux` asset. The tlstore catalog carries one row per edition and picks between
-them by `$PREFIX`, skipping the item with a build hint for a prefix nothing is published for.
+Each result is uploaded as `<tool>-<package name>-aarch64` (`fastfetch-io.vaj.tl-aarch64`,
+`dawn-io.vaj.tl-aarch64`), beside the unsuffixed `com.termux` asset. The tlstore catalog carries one
+row per edition and picks between them by `$PREFIX`, skipping the item with a build hint for a
+prefix nothing is published for.
 
 `sigye` and `kitten` are prefix-independent — no `RUNPATH`, no absolute prefix anywhere in either
 binary — so one build of each serves every edition.
