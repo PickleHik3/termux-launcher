@@ -42,6 +42,15 @@ public final class X11WindowManager {
      * launcher has on it. In the prefix's temporary directory, which the system empties at boot;
      * the wrapper takes the file away again as soon as the manager it names is gone.
      */
+    /**
+     * How many tenths of a second a desktop waits for the manager to be up before giving up on
+     * standing it down. Fifteen seconds: a display that is starting has a server to bring up, a
+     * wrapper to exec and a manager to launch, all on a phone that may be doing something else,
+     * and the cost of being too quick is the fault this whole wait exists to prevent. Nothing
+     * waits this long in the ordinary case — the loop ends the moment the manager answers.
+     */
+    @VisibleForTesting static final int AWAIT_MANAGER_TRIES = 150;
+
     public static final String WM_PID_PATH =
         TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/termux-x11-wm.pid";
 
@@ -94,8 +103,41 @@ public final class X11WindowManager {
     @Nullable
     public static String stopCommand(@Nullable String command) {
         if (command == null) return null;
+        return stopCommand(command, false);
+    }
+
+    /**
+     * {@link #stopCommand(String)}, told whether the launcher has just started the display itself.
+     *
+     * <p>That is the whole of the difference, and it was measured rather than guessed. Tapping a
+     * desktop with no display running starts one, and the launch follows the server reporting
+     * itself up — which is <em>before</em> the server has forked the wrapper that starts the
+     * manager and writes its pid down. On pong (2026-09-22) the stop read nothing, our openbox
+     * lived, xfwm4 found the screen taken and refused, and XFCE came up under the launcher's
+     * maximise-everything rule: exactly what D1 exists to prevent. The pid file's own timestamp
+     * showed it written after the stop had already given up.
+     *
+     * <p>So the wait is for a manager that is <em>running</em>, not merely for a file — a file can
+     * be there and name a process that has gone — and it is only spent on the path that has
+     * something to wait for. When the display was already up, the file is either there, and the
+     * loop ends on its first look, or there is genuinely no manager of ours to stop, and waiting
+     * could only ever delay the desktop the user asked for.
+     */
+    @Nullable
+    public static String stopCommand(@Nullable String command, boolean displayJustStarted) {
+        if (command == null) return null;
         String pidFile = ProotDistro.singleQuote(WM_PID_PATH);
-        return "wm=$(cat " + pidFile + " 2>/dev/null)\n"
+        String read = "wm=$(cat " + pidFile + " 2>/dev/null)\n";
+        String wait = !displayJustStarted ? "" :
+            "i=0\n"
+            + "while [ \"$i\" -lt " + AWAIT_MANAGER_TRIES + " ]; do\n"
+            + read
+            + "[ -n \"$wm\" ] && kill -0 \"$wm\" 2>/dev/null && break\n"
+            + "sleep 0.1\n"
+            + "i=$((i+1))\n"
+            + "done\n";
+        return wait
+            + read
             + "[ -n \"$wm\" ] && kill \"$wm\" 2>/dev/null\n"
             + "rm -f " + pidFile;
     }

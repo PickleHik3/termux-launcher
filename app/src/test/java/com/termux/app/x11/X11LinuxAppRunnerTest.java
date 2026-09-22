@@ -189,12 +189,33 @@ public class X11LinuxAppRunnerTest {
     }
 
     @Test public void theWindowManagerComesBackOnTheSameDisplayAndSaysWhatItIs() {
-        // The shell execs into the manager, so $$ is the manager's own pid — which is the one and
-        // only thing the next desktop will stop.
+        // Started beside the shell rather than exec'd into, so the script is still there to tell a
+        // real start from a refusal and to take its own pid file away afterwards.
         assertEquals("export DISPLAY=:1\n"
-                + "echo $$ > '" + X11WindowManager.WM_PID_PATH + "'\n"
-                + "exec openbox --config-file /rc.xml\n",
+                + "openbox --config-file /rc.xml &\n"
+                + "wm=$!\n"
+                + "sleep 1\n"
+                + "kill -0 \"$wm\" 2>/dev/null || exit 0\n"
+                + "echo \"$wm\" > '" + X11WindowManager.WM_PID_PATH + "'\n"
+                + "wait \"$wm\"\n"
+                + "[ \"$(cat '" + X11WindowManager.WM_PID_PATH + "' 2>/dev/null)\" = \"$wm\" ]"
+                + " && rm -f '" + X11WindowManager.WM_PID_PATH + "'\n",
             X11LinuxAppRunner.windowManagerScript("openbox --config-file /rc.xml", ":1"));
+    }
+
+    /**
+     * The safety net's whole basis: a manager that finds the screen taken must leave the pid file
+     * alone. Writing it would name a process that has already gone, and the cleanup would then
+     * take away the file naming the manager that really is running — so the next desktop would
+     * have nothing to stop and would land right back in the fault this guards against.
+     */
+    @Test public void aRefusedWindowManagerNeverTouchesThePidFile() {
+        String script = X11LinuxAppRunner.windowManagerScript("openbox", ":0");
+
+        int refusal = script.indexOf("kill -0 \"$wm\" 2>/dev/null || exit 0");
+        int claim = script.indexOf("echo \"$wm\" > ");
+        assertTrue("it has to test whether the manager survived", refusal > 0);
+        assertTrue("and the test has to come before the claim", refusal < claim);
     }
 
     /** A container fixture, read the way the launcher reads a real one. */
