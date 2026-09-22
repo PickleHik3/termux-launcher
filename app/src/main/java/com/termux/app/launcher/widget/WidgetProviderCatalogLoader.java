@@ -8,8 +8,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
-import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.Rect;
 import android.appwidget.AppWidgetHostView;
@@ -20,6 +18,7 @@ import android.os.Process;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.LruCache;
+import android.widget.RemoteViews;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -32,10 +31,12 @@ import com.termux.app.launcher.icon.HeapBudget;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -62,7 +63,7 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
         void onCatalog(long generation, @NonNull List<WidgetAppGroup> groups);
     }
     public interface PreviewCallback {
-        void onPreview(@NonNull WidgetProviderItem item, @Nullable Drawable preview);
+        void onPreview(@NonNull WidgetProviderItem item, @Nullable WidgetPreviewArtwork artwork);
     }
     interface Boundary {
         @NonNull List<UserHandle> profiles();
@@ -73,6 +74,18 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
         @Nullable Drawable appIcon(@NonNull AppWidgetProviderInfo info);
         @Nullable Drawable providerIcon(@NonNull AppWidgetProviderInfo info);
         @Nullable Drawable preview(@NonNull AppWidgetProviderInfo info);
+        /** Whether the provider says it has generated a home-screen preview. API 35 and up. */
+        default boolean offersGeneratedPreview(@NonNull AppWidgetProviderInfo info) {
+            return false;
+        }
+        /** Tier 1: the provider's generated home-screen preview. Null where the platform has none. */
+        @Nullable default RemoteViews generatedPreview(@NonNull AppWidgetProviderInfo info) {
+            return null;
+        }
+        /** Tier 2: the provider's declared {@code previewLayout}. Null where it declares none. */
+        @Nullable default RemoteViews previewLayout(@NonNull AppWidgetProviderInfo info) {
+            return null;
+        }
         boolean enabled(@NonNull AppWidgetProviderInfo info);
         @NonNull default Rect defaultPadding(@NonNull AppWidgetProviderInfo info) {
             return new Rect();
@@ -84,15 +97,18 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
     private static final int PREVIEW_HEAP_DIVISOR = 32;
     private static final int PREVIEW_MIN_BYTES = 2 * 1024 * 1024;
     private static final int PREVIEW_MAX_BYTES = 8 * 1024 * 1024;
-    /** Held for a provider that has no preview, so the miss is not re-queried on every bind. */
-    private static final Drawable NO_PREVIEW = new ColorDrawable(Color.TRANSPARENT);
+    /** {@code AppWidgetManager.getWidgetPreview} and {@code generatedPreviewCategories}. */
+    private static final int GENERATED_PREVIEW_SDK = 35;
     private final Boundary boundary;
     private final Executor worker;
     private final Handler main;
     private final Resources resources;
+    private final int sdkInt;
     private final int previewExtentPx;
     // Main-thread only, like the catalog cache below.
-    private final LruCache<String, Drawable> previews;
+    private final LruCache<String, WidgetPreviewArtwork> previews;
+    // Providers whose live preview would not inflate: asked for a bitmap from here on.
+    private final Set<String> demoted = new HashSet<>();
     private long generation;
     // Session-lifetime catalog cache: reopening the picker must not re-query AppWidgetManager.
     // All cache state is main-thread only; packageGeneration keeps a build that raced an
@@ -109,15 +125,21 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
 
     WidgetProviderCatalogLoader(Boundary boundary, Executor worker, Handler main,
                                 Resources resources, int previewBudgetBytes) {
+        this(boundary, worker, main, resources, previewBudgetBytes, Build.VERSION.SDK_INT);
+    }
+
+    WidgetProviderCatalogLoader(Boundary boundary, Executor worker, Handler main,
+                                Resources resources, int previewBudgetBytes, int sdkInt) {
         this.boundary = boundary;
         this.worker = worker;
         this.main = main;
         this.resources = resources;
-        this.previewExtentPx = Math.max(1, Math.round(
-            WidgetPickerAdapter.PREVIEW_DP * resources.getDisplayMetrics().density));
-        this.previews = new LruCache<String, Drawable>(previewBudgetBytes) {
-            @Override protected int sizeOf(String key, Drawable value) {
-                return DrawablePixels.heldBytes(value);
+        this.sdkInt = sdkInt;
+        this.previewExtentPx = WidgetPickerCardTemplate.largest()
+            .extentPx(resources.getDisplayMetrics().density);
+        this.previews = new LruCache<String, WidgetPreviewArtwork>(previewBudgetBytes) {
+            @Override protected int sizeOf(String key, WidgetPreviewArtwork value) {
+                return value.heldBytes();
             }
         };
     }
@@ -157,29 +179,69 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
     public void invalidate() {
         packageGeneration++;
         cachedGroups = null; cachedMetrics = null;
+        demoted.clear();
         releasePreviews();
     }
 
     /**
-     * Resolves the item's artwork off the main thread when the store does not hold it — the
-     * preview, or the provider's own icon when it offers no preview — while a held one (including
-     * a remembered "nothing to show") answers synchronously. Not generation-gated: a late arrival
-     * is still correct data and callers guard their views by item identity.
+     * Resolves the item's artwork off the main thread when the store does not hold it, walking the
+     * platform's ladder — generated preview, declared preview layout, then the bitmap this
+     * launcher has always drawn — while a held one (including a remembered "nothing to show")
+     * answers synchronously. Not generation-gated: a late arrival is still correct data and
+     * callers guard their views by item identity.
+     *
+     * <p>Only the resolution runs off the main thread. Constructing {@link RemoteViews} inflates
+     * nothing; the card applies them to a host view on the main thread, where views belong.
      */
     @Override
     public void loadPreview(@NonNull WidgetProviderItem item, @NonNull PreviewCallback callback) {
         String key = item.previewKey();
-        Drawable held = previews.get(key);
-        if (held != null) { callback.onPreview(item, held == NO_PREVIEW ? null : held); return; }
+        WidgetPreviewArtwork held = previews.get(key);
+        if (held != null) { callback.onPreview(item, held.isEmpty() ? null : held); return; }
+        final boolean flatOnly = demoted.contains(key);
+        final int extentPx = WidgetPickerCardTemplate.forSpan(item.columnSpan, item.rowSpan)
+            .extentPx(resources.getDisplayMetrics().density);
         worker.execute(() -> {
-            Drawable artwork = safePreview(item.info);
-            if (artwork == null) artwork = safeProviderIcon(item.info);
-            Drawable preview = DrawablePixels.shrink(resources, artwork, previewExtentPx);
+            WidgetPreviewArtwork artwork = resolveArtwork(item.info, flatOnly, extentPx);
             main.post(() -> {
-                previews.put(key, preview == null ? NO_PREVIEW : preview);
-                callback.onPreview(item, preview);
+                previews.put(key, artwork);
+                callback.onPreview(item, artwork.isEmpty() ? null : artwork);
             });
         });
+    }
+
+    /**
+     * The card could not inflate what this provider offered. It is demoted to the bitmap tier for
+     * the rest of the session and its held artwork dropped, so the next bind asks for something
+     * that can be drawn instead of failing again.
+     */
+    @Override
+    public void notePreviewRenderFailed(@NonNull WidgetProviderItem item) {
+        String key = item.previewKey();
+        if (demoted.add(key)) previews.remove(key);
+    }
+
+    /** The platform's documented precedence, each rung falling through to the next on any failure. */
+    @NonNull private WidgetPreviewArtwork resolveArtwork(@NonNull AppWidgetProviderInfo info,
+                                                         boolean flatOnly, int extentPx) {
+        if (!flatOnly) {
+            if (sdkInt >= GENERATED_PREVIEW_SDK && safeOffersGeneratedPreview(info)) {
+                RemoteViews generated = safeGeneratedPreview(info);
+                if (generated != null) {
+                    return WidgetPreviewArtwork.live(WidgetPreviewArtwork.TIER_GENERATED, generated);
+                }
+            }
+            if (sdkInt >= Build.VERSION_CODES.S) {
+                RemoteViews declared = safePreviewLayout(info);
+                if (declared != null) {
+                    return WidgetPreviewArtwork.live(WidgetPreviewArtwork.TIER_PREVIEW_LAYOUT,
+                        declared);
+                }
+            }
+        }
+        Drawable artwork = safePreview(info);
+        if (artwork == null) artwork = safeProviderIcon(info);
+        return WidgetPreviewArtwork.image(DrawablePixels.shrink(resources, artwork, extentPx));
     }
 
     @Override
@@ -314,10 +376,24 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
         try { return boundary.appIcon(info); } catch (RuntimeException exception) { return null; }
     }
     @Nullable private Drawable safeProviderIcon(AppWidgetProviderInfo info) {
-        try { return boundary.providerIcon(info); } catch (RuntimeException exception) { return null; }
+        try { return boundary.providerIcon(info); }
+        catch (RuntimeException | LinkageError exception) { return null; }
     }
     @Nullable private Drawable safePreview(AppWidgetProviderInfo info) {
-        try { return boundary.preview(info); } catch (RuntimeException exception) { return null; }
+        try { return boundary.preview(info); }
+        catch (RuntimeException | LinkageError exception) { return null; }
+    }
+    private boolean safeOffersGeneratedPreview(AppWidgetProviderInfo info) {
+        try { return boundary.offersGeneratedPreview(info); }
+        catch (RuntimeException | LinkageError exception) { return false; }
+    }
+    @Nullable private RemoteViews safeGeneratedPreview(AppWidgetProviderInfo info) {
+        try { return boundary.generatedPreview(info); }
+        catch (RuntimeException | LinkageError exception) { return null; }
+    }
+    @Nullable private RemoteViews safePreviewLayout(AppWidgetProviderInfo info) {
+        try { return boundary.previewLayout(info); }
+        catch (RuntimeException | LinkageError exception) { return null; }
     }
 
     private static final class MutableGroup {
@@ -374,6 +450,28 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
         @Override public Drawable preview(AppWidgetProviderInfo info) {
             return info.loadPreviewImage(context,
                 context.getResources().getDisplayMetrics().densityDpi);
+        }
+        /**
+         * {@code generatedPreviewCategories} arrived in API 35, so reading it off an older
+         * platform is a {@code NoSuchFieldError} rather than a missing method; the loader catches
+         * it along with everything else this rung can throw.
+         */
+        @Override public boolean offersGeneratedPreview(AppWidgetProviderInfo info) {
+            return (info.generatedPreviewCategories
+                & AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN) != 0;
+        }
+        @Override public RemoteViews generatedPreview(AppWidgetProviderInfo info) {
+            if (widgets == null) return null;
+            return widgets.getWidgetPreview(info.provider, info.getProfile(),
+                AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN);
+        }
+        /**
+         * The layout is resolved in this process, which is the same hack every launcher makes: the
+         * platform offers no way to render another profile's preview layout.
+         */
+        @Override public RemoteViews previewLayout(AppWidgetProviderInfo info) {
+            if (info.previewLayout == 0) return null;
+            return new RemoteViews(info.provider.getPackageName(), info.previewLayout);
         }
         @Override public boolean enabled(AppWidgetProviderInfo info) {
             try {

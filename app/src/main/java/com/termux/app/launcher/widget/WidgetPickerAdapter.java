@@ -1,10 +1,16 @@
 package com.termux.app.launcher.widget;
 
+import android.appwidget.AppWidgetHostView;
+import android.content.Context;
 import android.content.res.Resources;
+import android.graphics.Outline;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
+import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -35,14 +41,17 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
     public interface Listener { void onProviderSelected(@NonNull WidgetProviderItem item); }
     public interface FitPredicate { boolean canFit(@NonNull WidgetProviderItem item); }
     public interface PreviewLoader {
-        /** Resolves the card's artwork: the provider's preview, or its icon when it has none. */
+        /**
+         * Resolves the card's artwork: a live preview where the provider offers one, otherwise its
+         * preview bitmap, otherwise its icon.
+         */
         void loadPreview(@NonNull WidgetProviderItem item,
                          @NonNull WidgetProviderCatalogLoader.PreviewCallback callback);
+        /** This provider's live preview would not inflate; give the card a flat one from now on. */
+        default void notePreviewRenderFailed(@NonNull WidgetProviderItem item) { }
         /** The rows are gone, so is every preview that was held for them. */
         void releasePreviews();
     }
-    /** Edge of the preview slot on a provider card; previews are never held larger than this. */
-    static final int PREVIEW_DP = 56;
     private static final int HEADER = 0;
     private static final int PROVIDER = 1;
     private final ArrayList<WidgetAppGroup> catalog = new ArrayList<>();
@@ -158,10 +167,19 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         card.setOrientation(LinearLayout.HORIZONTAL); card.setGravity(Gravity.CENTER_VERTICAL);
         card.setMinimumHeight(Math.round(72 * density)); card.setPadding(Math.round(28 * density),
             Math.round(8 * density), Math.round(16 * density), Math.round(8 * density));
+        // The slot is the card's picture of the widget: sized to a template at bind, clipped to the
+        // corner the platform gives widget backgrounds, and holding either a host view or a bitmap.
+        FrameLayout slot = new FrameLayout(parent.getContext()); slot.setTag("slot");
+        slot.setClipChildren(true);
+        slot.setOutlineProvider(cardOutline(parent.getContext()));
+        slot.setClipToOutline(true);
         ImageView preview = new ImageView(parent.getContext()); preview.setTag("preview");
-        preview.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        card.addView(preview, new LinearLayout.LayoutParams(Math.round(PREVIEW_DP * density),
-            Math.round(PREVIEW_DP * density)));
+        preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        slot.addView(preview, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT));
+        WidgetPickerCardTemplate initial = WidgetPickerCardTemplate.forSpan(1, 1);
+        card.addView(slot, new LinearLayout.LayoutParams(initial.widthPx(density),
+            initial.heightPx(density)));
         LinearLayout labels = new LinearLayout(parent.getContext()); labels.setOrientation(LinearLayout.VERTICAL);
         TextView title = new TextView(parent.getContext()); title.setTag("title");
         TextView span = new TextView(parent.getContext()); span.setTag("span");
@@ -176,19 +194,18 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         cell.bound = row;
         if (row instanceof Section) { bindSection(holder, (Section) row); return; }
         WidgetProviderItem item = (WidgetProviderItem) row;
-        ImageView preview = holder.itemView.findViewWithTag("preview");
         TextView title = holder.itemView.findViewWithTag("title");
         TextView span = holder.itemView.findViewWithTag("span");
-        // The gallery glyph stands in while the preview or icon resolves.
-        applyPreview(preview, null);
-        if (previews != null) {
-            previews.loadPreview(item, (loaded, drawable) -> {
-                // The holder may have been recycled onto another row by the time this lands.
-                if (cell.bound == loaded) {
-                    applyPreview(cell.itemView.findViewWithTag("preview"), drawable);
-                }
-            });
-        }
+        WidgetPickerCardTemplate template = WidgetPickerCardTemplate.forSpan(item.columnSpan,
+            item.rowSpan);
+        cell.template = template;
+        applySlotSize(cell, template);
+        // The gallery glyph stands in while the artwork resolves.
+        releaseHost(cell);
+        ImageView slotImage = holder.itemView.findViewWithTag("preview");
+        slotImage.setVisibility(View.VISIBLE);
+        applyPreview(slotImage, null);
+        requestArtwork(cell, item, true);
         title.setText(item.label);
         String spanText = item.columnSpan + " × " + item.rowSpan + " cells";
         if (item.minimumColumnSpan > 0 && item.minimumRowSpan > 0
@@ -227,6 +244,134 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         holder.itemView.setOnClickListener(view -> toggleSection(group));
     }
 
+    /** A recycled card gives its host view back before the holder is aimed at another provider. */
+    @Override public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
+        super.onViewRecycled(holder);
+        if (holder instanceof Holder) { releaseHost((Holder) holder); ((Holder) holder).bound = null; }
+    }
+
+    private void requestArtwork(@NonNull Holder cell, @NonNull WidgetProviderItem item,
+                                boolean allowRetry) {
+        if (previews == null) return;
+        previews.loadPreview(item, (loaded, artwork) -> {
+            // The holder may have been recycled onto another row by the time this lands.
+            if (cell.bound != loaded) return;
+            applyArtwork(cell, item, artwork, allowRetry);
+        });
+    }
+
+    /**
+     * A live preview becomes a real host view with no bound id; anything else stays a bitmap. A
+     * provider whose preview will not inflate is reported once and asked again for a flat one —
+     * the retry cannot come back live, so it cannot loop.
+     */
+    private void applyArtwork(@NonNull Holder cell, @NonNull WidgetProviderItem item,
+                              @Nullable WidgetPreviewArtwork artwork, boolean allowRetry) {
+        ImageView preview = cell.itemView.findViewWithTag("preview");
+        if (artwork != null && artwork.isLive()) {
+            FrameLayout slot = cell.itemView.findViewWithTag("slot");
+            try {
+                AppWidgetHostView host = cell.host;
+                if (host == null) {
+                    host = new AppWidgetHostView(cell.itemView.getContext());
+                    cell.host = host;
+                }
+                if (host.getParent() != slot) {
+                    if (host.getParent() instanceof ViewGroup) {
+                        ((ViewGroup) host.getParent()).removeView(host);
+                    }
+                    slot.addView(host, 0);
+                }
+                host.setAppWidget(0, item.info);
+                host.updateAppWidget(artwork.remoteViews);
+                scaleIntoSlot(host, item, cell.template,
+                    cell.itemView.getResources().getDisplayMetrics().density);
+                preview.setVisibility(View.GONE);
+                return;
+            } catch (RuntimeException | LinkageError failure) {
+                releaseHost(cell);
+                if (previews != null) previews.notePreviewRenderFailed(item);
+                preview.setVisibility(View.VISIBLE);
+                applyPreview(preview, null);
+                if (allowRetry) requestArtwork(cell, item, false);
+                return;
+            }
+        }
+        releaseHost(cell);
+        preview.setVisibility(View.VISIBLE);
+        applyPreview(preview, artwork == null ? null : artwork.image);
+    }
+
+    /** The card is the template's size whatever the artwork turns out to be. */
+    private static void applySlotSize(@NonNull Holder cell,
+                                      @NonNull WidgetPickerCardTemplate template) {
+        View slot = cell.itemView.findViewWithTag("slot");
+        if (slot == null) return;
+        float density = cell.itemView.getResources().getDisplayMetrics().density;
+        ViewGroup.LayoutParams params = slot.getLayoutParams();
+        int width = template.widthPx(density);
+        int height = template.heightPx(density);
+        if (params.width != width || params.height != height) {
+            params.width = width; params.height = height; slot.setLayoutParams(params);
+        }
+    }
+
+    /**
+     * The host view is laid out at the widget's own pixel size and then scaled into the card, so a
+     * preview layout written for a 4x2 widget is not asked to fit a 4x2 card's worth of dp.
+     */
+    private static void scaleIntoSlot(@NonNull AppWidgetHostView host,
+                                      @NonNull WidgetProviderItem item,
+                                      @NonNull WidgetPickerCardTemplate template, float density) {
+        int slotWidth = template.widthPx(density);
+        int slotHeight = template.heightPx(density);
+        int naturalWidth = Math.max(1, item.info.minWidth);
+        int naturalHeight = Math.max(1, item.info.minHeight);
+        float scale = Math.min(slotWidth / (float) naturalWidth,
+            slotHeight / (float) naturalHeight);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(naturalWidth, naturalHeight);
+        params.leftMargin = Math.round((slotWidth - naturalWidth * scale) / 2f);
+        params.topMargin = Math.round((slotHeight - naturalHeight * scale) / 2f);
+        host.setLayoutParams(params);
+        host.setPivotX(0f); host.setPivotY(0f);
+        host.setScaleX(scale); host.setScaleY(scale);
+    }
+
+    private static void releaseHost(@NonNull Holder cell) {
+        AppWidgetHostView host = cell.host;
+        if (host == null) return;
+        if (host.getParent() instanceof ViewGroup) ((ViewGroup) host.getParent()).removeView(host);
+        cell.host = null;
+    }
+
+    /**
+     * The corner a widget wears, never more than a quarter of the card — a 1x1 card at the
+     * platform's full radius would read as a circle.
+     */
+    @NonNull private static ViewOutlineProvider cardOutline(@NonNull Context context) {
+        final float systemRadius = systemWidgetRadius(context);
+        return new ViewOutlineProvider() {
+            @Override public void getOutline(View view, Outline outline) {
+                float radius = Math.min(systemRadius,
+                    Math.min(view.getWidth(), view.getHeight()) * 0.25f);
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+            }
+        };
+    }
+
+    private static float systemWidgetRadius(@NonNull Context context) {
+        float density = context.getResources().getDisplayMetrics().density;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                return context.getResources().getDimension(
+                    android.R.dimen.system_app_widget_background_radius);
+            } catch (Resources.NotFoundException ignored) {
+                // Fall through to the fixed radius.
+            }
+        }
+        return 16f * density;
+    }
+
     @Override public int getItemCount() { return rows.size(); }
     @Nullable public WidgetProviderItem providerAt(int adapterPosition) {
         Object value = rows.get(adapterPosition);
@@ -236,9 +381,15 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         Object value = rows.get(adapterPosition);
         return value instanceof Section ? ((Section) value).group : null;
     }
+    /** Artwork fills the card; the stand-in glyph is left at its own size in the middle of it. */
     private static void applyPreview(@NonNull ImageView view, @Nullable Drawable preview) {
-        if (preview != null) view.setImageDrawable(preview);
-        else view.setImageResource(android.R.drawable.ic_menu_gallery);
+        if (preview != null) {
+            view.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            view.setImageDrawable(preview);
+        } else {
+            view.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+            view.setImageResource(android.R.drawable.ic_menu_gallery);
+        }
     }
 
     /** One collapsed or open app row; rebuilt on every change, so it carries its own state. */
@@ -278,6 +429,8 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
     }
     private static final class Holder extends RecyclerView.ViewHolder {
         Object bound;
+        @Nullable AppWidgetHostView host;
+        @NonNull WidgetPickerCardTemplate template = WidgetPickerCardTemplate.forSpan(1, 1);
         Holder(View item) { super(item); }
     }
 }

@@ -1,23 +1,15 @@
-# P2 text sizing renderer (feat/text-sizing-draw) - done
+# feat/widget-picker-previews — P1, spec items 1 + 2
 
-## Done
-- `TextBlockGeometry`: block rect, drawn size (s x n/d, 1 when demoted), v/h alignment, baseline,
-  per-row cursor rect, and `selectionCovers` / `cellSelected` - a block's cells take their fill
-  from the anchor cell, which is what highlights the rows under a tall block.
-- `TerminalRenderer`: block cells break the run; `drawRowTextBlocks` / `drawTextBlock` draw each
-  anchor clipped and aligned; cursor covers a block (D2) on both paths and for extra cursors;
-  record loop is compare-then-record for D4; a `Selection` holder replaces the per-row selx pair
-  in the background pass.
-- `RowRenderCache`: `captureTextSizes` (compares the public packed record) and
-  `spreadTextBlockGroups` (D4 B); rows carrying blocks also re-record whenever the selection moves.
-- `TextBlockSelection`: D5, one-row rule - both ends snap to their block's run on its anchor row,
-  put back in stream order over both blocks' corners. A block rectangle cannot be said in a
-  stream selection, so the rows underneath are the renderer's job, not the selection's.
-
-## Next
-- Nothing here. Waydroid re-check of the long-press highlight and of copy is the round's gate.
-
-## Gotchas
-- Snapping an end down to a block's bottom right is what painted a band across the whole row and
-  copied every block on it: a two-row selection is a stream, not a rectangle.
-- Handles stay on the anchor row's cell edges; they are not moved to the block's bottom.
+Done: tiered previews (generated → previewLayout → bitmap) through the loader's Boundary; card
+shapes snapped to six templates; live previews render into an unbound AppWidgetHostView scaled
+into the card; failed inflation demotes the provider to the bitmap tier for the session.
+In progress: nothing.
+Next: nothing in this phase. Item 2's "clip to the widget radius" is the slot's outline provider,
+capped at a quarter of the card — worth an eye on a device.
+Gotchas:
+- `generatedPreviewCategories` (API 35) is read in `AndroidBoundary.offersGeneratedPreview` only,
+  so tests drive the ladder through the fake and one injected `sdkInt`; Robolectric 4.13 has no
+  SDK 35 to run it on.
+- `new RemoteViews(pkg, id)` validates the package at construction, not at apply; a test fake must
+  use the test application's own package.
+- `WidgetPickerAdapter.PREVIEW_DP` is gone; the store now budgets for the largest template.
