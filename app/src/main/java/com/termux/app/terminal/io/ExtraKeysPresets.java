@@ -5,6 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -100,14 +101,31 @@ public final class ExtraKeysPresets {
      */
     @NonNull
     public static List<Preset> presetsForPage(int page) {
+        return presetsForPage(page, null);
+    }
+
+    /**
+     * The presets for a page, led by the row the user had before they took the launcher's row.
+     *
+     * <p>{@code previousPageValue} is what the card saved for this page when it was accepted, or
+     * null. It is offered first because it is the one preset the user cannot rebuild from memory,
+     * and it is left out entirely when there is nothing saved, so nobody is shown an empty undo.
+     */
+    @NonNull
+    public static List<Preset> presetsForPage(int page, @Nullable String previousPageValue) {
         String shipped = page == 0
             ? TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS
             : TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS2;
-        return Arrays.asList(
-            new Preset(com.termux.R.string.settings_extra_keys_preset_launcher, shipped),
-            new Preset(com.termux.R.string.settings_extra_keys_preset_classic, CLASSIC_TERMUX),
-            new Preset(com.termux.R.string.settings_extra_keys_preset_two_rows, TWO_ROWS),
-            new Preset(com.termux.R.string.settings_extra_keys_preset_empty, "[]"));
+        List<Preset> presets = new ArrayList<>(5);
+        if (previousPageValue != null && ExtraKeysDefaultOffer.hasPreviousRow(previousPageValue)) {
+            presets.add(new Preset(com.termux.R.string.settings_extra_keys_preset_previous,
+                previousPageValue));
+        }
+        presets.add(new Preset(com.termux.R.string.settings_extra_keys_preset_launcher, shipped));
+        presets.add(new Preset(com.termux.R.string.settings_extra_keys_preset_classic, CLASSIC_TERMUX));
+        presets.add(new Preset(com.termux.R.string.settings_extra_keys_preset_two_rows, TWO_ROWS));
+        presets.add(new Preset(com.termux.R.string.settings_extra_keys_preset_empty, "[]"));
+        return Collections.unmodifiableList(presets);
     }
 
     public static boolean isModifier(@Nullable String key) {

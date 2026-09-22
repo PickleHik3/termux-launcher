@@ -1,0 +1,2223 @@
+{
+  "source": "Waydroid, Android 13 (LineageOS 20), 600x1300 @180dpi, Termux Launcher 0.2.37 dev f2b7a2a8, recorded 2026-09-18. Eleven clips (places, status, stats, mouse_mode, dock, az, organize_apps, scale, touchpad, start, start_stop) re-taken 2026-09-19 on pong (Nothing A065, 1080x2412 @420 dpi, kept at native 1080 px width (frame 1080x2412) so the phone shows them without upscaling).",
+  "frame": "Clips are cropped strips of the 600px-wide phone frame; multi-band clips stack two or three horizontal bands top to bottom (see bands: [x,y,w,h] in frame coordinates). Gesture markers are burnt in.",
+  "encoding": "H.264 yuv420p 30fps, no audio, faststart; JPEG poster per clip.",
+  "coverage": {
+    "covered": 34,
+    "partial": 3,
+    "blocked": 3,
+    "shared": 4,
+    "total": 44
+  },
+  "topics": [
+    {
+      "topic": "places",
+      "status": "covered",
+      "clips": [
+        "places"
+      ],
+      "alt": "Swipe along the status bar to Widgets and back to Terminal.",
+      "note": "Swipe along the status bar to Widgets and back to Terminal."
+    },
+    {
+      "topic": "corners",
+      "status": "covered",
+      "clips": [
+        "corners"
+      ],
+      "alt": "Hold the top-left pane corner, tap ?, the help overlay opens; Back closes it.",
+      "note": "Hold the top-left pane corner, tap ?, the help overlay opens; Back closes it."
+    },
+    {
+      "topic": "palette",
+      "status": "covered",
+      "clips": [
+        "palette"
+      ],
+      "alt": "Swipe up on the space bar, type \"split\": the palette lists the matching actions.",
+      "note": "Swipe up on the space bar, type \"split\": the palette lists the matching actions."
+    },
+    {
+      "topic": "status",
+      "status": "covered",
+      "clips": [
+        "status"
+      ],
+      "alt": "Drag the bar down: the clock unfolds. Then swipe along it to Widgets and back.",
+      "note": "Drag the bar down: the clock unfolds. Then swipe along it to Widgets and back."
+    },
+    {
+      "topic": "stats",
+      "status": "covered",
+      "clips": [
+        "stats"
+      ],
+      "alt": "Tap the weather figure; its detail card drops from the bar; Back closes it.",
+      "note": "Tap the weather figure; its detail card drops from the bar; Back closes it."
+    },
+    {
+      "topic": "dock",
+      "status": "covered",
+      "clips": [
+        "dock"
+      ],
+      "alt": "Pull the dock down, the drawer opens; Back closes it.",
+      "note": "Pull the dock down, the drawer opens; Back closes it."
+    },
+    {
+      "topic": "az",
+      "status": "partial",
+      "clips": [
+        "az"
+      ],
+      "alt": "Slide along the A-Z row: the dock row shows the apps for the letter under the finger",
+      "note": "Slide along the A-Z row: the dock row shows the apps for the letter under the finger. The drag-up-to-an-app half is not shown."
+    },
+    {
+      "topic": "organize_apps",
+      "status": "covered",
+      "clips": [
+        "organize_apps"
+      ],
+      "alt": "Long-press a dock app: its menu offers Unpin and more; Back closes it",
+      "note": "Long-press a dock app: its menu offers Unpin and more; Back closes it. Pinning from the drawer and reordering are not shown."
+    },
+    {
+      "topic": "widget",
+      "status": "covered",
+      "clips": [
+        "widget"
+      ],
+      "alt": "Long-press an empty cell on the Widgets place, Add widget opens the picker.",
+      "note": "Long-press an empty cell on the Widgets place, Add widget opens the picker."
+    },
+    {
+      "topic": "pages",
+      "status": "covered",
+      "clips": [
+        "pages"
+      ],
+      "alt": "Long-press, Add page, then swipe sideways between pages (page dots change).",
+      "note": "Long-press, Add page, then swipe sideways between pages (page dots change)."
+    },
+    {
+      "topic": "copy_paste",
+      "status": "covered",
+      "clips": [
+        "copy_paste"
+      ],
+      "alt": "Long-press text, Copy, long-press an empty spot, Paste.",
+      "note": "Long-press text, Copy, long-press an empty spot, Paste."
+    },
+    {
+      "topic": "mouse_mode",
+      "status": "covered",
+      "clips": [
+        "mouse_mode"
+      ],
+      "alt": "Tap Mouse twice; the mouse mark appears in the status bar and leaves again.",
+      "note": "Tap Mouse twice; the mouse mark appears in the status bar and leaves again."
+    },
+    {
+      "topic": "text_size",
+      "status": "covered",
+      "clips": [
+        "text_size"
+      ],
+      "alt": "Two-finger pinch out and back in inside the pane.",
+      "note": "Two-finger pinch out and back in inside the pane."
+    },
+    {
+      "topic": "find_text",
+      "status": "covered",
+      "clips": [
+        "find_text"
+      ],
+      "alt": "Palette, \"search\", Search scrollback, type \"tlstore\": matches highlight; Back closes the strip.",
+      "note": "Palette, \"search\", Search scrollback, type \"tlstore\": matches highlight; Back closes the strip."
+    },
+    {
+      "topic": "hierarchy",
+      "status": "covered",
+      "clips": [
+        "hierarchy"
+      ],
+      "alt": "Tap the session badge; the Sessions panel opens.",
+      "note": "Tap the session badge; the Sessions panel opens."
+    },
+    {
+      "topic": "keyboard",
+      "status": "covered",
+      "clips": [
+        "keyboard"
+      ],
+      "alt": "Tap Keyboard on the extra keys row: hide, then show.",
+      "note": "Tap Keyboard on the extra keys row: hide, then show."
+    },
+    {
+      "topic": "keys",
+      "status": "covered",
+      "clips": [
+        "keys"
+      ],
+      "alt": "Tap Mouse twice, then swipe up on Split for its second action (new window).",
+      "note": "Tap Mouse twice, then swipe up on Split for its second action (new window)."
+    },
+    {
+      "topic": "keyboard_layouts",
+      "status": "covered",
+      "clips": [
+        "keyboard_layouts"
+      ],
+      "alt": "Swipe up on Keyboard: docked, floating, split, docked.",
+      "note": "Swipe up on Keyboard: docked, floating, split, docked."
+    },
+    {
+      "topic": "shortcuts",
+      "status": "covered",
+      "clips": [
+        "shortcuts"
+      ],
+      "alt": "Tap Ctrl then Alt: the keys show their shortcut labels; tap again to release.",
+      "note": "Tap Ctrl then Alt: the keys show their shortcut labels; tap again to release."
+    },
+    {
+      "topic": "space",
+      "status": "covered",
+      "clips": [
+        "space"
+      ],
+      "alt": "Swipe up-left and up-right on the space bar: the selected window tab changes.",
+      "note": "Swipe up-left and up-right on the space bar: the selected window tab changes."
+    },
+    {
+      "topic": "settings",
+      "status": "covered",
+      "clips": [
+        "settings"
+      ],
+      "alt": "Swipe the Alt key toward its cog; Settings opens.",
+      "note": "Swipe the Alt key toward its cog; Settings opens."
+    },
+    {
+      "topic": "panes",
+      "status": "covered",
+      "clips": [
+        "panes"
+      ],
+      "alt": "Split, drag the divider (hold a corner on it first), tap a pane, hold its corner and Close.",
+      "note": "Split, drag the divider (hold a corner on it first), tap a pane, hold its corner and Close."
+    },
+    {
+      "topic": "move_panes",
+      "status": "blocked",
+      "clips": [],
+      "alt": "Dragging the Move button onto the neighbour retiled the pane (Automatic tiling on) and left one pane visible instead of a swap; no usable take.",
+      "note": "Dragging the Move button onto the neighbour retiled the pane (Automatic tiling on) and left one pane visible instead of a swap; no usable take."
+    },
+    {
+      "topic": "float_pane",
+      "status": "covered",
+      "clips": [
+        "float_pane"
+      ],
+      "alt": "Palette, Float / dock pane: the pane floats; the same action docks it again.",
+      "note": "Palette, Float / dock pane: the pane floats; the same action docks it again."
+    },
+    {
+      "topic": "windows",
+      "status": "covered",
+      "clips": [
+        "windows"
+      ],
+      "alt": "Tap a tab, tap again for x, close, tap + for a new window.",
+      "note": "Tap a tab, tap again for x, close, tap + for a new window."
+    },
+    {
+      "topic": "workspaces",
+      "status": "covered",
+      "clips": [
+        "workspaces"
+      ],
+      "alt": "Palette, Save workspace: the naming dialog opens.",
+      "note": "Palette, Save workspace: the naming dialog opens."
+    },
+    {
+      "topic": "layout_editor",
+      "status": "covered",
+      "clips": [
+        "layout_editor"
+      ],
+      "alt": "Corner tab, grid button, Landscape/Portrait, Done.",
+      "note": "Corner tab, grid button, Landscape/Portrait, Done."
+    },
+    {
+      "topic": "appearance_editor",
+      "status": "covered",
+      "clips": [
+        "appearance_editor"
+      ],
+      "alt": "Corner tab, sliders button, raise the card, move Opacity and back, Done.",
+      "note": "Corner tab, sliders button, raise the card, move Opacity and back, Done."
+    },
+    {
+      "topic": "base_values",
+      "status": "covered",
+      "clips": [
+        "base_values"
+      ],
+      "alt": "On the Terminal surface, move Opacity: it goes independent; tap the Follow Base mark to hand it back.",
+      "note": "On the Terminal surface, move Opacity: it goes independent; tap the Follow Base mark to hand it back."
+    },
+    {
+      "topic": "themes",
+      "status": "covered",
+      "clips": [
+        "themes"
+      ],
+      "alt": "Settings > Look, scrolled.",
+      "note": "Settings > Look, scrolled."
+    },
+    {
+      "topic": "setup",
+      "status": "blocked",
+      "clips": [],
+      "alt": "The setup notice only shows while packages are missing; this Waydroid has X11 installed, so it cannot be shown without uninstalling packages.",
+      "note": "The setup notice only shows while packages are missing; this Waydroid has X11 installed, so it cannot be shown without uninstalling packages."
+    },
+    {
+      "topic": "start",
+      "status": "covered",
+      "clips": [
+        "start",
+        "start_stop"
+      ],
+      "alt": "Tap Start display",
+      "note": "Tap Start display; separately, hold the pane corner, tap Power, confirm Stop."
+    },
+    {
+      "topic": "display_apps",
+      "status": "blocked",
+      "clips": [],
+      "alt": "Only apps started by the launcher get a closable chip",
+      "note": "Only apps started by the launcher get a closable chip; starting one from the drawer with injected taps never fired, so the chip and its \u00d7 could not be recorded."
+    },
+    {
+      "topic": "scale",
+      "status": "covered",
+      "clips": [
+        "scale"
+      ],
+      "alt": "Hold the pane corner: the scale rail appears",
+      "note": "Hold the pane corner: the scale rail appears; drag its thumb down and back, the badge follows."
+    },
+    {
+      "topic": "touchpad",
+      "status": "partial",
+      "clips": [
+        "touchpad"
+      ],
+      "alt": "Tap Mouse: the touchpad appears",
+      "note": "Tap Mouse: the touchpad appears; one finger moves the pointer and taps; Mouse again hides it. Two- and three-finger gestures not shown."
+    },
+    {
+      "topic": "display_keys",
+      "status": "covered",
+      "clips": [
+        "display_keys"
+      ],
+      "alt": "Tap the Linux window, type on the in-app keyboard (goes to xterm), tap Terminal to come back.",
+      "note": "Tap the Linux window, type on the in-app keyboard (goes to xterm), tap Terminal to come back."
+    },
+    {
+      "topic": "fix_keyboard",
+      "status": "shared",
+      "clips": [
+        "keyboard"
+      ],
+      "alt": "Reuses the keyboard clip.",
+      "note": "Reuses the keyboard clip."
+    },
+    {
+      "topic": "fix_dock",
+      "status": "shared",
+      "clips": [
+        "layout_editor"
+      ],
+      "alt": "Reuses the layout editor clip; the dock toggle itself is not flipped.",
+      "note": "Reuses the layout editor clip; the dock toggle itself is not flipped."
+    },
+    {
+      "topic": "fix_action",
+      "status": "shared",
+      "clips": [
+        "palette"
+      ],
+      "alt": "Reuses the palette clip; no greyed-out action was found to show.",
+      "note": "Reuses the palette clip; no greyed-out action was found to show."
+    },
+    {
+      "topic": "fix_shortcuts",
+      "status": "covered",
+      "clips": [
+        "fix_shortcuts"
+      ],
+      "alt": "Settings > Keyboard, scrolled.",
+      "note": "Settings > Keyboard, scrolled."
+    },
+    {
+      "topic": "fix_stats",
+      "status": "covered",
+      "clips": [
+        "fix_stats"
+      ],
+      "alt": "Settings > Status bar, scrolled (CPU, memory, weather toggles).",
+      "note": "Settings > Status bar, scrolled (CPU, memory, weather toggles)."
+    },
+    {
+      "topic": "fix_display",
+      "status": "shared",
+      "clips": [
+        "start"
+      ],
+      "alt": "Reuses the start clip; the setup notice is not capturable here.",
+      "note": "Reuses the start clip; the setup notice is not capturable here."
+    },
+    {
+      "topic": "fix_support",
+      "status": "covered",
+      "clips": [
+        "fix_support"
+      ],
+      "alt": "Settings, then About & support.",
+      "note": "Settings, then About & support."
+    },
+    {
+      "topic": "hold_terminal",
+      "status": "partial",
+      "clips": [
+        "hold_terminal"
+      ],
+      "alt": "Hold on the terminal text, then hold longer for Copy, Paste and More.",
+      "note": "Hold on the text: the finger disk holds and drags (the mouse stage leaves no trace on screen), then a longer hold brings Copy, Paste and More with the selection handles."
+    }
+  ],
+  "clips": {
+    "appearance_editor": {
+      "id": "appearance_editor",
+      "video": "appearance_editor.mp4",
+      "poster": "appearance_editor.jpg",
+      "width": 600,
+      "height": 630,
+      "duration": 22.77,
+      "bytes": 192393,
+      "bands": [
+        [
+          0,
+          40,
+          600,
+          60
+        ],
+        [
+          0,
+          290,
+          600,
+          570
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            33,
+            63,
+            33,
+            63
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 4.41,
+          "kind": "tap",
+          "points": [
+            50,
+            78
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 8.32,
+          "kind": "tap",
+          "points": [
+            520,
+            826
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 12.18,
+          "kind": "swipe",
+          "points": [
+            260,
+            558,
+            340,
+            558
+          ],
+          "duration": 0.5
+        },
+        {
+          "t": 16.07,
+          "kind": "swipe",
+          "points": [
+            340,
+            558,
+            260,
+            558
+          ],
+          "duration": 0.5
+        },
+        {
+          "t": 19.67,
+          "kind": "tap",
+          "points": [
+            499,
+            333
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "az": {
+      "id": "az",
+      "video": "az.mp4",
+      "poster": "az.jpg",
+      "width": 1080,
+      "height": 315,
+      "duration": 6.72,
+      "bytes": 1001019,
+      "bands": [
+        [
+          0,
+          1422,
+          1080,
+          315
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "swipe",
+          "points": [
+            80,
+            1606,
+            1000,
+            1606
+          ],
+          "duration": 2.5
+        }
+      ],
+      "source": "pong native 1080"
+    },
+    "base_values": {
+      "id": "base_values",
+      "video": "base_values.mp4",
+      "poster": "base_values.jpg",
+      "width": 600,
+      "height": 200,
+      "duration": 8.77,
+      "bytes": 20065,
+      "bands": [
+        [
+          0,
+          430,
+          600,
+          200
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            257,
+            548,
+            340,
+            548
+          ],
+          "duration": 0.5
+        },
+        {
+          "t": 4.86,
+          "kind": "tap",
+          "points": [
+            561,
+            548
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "copy_paste": {
+      "id": "copy_paste",
+      "video": "copy_paste.mp4",
+      "poster": "copy_paste.jpg",
+      "width": 600,
+      "height": 600,
+      "duration": 15.87,
+      "bytes": 111956,
+      "bands": [
+        [
+          0,
+          40,
+          600,
+          600
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            60,
+            112,
+            60,
+            112
+          ],
+          "duration": 0.7
+        },
+        {
+          "t": 4.76,
+          "kind": "tap",
+          "points": [
+            55,
+            60
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 8.12,
+          "kind": "swipe",
+          "points": [
+            300,
+            600,
+            300,
+            600
+          ],
+          "duration": 0.7
+        },
+        {
+          "t": 12.05,
+          "kind": "tap",
+          "points": [
+            294,
+            555
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "corners": {
+      "id": "corners",
+      "video": "corners.mp4",
+      "poster": "corners.jpg",
+      "width": 600,
+      "height": 240,
+      "duration": 13.53,
+      "bytes": 65470,
+      "bands": [
+        [
+          0,
+          0,
+          600,
+          240
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.29,
+          "kind": "swipe",
+          "points": [
+            33,
+            63,
+            33,
+            63
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 5.69,
+          "kind": "tap",
+          "points": [
+            115,
+            63
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "display_keys": {
+      "id": "display_keys",
+      "video": "display_keys.mp4",
+      "poster": "display_keys.jpg",
+      "width": 600,
+      "height": 610,
+      "duration": 17.77,
+      "bytes": 190705,
+      "bands": [
+        [
+          0,
+          40,
+          600,
+          300
+        ],
+        [
+          0,
+          940,
+          600,
+          310
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "tap",
+          "points": [
+            200,
+            200
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 3.47,
+          "kind": "tap",
+          "points": [
+            43,
+            1225
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 6.56,
+          "kind": "tap",
+          "points": [
+            535,
+            1085
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 8.54,
+          "kind": "tap",
+          "points": [
+            152,
+            1085
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 10.53,
+          "kind": "tap",
+          "points": [
+            545,
+            1207
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 13.92,
+          "kind": "tap",
+          "points": [
+            300,
+            972
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "dock": {
+      "id": "dock",
+      "video": "dock.mp4",
+      "poster": "dock.jpg",
+      "width": 1080,
+      "height": 990,
+      "duration": 7.25,
+      "bytes": 1560721,
+      "bands": [
+        [
+          0,
+          115,
+          1080,
+          774
+        ],
+        [
+          0,
+          1422,
+          1080,
+          216
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "swipe",
+          "points": [
+            540,
+            1500,
+            540,
+            1900
+          ],
+          "duration": 0.6
+        }
+      ],
+      "source": "pong native 1080"
+    },
+    "find_text": {
+      "id": "find_text",
+      "video": "find_text.mp4",
+      "poster": "find_text.jpg",
+      "width": 600,
+      "height": 620,
+      "duration": 16.63,
+      "bytes": 137918,
+      "bands": [
+        [
+          0,
+          40,
+          600,
+          280
+        ],
+        [
+          0,
+          400,
+          600,
+          260
+        ],
+        [
+          0,
+          820,
+          600,
+          80
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            300,
+            1205,
+            300,
+            1150
+          ],
+          "duration": 0.15
+        },
+        {
+          "t": 7.05,
+          "kind": "tap",
+          "points": [
+            150,
+            564
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "fix_shortcuts": {
+      "id": "fix_shortcuts",
+      "video": "fix_shortcuts.mp4",
+      "poster": "fix_shortcuts.jpg",
+      "width": 600,
+      "height": 700,
+      "duration": 9.13,
+      "bytes": 229490,
+      "bands": [
+        [
+          0,
+          0,
+          600,
+          700
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 5.46,
+          "kind": "swipe",
+          "points": [
+            300,
+            1000,
+            300,
+            600
+          ],
+          "duration": 0.6
+        }
+      ]
+    },
+    "fix_stats": {
+      "id": "fix_stats",
+      "video": "fix_stats.mp4",
+      "poster": "fix_stats.jpg",
+      "width": 600,
+      "height": 700,
+      "duration": 9.17,
+      "bytes": 130622,
+      "bands": [
+        [
+          0,
+          0,
+          600,
+          700
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 5.45,
+          "kind": "swipe",
+          "points": [
+            300,
+            1000,
+            300,
+            600
+          ],
+          "duration": 0.6
+        }
+      ]
+    },
+    "fix_support": {
+      "id": "fix_support",
+      "video": "fix_support.mp4",
+      "poster": "fix_support.jpg",
+      "width": 600,
+      "height": 700,
+      "duration": 10.13,
+      "bytes": 103908,
+      "bands": [
+        [
+          0,
+          0,
+          600,
+          700
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 5.46,
+          "kind": "tap",
+          "points": [
+            300,
+            1149
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "float_pane": {
+      "id": "float_pane",
+      "video": "float_pane.mp4",
+      "poster": "float_pane.jpg",
+      "width": 600,
+      "height": 910,
+      "duration": 20.6,
+      "bytes": 346470,
+      "bands": [
+        [
+          0,
+          40,
+          600,
+          820
+        ],
+        [
+          0,
+          1160,
+          600,
+          90
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            300,
+            1205,
+            300,
+            1150
+          ],
+          "duration": 0.15
+        },
+        {
+          "t": 7.12,
+          "kind": "tap",
+          "points": [
+            100,
+            565
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 10.74,
+          "kind": "swipe",
+          "points": [
+            300,
+            1205,
+            300,
+            1150
+          ],
+          "duration": 0.15
+        },
+        {
+          "t": 16.89,
+          "kind": "tap",
+          "points": [
+            100,
+            565
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "hierarchy": {
+      "id": "hierarchy",
+      "video": "hierarchy.mp4",
+      "poster": "hierarchy.jpg",
+      "width": 600,
+      "height": 420,
+      "duration": 7.93,
+      "bytes": 55324,
+      "bands": [
+        [
+          0,
+          0,
+          600,
+          420
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "tap",
+          "points": [
+            34,
+            18
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "keyboard": {
+      "id": "keyboard",
+      "video": "keyboard.mp4",
+      "poster": "keyboard.jpg",
+      "width": 600,
+      "height": 400,
+      "duration": 9.17,
+      "bytes": 74486,
+      "bands": [
+        [
+          0,
+          850,
+          600,
+          400
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.29,
+          "kind": "tap",
+          "points": [
+            43,
+            972
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 5.6,
+          "kind": "tap",
+          "points": [
+            43,
+            1223
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "keyboard_layouts": {
+      "id": "keyboard_layouts",
+      "video": "keyboard_layouts.mp4",
+      "poster": "keyboard_layouts.jpg",
+      "width": 600,
+      "height": 760,
+      "duration": 14.5,
+      "bytes": 147561,
+      "bands": [
+        [
+          0,
+          500,
+          600,
+          760
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            43,
+            972,
+            43,
+            925
+          ],
+          "duration": 0.2
+        },
+        {
+          "t": 4.26,
+          "kind": "swipe",
+          "points": [
+            300,
+            962,
+            300,
+            560
+          ],
+          "duration": 0.5
+        },
+        {
+          "t": 7.62,
+          "kind": "swipe",
+          "points": [
+            43,
+            1225,
+            43,
+            1180
+          ],
+          "duration": 0.2
+        },
+        {
+          "t": 10.99,
+          "kind": "swipe",
+          "points": [
+            43,
+            972,
+            43,
+            925
+          ],
+          "duration": 0.2
+        }
+      ]
+    },
+    "keys": {
+      "id": "keys",
+      "video": "keys.mp4",
+      "poster": "keys.jpg",
+      "width": 600,
+      "height": 90,
+      "duration": 10.37,
+      "bytes": 23713,
+      "bands": [
+        [
+          0,
+          0,
+          600,
+          40
+        ],
+        [
+          0,
+          950,
+          600,
+          50
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "tap",
+          "points": [
+            129,
+            972
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 3.55,
+          "kind": "tap",
+          "points": [
+            129,
+            972
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 6.05,
+          "kind": "swipe",
+          "points": [
+            471,
+            972,
+            471,
+            925
+          ],
+          "duration": 0.2
+        }
+      ]
+    },
+    "layout_editor": {
+      "id": "layout_editor",
+      "video": "layout_editor.mp4",
+      "poster": "layout_editor.jpg",
+      "width": 600,
+      "height": 700,
+      "duration": 17.8,
+      "bytes": 103441,
+      "bands": [
+        [
+          0,
+          0,
+          600,
+          700
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            33,
+            63,
+            33,
+            63
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 4.42,
+          "kind": "tap",
+          "points": [
+            90,
+            78
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 8.46,
+          "kind": "tap",
+          "points": [
+            423,
+            122
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 11.51,
+          "kind": "tap",
+          "points": [
+            240,
+            122
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 14.27,
+          "kind": "tap",
+          "points": [
+            548,
+            57
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "mouse_mode": {
+      "id": "mouse_mode",
+      "video": "mouse_mode.mp4",
+      "poster": "mouse_mode.jpg",
+      "width": 1080,
+      "height": 183,
+      "duration": 5.76,
+      "bytes": 130448,
+      "bands": [
+        [
+          0,
+          302,
+          1080,
+          79
+        ],
+        [
+          0,
+          1627,
+          1080,
+          104
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "tap",
+          "points": [
+            231,
+            1680
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 3.15,
+          "kind": "tap",
+          "points": [
+            231,
+            1680
+          ],
+          "duration": 0.65
+        }
+      ],
+      "source": "pong native 1080"
+    },
+    "organize_apps": {
+      "id": "organize_apps",
+      "video": "organize_apps.mp4",
+      "poster": "organize_apps.jpg",
+      "width": 1080,
+      "height": 810,
+      "duration": 7.68,
+      "bytes": 1070887,
+      "bands": [
+        [
+          0,
+          819,
+          1080,
+          810
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "swipe",
+          "points": [
+            1002,
+            1504,
+            1002,
+            1504
+          ],
+          "duration": 0.9
+        }
+      ],
+      "source": "pong native 1080"
+    },
+    "pages": {
+      "id": "pages",
+      "video": "pages.mp4",
+      "poster": "pages.jpg",
+      "width": 600,
+      "height": 310,
+      "duration": 14.93,
+      "bytes": 60688,
+      "bands": [
+        [
+          0,
+          380,
+          600,
+          260
+        ],
+        [
+          0,
+          1070,
+          600,
+          50
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            300,
+            500,
+            300,
+            500
+          ],
+          "duration": 0.7
+        },
+        {
+          "t": 4.44,
+          "kind": "tap",
+          "points": [
+            250,
+            500
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 7.6,
+          "kind": "swipe",
+          "points": [
+            500,
+            600,
+            100,
+            600
+          ],
+          "duration": 0.3
+        },
+        {
+          "t": 11.07,
+          "kind": "swipe",
+          "points": [
+            100,
+            600,
+            500,
+            600
+          ],
+          "duration": 0.3
+        }
+      ]
+    },
+    "palette": {
+      "id": "palette",
+      "video": "palette.mp4",
+      "poster": "palette.jpg",
+      "width": 600,
+      "height": 390,
+      "duration": 9.93,
+      "bytes": 132074,
+      "bands": [
+        [
+          0,
+          420,
+          600,
+          290
+        ],
+        [
+          0,
+          1150,
+          600,
+          100
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.2,
+          "kind": "swipe",
+          "points": [
+            300,
+            1205,
+            300,
+            1150
+          ],
+          "duration": 0.15
+        }
+      ]
+    },
+    "panes": {
+      "id": "panes",
+      "video": "panes.mp4",
+      "poster": "panes.jpg",
+      "width": 600,
+      "height": 870,
+      "duration": 17.67,
+      "bytes": 270340,
+      "bands": [
+        [
+          0,
+          40,
+          600,
+          820
+        ],
+        [
+          0,
+          950,
+          600,
+          50
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "tap",
+          "points": [
+            471,
+            972
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 4.14,
+          "kind": "tap",
+          "points": [
+            33,
+            470
+          ],
+          "duration": 0.93
+        },
+        {
+          "t": 5.07,
+          "kind": "swipe",
+          "points": [
+            33,
+            470,
+            33,
+            640
+          ],
+          "duration": 0.74
+        },
+        {
+          "t": 8.61,
+          "kind": "tap",
+          "points": [
+            300,
+            200
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 11.25,
+          "kind": "swipe",
+          "points": [
+            33,
+            63,
+            33,
+            63
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 14.74,
+          "kind": "tap",
+          "points": [
+            130,
+            78
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "places": {
+      "id": "places",
+      "video": "places.mp4",
+      "poster": "places.jpg",
+      "width": 1080,
+      "height": 1008,
+      "duration": 7.83,
+      "bytes": 2019139,
+      "bands": [
+        [
+          0,
+          115,
+          1080,
+          1008
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "swipe",
+          "points": [
+            620,
+            341,
+            1040,
+            341
+          ],
+          "duration": 0.6
+        },
+        {
+          "t": 4.57,
+          "kind": "swipe",
+          "points": [
+            1000,
+            341,
+            500,
+            341
+          ],
+          "duration": 0.6
+        }
+      ],
+      "source": "pong native 1080"
+    },
+    "scale": {
+      "id": "scale",
+      "video": "scale.mp4",
+      "poster": "scale.jpg",
+      "width": 1080,
+      "height": 1008,
+      "duration": 13.86,
+      "bytes": 233932,
+      "bands": [
+        [
+          0,
+          302,
+          1080,
+          1008
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "swipe",
+          "points": [
+            16,
+            395,
+            16,
+            395
+          ],
+          "duration": 0.8
+        },
+        {
+          "t": 4.72,
+          "kind": "swipe",
+          "points": [
+            54,
+            965,
+            54,
+            1200
+          ],
+          "duration": 0.9
+        },
+        {
+          "t": 8.15,
+          "kind": "swipe",
+          "points": [
+            54,
+            1200,
+            54,
+            965
+          ],
+          "duration": 0.9
+        },
+        {
+          "t": 11.56,
+          "kind": "tap",
+          "points": [
+            540,
+            1200
+          ],
+          "duration": 0.65
+        }
+      ],
+      "source": "pong native 1080"
+    },
+    "settings": {
+      "id": "settings",
+      "video": "settings.mp4",
+      "poster": "settings.jpg",
+      "width": 600,
+      "height": 590,
+      "duration": 6.43,
+      "bytes": 72620,
+      "bands": [
+        [
+          0,
+          0,
+          600,
+          500
+        ],
+        [
+          0,
+          1160,
+          600,
+          90
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            135,
+            1198,
+            190,
+            1248
+          ],
+          "duration": 0.25
+        }
+      ]
+    },
+    "shortcuts": {
+      "id": "shortcuts",
+      "video": "shortcuts.mp4",
+      "poster": "shortcuts.jpg",
+      "width": 600,
+      "height": 325,
+      "duration": 12.2,
+      "bytes": 83981,
+      "bands": [
+        [
+          0,
+          925,
+          600,
+          325
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "tap",
+          "points": [
+            52,
+            1207
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 3.15,
+          "kind": "tap",
+          "points": [
+            140,
+            1207
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 7.15,
+          "kind": "tap",
+          "points": [
+            140,
+            1207
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 9.34,
+          "kind": "tap",
+          "points": [
+            52,
+            1207
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "space": {
+      "id": "space",
+      "video": "space.mp4",
+      "poster": "space.jpg",
+      "width": 600,
+      "height": 130,
+      "duration": 8.17,
+      "bytes": 27282,
+      "bands": [
+        [
+          0,
+          0,
+          600,
+          40
+        ],
+        [
+          0,
+          1160,
+          600,
+          90
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            300,
+            1205,
+            200,
+            1150
+          ],
+          "duration": 0.25
+        },
+        {
+          "t": 4.13,
+          "kind": "swipe",
+          "points": [
+            300,
+            1205,
+            400,
+            1150
+          ],
+          "duration": 0.25
+        }
+      ]
+    },
+    "start": {
+      "id": "start",
+      "video": "start.mp4",
+      "poster": "start.jpg",
+      "width": 1080,
+      "height": 1260,
+      "duration": 7.82,
+      "bytes": 697514,
+      "bands": [
+        [
+          0,
+          302,
+          1080,
+          1260
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "tap",
+          "points": [
+            540,
+            1255
+          ],
+          "duration": 0.65
+        }
+      ],
+      "source": "pong native 1080"
+    },
+    "start_stop": {
+      "id": "start_stop",
+      "video": "start_stop.mp4",
+      "poster": "start_stop.jpg",
+      "width": 1080,
+      "height": 1260,
+      "duration": 12.19,
+      "bytes": 1250415,
+      "bands": [
+        [
+          0,
+          302,
+          1080,
+          1260
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "swipe",
+          "points": [
+            16,
+            395,
+            16,
+            395
+          ],
+          "duration": 0.8
+        },
+        {
+          "t": 4.73,
+          "kind": "tap",
+          "points": [
+            75,
+            435
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 7.51,
+          "kind": "tap",
+          "points": [
+            842,
+            1422
+          ],
+          "duration": 0.65
+        }
+      ],
+      "source": "pong native 1080"
+    },
+    "stats": {
+      "id": "stats",
+      "video": "stats.mp4",
+      "poster": "stats.jpg",
+      "width": 1080,
+      "height": 1035,
+      "duration": 7.38,
+      "bytes": 1311513,
+      "bands": [
+        [
+          0,
+          302,
+          1080,
+          1035
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "tap",
+          "points": [
+            980,
+            341
+          ],
+          "duration": 0.65
+        }
+      ],
+      "source": "pong native 1080"
+    },
+    "text_size": {
+      "id": "text_size",
+      "video": "text_size.mp4",
+      "poster": "text_size.jpg",
+      "width": 600,
+      "height": 420,
+      "duration": 11.47,
+      "bytes": 189729,
+      "bands": [
+        [
+          0,
+          40,
+          600,
+          420
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            200,
+            450,
+            110,
+            450
+          ],
+          "duration": 0.8
+        },
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            400,
+            450,
+            490,
+            450
+          ],
+          "duration": 0.8
+        },
+        {
+          "t": 6.11,
+          "kind": "swipe",
+          "points": [
+            110,
+            450,
+            200,
+            450
+          ],
+          "duration": 0.8
+        },
+        {
+          "t": 6.11,
+          "kind": "swipe",
+          "points": [
+            490,
+            450,
+            400,
+            450
+          ],
+          "duration": 0.8
+        }
+      ]
+    },
+    "themes": {
+      "id": "themes",
+      "video": "themes.mp4",
+      "poster": "themes.jpg",
+      "width": 600,
+      "height": 700,
+      "duration": 9.13,
+      "bytes": 278925,
+      "bands": [
+        [
+          0,
+          0,
+          600,
+          700
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 5.45,
+          "kind": "swipe",
+          "points": [
+            300,
+            1000,
+            300,
+            600
+          ],
+          "duration": 0.6
+        }
+      ]
+    },
+    "touchpad": {
+      "id": "touchpad",
+      "video": "touchpad.mp4",
+      "poster": "touchpad.jpg",
+      "width": 1080,
+      "height": 1836,
+      "duration": 11.47,
+      "bytes": 748370,
+      "bands": [
+        [
+          0,
+          302,
+          1080,
+          1116
+        ],
+        [
+          0,
+          1631,
+          1080,
+          720
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "tap",
+          "points": [
+            231,
+            2300
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 3.95,
+          "kind": "swipe",
+          "points": [
+            300,
+            1950,
+            650,
+            2100
+          ],
+          "duration": 0.8
+        },
+        {
+          "t": 6.82,
+          "kind": "tap",
+          "points": [
+            480,
+            2000
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 9.15,
+          "kind": "tap",
+          "points": [
+            231,
+            1680
+          ],
+          "duration": 0.65
+        }
+      ],
+      "source": "pong native 1080"
+    },
+    "widget": {
+      "id": "widget",
+      "video": "widget.mp4",
+      "poster": "widget.jpg",
+      "width": 600,
+      "height": 700,
+      "duration": 8.67,
+      "bytes": 96109,
+      "bands": [
+        [
+          0,
+          0,
+          600,
+          700
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.89,
+          "kind": "swipe",
+          "points": [
+            300,
+            500,
+            300,
+            500
+          ],
+          "duration": 0.7
+        },
+        {
+          "t": 4.48,
+          "kind": "tap",
+          "points": [
+            250,
+            450
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "windows": {
+      "id": "windows",
+      "video": "windows.mp4",
+      "poster": "windows.jpg",
+      "width": 600,
+      "height": 140,
+      "duration": 5.8,
+      "bytes": 130472,
+      "bands": [
+        [
+          0,
+          0,
+          600,
+          140
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.2,
+          "kind": "tap",
+          "points": [
+            157,
+            18
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 2.44,
+          "kind": "tap",
+          "points": [
+            73,
+            18
+          ],
+          "duration": 0.65
+        },
+        {
+          "t": 3.67,
+          "kind": "tap",
+          "points": [
+            120,
+            18
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "workspaces": {
+      "id": "workspaces",
+      "video": "workspaces.mp4",
+      "poster": "workspaces.jpg",
+      "width": 600,
+      "height": 490,
+      "duration": 11.33,
+      "bytes": 81555,
+      "bands": [
+        [
+          0,
+          380,
+          600,
+          490
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 0.8,
+          "kind": "swipe",
+          "points": [
+            300,
+            1205,
+            300,
+            1150
+          ],
+          "duration": 0.15
+        },
+        {
+          "t": 6.87,
+          "kind": "tap",
+          "points": [
+            150,
+            608
+          ],
+          "duration": 0.65
+        }
+      ]
+    },
+    "status": {
+      "id": "status",
+      "video": "status.mp4",
+      "poster": "status.jpg",
+      "width": 1080,
+      "height": 360,
+      "duration": 10.58,
+      "bytes": 864228,
+      "bands": [
+        [
+          0,
+          115,
+          1080,
+          360
+        ]
+      ],
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "swipe",
+          "points": [
+            540,
+            170,
+            540,
+            420
+          ],
+          "duration": 0.6
+        },
+        {
+          "t": 4.33,
+          "kind": "swipe",
+          "points": [
+            620,
+            341,
+            1040,
+            341
+          ],
+          "duration": 0.6
+        },
+        {
+          "t": 7.31,
+          "kind": "swipe",
+          "points": [
+            1000,
+            341,
+            500,
+            341
+          ],
+          "duration": 0.6
+        }
+      ],
+      "source": "pong native 1080"
+    },
+    "hold_terminal": {
+      "id": "hold_terminal",
+      "video": "hold_terminal.mp4",
+      "poster": "hold_terminal.jpg",
+      "width": 1080,
+      "height": 1116,
+      "duration": 12.05,
+      "bytes": 1706854,
+      "bands": [
+        [
+          0,
+          302,
+          1080,
+          1116
+        ]
+      ],
+      "source": "pong native 1080",
+      "gestures": [
+        {
+          "t": 1.6,
+          "kind": "tap",
+          "points": [
+            540,
+            860
+          ],
+          "duration": 0.75
+        },
+        {
+          "t": 2.35,
+          "kind": "swipe",
+          "points": [
+            540,
+            860,
+            540,
+            1280
+          ],
+          "duration": 1.1
+        },
+        {
+          "t": 4.1,
+          "kind": "swipe",
+          "points": [
+            540,
+            900,
+            540,
+            900
+          ],
+          "duration": 1.9
+        }
+      ]
+    }
+  }
+}

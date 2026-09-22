@@ -1,0 +1,42 @@
+{
+  "id": "places",
+  "crop": [
+    [
+      0,
+      115,
+      1080,
+      1008
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.6002579780033557,
+      "kind": "swipe",
+      "points": [
+        620,
+        341,
+        1040,
+        341
+      ],
+      "duration": 0.6
+    },
+    {
+      "t": 4.570930747999228,
+      "kind": "swipe",
+      "points": [
+        1000,
+        341,
+        500,
+        341
+      ],
+      "duration": 0.6
+    }
+  ],
+  "duration": 7.83,
+  "bytes": 2019139,
+  "width": 1080,
+  "height": 1008,
+  "video": "places.mp4",
+  "poster": "places.jpg",
+  "source": "pong 1080x2412@420 native"
+}

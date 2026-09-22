@@ -1973,6 +1973,28 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_DISPLAY_ENABLE_PROMPTED, value, false);
     }
 
+    /** Whether this release's "take the new key row?" card has been answered. */
+    public boolean isExtraKeysDefaultOffered() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_EXTRA_KEYS_DEFAULT_OFFERED, TERMUX_APP.DEFAULT_VALUE_EXTRA_KEYS_DEFAULT_OFFERED);
+    }
+
+    public void setExtraKeysDefaultOffered(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_EXTRA_KEYS_DEFAULT_OFFERED, value, false);
+    }
+
+    /** The key row this toolbar page held before the new row was taken, or an empty string. */
+    @NonNull
+    public String getPreviousExtraKeys(int page) {
+        if (page < 0 || page >= TERMUX_APP.KEY_PREVIOUS_EXTRA_KEYS.length) return TERMUX_APP.DEFAULT_VALUE_PREVIOUS_EXTRA_KEYS;
+        String value = SharedPreferenceUtils.getString(mSharedPreferences, TERMUX_APP.KEY_PREVIOUS_EXTRA_KEYS[page], TERMUX_APP.DEFAULT_VALUE_PREVIOUS_EXTRA_KEYS, false);
+        return value == null ? TERMUX_APP.DEFAULT_VALUE_PREVIOUS_EXTRA_KEYS : value;
+    }
+
+    public void setPreviousExtraKeys(int page, @NonNull String value) {
+        if (page < 0 || page >= TERMUX_APP.KEY_PREVIOUS_EXTRA_KEYS.length) return;
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_PREVIOUS_EXTRA_KEYS[page], value, false);
+    }
+
     public boolean isFirstRunChainDone() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_FIRST_RUN_CHAIN_DONE, TERMUX_APP.DEFAULT_VALUE_FIRST_RUN_CHAIN_DONE);
     }

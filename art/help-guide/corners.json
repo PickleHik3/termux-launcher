@@ -1,0 +1,39 @@
+{
+  "id": "corners",
+  "crop": [
+    [
+      0,
+      0,
+      600,
+      240
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.2002539999994042,
+      "kind": "swipe",
+      "points": [
+        33,
+        63,
+        33,
+        63
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 5.604163453997899,
+      "kind": "tap",
+      "points": [
+        115,
+        63
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 13.53,
+  "bytes": 65470,
+  "width": 600,
+  "height": 240,
+  "video": "corners.mp4",
+  "poster": "corners.jpg"
+}

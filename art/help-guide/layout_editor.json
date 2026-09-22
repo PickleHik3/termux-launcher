@@ -1,0 +1,66 @@
+{
+  "id": "layout_editor",
+  "crop": [
+    [
+      0,
+      0,
+      600,
+      700
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.8000676060000842,
+      "kind": "swipe",
+      "points": [
+        33,
+        63,
+        33,
+        63
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 4.325053935001051,
+      "kind": "tap",
+      "points": [
+        90,
+        78
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 8.368601768997905,
+      "kind": "tap",
+      "points": [
+        423,
+        122
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 11.420100121998985,
+      "kind": "tap",
+      "points": [
+        240,
+        122
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 14.179779490998044,
+      "kind": "tap",
+      "points": [
+        548,
+        57
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 17.8,
+  "bytes": 103441,
+  "width": 600,
+  "height": 700,
+  "video": "layout_editor.mp4",
+  "poster": "layout_editor.jpg"
+}

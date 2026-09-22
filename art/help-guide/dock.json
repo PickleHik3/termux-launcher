@@ -1,0 +1,37 @@
+{
+  "id": "dock",
+  "crop": [
+    [
+      0,
+      115,
+      1080,
+      774
+    ],
+    [
+      0,
+      1422,
+      1080,
+      216
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.600284683998325,
+      "kind": "swipe",
+      "points": [
+        540,
+        1500,
+        540,
+        1900
+      ],
+      "duration": 0.6
+    }
+  ],
+  "duration": 7.25,
+  "bytes": 1560721,
+  "width": 1080,
+  "height": 990,
+  "video": "dock.mp4",
+  "poster": "dock.jpg",
+  "source": "pong 1080x2412@420 native"
+}

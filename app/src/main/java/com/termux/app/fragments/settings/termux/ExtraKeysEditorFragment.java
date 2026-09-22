@@ -45,6 +45,7 @@ import com.termux.app.terminal.io.ExtraKeyDetailSheet;
 import com.termux.app.terminal.io.ExtraKeysLayoutModel;
 import com.termux.app.terminal.io.ExtraKeysPresets;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
@@ -838,7 +839,11 @@ public class ExtraKeysEditorFragment extends Fragment {
     private void refreshPresets() {
         presetChips.removeAllViews();
         Context context = requireContext();
-        for (ExtraKeysPresets.Preset preset : ExtraKeysPresets.presetsForPage(currentPage)) {
+        // The row the user had before they took this release's row, when they took it: the one
+        // preset that is theirs alone, so it leads the list and stays after it is used.
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
+        String previous = preferences == null ? null : preferences.getPreviousExtraKeys(currentPage);
+        for (ExtraKeysPresets.Preset preset : ExtraKeysPresets.presetsForPage(currentPage, previous)) {
             Chip chip = new Chip(context);
             chip.setText(preset.titleRes);
             chip.setOnClickListener(v -> applyPreset(preset));

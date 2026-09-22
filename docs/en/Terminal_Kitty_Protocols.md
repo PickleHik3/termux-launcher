@@ -63,12 +63,36 @@ What changes and what does not:
 - Programs that gate pictures or the keyboard protocol on the variable start using them. Both work
   here.
 - The XTVERSION reply stays `termux-launcher(version)`, so features that check the real terminal
-  version, such as kitty's text sizing in md-render.nvim, stay off. Nothing pretends to be a kitty
-  release it is not.
+  version stay off; md-render.nvim, for one, enables text sizing only for a kitty version, even
+  though the terminal supports it (see [Text sizing](#text-sizing-osc-66)). Nothing pretends to be
+  a kitty release it is not.
 - `TERM_PROGRAM_VERSION` still carries the launcher's version; a program that reads both will see a
-  kitty name with a non-kitty version. That is the one inconsistency this setting introduces.
+  kitty name with a version such as 0.2.37. Some turn features off for a version that old; others
+  compare it against kitty release gates that mean nothing here.
 - Neovim 0.13 and newer sends the graphics query instead of reading the variable, and the terminal
   answers it. Once your Neovim is 0.13 the variable is only there for older tools.
+
+Why the launcher does not set it for you, and why the per-program form is the one to prefer:
+
+- Programs that see `kitty` stop asking and start assuming the whole kitty feature set. They then
+  send what the launcher does not have: shared-memory image transfer (`t=s`, impossible on
+  Android, so the picture fails instead of falling back to a file; `kitten icat` picks this path
+  when it believes it is local), file transfer over OSC 5113, and kitty's remote-control
+  commands. A program that queries gets a true answer; a program that trusts the name gets a
+  broken feature.
+- The launcher loses its own name. Scripts branch on `TERM_PROGRAM=termux-launcher` to know they
+  are inside the launcher; the tlstore installer does, to skip its download path when it is
+  already home. Exporting `kitty` shell-wide breaks that check and any user script written the
+  same way.
+- Some Neovim, tmux and shell setups switch to kitty-only key handling or kitty's shell
+  integration hooks on the name alone and expect behaviour the launcher only partly matches; the
+  symptom is stuck modifiers or odd prompts rather than a clean fallback.
+- Bug reports lose their terminal. A problem seen here gets filed upstream as "works in kitty",
+  and the launcher is invisible in it.
+
+The per-program wrapper above gives the sniffing program what it wants and leaves everything else
+truthful. Reach for the shell-wide export only if most of what you run is such a program, and
+expect the four points above.
 
 The in-app Help has the same one-line recipe under **Pictures in the terminal**.
 
@@ -152,6 +176,31 @@ Programs can follow the terminal between dark and light instead of guessing from
 
 nvim 0.11, fish 4.3 and tmux 3.6 use these reports to restyle themselves when the terminal's scheme
 changes.
+
+## Text sizing (OSC 66)
+
+`ESC ] 66 ; s=2 ; Heading ESC \` draws "Heading" twice as large, across two rows and twice the
+columns. The keys follow kitty's text sizing protocol: `s` 1 to 7 is the scale and the number of
+rows the text takes; `w` 0 to 7 forces a width in cells before scaling (0 measures the text);
+`n` and `d` draw the text at n/d of the block height, with `v` (0 top, 1 bottom, 2 centre) and
+`h` (0 left, 1 right, 2 centre) placing it inside the block. With `w` unset every character is its
+own block; with `w` set the whole text is one block and anything past `w` cells is cut.
+
+What a program can rely on:
+
+- The cursor moves `s × w` cells to the right on the same row, so the usual detection, writing a
+  `w=2` character and reading the cursor position, answers "supported". No environment variable is
+  involved.
+- Writing over the top-left cell of a block removes the whole block; writing over any other cell
+  blanks that cell. Erase, insert and delete sequences and scrolling inside a region remove every
+  block they touch. A block larger than the screen is discarded.
+- The cursor covers the whole block when it stands on any of its cells. Selecting any part of a
+  block selects all of it, and copying yields its text once.
+- When the pane becomes too narrow for a block, the text is shown at normal size on its first row
+  and grows back when the pane is wide enough again. Rotating the phone keeps blocks whole.
+
+Full-screen programs redraw on resize anyway; the narrow-pane rule matters only for text already in
+the scrollback.
 
 ## Current boundaries
 

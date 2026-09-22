@@ -1,0 +1,28 @@
+{
+  "id": "hierarchy",
+  "crop": [
+    [
+      0,
+      0,
+      600,
+      420
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.8000908660033019,
+      "kind": "tap",
+      "points": [
+        34,
+        18
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 7.93,
+  "bytes": 55324,
+  "width": 600,
+  "height": 420,
+  "video": "hierarchy.mp4",
+  "poster": "hierarchy.jpg"
+}

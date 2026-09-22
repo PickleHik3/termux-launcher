@@ -11,14 +11,14 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The last card's four sections, and what its Copy button puts on the clipboard.
+ * The last card's six sections, and what its Copy button puts on the clipboard.
  *
- * <p>Four things are worth knowing on the way out — the key every launcher shortcut starts with,
- * where the launcher is made the user's own, the launcher's own extras, and where graphical Linux
- * apps are set up — and the first device pass showed that a paragraph carrying a command inside
- * the prose is not a thing anyone can act on from a phone. So each section is a heading, one
- * sentence, and where there is something to run, the command on its own line with its own Copy
- * button.
+ * <p>Six things are worth knowing on the way out — what holding on the terminal gives you, the key
+ * every launcher shortcut starts with, where the launcher is made the user's own, the launcher's
+ * own extras, that a pane can draw pictures, and where graphical Linux apps are set up — and the
+ * first device pass showed that a paragraph carrying a command inside the prose is not a thing
+ * anyone can act on from a phone. So each section is a heading, one sentence, and where there is
+ * something to run, the command on its own line with its own Copy button.
  *
  * <p>The shortcuts and customize sections are the two the run never teaches: nothing in either is
  * a lesson, and a newcomer who does not know the shortcut key or the editors exist will not go
@@ -56,6 +56,15 @@ public final class TourClosingCard {
         }
     }
 
+    /**
+     * Decision (user, 2026-09-21): the hold was a shown-only card at the end of the Keyboard
+     * lesson, which asked a new phone for something it cannot do — the mouse half needs a program
+     * following the mouse, and a shell that has just been installed has none. It is a fact to read,
+     * not a gesture to practise, so it comes first here: it is the one thing on this card the user
+     * will meet by accident, the first time a finger rests on the text.
+     */
+    private static final Section HOLD = new Section(
+        R.string.tour_closing_hold_heading, R.string.tour_closing_hold_copy, 0);
     private static final Section SHORTCUTS = new Section(
         R.string.tour_closing_shortcuts_heading, R.string.tour_closing_shortcuts_copy, 0);
     private static final Section CUSTOMIZE = new Section(
@@ -69,6 +78,14 @@ public final class TourClosingCard {
      */
     private static final Section EXTRAS_NIX = new Section(
         R.string.tour_closing_extras_heading, R.string.tour_closing_extras_copy_nix, 0);
+    /**
+     * Decision (user, 2026-09-21): a sentence, and no command. The terminal draws pictures without
+     * being asked; only programs that decide by reading a name instead of asking the terminal need
+     * anything, and what they need is a habit rather than a line pasted once. The recipe and its
+     * caveats stay in Help, under "Pictures in the terminal", which is where they can be qualified.
+     */
+    private static final Section PICTURES = new Section(
+        R.string.tour_closing_pictures_heading, R.string.tour_closing_pictures_copy, 0);
     private static final Section GUI_APPS = new Section(
         R.string.tour_closing_gui_apps_heading, R.string.tour_closing_gui_apps_copy, 0);
     /**
@@ -80,14 +97,15 @@ public final class TourClosingCard {
         R.string.tour_closing_gui_apps_heading, R.string.tour_closing_gui_apps_copy_nix, 0);
 
     private static final List<Section> SECTIONS = Collections.unmodifiableList(
-        Arrays.asList(SHORTCUTS, CUSTOMIZE, EXTRAS, GUI_APPS));
+        Arrays.asList(HOLD, SHORTCUTS, CUSTOMIZE, EXTRAS, PICTURES, GUI_APPS));
     private static final List<Section> SECTIONS_NIX = Collections.unmodifiableList(
-        Arrays.asList(SHORTCUTS, CUSTOMIZE, EXTRAS_NIX, GUI_APPS_NIX));
+        Arrays.asList(HOLD, SHORTCUTS, CUSTOMIZE, EXTRAS_NIX, PICTURES, GUI_APPS_NIX));
 
     /**
-     * The card's sections, in order. The same four in every edition, and the same heading for the
+     * The card's sections, in order. The same six in every edition, and the same heading for the
      * last one everywhere; nix's last section carries its own sentence, since it has no "Get GUI
-     * apps" screen for the others' sentence to point at.
+     * apps" screen for the others' sentence to point at. The hold and the pictures sections are
+     * the terminal's own behaviour, so they read the same in every edition.
      */
     @NonNull
     public static List<Section> sections(@NonNull TourEdition edition) {

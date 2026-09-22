@@ -1,0 +1,29 @@
+{
+  "id": "start",
+  "crop": [
+    [
+      0,
+      302,
+      1080,
+      1260
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.6002673369948752,
+      "kind": "tap",
+      "points": [
+        540,
+        1255
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 7.82,
+  "bytes": 697514,
+  "width": 1080,
+  "height": 1260,
+  "video": "start.mp4",
+  "poster": "start.jpg",
+  "source": "pong 1080x2412@420 native"
+}

@@ -1,0 +1,39 @@
+{
+  "id": "base_values",
+  "crop": [
+    [
+      0,
+      430,
+      600,
+      200
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.8001297720002185,
+      "kind": "swipe",
+      "points": [
+        257,
+        548,
+        340,
+        548
+      ],
+      "duration": 0.5
+    },
+    {
+      "t": 4.768588803999592,
+      "kind": "tap",
+      "points": [
+        561,
+        548
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 8.77,
+  "bytes": 20065,
+  "width": 600,
+  "height": 200,
+  "video": "base_values.mp4",
+  "poster": "base_values.jpg"
+}

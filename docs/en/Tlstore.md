@@ -51,6 +51,7 @@ by name.
 | `tlstore info fish-shell` | what an item is, its version, and where it goes |
 | `tlstore install kitten sigye` | install one or more items by name |
 | `tlstore install` | open the picker instead of naming anything |
+| `tlstore browse` | look through the whole store and install as you go |
 | `tlstore remove kitten` | remove an item tlstore installed |
 | `tlstore update` | bring everything you have up to date |
 | `tlstore update --check` | see what is out of date without installing anything |
@@ -59,6 +60,7 @@ by name.
 | `tlstore display` | set up graphics for Linux apps |
 | `tlstore doctor` | check that everything is in place |
 | `tlstore version` | show the tlstore and item-list versions |
+| `--tsv` | on `list`, `search`, `info` and `update --check`: the same answer as tab-separated columns, for a program to read |
 
 `-y` says yes to everything except a config file of yours. `--configs` on `install` and `update`
 answers that one too, for scripts.
@@ -156,6 +158,64 @@ off — `tlstore update` is how it gets new versions. Once it is installed, sign
 claude
 ```
 
+## On official Termux
+
+Termux Launcher puts tlstore in place for you, but you do not need the launcher to use it — on
+plain Termux, one command installs it:
+
+```
+curl -fsSL https://raw.githubusercontent.com/PickleHik3/termux-launcher/main/scripts/tlstore/install.sh | sh
+```
+
+It checks what it downloads before installing anything, and puts tlstore exactly where the
+launcher app would: the `tlstore` command in your Termux `bin`, with the shorter `tl` and `tls`
+where those names are still free, and its item list alongside it. `tlstore update` keeps tlstore
+itself current from there, the same way it keeps your installed items current — you never need to
+run the command above again. If you install Termux Launcher later, the app quietly takes over
+keeping tlstore up to date. If you already have the launcher, running this command does nothing —
+it already provides tlstore.
+
+## Browsing
+
+`tlstore browse` opens the whole store in one view: the items on the left (or above, on a narrow
+phone screen), and whatever you are pointing at explained beside it. Plain `tlstore` with nothing
+after it opens the same view.
+
+| key | what it does |
+| --- | --- |
+| `Tab` | mark an item, so several can go in at once |
+| `Enter` | install what you marked, or the one you are on |
+| `Ctrl-R` | remove the one you are on |
+| `Ctrl-U` | bring everything you have up to date |
+| `Ctrl-F` | fetch a fresh list of items |
+| `?` | show these keys |
+| `Esc` | leave |
+
+Installing, removing and updating happen in the terminal, not in the view: the questions tlstore
+asks still reach you, and the view comes back when the work is done. An item you marked that is
+already installed is skipped with one line.
+
+The view needs `fzf`. Without it, tlstore offers to install it and otherwise falls back to the
+numbered picker, the same one `tlstore install` uses when you name nothing.
+
+## Which app you are in
+
+The store runs in the launcher and in plain Termux, and a few items only make sense in one of
+them. `fastfetch` is a launcher item: its animated logo needs the launcher's terminal. Everything
+else — `claude-code`, `sigye`, `kitten`, `fish-shell` — is offered in both.
+
+An item that belongs to one of them is filtered out completely everywhere else: it is not listed,
+not found by a search, and `tlstore info` says it is not in the list. `tlstore doctor` prints an
+`App` line naming what tlstore thinks it is running in.
+
+tlstore works this out from the environment the launcher sets, and, when a session came in over
+ssh and carries nothing, from the file the app writes each time it starts. Set `TLSTORE_HOST` to
+`launcher` or `termux` to say it yourself.
+
+For maintainers: the option is `host=launcher`, `host=termux`, or a comma list; an item without it
+is offered everywhere. `min-launcher=X.Y.Z` hides an item from launchers older than that version,
+and is ignored where there is no launcher to compare against.
+
 ## References
 
 `fastfetch`, `kitten`, `sigye`, and the musl loader are built by the launcher's maintainer rather
@@ -179,8 +239,8 @@ hand-edit it. To add or change an item:
 2. Run `scripts/tlstore/build-catalog.sh <path to termux-launcher-binaries/SHA256SUMS>` to compute
    digests, bump the serial, and write `catalog.tsv`. A plain `http(s)` source is downloaded once
    to hash it, so that step needs the network; it must name a tag or a commit, never a branch.
-3. Run `scripts/tlstore/sign-catalog.sh` to sign it.
-4. Commit all three: `items.tsv`, `catalog.tsv`, and `catalog.tsv.minisig`.
+3. Run `scripts/tlstore/sign.sh` to sign it (it also signs the `tlstore` script itself).
+4. Commit `items.tsv`, `catalog.tsv`, `catalog.tsv.minisig` and `tlstore.minisig`.
 
 Anything a user should not choose directly gets `hidden=1` in its options; anything needed only
 while installing goes in `build=`. A file in this repository is pinned to a tag or the commit that

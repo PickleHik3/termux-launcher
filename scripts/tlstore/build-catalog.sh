@@ -19,7 +19,7 @@
 # same day gets NN + 1, because tlstore accepts a refreshed catalog only when
 # its serial is higher than the one it already has.
 #
-# After building, sign it: scripts/tlstore/sign-catalog.sh
+# After building, sign it: scripts/tlstore/sign.sh
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -144,4 +144,4 @@ mkdir -p "$(dirname "$out")"
 cp "$tmp" "$out"
 chmod 644 "$out"
 echo "wrote $out — $count items, serial=$serial"
-echo "sign it with scripts/tlstore/sign-catalog.sh before it ships"
+echo "sign it with scripts/tlstore/sign.sh before it ships"

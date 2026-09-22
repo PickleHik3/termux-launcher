@@ -1,0 +1,46 @@
+{
+  "id": "windows",
+  "crop": [
+    [
+      0,
+      0,
+      600,
+      140
+    ]
+  ],
+  "events": [
+    {
+      "t": 1.200074403999679,
+      "kind": "tap",
+      "points": [
+        157,
+        18
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 2.4370987669990427,
+      "kind": "tap",
+      "points": [
+        73,
+        18
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 3.6718562059995747,
+      "kind": "tap",
+      "points": [
+        120,
+        18
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 5.8,
+  "bytes": 130472,
+  "width": 600,
+  "height": 140,
+  "video": "windows.mp4",
+  "poster": "windows.jpg"
+}

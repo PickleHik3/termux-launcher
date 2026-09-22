@@ -230,7 +230,11 @@ public abstract class TerminalTestCase extends TestCase {
 					codePoint = c;
 				}
 				assertFalse("Screen should never contain unassigned characters", Character.getType(codePoint) == Character.UNASSIGNED);
-				int width = WcWidth.width(codePoint);
+				// A text sizing block keeps its whole text in one cell, so on those rows only the
+				// stored width says how many columns a character really took.
+				int width = lines[i].hasTextSizes()
+						? lines[i].getDisplayWidthAt(j - (Character.isSupplementaryCodePoint(codePoint) ? 1 : 0))
+						: WcWidth.width(codePoint);
 				assertFalse("The first column should not start with combining character", currentColumn == 0 && width < 0);
 				if (width > 0) currentColumn += width;
 			}

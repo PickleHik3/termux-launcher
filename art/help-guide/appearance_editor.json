@@ -1,0 +1,85 @@
+{
+  "id": "appearance_editor",
+  "crop": [
+    [
+      0,
+      40,
+      600,
+      60
+    ],
+    [
+      0,
+      290,
+      600,
+      570
+    ]
+  ],
+  "events": [
+    {
+      "t": 0.8000715769994713,
+      "kind": "swipe",
+      "points": [
+        33,
+        63,
+        33,
+        63
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 4.316040763002093,
+      "kind": "tap",
+      "points": [
+        50,
+        78
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 8.22793461100082,
+      "kind": "tap",
+      "points": [
+        520,
+        826
+      ],
+      "duration": 0.65
+    },
+    {
+      "t": 12.085838121998677,
+      "kind": "swipe",
+      "points": [
+        260,
+        558,
+        340,
+        558
+      ],
+      "duration": 0.5
+    },
+    {
+      "t": 15.981477904999338,
+      "kind": "swipe",
+      "points": [
+        340,
+        558,
+        260,
+        558
+      ],
+      "duration": 0.5
+    },
+    {
+      "t": 19.575882086999627,
+      "kind": "tap",
+      "points": [
+        499,
+        333
+      ],
+      "duration": 0.65
+    }
+  ],
+  "duration": 22.77,
+  "bytes": 192393,
+  "width": 600,
+  "height": 630,
+  "video": "appearance_editor.mp4",
+  "poster": "appearance_editor.jpg"
+}
