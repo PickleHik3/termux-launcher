@@ -50,6 +50,13 @@ public final class X11LinuxAppRunner {
      * healthy start a crash.
      */
     @VisibleForTesting static final long QUICK_FAIL_MS = 3_000L;
+    /**
+     * How long a desktop is given to bring a window manager of its own before the launcher offers
+     * its own back. See {@link #windowManagerSafetyNet}. XFCE's xfwm4 takes the screen in the first
+     * moments of its session; ten seconds is well past that and still short enough that an
+     * unmanaged display is not left that way.
+     */
+    @VisibleForTesting static final long WM_SAFETY_NET_MS = 10_000L;
     private static final String LOG_TAG = "X11LinuxAppRunner";
 
     /**
@@ -164,7 +171,7 @@ public final class X11LinuxAppRunner {
         if (!host.isDisplayEnabled()) host.turnOnDisplay();
         host.showDisplayPlace();
         if (host.isDisplayRunning()) {
-            launch(app);
+            launch(app, false);
             return;
         }
         // The server needs a moment; the app runs when the controller says the display is up.
@@ -180,7 +187,9 @@ public final class X11LinuxAppRunner {
         LinuxAppCatalog.LinuxApp app = pending;
         pending = null;
         handler.removeCallbacks(giveUp);
-        launch(app);
+        // The display is up because this runner just asked for it: the manager it starts may not
+        // be there yet, and a desktop must wait for it rather than race it.
+        launch(app, true);
     }
 
     public void destroy() {
@@ -247,7 +256,7 @@ public final class X11LinuxAppRunner {
      * alongside the GPU probe, so a remembered app costs no more than an ordinary one) whether the
      * first attempt already needs the flag.
      */
-    private void launch(@NonNull LinuxAppCatalog.LinuxApp app) {
+    private void launch(@NonNull LinuxAppCatalog.LinuxApp app, boolean displayJustStarted) {
         // The probe may build a GL context the first time; off the main thread, then back.
         EXECUTOR.execute(() -> {
             // A desktop is never the Electron crash D7 remembers, and --no-sandbox is a flag no
@@ -259,7 +268,9 @@ public final class X11LinuxAppRunner {
             // here beside the probe rather than on the main thread when the desktop ends.
             String configured = app.session ? configuredWindowManager() : "";
             String stopWm = app.session
-                ? X11WindowManager.stopCommand(X11WindowManager.command(configured)) : null;
+                ? X11WindowManager.stopCommand(X11WindowManager.command(configured),
+                    displayJustStarted)
+                : null;
             String startWm = app.session ? X11WindowManager.startCommand(configured) : null;
             String script = app.session ? sessionScript(app, display, env, stopWm)
                 : script(app, display, env, noSandbox);
@@ -312,6 +323,33 @@ public final class X11LinuxAppRunner {
                       @NonNull String display, @NonNull List<String> env,
                       @Nullable String windowManagerRestart) {
         new Watch(app, display, env, windowManagerRestart).start(script, noSandbox);
+        if (app.session && windowManagerRestart != null) {
+            handler.postDelayed(() -> windowManagerSafetyNet(app, windowManagerRestart),
+                WM_SAFETY_NET_MS);
+        }
+    }
+
+    /**
+     * D1's floor (user, 2026-09-22): a desktop that brings no window manager of its own must not
+     * leave the display with none at all. Standing ours down is unconditional, so a desktop whose
+     * manager never starts — or crashes on the way up — would otherwise leave windows that cannot
+     * be raised, moved or closed. That is a worse display than the one D1 set out to fix.
+     *
+     * <p>Nothing has to detect whether a manager is there, because X already does: only one client
+     * may hold the window-manager selection, so simply trying to start ours again is the test.
+     * A desktop that brought its own gets a refusal that costs nothing and changes nothing — the
+     * script above exits without touching the pid file; a display with none gets ours back.
+     *
+     * <p>The wait is long on purpose. Claiming the screen out from under a desktop whose manager
+     * is merely slow would cause exactly the fault this guards against, only with the blame
+     * reversed, so the net is set well after any manager would have taken it.
+     */
+    private void windowManagerSafetyNet(@NonNull LinuxAppCatalog.LinuxApp app,
+                                        @NonNull String windowManagerRestart) {
+        // Anything but the desktop still on the display is stale: it ended, or a take-over moved
+        // on from it, and either way its window manager is not this net's business any more.
+        if (runningSession != app) return;
+        host.runScript(windowManagerRestart, ignored -> { });
     }
 
     /**
@@ -566,8 +604,20 @@ public final class X11LinuxAppRunner {
      */
     @NonNull
     static String windowManagerScript(@NonNull String command, @NonNull String display) {
+        String pidFile = ProotDistro.singleQuote(X11WindowManager.WM_PID_PATH);
         return "export DISPLAY=" + display + "\n"
-            + "echo $$ > " + ProotDistro.singleQuote(X11WindowManager.WM_PID_PATH) + "\n"
-            + "exec " + command + "\n";
+            + command + " &\n"
+            + "wm=$!\n"
+            // Only one client may hold the window-manager selection, so a manager that finds the
+            // screen already taken exits at once. That is what the safety net below leans on: a
+            // moment's wait tells a real start from a refusal, and a refusal must not touch the
+            // pid file — writing it would name a process that is already gone, and the cleanup
+            // below would then take away the file naming the manager that really is running.
+            + "sleep 1\n"
+            + "kill -0 \"$wm\" 2>/dev/null || exit 0\n"
+            + "echo \"$wm\" > " + pidFile + "\n"
+            + "wait \"$wm\"\n"
+            // Ours while it ran, and nobody else's afterwards.
+            + "[ \"$(cat " + pidFile + " 2>/dev/null)\" = \"$wm\" ] && rm -f " + pidFile + "\n";
     }
 }

@@ -150,6 +150,49 @@ public class X11WindowManagerTest {
         assertNull("but there may be no manager at all", X11WindowManager.stopCommand(null));
     }
 
+    /**
+     * The race this cost a device to find (pong, 2026-09-22). Tapping a desktop with no display
+     * running starts one, and the launch follows the server coming up — which is before the
+     * wrapper the server execs has started the manager and written its pid. Reading the file
+     * straight away found nothing, so our openbox survived, xfwm4 found the screen taken and
+     * refused, and XFCE came up under the launcher's maximise-everything rule: exactly what D1
+     * exists to prevent. The stop now waits for the file rather than assuming it is there.
+     */
+    /**
+     * The race this cost two device runs to pin down (pong, 2026-09-22). Tapping a desktop with no
+     * display running starts one, and the launch follows the server reporting itself up — which is
+     * before it has forked the wrapper that starts the manager and writes its pid. The first
+     * attempt at this waited for the <em>file</em>, bounded at two seconds, and still lost: the
+     * file's own timestamp showed it written after the stop had given up. So the wait is for a
+     * manager that answers, and it is long enough to mean it.
+     */
+    @Test public void aDesktopThatJustStartedTheDisplayWaitsForTheManagerToBeUp() {
+        String stop = X11WindowManager.stopCommand("openbox", true);
+        assertNotNull(stop);
+        // Not "the file exists" — a file can name a process that has gone.
+        assertTrue(stop, stop.contains("kill -0 \"$wm\" 2>/dev/null && break"));
+        // Bounded, so a manager that never comes cannot hold a desktop up for ever.
+        assertTrue(stop, stop.contains("[ \"$i\" -lt " + X11WindowManager.AWAIT_MANAGER_TRIES + " ]"));
+        assertTrue("fifteen seconds, not two — two is what lost on the device",
+            X11WindowManager.AWAIT_MANAGER_TRIES >= 100);
+        // The wait comes before the kill, or it would be no wait at all.
+        assertTrue(stop, stop.indexOf("&& break") < stop.indexOf("] && kill \"$wm\""));
+    }
+
+    /**
+     * And it is spent only where there is something to wait for. With the display already up the
+     * file is either there — the loop would end on its first look anyway — or there is genuinely no
+     * manager of ours, where waiting could only delay the desktop the user asked for.
+     */
+    @Test public void aDesktopOnARunningDisplayWaitsForNothing() {
+        String stop = X11WindowManager.stopCommand("openbox", false);
+        assertNotNull(stop);
+        assertFalse(stop, stop.contains("while"));
+        assertFalse(stop, stop.contains("sleep"));
+        assertEquals("and it is exactly what the one-argument form builds",
+            X11WindowManager.stopCommand("openbox"), stop);
+    }
+
     /** An empty pid file — no manager of ours running — kills nothing at all. */
     @Test public void nothingRecordedMeansNothingIsKilled() {
         String stop = X11WindowManager.stopCommand("openbox");
