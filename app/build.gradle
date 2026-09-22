@@ -118,6 +118,13 @@ android {
     lint {
         disable 'ProtectedPermissions'
         disable 'HardcodedDebugMode'
+        // Untranslated strings are a standing condition, not a defect: the app ships more strings
+        // than any translation carries and Android falls back to the default resource. Baselining
+        // this one would put the build back in the red on the next string anybody adds.
+        disable 'MissingTranslation'
+        // Everything else that was already here is recorded in the baseline rather than silenced,
+        // so a new finding of any kind still fails the build.
+        baseline = file('lint-baseline.xml')
     }
 
     testOptions {
@@ -375,8 +382,15 @@ if (findProject(":x11-server:loader") != null) {
         }
         android.sourceSets.getByName(typeName).assets.srcDir typeDir
         tasks.configureEach {
-            if (name.startsWith("merge") && name.endsWith("Assets")
-                    && name.toLowerCase().contains(typeName.toLowerCase())) {
+            def mentionsType = name.toLowerCase().contains(typeName.toLowerCase())
+            // The loader lands in an asset source set, so everything that reads the assets has to
+            // wait for it — the asset merge, and lint too: its analysis and model tasks walk the
+            // same source sets, and Gradle fails the build outright when they meet a directory
+            // nothing told them to wait for.
+            def readsAssets = (name.startsWith("merge") && name.endsWith("Assets")) ||
+                name.startsWith("lint") || name.contains("LintReportModel") ||
+                name.contains("LintVitalReportModel")
+            if (mentionsType && readsAssets) {
                 dependsOn task
             }
         }

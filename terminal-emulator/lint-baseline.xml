@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<issues format="6" by="lint 8.13.2" type="baseline" client="gradle" dependencies="false" name="AGP (8.13.2)" variant="all" version="8.13.2">
+
+    <issue
+        id="DefaultLocale"
+        message="Implicitly using the default locale is a common source of bugs: Use `String.format(Locale, ...)` instead"
+        errorLine1="                    Logger.logWarn(mClient, LOG_TAG, String.format(&quot;SGR unknown code %d&quot;, code));"
+        errorLine2="                                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/terminal/TerminalEmulator.java"
+            line="3391"
+            column="54"/>
+    </issue>
+
+    <issue
+        id="DiscouragedPrivateApi"
+        message="Reflective access to descriptor, which is not part of the public SDK and therefore likely to change in future Android releases"
+        errorLine1="                descriptorField = FileDescriptor.class.getDeclaredField(&quot;descriptor&quot;);"
+        errorLine2="                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/terminal/TerminalSession.java"
+            line="555"
+            column="35"/>
+    </issue>
+
+    <issue
+        id="SuspiciousIndentation"
+        message="Suspicious indentation: This is conditionally executed; expected it to be indented"
+        errorLine1="                    if (oldLine.mText[i] != &apos; &apos;)"
+        errorLine2="                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="src/main/java/com/termux/terminal/TerminalBuffer.java"
+            line="478"
+            column="21"/>
+        <location
+            file="src/main/java/com/termux/terminal/TerminalBuffer.java"
+            line="477"
+            column="21"
+            message="Previous statement here"/>
+    </issue>
+
+    <issue
+        id="GradleDependency"
+        message="A newer version of androidx.annotation:annotation than 1.9.0 is available: 1.10.0"
+        errorLine1="    implementation &quot;androidx.annotation:annotation:1.9.0&quot;"
+        errorLine2="                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
+        <location
+            file="build.gradle"
+            line="81"
+            column="20"/>
+    </issue>
+
+</issues>
