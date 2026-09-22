@@ -177,10 +177,23 @@ public final class LauncherWidgetRepository {
      * so it keeps where it is and the layout finds it room. One that left is simply not restored.
      * </p>
      *
-     * <p>Returns true only when widgets moved, so a caller can redraw on exactly those turns.
+     * <p>Returns true when a layout was swapped in, so a caller can redraw on exactly those turns.
+     * The swap may leave every widget where it was — the same grid on both sides is the common
+     * case — so this is "the wall was re-laid", not "something looks different".
      * Refused, with nothing changed, while an add is in flight — its reservation was made against
      * the layout on screen.</p>
      */
+    /**
+     * The same, for a caller holding raw preference numbers: the grid is clamped into its safety
+     * bounds here rather than at each call site.
+     */
+    public synchronized boolean applyOrientation(@NonNull String key, int rows, int columns) {
+        return applyOrientation(key, new WidgetGridDefinition(
+            Math.max(WidgetGridDefinition.MIN_ROWS, Math.min(WidgetGridDefinition.MAX_ROWS, rows)),
+            Math.max(WidgetGridDefinition.MIN_COLUMNS,
+                Math.min(WidgetGridDefinition.MAX_COLUMNS, columns))));
+    }
+
     public synchronized boolean applyOrientation(@NonNull String key,
                                                  @NonNull WidgetGridDefinition next) {
         if (key.isEmpty() || key.equals(orientation)) return false;
