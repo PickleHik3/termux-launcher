@@ -351,8 +351,12 @@ has never heard of. That is a real bug waiting, not a theoretical one.
 
 Ten of the nineteen Termux session files carry an `Icon` key, and four of those ten are `Icon=`
 with an empty value (xfce, mate, cinnamon, cinnamon2d) — a key that is present and says nothing.
-Three name a real theme icon (`openbox.desktop` → `openbox`, both icewm entries → `icewm`), and
-three give an absolute path into the prefix (the e16 entries → `$P/share/e16/icons/e16.png`,
+Three name a theme icon (`openbox.desktop` → `openbox`, both icewm entries → `icewm`) — but only
+openbox's is backed by a file. **Corrected while building P3 (2026-09-22):** icewm ships its
+pictures in `share/icewm/icons/`, a private directory of its own, not a freedesktop theme path, so
+`Icon=icewm` resolves nowhere and IceWM's tile is generic. Two real theme icons, not three.
+
+Three give an absolute path into the prefix (the e16 entries → `$P/share/e16/icons/e16.png`,
 which the existing rootfs-absolute icon handling already covers,
 `project-docs/distro-apps/SPEC.md:34`). lxqt, i3 (both), plasmax11, awesome, bspwm, herbstluftwm
 and wmaker have no `Icon` key at all — nine of the nineteen show nothing.
