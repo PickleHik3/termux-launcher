@@ -278,10 +278,13 @@ public final class UrlDetector {
             while (i < n) {
                 while (i < n && text.charAt(i) == ' ') i++;
                 if (i >= n) return -1;
-                if (columnStart[i] >= minColumn) break;
-                // A block to the left of the address's own: another pane's sidebar, not more of
-                // this address. Step over it and look past the gap that separates them.
-                while (i < n && text.charAt(i) != ' ') i++;
+                int runEnd = i;
+                while (runEnd < n && text.charAt(runEnd) != ' ') runEnd++;
+                // Keep the run unless it ends clear of the address's own block: a pane's text
+                // column wanders by a column or two between a first row and its continuations,
+                // while another pane's sidebar stops well short of it.
+                if (columnEnd[runEnd - 1] > minColumn - 2) break;
+                i = runEnd;
             }
             if (i >= n || i < consumed) return -1;
             // Only the first row of this line can continue the row above; a wrapped tail cannot.

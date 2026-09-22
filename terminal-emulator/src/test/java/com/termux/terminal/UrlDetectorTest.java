@@ -179,4 +179,27 @@ public class UrlDetectorTest extends TerminalTestCase {
         for (int row = 0; row < rows; row++)
             assertEquals("row " + row, url, urlAt(2, row));
     }
+
+    /**
+     * A pane's text column wanders by a column or two between an address's first row and its
+     * continuations. That must not cost the continuation: it is still the same block.
+     */
+    public void testAContinuationIndentedDifferentlyFromTheAddressIsStillJoined() {
+        for (int offset = 0; offset <= 2; offset++) {
+            withTerminalSized(COLUMNS, 12);
+            String url = "https://example.com/2/aaaaaaaaaa/bbbbbbbbbb/cc/end-2";
+            int paneColumn = 14;
+            int width = COLUMNS - paneColumn - offset;
+            int rows = (url.length() + width - 1) / width;
+            for (int i = 0; i < rows; i++) {
+                StringBuilder line = new StringBuilder(i == 0 ? "  omen" : "  dev");
+                int column = i == 0 ? paneColumn + offset : paneColumn;
+                while (line.length() < column) line.append(' ');
+                line.append(url, i * width, Math.min(url.length(), (i + 1) * width));
+                row(line.toString());
+            }
+            assertEquals("offset " + offset + ", first row", url, urlAt(paneColumn + offset + 2, 0));
+            assertEquals("offset " + offset + ", last row", url, urlAt(paneColumn + 2, rows - 1));
+        }
+    }
 }
