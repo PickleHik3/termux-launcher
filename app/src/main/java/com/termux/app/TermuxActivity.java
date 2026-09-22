@@ -9959,11 +9959,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The widget grid's columns and rows are the user's; the repository only remembers them. The
      * grid belongs to the home place and to this orientation, so a turn of the screen re-applies it.
+     * The widgets' places belong to the orientation too: the one being left is put down and the one
+     * arriving is picked up again, so turning the screen and turning it back changes nothing.
      */
     private void applyWidgetGridPreference() {
         if (mWidgetHostController == null) return;
         PlaceLayout layout = placeLayout(com.termux.app.wall.PaneWallPage.WIDGETS,
             currentPlaceOrientation());
+        boolean moved = mWidgetHostController.repository().applyOrientation(
+            currentPlaceOrientation().storageValue(),
+            com.termux.app.launcher.widget.WidgetGridDefinition.clamped(
+                layout.widgetRows, layout.widgetColumns));
+        // The grid is unchanged on a turn of the screen that only swapped the layouts, so the
+        // host's own redraw does not fire; the pane is asked to draw itself again here instead.
+        if (moved && mWidgetPaneController != null) mWidgetPaneController.onStart();
         mWidgetHostController.applyGrid(layout.widgetRows, layout.widgetColumns);
     }
 

@@ -15,6 +15,12 @@ public final class WidgetGridDefinition {
     public final int rows;
     public final int columns;
 
+    /** The nearest grid inside the safety bounds, for callers holding a raw preference value. */
+    public static WidgetGridDefinition clamped(int rows, int columns) {
+        return new WidgetGridDefinition(Math.max(MIN_ROWS, Math.min(MAX_ROWS, rows)),
+            Math.max(MIN_COLUMNS, Math.min(MAX_COLUMNS, columns)));
+    }
+
     public WidgetGridDefinition(int rows, int columns) {
         if (rows < MIN_ROWS || rows > MAX_ROWS || columns < MIN_COLUMNS
             || columns > MAX_COLUMNS) {
