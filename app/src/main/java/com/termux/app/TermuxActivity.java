@@ -9970,10 +9970,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             currentPlaceOrientation().storageValue(),
             com.termux.app.launcher.widget.WidgetGridDefinition.clamped(
                 layout.widgetRows, layout.widgetColumns));
+        mWidgetHostController.applyGrid(layout.widgetRows, layout.widgetColumns);
         // The grid is unchanged on a turn of the screen that only swapped the layouts, so the
         // host's own redraw does not fire; the pane is asked to draw itself again here instead.
         if (moved && mWidgetPaneController != null) mWidgetPaneController.onStart();
-        mWidgetHostController.applyGrid(layout.widgetRows, layout.widgetColumns);
     }
 
     private boolean updateAppLauncherBarHeight() {
