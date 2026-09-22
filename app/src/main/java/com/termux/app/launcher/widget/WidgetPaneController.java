@@ -105,6 +105,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     public void onStart() { render(); }
+    /** Draw the pane again from the repository — the layout under it changed without a grid change. */
+    public void redraw() { render(); }
     public void onStop() {
         catalog.cancel(); pane.picker().closeImmediate(); dismissPaneMenu();
     }
@@ -883,6 +885,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private void resizeDrag(@NonNull WidgetEditPolicy.Handle handle, int desiredEdgePx) {
         LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
         if (record == null) return;
+        // Same reason as the move path: a provider push mid-resize would re-inflate under the
+        // finger. Asked on every move event, so the safety release trails the gesture.
+        SafeLauncherAppWidgetHostView hostView = safeHostViewFor(edit.appWidgetId);
+        if (hostView != null) hostView.beginDeferringUpdates();
         boolean horizontal = handle == WidgetEditPolicy.Handle.LEFT
             || handle == WidgetEditPolicy.Handle.RIGHT;
         int gridEdgePx = horizontal ? desiredEdgePx - pane.grid().getLeft()
@@ -895,6 +901,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     private void endResizeDrag() {
+        SafeLauncherAppWidgetHostView resized = safeHostViewFor(edit.appWidgetId);
+        if (resized != null) resized.endDeferringUpdates();
         LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
         WidgetEditPolicy.Candidate candidate = edit.resizeCandidate;
         edit.resizeCandidate = null;

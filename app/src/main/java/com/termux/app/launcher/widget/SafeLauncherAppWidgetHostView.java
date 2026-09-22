@@ -98,12 +98,14 @@ public final class SafeLauncherAppWidgetHostView extends AppWidgetHostView {
      * can never freeze the widget.
      */
     public void beginDeferringUpdates() {
+        // The safety release is measured from the last call, not the first: a resize asks on every
+        // move event, and a gesture that outlives the timeout must not start re-inflating halfway.
+        deferralHandler.removeCallbacks(deferralTimeout);
+        deferralHandler.postDelayed(deferralTimeout, DEFER_TIMEOUT_MS);
         if (deferringUpdates) return;
         deferringUpdates = true;
         hasStashedUpdate = false;
         stashedUpdate = null;
-        deferralHandler.removeCallbacks(deferralTimeout);
-        deferralHandler.postDelayed(deferralTimeout, DEFER_TIMEOUT_MS);
     }
 
     /** Ends the deferral and applies whatever RemoteViews arrived meanwhile, if any. */
