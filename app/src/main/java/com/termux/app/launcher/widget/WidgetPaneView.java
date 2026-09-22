@@ -2,6 +2,7 @@ package com.termux.app.launcher.widget;
 
 import android.content.Context;
 import android.graphics.Canvas;
+import android.os.SystemClock;
 import android.graphics.Paint;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -9,6 +10,7 @@ import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.util.AttributeSet;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -33,6 +35,20 @@ public final class WidgetPaneView extends FrameLayout {
         default void onWidgetEditDiscard() { }
         /** The + on the page's border tab: another page, and the pane turns to it. */
         default void onWidgetAddPage() { }
+    }
+
+    /**
+     * Where the finger carrying a widget out of the picker is, and where it let go.
+     *
+     * <p>The picker is a sheet over this pane, so a widget dragged out of it starts its life as a
+     * press on a list row inside a child of this view and has to end as a drop on the grid, with
+     * the sheet dismissed in between. Nothing below can follow that: the row it started on is
+     * recycled away with the sheet. So the pane itself takes the stream over for the rest of the
+     * gesture and reports it here in screen coordinates.
+     */
+    public interface CarryListener {
+        void onCarryMove(float rawX, float rawY);
+        void onCarryEnd(float rawX, float rawY, boolean canceled);
     }
 
     /** Fraction of the pane width a released drag must cross to commit a page switch. */
@@ -95,8 +111,14 @@ public final class WidgetPaneView extends FrameLayout {
         LayoutParams noticeParams = new LayoutParams(LayoutParams.WRAP_CONTENT, dp(48),
             Gravity.TOP | Gravity.CENTER_HORIZONTAL); addView(notice, noticeParams);
 
-        picker = new WidgetPickerSheetView(context, item -> {
-            if (providerListener != null) providerListener.onProviderSelected(item);
+        picker = new WidgetPickerSheetView(context, new WidgetPickerAdapter.Listener() {
+            @Override public void onProviderSelected(@NonNull WidgetProviderItem item) {
+                if (providerListener != null) providerListener.onProviderSelected(item);
+            }
+            @Override public void onProviderHeld(@NonNull WidgetProviderItem item,
+                                                 @NonNull View card, float rawX, float rawY) {
+                if (providerListener != null) providerListener.onProviderHeld(item, card, rawX, rawY);
+            }
         });
         picker.setId(R.id.widget_picker_sheet);
         addView(picker, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
@@ -165,6 +187,62 @@ public final class WidgetPaneView extends FrameLayout {
     }
 
     @Nullable private WidgetDragLayerView dragLayer;
+    @Nullable private CarryListener carry;
+
+    /**
+     * Takes the finger that is currently on the picker over. Everything under this pane is sent
+     * the cancel an intercepting parent would have sent it, so the row the press began on lets go
+     * cleanly and performs no click, and every later event of that gesture goes to {@code listener}
+     * instead of to a child. Ancestors are asked to keep their hands off it for the same reason.
+     */
+    public void beginCarry(@NonNull CarryListener listener) {
+        if (carry != null) return;
+        carry = listener;
+        ViewParent parent = getParent();
+        if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+        long now = SystemClock.uptimeMillis();
+        MotionEvent cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0f, 0f, 0);
+        super.dispatchTouchEvent(cancel);
+        cancel.recycle();
+    }
+
+    /**
+     * Gives the stream back without a drop. The finger may still be down; it simply owns nothing
+     * from here, which is what a picker closing under it or a pane going away amounts to.
+     */
+    public void endCarry() { carry = null; }
+
+    /** Whether a widget is being carried out of the picker right now. */
+    public boolean carrying() { return carry != null; }
+
+    @Override public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
+        CarryListener carried = carry;
+        if (carried != null) {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_MOVE:
+                    carried.onCarryMove(event.getRawX(), event.getRawY());
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    carry = null;
+                    carried.onCarryEnd(event.getRawX(), event.getRawY(), false);
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    carry = null;
+                    carried.onCarryEnd(event.getRawX(), event.getRawY(), true);
+                    return true;
+                case MotionEvent.ACTION_DOWN:
+                    // A press with no lift before it: the carrying finger was lost somewhere this
+                    // view never heard about. End the carry and let the new press through.
+                    carry = null;
+                    carried.onCarryEnd(event.getRawX(), event.getRawY(), true);
+                    break;
+                default:
+                    // Second fingers belong to nobody while one is carrying a widget.
+                    return true;
+            }
+        }
+        return super.dispatchTouchEvent(event);
+    }
 
     /**
      * Slides the page that has just been rendered in from one side, exactly as a committed swipe
