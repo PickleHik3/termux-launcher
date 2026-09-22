@@ -1,6 +1,7 @@
 package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -103,5 +104,35 @@ public class X11WindowManagerTest {
 
         assertNull(X11WindowManager.xstartup("i3", prefix, wrapper));
         assertEquals(wrapper.getPath(), X11WindowManager.xstartup("openbox", prefix, wrapper));
+    }
+
+    /**
+     * D1: only the manager this launcher started may be stopped for a desktop, and the
+     * configuration file it was handed is the whole of what tells it apart.
+     */
+    @Test public void onlyOurOwnWindowManagerCanBeStopped() {
+        assertEquals("pkill -x -f 'openbox --config-file " + X11CliInstaller.OPENBOX_RC_PATH + "'",
+            X11WindowManager.stopCommand("openbox --config-file "
+                + X11CliInstaller.OPENBOX_RC_PATH));
+
+        assertNull("a user's own openbox is not ours to stop",
+            X11WindowManager.stopCommand("openbox"));
+        assertNull("nor one pointed at a configuration of their own",
+            X11WindowManager.stopCommand("openbox --config-file /somewhere/else/rc.xml"));
+        assertNull("any other manager is run as written and looks exactly like theirs",
+            X11WindowManager.stopCommand("i3"));
+        assertNull("and there may be no manager at all", X11WindowManager.stopCommand(null));
+    }
+
+    /**
+     * The match is the whole command line and nothing less: the display server's own carries the
+     * very same window-manager command as its {@code -xstartup} argument, and has to survive a
+     * desktop starting.
+     */
+    @Test public void theStopMatchesTheWholeCommandLineAndNothingLess() {
+        String stop = X11WindowManager.stopCommand("openbox --config-file "
+            + X11CliInstaller.OPENBOX_RC_PATH);
+        assertNotNull(stop);
+        assertTrue(stop.startsWith("pkill -x -f "));
     }
 }

@@ -15425,6 +15425,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     }
                 }
                 @Override public void showNotice(@NonNull String message) { showToast(message, true); }
+                @Override public void askBeforeReplacingSession(@NonNull String message,
+                        @NonNull Runnable onYes) {
+                    new com.google.android.material.dialog.MaterialAlertDialogBuilder(
+                            TermuxActivity.this)
+                        .setMessage(message)
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .setPositiveButton(R.string.termux_x11_session_replace_confirm,
+                            (dialog, which) -> onYes.run())
+                        .show();
+                }
             });
         mLinuxAppRunnerHook = entry -> {
             if (mLinuxApps == null) return false;

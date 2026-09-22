@@ -53,6 +53,42 @@ public final class X11WindowManager {
     }
 
     /**
+     * The shell line that stops the window manager <em>this launcher</em> started, or null when
+     * there is none it can tell apart from one the user started themselves. Takes what
+     * {@link #command} built, because that is the command line the process actually carries.
+     *
+     * <p>openbox is only ever ours when it is running with the configuration file the launcher
+     * hands it ({@link X11CliInstaller#OPENBOX_RC_PATH}), so that file is the whole of the
+     * identification: a user's own openbox, started from their own dotfiles, does not carry it and
+     * is never matched. Any other configured manager is run as written and looks exactly like one
+     * the user started, so there is nothing here that could safely stop it.
+     *
+     * <p>The match is the <em>whole</em> command line and nothing less ({@code -x} together with
+     * {@code -f}). The display server's own command line quotes the very same window-manager
+     * command as its {@code -xstartup} argument, so a substring match on the configuration path
+     * would take the server down with the manager; an exact match cannot. What that strictness
+     * costs is a manager started some other way simply not being found, which leaves it running —
+     * the harmless direction for a wrong guess.
+     */
+    @Nullable
+    public static String stopCommand(@Nullable String command) {
+        if (command == null || !command.contains(X11CliInstaller.OPENBOX_RC_PATH)) return null;
+        return "pkill -x -f " + ProotDistro.singleQuote(command);
+    }
+
+    /**
+     * The shell line that starts the configured window manager again, after a desktop session that
+     * took the display for itself has finished with it. It is the same thing the server is handed
+     * as {@code -xstartup} ({@link #xstartup}): on nix the wrapper, which is an executable script
+     * in its own right, and everywhere else the command as written. Null when there is no manager
+     * to start.
+     */
+    @Nullable
+    public static String startCommand(@NonNull String configured) {
+        return xstartup(configured);
+    }
+
+    /**
      * Whether {@code binary} is there to be run. A bare name is looked for where the edition
      * keeps its programs — the prefix's {@code bin}, or the nix profile's, which is where a
      * {@code login}'s own {@code PATH} will find it by that same name.
