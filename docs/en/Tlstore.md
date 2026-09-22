@@ -21,7 +21,7 @@ which opens a picker over every item you do not have yet.
 
 ## What's in the store
 
-Six items, and each one brings whatever it needs along with it.
+Seven items, and each one brings whatever it needs along with it.
 
 | item | what you get |
 | --- | --- |
@@ -30,6 +30,7 @@ Six items, and each one brings whatever it needs along with it.
 | `fastfetch` | System information beside an animated logo. It brings the layout; drop any GIF of yours at `~/Pictures/gif/skel.gif` and it plays there, otherwise you get text. |
 | `fish-shell` | The fish shell with the launcher's setup: the wallpaper prompt, `eza`, `zoxide`, and the plugins below. |
 | `kitten` | Kitty's companion tool, for showing images and sending files from the terminal. |
+| `opencode` | [opencode](https://opencode.ai), an open source coding agent for the terminal. About 200 MB. |
 | `sigye` | A clock for the terminal. |
 
 The wallpaper-matching oh-my-posh prompt theme and the Neovim colour scheme are set up from
@@ -159,6 +160,17 @@ off — `tlstore update` is how it gets new versions. Once it is installed, sign
 claude
 ```
 
+## opencode
+
+`tlstore install opencode` installs [opencode](https://opencode.ai), another coding agent for the
+terminal. It is about 200 MB, downloaded from npm and run through the same compatibility loader as
+Claude Code. Its own updater is switched off — `tlstore update` is how it gets new versions. Once it
+is installed, pick a provider and sign in with:
+
+```sh
+opencode
+```
+
 ## Writing
 
 `tlstore install dawn` installs [dawn](https://github.com/andrewmd5/dawn), a writing pad that runs
@@ -213,7 +225,7 @@ numbered picker, the same one `tlstore install` uses when you name nothing.
 
 The store runs in the launcher and in plain Termux, and a few items only make sense in one of
 them. `fastfetch` is a launcher item: its animated logo needs the launcher's terminal. Everything
-else — `claude-code`, `dawn`, `sigye`, `kitten`, `fish-shell` — is offered in both.
+else — `claude-code`, `dawn`, `opencode`, `sigye`, `kitten`, `fish-shell` — is offered in both.
 
 An item that belongs to one of them is filtered out completely everywhere else: it is not listed,
 not found by a search, and `tlstore info` says it is not in the list. `tlstore doctor` prints an
@@ -229,16 +241,16 @@ and is ignored where there is no launcher to compare against.
 
 ## References
 
-`dawn`, `fastfetch`, `kitten`, `sigye`, and the musl loader are built by the launcher's maintainer rather
-than coming from Termux's own packages or npm. The binaries themselves are published at
+`dawn`, `fastfetch`, `kitten`, `sigye`, and the musl runtime are built by the launcher's maintainer
+rather than coming from Termux's own packages or npm. The binaries themselves are published at
 [PickleHik3/termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries),
 which is what `tlstore install` downloads and checks against a pinned digest. The recipes that
 build them from upstream source — with whatever patches are applied — live in this repository
 under [`recipes/cross`](../../recipes/cross) and [`recipes/termux`](../../recipes/termux); run one
 yourself to reproduce a binary and compare it against what tlstore installed.
 
-Everything else in the store is unmodified: `claude-code` comes straight from npm, and the
-packages behind `fish-shell` (`fish`, `eza`, `zoxide`, `oh-my-posh`) come straight from Termux's
+Everything else in the store is unmodified: `claude-code` and `opencode` come straight from npm,
+and the packages behind `fish-shell` (`fish`, `eza`, `zoxide`, `oh-my-posh`) come straight from Termux's
 own package repository.
 
 ## For maintainers

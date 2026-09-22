@@ -98,6 +98,8 @@ write_catalog() {
         printf 'demo-pkg\tpkg\t-\t*\tdemo-one demo-two\t-\t-\t-\t-\tTwo packages from the package manager.\n'
         printf 'musl-loader\tbinary\t1\tcom.termux\tfile://%s/loader.bin\t%s\t~/.local/lib/musl/ld-musl-aarch64.so.1\t-\t-\tWhat tools from other systems need to start.\n' "$FX" "$(sha "$FX/loader.bin")"
         printf 'claude-code\tnpm-musl\tlatest\t*\tnpm:demo-cli#claude\t-\t-\tmusl-loader,demo-pkg\tenv=DEMO_FLAG=1;tz=1;build=demo-build\tA tool that comes from npm.\n'
+        printf 'musl-cxx\tbinary\t1\t*\tfile://%s/musllib.bin\t%s\t~/.local/lib/musl/libdemo++.so.6\t-\thidden=1\tA library tools from other systems need.\n' "$FX" "$(sha "$FX/musllib.bin")"
+        printf 'agent\tnpm-musl\tlatest\t*\tnpm:demo-agent#bin/agent\t-\t-\tmusl-loader,musl-cxx\tmusl-libs=musl-cxx\tAn agent that comes from npm.\n'
         printf 'kit\tbundle\t-\t*\t-\t-\t-\thello,fakebin,demo-pkg,secret\t-\tA few things at once.\n'
         printf 'plug\tfisher\t-\t*\tdemo/one demo/two\t-\t-\t-\t-\tPlugins for the shell.\n'
         printf 'secret\tfile\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/secret.conf\t-\thidden=1\tA part of something else.\n' "$FX" "$(sha "$FX/mine.conf")"
@@ -155,7 +157,7 @@ exit 0
 EOF
     chmod +x "$FIXBIN/fish"
 
-    # A fake npm registry: one package document and its tarball.
+    # A fake npm registry: two package documents and their tarballs.
     mkdir -p "$FX/registry/demo-cli" "$FX/pkgsrc/package"
     cat > "$FX/pkgsrc/package/claude" <<'EOF'
 #!/bin/sh
@@ -167,6 +169,19 @@ EOF
     tar czf "$FX/demo-cli-1.0.0.tgz" -C "$FX/pkgsrc" package
     printf '{"name":"demo-cli","version":"1.0.0","dist":{"tarball":"file://%s/demo-cli-1.0.0.tgz","integrity":"sha512-%s"}}\n' \
         "$FX" "$(sha512_b64 "$FX/demo-cli-1.0.0.tgz")" > "$FX/registry/demo-cli/latest"
+
+    # The second keeps its executable in a subdirectory and needs a library the
+    # loader alone does not provide — opencode's shape.
+    mkdir -p "$FX/registry/demo-agent" "$FX/agentsrc/package/bin"
+    cat > "$FX/agentsrc/package/bin/agent" <<'EOF'
+#!/bin/sh
+echo "demo-agent 2.0.0"
+EOF
+    chmod +x "$FX/agentsrc/package/bin/agent"
+    tar czf "$FX/demo-agent-2.0.0.tgz" -C "$FX/agentsrc" package
+    printf '{"name":"demo-agent","version":"2.0.0","dist":{"tarball":"file://%s/demo-agent-2.0.0.tgz","integrity":"sha512-%s"}}\n' \
+        "$FX" "$(sha512_b64 "$FX/demo-agent-2.0.0.tgz")" > "$FX/registry/demo-agent/latest"
+    printf 'the musl C++ library\n' > "$FX/musllib.bin"
 
     # The catalog the app ships, plus three the refresh can be pointed at.
     write_catalog "$TPREFIX/libexec/termux-launcher/tlstore/catalog.tsv" 2026090601 1 fakebin-1
@@ -479,6 +494,20 @@ run_suite() {
     if grep -q -- "-R --noconfirm demo-build" "$ROOT/pkg.log"; then pass; else fail "the build tool was removed again"; fi
     tl info claude-code
     expect_out "info names the build tools" "Builds with demo-build"
+
+    # --- npm-musl with extra musl libraries, and an executable in a subdirectory ---
+    tl install agent -y
+    expect_status "install an npm-musl item that needs more of musl" 0
+    expect_file "the extra library is beside the loader" "$TESTHOME/.local/lib/agent/libdemo++.so.6"
+    expect_file "the loader is there too" "$TESTHOME/.local/lib/agent/ld-musl-aarch64.so.1"
+    expect_file "the executable keeps its own path inside the package" "$TESTHOME/.local/lib/agent/bin/agent"
+    expect_file "the wrapper is named after the command, not the path" "$TESTHOME/.local/bin/agent"
+    expect_file "the library is also installed on its own" "$TESTHOME/.local/lib/musl/libdemo++.so.6"
+    OUT="$("$TESTHOME/.local/bin/agent" 2>&1)"; ST=$?
+    expect_status "the wrapper runs" 0
+    expect_out "the wrapper runs the package executable" "demo-agent 2.0.0"
+    tl remove agent -y
+    expect_status "remove it again" 0
 
     # --- build tools, with nobody to ask and with an answer ---
     : > "$ROOT/pkg.log"

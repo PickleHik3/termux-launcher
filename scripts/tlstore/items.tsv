@@ -16,13 +16,15 @@
 # requires  comma list installed first; a bundle's members live here
 # options   ;-separated key=value: env=K=V (comma repeats), tz=1, mode=755,
 #           build=<packages needed only while installing>, hidden=1,
+#           musl-libs=<hidden binary items copied in beside the musl loader,
+#           for an npm-musl binary that needs more of musl than its libc>,
 #           host=launcher|termux (comma list; absent means both),
 #           min-launcher=X.Y.Z (the oldest launcher that may have it)
 # summary   one plain sentence — it is what list and search show the user
 #
-# Six items are visible, in the order they appear here: claude-code, dawn,
-# fastfetch, fish-shell, kitten, sigye. Everything else is hidden=1 — a part
-# another item pulls in, never listed and never installed by name.
+# Seven items are visible, in the order they appear here: claude-code, dawn,
+# fastfetch, fish-shell, kitten, opencode, sigye. Everything else is hidden=1 —
+# a part another item pulls in, never listed and never installed by name.
 #
 # fastfetch links libandroid-glob and dlopens ImageMagick and Chafa for the
 # animated logo, so its libraries are a pkg item it requires rather than a note
@@ -34,6 +36,7 @@ fastfetch	binary	2.67.0	com.termux	binaries:fastfetch@2026.09.02	-	fastfetch-lib
 fastfetch	binary	2.67.0	io.vaj.tl	binaries:fastfetch-io.vaj.tl@2026.09.02	-	fastfetch-libs,fastfetch-config	host=launcher	System information beside an animated logo — drop any GIF at ~/Pictures/gif/skel.gif.
 fish-shell	bundle	-	*	-	-	fish,config-fish,personal-fish,oh-my-posh,eza,zoxide,fisher,fish-plugins	-	The fish shell with the launcher's setup: the wallpaper prompt, a nicer ls and quicker directory jumping.
 kitten	binary	0.48.2	*	binaries:kitten@2026.09.02	-	-	-	Kitty's companion tool, for images and files in the terminal.
+opencode	npm-musl	latest	com.termux,io.vaj.tl	npm:opencode-linux-arm64-musl#bin/opencode	-	musl-loader,musl-libstdcxx,musl-libgcc	env=OPENCODE_DISABLE_AUTOUPDATE=1;tz=1;build=patchelf;musl-libs=musl-libstdcxx,musl-libgcc	The open source coding agent, about 200 MB.
 sigye	binary	0.6.0	*	binaries:sigye@2026.09.02	-	-	-	A clock for the terminal.
 config-fish	file	e4422e22	*	launcher:docs/en/examples/config.fish@e4422e22c5a7a760c5bb1391e5978c8c7b36eb5f	~/.config/fish/config.fish	fish	hidden=1	The launcher's fish configuration.
 dawn-libs	pkg	-	*	libcurl	-	-	hidden=1	The web library dawn uses to fetch a linked picture.
@@ -43,6 +46,8 @@ fastfetch-libs	pkg	-	*	imagemagick chafa libandroid-glob zlib	-	-	hidden=1	The i
 fish	pkg	-	*	fish	-	-	hidden=1	The fish shell itself.
 fish-plugins	fisher	-	*	nickeb96/puffer-fish jorgebucaran/autopair.fish	-	fisher,fish	hidden=1	Shorter path shortcuts and automatic bracket pairing in fish.
 fisher	file	4.4.8	*	https://raw.githubusercontent.com/jorgebucaran/fisher/4.4.8/functions/fisher.fish	~/.config/fish/functions/fisher.fish	fish	hidden=1	The plugin manager fish uses.
+musl-libgcc	binary	14.2.0	*	binaries:musl-libgcc@2026.09.22-2	~/.local/lib/musl/libgcc_s.so.1	-	hidden=1	A support library some tools built for other Linux systems need.
+musl-libstdcxx	binary	14.2.0	*	binaries:musl-libstdcxx@2026.09.22-2	~/.local/lib/musl/libstdc++.so.6	-	hidden=1	The C++ library some tools built for other Linux systems need.
 musl-loader	binary	1.2.5	com.termux	binaries:musl-loader@2026.09.06	~/.local/lib/musl/ld-musl-aarch64.so.1	-	hidden=1	What tools built for other Linux systems need to start here.
 musl-loader	binary	1.2.5	io.vaj.tl	binaries:musl-loader-io.vaj.tl@2026.09.06	~/.local/lib/musl/ld-musl-aarch64.so.1	-	hidden=1	What tools built for other Linux systems need to start here.
 oh-my-posh	pkg	-	*	oh-my-posh	-	-	hidden=1	The prompt oh-my-posh draws.

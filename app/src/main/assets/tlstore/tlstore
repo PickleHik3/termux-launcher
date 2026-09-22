@@ -31,7 +31,7 @@
 
 set -u
 
-TLSTORE_VERSION=0.2
+TLSTORE_VERSION=0.3
 
 PREFIX="${TLSTORE_PREFIX:-${PREFIX:-${HOME%/files/home}/files/usr}}"
 HOME="${HOME:?tlstore needs HOME}"
@@ -316,7 +316,8 @@ source_url() {
 # item_targets <name> <kind> <target> [source] — where an item's payload lands,
 # space separated; empty for pkg and bundles. An npm-musl item lands twice: the
 # directory, then the wrapper, which is named after the executable inside the
-# package (claude-code installs the command `claude`).
+# package (claude-code installs the command `claude`). A package that keeps its
+# executable in a subdirectory (npm:x#bin/y) still gets the bare name.
 item_targets() {
     case "$2" in
         binary|file|file-once)
@@ -333,6 +334,7 @@ item_targets() {
                 *"#"*) it_exe="${it_exe##*#}" ;;
                 *) it_exe="$1" ;;
             esac
+            it_exe="${it_exe##*/}"
             if [ "$3" = "-" ] || [ -z "$3" ]; then
                 printf '%s %s' "$LIB_DIR/$1" "$BIN_DIR/$it_exe"
             else
@@ -933,6 +935,29 @@ do_npm_musl() {
             return 1
         fi
         chmod 755 "$np_loader" "$np_dir.new/$np_exe"
+
+        # Some of these binaries need more of the musl world than its libc —
+        # opencode links libstdc++ and libgcc_s, and Termux's own are Bionic
+        # ones the musl loader cannot use. They go in beside the loader,
+        # because the rpath set below is this directory and nothing else.
+        for np_lib in $(commas "$(opt "$ii_options" musl-libs)"); do
+            np_lib_row=$(row "$np_lib")
+            if [ -z "$np_lib_row" ]; then
+                rm -rf "$np_dir.new"
+                err "$ii_name has no $np_lib for this device"
+                return 1
+            fi
+            np_lib_have=$(item_targets "$np_lib" binary "$(field "$np_lib_row" 7)")
+            np_lib_dest="$np_dir.new/${np_lib_have##*/}"
+            if [ -f "$np_lib_have" ]; then
+                cp -f "$np_lib_have" "$np_lib_dest"
+            elif ! download "$(source_url "$(field "$np_lib_row" 5)")" "$np_lib_dest" "$(field "$np_lib_row" 6)"; then
+                rm -rf "$np_dir.new"
+                return 1
+            fi
+            chmod 644 "$np_lib_dest"
+        done
+
         if ! "$PATCHELF" --set-interpreter "$np_dir/ld-musl-aarch64.so.1" --set-rpath "$np_dir" "$np_dir.new/$np_exe"; then
             rm -rf "$np_dir.new"
             err "could not prepare $ii_name for this device"
