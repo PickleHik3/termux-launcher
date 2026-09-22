@@ -317,3 +317,25 @@ the suite on the merged state, regenerates and signs the catalog. Gate: `scripts
 all shells green and shellcheck clean; `browse` smoke on Waydroid (pkg items only, x86_64).
 Later rounds: CI in `termux-launcher-binaries` (tag → build → SHA256SUMS) and catalog signing on
 push; the catalog itself grows item by item.
+
+## Revision 4 — more of musl than its libc (tlstore 0.3)
+
+`npm-musl` was written for Claude Code, whose binary needs nothing but musl's libc. opencode's
+needs `libstdc++.so.6` and `libgcc_s.so.1` as well, and Termux's own are Bionic-linked, so the musl
+loader cannot use them.
+
+| addition | meaning |
+|---|---|
+| `musl-libs=<items>` | comma list of hidden `binary` items copied into the item's directory beside the loader, before patchelf. They land under their target's basename, which is what the binary's `NEEDED` names |
+
+The libraries cannot be ordinary `requires` alone: the install builds `<dir>.new` and moves it over
+the item, so anything put there first is thrown away. They stay in `requires` too, so a standalone
+copy exists under `~/.local/lib/musl/` and the install reuses it instead of downloading twice.
+
+`item_targets` now names an npm-musl wrapper after the executable's basename: the package that
+prompted this keeps its binary at `package/bin/opencode`, and the wrapper is `~/.local/bin/opencode`,
+not `~/.local/bin/bin/opencode`.
+
+The two libraries are GCC's, redistributed unchanged from Alpine's aarch64 packages by
+`recipes/fetch-musl-runtime.sh` in `termux-launcher-binaries`, under the GPL with the GCC Runtime
+Library Exception.
