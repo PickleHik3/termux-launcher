@@ -131,4 +131,52 @@ public class UrlDetectorTest extends TerminalTestCase {
         assertEquals("https://scrolled.example/away", found.get(0));
         assertEquals("https://scrolled.example/away", urlAt(3, -screen.getActiveTranscriptRows()));
     }
+
+    /**
+     * herdr with its sidebar open: every row of the pane carries another pane's text to its left,
+     * and the address is wrapped by the tool over more rows than the detector's context window.
+     */
+    public void testWrappedAddressBesideASidebarIsJoined() {
+        String url = "https://example.com/d/aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd/eeeeeeeeee"
+            + "/ffffffffff/gggggggggg/hhhhhhhhhh/iiiiiiiiii/jjjjjjjjjj/kkkkkkkkkk/end";
+        String[] sidebar = {"machines", "  mac", "  omencachy", "new \u00b7 omen", "  agents"};
+        int paneColumn = 14;
+        int rows = sidebarRows(sidebar, url, paneColumn);
+        assertTrue("the address must outrun the context window", rows > 4);
+        for (int row = 0; row < rows; row++)
+            assertEquals("row " + row, url, urlAt(paneColumn + 2, row));
+    }
+
+    /** Lay a pane's text out at {@code paneColumn}, with the sidebar's own text to its left. */
+    private int sidebarRows(String[] sidebar, String text, int paneColumn) {
+        int width = COLUMNS - paneColumn;
+        int rows = (text.length() + width - 1) / width;
+        for (int i = 0; i < rows; i++) {
+            StringBuilder line = new StringBuilder(i < sidebar.length ? sidebar[i] : "");
+            while (line.length() < paneColumn) line.append(' ');
+            line.append(text, i * width, Math.min(text.length(), (i + 1) * width));
+            row(line.toString());
+        }
+        return rows;
+    }
+
+    /** A sidebar's own text is not another pane's address continuing: it must not be glued on. */
+    public void testASidebarsTextIsNotGluedOntoAnAddress() {
+        row("machines      https://example.com/d/aaaaaaaaaa/b")
+            .row("  mac         bbbbbbbbb/end");
+        assertEquals("https://example.com/d/aaaaaaaaaa/bbbbbbbbbb/end", urlAt(16, 0));
+        assertEquals("https://example.com/d/aaaaaaaaaa/bbbbbbbbbb/end", urlAt(16, 1));
+        assertNull("the sidebar's own word is not part of the address", urlAt(3, 1));
+    }
+
+    /** A full-width pane, no sidebar: an address wrapped past the context window is still whole. */
+    public void testAnAddressWrappedPastTheContextWindowIsWholeFromEveryRow() {
+        String url = "https://example.com/d/aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd/eeeeeeeeee"
+            + "/ffffffffff/gggggggggg/hhhhhhhhhh/iiiiiiiiii/jjjjjjjjjj/kkkkkkkkkk/llllllllll"
+            + "/mmmmmmmmmm/nnnnnnnnnn/oooooooooo/pppppppppp/qqqqqqqqqq/rrrrrrrrrr/end";
+        int rows = sidebarRows(new String[0], url, 0);
+        assertTrue("the address must outrun the context window", rows > 4);
+        for (int row = 0; row < rows; row++)
+            assertEquals("row " + row, url, urlAt(2, row));
+    }
 }

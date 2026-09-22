@@ -99,10 +99,17 @@ public final class UrlDetector {
         }
     }
 
-    /** The address whose cells include {@code (column, row)}, or null. */
+    /**
+     * The address whose cells include {@code (column, row)}, or null. The search covers the whole
+     * screen, not a window around the row: an address a program wrapped by hand carries no wrap
+     * flag, so a window would hand back a truncated address where the renderer underlines a whole
+     * one, and a tap would open an address the user never saw.
+     */
     public static UrlSpan at(TerminalBuffer screen, int column, int row) {
         if (column < 0 || column >= screen.mColumns) return null;
-        for (UrlSpan span : find(screen, row, row)) {
+        int first = Math.min(row, 0);
+        int last = Math.max(row, screen.mScreenRows - 1);
+        for (UrlSpan span : find(screen, first, last)) {
             if (span.covers(row, column)) return span;
         }
         return null;
@@ -151,10 +158,11 @@ public final class UrlDetector {
                 // Follow the address into the rows below while it runs to a row's edge.
                 Line current = line;
                 int nextIndex = index + 1;
+                int minColumn = line.blockColumn(start);
                 while (end == current.text.length() && nextIndex < lines.size()
                     && current.reachesEdge(screen, current.text.length())) {
                     Line next = lines.get(nextIndex);
-                    int contStart = next.continuationStart();
+                    int contStart = next.continuationStart(minColumn);
                     if (contStart < 0) break;
                     String continuation = next.text.substring(contStart);
                     if (URL_PATTERN.matcher(continuation).lookingAt()) break;  // A new address, not more of this one.
@@ -261,15 +269,35 @@ public final class UrlDetector {
         /**
          * Where text continuing an address from the row above would start: past leading spaces —
          * which is where a pane border, blanked in {@link #appendRow}, its padding and any
-         * indentation all went. -1 when the row opens with nothing.
+         * indentation all went — and past any block starting left of {@code minColumn}, which
+         * belongs to whatever else shares the row. -1 when the row offers nothing.
          */
-        int continuationStart() {
+        int continuationStart(int minColumn) {
             int i = 0;
             int n = text.length();
-            while (i < n && text.charAt(i) == ' ') i++;
+            while (i < n) {
+                while (i < n && text.charAt(i) == ' ') i++;
+                if (i >= n) return -1;
+                if (columnStart[i] >= minColumn) break;
+                // A block to the left of the address's own: another pane's sidebar, not more of
+                // this address. Step over it and look past the gap that separates them.
+                while (i < n && text.charAt(i) != ' ') i++;
+            }
             if (i >= n || i < consumed) return -1;
             // Only the first row of this line can continue the row above; a wrapped tail cannot.
             return row[i] == rows.get(0) ? i : -1;
+        }
+
+        /**
+         * The column a continuation of the address at {@code index} may not start left of. An
+         * address with a gap of blank cells before it on its row opens a block of its own — a
+         * pane's text column — and whatever sits further left belongs to something else.
+         */
+        int blockColumn(int index) {
+            int r = row[index];
+            int gap = 0;
+            for (int i = index - 1; i >= 0 && row[i] == r && text.charAt(i) == ' '; i--) gap++;
+            return gap >= 2 ? columnStart[index] : 0;
         }
 
         private static char cellChar(TerminalRow line, int column) {
