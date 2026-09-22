@@ -11,6 +11,7 @@ import org.robolectric.annotation.Config;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.Assert.*;
 
@@ -152,12 +153,53 @@ public class WidgetEditPolicyTest {
         assertEquals(new WidgetCellRect(0, 1, 2, 2), records.get(1).cell);
     }
 
-    @Test public void resizeNeverDisplacesNeighbours() {
+    @Test public void resizeGrowsThroughANeighbourAndPushesItAside() {
         List<LauncherWidgetRecord> records = new ArrayList<>();
         records.add(record(1, new WidgetCellRect(0, 0, 1, 1)));
         records.add(record(2, new WidgetCellRect(2, 0, 3, 1)));
         WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.resize(metrics(), records, 1,
             new WidgetCellRect(0, 0, 1, 1), WidgetEditPolicy.Handle.RIGHT, 400, 1, 1);
+        assertTrue(candidate.valid);
+        assertEquals("the edge reaches the finger", new WidgetCellRect(0, 0, 4, 1),
+            candidate.rect);
+        assertEquals("and the widget in the way was rehomed, nobody else",
+            Set.of(2), candidate.displaced.keySet());
+        assertNotEquals(new WidgetCellRect(2, 0, 3, 1), candidate.displaced.get(2));
+        assertLayoutValid(records, 1, candidate);
+    }
+
+    @Test public void resizeShrinkDisplacesNobody() {
+        List<LauncherWidgetRecord> records = new ArrayList<>();
+        records.add(record(1, new WidgetCellRect(0, 0, 3, 1)));
+        records.add(record(2, new WidgetCellRect(3, 0, 4, 1)));
+        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.resize(metrics(), records, 1,
+            new WidgetCellRect(0, 0, 3, 1), WidgetEditPolicy.Handle.RIGHT, 100, 1, 1);
+        assertEquals(new WidgetCellRect(0, 0, 1, 1), candidate.rect);
+        assertTrue("a widget giving space back moves nobody", candidate.displaced.isEmpty());
+    }
+
+    @Test public void resizeStopsWhenTheBlockerHasNowhereToGo() {
+        // Every cell but the widget's own is taken, so the neighbour beside it cannot be rehomed
+        // and the grow is refused: the widget keeps the span it had.
+        List<LauncherWidgetRecord> records = new ArrayList<>();
+        records.add(record(1, new WidgetCellRect(0, 0, 1, 1)));
+        records.add(record(2, new WidgetCellRect(1, 0, 2, 1)));
+        records.add(record(3, new WidgetCellRect(2, 0, 4, 1)));
+        records.add(record(4, new WidgetCellRect(0, 1, 4, 4)));
+        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.resize(metrics(), records, 1,
+            new WidgetCellRect(0, 0, 1, 1), WidgetEditPolicy.Handle.RIGHT, 400, 1, 1);
+        assertEquals(new WidgetCellRect(0, 0, 1, 1), candidate.rect);
+        assertTrue(candidate.displaced.isEmpty());
+    }
+
+    @Test public void resizeTakesTheNearerRectThatDisturbsNobodyOverAFurtherOne() {
+        // Growing one cell is free; growing two would have to push the neighbour. The finger is
+        // at the one-cell edge, so the free rect wins on distance and nobody is touched.
+        List<LauncherWidgetRecord> records = new ArrayList<>();
+        records.add(record(1, new WidgetCellRect(0, 0, 1, 1)));
+        records.add(record(2, new WidgetCellRect(2, 0, 3, 1)));
+        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.resize(metrics(), records, 1,
+            new WidgetCellRect(0, 0, 1, 1), WidgetEditPolicy.Handle.RIGHT, 205, 1, 1);
         assertEquals(new WidgetCellRect(0, 0, 2, 1), candidate.rect);
         assertTrue(candidate.displaced.isEmpty());
     }
@@ -195,15 +237,6 @@ public class WidgetEditPolicyTest {
             new WidgetCellRect(0, 0, 1, 1), WidgetEditPolicy.Handle.RIGHT, 305, 1, 1);
         assertTrue(candidate.valid);
         assertEquals(new WidgetCellRect(0, 0, 3, 1), candidate.rect);
-    }
-
-    @Test public void resizeStopsAtNeighborCollision() {
-        List<LauncherWidgetRecord> records = new ArrayList<>();
-        records.add(record(1, new WidgetCellRect(0, 0, 1, 1)));
-        records.add(record(2, new WidgetCellRect(2, 0, 3, 1)));
-        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.resize(metrics(), records, 1,
-            new WidgetCellRect(0, 0, 1, 1), WidgetEditPolicy.Handle.RIGHT, 400, 1, 1);
-        assertEquals(new WidgetCellRect(0, 0, 2, 1), candidate.rect);
     }
 
     @Test public void resizeRespectsMinimumSpan() {

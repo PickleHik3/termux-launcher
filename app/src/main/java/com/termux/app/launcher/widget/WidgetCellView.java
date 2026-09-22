@@ -47,10 +47,12 @@ public final class WidgetCellView extends FrameLayout {
 
     private final int gutter;
     private final int touchSlop;
-    /** The corner every widget wears, the radius the platform gives widget backgrounds. */
+    /** This cell's own corner radius; the radius the platform gives widget backgrounds by default. */
     private final float cornerRadius;
     private final Path clipPath = new Path();
     private final RectF clipRect = new RectF();
+    /** True when the provider's own background opted out of clipping; see {@link WidgetCornerPolicy}. */
+    private boolean clipNothing;
     private boolean touchStreamAccepted;
     @Nullable private LongPressListener longPressListener;
     @Nullable private EditorFocusListener editorFocusListener;
@@ -141,6 +143,7 @@ public final class WidgetCellView extends FrameLayout {
         removeAllViews();
         if (child.getParent() instanceof ViewGroup) ((ViewGroup) child.getParent()).removeView(child);
         addView(child, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        refreshCornerClip();
     }
 
     /** The gutter every cell keeps between its edge and the provider's view. */
@@ -212,13 +215,61 @@ public final class WidgetCellView extends FrameLayout {
 
     @Override protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
         super.onSizeChanged(width, height, oldWidth, oldHeight);
+        refreshCornerClip();
+    }
+
+    @Override protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        // The provider's own background child is only positioned once this layout pass has run;
+        // onSizeChanged alone would miss a content swap or a reflow that keeps this cell's own
+        // size the same.
+        refreshCornerClip();
+    }
+
+    /**
+     * Recomputes what this cell clips to: the provider's own {@code android:id/background} child
+     * when there is one, nothing when that child has already opted itself out, or this cell's
+     * whole rectangle when there is no such child to defer to. See {@link WidgetCornerPolicy}.
+     */
+    private void refreshCornerClip() {
+        int width = getWidth(), height = getHeight();
+        View content = getChildCount() == 1 ? getChildAt(0) : null;
+        View background = content == null ? null
+            : content.findViewById(android.R.id.background);
+        WidgetCornerPolicy.BackgroundChild backgroundChild = background == null ? null
+            : new WidgetCornerPolicy.BackgroundChild(background.getClipToOutline(),
+                boundsRelativeToThis(background));
+        WidgetCornerPolicy.Decision decision = WidgetCornerPolicy.decide(backgroundChild,
+            new Rect(0, 0, width, height), cornerRadius, systemWidgetRadius(getContext()));
+        clipNothing = decision.clip == null;
+        if (clipNothing) {
+            setClipBounds(null);
+            return;
+        }
         setClipBounds(new Rect(0, 0, width, height));
-        clipRect.set(0f, 0f, width, height);
+        clipRect.set(decision.clip);
         clipPath.reset();
-        clipPath.addRoundRect(clipRect, cornerRadius, cornerRadius, Path.Direction.CW);
+        clipPath.addRoundRect(clipRect, decision.radius, decision.radius, Path.Direction.CW);
+    }
+
+    /** {@code view}'s bounds translated into this cell's own coordinate space. */
+    @NonNull private Rect boundsRelativeToThis(@NonNull View view) {
+        int left = 0, top = 0;
+        View current = view;
+        while (current != null && current != this) {
+            left += current.getLeft();
+            top += current.getTop();
+            ViewParent parent = current.getParent();
+            current = parent instanceof View ? (View) parent : null;
+        }
+        return new Rect(left, top, left + view.getWidth(), top + view.getHeight());
     }
 
     @Override protected void dispatchDraw(@NonNull Canvas canvas) {
+        if (clipNothing) {
+            super.dispatchDraw(canvas);
+            return;
+        }
         int save = canvas.save();
         if (clipPath.isEmpty()) canvas.clipRect(0, 0, getWidth(), getHeight());
         else canvas.clipPath(clipPath);

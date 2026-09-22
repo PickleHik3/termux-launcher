@@ -14,6 +14,11 @@
     <string name="widget_menu_remove_page">Remove page</string>
     <string name="widget_unsupported">Widgets aren\'t supported on this device</string>
     <string name="widget_remove_failed">Widget couldn\'t be removed</string>
+    <string name="widget_add_busy">Finish adding the current widget first</string>
+    <string name="widget_configuration_unavailable">Widget configuration isn\'t available</string>
+    <string name="widget_storage_failure">Widget couldn\'t be saved</string>
+    <string name="widget_add_failed">Widget wasn\'t added</string>
+    <string name="widget_grid_full">Grid is full</string>
     <string name="widget_no_room_on_page">No room on this page.</string>
     <string name="widget_picker_search_hint">Search widgets</string>
     <string name="widget_picker_no_matches">No widgets match that search.</string>

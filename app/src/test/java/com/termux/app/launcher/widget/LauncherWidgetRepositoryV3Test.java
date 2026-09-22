@@ -25,7 +25,7 @@ public class LauncherWidgetRepositoryV3Test {
         assertTrue(repository.putRecord(
             record(1, new WidgetCellRect(0, 0, 2, 2), 1)));
         JSONObject root = new JSONObject(storage.value);
-        assertEquals(3, root.getInt("version"));
+        assertEquals(4, root.getInt("version"));
         assertEquals(2, root.getInt("pages"));
         assertEquals(1, root.getJSONArray("records").getJSONObject(0).getInt("page"));
         LauncherWidgetRepository restored = new LauncherWidgetRepository(storage);
@@ -48,7 +48,7 @@ public class LauncherWidgetRepositoryV3Test {
         assertEquals(0, repository.pending().page);
         assertEquals(5, repository.revision());
         JSONObject migrated = new JSONObject(storage.value);
-        assertEquals(3, migrated.getInt("version"));
+        assertEquals(4, migrated.getInt("version"));
         assertEquals(1, migrated.getInt("pages"));
         assertEquals(0, migrated.getJSONArray("records").getJSONObject(0).getInt("page"));
     }
@@ -67,7 +67,7 @@ public class LauncherWidgetRepositoryV3Test {
         storage.fail = false;
         LauncherWidgetRepository retry = new LauncherWidgetRepository(storage);
         assertNotNull(retry.get(7));
-        assertEquals(3, new JSONObject(storage.value).getInt("version"));
+        assertEquals(4, new JSONObject(storage.value).getInt("version"));
     }
 
     @Test public void collisionsAreScopedPerPage() {
@@ -118,11 +118,11 @@ public class LauncherWidgetRepositoryV3Test {
         assertEquals(1, new JSONObject(storage.value).getJSONObject("pending").getInt("page"));
 
         WidgetTestFixtures.Memory future = new WidgetTestFixtures.Memory();
-        future.value = new JSONObject().put("version", 4).toString();
+        future.value = new JSONObject().put("version", 5).toString();
         LauncherWidgetRepository readOnly = new LauncherWidgetRepository(future);
         assertFalse(readOnly.putRecord(record(5, new WidgetCellRect(0, 0, 1, 1), 0)));
         assertEquals("an unknown newer payload is never overwritten",
-            new JSONObject().put("version", 4).toString(), future.value);
+            new JSONObject().put("version", 5).toString(), future.value);
     }
 
     private static LauncherWidgetRecord record(int id, WidgetCellRect cell, int page) {

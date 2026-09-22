@@ -105,6 +105,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     public void onStart() { render(); }
+    /** Draw the pane again from the repository — the layout under it changed without a grid change. */
+    public void redraw() { render(); }
     public void onStop() {
         catalog.cancel(); pane.picker().closeImmediate(); dismissPaneMenu();
     }
@@ -337,7 +339,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         float dragStartRawX, dragStartRawY;
         Rect dragStartBounds;
         WidgetEditPolicy.Candidate moveCandidate;
-        WidgetCellRect resizeCandidate;
+        WidgetEditPolicy.Candidate resizeCandidate;
         /** The page the drag is over now: the widget's own until the finger turns it. */
         int dragPage;
         /** Which edge band the finger is resting in: -1 the leading one, +1 the trailing one. */
@@ -576,6 +578,18 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.lastRawY = rawY;
         pane.removeCallbacks(edgeFlip);
         clearDisplacementPreview(false);
+        // Hold the live view still for the drag's duration: a provider push mid-move would
+        // re-inflate its content under the finger. endMoveDrag releases it; a dropped gesture is
+        // covered by SafeLauncherAppWidgetHostView's own 1 s timeout.
+        SafeLauncherAppWidgetHostView hostView = safeHostViewFor(edit.appWidgetId);
+        if (hostView != null) hostView.beginDeferringUpdates();
+    }
+
+    /** The live host view for {@code appWidgetId}, or null when there is none or it is not ours. */
+    @Nullable private SafeLauncherAppWidgetHostView safeHostViewFor(int appWidgetId) {
+        AppWidgetHostView view = widgets.createHostView(appWidgetId);
+        return view instanceof SafeLauncherAppWidgetHostView
+            ? (SafeLauncherAppWidgetHostView) view : null;
     }
 
     private void moveDrag(float rawX, float rawY) {
@@ -786,6 +800,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.edgeDirection = 0;
         int appWidgetId = edit.appWidgetId;
         boolean lifted = edit.lifted;
+        SafeLauncherAppWidgetHostView hostView = safeHostViewFor(appWidgetId);
+        if (hostView != null) hostView.endDeferringUpdates();
         LauncherWidgetRecord record = widgets.repository().get(appWidgetId);
         WidgetEditPolicy.Candidate candidate = edit.moveCandidate;
         int target = edit.dragPage;
@@ -861,29 +877,45 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return widgets.repository().putRecords(batch);
     }
 
+    /**
+     * The edge under the finger, and what the page has to shuffle to give the widget that span.
+     * A grow that lands on a neighbour pushes it aside just as a move does, and the neighbours
+     * slide to where they would go while the finger is still down.
+     */
     private void resizeDrag(@NonNull WidgetEditPolicy.Handle handle, int desiredEdgePx) {
         LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
         if (record == null) return;
+        // Same reason as the move path: a provider push mid-resize would re-inflate under the
+        // finger. Asked on every move event, so the safety release trails the gesture.
+        SafeLauncherAppWidgetHostView hostView = safeHostViewFor(edit.appWidgetId);
+        if (hostView != null) hostView.beginDeferringUpdates();
         boolean horizontal = handle == WidgetEditPolicy.Handle.LEFT
             || handle == WidgetEditPolicy.Handle.RIGHT;
         int gridEdgePx = horizontal ? desiredEdgePx - pane.grid().getLeft()
             : desiredEdgePx - pane.grid().getTop();
         edit.resizeCandidate = WidgetEditPolicy.resize(pane.grid().metrics(),
             widgets.repository().recordsOnPage(record.page), edit.appWidgetId, record.cell,
-            handle, gridEdgePx, edit.minColumnSpan, edit.minRowSpan).rect;
-        pane.widgetEditOverlay().setFrameBounds(paneBounds(edit.resizeCandidate));
+            handle, gridEdgePx, edit.minColumnSpan, edit.minRowSpan);
+        pane.widgetEditOverlay().setFrameBounds(paneBounds(edit.resizeCandidate.rect));
+        previewDisplacement(edit.resizeCandidate.displaced);
     }
 
     private void endResizeDrag() {
+        SafeLauncherAppWidgetHostView resized = safeHostViewFor(edit.appWidgetId);
+        if (resized != null) resized.endDeferringUpdates();
         LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
-        WidgetCellRect rect = edit.resizeCandidate;
+        WidgetEditPolicy.Candidate candidate = edit.resizeCandidate;
         edit.resizeCandidate = null;
-        if (record != null && rect != null && !rect.equals(record.cell)
-            && widgets.repository().putRecord(record.withCell(rect))) {
+        // The new span and every neighbour it pushed aside go in together: the same atomic batch
+        // the move path commits, so a refused write leaves the page exactly as it was.
+        if (record != null && candidate != null && !candidate.rect.equals(record.cell)
+            && commitMove(record, candidate, record.page)) {
+            // A render lays the neighbours out where the commit put them and drops the preview.
             render();
-        } else if (record != null) {
-            pane.widgetEditOverlay().setFrameBounds(paneBounds(record.cell));
+            return;
         }
+        clearDisplacementPreview(true);
+        if (record != null) pane.widgetEditOverlay().setFrameBounds(paneBounds(record.cell));
     }
 
     @NonNull private Rect paneBounds(@NonNull WidgetCellRect rect) {
@@ -932,14 +964,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     @NonNull private String messageFor(LauncherWidgetHostController.AddResult result) {
         switch (result) {
-            case UNSUPPORTED: return "Widgets aren't supported on this device";
-            case BUSY: return "Finish adding the current widget first";
-            case CONFIGURATION_UNAVAILABLE: return "Widget configuration isn't available";
-            case STORAGE_FAILURE: return "Widget couldn't be saved";
-            case DECLINED: return "Widget wasn't added";
-            case NO_SPACE: return "Grid is full";
+            case UNSUPPORTED: return pane.getContext().getString(R.string.widget_unsupported);
+            case BUSY: return pane.getContext().getString(R.string.widget_add_busy);
+            case CONFIGURATION_UNAVAILABLE:
+                return pane.getContext().getString(R.string.widget_configuration_unavailable);
+            case STORAGE_FAILURE: return pane.getContext().getString(R.string.widget_storage_failure);
+            case DECLINED: return pane.getContext().getString(R.string.widget_add_failed);
+            case NO_SPACE: return pane.getContext().getString(R.string.widget_grid_full);
             case REMOVE_FAILED: return pane.getContext().getString(R.string.widget_remove_failed);
-            default: return "Widget wasn’t added";
+            default: return pane.getContext().getString(R.string.widget_add_failed);
         }
     }
 }

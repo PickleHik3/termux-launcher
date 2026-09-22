@@ -50,7 +50,7 @@ public class WidgetProviderCatalogLoaderTest {
         // the row; the miss is remembered so the next bind does not ask the provider again.
         WidgetProviderItem broken = result[0].get(0).providers.get(0);
         final Drawable[] delivered = {new ColorDrawable(9)};
-        loader.loadPreview(broken, (item, preview) -> delivered[0] = preview);
+        loader.loadPreview(broken, (item, artwork) -> delivered[0] = image(artwork));
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertNull(delivered[0]);
         loader.loadPreview(broken, (item, preview) -> {});
@@ -70,7 +70,7 @@ public class WidgetProviderCatalogLoaderTest {
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertEquals(0, boundary.iconCalls);
         final Drawable[] delivered = new Drawable[1];
-        loader.loadPreview(item[0], (it, preview) -> delivered[0] = preview);
+        loader.loadPreview(item[0], (it, artwork) -> delivered[0] = image(artwork));
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertNotNull(delivered[0]);
         assertEquals(1, boundary.iconCalls);
@@ -153,13 +153,13 @@ public class WidgetProviderCatalogLoaderTest {
         assertEquals(0, boundary.previewCalls); // build never touches previews
         AtomicInteger callbacks = new AtomicInteger();
         final Drawable[] delivered = new Drawable[2];
-        loader.loadPreview(item[0], (it, preview) -> {
-            callbacks.incrementAndGet(); delivered[0] = preview;
+        loader.loadPreview(item[0], (it, artwork) -> {
+            callbacks.incrementAndGet(); delivered[0] = image(artwork);
         });
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertNotNull(delivered[0]);
-        loader.loadPreview(item[0], (it, preview) -> {
-            callbacks.incrementAndGet(); delivered[1] = preview;
+        loader.loadPreview(item[0], (it, artwork) -> {
+            callbacks.incrementAndGet(); delivered[1] = image(artwork);
         });
         assertEquals(2, callbacks.get()); // held previews answer synchronously
         assertSame(delivered[0], delivered[1]);
@@ -177,8 +177,8 @@ public class WidgetProviderCatalogLoaderTest {
             info("pkg", "C", true), info("pkg", "D", true));
         boundary.previewBitmapPx = 400;
         Resources resources = resources();
-        int extent = Math.round(WidgetPickerAdapter.PREVIEW_DP
-            * resources.getDisplayMetrics().density);
+        int extent = WidgetPickerCardTemplate.largest()
+            .extentPx(resources.getDisplayMetrics().density);
         int budget = extent * extent * 4 * 3; // three previews' worth at the retained size
         WidgetProviderCatalogLoader loader = new WidgetProviderCatalogLoader(boundary,
             Runnable::run, new Handler(Looper.getMainLooper()), resources, budget);
@@ -189,7 +189,8 @@ public class WidgetProviderCatalogLoaderTest {
         int bound = 0;
         for (WidgetAppGroup group : result[0]) {
             for (WidgetProviderItem item : group.providers) {
-                loader.loadPreview(item, (it, preview) -> {
+                loader.loadPreview(item, (it, artwork) -> {
+                    Drawable preview = image(artwork);
                     assertNotNull(preview);
                     assertTrue(preview.getIntrinsicWidth() <= extent);
                     assertTrue(preview.getIntrinsicHeight() <= extent);
@@ -243,6 +244,10 @@ public class WidgetProviderCatalogLoaderTest {
         assertEquals(1, result[0].minimumColumnSpan);
         assertEquals(1, result[0].minimumRowSpan);
         assertTrue(result[0].fits);
+    }
+
+    private static Drawable image(WidgetPreviewArtwork artwork) {
+        return artwork == null ? null : artwork.image;
     }
 
     private static WidgetProviderCatalogLoader loader(FakeBoundary boundary) {

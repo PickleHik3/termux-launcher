@@ -24,7 +24,7 @@ public final class WidgetEditPolicy {
         public final boolean valid;
         /**
          * Neighbours this candidate pushes aside, appWidgetId to its new cell. Empty whenever
-         * the candidate displaces nobody, and always empty for a resize.
+         * the candidate displaces nobody. A resize fills it in the same way a move does.
          */
         @NonNull public final Map<Integer, WidgetCellRect> displaced;
 
@@ -165,8 +165,11 @@ public final class WidgetEditPolicy {
     }
 
     /**
-     * Move one edge toward a desired pixel position in whole-cell steps. Only collision-free
-     * rects are candidates, so the result is always placeable; the current rect is the floor.
+     * Move one edge toward a desired pixel position in whole-cell steps. A candidate that lands
+     * on a neighbour is still taken when that neighbour can be pushed into a free hole on the
+     * same page, exactly as a move does, and the widgets that moved are reported in
+     * {@link Candidate#displaced}. Candidates whose blockers have nowhere to go are passed over,
+     * so the scan carries on outward and the current rect is the floor.
      */
     @NonNull
     public static Candidate resize(@NonNull WidgetGridMetrics metrics,
@@ -178,7 +181,11 @@ public final class WidgetEditPolicy {
         int minColumns = Math.max(1, minColumnSpan);
         int minRows = Math.max(1, minRowSpan);
         WidgetCellRect best = current;
+        Map<Integer, WidgetCellRect> bestDisplaced = Collections.emptyMap();
         long bestDistance = edgeDistance(metrics.boundsFor(current), handle, desiredEdgePx);
+        BitSet others = WidgetGridPlacementPolicy.occupancy(grid, records, appWidgetId);
+        // A snapshot that does not add up is nobody's to rearrange: the widget keeps its span.
+        if (others == null) return new Candidate(current, true);
         int lo, hi;
         switch (handle) {
             case LEFT:   lo = 0; hi = current.right - minColumns; break;
@@ -189,16 +196,27 @@ public final class WidgetEditPolicy {
         for (int edge = lo; edge <= hi; edge++) {
             WidgetCellRect candidate = withEdge(current, handle, edge);
             if (candidate.equals(current)) continue;
-            if (!WidgetGridPlacementPolicy.canPlace(grid, records, candidate, appWidgetId)) {
-                continue;
-            }
+            if (!WidgetGridPlacementPolicy.inBounds(grid, candidate)) continue;
             long distance = edgeDistance(metrics.boundsFor(candidate), handle, desiredEdgePx);
-            if (distance < bestDistance) {
+            // Nothing further from the finger than what is already held can win, and rehoming
+            // neighbours is the expensive part, so those candidates are never costed.
+            if (distance > bestDistance) continue;
+            Map<Integer, WidgetCellRect> displaced;
+            if (WidgetGridPlacementPolicy.isFree(grid, others, candidate)) {
+                displaced = Collections.emptyMap();
+            } else {
+                displaced = displace(metrics, records, appWidgetId, candidate);
+                if (displaced == null) continue;
+            }
+            // A finger resting halfway between two cell edges is equally far from both; the one
+            // that disturbs fewer neighbours is the better answer for that tie.
+            if (distance < bestDistance || displaced.size() < bestDisplaced.size()) {
                 bestDistance = distance;
                 best = candidate;
+                bestDisplaced = displaced;
             }
         }
-        return new Candidate(best, true);
+        return new Candidate(best, true, bestDisplaced);
     }
 
     private static WidgetCellRect withEdge(WidgetCellRect rect, Handle handle, int edge) {

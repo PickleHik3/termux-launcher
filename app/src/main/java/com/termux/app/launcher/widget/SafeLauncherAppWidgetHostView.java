@@ -63,6 +63,17 @@ public final class SafeLauncherAppWidgetHostView extends AppWidgetHostView {
     private boolean showingLocalError;
     private boolean replacingPosted;
 
+    /** How long a deferral can hold a stashed update before it releases on its own. */
+    private static final long DEFER_TIMEOUT_MS = 1000L;
+    private boolean deferringUpdates;
+    private boolean hasStashedUpdate;
+    @Nullable private RemoteViews stashedUpdate;
+    private final Runnable deferralTimeout = this::endDeferringUpdates;
+    // A dedicated Handler, not View.postDelayed: this tile can be mid-drag detached from any
+    // ViewRootImpl for a moment (a cross-page lift), and postDelayed on a detached view only
+    // queues until the next attach instead of actually scheduling the timeout.
+    private final Handler deferralHandler = new Handler(Looper.getMainLooper());
+
     public SafeLauncherAppWidgetHostView(@NonNull Context context,
                                          @Nullable FailureListener failureListener) {
         super(context);
@@ -76,6 +87,39 @@ public final class SafeLauncherAppWidgetHostView extends AppWidgetHostView {
     public boolean isShowingLocalError() { return showingLocalError; }
 
     @Nullable Executor asyncExecutorForTests() { return asyncExecutor; }
+
+    boolean isDeferringUpdatesForTests() { return deferringUpdates; }
+
+    /**
+     * Suspends provider pushes onto this tile: {@link #updateAppWidget} stashes the latest
+     * {@code RemoteViews} instead of applying it, so a live in-page move or resize does not
+     * re-inflate under the finger. Releases automatically after {@link #DEFER_TIMEOUT_MS} ms so a
+     * gesture that never calls {@link #endDeferringUpdates()} (a killed drag, a missed callback)
+     * can never freeze the widget.
+     */
+    public void beginDeferringUpdates() {
+        // The safety release is measured from the last call, not the first: a resize asks on every
+        // move event, and a gesture that outlives the timeout must not start re-inflating halfway.
+        deferralHandler.removeCallbacks(deferralTimeout);
+        deferralHandler.postDelayed(deferralTimeout, DEFER_TIMEOUT_MS);
+        if (deferringUpdates) return;
+        deferringUpdates = true;
+        hasStashedUpdate = false;
+        stashedUpdate = null;
+    }
+
+    /** Ends the deferral and applies whatever RemoteViews arrived meanwhile, if any. */
+    public void endDeferringUpdates() {
+        if (!deferringUpdates) return;
+        deferringUpdates = false;
+        deferralHandler.removeCallbacks(deferralTimeout);
+        if (hasStashedUpdate) {
+            RemoteViews toApply = stashedUpdate;
+            hasStashedUpdate = false;
+            stashedUpdate = null;
+            updateAppWidget(toApply);
+        }
+    }
 
     @Override
     protected View getErrorView() {
@@ -100,6 +144,11 @@ public final class SafeLauncherAppWidgetHostView extends AppWidgetHostView {
 
     @Override
     public void updateAppWidget(@Nullable RemoteViews remoteViews) {
+        if (deferringUpdates) {
+            stashedUpdate = remoteViews;
+            hasStashedUpdate = true;
+            return;
+        }
         boolean wasShowingError = showingLocalError;
         try {
             probe("update");
