@@ -1,23 +1,23 @@
-# P2 text sizing renderer (feat/text-sizing-draw) - done
+# feat/widget-picker-previews — P1, spec items 1 + 2 — done
 
 ## Done
-- `TextBlockGeometry`: block rect, drawn size (s x n/d, 1 when demoted), v/h alignment, baseline,
-  per-row cursor rect, and `selectionCovers` / `cellSelected` - a block's cells take their fill
-  from the anchor cell, which is what highlights the rows under a tall block.
-- `TerminalRenderer`: block cells break the run; `drawRowTextBlocks` / `drawTextBlock` draw each
-  anchor clipped and aligned; cursor covers a block (D2) on both paths and for extra cursors;
-  record loop is compare-then-record for D4; a `Selection` holder replaces the per-row selx pair
-  in the background pass.
-- `RowRenderCache`: `captureTextSizes` (compares the public packed record) and
-  `spreadTextBlockGroups` (D4 B); rows carrying blocks also re-record whenever the selection moves.
-- `TextBlockSelection`: D5, one-row rule - both ends snap to their block's run on its anchor row,
-  put back in stream order over both blocks' corners. A block rectangle cannot be said in a
-  stream selection, so the rows underneath are the renderer's job, not the selection's.
+- `WidgetPreviewArtwork`: the three forms a card can show; `WidgetPickerCardTemplate`: six shapes
+  and the smallest-containing rule that picks one.
+- `WidgetProviderCatalogLoader`: the ladder (generated → previewLayout → bitmap) behind three new
+  `Boundary` methods, each rung caught for `RuntimeException | LinkageError`; per-item shrink
+  extent; `notePreviewRenderFailed` demotes a provider for the session.
+- `WidgetPickerAdapter`: slot sized from the template, live artwork into an unbound
+  `AppWidgetHostView` scaled into it, touches intercepted so the card keeps the tap.
 
 ## Next
-- Nothing here. Waydroid re-check of the long-press highlight and of copy is the round's gate.
+Nothing in this phase. The spec's own gate for P1 is a device count of how many installed
+providers actually reach tier 1 or 2 — not run here.
 
 ## Gotchas
-- Snapping an end down to a block's bottom right is what painted a band across the whole row and
-  copied every block on it: a two-row selection is a stream, not a rectangle.
-- Handles stay on the anchor row's cell edges; they are not moved to the block's bottom.
+- The suite runs ~5,000 Robolectric tests in one 512 MB worker and is at the ceiling: five extra
+  `Robolectric.buildActivity` calls in a new test OOM'd six unrelated tests. Use the application
+  context unless a test needs an Activity.
+- `new RemoteViews(pkg, id)` validates the package at construction; a fake must use the test
+  application's own package.
+- The API 35 field is read in `AndroidBoundary` only, so the ladder is driven by an injected
+  `sdkInt` — Robolectric 4.13 has no SDK 35 image to run it on.
