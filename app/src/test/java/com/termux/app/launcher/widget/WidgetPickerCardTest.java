@@ -1,6 +1,5 @@
 package com.termux.app.launcher.widget;
 
-import android.app.Activity;
 import android.app.Application;
 import android.appwidget.AppWidgetHostView;
 import android.appwidget.AppWidgetProviderInfo;
@@ -21,8 +20,8 @@ import com.termux.R;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
 import java.util.ArrayList;
@@ -159,9 +158,12 @@ public class WidgetPickerCardTest {
         return new WidgetProviderItem(0, info, label, columns, rows, 1, 1, true);
     }
 
-    /** One app row with its cards open, laid out, so the holders exist and are bound. */
+    /**
+     * One app row with its cards open, laid out, so the holders exist and are bound. No Activity:
+     * the cards are plain views, and this suite runs 5,000 Robolectric tests in one 512 MB worker.
+     */
     private static final class Harness {
-        final Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        final android.content.Context activity = RuntimeEnvironment.getApplication();
         final FakeLoader loader = new FakeLoader();
         final WidgetPickerAdapter adapter = new WidgetPickerAdapter(item -> { });
         final RecyclerView list;
@@ -172,7 +174,6 @@ public class WidgetPickerCardTest {
             list = new RecyclerView(activity);
             list.setLayoutManager(new LinearLayoutManager(activity));
             list.setAdapter(adapter);
-            activity.setContentView(list);
             adapter.setPreviewLoader(loader);
             List<WidgetProviderItem> providers = new ArrayList<>();
             Collections.addAll(providers, items);
