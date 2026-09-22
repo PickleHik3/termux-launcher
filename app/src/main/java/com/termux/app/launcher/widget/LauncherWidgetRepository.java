@@ -503,6 +503,23 @@ public final class LauncherWidgetRepository {
         return commitValidated(next, pending, definition, pageCount, revision + 1);
     }
 
+    /**
+     * Empties the wall in one commit: no records, no reservation, a single page, and nothing left
+     * on the shelf for the orientations that are not on screen. The grid and the orientation on
+     * screen are how the wall is drawn rather than what is on it, so both stay as they are.
+     *
+     * <p>Shelved layouts go with the records because they are placements of those same widget
+     * IDs; keeping them would leave the other orientation holding positions for widgets that no
+     * longer exist, ready to resurface at the next rotation.
+     *
+     * @return true when the empty wall was written.
+     */
+    public synchronized boolean resetToEmptyWall() {
+        return commitValidated(new LinkedHashMap<Integer, LauncherWidgetRecord>(), null, grid, 1,
+            Collections.<Integer>emptySet(), orientation,
+            new LinkedHashMap<String, OrientationLayout>(), revision + 1);
+    }
+
     @NonNull public synchronized String serialize() {
         return encode(records, pending, grid, pageCount, freshPages, orientation, layouts,
             revision);
