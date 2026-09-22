@@ -18,7 +18,12 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Where a Linux app's icon lives — in the prefix or inside a distro container — and how it is
@@ -26,6 +31,9 @@ import java.util.Locale;
  * freedesktop one cut to what matters: the hicolor theme's PNG sizes, largest useful first, then
  * {@code scalable}'s SVG, then the pixmaps directory — a real raster size always wins over a
  * rendered one, since a hand-made 256px PNG beats a vector redrawn at the same budget.
+ *
+ * <p>A whole desktop is the one entry that usually names no picture at all, so it gets a second
+ * try at the desktop environment's own application icon; see {@link #DESKTOP_ICON_NAMES}.
  */
 public final class LinuxAppIcons {
 
@@ -45,16 +53,78 @@ public final class LinuxAppIcons {
     /** Checked in this order at every candidate location: a PNG at a size beats an SVG at it. */
     private static final String[] ICON_EXTENSIONS = {".png", ".svg"};
 
+    /**
+     * The name a desktop environment's own application icon is installed under, for a whole
+     * desktop whose session file names no icon that resolves — which is most of them: of the
+     * nineteen session files in Termux's x11 repository nine carry no {@code Icon} key at all and
+     * four more carry an empty one.
+     *
+     * <p>The key is matched against the session's {@code DesktopNames} value and against its
+     * desktop-file name, both lower-cased; the two agree for every desktop here. Each name was
+     * read out of a real package's file list at a path this class already searches —
+     * {@code xfce4-logo} from Termux's {@code libxfce4ui} and Debian's {@code libxfce4ui-utils},
+     * {@code lxqt} from {@code lxqt-themes} and {@code lxqt-system-theme}, {@code mate-desktop}
+     * from {@code mate-desktop} and {@code mate-desktop-common}, {@code openbox} from openbox's
+     * own {@code share/pixmaps}, {@code cinnamon} from {@code cinnamon}. A desktop that ships no
+     * such icon — i3, IceWM, Plasma, awesome, bspwm, herbstluftwm, Window Maker — finds nothing
+     * here and keeps the drawer's own stand-in rather than a name that resolves nowhere.
+     */
+    private static final Map<String, String> DESKTOP_ICON_NAMES = buildDesktopIconNames();
+
+    @NonNull
+    private static Map<String, String> buildDesktopIconNames() {
+        Map<String, String> names = new HashMap<>();
+        names.put("xfce", "xfce4-logo");
+        names.put("lxqt", "lxqt");
+        names.put("mate", "mate-desktop");
+        names.put("openbox", "openbox");
+        names.put("cinnamon", "cinnamon");
+        names.put("cinnamon2d", "cinnamon");
+        names.put("x-cinnamon", "cinnamon");
+        return Collections.unmodifiableMap(names);
+    }
+
     private LinuxAppIcons() {}
 
     /**
      * The icon file for an app, wherever the app lives. A container names its paths in its own
      * world and keeps its icons under its {@code /usr}, so both are resolved against its rootfs —
      * which is inside the launcher's own data directory, and so an ordinary readable file.
+     *
+     * <p>A whole desktop ({@link LinuxAppCatalog.LinuxApp#session}) gets one more try: its own
+     * {@code Icon} first, exactly like an app, and then the desktop's own application icon by name
+     * ({@link #DESKTOP_ICON_NAMES}), because a session file that names a picture is the exception.
+     * An application's lookup is untouched — nothing that resolves today stops resolving, and
+     * nothing that fails today starts succeeding.
      */
     @Nullable
     public static File find(@NonNull LinuxAppCatalog.LinuxApp app) {
-        return find(app.icon, app.container);
+        File own = find(app.icon, app.container);
+        if (own != null || !app.session) return own;
+        for (String name : desktopIconNames(app)) {
+            File file = find(name, app.container);
+            if (file != null) return file;
+        }
+        return null;
+    }
+
+    /**
+     * The application-icon names to try for a whole desktop, most specific first: what the session
+     * calls itself in {@code DesktopNames}, then what its file is called. Empty for an application,
+     * and for a desktop no package here ships an icon for.
+     */
+    @NonNull
+    static List<String> desktopIconNames(@NonNull LinuxAppCatalog.LinuxApp app) {
+        if (!app.session) return Collections.emptyList();
+        List<String> keys = new ArrayList<>(3);
+        for (String desktopName : app.desktopNames.split(";")) keys.add(desktopName);
+        keys.add(app.desktopFile);
+        List<String> names = new ArrayList<>(2);
+        for (String key : keys) {
+            String name = DESKTOP_ICON_NAMES.get(key.trim().toLowerCase(Locale.ROOT));
+            if (name != null && !names.contains(name)) names.add(name);
+        }
+        return names;
     }
 
     /** The icon file for an {@code Icon=} value belonging to {@code container}, or null. */

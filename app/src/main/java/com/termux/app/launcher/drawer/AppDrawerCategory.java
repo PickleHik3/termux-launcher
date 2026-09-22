@@ -21,6 +21,10 @@ public enum AppDrawerCategory {
     TRAVEL("travel", R.string.app_drawer_category_travel, false),
     INFORMATION_READING("information_reading", R.string.app_drawer_category_information_reading,
         false),
+    // A whole desktop environment is not an app: one tap takes the display for as long as it
+    // runs, so it stands beside the Linux apps rather than unmarked among things that open a
+    // single window.
+    DESKTOPS("desktops", R.string.app_drawer_category_desktops, false),
     LINUX_APPS("linux_apps", R.string.app_drawer_category_linux_apps, false),
     OTHER("other", R.string.app_drawer_category_other, false);
 

@@ -550,6 +550,7 @@
     <string name="app_drawer_category_photo_video">Photo &amp; Creativity</string>
     <string name="app_drawer_category_travel">Travel &amp; Local</string>
     <string name="app_drawer_category_information_reading">News &amp; Reading</string>
+    <string name="app_drawer_category_desktops">Desktops</string>
     <string name="app_drawer_category_linux_apps">Linux Apps</string>
     <string name="app_drawer_category_other">Other</string>
     <string name="app_drawer_category_automatic">Automatic (suggested)</string>
