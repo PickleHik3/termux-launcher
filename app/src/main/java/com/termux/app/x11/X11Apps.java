@@ -24,6 +24,16 @@ public final class X11Apps {
      */
     private static final String CONTAINER_PREFIX = "distro:";
 
+    /**
+     * What marks an id as a whole desktop session rather than an application. It sits
+     * <em>inside</em> the desktop-file part of an id — {@code session:xfce},
+     * {@code distro:debian:session:xfce} — so {@link #qualify}, {@link #containerOf} and every
+     * existing pin, ranking and folder go on reading an id exactly as they did. Without it,
+     * {@code xfce.desktop} in {@code applications} and {@code xfce.desktop} in {@code xsessions}
+     * are the same id and the catalogue's de-duplication silently drops the second.
+     */
+    public static final String SESSION_PREFIX = "session:";
+
     private X11Apps() {}
 
     /**
@@ -47,12 +57,41 @@ public final class X11Apps {
         return end < 0 ? "" : id.substring(CONTAINER_PREFIX.length(), end);
     }
 
-    /** The desktop file's own name behind an id, whichever kind of id it is. */
+    /**
+     * The launcher-wide id of a session file — {@link #qualify} over a desktop-file name carrying
+     * {@link #SESSION_PREFIX}. The marker goes inside, never in front of the container, so the id
+     * still starts with {@code distro:} for a session installed in a container.
+     */
+    @NonNull
+    public static String qualifySession(@NonNull String container, @NonNull String desktopFileId) {
+        return qualify(container, SESSION_PREFIX + desktopFileId);
+    }
+
+    /**
+     * The desktop file's own name behind an id, whichever kind of id it is. A session's still
+     * carries {@link #SESSION_PREFIX}; {@link #desktopFileNameOf} is the one that takes it off.
+     */
     @NonNull
     public static String desktopFileOf(@NonNull String id) {
         if (!id.startsWith(CONTAINER_PREFIX)) return id;
         int end = id.indexOf(':', CONTAINER_PREFIX.length());
         return end < 0 ? id : id.substring(end + 1);
+    }
+
+    /** Whether an id names a whole desktop session rather than an application. */
+    public static boolean isSessionId(@NonNull String id) {
+        return desktopFileOf(id).startsWith(SESSION_PREFIX);
+    }
+
+    /**
+     * The name of the {@code .desktop} file behind an id, with the session marker taken off — what
+     * to look an icon up by, or to show in a diagnostic. Same as {@link #desktopFileOf} for an
+     * application.
+     */
+    @NonNull
+    public static String desktopFileNameOf(@NonNull String id) {
+        String file = desktopFileOf(id);
+        return file.startsWith(SESSION_PREFIX) ? file.substring(SESSION_PREFIX.length()) : file;
     }
 
     @NonNull
