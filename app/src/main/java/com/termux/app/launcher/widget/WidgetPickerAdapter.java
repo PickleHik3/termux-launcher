@@ -9,6 +9,7 @@ import android.os.Build;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
@@ -39,7 +40,16 @@ import java.util.Set;
  * matches in so the results need no second tap.
  */
 public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
-    public interface Listener { void onProviderSelected(@NonNull WidgetProviderItem item); }
+    public interface Listener {
+        void onProviderSelected(@NonNull WidgetProviderItem item);
+        /**
+         * The card was held rather than tapped: the finger is taking this widget out of the sheet
+         * to choose a cell for it. {@code card} is the row the press landed on, whose picture the
+         * finger carries, and the coordinates are the finger's, on screen.
+         */
+        default void onProviderHeld(@NonNull WidgetProviderItem item, @NonNull View card,
+                                    float rawX, float rawY) { }
+    }
     public interface FitPredicate { boolean canFit(@NonNull WidgetProviderItem item); }
     public interface PreviewLoader {
         /**
@@ -162,7 +172,7 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
                 Math.round(20 * density), ViewGroup.LayoutParams.WRAP_CONTENT);
             chevronParams.setMarginStart(Math.round(8 * density));
             row.addView(chevron, chevronParams);
-            return new Holder(row);
+            return new Holder(row, false);
         }
         LinearLayout card = new LinearLayout(parent.getContext());
         card.setOrientation(LinearLayout.HORIZONTAL); card.setGravity(Gravity.CENTER_VERTICAL);
@@ -187,7 +197,7 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         labels.addView(title); labels.addView(span);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         lp.setMarginStart(Math.round(12 * density)); card.addView(labels, lp);
-        return new Holder(card);
+        return new Holder(card, true);
     }
     @Override public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         Object row = rows.get(position);
@@ -220,6 +230,71 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         holder.itemView.setContentDescription(item.label + ", " + spanText
             + (enabled ? "" : ", no space"));
         holder.itemView.setOnClickListener(enabled ? view -> listener.onProviderSelected(item) : null);
+        // The hold rides alongside the tap rather than replacing it: the listener never consumes
+        // an event, so a press that is not held long enough is the click it has always been.
+        cell.hold.arm(enabled);
+    }
+
+    /**
+     * A press held still on a card hands the widget to the finger.
+     *
+     * <p>It cannot be a long-click listener: a long click arrives only once the finger lifts on
+     * some paths and, more to the point, {@link View} would then consume the gesture inside a list
+     * that is about to be recycled away. This watches the stream without taking it, and the moment
+     * the hold matures it says so; whoever answers is responsible for taking the stream off the
+     * sheet. Movement past the touch slop is a scroll, and the hold is dropped.
+     */
+    private final class CardHold implements View.OnTouchListener {
+        private final Holder cell;
+        private final int slop;
+        private final Runnable matured = this::mature;
+        private boolean armed;
+        private boolean watching;
+        private float downX, downY, rawX, rawY;
+
+        CardHold(@NonNull Holder cell) {
+            this.cell = cell;
+            slop = ViewConfiguration.get(cell.itemView.getContext()).getScaledTouchSlop();
+            cell.itemView.setOnTouchListener(this);
+        }
+
+        /** A card with no room on the page refuses the hold exactly as it refuses the tap. */
+        void arm(boolean value) { armed = value; if (!value) stop(); }
+
+        void stop() {
+            watching = false;
+            cell.itemView.removeCallbacks(matured);
+        }
+
+        @Override public boolean onTouch(View view, MotionEvent event) {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    stop();
+                    if (!armed || !(cell.bound instanceof WidgetProviderItem)) break;
+                    downX = event.getX(); downY = event.getY();
+                    rawX = event.getRawX(); rawY = event.getRawY();
+                    watching = true;
+                    view.postDelayed(matured, ViewConfiguration.getLongPressTimeout());
+                    break;
+                case MotionEvent.ACTION_MOVE:
+                    if (!watching) break;
+                    rawX = event.getRawX(); rawY = event.getRawY();
+                    if (Math.hypot(event.getX() - downX, event.getY() - downY) > slop) stop();
+                    break;
+                default:
+                    stop();
+                    break;
+            }
+            return false;
+        }
+
+        private void mature() {
+            if (!watching) return;
+            watching = false;
+            Object bound = cell.bound;
+            if (!(bound instanceof WidgetProviderItem)) return;
+            listener.onProviderHeld((WidgetProviderItem) bound, cell.itemView, rawX, rawY);
+        }
     }
 
     /** The app row stays live whatever its widgets measure: it is how they are reached at all. */
@@ -248,7 +323,11 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
     /** A recycled card gives its host view back before the holder is aimed at another provider. */
     @Override public void onViewRecycled(@NonNull RecyclerView.ViewHolder holder) {
         super.onViewRecycled(holder);
-        if (holder instanceof Holder) { releaseHost((Holder) holder); ((Holder) holder).bound = null; }
+        if (holder instanceof Holder) {
+            releaseHost((Holder) holder);
+            ((Holder) holder).hold.stop();
+            ((Holder) holder).bound = null;
+        }
     }
 
     private void requestArtwork(@NonNull Holder cell, @NonNull WidgetProviderItem item,
@@ -441,10 +520,16 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
             return "p " + item.profileSerial + " " + item.info.provider.flattenToString();
         }
     }
-    private static final class Holder extends RecyclerView.ViewHolder {
+    private final class Holder extends RecyclerView.ViewHolder {
         Object bound;
         @Nullable AppWidgetHostView host;
         @NonNull WidgetPickerCardTemplate template = WidgetPickerCardTemplate.forSpan(1, 1);
-        Holder(View item) { super(item); }
+        /** Only provider cards are carried; an app row has nothing to take out of the sheet. */
+        @NonNull final CardHold hold;
+        Holder(View item, boolean provider) {
+            super(item);
+            hold = new CardHold(this);
+            if (!provider) hold.arm(false);
+        }
     }
 }
