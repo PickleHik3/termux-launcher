@@ -337,7 +337,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         float dragStartRawX, dragStartRawY;
         Rect dragStartBounds;
         WidgetEditPolicy.Candidate moveCandidate;
-        WidgetCellRect resizeCandidate;
+        WidgetEditPolicy.Candidate resizeCandidate;
         /** The page the drag is over now: the widget's own until the finger turns it. */
         int dragPage;
         /** Which edge band the finger is resting in: -1 the leading one, +1 the trailing one. */
@@ -875,6 +875,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return widgets.repository().putRecords(batch);
     }
 
+    /**
+     * The edge under the finger, and what the page has to shuffle to give the widget that span.
+     * A grow that lands on a neighbour pushes it aside just as a move does, and the neighbours
+     * slide to where they would go while the finger is still down.
+     */
     private void resizeDrag(@NonNull WidgetEditPolicy.Handle handle, int desiredEdgePx) {
         LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
         if (record == null) return;
@@ -884,20 +889,25 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             : desiredEdgePx - pane.grid().getTop();
         edit.resizeCandidate = WidgetEditPolicy.resize(pane.grid().metrics(),
             widgets.repository().recordsOnPage(record.page), edit.appWidgetId, record.cell,
-            handle, gridEdgePx, edit.minColumnSpan, edit.minRowSpan).rect;
-        pane.widgetEditOverlay().setFrameBounds(paneBounds(edit.resizeCandidate));
+            handle, gridEdgePx, edit.minColumnSpan, edit.minRowSpan);
+        pane.widgetEditOverlay().setFrameBounds(paneBounds(edit.resizeCandidate.rect));
+        previewDisplacement(edit.resizeCandidate.displaced);
     }
 
     private void endResizeDrag() {
         LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
-        WidgetCellRect rect = edit.resizeCandidate;
+        WidgetEditPolicy.Candidate candidate = edit.resizeCandidate;
         edit.resizeCandidate = null;
-        if (record != null && rect != null && !rect.equals(record.cell)
-            && widgets.repository().putRecord(record.withCell(rect))) {
+        // The new span and every neighbour it pushed aside go in together: the same atomic batch
+        // the move path commits, so a refused write leaves the page exactly as it was.
+        if (record != null && candidate != null && !candidate.rect.equals(record.cell)
+            && commitMove(record, candidate, record.page)) {
+            // A render lays the neighbours out where the commit put them and drops the preview.
             render();
-        } else if (record != null) {
-            pane.widgetEditOverlay().setFrameBounds(paneBounds(record.cell));
+            return;
         }
+        clearDisplacementPreview(true);
+        if (record != null) pane.widgetEditOverlay().setFrameBounds(paneBounds(record.cell));
     }
 
     @NonNull private Rect paneBounds(@NonNull WidgetCellRect rect) {
