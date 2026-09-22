@@ -394,13 +394,9 @@ public class X11CliInstallerTest {
                 // No sleep in a nix prefix's own bin, so Android's, by its path: the wrapper runs
                 // in Android's shell and has no PATH that would find one.
                 + "server=$PPID\n"
-                + "if kill -0 \"$server\" 2>/dev/null; then\n"
                 + "while kill -0 \"$server\" 2>/dev/null; do\n"
                 + "/system/bin/sleep 3600\n"
-                + "done\n"
-                + "else\n"
-                + "exec /system/bin/sleep 2147483647\n"
-                + "fi\n",
+                + "done\n",
             text(installer.wmScript()));
         assertTrue(installer.wmScript().canExecute());
         assertTrue("the whole point of the wrapper is that this path is short",
@@ -430,15 +426,37 @@ public class X11CliInstallerTest {
                 // The prefix's own sleep, by its path. It then watches the one process it must
                 // outlive and no longer: the server, which is its own parent.
                 + "server=$PPID\n"
-                + "if kill -0 \"$server\" 2>/dev/null; then\n"
                 + "while kill -0 \"$server\" 2>/dev/null; do\n"
                 + sleep.getPath() + " 3600\n"
-                + "done\n"
-                + "else\n"
-                + "exec " + sleep.getPath() + " 2147483647\n"
-                + "fi\n",
+                + "done\n",
             text(installer.wmScript()));
         assertTrue(installer.wmScript().canExecute());
+    }
+
+    /**
+     * The wrapper leaves when the display does. Turning the display off kills the server first, so
+     * by the time the manager has gone and {@code wait} has returned there is no parent left to
+     * see — the loop's condition is the only look there is, so the wrapper stops rather than
+     * staying behind. An earlier version slept forever in exactly that case, which left one
+     * sleeper per display stop for the rest of the boot.
+     */
+    @Test
+    public void theWrapperNeverSleepsWithoutWatchingForTheServer() throws IOException {
+        File sleep = new File(bin, "sleep");
+        assertTrue(sleep.createNewFile() && sleep.setExecutable(true));
+        String script = X11CliInstaller.windowManagerScript(
+            bin.getParentFile(), "openbox --config-file " + X11CliInstaller.OPENBOX_RC_PATH);
+
+        assertFalse("nothing may outlast the display", script.contains("2147483647"));
+        assertFalse("no branch that stops looking at the server", script.contains("else"));
+        // Every sleep in the wrapper is inside the loop that is watching the server.
+        for (String line : script.split("\n")) {
+            if (line.contains("sleep ")) {
+                assertTrue("a sleep outside the watch loop would be a leak: " + line,
+                    line.trim().endsWith(" 3600"));
+            }
+        }
+        assertTrue(script.contains("while kill -0 \"$server\" 2>/dev/null; do"));
     }
 
     /** A window manager that is not installed, or none configured, leaves no wrapper behind. */

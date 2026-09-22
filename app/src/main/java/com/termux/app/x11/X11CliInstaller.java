@@ -304,9 +304,17 @@ public final class X11CliInstaller {
      * other way round — so a wrapper that only slept would be left behind, once per display, for
      * the rest of the boot. Instead it looks at its own parent, which <em>is</em> the server
      * ({@code fork} in upstream's {@code ddxReadyThread}, with no {@code setsid} between), once an
-     * hour: no busy-wait, and nothing left sleeping after the display is gone. A parent that
-     * cannot be seen at all is the one case where sleeping forever is right — being wrong about it
-     * would end the display — so that branch never looks again.
+     * hour: no busy-wait, and nothing left sleeping after the display is gone.
+     *
+     * <p>The look is the loop's own condition and there is no other branch, which is what makes
+     * the ordinary case right. Turning the display off kills the server first; the manager then
+     * loses its X connection and exits, {@code wait} returns, and the parent is already gone —
+     * {@code $PPID} is fixed at this shell's startup and is not rewritten by reparenting, so it
+     * still names the server, {@code kill -0} fails, the loop body never runs and the wrapper
+     * leaves at once. An earlier version treated an unseeable parent as a reason to sleep forever
+     * instead, which leaked exactly one sleeper per display stop — the commonest path of all. The
+     * fear behind it was real but misplaced: the server and the launcher are the same uid, so a
+     * {@code kill -0} that fails means a process that is gone, not one we may not signal.
      *
      * <p>The pid file is taken away again the moment the manager it names is gone, so a stop never
      * has a dead pid to aim at.
@@ -322,13 +330,9 @@ public final class X11CliInstaller {
             + "wait\n"
             + "rm -f " + pidFile + "\n"
             + "server=$PPID\n"
-            + "if kill -0 \"$server\" 2>/dev/null; then\n"
             + "while kill -0 \"$server\" 2>/dev/null; do\n"
             + sleep + " " + IDLE_SECONDS + "\n"
-            + "done\n"
-            + "else\n"
-            + "exec " + sleep + " 2147483647\n"
-            + "fi\n";
+            + "done\n";
     }
 
     /**
