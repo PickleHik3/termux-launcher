@@ -54,8 +54,9 @@ public final class LauncherCategorySortPrompt {
         descriptions.put("photo_video", "camera, gallery and photo or video editing");
         descriptions.put("travel", "maps, navigation, transport and travel booking");
         descriptions.put("information_reading", "news, search, reading, books and reference");
-        // In practice the classifier assigns this one from the package alone before an app ever
+        // In practice the classifier assigns these two from the package alone before an app ever
         // reaches this prompt; kept here only so the taxonomy stays exhaustive.
+        descriptions.put("desktops", "whole Linux desktop environments that take over the screen");
         descriptions.put("linux_apps", "apps that run inside a Linux distro on the device");
         descriptions.put("other", "anything that fits none of the above");
         return Collections.unmodifiableMap(descriptions);

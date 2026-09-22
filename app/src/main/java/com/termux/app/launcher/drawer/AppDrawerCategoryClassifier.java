@@ -192,9 +192,13 @@ public final class AppDrawerCategoryClassifier {
                 return new AppDrawerCategoryAssignment(user, Source.USER, 1f);
         }
         // Package identity, not a guess: every x11:linux entry belongs together regardless of
-        // what its name or label scores against the heuristics below.
+        // what its name or label scores against the heuristics below. A whole desktop is the one
+        // split inside that package — it takes the display rather than opening a window — and it
+        // is told apart by the marker its id carries, never by anything read out of its name.
         if (X11Apps.isLinuxApp(entry.appRef))
-            return new AppDrawerCategoryAssignment(AppDrawerCategory.LINUX_APPS,
+            return new AppDrawerCategoryAssignment(
+                X11Apps.isSessionId(X11Apps.desktopId(entry.appRef))
+                    ? AppDrawerCategory.DESKTOPS : AppDrawerCategory.LINUX_APPS,
                 Source.LINUX_APP, 1f);
         AppDrawerCategory forced = curated.forcedCategoryForPackage(packageName);
         if (forced != null)
