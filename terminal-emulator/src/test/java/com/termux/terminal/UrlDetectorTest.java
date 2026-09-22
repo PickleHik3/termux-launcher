@@ -202,4 +202,32 @@ public class UrlDetectorTest extends TerminalTestCase {
             assertEquals("offset " + offset + ", last row", url, urlAt(paneColumn + 2, rows - 1));
         }
     }
+
+    /**
+     * The renderer underlines what {@code find} returns for the rows in view. An address whose
+     * first row has scrolled above that window must still be found from the rows still on screen,
+     * or it loses its underline until the user scrolls back to its start.
+     */
+    public void testAnAddressStartingAboveTheVisibleWindowIsStillFound() {
+        String url = "https://example.com/3/aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddd/eeeeeeeeee"
+            + "/ffffffffff/gggggggggg/hhhhhhhhhh/iiiiiiiiii/jjjjjjjjjj/kkkkkkkkkk/end-3";
+        int paneColumn = 12;
+        int width = COLUMNS - paneColumn;
+        int rows = (url.length() + width - 1) / width;
+        assertTrue("the address must outrun the context window", rows > 4);
+        for (int i = 0; i < rows; i++) {
+            StringBuilder line = new StringBuilder(i == 0 ? "  omen" : "  dev");
+            while (line.length() < paneColumn) line.append(' ');
+            line.append(url, i * width, Math.min(url.length(), (i + 1) * width));
+            row(line.toString());
+        }
+        TerminalBuffer screen = mTerminal.getScreen();
+        for (int topRow = 0; topRow < rows; topRow++) {
+            List<UrlDetector.UrlSpan> spans = UrlDetector.find(screen, topRow, mTerminal.mRows - 1);
+            assertEquals("visible from row " + topRow, 1, spans.size());
+            assertEquals("visible from row " + topRow, url, spans.get(0).url);
+        }
+        assertTrue("nothing to find once the address is wholly above the window",
+            UrlDetector.find(screen, rows, mTerminal.mRows - 1).isEmpty());
+    }
 }

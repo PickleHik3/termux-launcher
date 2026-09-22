@@ -129,6 +129,10 @@ public final class UrlDetector {
 
         int scanFirst = Math.max(minRow, firstRow - CONTEXT_ROWS);
         for (int i = 0; i < MAX_WRAP_CHAIN && scanFirst > minRow && lineWraps(screen, scanFirst - 1); i++) scanFirst--;
+        // A program that wraps by hand sets no wrap flag, so the chain above has to be walked by
+        // sight: while the row above still runs to its edge it may carry the start of an address
+        // that reaches into the range, and without it the rows in view match nothing at all.
+        for (int i = 0; i < MAX_WRAP_CHAIN && scanFirst > minRow && rowReachesEdge(screen, scanFirst - 1); i++) scanFirst--;
         int scanLast = Math.min(maxRow, lastRow + CONTEXT_ROWS);
         for (int i = 0; i < MAX_WRAP_CHAIN && scanLast < maxRow && lineWraps(screen, scanLast); i++) scanLast++;
 
@@ -188,6 +192,17 @@ public final class UrlDetector {
     private static boolean lineWraps(TerminalBuffer screen, int row) {
         TerminalRow line = screen.mLines[screen.externalToInternalRow(row)];
         return line != null && line.mLineWrap;
+    }
+
+    /** Whether a row's last cell carries text: what a wrapped or painted row looks like. */
+    private static boolean rowReachesEdge(TerminalBuffer screen, int externalRow) {
+        TerminalRow line = screen.mLines[screen.externalToInternalRow(externalRow)];
+        if (line == null) return false;
+        int last = screen.mColumns - 1;
+        int index = line.findStartOfColumn(last);
+        if (index >= line.getSpaceUsed()) return false;
+        char c = line.mText[index];
+        return c != ' ' && !isBorderGlyph(c);
     }
 
     /** Box-drawing and block glyphs: a multiplexer's pane edge or scrollbar, never part of an address. */
