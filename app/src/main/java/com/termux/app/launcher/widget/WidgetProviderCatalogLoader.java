@@ -457,11 +457,12 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
          * it along with everything else this rung can throw.
          */
         @Override public boolean offersGeneratedPreview(AppWidgetProviderInfo info) {
-            return (info.generatedPreviewCategories
-                & AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN) != 0;
+            return Build.VERSION.SDK_INT >= GENERATED_PREVIEW_SDK
+                && (info.generatedPreviewCategories
+                    & AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN) != 0;
         }
         @Override public RemoteViews generatedPreview(AppWidgetProviderInfo info) {
-            if (widgets == null) return null;
+            if (widgets == null || Build.VERSION.SDK_INT < GENERATED_PREVIEW_SDK) return null;
             return widgets.getWidgetPreview(info.provider, info.getProfile(),
                 AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN);
         }
@@ -470,7 +471,9 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
          * platform offers no way to render another profile's preview layout.
          */
         @Override public RemoteViews previewLayout(AppWidgetProviderInfo info) {
-            if (info.previewLayout == 0) return null;
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || info.previewLayout == 0) {
+                return null;
+            }
             return new RemoteViews(info.provider.getPackageName(), info.previewLayout);
         }
         @Override public boolean enabled(AppWidgetProviderInfo info) {
