@@ -240,11 +240,13 @@ An app whose menu entry asks for a terminal opens in a terminal pane rather than
 Two things make this work:
 
 - **The window manager.** The launcher starts `openbox` with the display (install it with
-  `pkg install openbox`), with a launcher-owned rule that maximises every window, so windows open
-  full size and dialogs stay on screen. The Display page names it at the foot of the page rather
-  than offering it as a setting. Windows fill the display to its rounded corners, as on
-  any rounded desktop, so a terminal that wants its first and last cells clear of the arcs pads
-  its own window (`window_padding_width` in kitty, `window.padding` in alacritty).
+  `pkg install openbox`) for single apps, with a launcher-owned rule that maximises every window,
+  so windows open full size and dialogs stay on screen. The Display page names it at the foot of
+  the page rather than offering it as a setting. A whole desktop session brings its own window
+  manager instead: openbox steps aside while the desktop runs and comes back once it closes.
+  Windows fill the display to its rounded corners, as on any rounded desktop, so a terminal that
+  wants its first and last cells clear of the arcs pads its own window (`window_padding_width` in
+  kitty, `window.padding` in alacritty).
 - **Linux apps in the drawer**, on the Display page in Settings, can be switched off if you
   would rather start apps from a shell.
 
@@ -269,10 +271,13 @@ the whole temporary directory and works too. Neither is on by default. `DISPLAY`
 in with `-e` — exporting it in your Termux shell does not carry it across. The server needs no
 `-ac` and the container needs no `xauth`.
 
-Inside, install and start any X11 desktop or app as usual (`pacman -S xfce4 && startxfce4`, or a
-single app). A single app needs none of this from the drawer's point of view: apps installed in a
-container are listed in the app drawer by themselves, and a tap opens one here — see
-[Linux apps from a distro](Linux_Apps_From_A_Distro.md).
+Inside, install a single app as usual, or a whole desktop (`pacman -S xfce4`). Neither needs
+starting by hand from here: an app appears in the app drawer under Linux Apps, a desktop appears
+under Desktops, and a tap opens either one — a desktop takes over the display until you close it —
+see [Linux apps from a distro](Linux_Apps_From_A_Distro.md). Starting a desktop by hand still
+works too, the same way termux-x11's own instructions do: a desktop needs a message bus and
+`startxfce4` starts none of its own, so run `dbus-launch --exit-with-session startxfce4` after
+logging in as above.
 
 GPU profiles work inside the proot too: install the *distro's* Mesa, export the same
 variables in the proot shell, and — for the `virgl` profiles — keep `virgl_test_server_android`
