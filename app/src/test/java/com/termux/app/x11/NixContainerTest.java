@@ -76,6 +76,19 @@ public class NixContainerTest {
             dirs.get(1));
     }
 
+    /**
+     * A desktop's session file on the nix edition comes out of the profile, the way every package
+     * does. There is no {@code local} level in a nix profile and no hand-written one either — the
+     * user's own entries are a home-manager activation, which lands in the profile too.
+     */
+    @Test public void theSessionDirIsTheProfilesOwn() throws IOException {
+        ProotDistro.Container nix = nix();
+        List<File> dirs = nix.sessionDirs();
+        assertEquals(1, dirs.size());
+        assertEquals(new File(prefix, "nix/store/sl25-nix-on-droid-path/share/xsessions"),
+            dirs.get(0));
+    }
+
     @Test public void anAbsolutePathIsRewrittenAndFollowed() throws IOException {
         ProotDistro.Container nix = nix();
         File icon = write(new File(prefix, "nix/store/zxyn-xterm-410/share/pixmaps/xterm.png"), "x");

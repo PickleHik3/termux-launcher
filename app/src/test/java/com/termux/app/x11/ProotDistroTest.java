@@ -82,6 +82,40 @@ public class ProotDistroTest {
         assertEquals(new File("/usr/share/pixmaps/x.png"), prefix.inside("/usr/share/pixmaps/x.png"));
     }
 
+    /**
+     * A whole desktop puts its entry in {@code xsessions}, a different directory from
+     * {@code applications} and the only thing that says the entry is a desktop rather than an app.
+     * Both levels of {@code XDG_DATA_DIRS} are read, as every display manager reads them.
+     */
+    @Test public void aContainerKnowsWhereItsDesktopSessionsLive() throws IOException {
+        File containers = temp.newFolder("containers");
+        File rootfs = rootfs(containers, "debian");
+        write(rootfs, "etc/passwd", "root:x:0:0:root:/root:/bin/bash\n"
+            + "amal:x:1000:1000::/home/amal:/bin/bash\n");
+
+        ProotDistro.Container debian = ProotDistro.byName(ProotDistro.containers(containers), "debian");
+
+        assertNotNull(debian);
+        assertEquals(Arrays.asList(
+                new File(rootfs, "usr/share/xsessions"),
+                new File(rootfs, "usr/local/share/xsessions")),
+            debian.sessionDirs());
+        // Applications are untouched by this — the list they were is the list they are.
+        assertEquals(Arrays.asList(
+                new File(rootfs, "usr/share/applications"),
+                new File(rootfs, "usr/local/share/applications"),
+                new File(rootfs, "home/amal/.local/share/applications")),
+            debian.applicationDirs());
+    }
+
+    @Test public void thePrefixKeepsItsSessionsBesideItsApplications() {
+        List<File> dirs = ProotDistro.Container.PREFIX.sessionDirs();
+
+        assertEquals(2, dirs.size());
+        assertTrue(dirs.get(0).getPath().endsWith("/share/xsessions"));
+        assertTrue(dirs.get(1).getPath().endsWith("/local/share/xsessions"));
+    }
+
     // --- who the login runs as -------------------------------------------------------------
 
     @Test public void theFirstOrdinaryUserIsWhoWeLogInAs() {
