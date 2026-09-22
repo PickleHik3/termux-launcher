@@ -131,4 +131,103 @@ public class UrlDetectorTest extends TerminalTestCase {
         assertEquals("https://scrolled.example/away", found.get(0));
         assertEquals("https://scrolled.example/away", urlAt(3, -screen.getActiveTranscriptRows()));
     }
+
+    /**
+     * herdr with its sidebar open: every row of the pane carries another pane's text to its left,
+     * and the address is wrapped by the tool over more rows than the detector's context window.
+     */
+    public void testWrappedAddressBesideASidebarIsJoined() {
+        String url = "https://example.com/d/aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd/eeeeeeeeee"
+            + "/ffffffffff/gggggggggg/hhhhhhhhhh/iiiiiiiiii/jjjjjjjjjj/kkkkkkkkkk/end";
+        String[] sidebar = {"machines", "  mac", "  omencachy", "new \u00b7 omen", "  agents"};
+        int paneColumn = 14;
+        int rows = sidebarRows(sidebar, url, paneColumn);
+        assertTrue("the address must outrun the context window", rows > 4);
+        for (int row = 0; row < rows; row++)
+            assertEquals("row " + row, url, urlAt(paneColumn + 2, row));
+    }
+
+    /** Lay a pane's text out at {@code paneColumn}, with the sidebar's own text to its left. */
+    private int sidebarRows(String[] sidebar, String text, int paneColumn) {
+        int width = COLUMNS - paneColumn;
+        int rows = (text.length() + width - 1) / width;
+        for (int i = 0; i < rows; i++) {
+            StringBuilder line = new StringBuilder(i < sidebar.length ? sidebar[i] : "");
+            while (line.length() < paneColumn) line.append(' ');
+            line.append(text, i * width, Math.min(text.length(), (i + 1) * width));
+            row(line.toString());
+        }
+        return rows;
+    }
+
+    /** A sidebar's own text is not another pane's address continuing: it must not be glued on. */
+    public void testASidebarsTextIsNotGluedOntoAnAddress() {
+        row("machines      https://example.com/d/aaaaaaaaaa/b")
+            .row("  mac         bbbbbbbbb/end");
+        assertEquals("https://example.com/d/aaaaaaaaaa/bbbbbbbbbb/end", urlAt(16, 0));
+        assertEquals("https://example.com/d/aaaaaaaaaa/bbbbbbbbbb/end", urlAt(16, 1));
+        assertNull("the sidebar's own word is not part of the address", urlAt(3, 1));
+    }
+
+    /** A full-width pane, no sidebar: an address wrapped past the context window is still whole. */
+    public void testAnAddressWrappedPastTheContextWindowIsWholeFromEveryRow() {
+        String url = "https://example.com/d/aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd/eeeeeeeeee"
+            + "/ffffffffff/gggggggggg/hhhhhhhhhh/iiiiiiiiii/jjjjjjjjjj/kkkkkkkkkk/llllllllll"
+            + "/mmmmmmmmmm/nnnnnnnnnn/oooooooooo/pppppppppp/qqqqqqqqqq/rrrrrrrrrr/end";
+        int rows = sidebarRows(new String[0], url, 0);
+        assertTrue("the address must outrun the context window", rows > 4);
+        for (int row = 0; row < rows; row++)
+            assertEquals("row " + row, url, urlAt(2, row));
+    }
+
+    /**
+     * A pane's text column wanders by a column or two between an address's first row and its
+     * continuations. That must not cost the continuation: it is still the same block.
+     */
+    public void testAContinuationIndentedDifferentlyFromTheAddressIsStillJoined() {
+        for (int offset = 0; offset <= 2; offset++) {
+            withTerminalSized(COLUMNS, 12);
+            String url = "https://example.com/2/aaaaaaaaaa/bbbbbbbbbb/cc/end-2";
+            int paneColumn = 14;
+            int width = COLUMNS - paneColumn - offset;
+            int rows = (url.length() + width - 1) / width;
+            for (int i = 0; i < rows; i++) {
+                StringBuilder line = new StringBuilder(i == 0 ? "  omen" : "  dev");
+                int column = i == 0 ? paneColumn + offset : paneColumn;
+                while (line.length() < column) line.append(' ');
+                line.append(url, i * width, Math.min(url.length(), (i + 1) * width));
+                row(line.toString());
+            }
+            assertEquals("offset " + offset + ", first row", url, urlAt(paneColumn + offset + 2, 0));
+            assertEquals("offset " + offset + ", last row", url, urlAt(paneColumn + 2, rows - 1));
+        }
+    }
+
+    /**
+     * The renderer underlines what {@code find} returns for the rows in view. An address whose
+     * first row has scrolled above that window must still be found from the rows still on screen,
+     * or it loses its underline until the user scrolls back to its start.
+     */
+    public void testAnAddressStartingAboveTheVisibleWindowIsStillFound() {
+        String url = "https://example.com/3/aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddd/eeeeeeeeee"
+            + "/ffffffffff/gggggggggg/hhhhhhhhhh/iiiiiiiiii/jjjjjjjjjj/kkkkkkkkkk/end-3";
+        int paneColumn = 12;
+        int width = COLUMNS - paneColumn;
+        int rows = (url.length() + width - 1) / width;
+        assertTrue("the address must outrun the context window", rows > 4);
+        for (int i = 0; i < rows; i++) {
+            StringBuilder line = new StringBuilder(i == 0 ? "  omen" : "  dev");
+            while (line.length() < paneColumn) line.append(' ');
+            line.append(url, i * width, Math.min(url.length(), (i + 1) * width));
+            row(line.toString());
+        }
+        TerminalBuffer screen = mTerminal.getScreen();
+        for (int topRow = 0; topRow < rows; topRow++) {
+            List<UrlDetector.UrlSpan> spans = UrlDetector.find(screen, topRow, mTerminal.mRows - 1);
+            assertEquals("visible from row " + topRow, 1, spans.size());
+            assertEquals("visible from row " + topRow, url, spans.get(0).url);
+        }
+        assertTrue("nothing to find once the address is wholly above the window",
+            UrlDetector.find(screen, rows, mTerminal.mRows - 1).isEmpty());
+    }
 }
