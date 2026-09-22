@@ -558,9 +558,16 @@ public final class X11LinuxAppRunner {
      * The shell line that starts the window manager again on {@code display}, after a desktop has
      * finished with it (D1). It needs the display named the same way everything else on it does;
      * the server hands its own {@code -xstartup} that variable, and nothing hands it to this.
+     *
+     * <p>It writes down the pid the way the wrapper did — this shell {@code exec}s into the
+     * manager, so {@code $$} is the manager — because the next desktop stops what that file names
+     * and nothing else. {@code command} is {@link X11WindowManager#startCommand}, never the
+     * wrapper: that one is the server's own child and sleeps for the life of the display.
      */
     @NonNull
     static String windowManagerScript(@NonNull String command, @NonNull String display) {
-        return "export DISPLAY=" + display + "\nexec " + command + "\n";
+        return "export DISPLAY=" + display + "\n"
+            + "echo $$ > " + ProotDistro.singleQuote(X11WindowManager.WM_PID_PATH) + "\n"
+            + "exec " + command + "\n";
     }
 }

@@ -386,12 +386,59 @@ public class X11CliInstallerTest {
         assertTrue(openbox.canExecute());
         assertEquals("#!/system/bin/sh\n"
                 + X11CliInstaller.MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
-                + "exec " + new File(prefix, "bin/login").getPath() + " openbox --config-file "
-                + X11CliInstaller.OPENBOX_RC_PATH + "\n",
+                + new File(prefix, "bin/login").getPath() + " openbox --config-file "
+                + X11CliInstaller.OPENBOX_RC_PATH + " &\n"
+                + "echo $! > '" + X11WindowManager.WM_PID_PATH + "'\n"
+                + "wait\n"
+                + "rm -f '" + X11WindowManager.WM_PID_PATH + "'\n"
+                // No sleep in a nix prefix's own bin, so Android's, by its path: the wrapper runs
+                // in Android's shell and has no PATH that would find one.
+                + "server=$PPID\n"
+                + "if kill -0 \"$server\" 2>/dev/null; then\n"
+                + "while kill -0 \"$server\" 2>/dev/null; do\n"
+                + "/system/bin/sleep 3600\n"
+                + "done\n"
+                + "else\n"
+                + "exec /system/bin/sleep 2147483647\n"
+                + "fi\n",
             text(installer.wmScript()));
         assertTrue(installer.wmScript().canExecute());
         assertTrue("the whole point of the wrapper is that this path is short",
             X11CliInstaller.WM_SCRIPT_PATH.length() < 128);
+    }
+
+    /**
+     * The wrapper is every edition's now, not only nix's: the server ends the display when its
+     * {@code -xstartup} child exits or is signalled, so a desktop that wants to stop the window
+     * manager (D1) needs that child to be something else.
+     */
+    @Test public void everyPrefixGetsAWrapperThatOutlivesTheWindowManager() throws IOException {
+        File sleep = new File(bin, "sleep");
+        assertTrue(sleep.createNewFile() && sleep.setExecutable(true));
+        File openbox = new File(bin, "openbox");
+        assertTrue(openbox.createNewFile() && openbox.setExecutable(true));
+        installer = new X11CliInstaller(bin, libexec, "com.termux.test", assets(LOADER), "openbox");
+
+        assertEquals(X11CliInstaller.Result.INSTALLED, installer.install());
+
+        assertEquals("#!" + new File(bin, "bash").getPath() + "\n"
+                + X11CliInstaller.MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
+                + "openbox --config-file " + X11CliInstaller.OPENBOX_RC_PATH + " &\n"
+                + "echo $! > '" + X11WindowManager.WM_PID_PATH + "'\n"
+                + "wait\n"
+                + "rm -f '" + X11WindowManager.WM_PID_PATH + "'\n"
+                // The prefix's own sleep, by its path. It then watches the one process it must
+                // outlive and no longer: the server, which is its own parent.
+                + "server=$PPID\n"
+                + "if kill -0 \"$server\" 2>/dev/null; then\n"
+                + "while kill -0 \"$server\" 2>/dev/null; do\n"
+                + sleep.getPath() + " 3600\n"
+                + "done\n"
+                + "else\n"
+                + "exec " + sleep.getPath() + " 2147483647\n"
+                + "fi\n",
+            text(installer.wmScript()));
+        assertTrue(installer.wmScript().canExecute());
     }
 
     /** A window manager that is not installed, or none configured, leaves no wrapper behind. */
@@ -410,8 +457,8 @@ public class X11CliInstallerTest {
     }
 
     @Test public void aTermuxPrefixIsLeftExactlyAsItWas() throws IOException {
-        // No profile link, so nothing nix-shaped happens: the bash shebang, no xkb link, and no
-        // wrapper — there the server is handed the window manager's own command line.
+        // No profile link, so nothing nix-shaped happens: the bash shebang and no xkb link. No
+        // wrapper either, but for the ordinary reason — openbox is not installed in this prefix.
         installer = new X11CliInstaller(bin, libexec, "com.termux.test", assets(LOADER), "openbox");
 
         assertEquals(X11CliInstaller.Result.INSTALLED, installer.install());

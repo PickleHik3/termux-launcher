@@ -147,9 +147,9 @@ public class X11LinuxAppRunnerTest {
         assertTrue("the manager is stopped", stopAt > 0);
         assertTrue("and stopped before the desktop starts",
             stopAt < script.indexOf("exec startxfce4"));
-        // Nothing is stopped when there is nothing of ours to stop.
+        // Nothing is stopped when there is no manager at all.
         assertFalse(X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
-            Collections.emptyList(), null).contains("pkill"));
+            Collections.emptyList(), null).contains("kill"));
     }
 
     @Test public void theShellWritesDownThePidItIsAboutToBecome() {
@@ -188,8 +188,12 @@ public class X11LinuxAppRunnerTest {
         assertTrue(script.endsWith("exec startxfce4\n'\n"));
     }
 
-    @Test public void theWindowManagerComesBackOnTheSameDisplay() {
-        assertEquals("export DISPLAY=:1\nexec openbox --config-file /rc.xml\n",
+    @Test public void theWindowManagerComesBackOnTheSameDisplayAndSaysWhatItIs() {
+        // The shell execs into the manager, so $$ is the manager's own pid — which is the one and
+        // only thing the next desktop will stop.
+        assertEquals("export DISPLAY=:1\n"
+                + "echo $$ > '" + X11WindowManager.WM_PID_PATH + "'\n"
+                + "exec openbox --config-file /rc.xml\n",
             X11LinuxAppRunner.windowManagerScript("openbox --config-file /rc.xml", ":1"));
     }
 
