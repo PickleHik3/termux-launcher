@@ -576,6 +576,18 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.lastRawY = rawY;
         pane.removeCallbacks(edgeFlip);
         clearDisplacementPreview(false);
+        // Hold the live view still for the drag's duration: a provider push mid-move would
+        // re-inflate its content under the finger. endMoveDrag releases it; a dropped gesture is
+        // covered by SafeLauncherAppWidgetHostView's own 1 s timeout.
+        SafeLauncherAppWidgetHostView hostView = safeHostViewFor(edit.appWidgetId);
+        if (hostView != null) hostView.beginDeferringUpdates();
+    }
+
+    /** The live host view for {@code appWidgetId}, or null when there is none or it is not ours. */
+    @Nullable private SafeLauncherAppWidgetHostView safeHostViewFor(int appWidgetId) {
+        AppWidgetHostView view = widgets.createHostView(appWidgetId);
+        return view instanceof SafeLauncherAppWidgetHostView
+            ? (SafeLauncherAppWidgetHostView) view : null;
     }
 
     private void moveDrag(float rawX, float rawY) {
@@ -786,6 +798,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.edgeDirection = 0;
         int appWidgetId = edit.appWidgetId;
         boolean lifted = edit.lifted;
+        SafeLauncherAppWidgetHostView hostView = safeHostViewFor(appWidgetId);
+        if (hostView != null) hostView.endDeferringUpdates();
         LauncherWidgetRecord record = widgets.repository().get(appWidgetId);
         WidgetEditPolicy.Candidate candidate = edit.moveCandidate;
         int target = edit.dragPage;
@@ -932,14 +946,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     @NonNull private String messageFor(LauncherWidgetHostController.AddResult result) {
         switch (result) {
-            case UNSUPPORTED: return "Widgets aren't supported on this device";
-            case BUSY: return "Finish adding the current widget first";
-            case CONFIGURATION_UNAVAILABLE: return "Widget configuration isn't available";
-            case STORAGE_FAILURE: return "Widget couldn't be saved";
-            case DECLINED: return "Widget wasn't added";
-            case NO_SPACE: return "Grid is full";
+            case UNSUPPORTED: return pane.getContext().getString(R.string.widget_unsupported);
+            case BUSY: return pane.getContext().getString(R.string.widget_add_busy);
+            case CONFIGURATION_UNAVAILABLE:
+                return pane.getContext().getString(R.string.widget_configuration_unavailable);
+            case STORAGE_FAILURE: return pane.getContext().getString(R.string.widget_storage_failure);
+            case DECLINED: return pane.getContext().getString(R.string.widget_add_failed);
+            case NO_SPACE: return pane.getContext().getString(R.string.widget_grid_full);
             case REMOVE_FAILED: return pane.getContext().getString(R.string.widget_remove_failed);
-            default: return "Widget wasn’t added";
+            default: return pane.getContext().getString(R.string.widget_add_failed);
         }
     }
 }

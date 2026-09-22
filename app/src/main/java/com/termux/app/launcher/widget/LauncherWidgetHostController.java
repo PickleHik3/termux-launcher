@@ -71,6 +71,8 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         void stopListening();
         @NonNull AppWidgetHostView createView(int appWidgetId, @NonNull AppWidgetProviderInfo info);
         void updateOptions(int appWidgetId, @NonNull Bundle options);
+        /** The options the provider process actually has right now, not our own stored copy. */
+        @Nullable Bundle getOptions(int appWidgetId);
         long profileSerial(@NonNull UserHandle profile);
         boolean configureActivityAvailable(@NonNull ComponentName configure,
                                            @Nullable UserHandle profile);
@@ -491,15 +493,34 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         WidgetSizeOptionsPolicy.Result result = WidgetSizeOptionsPolicy.calculate(record.sizeOptions(),
             widthPx, heightPx, activity.getResources().getDisplayMetrics().density,
             orientation, Build.VERSION.SDK_INT);
-        if (!result.valid || !result.changed) return false;
-        LauncherWidgetRecord changed = record.withSizeOptions(result.options);
-        if (!repository.putRecord(changed)) return false;
+        if (!result.valid) return false;
+        if (result.changed) {
+            LauncherWidgetRecord changed = record.withSizeOptions(result.options);
+            if (!repository.putRecord(changed)) return false;
+        }
+        // The record's own stored bundle can say nothing changed while the provider process
+        // itself has a different one (a reinstall, an update that reset its options) - a live
+        // read here is what actually decides whether the write, which wakes the provider process,
+        // is skippable. Two reads beat one needless write.
+        if (WidgetSizeOptionsPolicy.effectivelyEqual(safeGetOptions(appWidgetId), result.options,
+            Build.VERSION.SDK_INT)) {
+            return result.changed;
+        }
         try {
             platform.updateOptions(appWidgetId, result.options);
             return true;
         } catch (RuntimeException exception) {
             repository.putRecord(record.withRenderFailure("options"));
             return false;
+        }
+    }
+
+    @Nullable
+    private Bundle safeGetOptions(int appWidgetId) {
+        try {
+            return platform.getOptions(appWidgetId);
+        } catch (RuntimeException exception) {
+            return null;
         }
     }
 
@@ -698,6 +719,7 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         @Override public void updateOptions(int id, Bundle options) {
             manager.updateAppWidgetOptions(id, options);
         }
+        @Override public Bundle getOptions(int id) { return manager.getAppWidgetOptions(id); }
         @Override public long profileSerial(UserHandle profile) {
             return users == null || profile == null ? 0L : users.getSerialNumberForUser(profile);
         }
