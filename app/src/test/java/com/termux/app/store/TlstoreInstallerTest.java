@@ -46,6 +46,7 @@ public class TlstoreInstallerTest {
     private static final byte[] MOTD =
         "#!/system/bin/sh\nprintf '%s\\n' 'Welcome to Termux Launcher.'\n"
             .getBytes(StandardCharsets.UTF_8);
+    private static final byte[] TLSTORE_UI = "ELF-fixture-arm64-v8a".getBytes(StandardCharsets.UTF_8);
 
     private static TlstoreInstaller.AssetSource assets(byte[] script, boolean includeTrustedKey) {
         return assets(script, includeTrustedKey, MOTD);
@@ -53,6 +54,12 @@ public class TlstoreInstallerTest {
 
     private static TlstoreInstaller.AssetSource assets(byte[] script, boolean includeTrustedKey,
                                                         byte[] motd) {
+        return assets(script, includeTrustedKey, motd, null);
+    }
+
+    /** {@code tlstoreUi}, when not null, is served under {@code tlstore/tlstore-ui-arm64-v8a}. */
+    private static TlstoreInstaller.AssetSource assets(byte[] script, boolean includeTrustedKey,
+                                                        byte[] motd, byte[] tlstoreUi) {
         return name -> {
             if (name.equals("tlstore/tlstore")) return new ByteArrayInputStream(script);
             if (name.equals("tlstore/catalog.tsv")) return new ByteArrayInputStream(CATALOG);
@@ -61,6 +68,10 @@ public class TlstoreInstallerTest {
                 return new ByteArrayInputStream(TRUSTED_KEY);
             }
             if (name.equals("tlstore/motd.sh")) return new ByteArrayInputStream(motd);
+            if (name.equals("tlstore/tlstore-ui-arm64-v8a")) {
+                if (tlstoreUi == null) throw new FileNotFoundException(name);
+                return new ByteArrayInputStream(tlstoreUi);
+            }
             throw new FileNotFoundException(name);
         };
     }
@@ -221,6 +232,67 @@ public class TlstoreInstallerTest {
         assertTrue(installer.tlstoreScript().exists());
         assertTrue(installer.catalogFile().exists());
         assertTrue(installer.markerFile().exists());
+    }
+
+    // --- tlstore-ui ---
+
+    @Test public void aBundledUiBinaryIsInstalledAndExecutable() throws IOException {
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
+
+        assertArrayEquals(TLSTORE_UI, Files.readAllBytes(installer.tlstoreUiFile().toPath()));
+        assertFalse(Files.isSymbolicLink(installer.tlstoreUiFile().toPath()));
+        assertTrue(installer.tlstoreUiFile().canExecute());
+    }
+
+    @Test public void aDeviceAbiWithNoBundledUiBinaryGetsNothingWritten() throws IOException {
+        // The APK only carries arm64-v8a; this "device" only reports x86_64.
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"x86_64"});
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
+
+        assertFalse("nothing to fall back from but the list, so nothing is written",
+            installer.tlstoreUiFile().exists());
+        // Everything else still installs; a missing tlstore-ui is not a failure.
+        assertTrue(installer.tlstoreScript().exists());
+    }
+
+    @Test public void aChangedUiBinaryIsRewrittenOnAVersionBump() throws IOException {
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+        installer.install();
+        Files.write(installer.markerFile().toPath(),
+            (TlstoreInstaller.MARKER_PREAMBLE + " v0 com.termux.test\n")
+                .getBytes(StandardCharsets.UTF_8));
+        byte[] newerUi = "ELF-fixture-newer".getBytes(StandardCharsets.UTF_8);
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, newerUi), new String[]{"arm64-v8a"});
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
+
+        assertArrayEquals(newerUi, Files.readAllBytes(installer.tlstoreUiFile().toPath()));
+    }
+
+    @Test public void aForeignUiBinaryIsLeftAloneAcrossAVersionBump() throws IOException {
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+        installer.install();
+        Files.write(installer.tlstoreUiFile().toPath(), "not ours".getBytes(StandardCharsets.UTF_8));
+        Files.write(installer.markerFile().toPath(),
+            (TlstoreInstaller.MARKER_PREAMBLE + " v0 com.termux.test\n")
+                .getBytes(StandardCharsets.UTF_8));
+        byte[] newerUi = "ELF-fixture-newer".getBytes(StandardCharsets.UTF_8);
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, newerUi), new String[]{"arm64-v8a"});
+
+        TlstoreInstaller.Result result = installer.install();
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, result);
+        assertEquals("the foreign file must survive", "not ours",
+            text(installer.tlstoreUiFile()));
     }
 
     private static int countTempFiles(File dir) {

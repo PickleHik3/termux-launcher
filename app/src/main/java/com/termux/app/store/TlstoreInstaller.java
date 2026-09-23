@@ -1,6 +1,7 @@
 package com.termux.app.store;
 
 import android.content.Context;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -43,6 +44,15 @@ import java.util.function.Consumer;
  * (recorded in {@code .motd-sha256} beside the marker); a file that has drifted from that — the
  * user edited or replaced it — is left alone for good.
  *
+ * <p>It also ships {@code tlstore-ui}, the full-screen store UI, the same way: one asset per ABI
+ * ({@code tlstore/tlstore-ui-<abi>}, plain assets rather than a {@code jniLibs} entry, since this
+ * is a regular program a shell execs, not a library the app dlopens — see
+ * {@code project-docs/tlstore/REVISION-5.md#launcher-hooks} for why that split is safe here). The
+ * device's first supported ABI with a matching asset wins; a device with none bundled gets nothing
+ * written and keeps whatever was there before, so {@code tlstore} falls back to printing the list.
+ * A binary already in place that this class did not write (no matching {@code .tlstore-ui-sha256}
+ * record) is left alone, the same as a foreign {@code tlstore}/{@code tl}/{@code tls}.
+ *
  * <p>All of it is disk I/O; {@link #installAsync} keeps it off the main thread.
  */
 public final class TlstoreInstaller {
@@ -61,6 +71,8 @@ public final class TlstoreInstaller {
     private static final String CATALOG_ASSET = "tlstore/catalog.tsv";
     private static final String TRUSTED_KEY_ASSET = "tlstore/trusted.pub";
     private static final String MOTD_ASSET = "tlstore/motd.sh";
+    /** {@code tlstore/tlstore-ui-<abi>}, e.g. {@code tlstore/tlstore-ui-arm64-v8a}. */
+    private static final String TLSTORE_UI_ASSET_PREFIX = "tlstore/tlstore-ui-";
 
     /** The name every alias points at; also the {@code #!}-less command itself. */
     private static final String TLSTORE_NAME = "tlstore";
@@ -125,17 +137,27 @@ public final class TlstoreInstaller {
     /** The app's versionName: every release rewrites the files, so a changed asset ships. */
     @NonNull private final String release;
     @NonNull private final AssetSource assets;
+    /** ABIs to try for {@code tlstore-ui}, most preferred first; {@link Build#SUPPORTED_ABIS}. */
+    @NonNull private final String[] abis;
 
     @VisibleForTesting
     TlstoreInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull File dataHomeDir,
                      @NonNull String applicationId, @NonNull String release,
                      @NonNull AssetSource assets) {
+        this(binDir, libexecDir, dataHomeDir, applicationId, release, assets, Build.SUPPORTED_ABIS);
+    }
+
+    @VisibleForTesting
+    TlstoreInstaller(@NonNull File binDir, @NonNull File libexecDir, @NonNull File dataHomeDir,
+                     @NonNull String applicationId, @NonNull String release,
+                     @NonNull AssetSource assets, @NonNull String[] abis) {
         this.binDir = binDir;
         this.libexecDir = libexecDir;
         this.dataHomeDir = dataHomeDir;
         this.applicationId = applicationId;
         this.release = release;
         this.assets = assets;
+        this.abis = abis;
     }
 
     /** The installer for this launcher's own prefix. */
@@ -183,6 +205,8 @@ public final class TlstoreInstaller {
     @NonNull File markerFile() { return new File(libexecDir, ".installed"); }
     @NonNull File motdFile() { return new File(dataHomeDir, "motd.sh"); }
     @NonNull File motdShaFile() { return new File(libexecDir, ".motd-sha256"); }
+    @NonNull File tlstoreUiFile() { return new File(libexecDir, "tlstore-ui"); }
+    @NonNull File tlstoreUiShaFile() { return new File(libexecDir, ".tlstore-ui-sha256"); }
 
     @NonNull
     Result install() {
@@ -213,6 +237,7 @@ public final class TlstoreInstaller {
                 Logger.logInfo(LOG_TAG, "No trusted.pub asset yet; installing tlstore without it");
             }
             installMotd();
+            installTlstoreUi();
             writeAtomically(markerFile(), bytes(marker), true, false);
             return Result.INSTALLED;
         } catch (Exception e) {
@@ -292,6 +317,70 @@ public final class TlstoreInstaller {
         } catch (IOException e) {
             Logger.logErrorExtended(LOG_TAG, "Failed to install motd.sh: " + e.getMessage());
         }
+    }
+
+    // ---- The store UI binary ------------------------------------------------------------------
+
+    /**
+     * Write {@code tlstore-ui} for this device's ABI, if the APK carries one. Rewritten whenever
+     * the bundled asset's bytes change (a release ships a newer build), same as everything else
+     * this class writes on a marker mismatch. Left alone — the way an edited {@code motd.sh} is —
+     * once a file is there whose sha256 does not match {@code .tlstore-ui-sha256}, meaning either
+     * a foreign file sits there or the on-disk copy has already drifted from what was written;
+     * either way it is not this class's to overwrite. A symlink at the destination counts as
+     * foreign too, the same rule {@link #writeAtomically} enforces for every other file here.
+     */
+    private void installTlstoreUi() {
+        byte[] asset;
+        try {
+            asset = findTlstoreUiAsset();
+        } catch (IOException e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to read a bundled tlstore-ui: " + e.getMessage());
+            return;
+        }
+        if (asset == null) {
+            Logger.logDebug(LOG_TAG, "No tlstore-ui bundled for this device's ABI; "
+                + "tlstore falls back to printing the list");
+            return;
+        }
+        try {
+            File binary = tlstoreUiFile();
+            if (Files.isSymbolicLink(binary.toPath())) {
+                Logger.logInfo(LOG_TAG, "Leaving tlstore-ui alone; a symlink is there");
+                return;
+            }
+            String assetSha = sha256Hex(asset);
+            if (binary.isFile()) {
+                String currentSha = sha256Hex(Files.readAllBytes(binary.toPath()));
+                if (currentSha.equals(assetSha)) return; // already the current build
+                String previousSha = read(tlstoreUiShaFile());
+                if (previousSha == null || !previousSha.equals(currentSha)) {
+                    Logger.logDebug(LOG_TAG, "Leaving " + binary + " alone; its content does not "
+                        + "match what this launcher last wrote there");
+                    return;
+                }
+            }
+            writeAtomically(binary, new java.io.ByteArrayInputStream(asset), true, true);
+            writeAtomically(tlstoreUiShaFile(), bytes(assetSha), true, false);
+        } catch (IOException e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to install tlstore-ui: " + e.getMessage());
+        }
+    }
+
+    /**
+     * The bundled {@code tlstore-ui} bytes for the first ABI in {@link #abis} the APK carries one
+     * for, or {@code null} when none of them do.
+     */
+    @Nullable
+    private byte[] findTlstoreUiAsset() throws IOException {
+        for (String abi : abis) {
+            try (InputStream in = assets.open(TLSTORE_UI_ASSET_PREFIX + abi)) {
+                return readAll(in);
+            } catch (java.io.FileNotFoundException e) {
+                // Not bundled for this ABI; try the next.
+            }
+        }
+        return null;
     }
 
     @NonNull

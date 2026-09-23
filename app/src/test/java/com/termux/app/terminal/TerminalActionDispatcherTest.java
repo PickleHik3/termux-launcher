@@ -40,6 +40,7 @@ public class TerminalActionDispatcherTest {
     public void detach() {
         if (attachedHost != null) dispatcher.detach(attachedHost);
         attachedHost = null;
+        KeyboardHoldTracker.getInstance().clear();
     }
 
     private FakeTerminalHost attachedHost;
@@ -226,6 +227,68 @@ public class TerminalActionDispatcherTest {
         assertFalse(hidden.getBoolean("keyboardShown"));
         assertFalse(host.inAppKeyboardShown);
         assertTrue(host.calls.contains("hideInAppKeyboard:focus"));
+    }
+
+    @Test
+    public void hideWithHoldRecordsTheCallingSessionAndShowAlwaysReleasesIt() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+        TerminalSession session = session();
+        host.currentSession = session;
+
+        JSONObject hidden = dispatcher.execute("keyboard.hide", new JSONObject().put("hold", true));
+        assertTrue(hidden.getBoolean("ok"));
+        assertTrue(hidden.getBoolean("held"));
+        assertTrue(KeyboardHoldTracker.getInstance().isHeldBy(session.mHandle));
+
+        JSONObject shown = dispatcher.execute("keyboard.show", new JSONObject());
+        assertTrue(shown.getBoolean("ok"));
+        assertFalse("show always releases a hold, whoever calls it", shown.getBoolean("held"));
+        assertFalse(KeyboardHoldTracker.getInstance().isHeld());
+    }
+
+    @Test
+    public void aPlainHideWithoutHoldRecordsNoHold() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+        host.currentSession = session();
+
+        JSONObject hidden = dispatcher.execute("keyboard.hide", new JSONObject());
+
+        assertTrue(hidden.getBoolean("ok"));
+        assertFalse(hidden.getBoolean("held"));
+        assertFalse(KeyboardHoldTracker.getInstance().isHeld());
+    }
+
+    @Test
+    public void aSessionThatWasHoldingTheKeyboardDownShowsItAgainWhenItFinishes() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+        TerminalSession session = session();
+        host.currentSession = session;
+        dispatcher.execute("keyboard.hide", new JSONObject().put("hold", true));
+        assertFalse(host.inAppKeyboardShown);
+
+        dispatcher.onSessionFinished(session);
+
+        assertTrue("nobody else was ever going to show it again", host.inAppKeyboardShown);
+        assertTrue(host.calls.contains("showInAppKeyboard:focus"));
+        assertFalse(KeyboardHoldTracker.getInstance().isHeld());
+    }
+
+    @Test
+    public void anUnrelatedSessionFinishingLeavesAnotherSessionsHoldAlone() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+        TerminalSession holder = session();
+        host.currentSession = holder;
+        dispatcher.execute("keyboard.hide", new JSONObject().put("hold", true));
+
+        dispatcher.onSessionFinished(session());
+
+        assertFalse("only the holding session's own end restores the keyboard",
+            host.inAppKeyboardShown);
+        assertTrue(KeyboardHoldTracker.getInstance().isHeldBy(holder.mHandle));
     }
 
     /**

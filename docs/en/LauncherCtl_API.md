@@ -227,10 +227,16 @@ elsewhere it simply opens or closes the keyboard. Both put something on a screen
 launcher answers 409 `activity_not_running`; 409 `unavailable` means the in-app keyboard is off.
 Rate limit: 240 a minute each.
 
+`hide` also takes `{"hold": true}`: the calling session keeps the keyboard down until it calls
+`show` itself, instead of just for this one call. If that session ends first, the launcher shows
+the keyboard again on its own — nothing is ever left stuck down. A full-screen program that wants
+the keyboard out of its way while it runs (tlstore-ui) asks for a hold.
+
 ```sh
 launcherctl keyboard show --source focus
 launcherctl keyboard hide --source focus
 launcherctl keyboard show          # source=manual
+launcherctl keyboard hide --hold   # keep it down until this session shows it again or ends
 ```
 
 ### OpenAI-compatible
