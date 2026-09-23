@@ -14822,24 +14822,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
-                    noteTerminalPlaceMayBeVisible();
-                    if (mPaneWallController.displayPage() != null) {
-                        mPaneWallController.displayPage().dismissControls();
-                    }
-                    if (mPaneWallController.widgetsPage() != null) {
-                        mPaneWallController.widgetsPage().dismissControls();
-                    }
-                    syncPlaceBar();
-                    syncWallKeyboard(page);
-                    syncDisplayTouchpad();
-                    syncPlaceStatusBar(page);
-                    syncPlaceLayout();
-                    mLastWallPage = page;
-                    // The window chips belong to the place on screen: terminal windows on the
-                    // terminal, the display's apps on the Display place.
-                    com.termux.app.terminal.TerminalWindowBar chips =
-                        findViewById(R.id.terminal_window_bar);
-                    if (chips != null && isSplitPanesEnabled()) syncWindowBarItems(chips);
+                    // One window-bar refresh for the whole change, however many syncs ask.
+                    batchWindowBarRefresh(() -> {
+                        noteTerminalPlaceMayBeVisible();
+                        if (mPaneWallController.displayPage() != null) {
+                            mPaneWallController.displayPage().dismissControls();
+                        }
+                        if (mPaneWallController.widgetsPage() != null) {
+                            mPaneWallController.widgetsPage().dismissControls();
+                        }
+                        syncPlaceBar();
+                        syncWallKeyboard(page);
+                        syncDisplayTouchpad();
+                        syncPlaceStatusBar(page);
+                        syncPlaceLayout();
+                        mLastWallPage = page;
+                        // The window chips belong to the place on screen: terminal windows on the
+                        // terminal, the display's apps on the Display place.
+                        com.termux.app.terminal.TerminalWindowBar chips =
+                            findViewById(R.id.terminal_window_bar);
+                        if (chips != null && isSplitPanesEnabled()) syncWindowBarItems(chips);
+                    });
                 }
             });
         mPaneWallController.attachTerminalPage(paneHost);
@@ -16690,6 +16693,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Refresh visibility, labels, selection and the shared dock/keyboard glass treatment. */
     public void refreshTerminalWindowBar() {
+        if (mWindowBarRefreshBatchDepth > 0) {
+            mWindowBarRefreshPending = true;
+            return;
+        }
+        doRefreshTerminalWindowBar();
+    }
+
+    /** Depth of {@link #batchWindowBarRefresh}; while above zero a refresh is only noted. */
+    private int mWindowBarRefreshBatchDepth;
+    private boolean mWindowBarRefreshPending;
+
+    /**
+     * Runs {@code action} with the window bar's refresh held to one pass at its end. The bar
+     * re-reads everything it shows on every refresh, so a page change whose several syncs each
+     * ask for one — the status bar's height, the place's row, its look — pays for it once.
+     */
+    private void batchWindowBarRefresh(@NonNull Runnable action) {
+        mWindowBarRefreshBatchDepth++;
+        try {
+            action.run();
+        } finally {
+            if (--mWindowBarRefreshBatchDepth == 0 && mWindowBarRefreshPending) {
+                mWindowBarRefreshPending = false;
+                refreshTerminalWindowBar();
+            }
+        }
+    }
+
+    private void doRefreshTerminalWindowBar() {
         View host = findViewById(R.id.terminal_window_bar_host);
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (host == null || bar == null) return;
