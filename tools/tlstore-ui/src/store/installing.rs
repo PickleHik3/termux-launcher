@@ -72,7 +72,12 @@ impl View for Installing {
         let on_shown = job.current.as_deref() == Some(shown.as_str()) || job.current.is_none();
         let pct = if on_shown || !running { job.pct } else { job.pct.min(99) };
         let ok_all = !running && job.done.iter().all(|d| d.ok) && !job.done.is_empty();
-        let pct = if ok_all { 100 } else { pct };
+        let target = if ok_all { 100 } else { pct };
+        // The count-up: motion may show a number on its way to the target; the dot bar follows.
+        let pct = match p.fx.get(El::Block(0)).value {
+            Some(v) => v.round().clamp(0.0, 100.0) as u8,
+            None => target,
+        };
 
         // The number.
         let digits = pct.to_string();
@@ -90,6 +95,10 @@ impl View for Installing {
             let e = p.text(El::Block(0), x, y, &digits, pal.accent_s().bold());
             p.text(El::Block(0), e, y, "%", pal.dim_s());
             y += 2;
+        }
+        // The scene keeps the number at rest, so motion can see where it is heading.
+        if let Some(el) = p.scene.elements.iter_mut().find(|e| e.el == El::Block(0)) {
+            el.text = Some(target.to_string());
         }
 
         // The dot bar.

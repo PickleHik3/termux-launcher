@@ -58,6 +58,13 @@ impl<'a> Frame<'a> {
         }
     }
 
+    /// Blank again, as if new: cells, pictures and tap regions dropped (to draw the frame over).
+    pub fn clear(&mut self) {
+        self.buf = Buffer::new(self.buf.w, self.buf.h);
+        self.places.clear();
+        self.hits.clear();
+    }
+
     pub fn area(&self) -> Rect {
         self.buf.area()
     }

@@ -6,6 +6,7 @@ pub mod apps;
 pub mod data;
 pub mod installing;
 pub mod item;
+pub mod motion;
 pub mod nogh;
 pub mod paint;
 pub mod proc;
@@ -545,11 +546,24 @@ pub struct Router {
     leave_scene: Scene,
     hints: Vec<Hint>,
     motion_on: bool,
+    /// Where "now" comes from (a fake clock in tests).
+    clock: Box<dyn Fn() -> Instant>,
 }
 
 impl Router {
+    /// With no motion at all (every navigation instant).
     pub fn new(env: Env) -> Router {
         Router::with_motion(env, Box::new(NoMotion))
+    }
+
+    /// With the store's motion ([`motion::Timeline`]); `Ctx::motion` still turns it off.
+    pub fn animated(env: Env) -> Router {
+        Router::with_motion(env, Box::new(motion::Timeline::new()))
+    }
+
+    /// Replaces the clock motion reads (tests drive transitions frame by frame with it).
+    pub fn set_clock(&mut self, clock: impl Fn() -> Instant + 'static) {
+        self.clock = Box::new(clock);
     }
 
     /// With a motion timeline (P5).
@@ -563,6 +577,7 @@ impl Router {
             leave_scene: Scene::default(),
             hints: Vec::new(),
             motion_on: true,
+            clock: Box::new(Instant::now),
         }
     }
 
@@ -577,7 +592,7 @@ impl Router {
 
     /// The one place navigation happens.
     fn navigate(&mut self, go: Go) -> Nav {
-        let now = Instant::now();
+        let now = (self.clock)();
         let (kind, leave) = match go {
             Go::Stay | Go::Pass => return Nav::Stay,
             Go::Quit => return Nav::Quit,
@@ -644,7 +659,9 @@ impl Router {
         c
     }
 
-    fn draw_view(&mut self, f: &mut Frame, which: Option<usize>, fx: &Fx) {
+    /// Draws view `which` (None: the owned leaving view). `leaving`: the frame belongs to the
+    /// view being left, so its scene goes to `leave_scene` and the current scene stays as is.
+    fn draw_view(&mut self, f: &mut Frame, which: Option<usize>, fx: &Fx, leaving: bool) {
         let r = f.regions();
         let notice = self.st.notice.clone();
         match which {
@@ -654,7 +671,11 @@ impl Router {
                 let mut p = Paint::new(f, fx, &mut scene);
                 self.hints = draw_chrome(&mut p, &r, &chrome, notice.as_deref());
                 self.views[idx].body(&mut p, &mut self.st, &r);
-                self.scene = scene;
+                if leaving {
+                    self.leave_scene = scene;
+                } else {
+                    self.scene = scene;
+                }
             }
             None => {
                 let Leave::Owned(v) = &mut self.leave else { return };
@@ -667,28 +688,41 @@ impl Router {
             }
         }
     }
+
+    /// Draws one frame in whatever phase motion says.
+    fn draw_phase(&mut self, f: &mut Frame, now: Instant) {
+        let top = self.views.len() - 1;
+        let phase = if self.motion_on && self.motion.active() {
+            self.motion.frame(now, &self.scene)
+        } else {
+            Phase::Idle
+        };
+        match phase {
+            Phase::Leaving(fx) => match self.leave {
+                Leave::Below if top > 0 => self.draw_view(f, Some(top - 1), &fx, true),
+                Leave::Owned(_) => self.draw_view(f, None, &fx, true),
+                _ => self.draw_view(f, Some(top), &fx, false),
+            },
+            Phase::Entering(fx) => {
+                self.leave = Leave::None;
+                self.draw_view(f, Some(top), &fx, false);
+            }
+            Phase::Idle => {
+                self.leave = Leave::None;
+                self.draw_view(f, Some(top), &Fx::default(), false);
+            }
+        }
+    }
 }
 
 impl Screen for Router {
     fn draw(&mut self, f: &mut Frame) {
         self.motion_on = f.ctx.motion;
-        let top = self.views.len() - 1;
-        let phase =
-            if self.motion.active() { self.motion.frame(Instant::now(), &self.scene) } else { Phase::Idle };
-        match phase {
-            Phase::Leaving(fx) => match self.leave {
-                Leave::Below if top > 0 => self.draw_view(f, Some(top - 1), &fx),
-                Leave::Owned(_) => self.draw_view(f, None, &fx),
-                _ => self.draw_view(f, Some(top), &fx),
-            },
-            Phase::Entering(fx) => {
-                self.leave = Leave::None;
-                self.draw_view(f, Some(top), &fx);
-            }
-            Phase::Idle => {
-                self.leave = Leave::None;
-                self.draw_view(f, Some(top), &Fx::default());
-            }
+        let now = (self.clock)();
+        self.draw_phase(f, now);
+        if self.motion_on && self.motion.drawn(now, &self.scene) {
+            f.clear();
+            self.draw_phase(f, now);
         }
     }
 
