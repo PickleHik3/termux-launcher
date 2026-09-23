@@ -114,6 +114,25 @@ public final class TaiRuntimeOptions {
         );
     }
 
+    /** The window the memory budget settled on; it sizes the engine for this load. */
+    @NonNull
+    public TaiRuntimeOptions withContextWindow(@Nullable Integer overrideContextWindow) {
+        return new TaiRuntimeOptions(
+            maxTokens,
+            topK,
+            topP,
+            temperature,
+            accelerator,
+            overrideContextWindow,
+            threadCount,
+            precision,
+            memoryMode,
+            thinkingEnabled,
+            speculativeDecodingEnabled,
+            idleUnloadMinutes
+        );
+    }
+
     @NonNull
     public TaiRuntimeOptions withAccelerator(@Nullable String overrideAccelerator) {
         return new TaiRuntimeOptions(

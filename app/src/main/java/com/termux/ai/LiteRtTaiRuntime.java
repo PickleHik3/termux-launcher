@@ -115,8 +115,20 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             keepWarmUntilMs,
             idleUnloadAtMs,
             loadedAtMs,
-            lastUsedAtMs
+            lastUsedAtMs,
+            loadedWindowJson()
         );
+    }
+
+    /** The window the loaded engine was sized with, as the memory budget settled it. */
+    @Nullable
+    private JSONObject loadedWindowJson() {
+        if (engine == null || loadedOptions == null || loadedOptions.contextWindow == null) return null;
+        try {
+            return new JSONObject().put("contextWindow", loadedOptions.contextWindow);
+        } catch (JSONException e) {
+            return null;
+        }
     }
 
     @Override

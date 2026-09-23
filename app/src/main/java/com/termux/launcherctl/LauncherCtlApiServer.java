@@ -1568,7 +1568,9 @@ public class LauncherCtlApiServer {
             "LiteRT-LM and MNN load in :tai_runtime after ABI/API/library/model/memory preflight.\n" +
             "MNN models route through the bundled MNN backend when supported by the installed APK.\n" +
             "GGUF/raw weight files are not supported by this APK.\n" +
-            "Auto defaults to CPU on unknown devices; GPU is used automatically only after a successful device/model history.\n" +
+            "Auto tries the GPU first and the CPU after a recorded GPU failure. Every load is sized to the memory\n" +
+            "free at that moment: the context window shrinks to fit (down to 4096 tokens), and a load that\n" +
+            "cannot fit is refused rather than started.\n" +
             "OpenAI-compatible endpoints (default bind mode is localhost):\n" +
             "  /v1/models\n" +
             "  /v1/chat/completions\n" +
