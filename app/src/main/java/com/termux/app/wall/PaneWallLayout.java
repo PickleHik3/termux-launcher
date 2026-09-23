@@ -377,11 +377,12 @@ public final class PaneWallLayout extends ViewGroup {
 
     /**
      * Put every page where the current page and the offset say it goes. Pages are only moved,
-     * never re-laid-out, and a page that is completely off screen stops drawing.
+     * never re-laid-out, and a page that is completely off screen stops drawing — mid-slide too:
+     * the ring's third page, which a slide between the other two never shows, is not drawn along
+     * with them.
      */
     private void applyPagePositions() {
         int width = getWidth();
-        boolean moving = isMoving();
         for (Map.Entry<PaneWallPage, View> entry : mPageViews.entrySet()) {
             View view = entry.getValue();
             if (!mPages.contains(entry.getKey())) {
@@ -396,7 +397,7 @@ public final class PaneWallLayout extends ViewGroup {
                 + (entry.getKey() == mNudgePage ? mNudgePx : 0f);
             view.setTranslationX(x);
             boolean onScreen = width <= 0 || Math.abs(x) < width;
-            view.setVisibility(onScreen || moving ? VISIBLE : INVISIBLE);
+            view.setVisibility(onScreen ? VISIBLE : INVISIBLE);
         }
         if (mListener != null) mListener.onWallOffsetChanged(mOffsetPx);
     }
