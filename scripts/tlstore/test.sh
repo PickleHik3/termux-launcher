@@ -32,13 +32,14 @@
 #                            drives the detection itself, through TERM_PROGRAM,
 #                            TERM_PROGRAM_VERSION and the marker file the app
 #                            writes, and checks all three.
-#   TLSTORE_FZF=no-such-fzf — the fzf command. There is no pty here, so the
-#                            full-screen view cannot run; pointing this at a
-#                            name that is not there tests what people without
-#                            fzf get instead.
 #   TLSTORE_RAW_BASE       — the top of the repository a hand-installed tlstore
 #                            reads; the suite points it at a file:// tree laid
 #                            out the way this one is.
+#   TLSTORE_UI=no-such-ui  — the tlstore-ui binary bare `tlstore` execs inside
+#                            the launcher. There is no pty here, so the suite
+#                            never actually execs one; it points this at a
+#                            fake executable to prove the routing decision, and
+#                            at a name that is not there for the fallback.
 # The catalog signature tests need minisign. Without it they are skipped, and
 # the suite says so instead of passing quietly.
 
@@ -81,31 +82,39 @@ sha512_b64() {
     fi
 }
 
+# The Revision 5 columns (category upstream setup standfirst does1..3 try
+# notes author licence size picture picture-digest demo featured), appended
+# after summary. Every fixture row carries one of these two so the catalog
+# stays 26 columns wide; R5_HELLO gives "hello" a category and makes it the
+# featured item, so list/search/info --tsv have something real to read back.
+R5_NONE="-	-	0	-	-	-	-	-	-	-	-	-	-	-	-	0"
+R5_HELLO="Tools	-	0	a greeting from the item list	Shows a greeting	Keeps it plain text	Does nothing else	hello	one note|another note	Test Author	MIT	~1 KB	file://example/hello.jpg	deadbeef	-	1"
+
 # write_catalog <file> <serial> <version> <fakebin payload> — the version is the
 # one hello and fakebin carry, so a newer catalog moves a config item on too.
 write_catalog() {
     local out="$1" serial="$2" fbver="$3" fbfile="$4"
     {
         printf '# tlstore catalog\tserial=%s\n' "$serial"
-        printf '# name\tkind\tversion\tprefixes\tsource\tdigest\ttarget\trequires\toptions\tsummary\n'
-        printf 'hello\tfile\t%s\t*\tfile://%s/hello.conf\t%s\t~/.config/hello.conf\t-\t-\tA greeting you can read.\n' "$fbver" "$FX" "$(sha "$FX/hello.conf")"
-        printf 'mine\tfile-once\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/mine.conf\t-\t-\tYours to edit, installed once.\n' "$FX" "$(sha "$FX/mine.conf")"
-        printf 'fakebin\tbinary\t%s\t*\tfile://%s/%s\t%s\t-\t-\t-\tA small tool for the terminal.\n' "$fbver" "$FX" "$fbfile" "$(sha "$FX/$fbfile")"
-        printf 'badsum\tbinary\t1\t*\tfile://%s/hello.conf\t%s\t~/.local/bin/badsum\t-\t-\tNever installs, on purpose.\n' "$FX" "0000000000000000000000000000000000000000000000000000000000000000"
-        printf 'twin\tbinary\t1\tio.vaj.tl\tfile://%s/other.bin\t%s\t~/.local/bin/twin\t-\t-\tThe other edition build.\n' "$FX" "$(sha "$FX/other.bin")"
-        printf 'twin\tbinary\t1\tcom.termux\tfile://%s/twin.bin\t%s\t~/.local/bin/twin\t-\t-\tThis edition build.\n' "$FX" "$(sha "$FX/twin.bin")"
-        printf 'ghost\tbinary\t1\tio.vaj.tl\tfile://%s/other.bin\t%s\t-\t-\t-\tOnly for another edition.\n' "$FX" "$(sha "$FX/other.bin")"
-        printf 'demo-pkg\tpkg\t-\t*\tdemo-one demo-two\t-\t-\t-\t-\tTwo packages from the package manager.\n'
-        printf 'musl-loader\tbinary\t1\tcom.termux\tfile://%s/loader.bin\t%s\t~/.local/lib/musl/ld-musl-aarch64.so.1\t-\t-\tWhat tools from other systems need to start.\n' "$FX" "$(sha "$FX/loader.bin")"
-        printf 'claude-code\tnpm-musl\tlatest\t*\tnpm:demo-cli#claude\t-\t-\tmusl-loader,demo-pkg\tenv=DEMO_FLAG=1;tz=1;build=demo-build\tA tool that comes from npm.\n'
-        printf 'musl-cxx\tbinary\t1\t*\tfile://%s/musllib.bin\t%s\t~/.local/lib/musl/libdemo++.so.6\t-\thidden=1\tA library tools from other systems need.\n' "$FX" "$(sha "$FX/musllib.bin")"
-        printf 'agent\tnpm-musl\tlatest\t*\tnpm:demo-agent#bin/agent\t-\t-\tmusl-loader,musl-cxx\tmusl-libs=musl-cxx\tAn agent that comes from npm.\n'
-        printf 'kit\tbundle\t-\t*\t-\t-\t-\thello,fakebin,demo-pkg,secret\t-\tA few things at once.\n'
-        printf 'plug\tfisher\t-\t*\tdemo/one demo/two\t-\t-\t-\t-\tPlugins for the shell.\n'
-        printf 'secret\tfile\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/secret.conf\t-\thidden=1\tA part of something else.\n' "$FX" "$(sha "$FX/mine.conf")"
-        printf 'launcheronly\tbinary\t1\t*\tfile://%s/twin.bin\t%s\t~/.local/bin/launcheronly\t-\thost=launcher\tOnly where the launcher runs it.\n' "$FX" "$(sha "$FX/twin.bin")"
-        printf 'termuxonly\tbinary\t1\t*\tfile://%s/other.bin\t%s\t~/.local/bin/termuxonly\t-\thost=termux\tOnly in the plain app.\n' "$FX" "$(sha "$FX/other.bin")"
-        printf 'recentonly\tbinary\t1\t*\tfile://%s/twin.bin\t%s\t~/.local/bin/recentonly\t-\tmin-launcher=0.3.0\tWants a recent app.\n' "$FX" "$(sha "$FX/twin.bin")"
+        printf '# name\tkind\tversion\tprefixes\tsource\tdigest\ttarget\trequires\toptions\tsummary\tcategory\tupstream\tsetup\tstandfirst\tdoes1\tdoes2\tdoes3\ttry\tnotes\tauthor\tlicence\tsize\tpicture\tpicture-digest\tdemo\tfeatured\n'
+        printf 'hello\tfile\t%s\t*\tfile://%s/hello.conf\t%s\t~/.config/hello.conf\t-\t-\tA greeting you can read.\t%s\n' "$fbver" "$FX" "$(sha "$FX/hello.conf")" "$R5_HELLO"
+        printf 'mine\tfile-once\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/mine.conf\t-\t-\tYours to edit, installed once.\t%s\n' "$FX" "$(sha "$FX/mine.conf")" "$R5_NONE"
+        printf 'fakebin\tbinary\t%s\t*\tfile://%s/%s\t%s\t-\t-\t-\tA small tool for the terminal.\t%s\n' "$fbver" "$FX" "$fbfile" "$(sha "$FX/$fbfile")" "$R5_NONE"
+        printf 'badsum\tbinary\t1\t*\tfile://%s/hello.conf\t%s\t~/.local/bin/badsum\t-\t-\tNever installs, on purpose.\t%s\n' "$FX" "0000000000000000000000000000000000000000000000000000000000000000" "$R5_NONE"
+        printf 'twin\tbinary\t1\tio.vaj.tl\tfile://%s/other.bin\t%s\t~/.local/bin/twin\t-\t-\tThe other edition build.\t%s\n' "$FX" "$(sha "$FX/other.bin")" "$R5_NONE"
+        printf 'twin\tbinary\t1\tcom.termux\tfile://%s/twin.bin\t%s\t~/.local/bin/twin\t-\t-\tThis edition build.\t%s\n' "$FX" "$(sha "$FX/twin.bin")" "$R5_NONE"
+        printf 'ghost\tbinary\t1\tio.vaj.tl\tfile://%s/other.bin\t%s\t-\t-\t-\tOnly for another edition.\t%s\n' "$FX" "$(sha "$FX/other.bin")" "$R5_NONE"
+        printf 'demo-pkg\tpkg\t-\t*\tdemo-one demo-two\t-\t-\t-\t-\tTwo packages from the package manager.\t%s\n' "$R5_NONE"
+        printf 'musl-loader\tbinary\t1\tcom.termux\tfile://%s/loader.bin\t%s\t~/.local/lib/musl/ld-musl-aarch64.so.1\t-\t-\tWhat tools from other systems need to start.\t%s\n' "$FX" "$(sha "$FX/loader.bin")" "$R5_NONE"
+        printf 'claude-code\tnpm-musl\tlatest\t*\tnpm:demo-cli#claude\t-\t-\tmusl-loader,demo-pkg\tenv=DEMO_FLAG=1;tz=1;build=demo-build\tA tool that comes from npm.\t%s\n' "$R5_NONE"
+        printf 'musl-cxx\tbinary\t1\t*\tfile://%s/musllib.bin\t%s\t~/.local/lib/musl/libdemo++.so.6\t-\thidden=1\tA library tools from other systems need.\t%s\n' "$FX" "$(sha "$FX/musllib.bin")" "$R5_NONE"
+        printf 'agent\tnpm-musl\tlatest\t*\tnpm:demo-agent#bin/agent\t-\t-\tmusl-loader,musl-cxx\tmusl-libs=musl-cxx\tAn agent that comes from npm.\t%s\n' "$R5_NONE"
+        printf 'kit\tbundle\t-\t*\t-\t-\t-\thello,fakebin,demo-pkg,secret\t-\tA few things at once.\t%s\n' "$R5_NONE"
+        printf 'plug\tfisher\t-\t*\tdemo/one demo/two\t-\t-\t-\t-\tPlugins for the shell.\t%s\n' "$R5_NONE"
+        printf 'secret\tfile\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/secret.conf\t-\thidden=1\tA part of something else.\t%s\n' "$FX" "$(sha "$FX/mine.conf")" "$R5_NONE"
+        printf 'launcheronly\tbinary\t1\t*\tfile://%s/twin.bin\t%s\t~/.local/bin/launcheronly\t-\thost=launcher\tOnly where the launcher runs it.\t%s\n' "$FX" "$(sha "$FX/twin.bin")" "$R5_NONE"
+        printf 'termuxonly\tbinary\t1\t*\tfile://%s/other.bin\t%s\t~/.local/bin/termuxonly\t-\thost=termux\tOnly in the plain app.\t%s\n' "$FX" "$(sha "$FX/other.bin")" "$R5_NONE"
+        printf 'recentonly\tbinary\t1\t*\tfile://%s/twin.bin\t%s\t~/.local/bin/recentonly\t-\tmin-launcher=0.3.0\tWants a recent app.\t%s\n' "$FX" "$(sha "$FX/twin.bin")" "$R5_NONE"
     } > "$out"
 }
 
@@ -228,7 +237,7 @@ tl() {
             TLSTORE_PATCHELF=true \
             TLSTORE_ASSUME_TTY="${TTY_KNOB:-0}" \
             TLSTORE_HOST="${HOST_KNOB:-}" \
-            TLSTORE_FZF="${FZF_KNOB:-}" \
+            TLSTORE_UI="${UI_KNOB:-}" \
             TLSTORE_RAW_BASE="${RAWBASE_KNOB:-}" \
             TERM_PROGRAM="${TP_KNOB:-}" \
             TERM_PROGRAM_VERSION="${TPV_KNOB:-}" \
@@ -243,7 +252,7 @@ tl() {
             TLSTORE_PATCHELF=true \
             TLSTORE_ASSUME_TTY="${TTY_KNOB:-0}" \
             TLSTORE_HOST="${HOST_KNOB:-}" \
-            TLSTORE_FZF="${FZF_KNOB:-}" \
+            TLSTORE_UI="${UI_KNOB:-}" \
             TLSTORE_RAW_BASE="${RAWBASE_KNOB:-}" \
             TERM_PROGRAM="${TP_KNOB:-}" \
             TERM_PROGRAM_VERSION="${TPV_KNOB:-}" \
@@ -253,7 +262,34 @@ tl() {
     STDIN_TEXT=""
     TTY_KNOB=0
     HOST_KNOB=""
-    FZF_KNOB=""
+    UI_KNOB=""
+    RAWBASE_KNOB=""
+    TP_KNOB=""
+    TPV_KNOB=""
+    return 0
+}
+
+# tl_stdout [args...] — like tl, but OUT is stdout alone (stderr discarded),
+# to prove --progress keeps its machine lines clean of the human narration
+# say() sends to stderr in that mode; no test besides that one needs it.
+tl_stdout() {
+    OUT="$(env -i \
+        HOME="$TESTHOME" PATH="$RUNPATH" \
+        TLSTORE_PREFIX="$TPREFIX" \
+        TLSTORE_CATALOG_URL="$CATALOG_URL" \
+        TLSTORE_NPM_REGISTRY="file://$FX/registry" \
+        TLSTORE_ARCH=aarch64 \
+        TLSTORE_PATCHELF=true \
+        TLSTORE_ASSUME_TTY="${TTY_KNOB:-0}" \
+        TLSTORE_HOST="${HOST_KNOB:-}" \
+        TLSTORE_UI="${UI_KNOB:-}" \
+        TLSTORE_RAW_BASE="${RAWBASE_KNOB:-}" \
+        TERM_PROGRAM="${TP_KNOB:-}" \
+        TERM_PROGRAM_VERSION="${TPV_KNOB:-}" \
+        "${SHCMD[@]}" "$TLSTORE" "$@" < /dev/null 2>/dev/null)"
+    ST=$?
+    HOST_KNOB=""
+    UI_KNOB=""
     RAWBASE_KNOB=""
     TP_KNOB=""
     TPV_KNOB=""
@@ -290,19 +326,57 @@ run_suite() {
     CATALOG_URL="file://$FX/newer.tsv"
     STDIN_TEXT=""
     HOST_KNOB=""
-    FZF_KNOB=""
+    UI_KNOB=""
     RAWBASE_KNOB=""
     TP_KNOB=""
     TPV_KNOB=""
 
     # --- help, version, usage ---
-    tl; expect_status "no arguments prints help" 0; expect_out "no arguments prints help" "tlstore install"
+    tl help; expect_status "help" 0; expect_out "help lists commands" "tlstore install"
+    expect_no_out "help no longer mentions browse" "browse"
     tl version; expect_status "version" 0; expect_out "version names the item list" "2026090601"
     tl nonsense; expect_status "unknown command is a usage error" 2
+    tl browse; expect_status "browse is no longer a command" 2
     tl list -x; expect_status "unknown option is a usage error" 2
     tl search; expect_status "search with no term is a usage error" 2
     tl remove; expect_status "remove with no name is a usage error" 2
     tl info nosuch; expect_status "info on an unknown item fails" 1
+
+    # --- bare command: tlstore-ui inside the launcher, the list everywhere else ---
+    # This harness has no pty, so on_terminal is always false here — every one
+    # of these falls back to the list; the exec itself is proved below with a
+    # real pty, when one is available.
+    tl
+    expect_status "no arguments, not the launcher" 0
+    expect_out "prints the item list" "hello"
+    expect_out "and one line on how to install" "Run 'tlstore install' to add what you want."
+    expect_no_out "not the old full usage text" "tlstore info <name>"
+    HOST_KNOB=launcher
+    tl
+    expect_status "no arguments, the launcher, but no terminal here" 0
+    expect_out "still prints the item list" "hello"
+    HOST_KNOB=launcher
+    UI_KNOB="$ROOT/no-such-tlstore-ui"
+    tl
+    expect_status "no arguments, the launcher, a ui path that is not there" 0
+    expect_out "falls back to the item list" "hello"
+    if command -v script >/dev/null 2>&1; then
+        ui_fake="$FIXBIN/fake-tlstore-ui"
+        printf '#!/bin/sh\necho TLSTORE_UI_RAN\n' > "$ui_fake"
+        chmod +x "$ui_fake"
+        ui_log="$ROOT/ui.typescript"
+        script -qc "env -i HOME='$TESTHOME' PATH='$RUNPATH' TLSTORE_PREFIX='$TPREFIX' \
+            TLSTORE_CATALOG_URL='$CATALOG_URL' TLSTORE_HOST=launcher TLSTORE_UI='$ui_fake' \
+            ${SHCMD[*]} '$TLSTORE'" "$ui_log" >/dev/null 2>&1
+        if grep -q TLSTORE_UI_RAN "$ui_log" 2>/dev/null; then
+            pass
+        else
+            fail "no arguments execs tlstore-ui inside the launcher, with a real terminal"
+        fi
+        rm -f "$ui_log" "$ui_fake"
+    else
+        skip "bare-command exec routing" "script is not installed"
+    fi
 
     # --- list, search, info, per-prefix and per-arch selection ---
     tl list
@@ -628,6 +702,10 @@ y
         $'^twin\tavailable\t1\t\tbinary\t'
     expect_no_out "list --tsv prints no mark column" '^\* '
     expect_no_out "list --tsv hides the parts of other items" "^secret"
+    expect_out "list --tsv carries the category and featured columns" \
+        $'^hello\tinstalled\t2\t2\tfile\tA greeting you can read.\tTools\t1$'
+    expect_out "an item with no category prints -, not featured" \
+        $'^twin\tavailable\t1\t\tbinary\t.*\t-\t0$'
     tl list --tsv -a
     expect_no_out "list --tsv -a is only what you do not have" $'^hello\t'
     tl list --tsv -i
@@ -635,6 +713,8 @@ y
     tl search --tsv greeting
     expect_status "search --tsv" 0
     expect_out "search --tsv has the same columns as list" $'^hello\tinstalled\t2\t2\tfile\t'
+    expect_out "search --tsv carries category and featured too" \
+        $'^hello\tinstalled\t2\t2\tfile\tA greeting you can read.\tTools\t1$'
     tl info --tsv hello
     expect_status "info --tsv" 0
     expect_out "info --tsv gives one key and value per line" $'^Kind\tfile$'
@@ -646,10 +726,36 @@ y
     expect_out "info --tsv says what is installed" $'^Installed\t2$'
     expect_out "info --tsv ends with the summary" $'^Summary\tA greeting you can read.$'
     expect_no_out "info --tsv is not the form for people" "^hello$"
+    # --- the Revision 5 item-spread fields, round-tripped through info --tsv ---
+    expect_out "info --tsv names the category" $'^Category\tTools$'
+    expect_no_out "info --tsv skips an unknown upstream" $'^Upstream\t'
+    expect_out "info --tsv always names setup, 0 being an answer" $'^Setup\t0$'
+    expect_out "info --tsv names the standfirst" $'^Standfirst\ta greeting from the item list$'
+    expect_out "info --tsv names does1" $'^Does1\tShows a greeting$'
+    expect_out "info --tsv names does2" $'^Does2\tKeeps it plain text$'
+    expect_out "info --tsv names does3" $'^Does3\tDoes nothing else$'
+    expect_out "info --tsv names try" $'^Try\thello$'
+    expect_out "info --tsv keeps notes pipe-separated" $'^Notes\tone note|another note$'
+    expect_out "info --tsv names the author" $'^Author\tTest Author$'
+    expect_out "info --tsv names the licence" $'^Licence\tMIT$'
+    expect_out "info --tsv names the size" $'^Size\t~1 KB$'
+    expect_out "info --tsv names the picture" $'^Picture\tfile://example/hello.jpg$'
+    expect_out "info --tsv names the picture digest alongside it" $'^Picture-digest\tdeadbeef$'
+    expect_out "info --tsv always names featured, 0 being an answer" $'^Featured\t1$'
+    tl info --tsv twin
+    expect_no_out "an item with no picture prints no Picture line" $'^Picture\t'
+    expect_out "and featured still prints as 0" $'^Featured\t0$'
     tl info --tsv claude-code
     expect_out "info --tsv names the build tools" $'^Builds with\tdemo-build$'
     tl info --tsv
     expect_status "info --tsv still needs a name" 2
+    # --- the same handful, for a person reading the terminal ---
+    tl info hello
+    expect_out "human info also names the category" "Category *Tools"
+    expect_out "human info also names the author" "Author *Test Author"
+    expect_out "human info also names the licence" "Licence *MIT"
+    expect_out "human info also names the size" "Size *~1 KB"
+    expect_no_out "human info does not dump the item-spread copy" "Standfirst"
 
     # A newer list, put in place without a refresh, so there is something to
     # report as out of date.
@@ -710,37 +816,48 @@ y
         skip "self-update tests" "minisign is not installed"
     fi
 
-    # --- browsing ---
-    FZF_KNOB=no-such-fzf
-    tl browse
-    expect_status "browse with nobody at a terminal" 0
-    expect_out "it falls back to the whole list" "hello"
-    expect_out "and says why" "needs a terminal"
+    # --- --progress: the machine stream tlstore-ui reads ---
+    tl remove fakebin -y
+    tl_stdout install fakebin --progress
+    expect_status "a successful --progress install" 0
+    expect_out "the fetched step" $'^step\tfakebin\t10\tfetched$'
+    expect_out "the signature-checked step" $'^step\tfakebin\t60\tsignature checked$'
+    expect_out "the putting-files step" $'^step\tfakebin\t90\tputting files in place$'
+    expect_out "the ready step" $'^step\tfakebin\t100\tready$'
+    expect_out "the done line, ok" $'^done\tfakebin\tok\tinstalled$'
+    expect_no_out "stdout alone carries no human narration" "Installing:"
+    expect_file "the item really is installed" "$TESTHOME/.local/bin/fakebin"
 
-    : > "$ROOT/pkg.log"
-    TTY_KNOB=1
-    FZF_KNOB=no-such-fzf
-    STDIN_TEXT='n
+    tl install badsum --progress
+    expect_status "a failing --progress install still exits nonzero" 1
+    expect_out "the done line, failed" $'^done\tbadsum\tfailed\tcould not install badsum$'
+    expect_no_out "a failed item never claims to be ready" $'^step\tbadsum\t100\tready$'
 
-'
-    tl browse
-    expect_status "browse without fzf" 0
-    expect_out "it offers to install fzf" "needs fzf"
-    expect_out "declining leaves the numbered picker" "Type numbers to pick"
-    if grep -q fzf "$ROOT/pkg.log" 2>/dev/null; then fail "declining installs nothing"; else pass; fi
+    write_catalog "$TESTHOME/.local/share/tlstore/catalog.tsv" 2026090699 9 fakebin-3
+    tl update --progress --offline
+    expect_status "a --progress update" 0
+    expect_out "the update steps stream on stdout" $'^step\tfakebin\t10\tfetched$'
+    expect_out "and finish ready" $'^step\tfakebin\t100\tready$'
+    expect_out "the done line for an update" $'^done\tfakebin\tok\tupdated$'
+    expect_no_out "self-update never runs inside a --progress stream" "tlstore is now version"
 
-    : > "$ROOT/pkg.log"
-    TTY_KNOB=1
-    FZF_KNOB=no-such-fzf
-    STDIN_TEXT='y
+    printf 'the users own greeting\n' > "$TESTHOME/.config/hello.conf"
+    forget_state
+    tl install hello --progress
+    expect_status "a --progress install that would touch a config file still succeeds" 0
+    expect_content "the users config is kept, never replaced" \
+        "$TESTHOME/.config/hello.conf" "the users own greeting"
+    expect_out "the done line says it was kept" $'^done\thello\tok\tkept your hello.conf$'
+    expect_no_out "no diff leaks onto stdout" "^---"
+    expect_no_out "and no replace question either" "Replace your"
 
-'
-    tl browse
-    expect_status "browse, the offer accepted" 0
-    if grep -q fzf "$ROOT/pkg.log" 2>/dev/null; then pass; else fail "the package manager was asked for fzf"; fi
-    expect_out "and the numbered picker still comes up" "Type numbers to pick"
+    tl remove hello --progress
+    expect_status "a --progress remove" 0
+    expect_out "the remove steps stream too" $'^step\thello\t30\tfetched$'
+    expect_out "and finish ready" $'^step\thello\t100\tready$'
+    expect_out "the done line for a remove" $'^done\thello\tok\tremoved$'
 
-    # --- the numbered picker ---
+    # --- the numbered picker (the only picker now; fzf is gone) ---
     rm -rf "$TESTHOME/.local/share/tlstore" "$TESTHOME/.config/hello.conf"
     CATALOG_URL="file://$FX/newer.tsv"
     STDIN_TEXT='a
@@ -792,6 +909,94 @@ for entry in "${shells[@]}"; do
         echo "   all checks passed"
     fi
 done
+
+echo
+# ---------------------------------------------------------------------------
+# Backward compatibility: a phone's already-installed tlstore against the new
+# catalog. Revision 5 only ever appends columns (see the TSV contract in
+# project-docs/tlstore/REVISION-5.md), so the script already on dev, unchanged,
+# must still read this worktree's catalog shape.
+# ---------------------------------------------------------------------------
+
+echo "== the dev-branch tlstore reads the Revision 5 catalog"
+OLD_TLSTORE="$(mktemp)"
+if git -C "$repo" show dev:app/src/main/assets/tlstore/tlstore > "$OLD_TLSTORE" 2>/dev/null; then
+    SHELL_LABEL="dev-branch tlstore"
+    build_fixture
+    CATALOG_URL="file://$FX/newer.tsv"
+    old_env() {
+        env -i HOME="$TESTHOME" PATH="$RUNPATH" \
+            TLSTORE_PREFIX="$TPREFIX" TLSTORE_CATALOG_URL="$CATALOG_URL" \
+            TLSTORE_ARCH=aarch64 TLSTORE_PATCHELF=true \
+            /bin/sh "$OLD_TLSTORE" "$@" 2>&1
+    }
+    OUT="$(old_env list)"; ST=$?
+    expect_status "its list command still exits 0 against this catalog" 0
+    expect_out "and still shows an item from it" "hello"
+    OUT="$(old_env info hello)"; ST=$?
+    expect_status "its info command still works" 0
+    expect_out "and still reads the summary, unaware of the columns after it" \
+        "A greeting you can read."
+    mkdir -p "$TESTHOME/.config"
+    OUT="$(old_env install hello -y)"; ST=$?
+    expect_status "it can still install an item from the Revision 5 catalog" 0
+    expect_file "the file landed" "$TESTHOME/.config/hello.conf"
+    rm -rf "$ROOT"
+else
+    skip "dev-branch compatibility check" "no dev branch reachable from this worktree"
+fi
+rm -f "$OLD_TLSTORE"
+
+echo
+echo "== build-catalog.sh"
+SHELL_LABEL=build-catalog
+BC_ROOT="$(mktemp -d)"
+mkdir -p "$BC_ROOT/scripts/tlstore/pictures" "$BC_ROOT/app/src/main/assets/tlstore"
+cp "$repo/scripts/tlstore/build-catalog.sh" "$BC_ROOT/scripts/tlstore/build-catalog.sh"
+printf 'a fake picture\n' > "$BC_ROOT/scripts/tlstore/pictures/demo.jpg"
+BC_PIC_DIGEST="$(sha "$BC_ROOT/scripts/tlstore/pictures/demo.jpg")"
+BC_SUMS="$BC_ROOT/SHA256SUMS"
+printf '1111111111111111111111111111111111111111111111111111111111111111  demo-aarch64\n' > "$BC_SUMS"
+
+# bc_write_items <items.tsv path> <featured 0|1> <category>
+bc_write_items() {
+    printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\t%s\tdemo/demo\t0\ta demo item for testing\tShows a demo\tDoes another thing\tDoes one more thing\tdemo\t-\tDemo Author\tMIT\t-\tlauncher:scripts/tlstore/pictures/demo.jpg@abc123\t-\t%s\n' \
+        "$3" "$2" > "$1"
+    printf 'part\tpkg\t-\t*\tdemo-pkg\t-\t-\thidden=1\tA hidden part.\t-\t-\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t0\n' >> "$1"
+}
+
+bc_items="$BC_ROOT/scripts/tlstore/items.tsv"
+bc_cat="$BC_ROOT/app/src/main/assets/tlstore/catalog.tsv"
+
+bc_write_items "$bc_items" 1 Tools
+OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
+if [ "$ST" = 0 ]; then pass; else fail "build-catalog.sh runs against a Revision 5 items.tsv" "$OUT"; fi
+if [ -f "$bc_cat" ]; then pass; else fail "it writes the catalog"; fi
+if awk -F'\t' 'NR==3 { exit (NF == 26) ? 0 : 1 }' "$bc_cat"; then pass; else fail "the header row has 26 columns"; fi
+if awk -F'\t' -v want="$BC_PIC_DIGEST" '$1=="demo" { exit ($24==want) ? 0 : 1 }' "$bc_cat"; then
+    pass
+else
+    fail "the picture's digest was computed the same way the item's own is"
+fi
+if awk -F'\t' '$1=="demo" { exit ($11=="Tools" && $26=="1") ? 0 : 1 }' "$bc_cat"; then
+    pass
+else
+    fail "category and featured round-trip into the catalog"
+fi
+
+printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\tTools\n' > "$bc_items"
+OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
+if [ "$ST" != 0 ]; then pass; else fail "a row missing the Revision 5 columns is refused"; fi
+
+bc_write_items "$bc_items" 1 Nonsense
+OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
+if [ "$ST" != 0 ]; then pass; else fail "an unknown category is refused"; fi
+
+bc_write_items "$bc_items" 0 Tools
+OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
+if [ "$ST" != 0 ]; then pass; else fail "no item at all being featured is refused"; fi
+
+rm -rf "$BC_ROOT"
 
 echo
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@ tlstore shell
 ```
 
 installs the whole fish setup in one go: fish, a prompt that follows your wallpaper colors, a nicer
-`ls`, faster directory jumping, and a couple of plugins. From there, browse everything else with:
+`ls`, faster directory jumping, and a couple of plugins. From there, install everything else with:
 
 ```sh
 tlstore install
@@ -53,7 +53,6 @@ by name.
 | `tlstore info fish-shell` | what an item is, its version, and where it goes |
 | `tlstore install kitten sigye` | install one or more items by name |
 | `tlstore install` | open the picker instead of naming anything |
-| `tlstore browse` | look through the whole store and install as you go |
 | `tlstore remove kitten` | remove an item tlstore installed |
 | `tlstore update` | bring everything you have up to date |
 | `tlstore update --check` | see what is out of date without installing anything |
@@ -198,28 +197,11 @@ run the command above again. If you install Termux Launcher later, the app quiet
 keeping tlstore up to date. If you already have the launcher, running this command does nothing —
 it already provides tlstore.
 
-## Browsing
+## Plain `tlstore`
 
-`tlstore browse` opens the whole store in one view: the items on the left (or above, on a narrow
-phone screen), and whatever you are pointing at explained beside it. Plain `tlstore` with nothing
-after it opens the same view.
-
-| key | what it does |
-| --- | --- |
-| `Tab` | mark an item, so several can go in at once |
-| `Enter` | install what you marked, or the one you are on |
-| `Ctrl-R` | remove the one you are on |
-| `Ctrl-U` | bring everything you have up to date |
-| `Ctrl-F` | fetch a fresh list of items |
-| `?` | show these keys |
-| `Esc` | leave |
-
-Installing, removing and updating happen in the terminal, not in the view: the questions tlstore
-asks still reach you, and the view comes back when the work is done. An item you marked that is
-already installed is skipped with one line.
-
-The view needs `fzf`. Without it, tlstore offers to install it and otherwise falls back to the
-numbered picker, the same one `tlstore install` uses when you name nothing.
+Inside the launcher, running `tlstore` with nothing after it opens a full-screen store. Anywhere
+else — plain Termux, ssh, tmux — it just prints the list, the same as `tlstore list`, with one line
+on how to install something.
 
 ## Which app you are in
 
