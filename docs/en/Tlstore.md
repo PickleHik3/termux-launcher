@@ -177,6 +177,10 @@ in the terminal. Open a file with `dawn notes.md`, or `dawn` on its own for an e
 type stays plain markdown on disk, but headings grow, links and quotes settle back, and a picture
 you point at appears in place. In the launcher, copy and paste share the phone's clipboard.
 
+Press `Ctrl+/` to ask the launcher's AI about what you are writing, have it rewrite the text you
+selected, or write at the cursor; `Ctrl+Z` undoes anything it changes. It uses the model you chose
+as the default in the launcher's AI settings.
+
 It looks its best in the launcher's terminal, which is where the large headings and the pictures
 come from; in a terminal without them, the same text is simply shown plain.
 
