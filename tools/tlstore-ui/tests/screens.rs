@@ -3,14 +3,15 @@
 //!
 //! Snapshots live in tests/snapshots; `UPDATE_SNAPSHOTS=1 cargo test` rewrites them.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use tlstore_ui::app::{Ctx, Nav, Screen};
-use tlstore_ui::render::{Frame, HitMap, Sym};
+use tlstore_ui::render::{Frame, HitMap, Renderer, Sym};
+use tlstore_ui::store::motion::{Timeline, GLYPHS};
 use tlstore_ui::store::proc::Env;
 use tlstore_ui::store::scene::{Effect, El, Fx, Motion, NavKind, Phase, Scene};
 use tlstore_ui::store::Router;
@@ -49,6 +50,9 @@ struct H {
     hits: HitMap,
     sink: Rc<RefCell<Vec<String>>>,
     text: String,
+    /// Every drawn frame also goes through a renderer; `out` is the last frame's escapes.
+    renderer: Renderer,
+    out: String,
 }
 
 struct Opts {
@@ -58,11 +62,24 @@ struct Opts {
     pics: bool,
     caps: bool,
     motion: Option<Box<dyn Motion>>,
+    /// `Ctx::motion` false even though a motion is plugged in (TLSTORE_MOTION=0).
+    motion_off: bool,
+    /// A fake clock for the router (set before the first frame).
+    clock: Option<Rc<Cell<Instant>>>,
 }
 
 impl Default for Opts {
     fn default() -> Opts {
-        Opts { gh: Gh::SignedIn, launcherctl: true, opener: true, pics: true, caps: false, motion: None }
+        Opts {
+            gh: Gh::SignedIn,
+            launcherctl: true,
+            opener: true,
+            pics: true,
+            caps: false,
+            motion: None,
+            motion_off: false,
+            clock: None,
+        }
     }
 }
 
@@ -92,15 +109,27 @@ impl H {
             sink.clone(),
         );
         let mut ctx = Ctx::for_tests(cols, rows);
-        ctx.motion = o.motion.is_some();
+        ctx.motion = o.motion.is_some() && !o.motion_off;
         if o.caps {
             ctx.caps = Caps::all();
         }
-        let router = match o.motion {
+        let mut router = match o.motion {
             Some(m) => Router::with_motion(env, m),
             None => Router::new(env),
         };
-        let mut h = H { dir, ctx, router: Some(router), hits: HitMap::default(), sink, text: String::new() };
+        if let Some(c) = o.clock {
+            router.set_clock(move || c.get());
+        }
+        let mut h = H {
+            dir,
+            ctx,
+            router: Some(router),
+            hits: HitMap::default(),
+            sink,
+            text: String::new(),
+            renderer: Renderer::new(),
+            out: String::new(),
+        };
         h.settle();
         h.draw();
         h
@@ -116,6 +145,8 @@ impl H {
         router.draw(&mut f);
         self.text = screen_text(&f);
         self.hits = f.hits.clone();
+        self.out.clear();
+        self.renderer.render(&f.buf, &f.places, &mut self.out);
         self.text.clone()
     }
 
@@ -727,4 +758,355 @@ fn router_hands_navigation_and_frames_to_motion() {
         ]
     );
     assert!(log.iter().all(|(_, _, _, n)| *n > 5), "the leaving scene is handed over: {log:?}");
+}
+
+// ---------------------------------------------------------------------------
+// Motion (P5): the Timeline, driven by a fake clock
+// ---------------------------------------------------------------------------
+
+/// A harness with the store's Timeline and a fake clock, settled past the startup entry.
+fn animated(cols: u16, rows: u16, caps: bool) -> (H, Rc<Cell<Instant>>) {
+    let clock = Rc::new(Cell::new(Instant::now()));
+    let mut h = H::new(
+        cols,
+        rows,
+        Opts { caps, motion: Some(Box::new(Timeline::new())), clock: Some(clock.clone()), ..Opts::default() },
+    );
+    advance(&mut h, &clock, 2000);
+    assert!(!h.r().animating());
+    (h, clock)
+}
+
+/// Moves the fake clock on by `ms` and draws.
+fn advance(h: &mut H, clock: &Rc<Cell<Instant>>, ms: u64) {
+    clock.set(clock.get() + Duration::from_millis(ms));
+    h.draw();
+}
+
+/// Sets the fake clock to `t0 + ms` and draws.
+fn at(h: &mut H, clock: &Rc<Cell<Instant>>, t0: Instant, ms: f32) {
+    clock.set(t0 + Duration::from_secs_f32(ms / 1000.0));
+    h.draw();
+}
+
+/// The frame's output with picture uploads (`a=t` and their continuation chunks) left out,
+/// and the printable text it writes (everything outside escape sequences).
+fn split_output(out: &str) -> (usize, usize, String) {
+    let b = out.as_bytes();
+    let (mut i, mut upload, mut text) = (0, 0, String::new());
+    while i < b.len() {
+        if b[i] == 0x1b && i + 1 < b.len() {
+            let start = i;
+            match b[i + 1] {
+                b'[' => {
+                    i += 2;
+                    while i < b.len() && !(0x40..=0x7e).contains(&b[i]) {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                b'_' | b']' | b'P' => {
+                    i += 2;
+                    while i < b.len() && !(b[i] == 0x1b && b.get(i + 1) == Some(&b'\\')) && b[i] != 0x07 {
+                        i += 1;
+                    }
+                    i += if b.get(i) == Some(&0x07) { 1 } else { 2 };
+                    let body = &out[start + 2..i.min(out.len())];
+                    if b[start + 1] == b'_' && (body.starts_with("Ga=t") || body.starts_with("Gm=")) {
+                        upload += i - start;
+                    }
+                }
+                _ => i += 2,
+            }
+        } else {
+            let ch = out[i..].chars().next().unwrap();
+            text.push(ch);
+            i += ch.len_utf8();
+        }
+    }
+    (out.len() - upload.min(out.len()), upload, text)
+}
+
+#[test]
+fn timeline_plays_flow_for_a_push_to_item() {
+    let (mut h, clock) = animated(52, 45, true);
+    let from = h.r().scene.clone();
+    assert_eq!(from.screen, "apps");
+    h.tap("sigye");
+    advance(&mut h, &clock, 2000);
+    let cur = h.r().scene.clone();
+    assert_eq!(cur.screen, "item");
+    assert!(cur.get(El::HeroWord).is_some_and(|e| e.picture.is_some()), "hero word is a picture");
+    let crumb = cur.get(El::Crumb).and_then(|e| e.text.clone()).unwrap();
+    assert_eq!(crumb, "/ apps / sigye");
+
+    let mut m = Timeline::new();
+    let t0 = Instant::now();
+    let t = |ms: u64| t0 + Duration::from_millis(ms);
+    m.navigate(NavKind::Push, &from, "item", t0);
+    assert!(m.active());
+
+    // t = 0: leaving, nothing moved yet.
+    let Phase::Leaving(fx) = m.frame(t(0), &cur) else { panic!("leaving at 0") };
+    assert!(fx.get(El::Row(0)).at_rest() && fx.get(El::HeroWord).at_rest() && fx.get(El::Crumb).at_rest());
+
+    // t = 100: the old content has faded; its pictures are hidden and lifting; the masthead stays.
+    let Phase::Leaving(fx) = m.frame(t(100), &cur) else { panic!("leaving at 100") };
+    assert!(fx.get(El::Row(0)).alpha <= 0.07, "{:?}", fx.get(El::Row(0)));
+    assert!(fx.get(El::Keys).alpha <= 0.07);
+    let w = fx.get(El::HeroWord);
+    assert!(w.alpha < 0.5 && w.dy < 0, "{w:?}");
+    assert!(fx.get(El::Crumb).at_rest() && fx.get(El::Mark).at_rest() && fx.get(El::Context).at_rest());
+
+    // t = 300 (140 ms into the entry): crumb decoding, rule drawing, word rising, blocks not yet.
+    let Phase::Entering(fx) = m.frame(t(300), &cur) else { panic!("entering at 300") };
+    let c = fx.get(El::Crumb).text.expect("crumb decoding");
+    assert_eq!(c, tlstore_ui::store::motion::decode(&crumb, 4));
+    assert!(c.starts_with("/ a") && c != crumb && c.chars().any(|ch| GLYPHS.contains(&ch)), "{c}");
+    let rule = fx.get(El::Rule).reveal;
+    assert!(rule > 0.6 && rule < 0.95, "rule {rule}");
+    let lead = fx.get(El::HeroLead).alpha;
+    assert!(lead > 0.2 && lead < 1.0, "lead {lead}");
+    let w = fx.get(El::HeroWord);
+    assert!(w.shown > 0.1 && w.shown < 0.9 && w.dy > 0, "word {w:?}");
+    if cur.get(El::Cover).is_some_and(|e| e.picture.is_some()) {
+        assert!(fx.get(El::Cover).shown < 0.05, "{:?}", fx.get(El::Cover));
+    }
+    assert_eq!(fx.get(El::Block(0)).alpha, 0.0);
+    assert_eq!(fx.get(El::Block(1)).alpha, 0.0);
+
+    // t = 600 (440 ms in): crumb and rule done, the word has risen (on its spring), cover
+    // wiping, the first blocks in, the last still arriving.
+    let Phase::Entering(fx) = m.frame(t(600), &cur) else { panic!("entering at 600") };
+    assert!(fx.get(El::Crumb).at_rest());
+    assert!(fx.get(El::Rule).reveal > 0.99);
+    let w = fx.get(El::HeroWord);
+    assert!(w.shown == 1.0 && w.dy.abs() <= 1, "word {w:?}");
+    if cur.get(El::Cover).is_some_and(|e| e.picture.is_some()) {
+        let s = fx.get(El::Cover).shown;
+        assert!(s > 0.2 && s < 0.7, "cover {s}");
+    }
+    assert!(fx.get(El::Block(0)).alpha >= 0.9);
+    let last = cur
+        .elements
+        .iter()
+        .filter_map(|e| if let El::Block(n) = e.el { Some(n) } else { None })
+        .max()
+        .unwrap();
+    assert!(last >= 3);
+    assert!(fx.get(El::Block(last)).alpha < 1.0 || !fx.get(El::Block(last)).at_rest());
+
+    // t = 900 (740 ms in): only the cover's wipe is left.
+    let Phase::Entering(fx) = m.frame(t(900), &cur) else { panic!("entering at 900") };
+    for e in &cur.elements {
+        if e.el != El::Cover {
+            assert!(fx.get(e.el).at_rest(), "{:?} still moving: {:?}", e.el, fx.get(e.el));
+        }
+    }
+    if cur.get(El::Cover).is_some_and(|e| e.picture.is_some()) {
+        let s = fx.get(El::Cover).shown;
+        assert!(s > 0.9 && s < 1.0, "cover {s}");
+    }
+
+    // Past ≈ 980 ms (160 leave + 820 entry): at rest, no more ticks.
+    assert!(matches!(m.frame(t(1000), &cur), Phase::Idle));
+    assert!(!m.active());
+}
+
+#[test]
+fn leaving_view_is_dropped_by_the_first_entering_frame() {
+    let (mut h, clock) = animated(52, 45, true);
+    let t0 = clock.get();
+    h.tap("sigye");
+    // Leaving: the apps view is still what is drawn.
+    assert!(h.r().animating());
+    assert!(h.has("A P P S"), "{}", h.text);
+    at(&mut h, &clock, t0, 80.0);
+    assert!(h.has("/ apps") && !h.has("/ apps / s"), "masthead stays while leaving:\n{}", h.text);
+    assert_eq!(h.r().scene.screen, "item", "the current scene is the new view's");
+    // First entering frame: the item, everything still to arrive, crumb all glyphs.
+    at(&mut h, &clock, t0, 170.0);
+    assert_eq!(h.r().scene.screen, "item");
+    assert!(!h.has("A P P S") && !h.has("sigye"), "{}", h.text);
+    assert!(h.row(1).chars().any(|c| GLYPHS.contains(&c)), "{}", h.row(1));
+    // And it never comes back.
+    for ms in (186..1200).step_by(17) {
+        at(&mut h, &clock, t0, ms as f32);
+        assert!(!h.has("A P P S"), "at {ms}\n{}", h.text);
+    }
+    assert!(h.has("/ apps / sigye") && !h.r().animating());
+}
+
+#[test]
+fn input_during_the_leave_goes_to_the_new_view() {
+    let (mut h, clock) = animated(52, 45, true);
+    let t0 = clock.get();
+    h.tap("sigye");
+    at(&mut h, &clock, t0, 60.0);
+    assert_eq!(h.r().top(), "item");
+    h.key(Key::Esc);
+    assert_eq!(h.r().top(), "apps");
+    advance(&mut h, &clock, 2000);
+    assert!(h.has("A P P S") && !h.r().animating());
+}
+
+#[test]
+fn motion_off_means_no_ticks_and_the_final_state_at_once() {
+    let clock = Rc::new(Cell::new(Instant::now()));
+    let mut h = H::new(
+        52,
+        45,
+        Opts {
+            caps: true,
+            motion: Some(Box::new(Timeline::new())),
+            motion_off: true,
+            clock: Some(clock.clone()),
+            ..Opts::default()
+        },
+    );
+    assert!(!h.r().animating(), "no startup entry");
+    assert!(h.has("A P P S") && h.has("sigye"));
+    h.tap("sigye");
+    assert!(!h.r().animating());
+    assert!(h.has("/ apps / sigye") && h.has("N O"), "{}", h.text);
+    h.key(Key::Esc);
+    assert!(!h.r().animating() && h.has("A P P S"));
+    h.tap_on("Note taking", "AI");
+    assert!(!h.r().animating() && h.has("claude-code") && !h.has("sigye"));
+    // Same frame as with no motion plugged in at all.
+    let mut plain = H::new(52, 45, Opts { caps: true, ..Opts::default() });
+    plain.tap("sigye");
+    let mut off = H::new(
+        52,
+        45,
+        Opts { caps: true, motion: Some(Box::new(Timeline::new())), motion_off: true, ..Opts::default() },
+    );
+    off.tap("sigye");
+    assert_eq!(off.text, plain.text);
+}
+
+#[test]
+fn the_first_view_enters_too() {
+    let clock = Rc::new(Cell::new(Instant::now()));
+    let mut h = H::new(
+        52,
+        45,
+        Opts { motion: Some(Box::new(Timeline::new())), clock: Some(clock.clone()), ..Opts::default() },
+    );
+    assert!(h.r().animating());
+    assert!(!h.has("sigye"), "rows arrive later:\n{}", h.text);
+    advance(&mut h, &clock, 2000);
+    assert!(h.has("sigye") && !h.r().animating());
+}
+
+#[test]
+fn rows_restagger_on_a_category_change() {
+    let (mut h, clock) = animated(52, 45, false);
+    let t0 = clock.get();
+    h.tap_on("Note taking", "AI");
+    assert!(h.r().animating());
+    assert!(!h.has("claude-code"), "rows start hidden:\n{}", h.text);
+    at(&mut h, &clock, t0, 200.0);
+    assert!(h.has("claude-code") && !h.has("sigye"));
+    assert!(!h.r().animating(), "a re-stagger lasts at most 200 ms");
+    // Moving the cursor or marking a row is not a list change.
+    h.key(Key::Char(' '));
+    assert!(!h.r().animating());
+}
+
+#[test]
+fn frames_stay_small_and_picture_only_frames_write_no_text() {
+    let (mut h, clock) = animated(52, 45, true);
+    h.out.clear();
+    let t0 = clock.get();
+    h.tap("sigye");
+    let mut sizes = Vec::new();
+    let mut uploads = 0;
+    let mut t = 0.0f32;
+    while t < 1100.0 {
+        at(&mut h, &clock, t0, t);
+        let (bytes, up, text) = split_output(&h.out);
+        uploads += up;
+        sizes.push((t as u32, bytes, text.chars().filter(|c| !c.is_whitespace()).count()));
+        t += 1000.0 / 60.0;
+    }
+    let max = sizes.iter().map(|s| s.1).max().unwrap();
+    let total: usize = sizes.iter().map(|s| s.1).sum();
+    eprintln!(
+        "push to item, 52x45 kitty: {} frames, max {max} B, mean {} B, uploads {uploads} B",
+        sizes.len(),
+        total / sizes.len()
+    );
+    for (t, b, n) in &sizes {
+        eprintln!("  t={t:4} ms  {b:5} B  {n:4} printable");
+    }
+    assert!(max <= 8 * 1024, "a frame over 8 KB: {sizes:?}");
+    // From 560 ms into the entry on, only the cover still wipes: each frame re-places it and
+    // writes no text at all.
+    assert!(h.r().scene.get(El::Cover).is_some_and(|e| e.picture.is_some()), "sigye has a cover picture");
+    let late: Vec<_> = sizes.iter().filter(|s| (720..=960).contains(&s.0)).collect();
+    assert!(late.iter().filter(|s| s.1 > 0).count() >= 5, "the cover moves: {late:?}");
+    for (t, b, n) in late {
+        assert!(*n == 0 && *b < 512, "t={t}: {b} B with {n} printable characters");
+    }
+}
+
+#[test]
+fn plain_terminals_get_the_text_motion_only() {
+    let (mut h, clock) = animated(52, 45, false);
+    let rest_rule = {
+        // The rule at rest, on the apps screen.
+        h.row(2).chars().filter(|c| *c == '─').count()
+    };
+    let t0 = clock.get();
+    h.tap("sigye");
+    at(&mut h, &clock, t0, 160.0 + 130.0);
+    assert!(!h.text.contains('░'), "no pictures here");
+    assert!(h.row(1).chars().any(|c| GLYPHS.contains(&c)), "crumb decoding: {}", h.row(1));
+    let rule = h.row(2).chars().filter(|c| *c == '─').count();
+    assert!(rule > 0 && rule < rest_rule, "rule drawing out: {rule} of {rest_rule}");
+    // The hero word does not move by rows here: if drawn, it is on its own row.
+    let word_row = |h: &H| h.text.lines().position(|l| l.contains("sigye") && !l.contains("/ apps"));
+    let early = word_row(&h);
+    at(&mut h, &clock, t0, 2000.0);
+    let rest = word_row(&h);
+    assert!(rest.is_some());
+    assert!(early.is_none() || early == rest, "{early:?} vs {rest:?}");
+    // At rest it is exactly the frame without motion.
+    let mut still = H::new(52, 45, Opts::default());
+    still.tap("sigye");
+    assert_eq!(h.text, still.text);
+}
+
+#[test]
+fn install_number_counts_up_and_the_dot_bar_follows() {
+    let (mut h, clock) = animated(52, 45, false);
+    std::fs::write(h.dir.join("hold"), "").unwrap();
+    h.tap("sigye");
+    advance(&mut h, &clock, 2000);
+    let t0 = clock.get();
+    h.key(Key::Char('i'));
+    assert_eq!(h.r().top(), "installing");
+    h.pump(|r| r.st.job.as_ref().is_some_and(|j| j.pct >= 60));
+    let target = h.r().st.job.as_ref().unwrap().pct as u32;
+    let number = |h: &H| -> Option<(u32, usize)> {
+        let l = h.text.lines().find(|l| l.trim_end().ends_with('%'))?;
+        let n = l[3..].trim().trim_end_matches('%').parse().ok()?;
+        let bar = h.text.lines().find(|l| l.contains('○') || l.contains('●'))?;
+        Some((n, bar.matches('●').count()))
+    };
+    // The count starts on the first entering frame, from 0.
+    at(&mut h, &clock, t0, 160.0 + 20.0);
+    assert_eq!(number(&h).map(|n| n.0), Some(0), "{}", h.text);
+    at(&mut h, &clock, t0, 160.0 + 120.0);
+    let (mid, mid_dots) = number(&h).expect("number on screen");
+    assert!(mid > 0 && mid < target, "counting: {mid} of {target}\n{}", h.text);
+    at(&mut h, &clock, t0, 160.0 + 2000.0);
+    let (end, end_dots) = number(&h).unwrap();
+    assert_eq!(end, target);
+    assert!(mid_dots < end_dots, "the dot bar follows: {mid_dots} then {end_dots}");
+    assert!(!h.r().animating());
+    h.key(Key::Char('c'));
+    h.settle();
+    std::fs::remove_file(h.dir.join("hold")).unwrap();
 }

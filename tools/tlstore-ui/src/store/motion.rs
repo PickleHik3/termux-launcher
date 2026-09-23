@@ -157,13 +157,15 @@ pub fn decode(target: &str, step: u32) -> String {
     target
         .chars()
         .enumerate()
-        .map(|(i, ch)| {
-            if i < k || ch == ' ' {
-                ch
-            } else {
-                GLYPHS[(i * 7 + step as usize * 3) % GLYPHS.len()]
-            }
-        })
+        .map(
+            |(i, ch)| {
+                if i < k || ch == ' ' {
+                    ch
+                } else {
+                    GLYPHS[(i * 7 + step as usize * 3) % GLYPHS.len()]
+                }
+            },
+        )
         .collect()
 }
 
@@ -281,7 +283,9 @@ impl Timeline {
         let step = (e / CRUMB_STEP).floor() as u32;
         if step < CRUMB_STEPS {
             match cur.get(El::Crumb).and_then(|c| c.text.as_deref()) {
-                Some(t) => set(&mut fx, El::Crumb, Effect { text: Some(decode(t, step)), ..Effect::default() }),
+                Some(t) => {
+                    set(&mut fx, El::Crumb, Effect { text: Some(decode(t, step)), ..Effect::default() })
+                }
                 None if blind => set(&mut fx, El::Crumb, Effect { alpha: 0.0, ..Effect::default() }),
                 None => {}
             }
@@ -321,7 +325,11 @@ impl Timeline {
         let rows = if blind {
             HIDE_ROWS
         } else {
-            cur.elements.iter().filter_map(|x| if let El::Row(n) = x.el { Some(n + 1) } else { None }).max().unwrap_or(0)
+            cur.elements
+                .iter()
+                .filter_map(|x| if let El::Row(n) = x.el { Some(n + 1) } else { None })
+                .max()
+                .unwrap_or(0)
         };
         let last = Self::stagger(&mut fx, e, rows, ROWS_AT, ROW_GAP, ROWS_SPAN, ARRIVE);
         if rows > 0 || blind {
@@ -494,5 +502,129 @@ impl Motion for Timeline {
             self.count = None;
         }
         redraw
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::render::Rect;
+
+    fn samples(f: fn(f32) -> f32) -> Vec<f32> {
+        (0..=200).map(|i| f(i as f32 / 200.0)).collect()
+    }
+
+    #[test]
+    fn spring_overshoots_nine_percent_and_settles_by_seventy() {
+        assert_eq!(ease::spring(0.0), 0.0);
+        assert_eq!(ease::spring(1.0), 1.0);
+        let s = samples(ease::spring);
+        let (peak_i, peak) =
+            s.iter().enumerate().fold((0, 0.0f32), |a, (i, &v)| if v > a.1 { (i, v) } else { a });
+        assert!((peak - 1.089).abs() < 0.002, "peak {peak}");
+        assert!((0.24..=0.28).contains(&(peak_i as f32 / 200.0)), "peak at {}", peak_i as f32 / 200.0);
+        // Settled: within 0.2% of the end from 70% on.
+        for (i, v) in s.iter().enumerate().skip(140) {
+            assert!((v - 1.0).abs() <= 0.002, "t={} v={v}", i as f32 / 200.0);
+        }
+        // Rises monotonically up to the peak.
+        assert!(s[..=peak_i].windows(2).all(|w| w[1] >= w[0]));
+        assert!(ease::spring(0.129) > 0.72 && ease::spring(0.129) < 0.73);
+    }
+
+    #[test]
+    fn beziers_hit_their_ends_and_never_turn_back() {
+        for f in [ease::out as fn(f32) -> f32, ease::dram] {
+            assert_eq!(f(0.0), 0.0);
+            assert_eq!(f(1.0), 1.0);
+            assert_eq!(f(-1.0), 0.0);
+            assert_eq!(f(2.0), 1.0);
+            let s = samples(f);
+            assert!(s.windows(2).all(|w| w[1] >= w[0] - 1e-6), "monotonic");
+            assert!(s.iter().all(|v| (0.0..=1.0 + 1e-6).contains(v)));
+        }
+        // Snappy decel: most of the way there early.
+        assert!(ease::out(0.1) > 0.4 && ease::out(0.3) > 0.85, "{} {}", ease::out(0.1), ease::out(0.3));
+        // Dramatic in-out: slow start, fast middle, slow end.
+        assert!(ease::dram(0.2) < 0.06 && ease::dram(0.8) > 0.94);
+        // Cross-checked against an independent bisection of the same curve.
+        assert!((ease::dram(0.5) - 0.59597).abs() < 1e-4, "{}", ease::dram(0.5));
+        assert!((ease::out(0.1) - 0.49439).abs() < 1e-4, "{}", ease::out(0.1));
+        // Linear control points give a straight line.
+        assert!((ease::bezier(0.0, 0.0, 1.0, 1.0, 0.37) - 0.37).abs() < 1e-4);
+    }
+
+    #[test]
+    fn breadcrumb_decodes_left_to_right_in_twelve_steps() {
+        let t = "/ apps / sigye";
+        let s0 = decode(t, 0);
+        assert_eq!(s0.chars().count(), t.chars().count());
+        assert!(s0.chars().zip(t.chars()).all(|(a, b)| (b == ' ') == (a == ' ')));
+        assert!(s0.chars().filter(|c| *c != ' ').all(|c| GLYPHS.contains(&c)));
+        let s6 = decode(t, 6);
+        assert!(s6.starts_with("/ apps"), "{s6}");
+        assert_ne!(s6, t);
+        assert_eq!(decode(t, 12), t);
+    }
+
+    fn scene(screen: &'static str, number: &str) -> Scene {
+        let mut s = Scene::new(screen);
+        s.cell = (8, 20);
+        s.push(El::Crumb, Rect::new(10, 1, 12, 1), None, Some("/ installing"));
+        s.push(El::Block(0), Rect::new(10, 9, 6, 3), None, Some(number));
+        s
+    }
+
+    fn value(fx: &Phase) -> Option<f32> {
+        match fx {
+            Phase::Entering(fx) => fx.get(El::Block(0)).value,
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn install_number_counts_up_to_each_new_value() {
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let mut m = Timeline::new();
+        m.started = true; // not the first view: no entry
+        assert!(m.drawn(at(0), &scene("installing", "40")));
+        assert_eq!(value(&m.frame(at(0), &scene("installing", "40"))), Some(0.0));
+        let mid = value(&m.frame(at(100), &scene("installing", "40"))).unwrap();
+        assert!(mid > 5.0 && mid < 40.0, "{mid}");
+        assert!(!m.drawn(at(100), &scene("installing", "40")), "same target: no restart");
+        // A new value mid-count: count on from where it is.
+        assert!(m.drawn(at(150), &scene("installing", "65")));
+        let from = value(&m.frame(at(150), &scene("installing", "65"))).unwrap();
+        assert!(from > mid && from < 40.0, "{from}");
+        let end = value(&m.frame(at(2000), &scene("installing", "65")));
+        assert_eq!(end, Some(65.0));
+        assert!(matches!(m.frame(at(2100), &scene("installing", "65")), Phase::Idle));
+        assert!(!m.active());
+    }
+
+    #[test]
+    fn rows_restagger_within_200ms_when_the_list_changes() {
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let apps = |names: &[&str]| {
+            let mut s = Scene::new("apps");
+            for (i, n) in names.iter().enumerate() {
+                s.push(El::Row(i as u16), Rect::new(2, 20 + 2 * i as u16, 40, 1), None, Some(n));
+            }
+            s
+        };
+        let mut m = Timeline::new();
+        m.started = true;
+        assert!(!m.drawn(at(0), &apps(&["01", "02", "03"])));
+        assert!(!m.drawn(at(10), &apps(&["01", "02", "03"])), "unchanged: nothing moves");
+        assert!(m.drawn(at(20), &apps(&["02", "05"])));
+        let Phase::Entering(fx) = m.frame(at(20), &apps(&["02", "05"])) else { panic!("restagger") };
+        assert_eq!(fx.get(El::Row(0)).alpha, 0.0);
+        assert_eq!(fx.get(El::Row(1)).alpha, 0.0);
+        let Phase::Entering(fx) = m.frame(at(50), &apps(&["02", "05"])) else { panic!("restagger") };
+        assert!(fx.get(El::Row(0)).alpha > fx.get(El::Row(1)).alpha, "row 0 ahead of row 1");
+        assert!(matches!(m.frame(at(220), &apps(&["02", "05"])), Phase::Idle));
+        assert!(!m.active());
     }
 }

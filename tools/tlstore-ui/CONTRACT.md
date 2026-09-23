@@ -52,3 +52,30 @@ Fx::default() = at rest; fx.set(El, Effect{dx,dy /*px*/, shown /*0-1 from top: m
   `reveal` truncates text and draws leaders/hlines out from the left; `text` replaces a text element for the frame.
 In-screen motion (install count-up, rows on filter change) uses the same Fx from frame(); job state: router.st.job (pct, step, done).
 Motion off: Router passes ctx.motion; with it false navigate() is never called and frame() never runs.
+
+# tlstore-ui motion contract (P5) — for the ship phase and later screens
+
+use tlstore_ui::store::{Router, motion::{Timeline, ease, timing, decode, GLYPHS}};
+Router::animated(env) = with_motion(env, Box::new(Timeline::new())); main.rs uses it. Router::new stays motionless.
+Router::set_clock(Fn()->Instant)  // tests drive transitions frame by frame; navigate() and draw() read it
+Motion gains fn drawn(&mut self, now, current:&Scene)->bool {false}: called after every drawn frame while
+  ctx.motion; true → the router clears the Frame (Frame::clear) and draws it again through a fresh frame().
+  Used for: first look at an entering view's layout, the first view's own entry, rows changed in place, a
+  new install percentage. `current` is empty while a leaving view is drawn (its scene goes to leave_scene).
+Effect gains line:f32 (leaders/hlines drawn out, text untouched; they use min(reveal,line)) and
+  value:Option<f32> (Installing draws Block(0)'s number and its dot bar from it; the scene keeps the target).
+Scene gains cell:(w,h) px. Pictures hidden or moved by an effect are still recorded, at their rest rect.
+Row text in the scene = the first text drawn for it (Apps: the item number, drawn before the ✓ mark).
+Timeline (ms): leave 160 — all but Mark/Crumb/Context fade (alpha in 1/16 steps); pictures alpha 1-p, lift
+  0.4 row. Enter ≈820 after it: Crumb decode 12×32 · Rule reveal 600 out · HeroLead fade 500 @60 ·
+  HeroWord picture: spring 600 @100 as dy=h(1−s), shown=min(s,1); text: fade · Cover picture: shown dram
+  700 @120; stand-in: fade · Caption @180, Header/Chips @225 fade 300 · Row(i) @260+min(45, 240/(n−1))·i,
+  fade 300, leaders 60 behind over 240 · Pager after the last row · Block(b) @180+min(45,300/(n−1))·b
+  (Installing Block 0/1: count-up instead) · Keys, SelBar, Notice, Mark, Context at rest.
+  Every NavKind plays the same; a navigation mid-transition restarts from the view as last drawn.
+In-screen: Apps rows whose numbers change (filter, category, page, resize) re-stagger within 200 ms;
+  Installing counts to each new pct from what is shown over 200+6·|Δ| ms (≤700), out easing.
+Motion off (ctx.motion false = TLSTORE_MOTION=0): no navigate/frame/drawn calls, no ticks, frames at rest.
+  The launcher's animations-off is not visible to shell programs (see the P5 report); nothing reads it yet.
+Measured (tests/screens.rs, 52×45 kitty, push to item): max 2.7 KB per frame, mean 0.46 KB, uploads apart;
+  cover-only frames ≈81 B with no text.
