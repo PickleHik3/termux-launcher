@@ -33,7 +33,7 @@
 
 set -u
 
-TLSTORE_VERSION=0.3
+TLSTORE_VERSION=0.4
 
 PREFIX="${TLSTORE_PREFIX:-${PREFIX:-${HOME%/files/home}/files/usr}}"
 HOME="${HOME:?tlstore needs HOME}"

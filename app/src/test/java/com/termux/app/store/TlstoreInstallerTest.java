@@ -295,6 +295,55 @@ public class TlstoreInstallerTest {
             text(installer.tlstoreUiFile()));
     }
 
+    // --- tlstore-ui refresh on every start, even when the outer marker is already up to date ---
+
+    @Test public void anUnchangedUiBinaryIsUntouchedOnAnUpToDateInstall() throws IOException {
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+        installer.install();
+        long mtimeBefore = installer.tlstoreUiFile().lastModified();
+
+        // Same applicationId, same versionName, same bundled binary: the outer marker matches,
+        // so this is the UP_TO_DATE path — the one that used to skip tlstore-ui entirely.
+        assertEquals(TlstoreInstaller.Result.UP_TO_DATE, installer.install());
+
+        assertArrayEquals(TLSTORE_UI, Files.readAllBytes(installer.tlstoreUiFile().toPath()));
+        assertEquals("untouched, not just byte-identical", mtimeBefore,
+            installer.tlstoreUiFile().lastModified());
+    }
+
+    @Test public void aChangedUiBinaryIsRewrittenEvenWithTheSameVersionName() throws IOException {
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+        installer.install();
+        // Same applicationId and versionName as a fresh build during development would carry —
+        // the outer marker does not change, only the bundled asset's bytes do.
+        byte[] newerUi = "ELF-fixture-newer-same-versionName".getBytes(StandardCharsets.UTF_8);
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, newerUi), new String[]{"arm64-v8a"});
+
+        assertEquals(TlstoreInstaller.Result.UP_TO_DATE, installer.install());
+
+        assertArrayEquals("a changed binary must reach the phone even without a version bump",
+            newerUi, Files.readAllBytes(installer.tlstoreUiFile().toPath()));
+    }
+
+    @Test public void aForeignUiBinaryIsLeftAloneOnAnUpToDateInstall() throws IOException {
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+        installer.install();
+        Files.write(installer.tlstoreUiFile().toPath(), "not ours".getBytes(StandardCharsets.UTF_8));
+        // Same applicationId/versionName/asset as the first install; only the on-disk file
+        // changed, out from under this class — the outer marker still matches.
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(TLSTORE_SCRIPT, true, MOTD, TLSTORE_UI), new String[]{"arm64-v8a"});
+
+        assertEquals(TlstoreInstaller.Result.UP_TO_DATE, installer.install());
+
+        assertEquals("the foreign file must survive", "not ours",
+            text(installer.tlstoreUiFile()));
+    }
+
     private static int countTempFiles(File dir) {
         String[] names = dir.list((d, name) -> name.endsWith(".tmp"));
         return names == null ? 0 : names.length;

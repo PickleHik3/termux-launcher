@@ -228,6 +228,78 @@ tasks.register("verifyReleaseHardening") {
     }
 }
 
+// tlstore-ui's release binaries (app/src/main/assets/tlstore/tlstore-ui-<abi>) are committed,
+// not built by this project: CI's debug_build.yml only has Java/Gradle, no Rust toolchain, and
+// asking every contributor to install one just to build the app was the thing to avoid. The
+// tradeoff is that nothing forces someone who edits tools/tlstore-ui to also run
+// `scripts/tlstore/build-ui.sh --install` before committing — so this task closes that gap by
+// comparing a hash of the crate sources (scripts/tlstore/ui-src-hash.sh) against the same hash
+// build.rs baked into each committed binary (read with a plain-text search, since a device-ABI
+// binary cannot be executed on the build host to ask it with --version).
+tasks.register("checkTlstoreUiFresh") {
+    description = "Fails if a tools/tlstore-ui source change was never rebuilt into the committed tlstore-ui-<abi> assets."
+    group = "verification"
+
+    def hashScript = rootProject.file("scripts/tlstore/ui-src-hash.sh")
+    def crateDir = rootProject.file("tools/tlstore-ui")
+    def assetsDir = file("src/main/assets/tlstore")
+    def abis = ["arm64-v8a", "x86_64"]
+
+    inputs.file(hashScript)
+    inputs.dir(new File(crateDir, "src"))
+    inputs.file(new File(crateDir, "Cargo.toml"))
+    inputs.file(new File(crateDir, "Cargo.lock"))
+    abis.each { abi -> inputs.file(new File(assetsDir, "tlstore-ui-${abi}")) }
+    // No task output: this only ever needs to run again when one of the inputs above changes.
+    outputs.upToDateWhen { true }
+
+    doLast {
+        // Plain ProcessBuilder, not Gradle's own exec DSL: that API has moved between major
+        // Gradle versions, while this has not.
+        def process = new ProcessBuilder("bash", hashScript.absolutePath).start()
+        def stdout = process.inputStream.text
+        def stderr = process.errorStream.text
+        def exitCode = process.waitFor()
+        if (exitCode != 0) {
+            throw new GradleException(
+                "scripts/tlstore/ui-src-hash.sh exited ${exitCode}: ${stderr}")
+        }
+        def expected = stdout.trim()
+        if (!(expected ==~ /[0-9a-f]{64}/)) {
+            throw new GradleException(
+                "scripts/tlstore/ui-src-hash.sh did not print a sha256 hash: '${expected}'")
+        }
+        def marker = ~/TLSTORE_UI_SRC_HASH=([0-9a-f]{64})/
+        abis.each { abi ->
+            def binary = new File(assetsDir, "tlstore-ui-${abi}")
+            if (!binary.isFile()) {
+                throw new GradleException("Missing ${binary.path} — run: " +
+                    "scripts/tlstore/build-ui.sh --install ${abi}")
+            }
+            // ISO-8859-1 maps every byte to exactly one char, so this text search finds the
+            // marker inside an otherwise-binary file without touching a single byte of it.
+            def matcher = marker.matcher(new String(binary.bytes, "ISO-8859-1"))
+            if (!matcher.find()) {
+                throw new GradleException("${binary.path} has no TLSTORE_UI_SRC_HASH marker " +
+                    "baked in; is it really a tlstore-ui build (see build.rs)?")
+            }
+            def actual = matcher.group(1)
+            if (actual != expected) {
+                throw new GradleException("${binary.path} was built from different " +
+                    "tools/tlstore-ui sources than the working tree (binary has ${actual}, " +
+                    "sources hash to ${expected}). Run: scripts/tlstore/build-ui.sh --install ${abi}")
+            }
+        }
+    }
+}
+
+afterEvaluate {
+    tasks.findByName("check")?.dependsOn(tasks.named("checkTlstoreUiFresh"))
+    // CI's debug_build.yml runs this task already; wiring it here means a stale tlstore-ui
+    // binary fails the very step CI runs, with no separate workflow step to remember to add.
+    tasks.findByName("testDebugUnitTest")?.dependsOn(tasks.named("checkTlstoreUiFresh"))
+}
+
 def validateVersionName(String versionName) {
     // https://semver.org/spec/v2.0.0.html#is-there-a-suggested-regular-expression-regex-to-check-a-semver-string
     if (!java.util.regex.Pattern.matches("^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?\$", versionName)) {

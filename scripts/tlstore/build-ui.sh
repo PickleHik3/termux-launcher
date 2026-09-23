@@ -1,18 +1,32 @@
 #!/usr/bin/env bash
 # Builds tlstore-ui release binaries for the phone ABIs the launcher ships.
 #
-#   scripts/tlstore/build-ui.sh [abi...]      abi: arm64-v8a (default) and/or x86_64
+#   scripts/tlstore/build-ui.sh [--install] [abi...]   abi: arm64-v8a (default) and/or x86_64
 #
 # Needs rustup with the aarch64-linux-android / x86_64-linux-android targets and the
 # Android NDK. The NDK is taken from $ANDROID_NDK_HOME, else the SDK's ndk/29.0.14206865
 # ($ANDROID_HOME, ~/Android/Sdk, ~/Library/Android/sdk). Binaries link against the
 # platform's own libc at API 26, are stripped, and land in tools/tlstore-ui/dist/<abi>/.
+#
+# --install also copies each stripped binary into
+# app/src/main/assets/tlstore/tlstore-ui-<abi>, the committed copy the APK ships (see
+# TlstoreInstaller.installTlstoreUi() and CI's debug_build.yml, neither of which builds Rust).
+# Run this — and commit the result — after any change under tools/tlstore-ui: the
+# checkTlstoreUiFresh gradle task fails the build once the committed binaries' baked-in source
+# hash (scripts/tlstore/ui-src-hash.sh) stops matching the working tree.
 set -euo pipefail
 
 API=26
 NDK_VERSION=29.0.14206865
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 CRATE="$ROOT/tools/tlstore-ui"
+ASSETS_DIR="$ROOT/app/src/main/assets/tlstore"
+
+INSTALL=0
+if [ "${1:-}" = "--install" ]; then
+    INSTALL=1
+    shift
+fi
 
 if [ "$#" -eq 0 ]; then
     set -- arm64-v8a x86_64
@@ -72,4 +86,9 @@ for abi in "$@"; do
     mkdir -p "$CRATE/dist/$abi"
     cp "$out" "$CRATE/dist/$abi/tlstore-ui"
     printf '%-10s %8d bytes  %s\n' "$abi" "$(size_of "$CRATE/dist/$abi/tlstore-ui")" "tools/tlstore-ui/dist/$abi/tlstore-ui"
+    if [ "$INSTALL" -eq 1 ]; then
+        mkdir -p "$ASSETS_DIR"
+        cp "$out" "$ASSETS_DIR/tlstore-ui-$abi"
+        echo "           -> app/src/main/assets/tlstore/tlstore-ui-$abi"
+    fi
 done
