@@ -42,15 +42,23 @@ public final class TaiRuntimePresence {
         public final long idleUnloadAtMs;
         /** Wall-clock ms this snapshot was written, used to notice a runtime that was killed. */
         public final long publishedAtMs;
+        /** The loaded engine's context window, or 0 when unknown. */
+        public final int contextWindow;
 
         Snapshot(boolean loaded, boolean loading, boolean generating, @Nullable String modelId,
                  long idleUnloadAtMs, long publishedAtMs) {
+            this(loaded, loading, generating, modelId, idleUnloadAtMs, publishedAtMs, 0);
+        }
+
+        Snapshot(boolean loaded, boolean loading, boolean generating, @Nullable String modelId,
+                 long idleUnloadAtMs, long publishedAtMs, int contextWindow) {
             this.loaded = loaded;
             this.loading = loading;
             this.generating = generating;
             this.modelId = modelId;
             this.idleUnloadAtMs = idleUnloadAtMs;
             this.publishedAtMs = publishedAtMs;
+            this.contextWindow = contextWindow;
         }
 
         /** True while the runtime holds a model, is pulling one in, or is mid-generation. */
@@ -80,6 +88,7 @@ public final class TaiRuntimePresence {
             json.put("modelId", state.loadedModelId == null ? JSONObject.NULL : state.loadedModelId);
             json.put("idleUnloadAtMs", state.idleUnloadAtMs);
             json.put("publishedAtMs", System.currentTimeMillis());
+            json.put("contextWindow", state.toJson().optInt("contextWindow", 0));
         } catch (Exception ignored) {
             return;
         }
@@ -104,7 +113,8 @@ public final class TaiRuntimePresence {
                 json.optBoolean("generating", false),
                 json.isNull("modelId") ? null : json.optString("modelId", null),
                 json.optLong("idleUnloadAtMs", 0L),
-                json.optLong("publishedAtMs", 0L));
+                json.optLong("publishedAtMs", 0L),
+                json.optInt("contextWindow", 0));
         } catch (Exception ignored) {
             return Snapshot.none();
         }

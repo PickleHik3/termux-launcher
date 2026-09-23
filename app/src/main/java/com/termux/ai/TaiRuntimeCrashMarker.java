@@ -26,9 +26,12 @@ public final class TaiRuntimeCrashMarker {
             marker.put("modelId", model.id);
             marker.put("backend", backend);
             marker.put("accelerator", options.accelerator == null ? "auto" : options.accelerator);
+            if (options.contextWindow != null) marker.put("contextWindow", options.contextWindow);
             marker.put("startedAtMs", System.currentTimeMillis());
             marker.put("message", "AI runtime was loading model " + model.id + ".");
-            prefs(context).edit().putString(KEY_MARKER, marker.toString()).apply();
+            // commit, not apply: the marker exists for the case where the process is killed moments
+            // later, which an asynchronous write can lose.
+            prefs(context).edit().putString(KEY_MARKER, marker.toString()).commit();
         } catch (JSONException ignored) {
         }
     }

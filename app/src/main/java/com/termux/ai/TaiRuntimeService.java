@@ -1,5 +1,6 @@
 package com.termux.ai;
 
+import android.app.ActivityManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -243,11 +244,41 @@ public final class TaiRuntimeService extends Service {
             try {
                 TaiRuntimeState state = TaiManager.getRuntimeProcessInstance(this).getRuntimeState();
                 TaiRuntimePresence.publish(this, state);
+                if (state.loaded && systemIsLowOnMemory()) releaseUnderPressure();
                 if (!state.loaded && !state.activeGeneration && !"loading".equals(state.state))
                     stopPresenceWatch();
             } catch (Exception ignored) {
             }
         }, PRESENCE_WATCH_INTERVAL_MS, PRESENCE_WATCH_INTERVAL_MS, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Whether the system has reached its own low-memory threshold. From Android 14 the running
+     * trim levels are no longer delivered, so the watch asks instead of waiting to be told.
+     */
+    private boolean systemIsLowOnMemory() {
+        ActivityManager activityManager = getSystemService(ActivityManager.class);
+        if (activityManager == null) return false;
+        ActivityManager.MemoryInfo info = new ActivityManager.MemoryInfo();
+        activityManager.getMemoryInfo(info);
+        return info.lowMemory;
+    }
+
+    /**
+     * Gives the model's memory back when the phone runs out: the home screen and whatever the user
+     * is doing matter more than a resident model, which reloads on the next request. The budget
+     * keeps loads from getting here; this is for the phone filling up around a model already held.
+     */
+    private void releaseUnderPressure() {
+        controlExecutor.execute(() -> {
+            try {
+                TaiManager manager = TaiManager.getRuntimeProcessInstance(this);
+                manager.cancelRuntime();
+                manager.unloadModel();
+                updateForegroundAfterOperation();
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     private synchronized void stopPresenceWatch() {

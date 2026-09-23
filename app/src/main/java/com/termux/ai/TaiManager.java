@@ -449,13 +449,19 @@ public final class TaiManager {
         }
         TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
         if (preflight.blocked) {
-            TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend,
-                preflight.effectiveAccelerator, preflight.message);
+            // Free memory running short is a moment, not a verdict on the accelerator: recording it
+            // would demote the GPU for good over one crowded afternoon.
+            if (!preflight.errorCode.startsWith("low_available_memory")) {
+                TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend,
+                    preflight.effectiveAccelerator, preflight.message);
+            }
             return preflight.blockingError(preflightStatusCode(preflight));
         }
-        TaiRuntimeOptions loadOptions = optionsForPreflight(spec, options, preflight);
-        JSONObject result = localRuntime().load(spec, loadOptions);
+        LoadDecision decision = decideLoad(spec, options, preflight);
+        if (decision.refusal != null) return decision.refusal;
+        JSONObject result = localRuntime().load(spec, decision.options);
         result.put("preflight", preflight.toJson());
+        result.put("memoryBudget", planJson(decision.plan));
         recordRuntimeResult(spec, preflight, result);
         return result;
     }
@@ -480,7 +486,13 @@ public final class TaiManager {
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
         TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
         if (preflight.blocked) return preflight.blockingError(preflightStatusCode(preflight));
-        JSONObject result = localRuntime().keepWarm(spec, optionsForPreflight(spec, options, preflight), minutes);
+        TaiRuntimeOptions warmOptions = optionsForPreflight(spec, options, preflight);
+        if (!localRuntime().isModelLoaded(spec.id)) {
+            LoadDecision decision = decideLoad(spec, options, preflight);
+            if (decision.refusal != null) return decision.refusal;
+            warmOptions = decision.options;
+        }
+        JSONObject result = localRuntime().keepWarm(spec, warmOptions, minutes);
         result.put("preflight", preflight.toJson());
         recordRuntimeResult(spec, preflight, result);
         return result;
@@ -911,6 +923,7 @@ public final class TaiManager {
         JSONObject installed = new JSONObject();
         JSONArray models = new JSONArray();
         TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+        TaiRuntimePresence.Snapshot presence = TaiRuntimePresence.read(appContext);
         boolean mnnSupported = device.mnnSupported;
         LinkedHashMap<String, TaiModelSpec> availableModels = new LinkedHashMap<>();
         availableModels.putAll(modelStore.getDownloadedReadableModels());
@@ -920,8 +933,8 @@ public final class TaiManager {
             // Management can retain imported packages whose backend is not executable yet, but
             // generation discovery must publish only models with at least one runnable endpoint.
             if (stored.endpointCapabilities.isEmpty()) continue;
-            TaiModelSpec spec = TaiContextWindowPolicy.apply(stored, device.memoryBytes,
-                settings.getRuntimeOptions(stored).contextWindow);
+            TaiModelSpec spec = advertisedContextWindow(TaiContextWindowPolicy.apply(stored, device.memoryBytes,
+                settings.getRuntimeOptions(stored).contextWindow), device, presence, availableModels);
             // Advertise multimodal LiteRT models as separate modality-scoped ids (chat / -vision /
             // -audio), matching Edge Gallery's per-task loading. See TaiModelVariants.
             for (TaiModelSpec variant : TaiModelVariants.expand(spec,
@@ -1237,12 +1250,113 @@ public final class TaiManager {
         if (preflight.blocked) {
             return preflight.blockingError(preflightStatusCode(preflight));
         }
-        TaiRuntimeOptions loadOptions = optionsForPreflight(spec, options, preflight);
-        JSONObject load = localRuntime().load(spec, loadOptions);
+        LoadDecision decision = decideLoad(spec, options, preflight);
+        if (decision.refusal != null) return decision.refusal;
+        JSONObject load = localRuntime().load(spec, decision.options);
         load.put("preflight", preflight.toJson());
+        load.put("memoryBudget", planJson(decision.plan));
         recordRuntimeResult(spec, preflight, load);
         if (!load.optBoolean("ok", false)) return load;
         return null;
+    }
+
+    /** The options a load goes ahead with, or the refusal the memory budget answered instead. */
+    private static final class LoadDecision {
+        @Nullable final TaiRuntimeOptions options;
+        @Nullable final JSONObject refusal;
+        @NonNull final TaiLoadBudget.Plan plan;
+
+        LoadDecision(@Nullable TaiRuntimeOptions options, @Nullable JSONObject refusal,
+                     @NonNull TaiLoadBudget.Plan plan) {
+            this.options = options;
+            this.refusal = refusal;
+            this.plan = plan;
+        }
+    }
+
+    /**
+     * Settles accelerator and context window for a load that passed preflight, from the memory free
+     * right now (see {@link TaiLoadBudget}). Every load path goes through here: explicit loads,
+     * keep-warm and the automatic load behind a chat request.
+     */
+    @NonNull
+    private LoadDecision decideLoad(
+        @NonNull TaiModelSpec spec,
+        @NonNull TaiRuntimeOptions options,
+        @NonNull TaiLoadPreflight.Result preflight
+    ) throws JSONException {
+        TaiDeviceCapabilities device = preflight.device;
+        List<String> accelerators;
+        if (!"auto".equals(preflight.requestedAccelerator) || TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
+            accelerators = Collections.singletonList(preflight.effectiveAccelerator);
+        } else {
+            accelerators = TaiLoadPreflight.autoAccelerators(appContext, spec, device, preflight.profile);
+            if (accelerators.isEmpty()) accelerators = Collections.singletonList(preflight.effectiveAccelerator);
+        }
+        int cap = TaiContextWindowPolicy.effectiveEndpointContextWindow(spec, device.memoryBytes, options.contextWindow);
+        long fileBytes = spec.sizeBytes;
+        if (fileBytes <= 0L && spec.localPath != null) fileBytes = new File(spec.localPath).length();
+        boolean encoders = spec.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
+            || spec.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
+        String crashedAccelerator = null;
+        int crashedContext = 0;
+        JSONObject marker = TaiRuntimeCrashMarker.read(appContext);
+        if (marker != null && spec.id.equals(marker.optString("modelId"))) {
+            crashedAccelerator = TaiLoadPreflight.normalizeAccelerator(marker.optString("accelerator", null));
+            crashedContext = marker.optInt("contextWindow", 0);
+        }
+        long available = device.availableMemoryBytes;
+        if (available > 0L) available += residentModelBytes(spec.id);
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, fileBytes, encoders,
+            device.physicalMemoryBytes, available, accelerators, cap,
+            crashedAccelerator, crashedContext));
+        if (!plan.fits) {
+            JSONObject refusal = error(409, "insufficient_memory",
+                "Not enough free memory to load " + spec.displayName + ". Close some apps and try again.");
+            refusal.put("memoryBudget", planJson(plan));
+            return new LoadDecision(null, refusal, plan);
+        }
+        TaiRuntimeOptions loadOptions = optionsForPreflight(spec, options, preflight);
+        if (!TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && plan.accelerator != null
+                && !plan.accelerator.equals(preflight.effectiveAccelerator)) {
+            loadOptions = loadOptions.withAccelerator(plan.accelerator);
+        }
+        return new LoadDecision(loadOptions.withContextWindow(plan.contextWindow), null, plan);
+    }
+
+    /**
+     * What the model resident now holds, when it is not {@code modelId}: the load about to happen
+     * closes it first, so that memory is the new load's to spend even though it is not free yet.
+     */
+    private long residentModelBytes(@NonNull String modelId) {
+        TaiRuntimeState state = localRuntime().getState();
+        if (!state.loaded || state.loadedModelId == null || modelId.equals(state.loadedModelId)
+                || state.loadedModelPath == null) return 0L;
+        long size = new File(state.loadedModelPath).length();
+        if (size <= 0L) return 0L;
+        int window = TaiLoadBudget.FLOOR_CONTEXT;
+        try {
+            window = state.toJson().optInt("contextWindow", window);
+        } catch (JSONException ignored) {
+        }
+        String backend = TaiModelSpec.BACKEND_MNN_LLM.equals(state.runtimeName)
+            ? TaiModelSpec.BACKEND_MNN_LLM : TaiModelSpec.BACKEND_LITERT_LM;
+        String accelerator = state.backend.toLowerCase(Locale.ROOT).contains("gpu") ? "gpu" : "cpu";
+        return TaiLoadBudget.estimateBytes(backend, accelerator, size, false, window);
+    }
+
+    @NonNull
+    static JSONObject planJson(@NonNull TaiLoadBudget.Plan plan) throws JSONException {
+        JSONObject json = new JSONObject();
+        json.put("fits", plan.fits);
+        json.put("accelerator", plan.accelerator == null ? JSONObject.NULL : plan.accelerator);
+        json.put("contextWindow", plan.contextWindow);
+        json.put("estimatedBytes", plan.estimatedBytes);
+        json.put("availableBytes", plan.availableBytes);
+        json.put("reserveBytes", plan.reserveBytes);
+        json.put("neededFreeBytes", plan.neededFreeBytes());
+        json.put("measured", plan.measured);
+        return json;
     }
 
     @NonNull
@@ -1368,6 +1482,33 @@ public final class TaiManager {
                 : direct);
         }
         return withDeviceContextWindow(TaiModelVariants.resolve(migratedId, this::lookupBaseModel));
+    }
+
+    /**
+     * What a client is told a chat model's window is: the loaded engine's when it is resident,
+     * otherwise what a load would be given with the memory free now. Advertising the RAM tier
+     * instead promised 32k to a phone that could only load 4k, and clients sized their prompts to
+     * the promise.
+     */
+    @NonNull
+    private TaiModelSpec advertisedContextWindow(@NonNull TaiModelSpec spec, @NonNull TaiDeviceCapabilities device,
+                                                 @NonNull TaiRuntimePresence.Snapshot presence,
+                                                 @NonNull Map<String, TaiModelSpec> installed) {
+        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) return spec;
+        if (presence.loaded && spec.id.equals(presence.modelId) && presence.contextWindow > 0) {
+            return spec.withEndpointContextWindow(Math.min(spec.endpointContextWindow, presence.contextWindow));
+        }
+        long available = device.availableMemoryBytes;
+        TaiModelSpec resident = presence.loaded && presence.modelId != null ? installed.get(presence.modelId) : null;
+        if (available > 0L && resident != null && !resident.id.equals(spec.id)) {
+            available += TaiLoadBudget.estimateBytes(resident.backend, "cpu", resident.sizeBytes, false,
+                presence.contextWindow > 0 ? presence.contextWindow : TaiLoadBudget.FLOOR_CONTEXT);
+        }
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, spec.sizeBytes,
+            false, device.physicalMemoryBytes, available,
+            TaiLoadPreflight.autoAccelerators(appContext, spec, device, TaiModelProfile.forModel(spec)),
+            spec.endpointContextWindow, null, 0));
+        return spec.withEndpointContextWindow(Math.min(spec.endpointContextWindow, plan.contextWindow));
     }
 
     /**

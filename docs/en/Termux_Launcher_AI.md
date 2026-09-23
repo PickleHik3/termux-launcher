@@ -174,7 +174,19 @@ tai unload
 
 Termux Launcher AI keeps one chat/generation model active at a time. Loading a LiteRT-LM or MNN model unloads the previous chat model. FunctionGemma is a normal CPU-only catalog model and also replaces the active model when loaded.
 
-Models default to CPU on unknown devices. GPU is automatic only after a successful model/device GPU history, or you can test it explicitly with `tai load <model> --gpu` when the model supports it.
+Automatic loads try the GPU first and use the CPU after a GPU load has failed on your phone. You can pick one explicitly with `tai load <model> --gpu` or `--cpu`.
+
+## Memory
+
+A model is loaded to fit the memory your phone has free at that moment, so it never crowds out the home screen and the apps you are using.
+
+- The context window is the part that grows with free memory. It shrinks by halves until the load fits, down to 4096 tokens. A setting or request for a larger window is an upper limit, not a promise.
+- If the GPU load does not fit even at 4096 tokens, the CPU load is used instead: slower, but it needs about half the memory.
+- If neither fits, the load is refused with a short message. Close some apps and try again.
+- About 1.5 GB, or 15% of your RAM if that is more, is always left free.
+- If your phone runs low on memory while a model is loaded, TAI unloads it. The next request loads it again.
+- `/v1/models` reports the context window a load would actually get right now.
+- `tai --json runtime` shows the window the loaded model was given.
 
 ## Settings
 
