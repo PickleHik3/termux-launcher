@@ -17128,43 +17128,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Whether {@code shell} has a command actively working in it this instant — an agent thinking, a
-     * build compiling — as opposed to merely sitting at a prompt. The phase tracker adds the memory:
-     * the grace after a quiet spell, and what the quiet turned out to mean.
-     *
-     * <p>Two signals, either of which counts once the foreground is not the shell itself: the
-     * foreground process group's CPU use between the resolver's polls, and sustained output. CPU was
-     * the only signal for a while, because output alone cannot tell a shell echoing keystrokes from
-     * a command printing; but an agent waiting on the network burns no CPU while its spinner keeps
-     * redrawing, and the ring going out mid-task read as the indicator failing. So output counts
-     * too, gated by the foreground being a command rather than the shell (which is what rules out
-     * the echo) and by the input grace below (which rules out the keystrokes themselves). The price
-     * is that a full-screen program repainting a clock reads as working; a running program is
-     * working in the sense tmux's monitor-activity means, and that is the sense the ring shows.
-     *
-     * <p>Input silences the indication outright: while the user is typing, the pane is being
-     * interacted with, not working in the background, whatever its process spends on rendering the
-     * keystrokes. Both signals are read over a stretch of time rather than at an instant, so the
-     * silence has to reach back over that stretch too: a CPU reading whose interval the user typed
-     * in is discounted, and the tracker never records the echo of a keystroke as output. Without
-     * that, the pause after typing into a remote shell lit the ring — the stretch that was measured
-     * held the typing, but the instant it was judged at did not.
-     *
-     * <p>Where no foreground reading is available — no privileged backend, an unreadable procfs — the
-     * output signal stands alone, and there the alternate screen is excluded, since without knowing
-     * what is in the foreground a repainting TUI cannot be told from a shell.
+     * Whether {@code shell} has a command actively working in it this instant. The rules, and why a
+     * full-screen program only counts on measured CPU, live in
+     * {@link com.termux.app.statusbar.ShellWorkingPolicy}.
      */
     private boolean isShellWorking(@NonNull TerminalSession shell, long nowMs) {
         int pid = shell.getPid();
         if (pid <= 0) return false;
-        long lastWrite = shell.getLastWriteUptimeMs();
-        if (lastWrite > 0L && nowMs - lastWrite < SHELL_INPUT_GRACE_MS) return false;
         com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
             mWindowForegroundResolver == null ? null : mWindowForegroundResolver.get(pid);
-        if (info != null && info.idle) return false;          // the shell itself has the terminal
-        if (info != null && info.isWorkingAsOf(nowMs, lastWrite)) return true;
-        if (info == null && isFullScreenApplication(shell)) return false;
-        return mShellActivityTracker.isWorking(pid, nowMs);
+        return com.termux.app.statusbar.ShellWorkingPolicy.isWorking(nowMs, shell.getLastWriteUptimeMs(),
+            SHELL_INPUT_GRACE_MS, info, isFullScreenApplication(shell),
+            mShellActivityTracker.isWorking(pid, nowMs));
     }
 
     /** Whether {@code shell} has a full-screen application on the alternate screen buffer. */
