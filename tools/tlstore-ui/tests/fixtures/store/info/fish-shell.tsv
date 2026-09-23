@@ -1,0 +1,16 @@
+Kind	bundle
+Version	-
+From	-
+Checksum	-
+Needs	fish,config-fish,personal-fish,oh-my-posh,eza,zoxide,fisher,fish-plugins
+Files	-
+Installed	-
+Summary	The fish shell with the launcher's setup: the wallpaper prompt, a nicer ls and quicker directory jumping.
+Category	Tools
+Setup	1
+Standfirst	shell setup with a matching prompt
+Does1	Follows your wallpaper in the prompt
+Does2	Jumps to used directories by name
+Does3	Colours ls output with icons
+Try	fish
+Featured	0

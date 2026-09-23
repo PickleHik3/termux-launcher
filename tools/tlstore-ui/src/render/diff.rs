@@ -198,6 +198,26 @@ impl Renderer {
             cur = None;
         }
 
+        // Hyperlinks: a link that is new, or whose cells changed, is written again inside
+        // OSC 8; cells a link has left are written again without one.
+        let cells_same = |r: &super::Rect| (r.x..r.right()).all(|x| buf.get(x, r.y) == prev.get(x, r.y));
+        for (r, url) in prev.links() {
+            if !buf.links().iter().any(|(nr, nu)| nr == r && nu == url) {
+                write_cells(out, buf, *r, &mut pen);
+                cur = None;
+            }
+        }
+        for (r, url) in buf.links() {
+            let known = prev.links().iter().any(|(pr, pu)| pr == r && pu == url);
+            if known && cells_same(r) {
+                continue;
+            }
+            let _ = write!(out, "\x1b[{};{}H\x1b]8;;{}\x1b\\", r.y + 1, r.x + 1, url);
+            write_cells_here(out, buf, *r, &mut pen);
+            out.push_str("\x1b]8;;\x1b\\");
+            cur = None;
+        }
+
         // Pictures.
         for old in &self.prev_places {
             if !places.iter().any(|p| p.key() == old.key()) {
@@ -229,6 +249,30 @@ impl Renderer {
     }
 }
 
+/// Moves to `r` and writes its cells again (one row).
+fn write_cells(out: &mut String, buf: &Buffer, r: super::Rect, pen: &mut Option<Style>) {
+    let _ = write!(out, "\x1b[{};{}H", r.y + 1, r.x + 1);
+    write_cells_here(out, buf, r, pen);
+}
+
+/// Writes the cells of one-row `r` from the cursor position.
+fn write_cells_here(out: &mut String, buf: &Buffer, r: super::Rect, pen: &mut Option<Style>) {
+    for x in r.x..r.right() {
+        let Some(c) = buf.get(x, r.y) else { break };
+        let ch = match &c.sym {
+            Sym::Char(ch) => ch.to_string(),
+            Sym::Cluster(s) => s.to_string(),
+            Sym::WideTail => continue,
+            Sym::Covered => " ".to_string(),
+        };
+        if *pen != Some(c.style) {
+            c.style.write_sgr(out);
+            *pen = Some(c.style);
+        }
+        out.push_str(&ch);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -236,6 +280,24 @@ mod tests {
 
     fn r() -> Renderer {
         Renderer { compress: false, sync: true, ..Default::default() }
+    }
+
+    #[test]
+    fn links_are_wrapped_in_osc8_and_dropped_cleanly() {
+        let mut rr = r();
+        let mut b = Buffer::new(8, 1);
+        b.put_str(0, 0, "ab", Style::new(), 8);
+        b.link(crate::render::Rect::new(0, 0, 2, 1), "https://x.y/z");
+        let mut out = String::new();
+        rr.render(&b, &[], &mut out);
+        assert!(out.contains("\x1b[1;1H\x1b]8;;https://x.y/z\x1b\\ab\x1b]8;;\x1b\\"), "{out:?}");
+        out.clear();
+        rr.render(&b, &[], &mut out);
+        assert!(out.is_empty());
+        let mut plain = Buffer::new(8, 1);
+        plain.put_str(0, 0, "ab", Style::new(), 8);
+        rr.render(&plain, &[], &mut out);
+        assert!(out.contains("\x1b[1;1H\x1b[0mab") && !out.contains("]8;;h"), "{out:?}");
     }
 
     #[test]

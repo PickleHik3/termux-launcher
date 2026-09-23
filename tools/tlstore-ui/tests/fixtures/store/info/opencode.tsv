@@ -1,0 +1,22 @@
+Kind	npm-musl
+Version	latest
+From	npm:opencode-linux-arm64-musl#bin/opencode
+Checksum	-
+Needs	musl-loader,musl-libstdcxx,musl-libgcc
+Files	-
+Summary	The open source coding agent, about 200 MB.
+Category	AI
+Upstream	anomalyco/opencode
+Setup	0
+Standfirst	an open source agent for the terminal
+Does1	Writes and edits code from your prompts
+Does2	Talks to the provider you choose
+Does3	Keeps its own updater switched off
+Try	opencode
+Notes	about 200 mb|needs a provider account to sign in
+Author	anomalyco
+Licence	MIT
+Size	~200 MB
+Picture	launcher:scripts/tlstore/pictures/opencode.jpg@5253e29ae8e128aad09b08fd57eb115ba66140d8
+Picture-digest	628951d862fe56794a8e1f46d979566f978c9e855757f9b8c5285d65e4151e8e
+Featured	0

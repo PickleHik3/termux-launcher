@@ -31,3 +31,24 @@ Regions { tier, narrow, gutter, masthead, rule, hero, hero_lead, hero_word, body
 Palette { dark, accent, on_accent, tonal, on_tonal, surface, ink, dim, rule } + ink_s() dim_s() accent_s() rule_s() tonal_s() accent_fill_s()
   from ~/.termux/material-colors-{dark|light}.properties; dark = OSC 11 background, else exported mode, else dark
 Reference screen: src/demo.rs. Binary: tlstore-ui --demo | --probe | --version.
+
+# tlstore-ui screens contract (P4) — for the motion phase
+
+use tlstore_ui::store::{Router, scene::*};  Router::new(Env::from_env()) | Router::with_motion(env, Box<dyn Motion>)
+Router is the only app::Screen; every navigation goes through Router::navigate (Push/Pop/Replace/Home from views' Go).
+trait Motion { fn navigate(&mut self, kind:NavKind, from:&Scene, to:&'static str, now:Instant);  // only when ctx.motion
+  fn frame(&mut self, now:Instant, current:&Scene) -> Phase;  // called each frame while active()
+  fn active(&self) -> bool }  // true → app ticks 60 fps; Router::animating()/tick() delegate here
+enum Phase { Idle, Leaving(Fx) /*router draws the leaving view (kept alive) with Fx*/, Entering(Fx) /*current view*/ }
+  Leaving ends (and the old view is dropped) on the first frame that returns Entering or Idle. Input goes to the new view at once.
+enum NavKind { Push, Pop, Replace, Home }
+Scene { screen:"apps"|"item"|"updates"|"installing"|"nogh", elements:Vec<Element{el,rect,picture:Option<(img_id,pid)>,text}> }
+  recorded every frame in drawing order; Router.scene = current view's last frame; `from` = leaving view's last frame.
+El: Mark Crumb Context Rule HeroLead HeroWord Cover Caption Header Chips Pager SelBar Row(n on screen) Block(n) Keys Notice
+  Block(n): Item 0 line,1 standfirst,2 star rule,3 facts,4 what it does,5 try it,6 demo,7 notes (absent slots shift down);
+            Installing 0 number,1 dot bar,2-5 steps,6 "with part",7 note/summary,8 next; NoGh 0 star rule,1 hairline,2 text,3 commands.
+Fx::default() = at rest; fx.set(El, Effect{dx,dy /*px*/, shown /*0-1 from top: mask rise, wipe*/, alpha, reveal /*0-1 chars, leaders*/, text /*crumb glyphs*/})
+  Pictures move by pixels and crop by `shown`; alpha<0.5 hides a picture. Text moves by whole cells, fades toward surface,
+  `reveal` truncates text and draws leaders/hlines out from the left; `text` replaces a text element for the frame.
+In-screen motion (install count-up, rows on filter change) uses the same Fx from frame(); job state: router.st.job (pct, step, done).
+Motion off: Router passes ctx.motion; with it false navigate() is never called and frame() never runs.

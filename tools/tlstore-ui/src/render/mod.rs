@@ -121,11 +121,19 @@ pub struct Buffer {
     pub h: u16,
     cells: Vec<Cell>,
     runs: Vec<SizedRun>,
+    /// OSC 8 hyperlinks: cells in the rect link to the URL (one row each, see [`Buffer::link`]).
+    links: Vec<(Rect, String)>,
 }
 
 impl Buffer {
     pub fn new(w: u16, h: u16) -> Buffer {
-        Buffer { w, h, cells: vec![Cell::blank(); w as usize * h as usize], runs: Vec::new() }
+        Buffer {
+            w,
+            h,
+            cells: vec![Cell::blank(); w as usize * h as usize],
+            runs: Vec::new(),
+            links: Vec::new(),
+        }
     }
 
     pub fn area(&self) -> Rect {
@@ -146,6 +154,20 @@ impl Buffer {
 
     pub fn runs(&self) -> &[SizedRun] {
         &self.runs
+    }
+
+    /// Makes the cells of a one-row `rect` an OSC 8 hyperlink to `url` (clipped; an empty
+    /// rect or URL is ignored). The text must already be drawn there.
+    pub fn link(&mut self, rect: Rect, url: &str) {
+        let r = rect.intersect(&self.area());
+        if r.is_empty() || url.is_empty() {
+            return;
+        }
+        self.links.push((Rect { h: 1, ..r }, url.to_string()));
+    }
+
+    pub fn links(&self) -> &[(Rect, String)] {
+        &self.links
     }
 
     /// Makes (x, y) safe to overwrite: breaks a wide pair or a sized run that uses it.

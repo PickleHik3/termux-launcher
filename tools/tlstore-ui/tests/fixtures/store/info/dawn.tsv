@@ -1,0 +1,21 @@
+Kind	binary
+Version	0.1.3+0e958747
+From	binaries:dawn@2026.09.22
+Checksum	01c344181fa9f8c673ac06aafd984ec8988cf36ec2e58da39b00f65231145842
+Needs	dawn-libs
+Files	-
+Summary	A quiet place to write, with your markdown taking shape as you type.
+Category	Note taking
+Upstream	andrewmd5/dawn
+Setup	0
+Standfirst	a quiet place to write, headings and all
+Does1	Shows headings and quotes as you type
+Does2	Keeps your file plain markdown on disk
+Does3	Displays a linked picture in place
+Try	dawn notes.md
+Notes	looks best in this launcher's terminal
+Author	andrewmd5
+Licence	MIT
+Picture	launcher:scripts/tlstore/pictures/dawn.jpg@5253e29ae8e128aad09b08fd57eb115ba66140d8
+Picture-digest	64824bf316834811ee3e1cd0f54d387933ca0f8fefa5a6ab0e5a9e163e623dda
+Featured	1

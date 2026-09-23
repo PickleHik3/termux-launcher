@@ -1,0 +1,34 @@
+00|
+01| TLSTORE / apps / sigye
+02| ──────────────────────────────────────
+03|
+04|      N O .   0 7   ·   T O O L S
+05|                 sigye
+06|
+07|
+08|
+09|
+10|               S I G Y E
+11|
+12|
+13|
+14|        ────────── ☆¹ ──────────
+15|
+16|
+17| ──────────────────────────────────────
+18| ¹ Starring needs gh.
+19|   Install it and sign in once, then pr
+20|   s again:
+21|
+22|     $ pkg install gh
+23|     $ gh auth login
+24|
+25|
+26|
+27|
+28|
+29|
+30|
+31|
+32| o open the repo instead  esc not now
+33|

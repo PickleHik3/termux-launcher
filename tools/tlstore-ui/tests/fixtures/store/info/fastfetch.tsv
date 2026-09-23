@@ -1,0 +1,22 @@
+Kind	binary
+Version	2.67.0
+From	binaries:fastfetch@2026.09.02
+Checksum	eb99944ca4879a77e67d5ce3c9c57393ef843ddab4a162f3d03584cdb04b3e85
+Needs	fastfetch-libs,fastfetch-config
+Files	-
+Installed	2.66.0
+Summary	System information beside an animated logo — drop any GIF at ~/Pictures/gif/skel.gif.
+Category	Tools
+Upstream	fastfetch-cli/fastfetch
+Setup	0
+Standfirst	system info beside an animated logo
+Does1	Shows system info in a tidy list
+Does2	Plays a gif you drop in as the logo
+Does3	Reads your device, shell and battery
+Try	fastfetch
+Notes	only runs in this launcher's terminal
+Author	fastfetch-cli
+Licence	MIT
+Picture	launcher:scripts/tlstore/pictures/fastfetch.jpg@5253e29ae8e128aad09b08fd57eb115ba66140d8
+Picture-digest	cc2053d3cab20e5288f12a6e8efdcaec1daaaaa8f83b7d19ff53ff544508b7bd
+Featured	0
