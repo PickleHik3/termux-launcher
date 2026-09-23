@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 
@@ -137,13 +138,49 @@ public final class PlaceLookPreferences implements SharedPreferences {
     // ------------------------------------------------------------------------------ the scopes
 
     /**
-     * The place the chrome is being drawn for. Returns whether it moved, so the caller only pays
-     * for a re-apply when it did.
+     * The place the chrome is being drawn for. Returns whether any look read now answers
+     * differently, so the caller only pays for a re-apply when one does: two places that both
+     * read the shared layer, or whose own values match it, are the same look.
      */
     public boolean setRenderPlace(@Nullable PaneWallPage place) {
         if (mRenderPlace == place) return false;
+        PaneWallPage previous = mRenderPlace;
         mRenderPlace = place;
-        return true;
+        // The editor decides what reads resolve through while it is open.
+        return mEditing || readsDiffer(previous, place);
+    }
+
+    /** Whether any look key resolves to a different value for {@code a} than for {@code b}. */
+    private boolean readsDiffer(@Nullable PaneWallPage a, @Nullable PaneWallPage b) {
+        return !keysReadingDifferently(a, b).isEmpty();
+    }
+
+    /**
+     * The shared look keys a read answers differently for {@code a} than for {@code b} — what a
+     * move between the two has to repaint. A null place is the shared layer.
+     */
+    @NonNull
+    public Set<String> keysReadingDifferently(@Nullable PaneWallPage a, @Nullable PaneWallPage b) {
+        Set<String> keys = new HashSet<>();
+        Map<String, ?> all = mStore.getAll();
+        for (String stored : all.keySet()) {
+            PaneWallPage owner = placeOfLookKey(stored);
+            if (owner == null || (owner != a && owner != b)) continue;
+            String key = stored.substring((PREFIX + placeKey(owner) + INFIX).length());
+            if (!Objects.equals(resolved(all, a, key), resolved(all, b, key))) keys.add(key);
+        }
+        return keys;
+    }
+
+    /** What a read of {@code key} answers with for {@code place}, off one snapshot of the store. */
+    @Nullable
+    private static Object resolved(@NonNull Map<String, ?> all, @Nullable PaneWallPage place,
+                                   @NonNull String key) {
+        if (place != null && isScopable(key)) {
+            String scoped = lookKey(place, key);
+            if (all.containsKey(scoped)) return all.get(scoped);
+        }
+        return all.get(key);
     }
 
     @Nullable

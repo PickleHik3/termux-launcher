@@ -141,6 +141,54 @@ public class ChromeRendererTest {
         assertEquals(1, surfaces.invariantsEnforced);
     }
 
+    /**
+     * A pre-draw gate applies against settled layout, which is the pass a pending accessory render
+     * was about to run after the draw — so it runs in that one's place and the posted one is gone.
+     * A page change with the keyboard opening paid for both (Pong, 2026-09-23).
+     */
+    @Test
+    public void aSettledApplyStandsInForThePendingRender() {
+        chrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        ChromeSpec gateSpec = new ChromeSpec(false, true, 0, true, true, false, true, 1f, 12);
+
+        chrome.applySettled(gateSpec);
+
+        assertEquals(1, surfaces.applied.size());
+        assertSame("the gate's own spec is what is applied", gateSpec, surfaces.applied.get(0));
+        assertEquals("it is the accessory render pass", 1, surfaces.invariantsEnforced);
+        assertFalse(chrome.isRenderSyncPending());
+        mainLooper().idle();
+        assertEquals("the posted pass was withdrawn", 1, surfaces.applied.size());
+    }
+
+    /** A settled apply that leaves a crop stale still earns the one follow-up a render pass does. */
+    @Test
+    public void aSettledApplyThatLeavesACropStaleBooksOneMore() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes =
+            ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_DOCK_BACKDROP;
+        surfaces.applyRequestsRemaining = 1;
+        chrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+
+        chrome.applySettled(surfaces.spec);
+        assertTrue(chrome.isRenderSyncPending());
+        mainLooper().idle();
+
+        assertEquals(2, surfaces.applied.size());
+        assertFalse(chrome.isRenderSyncPending());
+    }
+
+    /** With nothing pending a settled apply is the plain apply the gates always made. */
+    @Test
+    public void aSettledApplyWithNothingPendingIsAPlainApply() {
+        chrome.applySettled(surfaces.spec);
+
+        assertEquals(1, surfaces.applied.size());
+        assertEquals("not a render pass", 0, surfaces.invariantsEnforced);
+        mainLooper().idle();
+        assertEquals(1, surfaces.applied.size());
+    }
+
     @Test
     public void cancellingPendingWorkDropsTheBookedCommit() {
         chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);

@@ -146,6 +146,27 @@ public class PaneWallLayoutTest {
         assertTrue("a page sliding in has to be drawing", display.getVisibility() == View.VISIBLE);
     }
 
+    /**
+     * A slide between two places does not draw the third. It used to be kept drawing for the whole
+     * motion, so every page change paid for the widget grid and the display beside the two pages
+     * actually on screen (Pong, 2026-09-23).
+     */
+    @Test
+    public void aDragBetweenTwoPlacesLeavesTheThirdUndrawn() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.beginDrag();
+        wall.dragTo(-200f);
+        assertEquals(View.VISIBLE, terminal.getVisibility());
+        assertEquals(View.VISIBLE, display.getVisibility());
+        assertEquals("the page behind the terminal is a full width off screen",
+            View.INVISIBLE, widgets.getVisibility());
+
+        // The finger turns back and the Widgets page slides in: it draws again as it arrives.
+        wall.dragTo(200f);
+        assertEquals(View.VISIBLE, widgets.getVisibility());
+        assertEquals(View.INVISIBLE, display.getVisibility());
+    }
+
     @Test
     public void aShortDragLeavesThePageAlone() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);

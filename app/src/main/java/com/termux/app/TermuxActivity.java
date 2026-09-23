@@ -113,6 +113,7 @@ import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceLookPreferences;
+import com.termux.app.place.PlaceLookRefresh;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.PlaceSizePreferences;
 import com.termux.app.surfaces.SurfaceEditorController;
@@ -2903,9 +2904,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateWallpaperBackdrop();
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
+        // This runs behind every chrome apply, several times a page change, and the style is a
+        // live view that looks new each time: re-dress the panes and pages only when what it
+        // answers has moved.
+        com.termux.app.terminal.PaneStyleKey key = com.termux.app.terminal.PaneStyleKey.of(style);
+        if (key.equals(mAppliedPaneStyleKey)) return;
+        mAppliedPaneStyleKey = key;
         mPaneController.setSurfaceStyle(style);
         if (mPaneWallController != null) mPaneWallController.applyStyle(style);
     }
+
+    /** What {@link #updateTerminalGlassFrost} last dressed the panes with; null forces a pass. */
+    @Nullable private com.termux.app.terminal.PaneStyleKey mAppliedPaneStyleKey;
 
     /**
      * Whether the launcher paints the wallpaper itself or leaves it to the ROM.
@@ -6249,7 +6259,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public void applyChromeSpec(@NonNull ChromeSpec spec) {
-                TermuxActivity.this.applyChromeSpec(spec);
+                // The gates apply against settled layout, which is what a pending accessory
+                // render was about to do after the draw: run it here instead of twice.
+                mChrome.applySettled(spec);
             }
 
             @Override public void applyKeyboardSurfaceState(@NonNull ChromeSpec spec) {
@@ -8941,6 +8953,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.widget.FrameLayout paneHost = findViewById(R.id.terminal_pane_host);
         mPaneController = new com.termux.app.terminal.TerminalPaneController(
             new PaneHost(), paneHost, getLayoutInflater());
+        mAppliedPaneStyleKey = null;
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
         createPaneWallController(paneHost);
         applyPaneBehaviourPreferences();
@@ -10816,13 +10829,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void doSyncPlaceLayout() {
         // The look layer follows the wall too: a place wearing its own dock, keyboard or status
         // surface puts it on as the wall settles on it. Nothing to re-apply when no place has one.
-        boolean lookChanged = mLookPreferences != null
-            && mLookPreferences.setRenderPlace(currentWallPlace())
-            && mLookPreferences.hasAnyOverrides();
+        // Only the parts whose look reads differently here are repainted: a home screen that only
+        // clears its canvas costs a terminal repaint, not the whole appearance.
+        java.util.EnumSet<PlaceLookRefresh.Part> lookParts =
+            java.util.EnumSet.noneOf(PlaceLookRefresh.Part.class);
+        if (mLookPreferences != null) {
+            com.termux.app.wall.PaneWallPage from = mLookPreferences.renderPlace();
+            com.termux.app.wall.PaneWallPage to = currentWallPlace();
+            if (mLookPreferences.setRenderPlace(to)) {
+                lookParts = mLookPreferences.isEditing()
+                    ? java.util.EnumSet.allOf(PlaceLookRefresh.Part.class)
+                    : PlaceLookRefresh.partsFor(mLookPreferences.keysReadingDifferently(from, to));
+            }
+        }
         // The dock's height, the keyboard's height and its chin are the place's and the
         // orientation's, so a wall settling on a place sized differently — or a turn of the screen
         // — has to re-read them even where no look was ever overridden.
-        lookChanged |= applyPlaceSizes();
+        if (applyPlaceSizes()) lookParts = java.util.EnumSet.allOf(PlaceLookRefresh.Part.class);
         PlaceLayout layout = currentPlaceLayout();
         boolean arrangementChanged = !layout.equals(mAppliedPlaceLayout);
         mAppliedPlaceLayout = layout;
@@ -10859,7 +10882,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setTerminalToolbarHeight();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
-        if (lookChanged) applyPlaceLook();
+        if (!lookParts.isEmpty()) applyPlaceLook(lookParts);
     }
 
     /** The three sizes as last applied, so a place or a turn that moves one is noticed. */
@@ -10892,25 +10915,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * use — three to four full-frame rebuilds, half a second of main thread, inside the tap or the
      * drag that moved the wall (measured on Pong, 2026-09-07).
      */
-    private void applyPlaceLook() {
+    private void applyPlaceLook(@NonNull java.util.Set<PlaceLookRefresh.Part> parts) {
         Trace.beginSection("Place.applyLook");
         try {
-            doApplyPlaceLook();
+            doApplyPlaceLook(parts);
         } finally {
             Trace.endSection();
         }
     }
 
-    private void doApplyPlaceLook() {
-        updateAppLauncherBarHeight();
-        setTerminalToolbarHeight(true);
-        applyTerminalSurfaceAppearance();
-        refreshTerminalWindowBar();
-        applySuggestionBarSurfaceStyling();
-        if (mPaneController != null) mPaneController.refreshPaneLayout();
-        if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
-        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP
-            | ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    private void doApplyPlaceLook(@NonNull java.util.Set<PlaceLookRefresh.Part> parts) {
+        if (parts.contains(PlaceLookRefresh.Part.DOCK)) {
+            updateAppLauncherBarHeight();
+            setTerminalToolbarHeight(true);
+            applySuggestionBarSurfaceStyling();
+        }
+        if (parts.contains(PlaceLookRefresh.Part.TERMINAL)) {
+            applyTerminalSurfaceAppearance();
+            if (mPaneController != null) mPaneController.refreshPaneLayout();
+        }
+        if (parts.contains(PlaceLookRefresh.Part.STATUS)) refreshTerminalWindowBar();
+        if (parts.contains(PlaceLookRefresh.Part.KEYBOARD) && mInAppKeyboard != null)
+            mInAppKeyboard.onPreferencesReloaded();
+        // A backdrop is a crop of the blurred wallpaper, keyed by its rect and radius already; only
+        // a surface whose own look moved has a reason to throw its crop away.
+        int scopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER;
+        if (parts.contains(PlaceLookRefresh.Part.DOCK)) scopes |= ChromeRenderer.SCOPE_BACKDROPS;
+        if (parts.contains(PlaceLookRefresh.Part.KEYBOARD))
+            scopes |= ChromeRenderer.SCOPE_KEYBOARD_BACKDROP;
+        mChrome.requestSync(scopes);
     }
 
     /**
@@ -14683,7 +14716,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // as it happened, so writing its own answer back to it only ever pinned a default nobody
         // chose — and the store cannot tell a pinned default from a choice afterwards.
         mStatusBarPlace = page;
-        setTopStatusBarCollapsed(isStatusBarCompact(), true);
+        // Mid-slide the bar takes its new height in one step: animating it would re-lay out and
+        // repaint the terminal at every intermediate height while the terminal is itself sliding,
+        // which is what made crossing between a compact and an open place judder.
+        // The page change is announced before the slide starts, so a wall still carrying an offset
+        // counts as moving.
+        com.termux.app.wall.PaneWallLayout wall =
+            mPaneWallController == null ? null : mPaneWallController.wall();
+        boolean wallMoving = wall != null && (wall.isMoving() || wall.offsetPx() != 0f);
+        setTopStatusBarCollapsed(isStatusBarCompact(), !wallMoving);
     }
 
     /**
@@ -14791,24 +14832,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
-                    noteTerminalPlaceMayBeVisible();
-                    if (mPaneWallController.displayPage() != null) {
-                        mPaneWallController.displayPage().dismissControls();
-                    }
-                    if (mPaneWallController.widgetsPage() != null) {
-                        mPaneWallController.widgetsPage().dismissControls();
-                    }
-                    syncPlaceBar();
-                    syncWallKeyboard(page);
-                    syncDisplayTouchpad();
-                    syncPlaceStatusBar(page);
-                    syncPlaceLayout();
-                    mLastWallPage = page;
-                    // The window chips belong to the place on screen: terminal windows on the
-                    // terminal, the display's apps on the Display place.
-                    com.termux.app.terminal.TerminalWindowBar chips =
-                        findViewById(R.id.terminal_window_bar);
-                    if (chips != null && isSplitPanesEnabled()) syncWindowBarItems(chips);
+                    // One window-bar refresh for the whole change, however many syncs ask.
+                    batchWindowBarRefresh(() -> {
+                        noteTerminalPlaceMayBeVisible();
+                        if (mPaneWallController.displayPage() != null) {
+                            mPaneWallController.displayPage().dismissControls();
+                        }
+                        if (mPaneWallController.widgetsPage() != null) {
+                            mPaneWallController.widgetsPage().dismissControls();
+                        }
+                        if (mWidgetPaneController != null
+                            && page != com.termux.app.wall.PaneWallPage.WIDGETS) {
+                            mWidgetPaneController.onWallPageLeaving();
+                        }
+                        syncPlaceBar();
+                        syncWallKeyboard(page);
+                        syncDisplayTouchpad();
+                        syncPlaceStatusBar(page);
+                        syncPlaceLayout();
+                        mLastWallPage = page;
+                        // The window chips belong to the place on screen: terminal windows on the
+                        // terminal, the display's apps on the Display place.
+                        com.termux.app.terminal.TerminalWindowBar chips =
+                            findViewById(R.id.terminal_window_bar);
+                        if (chips != null && isSplitPanesEnabled()) syncWindowBarItems(chips);
+                    });
                 }
             });
         mPaneWallController.attachTerminalPage(paneHost);
@@ -14819,6 +14867,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (com.termux.BuildConfig.X11_SERVER) attachDisplayPage();
         installLinuxAppRunner();
+        mAppliedPaneStyleKey = null;
         mPaneWallController.applyStyle(paneSurfaceStyle());
         // A recreated activity comes back to the page it showed; a fresh launch comes back to
         // the place the wall last rested on.
@@ -16659,6 +16708,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Refresh visibility, labels, selection and the shared dock/keyboard glass treatment. */
     public void refreshTerminalWindowBar() {
+        if (mWindowBarRefreshBatchDepth > 0) {
+            mWindowBarRefreshPending = true;
+            return;
+        }
+        doRefreshTerminalWindowBar();
+    }
+
+    /** Depth of {@link #batchWindowBarRefresh}; while above zero a refresh is only noted. */
+    private int mWindowBarRefreshBatchDepth;
+    private boolean mWindowBarRefreshPending;
+
+    /**
+     * Runs {@code action} with the window bar's refresh held to one pass at its end. The bar
+     * re-reads everything it shows on every refresh, so a page change whose several syncs each
+     * ask for one — the status bar's height, the place's row, its look — pays for it once.
+     */
+    private void batchWindowBarRefresh(@NonNull Runnable action) {
+        mWindowBarRefreshBatchDepth++;
+        try {
+            action.run();
+        } finally {
+            if (--mWindowBarRefreshBatchDepth == 0 && mWindowBarRefreshPending) {
+                mWindowBarRefreshPending = false;
+                refreshTerminalWindowBar();
+            }
+        }
+    }
+
+    private void doRefreshTerminalWindowBar() {
         View host = findViewById(R.id.terminal_window_bar_host);
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (host == null || bar == null) return;

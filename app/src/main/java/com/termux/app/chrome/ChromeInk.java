@@ -351,11 +351,61 @@ public final class ChromeInk {
     public int inkOn(@NonNull OnGlass.Resolution resolved, @ColorInt int ground,
                      @ColorInt int darkInk, @ColorInt int paleInk, double target) {
         boolean pale = polarity() == Polarity.PALE_INK;
-        int ink = pale ? paleInk : darkInk;
         int opaqueGround = OnGlass.opaque(ground);
-        int directed = OnGlass.inkOnBand(resolved, opaqueGround, ink, ink, target, pale);
-        if (OnGlass.ratio(directed, opaqueGround) >= target) return directed;
-        return OnGlass.inkOnBand(resolved, opaqueGround, darkInk, paleInk, target, null);
+        // The answer is a function of these five and nothing else, and every chrome pass asks the
+        // same questions again for every widget on the bar: remember them rather than re-walk the
+        // tones. The polarity is part of the question, so nothing here can go stale.
+        InkQuestion question = new InkQuestion(pale, opaqueGround, darkInk, paleInk, target);
+        Integer known = mInkAnswers.get(question);
+        if (known != null) return known;
+        int ink = pale ? paleInk : darkInk;
+        int answer = OnGlass.inkOnBand(resolved, opaqueGround, ink, ink, target, pale);
+        if (OnGlass.ratio(answer, opaqueGround) < target)
+            answer = OnGlass.inkOnBand(resolved, opaqueGround, darkInk, paleInk, target, null);
+        if (mInkAnswers.size() >= MAX_INK_ANSWERS) mInkAnswers.clear();
+        mInkAnswers.put(question, answer);
+        return answer;
+    }
+
+    /** A bar asks a few dozen distinct questions; a new wallpaper or palette asks a new set. */
+    static final int MAX_INK_ANSWERS = 64;
+    @NonNull private final java.util.Map<InkQuestion, Integer> mInkAnswers = new java.util.HashMap<>();
+
+    /** Number of remembered answers, for tests. */
+    int inkAnswerCountForTests() {
+        return mInkAnswers.size();
+    }
+
+    /** Everything {@link #inkOn(OnGlass.Resolution, int, int, int, double)} answers from. */
+    private static final class InkQuestion {
+        final boolean pale;
+        final int ground;
+        final int darkInk;
+        final int paleInk;
+        final long target;
+
+        InkQuestion(boolean pale, int ground, int darkInk, int paleInk, double target) {
+            this.pale = pale;
+            this.ground = ground;
+            this.darkInk = darkInk;
+            this.paleInk = paleInk;
+            this.target = Double.doubleToLongBits(target);
+        }
+
+        @Override public boolean equals(Object other) {
+            if (!(other instanceof InkQuestion)) return false;
+            InkQuestion that = (InkQuestion) other;
+            return pale == that.pale && ground == that.ground && darkInk == that.darkInk
+                && paleInk == that.paleInk && target == that.target;
+        }
+
+        @Override public int hashCode() {
+            int hash = pale ? 1 : 0;
+            hash = hash * 31 + ground;
+            hash = hash * 31 + darkInk;
+            hash = hash * 31 + paleInk;
+            return hash * 31 + Long.hashCode(target);
+        }
     }
 
     /**
