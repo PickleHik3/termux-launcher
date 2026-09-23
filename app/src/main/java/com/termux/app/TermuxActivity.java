@@ -2904,9 +2904,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateWallpaperBackdrop();
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
+        // This runs behind every chrome apply, several times a page change, and the style is a
+        // live view that looks new each time: re-dress the panes and pages only when what it
+        // answers has moved.
+        com.termux.app.terminal.PaneStyleKey key = com.termux.app.terminal.PaneStyleKey.of(style);
+        if (key.equals(mAppliedPaneStyleKey)) return;
+        mAppliedPaneStyleKey = key;
         mPaneController.setSurfaceStyle(style);
         if (mPaneWallController != null) mPaneWallController.applyStyle(style);
     }
+
+    /** What {@link #updateTerminalGlassFrost} last dressed the panes with; null forces a pass. */
+    @Nullable private com.termux.app.terminal.PaneStyleKey mAppliedPaneStyleKey;
 
     /**
      * Whether the launcher paints the wallpaper itself or leaves it to the ROM.
@@ -8944,6 +8953,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.widget.FrameLayout paneHost = findViewById(R.id.terminal_pane_host);
         mPaneController = new com.termux.app.terminal.TerminalPaneController(
             new PaneHost(), paneHost, getLayoutInflater());
+        mAppliedPaneStyleKey = null;
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
         createPaneWallController(paneHost);
         applyPaneBehaviourPreferences();
@@ -14853,6 +14863,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (com.termux.BuildConfig.X11_SERVER) attachDisplayPage();
         installLinuxAppRunner();
+        mAppliedPaneStyleKey = null;
         mPaneWallController.applyStyle(paneSurfaceStyle());
         // A recreated activity comes back to the page it showed; a fresh launch comes back to
         // the place the wall last rested on.
