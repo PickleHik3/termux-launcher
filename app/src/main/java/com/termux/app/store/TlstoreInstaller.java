@@ -212,7 +212,23 @@ public final class TlstoreInstaller {
     Result install() {
         if (!binDir.isDirectory()) return Result.NO_PREFIX;
         String marker = MARKER_PREAMBLE + " v" + VERSION + " " + applicationId + " " + release + "\n";
-        if (marker.equals(read(markerFile()))) return Result.UP_TO_DATE;
+        if (marker.equals(read(markerFile()))) {
+            // The CLI, its aliases, the catalog and the key are already this release's; nothing
+            // there can have changed without the marker changing too. tlstore-ui is different:
+            // two builds can share the same applicationId/versionName (a debug rebuild during
+            // development, or a reinstall Android does not consider an update) while shipping a
+            // different binary, and installTlstoreUi() already tells "unchanged" from "changed"
+            // from "foreign" by the bundled asset's own bytes, not by this marker. So it always
+            // runs here too — cheap (a sha256 of one small file) when nothing changed.
+            if (libexecDir.isDirectory()) {
+                try {
+                    installTlstoreUi();
+                } catch (Exception e) {
+                    Logger.logErrorExtended(LOG_TAG, "Failed to refresh tlstore-ui: " + e.getMessage());
+                }
+            }
+            return Result.UP_TO_DATE;
+        }
         String foreign = foreignCommandName();
         if (foreign != null) {
             Logger.logInfo(LOG_TAG, "Leaving a " + foreign + " we did not write alone");
@@ -323,12 +339,17 @@ public final class TlstoreInstaller {
 
     /**
      * Write {@code tlstore-ui} for this device's ABI, if the APK carries one. Rewritten whenever
-     * the bundled asset's bytes change (a release ships a newer build), same as everything else
-     * this class writes on a marker mismatch. Left alone — the way an edited {@code motd.sh} is —
-     * once a file is there whose sha256 does not match {@code .tlstore-ui-sha256}, meaning either
-     * a foreign file sits there or the on-disk copy has already drifted from what was written;
-     * either way it is not this class's to overwrite. A symlink at the destination counts as
-     * foreign too, the same rule {@link #writeAtomically} enforces for every other file here.
+     * the bundled asset's bytes change (a release ships a newer build). Unlike everything else
+     * this class writes, that check runs on <em>every</em> {@link #install()} call, including one
+     * the outer marker already calls {@link Result.Kind#UP_TO_DATE} — this method's own sha256
+     * comparison is what decides freshness here, since two builds can share the same
+     * applicationId/versionName while shipping a different binary (a debug rebuild, or a
+     * reinstall Android does not treat as an update). Left alone — the way an edited
+     * {@code motd.sh} is — once a file is there whose sha256 does not match
+     * {@code .tlstore-ui-sha256}, meaning either a foreign file sits there or the on-disk copy has
+     * already drifted from what was written; either way it is not this class's to overwrite. A
+     * symlink at the destination counts as foreign too, the same rule {@link #writeAtomically}
+     * enforces for every other file here.
      */
     private void installTlstoreUi() {
         byte[] asset;

@@ -39,7 +39,14 @@ fn main() -> ExitCode {
         "--demo" => app::run(Box::new(Demo::new()), Options::default()),
         "--probe" => probe(),
         "--version" => {
+            // The second line is one compile-time literal (`concat!`, not two prints that just
+            // happen to run back to back) so the label and hash sit in a single contiguous
+            // string in the binary's rodata — checkTlstoreUiFresh (app/build.gradle) greps the
+            // built binary for it without executing it, since a device-ABI binary cannot run on
+            // the build host. See scripts/tlstore/ui-src-hash.sh and build.rs.
+            const SRC_HASH_LINE: &str = concat!("TLSTORE_UI_SRC_HASH=", env!("TLSTORE_UI_SRC_HASH"));
             println!("tlstore-ui {}", env!("CARGO_PKG_VERSION"));
+            println!("{SRC_HASH_LINE}");
             Ok(())
         }
         _ => {
