@@ -1762,7 +1762,7 @@ public class LauncherCtlApiServer {
             "  launcherctl pane close <id>\n" +
             "  launcherctl agent working|blocked|idle|clear [--agent NAME] [--pane ID]\n" +
             "  launcherctl agent install-hooks\n" +
-            "  launcherctl keyboard show|hide [--source manual|focus]\n" +
+            "  launcherctl keyboard show|hide [--source manual|focus] [--hold]\n" +
             "  launcherctl x11 gpu [--env]\n" +
             "\n" +
             "Examples:\n" +
@@ -1771,6 +1771,7 @@ public class LauncherCtlApiServer {
             "  launcherctl pane write \"$id\" --enter 'make test'\n" +
             "  launcherctl pane read \"$id\" --lines 40\n" +
             "  launcherctl keyboard show --source focus   # a text field took focus\n" +
+            "  launcherctl keyboard hide --hold            # keep it down until this asks again\n" +
             "\n" +
             "A pane opened here belongs to the opener: write, read and close only work on panes\n" +
             "opened through this command; list and focus work on every pane. Output is JSON.\n" +
@@ -1929,13 +1930,21 @@ public class LauncherCtlApiServer {
             "    shift || true\n" +
             "    sub=\"${1:-}\"\n" +
             "    [ \"$sub\" = show ] || [ \"$sub\" = hide ] || \\\n" +
-            "      { echo \"usage: launcherctl keyboard show|hide [--source manual|focus]\" >&2; exit 2; }\n" +
+            "      { echo \"usage: launcherctl keyboard show|hide [--source manual|focus] [--hold]\" >&2; exit 2; }\n" +
             "    shift || true\n" +
-            "    source=manual\n" +
-            "    if [ \"${1:-}\" = \"--source\" ]; then source=\"${2:-}\"; shift 2 || true; fi\n" +
+            "    source=manual hold=false\n" +
+            "    while [ \"$#\" -gt 0 ]; do\n" +
+            "      case \"$1\" in\n" +
+            "        --source) source=\"${2:-}\"; shift 2 || true ;;\n" +
+            "        --hold) hold=true; shift ;;\n" +
+            "        *) echo \"launcherctl keyboard: unknown option $1\" >&2; exit 2 ;;\n" +
+            "      esac\n" +
+            "    done\n" +
             "    [ \"$source\" = manual ] || [ \"$source\" = focus ] || \\\n" +
             "      { echo \"launcherctl keyboard: --source must be manual or focus\" >&2; exit 2; }\n" +
-            "    api POST \"/v1/keyboard/$sub\" \"{\\\"source\\\":\\\"$source\\\"}\"\n" +
+            "    # --hold only means anything on hide: it asks the launcher to keep the keyboard\n" +
+            "    # down until this same shell either shows it again or ends, not for one call.\n" +
+            "    api POST \"/v1/keyboard/$sub\" \"{\\\"source\\\":\\\"$source\\\",\\\"hold\\\":$hold}\"\n" +
             "    ;;\n" +
             "  x11)\n" +
             "    shift || true\n" +

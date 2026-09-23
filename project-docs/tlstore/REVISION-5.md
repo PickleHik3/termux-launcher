@@ -85,6 +85,38 @@ only with the user's go.
 - B1 A: pure terminal; the web inset is dropped (ADR 0002 rewritten to say so).
 - B2 A: rustup and the Android Rust targets are installed on the dev machine; the phone build is local.
 - B3 A: P1–P3 run now; what follows is decided after they land (account budget).
+
+## Launcher hooks (P2)
+
+**`tlstore-ui`'s path.** `TlstoreInstaller` writes it to `$PREFIX/libexec/termux-launcher/tlstore/tlstore-ui`,
+executable, once the APK carries a binary for the device's ABI — a plain asset per ABI
+(`tlstore/tlstore-ui-<abi>` in `app/src/main/assets`, e.g. `tlstore/tlstore-ui-arm64-v8a`,
+`tlstore/tlstore-ui-x86_64`), not a `jniLibs` entry: `tlstore-ui` is a program the shell execs, not
+a library the app `dlopen`s, and the launcher already execs its own prefix binaries directly
+(`targetSdkVersion` 28, below the level where Android's exec restrictions on app-private storage
+apply), so the plain-asset route needs no `app_process`/JNI wrapper the way `termux-x11`'s does. A
+device whose ABI has no bundled binary gets nothing written; `tlstore` (the bare command) then
+falls back to printing the list instead of drawing the UI. P3/P4/P6: land the built binaries at
+those asset paths (`scripts/tlstore/build-ui.sh`'s job) and the installer picks them up on the next
+app update — no other wiring needed on the Rust side to get shipped.
+
+**Putting the in-app keyboard away.** Reuse the existing `launcherctl keyboard hide|show` route
+(`docs/en/LauncherCtl_API.md#the-on-screen-keyboard`); it already puts the in-app keyboard down and
+back for a stopped/foreground-checked launcher. `hide` now also takes `--hold` (`{"hold": true}`):
+the calling session keeps the keyboard down until *that same session* calls `keyboard show` itself
+or its shell ends — either way the launcher restores it on its own, so a crash or a plain `q` quit
+that skips its own cleanup still can't leave the keyboard stuck down. Scoping is by session, not by
+pane: only the session that asked can be the one auto-restored, and `keyboard show` from anywhere
+always clears the current hold outright.
+
+```sh
+launcherctl keyboard hide --hold   # tlstore-ui, on entry
+launcherctl keyboard show          # tlstore-ui, on a clean exit — call this even for --hold
+```
+
+Judgement call: `tlstore-ui` should still call `keyboard show` itself on every exit path it
+controls (normal quit, an error it catches) — the auto-restore-on-session-end is the safety net for
+a crash or the pane closing outright, not a reason to skip the tidy exit.
 - B4 B: pictures are the upstream GitHub hero images or screenshots; where none exist we take our own.
 
 ## TSV contract, Revision 5

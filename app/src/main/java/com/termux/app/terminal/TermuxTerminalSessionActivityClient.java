@@ -306,6 +306,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     @Override
     public void onSessionFinished(@NonNull TerminalSession finishedSession) {
+        // Ahead of everything below: a session that held the in-app keyboard down for a program
+        // running in it (tlstore-ui's `keyboard.hide --hold`) must not leave it stuck down just
+        // because the shell exited instead of asking nicely with `keyboard.show`.
+        TerminalActionDispatcher.getInstance().onSessionFinished(finishedSession);
         // Nothing to paint for a shell that has ended, and no reason to hold it here until the
         // wall next moves.
         mDeferredScreenUpdateSessions.remove(finishedSession);

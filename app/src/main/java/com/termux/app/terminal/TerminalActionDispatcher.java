@@ -206,6 +206,19 @@ public final class TerminalActionDispatcher {
     }
 
     /**
+     * Called from {@link TermuxTerminalSessionActivityClient#onSessionFinished}, for every
+     * session, not just ones a caller might have held the keyboard for — cheaper than asking
+     * first. If {@code session} was holding the in-app keyboard down via
+     * {@code keyboard.hide --hold}, nothing will ever call {@code keyboard.show} for it now that
+     * it is gone, so this shows the keyboard itself rather than leaving it stuck down.
+     */
+    public void onSessionFinished(@NonNull TerminalSession session) {
+        if (!KeyboardHoldTracker.getInstance().releaseOnSessionFinished(session.mHandle)) return;
+        TerminalHost host = currentHost();
+        if (host != null) host.showInAppKeyboard(true);
+    }
+
+    /**
      * Terminal actions that do not need the Activity on screen: the pane routes an agent in a
      * shell drives through the local API. Each only touches session/view state — opening,
      * listing, focusing, reading, writing or closing a pane — and never calls anything that
@@ -1155,6 +1168,12 @@ public final class TerminalActionDispatcher {
                         return error(400, "bad_request", "'source' must be manual or focus");
                     boolean fromFocus = "focus".equals(source);
                     boolean show = TOOL_KEYBOARD_SHOW.equals(toolName);
+                    // "hold" is a program's own request (tlstore-ui today) to keep the keyboard
+                    // down for as long as it is on screen, rather than for just this one call the
+                    // way source=focus/manual already is. keyboard.show always releases a hold,
+                    // whoever calls it; a hold outlives its session through onSessionFinished
+                    // below, in case the program never calls show back.
+                    boolean hold = !show && arguments.optBoolean("hold", false);
                     // The Display place can be typed into with the phone's own keyboard, which is
                     // there to answer whether or not the in-app keyboard is switched on.
                     if (!host.isInAppKeyboardEnabled() && !host.displayTakesSystemKeyboard())
@@ -1163,7 +1182,13 @@ public final class TerminalActionDispatcher {
                         ? host.showInAppKeyboard(fromFocus) : host.hideInAppKeyboard(fromFocus);
                     if (!applied)
                         return error(409, "unavailable", "The in-app keyboard is not on screen");
-                    return ok().put("source", source).put("keyboardShown", show);
+                    if (show) {
+                        KeyboardHoldTracker.getInstance().release();
+                    } else if (hold) {
+                        TerminalSession session = host.currentSession();
+                        if (session != null) KeyboardHoldTracker.getInstance().hold(session.mHandle);
+                    }
+                    return ok().put("source", source).put("keyboardShown", show).put("held", hold);
                 }
 
                 case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:
