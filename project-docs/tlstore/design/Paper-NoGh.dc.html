@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Starring needs gh</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,700;0,800;1,300;1,400&amp;display=swap">
+<style>
+body{margin:0;background:#050506}
+a{color:inherit}a:hover{opacity:.8}
+.tty{position:relative;overflow:hidden;font-family:"JetBrains Mono",monospace;font-size:13.333px;line-height:20px}
+.t{position:absolute;white-space:pre;height:20px}
+.im{position:absolute;box-sizing:border-box}
+.art{background-color:#2a2622;background-image:radial-gradient(rgba(255,255,255,.14) 1.2px,transparent 1.3px);background-size:6px 6px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.55);font-family:"JetBrains Mono",monospace;font-size:11px;letter-spacing:.08em}
+.cur{display:inline-block;width:8px;height:20px;vertical-align:top;animation:blink 1.1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.fade{animation:fade 1.2s cubic-bezier(.32,.72,0,1) both}
+@keyframes fade{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+</style>
+</helmet>
+<div class="tty" style="width:416px;height:900px;background:{{bg}};color:{{ink}}">
+<div style="opacity:.35"><div class="im art" style="left:0px;top:0px;width:416px;height:240px;">[sigye]</div><span class="t" style="top:280px;left:100.0px;font-size:39.999px;line-height:60px;height:60px;font-weight:800">S I G Y E</span></div>
+<span class="t" style="top:380px;left:112.0px;font-size:13.333px;line-height:20px;height:20px;"><span style="color:{{rule}}">──────────</span> <span style="color:{{accent}}">☆¹</span> <span style="color:{{rule}}">──────────</span></span>
+<div class="im " style="left:16px;top:590px;width:384px;height:1px;background:{{rule}}"></div>
+<span class="t" style="top:600px;left:16px;font-size:13.333px;line-height:20px;height:20px;"><span style="color:{{accent}}">¹</span> <b>Starring needs gh.</b></span>
+<span class="t" style="top:620px;left:32px;font-size:13.333px;line-height:20px;height:20px;color:{{dim}}">Install it and sign in once, then press</span>
+<span class="t" style="top:640px;left:32px;font-size:13.333px;line-height:20px;height:20px;color:{{dim}}">s again:</span>
+<span class="t" style="top:680px;left:48px;font-size:13.333px;line-height:20px;height:20px;"><span style="color:{{dim}}">$</span> pkg install gh</span>
+<span class="t" style="top:700px;left:48px;font-size:13.333px;line-height:20px;height:20px;"><span style="color:{{dim}}">$</span> gh auth login</span>
+<span class="t" style="top:760px;left:32px;font-size:13.333px;line-height:20px;height:20px;"><span style="color:{{accent}}">o</span>      <span style="color:{{dim}}">open the repo instead</span></span><span class="t" style="top:780px;left:32px;font-size:13.333px;line-height:20px;height:20px;"><span style="color:{{accent}}">esc</span>    <span style="color:{{dim}}">not now</span></span>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent": {"editor": "color", "default": "#A8C7FA", "options": ["#A8C7FA", "#D0BCFF", "#9CD49F", "#FFB77C"], "section": "Wallpaper (Material)"}, "paper": {"editor": "boolean", "default": false, "section": "Wallpaper (Material)"}, "$preview": {"width": 416, "height": 900}}'>
+class Component extends DCLogic {
+renderVals() {
+const n = this.props.updates ?? 2;
+const p = this.props.paper ?? false;
+const TONE = {'#D0BCFF':'#6750A4','#A8C7FA':'#0B57D0','#9CD49F':'#146C2E','#FFB77C':'#8B5000'};
+const a0 = (this.props.accent ?? '#A8C7FA').toUpperCase();
+const accent = p ? (TONE[a0] ?? a0) : a0;
+const pal = {
+accent, bg: p ? '#FEF7FF' : '#141218', ink: p ? '#1D1B20' : '#E6E0E9', dim: p ? '#79747E' : '#938F99',
+rule: p ? '#CAC4D0' : '#49454F', px: p ? '#1D1B20' : '#E6E0E9', tonal: accent + (p ? '1F' : '2E')
+};
+return { ...pal, updates: n, hasUpdates: n > 0 };
+}
+}
+</script>
+</body>
+</html>
