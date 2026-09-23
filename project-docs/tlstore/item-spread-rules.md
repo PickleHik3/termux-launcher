@@ -9,9 +9,9 @@ others the day it is added. The upstream README is never shown as it is. Design 
 
 | # | Slot | Rule | Catalog field |
 |---|---|---|---|
-| 1 | Cover picture | Chosen by us, about 16:9, edge to edge, fading into the page at the bottom. May move: a loop of 6 s or less, no sound. Signed with the catalog. | `picture` |
-| 2 | Name | The item name in lower case, drawn in the script face at 104 px, centred, crossing the picture's lower edge. Nothing else overlaps it. | `name` |
-| 3 | Line | `No. NN · CATEGORY` (catalog order, category in caps), dim, left. Upstream `owner/repo` right, wavy underline in the accent. A setup shows `our setup` instead. | `category`, `upstream` |
+| 1 | Cover picture | Chosen by us, about 16:9, edge to edge, at most 7 rows, below the hero. May move: a loop of 6 s or less, no sound. Signed with the catalog. | `picture` |
+| 2 | Hero word | The item name in lower case, drawn in the script face, centred — the page's hero word, same as every other screen's, sitting above the cover, never crossing it. Its lead line, small caps, dim, carries `No. NN · CATEGORY` (catalog order, category in caps). | `name`, `category` |
+| 3 | Line | Installed state left (`installed <version>` once it is), upstream `owner/repo` right, wavy underline in the accent. A setup with no upstream shows `our setup` instead. | `upstream` |
 | 4 | Standfirst | One line, 42 characters at most, lower case, italic, dim: what it is for, in plain words. No brand names, no "powerful", no full stop. | `standfirst` |
 | 5 | Rule | Ten dashes each side of the star. ★ in the accent when starred, ☆ when not. Hidden until gh works; never shown for a setup. | — |
 | 6 | Facts | A box-drawn table with these rows in this order: version (`old → new` when an update exists), made by, licence, size. An unknown value drops its row. | `version`, `author`, `licence`, `size` |

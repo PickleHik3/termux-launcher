@@ -115,6 +115,20 @@ write_catalog() {
         printf 'launcheronly\tbinary\t1\t*\tfile://%s/twin.bin\t%s\t~/.local/bin/launcheronly\t-\thost=launcher\tOnly where the launcher runs it.\t%s\n' "$FX" "$(sha "$FX/twin.bin")" "$R5_NONE"
         printf 'termuxonly\tbinary\t1\t*\tfile://%s/other.bin\t%s\t~/.local/bin/termuxonly\t-\thost=termux\tOnly in the plain app.\t%s\n' "$FX" "$(sha "$FX/other.bin")" "$R5_NONE"
         printf 'recentonly\tbinary\t1\t*\tfile://%s/twin.bin\t%s\t~/.local/bin/recentonly\t-\tmin-launcher=0.3.0\tWants a recent app.\t%s\n' "$FX" "$(sha "$FX/twin.bin")" "$R5_NONE"
+        # A real, fetchable picture and demo, so `tlstore picture` has
+        # something genuine to verify and cache. Digests are computed here,
+        # not folded into R5_HELLO/R5_NONE, since they depend on the fixture
+        # files this function's caller already made.
+        printf 'pictured\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/pictured.conf\t-\t-\tHas a real picture and demo, for the picture command tests.\tTools\t-\t0\tan item with a picture\tShows a picture\tKeeps it simple\tHas a demo too\tpictured\t-\tTest Author\tMIT\t~1 KB\tfile://%s/pictured.jpg\t%s\tfile://%s/pictured-demo.jpg\t0\n' \
+            "$FX" "$(sha "$FX/hello.conf")" "$FX" "$(sha "$FX/pictured.jpg")" "$FX"
+        # Same picture file, but the catalog's own digest for it is wrong —
+        # `tlstore picture` must refuse it the way any other digest mismatch is.
+        printf 'badpic\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/badpic.conf\t-\t-\tHas a picture whose digest never matches, on purpose.\tTools\t-\t0\t-\t-\t-\t-\t-\t-\tTest Author\tMIT\t-\tfile://%s/pictured.jpg\t0000000000000000000000000000000000000000000000000000000000000000\t-\t0\n' \
+            "$FX" "$(sha "$FX/hello.conf")" "$FX"
+        # A binary whose source is a FIFO: curl blocks reading it until this
+        # test writes to the other end, so a --progress install can be
+        # cancelled reliably while it is still in flight.
+        printf 'slow\tbinary\t1\t*\tfile://%s/slow.pipe\t-\t-\t-\t-\tA slow item, so a --progress cancel can land mid-download.\t%s\n' "$FX" "$R5_NONE"
     } > "$out"
 }
 
@@ -137,6 +151,10 @@ build_fixture() {
     printf '#!/bin/sh\necho twin here\n' > "$FX/twin.bin"
     printf '#!/bin/sh\necho other edition\n' > "$FX/other.bin"
     printf 'not really a loader\n' > "$FX/loader.bin"
+    printf 'a picture worth caching\n' > "$FX/pictured.jpg"
+    printf 'a demo worth caching\n' > "$FX/pictured-demo.jpg"
+    rm -f "$FX/slow.pipe"
+    mkfifo "$FX/slow.pipe"
 
     # Fake package managers: they record what they were asked for. Both names
     # are needed — tlstore prefers pacman, and a host may have a real one.
@@ -757,6 +775,47 @@ y
     expect_out "human info also names the size" "Size *~1 KB"
     expect_no_out "human info does not dump the item-spread copy" "Standfirst"
 
+    # --- tlstore picture: a digest-verified, cached local copy for tlstore-ui ---
+    PIC_DIGEST="$(sha "$FX/pictured.jpg")"
+    PIC_CACHE="$TESTHOME/.cache/tlstore/pictures/$PIC_DIGEST.jpg"
+    rm -rf "$TESTHOME/.cache/tlstore"
+
+    tl_stdout picture pictured
+    expect_status "picture prints a path and exits 0" 0
+    expect_out "it names the digest-keyed cache copy" "^$PIC_CACHE\$"
+    expect_content "the cached copy is really the picture" "$PIC_CACHE" "a picture worth caching"
+
+    # A second call must never touch the source again: move it out of the way
+    # and prove the same cached path still comes back, offline.
+    mv "$FX/pictured.jpg" "$FX/pictured.jpg.moved"
+    tl_stdout picture pictured
+    expect_status "a second call is instant and offline" 0
+    expect_out "and returns the very same cached path" "^$PIC_CACHE\$"
+    mv "$FX/pictured.jpg.moved" "$FX/pictured.jpg"
+
+    tl_stdout picture pictured demo
+    expect_status "picture demo prints the demo's path" 0
+    expect_content "and it really is the demo picture" "$OUT" "a demo worth caching"
+
+    tl_stdout picture twin
+    expect_status "an item with no picture fails" 1
+    expect_no_out "and prints nothing on stdout" "."
+
+    tl_stdout picture no-such-item
+    expect_status "an unknown item fails" 1
+    expect_no_out "and prints nothing on stdout" "."
+
+    tl_stdout picture hello
+    expect_status "a picture whose source cannot be fetched fails" 1
+    expect_no_out "and prints nothing on stdout" "."
+    expect_no_file "and nothing was cached for it" "$TESTHOME/.cache/tlstore/pictures/deadbeef.jpg"
+
+    tl_stdout picture badpic
+    expect_status "a picture whose digest does not match fails" 1
+    expect_no_out "and prints nothing on stdout" "."
+    expect_no_file "and nothing was cached for it either" \
+        "$TESTHOME/.cache/tlstore/pictures/0000000000000000000000000000000000000000000000000000000000000000.jpg"
+
     # A newer list, put in place without a refresh, so there is something to
     # report as out of date.
     write_catalog "$TESTHOME/.local/share/tlstore/catalog.tsv" 2026090610 3 fakebin-3
@@ -856,6 +915,58 @@ y
     expect_out "the remove steps stream too" $'^step\thello\t30\tfetched$'
     expect_out "and finish ready" $'^step\thello\t100\tready$'
     expect_out "the done line for a remove" $'^done\thello\tok\tremoved$'
+
+    # --- cancel: SIGTERM to the whole process group (what tlstore-ui sends
+    # when the person backs out of a running --progress job) stops cleanly ---
+    forget_state
+    rm -rf "$TESTHOME/.config/hello.conf" "$TESTHOME/.local/bin"
+    CANCEL_OUT="$ROOT/cancel.out"
+    CANCEL_PART="$TESTHOME/.local/bin/.slow.part"
+    : > "$CANCEL_OUT"
+    set -m
+    env -i \
+        HOME="$TESTHOME" PATH="$RUNPATH" \
+        TLSTORE_PREFIX="$TPREFIX" \
+        TLSTORE_CATALOG_URL="$CATALOG_URL" \
+        TLSTORE_NPM_REGISTRY="file://$FX/registry" \
+        TLSTORE_ARCH=aarch64 \
+        TLSTORE_PATCHELF=true \
+        "${SHCMD[@]}" "$TLSTORE" install hello slow -y --progress > "$CANCEL_OUT" 2>/dev/null &
+    CANCEL_PID=$!
+    CANCEL_I=0
+    while ! pgrep -f 'slow\.pipe' >/dev/null 2>&1 && [ "$CANCEL_I" -lt 100 ]; do
+        sleep 0.05
+        CANCEL_I=$((CANCEL_I + 1))
+    done
+    if pgrep -f 'slow\.pipe' >/dev/null 2>&1; then
+        pass
+    else
+        fail "the slow item's download really started before the cancel was sent"
+    fi
+    kill -TERM -- -"$CANCEL_PID" 2>/dev/null
+    wait "$CANCEL_PID" 2>/dev/null
+    set +m
+    CANCEL_TXT="$(cat "$CANCEL_OUT" 2>/dev/null)"
+    if printf '%s' "$CANCEL_TXT" | grep -q "$(printf 'done\tslow\tfailed\tCancelled.')"; then
+        pass
+    else
+        fail "the cancelled item gets a done/failed/Cancelled line" "$CANCEL_TXT"
+    fi
+    if [ -e "$CANCEL_PART" ]; then
+        fail "the half-written part file was left behind"
+    else
+        pass
+    fi
+    if printf '%s' "$CANCEL_TXT" | grep -q "$(printf 'done\thello\tok')"; then
+        pass
+    else
+        fail "an item that finished before the cancel still gets its own done line" "$CANCEL_TXT"
+    fi
+    tl list -i
+    expect_out "the item that finished before the cancel stays installed" "hello"
+    expect_no_out "the cancelled item was never recorded as installed" "slow"
+    forget_state
+    rm -rf "$TESTHOME/.config/hello.conf" "$TESTHOME/.local/bin"
 
     # --- the numbered picker (the only picker now; fzf is gone) ---
     rm -rf "$TESTHOME/.local/share/tlstore" "$TESTHOME/.config/hello.conf"

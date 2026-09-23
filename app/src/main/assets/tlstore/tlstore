@@ -134,6 +134,16 @@ FAILED=0
 
 TAB=$(printf '\t')
 
+# What a cancel (SIGTERM to the whole process group — tlstore-ui sends it when
+# the person backs out of a running --progress job) has to clean up: the temp
+# file the current download is writing (download() keeps this current),
+# anywhere else an install leaves a half-built scratch copy before it moves it
+# into place (npm-musl's unpack directory), and which item was in flight, so
+# the UI still gets a done line for it instead of waiting forever.
+CANCEL_TMP=""
+CANCEL_EXTRA=""
+CANCEL_ITEM=""
+
 # ---------------------------------------------------------------------------
 # Output
 # ---------------------------------------------------------------------------
@@ -155,6 +165,25 @@ progress_line() { printf '%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4"; }
 progress_done() { printf 'done\t%s\t%s\t%s\n' "$1" "$2" "$3"; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
+
+# Runs on SIGTERM (a plain kill or the whole process group tlstore-ui signals
+# to cancel a running --progress job): drop whatever the current download had
+# not finished writing, drop any other scratch copy an install had not yet
+# moved into place, tell the UI the item in flight failed rather than leaving
+# it to wait for a line that is never coming, and stop. Nothing already
+# recorded in STATE is touched, so an item that finished earlier in this same
+# run stays installed.
+on_cancel() {
+    [ -z "$CANCEL_TMP" ] || rm -f "$CANCEL_TMP"
+    for oc_p in $CANCEL_EXTRA; do
+        rm -rf "$oc_p"
+    done
+    if [ "$PROGRESS" = 1 ] && [ -n "$CANCEL_ITEM" ]; then
+        progress_done "$CANCEL_ITEM" failed "Cancelled."
+    fi
+    exit 143
+}
+trap on_cancel TERM
 
 # ---------------------------------------------------------------------------
 # Catalog
@@ -458,7 +487,10 @@ restore_backup() {
     return 0
 }
 
-# download <url> <destination> <sha256 or ->
+# download <url> <destination> <sha256 or -> — CANCEL_TMP tracks the part
+# file while it is being written, so on_cancel can drop it if a SIGTERM lands
+# mid-download; nothing here is left behind once the function returns, either
+# way, since every exit path clears it again.
 download() {
     dl_url="$1"
     dl_dest="$2"
@@ -466,8 +498,10 @@ download() {
     dl_dir=$(dirname "$dl_dest")
     mkdir -p "$dl_dir" || return 1
     dl_tmp="$dl_dir/.$(basename "$dl_dest").part"
+    CANCEL_TMP="$dl_tmp"
     if ! curl -fsSL -o "$dl_tmp" "$dl_url"; then
         rm -f "$dl_tmp"
+        CANCEL_TMP=""
         err "could not download $(basename "$dl_dest")"
         return 1
     fi
@@ -475,16 +509,19 @@ download() {
         dl_actual=$(file_digest "$dl_tmp")
         if [ -z "$dl_actual" ]; then
             rm -f "$dl_tmp"
+            CANCEL_TMP=""
             err "cannot check what was downloaded — install coreutils and try again"
             return 1
         fi
         if [ "$dl_actual" != "$dl_expect" ]; then
             rm -f "$dl_tmp"
+            CANCEL_TMP=""
             err "$(basename "$dl_dest") does not match what the list expects — nothing was installed"
             return 1
         fi
     fi
-    mv "$dl_tmp" "$dl_dest" || return 1
+    mv "$dl_tmp" "$dl_dest" || { CANCEL_TMP=""; return 1; }
+    CANCEL_TMP=""
     return 0
 }
 
@@ -947,18 +984,23 @@ do_npm_musl() {
         mkdir -p "$(dirname "$np_dir")"
         np_tmp="$CACHE_DIR/$ii_name.tgz"
         mkdir -p "$CACHE_DIR"
-        curl -fsSL -o "$np_tmp" "$np_tarball" || { rm -f "$np_tmp"; err "could not download $ii_name"; return 1; }
+        CANCEL_TMP="$np_tmp"
+        curl -fsSL -o "$np_tmp" "$np_tarball" || { rm -f "$np_tmp"; CANCEL_TMP=""; err "could not download $ii_name"; return 1; }
         np_actual=$(sha512sum "$np_tmp" | cut -d' ' -f1)
         if [ "$np_actual" != "$np_expect" ]; then
             rm -f "$np_tmp"
+            CANCEL_TMP=""
             err "$ii_name does not match its checksum — nothing was installed"
             return 1
         fi
+        CANCEL_TMP=""
         rm -rf "$np_dir.new"
         mkdir -p "$np_dir.new"
+        CANCEL_EXTRA="$np_dir.new"
         if ! tar xzf "$np_tmp" -C "$np_dir.new" --strip-components=1 "package/$np_exe"; then
             rm -f "$np_tmp"
             rm -rf "$np_dir.new"
+            CANCEL_EXTRA=""
             err "the $ii_name download is not what was expected"
             return 1
         fi
@@ -971,6 +1013,7 @@ do_npm_musl() {
             cp -f "$np_have_loader" "$np_loader"
         elif ! download "$(source_url "$(field "$np_loader_row" 5)")" "$np_loader" "$(field "$np_loader_row" 6)"; then
             rm -rf "$np_dir.new"
+            CANCEL_EXTRA=""
             return 1
         fi
         chmod 755 "$np_loader" "$np_dir.new/$np_exe"
@@ -983,6 +1026,7 @@ do_npm_musl() {
             np_lib_row=$(row "$np_lib")
             if [ -z "$np_lib_row" ]; then
                 rm -rf "$np_dir.new"
+                CANCEL_EXTRA=""
                 err "$ii_name has no $np_lib for this device"
                 return 1
             fi
@@ -992,6 +1036,7 @@ do_npm_musl() {
                 cp -f "$np_lib_have" "$np_lib_dest"
             elif ! download "$(source_url "$(field "$np_lib_row" 5)")" "$np_lib_dest" "$(field "$np_lib_row" 6)"; then
                 rm -rf "$np_dir.new"
+                CANCEL_EXTRA=""
                 return 1
             fi
             chmod 644 "$np_lib_dest"
@@ -999,10 +1044,12 @@ do_npm_musl() {
 
         if ! "$PATCHELF" --set-interpreter "$np_dir/ld-musl-aarch64.so.1" --set-rpath "$np_dir" "$np_dir.new/$np_exe"; then
             rm -rf "$np_dir.new"
+            CANCEL_EXTRA=""
             err "could not prepare $ii_name for this device"
             return 1
         fi
         printf '%s\n' "$np_version" > "$np_dir.new/version"
+        CANCEL_EXTRA=""
         rm -rf "$np_dir.old"
         [ ! -e "$np_dir" ] || mv "$np_dir" "$np_dir.old"
         mv "$np_dir.new" "$np_dir"
@@ -1373,6 +1420,83 @@ cmd_info() {
     return 0
 }
 
+# sha256 of a short string, for caching a fetch that carries no digest of its
+# own (a demo has none in the catalog — only the item's own picture does).
+string_digest() {
+    sd_tmp="$CACHE_DIR/.picture-url.$$"
+    mkdir -p "$CACHE_DIR"
+    printf '%s' "$1" > "$sd_tmp"
+    sd_out=$(file_digest "$sd_tmp")
+    rm -f "$sd_tmp"
+    printf '%s' "$sd_out"
+}
+
+# A local, verified copy of <url> (checked against <digest> unless it is "-"),
+# cached under CACHE_DIR/pictures keyed by the digest so a second call for the
+# same picture never touches the network. Prints the path on success only.
+# cache_fetch <url> <digest> <extension>
+cache_fetch() {
+    cf_url="$1"
+    cf_digest="$2"
+    cf_ext="$3"
+    mkdir -p "$CACHE_DIR/pictures"
+    if [ -n "$cf_digest" ] && [ "$cf_digest" != "-" ]; then
+        cf_key="$cf_digest"
+    else
+        cf_key=$(string_digest "$cf_url")
+    fi
+    cf_dest="$CACHE_DIR/pictures/$cf_key.$cf_ext"
+    if [ -f "$cf_dest" ]; then
+        printf '%s\n' "$cf_dest"
+        return 0
+    fi
+    download "$cf_url" "$cf_dest" "$cf_digest" || return 1
+    printf '%s\n' "$cf_dest"
+    return 0
+}
+
+# tlstore picture <name> [demo] — for tlstore-ui: the local path of the item's
+# cover picture, or its demo when "demo" is given, fetched and digest-checked
+# the same way any other launcher: source is (see load_item / picture,
+# picture-digest). A demo carries no digest column of its own, so it is only
+# cached by its URL, not verified against one. Prints nothing and exits
+# non-zero when the item has no such picture, the download fails, or the
+# digest does not match.
+cmd_picture() {
+    cp_name=""
+    cp_demo=0
+    for cp_a in "$@"; do
+        case "$cp_a" in
+            demo) cp_demo=1 ;;
+            -*) err "unknown option: $cp_a"; return 2 ;;
+            *)
+                if [ -n "$cp_name" ]; then
+                    err "picture needs one name"
+                    return 2
+                fi
+                cp_name="$cp_a"
+                ;;
+        esac
+    done
+    [ -n "$cp_name" ] || { err "picture needs a name"; return 2; }
+    need_catalog
+    load_item "$cp_name" || return 1
+    if [ "$cp_demo" = 1 ]; then
+        cp_source="$it_demo"
+        cp_digest="-"
+    else
+        cp_source="$it_picture"
+        cp_digest="$it_picture_digest"
+    fi
+    [ "$cp_source" != "-" ] && [ -n "$cp_source" ] || return 1
+    cp_url=$(source_url "$cp_source")
+    cp_ext="${cp_url##*.}"
+    case "$cp_ext" in
+        ''|*[!a-zA-Z0-9]*) cp_ext=jpg ;;
+    esac
+    cache_fetch "$cp_url" "$cp_digest" "$cp_ext"
+}
+
 cmd_install() {
     ci_names=""
     for ci_a in "$@"; do
@@ -1423,6 +1547,7 @@ cmd_install() {
     add_build_tools "$ci_plan" 0 || return 1
     for ci_n in $ci_plan; do
         if [ "$PROGRESS" = 1 ]; then
+            CANCEL_ITEM="$ci_n"
             progress_line step "$ci_n" 10 fetched
             PROGRESS_NOTE=""
             if install_item "$ci_n"; then
@@ -1434,6 +1559,7 @@ cmd_install() {
                 FAILED=1
                 progress_done "$ci_n" failed "could not install $ci_n"
             fi
+            CANCEL_ITEM=""
         else
             install_item "$ci_n" || FAILED=1
         fi
@@ -1477,6 +1603,7 @@ cmd_remove() {
     ask_yn "Go ahead?" || { say "Nothing was removed."; return 0; }
     for cr_n in $cr_all; do
         if [ "$PROGRESS" = 1 ]; then
+            CANCEL_ITEM="$cr_n"
             progress_line step "$cr_n" 30 fetched
             if remove_item "$cr_n"; then
                 progress_line step "$cr_n" 75 "putting files in place"
@@ -1486,6 +1613,7 @@ cmd_remove() {
                 FAILED=1
                 progress_done "$cr_n" failed "could not remove $cr_n"
             fi
+            CANCEL_ITEM=""
         else
             remove_item "$cr_n" || FAILED=1
         fi
@@ -1602,6 +1730,7 @@ update_items() {
         add_build_tools "$cu_out" 1 || return 1
         for cu_n in $cu_out; do
             if [ "$PROGRESS" = 1 ]; then
+                CANCEL_ITEM="$cu_n"
                 progress_line step "$cu_n" 10 fetched
                 PROGRESS_NOTE=""
                 if install_item "$cu_n" 1; then
@@ -1613,6 +1742,7 @@ update_items() {
                     FAILED=1
                     progress_done "$cu_n" failed "could not update $cu_n"
                 fi
+                CANCEL_ITEM=""
             else
                 install_item "$cu_n" 1 || FAILED=1
             fi
@@ -1830,6 +1960,7 @@ main() {
         list) cmd_list "$@" ;;
         search) cmd_search "$@" ;;
         info) cmd_info "$@" ;;
+        picture) cmd_picture "$@" ;;
         install|add) cmd_install "$@" ;;
         remove|uninstall) cmd_remove "$@" ;;
         update|upgrade) cmd_update "$@" ;;
