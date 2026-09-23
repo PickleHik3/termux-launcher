@@ -128,11 +128,14 @@ impl Renderer {
         self.prev_places.retain(|p| p.pic.id() != pic_id);
     }
 
-    /// Appends the escapes that turn the previous frame into `buf` + `places`.
+    /// Appends the escapes that turn the previous frame into `buf` + `places`; appends
+    /// nothing at all when the frame is unchanged.
     pub fn render(&mut self, buf: &Buffer, places: &[Placement], out: &mut String) {
+        let start = out.len();
         if self.sync {
             out.push_str("\x1b[?2026h");
         }
+        let body = out.len();
         let mut pen: Option<Style> = None;
         let mut cur: Option<(u16, u16)> = None;
 
@@ -216,7 +219,9 @@ impl Renderer {
             escapes::kitty_place(out, id, p.pid, p.px_x, p.px_y, p.cols, p.rows, p.crop, p.z);
         }
 
-        if self.sync {
+        if out.len() == body {
+            out.truncate(start);
+        } else if self.sync {
             out.push_str("\x1b[?2026l");
         }
         self.prev = Some(buf.clone());
@@ -257,7 +262,7 @@ mod tests {
         assert_eq!(out, "\x1b[?2026h\x1b[1;2H\x1b[0;38;2;255;0;0ma\x1b[2;3H\x1b[0mz\x1b[?2026l");
         out.clear();
         rr.render(&b, &[], &mut out);
-        assert_eq!(out, "\x1b[?2026h\x1b[?2026l");
+        assert_eq!(out, "");
     }
 
     #[test]
