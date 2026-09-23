@@ -1,0 +1,26 @@
+[package]
+name = "tlstore-ui"
+version = "0.1.0"
+edition = "2021"
+description = "Full-screen tlstore drawn by the terminal itself"
+license = "GPL-3.0-only"
+publish = false
+
+[[bin]]
+name = "tlstore-ui"
+path = "src/main.rs"
+
+[dependencies]
+libc = "0.2"
+fontdue = { version = "0.9", default-features = false, features = ["std"] }
+unicode-width = "0.2"
+png = "0.17"
+zune-jpeg = { version = "0.4", default-features = false, features = ["std"] }
+miniz_oxide = "0.8"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
