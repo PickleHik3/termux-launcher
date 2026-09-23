@@ -113,6 +113,7 @@ import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceLookPreferences;
+import com.termux.app.place.PlaceLookRefresh;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.PlaceSizePreferences;
 import com.termux.app.surfaces.SurfaceEditorController;
@@ -10816,13 +10817,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void doSyncPlaceLayout() {
         // The look layer follows the wall too: a place wearing its own dock, keyboard or status
         // surface puts it on as the wall settles on it. Nothing to re-apply when no place has one.
-        boolean lookChanged = mLookPreferences != null
-            && mLookPreferences.setRenderPlace(currentWallPlace())
-            && mLookPreferences.hasAnyOverrides();
+        // Only the parts whose look reads differently here are repainted: a home screen that only
+        // clears its canvas costs a terminal repaint, not the whole appearance.
+        java.util.EnumSet<PlaceLookRefresh.Part> lookParts =
+            java.util.EnumSet.noneOf(PlaceLookRefresh.Part.class);
+        if (mLookPreferences != null) {
+            com.termux.app.wall.PaneWallPage from = mLookPreferences.renderPlace();
+            com.termux.app.wall.PaneWallPage to = currentWallPlace();
+            if (mLookPreferences.setRenderPlace(to)) {
+                lookParts = mLookPreferences.isEditing()
+                    ? java.util.EnumSet.allOf(PlaceLookRefresh.Part.class)
+                    : PlaceLookRefresh.partsFor(mLookPreferences.keysReadingDifferently(from, to));
+            }
+        }
         // The dock's height, the keyboard's height and its chin are the place's and the
         // orientation's, so a wall settling on a place sized differently — or a turn of the screen
         // — has to re-read them even where no look was ever overridden.
-        lookChanged |= applyPlaceSizes();
+        if (applyPlaceSizes()) lookParts = java.util.EnumSet.allOf(PlaceLookRefresh.Part.class);
         PlaceLayout layout = currentPlaceLayout();
         boolean arrangementChanged = !layout.equals(mAppliedPlaceLayout);
         mAppliedPlaceLayout = layout;
@@ -10859,7 +10870,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setTerminalToolbarHeight();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
-        if (lookChanged) applyPlaceLook();
+        if (!lookParts.isEmpty()) applyPlaceLook(lookParts);
     }
 
     /** The three sizes as last applied, so a place or a turn that moves one is noticed. */
@@ -10892,25 +10903,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * use — three to four full-frame rebuilds, half a second of main thread, inside the tap or the
      * drag that moved the wall (measured on Pong, 2026-09-07).
      */
-    private void applyPlaceLook() {
+    private void applyPlaceLook(@NonNull java.util.Set<PlaceLookRefresh.Part> parts) {
         Trace.beginSection("Place.applyLook");
         try {
-            doApplyPlaceLook();
+            doApplyPlaceLook(parts);
         } finally {
             Trace.endSection();
         }
     }
 
-    private void doApplyPlaceLook() {
-        updateAppLauncherBarHeight();
-        setTerminalToolbarHeight(true);
-        applyTerminalSurfaceAppearance();
-        refreshTerminalWindowBar();
-        applySuggestionBarSurfaceStyling();
-        if (mPaneController != null) mPaneController.refreshPaneLayout();
-        if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
-        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP
-            | ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    private void doApplyPlaceLook(@NonNull java.util.Set<PlaceLookRefresh.Part> parts) {
+        if (parts.contains(PlaceLookRefresh.Part.DOCK)) {
+            updateAppLauncherBarHeight();
+            setTerminalToolbarHeight(true);
+            applySuggestionBarSurfaceStyling();
+        }
+        if (parts.contains(PlaceLookRefresh.Part.TERMINAL)) {
+            applyTerminalSurfaceAppearance();
+            if (mPaneController != null) mPaneController.refreshPaneLayout();
+        }
+        if (parts.contains(PlaceLookRefresh.Part.STATUS)) refreshTerminalWindowBar();
+        if (parts.contains(PlaceLookRefresh.Part.KEYBOARD) && mInAppKeyboard != null)
+            mInAppKeyboard.onPreferencesReloaded();
+        // A backdrop is a crop of the blurred wallpaper, keyed by its rect and radius already; only
+        // a surface whose own look moved has a reason to throw its crop away.
+        int scopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER;
+        if (parts.contains(PlaceLookRefresh.Part.DOCK)) scopes |= ChromeRenderer.SCOPE_BACKDROPS;
+        if (parts.contains(PlaceLookRefresh.Part.KEYBOARD))
+            scopes |= ChromeRenderer.SCOPE_KEYBOARD_BACKDROP;
+        mChrome.requestSync(scopes);
     }
 
     /**

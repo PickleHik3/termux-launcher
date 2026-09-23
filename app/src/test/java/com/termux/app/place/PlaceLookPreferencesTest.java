@@ -301,4 +301,51 @@ public class PlaceLookPreferencesTest {
         assertEquals("place.display.look." + KEY_STATUS_BLUR,
             PlaceLookPreferences.lookKey(PaneWallPage.DISPLAY, KEY_STATUS_BLUR));
     }
+
+    // ------------------------------------------------------------------ what a move changes
+
+    @Test
+    public void movingBetweenPlacesThatReadTheSameLookIsNotAChange() {
+        // Only the home screen has a look of its own: the terminal and the display both read the
+        // shared layer, so crossing between them re-applies nothing.
+        store.edit().putInt(PlaceLookPreferences.lookKey(PaneWallPage.WIDGETS, KEY_STATUS_BLUR), 0)
+            .commit();
+        assertFalse(look.setRenderPlace(PaneWallPage.TERMINAL));
+        assertFalse(look.setRenderPlace(PaneWallPage.DISPLAY));
+        // Onto the home screen and off it again, the look does move.
+        assertTrue(look.setRenderPlace(PaneWallPage.WIDGETS));
+        assertTrue(look.setRenderPlace(PaneWallPage.TERMINAL));
+        assertEquals(PaneWallPage.TERMINAL, look.renderPlace());
+    }
+
+    @Test
+    public void aPlaceWhoseOwnValueMatchesTheSharedOneReadsTheSameLook() {
+        store.edit().putInt(KEY_STATUS_BLUR, 9)
+            .putInt(PlaceLookPreferences.lookKey(PaneWallPage.WIDGETS, KEY_STATUS_BLUR), 9)
+            .commit();
+        look.setRenderPlace(PaneWallPage.TERMINAL);
+        assertFalse(look.setRenderPlace(PaneWallPage.WIDGETS));
+        assertEquals(PaneWallPage.WIDGETS, look.renderPlace());
+    }
+
+    @Test
+    public void whileTheEditorIsOpenEveryMoveCounts() {
+        // The editor decides what reads resolve through, so the wall moving under it is always
+        // worth a re-apply; the comparison only speaks for the place on screen.
+        look.beginEdit(PaneWallPage.DISPLAY);
+        assertTrue(look.setRenderPlace(PaneWallPage.TERMINAL));
+        look.endEdit();
+    }
+
+    @Test
+    public void aMoveNamesTheSharedKeysThatReadDifferently() {
+        store.edit().putInt(PlaceLookPreferences.lookKey(PaneWallPage.WIDGETS, KEY_STATUS_BLUR), 0)
+            .putInt(PlaceLookPreferences.lookKey(PaneWallPage.DISPLAY, KEY_STATUS_BLUR), 4)
+            .commit();
+        assertEquals(Collections.singleton(KEY_STATUS_BLUR),
+            look.keysReadingDifferently(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL));
+        assertEquals(Collections.singleton(KEY_STATUS_BLUR),
+            look.keysReadingDifferently(PaneWallPage.WIDGETS, PaneWallPage.DISPLAY));
+        assertTrue(look.keysReadingDifferently(PaneWallPage.TERMINAL, null).isEmpty());
+    }
 }
