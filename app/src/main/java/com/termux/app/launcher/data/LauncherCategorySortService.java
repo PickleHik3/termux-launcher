@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat;
 
 import com.termux.R;
 import com.termux.ai.TaiManager;
+import com.termux.ai.TaiRuntimePresence;
 import com.termux.app.activities.SettingsActivity;
 
 import org.json.JSONArray;
@@ -218,12 +219,34 @@ public final class LauncherCategorySortService extends Service {
             merged.put(section.getKey(), new ArrayList<>(section.getValue()));
 
         TaiManager manager = TaiManager.getInstance(this);
+        // Whatever chat model the user had resident comes back when the sort is done; the sort
+        // borrows the runtime, it does not get to keep it.
+        TaiRuntimePresence.Snapshot before = TaiRuntimePresence.read(this);
+        String residentBefore = before.loaded ? before.modelId : null;
         // Loading is minutes of the run on a cold runtime, and it used to happen invisibly inside
         // the first inference — which read as "stuck at 0 of N". Load it here so the phase is a
         // phase the user can see.
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_LOADING_MODEL));
         updateProgressNotification(true);
-        loadModel(manager, modelId);
+        String loadFailure = loadModel(manager, modelId);
+        if (loadFailure != null) {
+            // Every app would retry the same load on its own and fail the same way; under memory
+            // pressure that is a reload per app. One clear stop instead.
+            String failed = getString(R.string.settings_app_drawer_category_sort_load_failed, loadFailure);
+            update(s -> s.withOutcome(failed));
+            return;
+        }
+        try {
+            sortPending(manager, modelId, pending, labelByPackage, merged, file, provider);
+        } finally {
+            restoreRuntime(manager, modelId, residentBefore);
+        }
+    }
+
+    private void sortPending(@NonNull TaiManager manager, @Nullable String modelId,
+                             @NonNull List<String> pending, @NonNull Map<String, String> labelByPackage,
+                             @NonNull LinkedHashMap<String, List<String>> merged, @NonNull File file,
+                             @NonNull LauncherAppDataProvider provider) throws Exception {
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_SORTING));
         int assigned = 0;
         for (String packageName : pending) {
@@ -265,16 +288,38 @@ public final class LauncherCategorySortService extends Service {
     }
 
     /**
-     * Loads the model up front. A failure is not fatal on purpose: the per-app inference below will
-     * try to load it again and report its own error, and a preflight warning that only blocks the
-     * explicit load must not cancel a run the user asked for.
+     * Loads the model up front.
+     *
+     * @return null when it loaded, otherwise the runtime's own sentence for why it did not. An
+     *     explicit load only fails on something the per-app requests would hit too (not enough free
+     *     memory, a missing file), so a failure here ends the run.
      */
-    private void loadModel(@NonNull TaiManager manager, @Nullable String modelId) {
-        if (modelId == null || modelId.trim().isEmpty()) return;
+    @Nullable
+    private String loadModel(@NonNull TaiManager manager, @Nullable String modelId) {
+        if (modelId == null || modelId.trim().isEmpty()) return null;
         try {
             JSONObject request = new JSONObject();
             request.put("model", modelId);
-            manager.loadModel(request.toString());
+            JSONObject result = manager.loadModel(request.toString());
+            if (result.optBoolean("ok", false)) return null;
+            String message = result.optString("message", "").trim();
+            return message.isEmpty() ? getString(R.string.settings_app_drawer_category_sort_unavailable_model) : message;
+        } catch (Exception e) {
+            return getString(R.string.settings_app_drawer_category_sort_unavailable_model);
+        }
+    }
+
+    /** Puts the runtime back as the sort found it: the user's model reloaded, or nothing held. */
+    private void restoreRuntime(@NonNull TaiManager manager, @Nullable String sortModel,
+                                @Nullable String residentBefore) {
+        try {
+            if (residentBefore == null) {
+                manager.unloadModel();
+            } else if (!residentBefore.equals(sortModel)) {
+                JSONObject request = new JSONObject();
+                request.put("model", residentBefore);
+                manager.loadModel(request.toString());
+            }
         } catch (Exception ignored) {
         }
     }

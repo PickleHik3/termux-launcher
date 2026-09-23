@@ -75,16 +75,18 @@ final class CategorySortDialogs {
     }
 
     /**
-     * @return the downloaded model this feature would use — E4B when present, else E2B — or null
-     *     when neither is installed. Availability is a separate question, see
-     *     {@link #unavailableReason}.
+     * @return the downloaded model this feature would use — E4B when the phone meets its RAM
+     *     recommendation (or E2B is not there to fall back on), else E2B — or null when neither is
+     *     installed. Availability is a separate question, see {@link #unavailableReason}.
      */
     @Nullable
     static TaiModelSpec resolveModel(@NonNull Context context) {
         Map<String, TaiModelSpec> installed = new TaiModelStore(context).getDownloadedReadableModels();
-        TaiModelSpec preferred = installed.get(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT);
-        if (preferred != null) return preferred;
-        return installed.get(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
+        TaiModelSpec e4b = installed.get(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT);
+        TaiModelSpec e2b = installed.get(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
+        if (e4b != null && (e2b == null
+                || TaiDeviceCapabilities.detect(context).checkModelCapability(e4b).warning == null)) return e4b;
+        return e2b != null ? e2b : e4b;
     }
 
     /**
