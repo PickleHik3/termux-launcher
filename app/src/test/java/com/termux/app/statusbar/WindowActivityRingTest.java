@@ -31,18 +31,6 @@ public class WindowActivityRingTest {
         assertEquals(startOfNext, endOfTurn, 0.5f);
     }
 
-    @Test
-    public void lazyModeStepsThePhaseInsteadOfHoldingIt() {
-        assertEquals(0f, WindowActivityRing.steppedPhase(0.05f, 8), .0001f);
-        assertEquals(0.125f, WindowActivityRing.steppedPhase(0.13f, 8), .0001f);
-        assertEquals(0.875f, WindowActivityRing.steppedPhase(0.999f, 8), .0001f);
-        // Never wraps to a full turn: a phase in [0,1) stays in [0,1).
-        assertTrue(WindowActivityRing.steppedPhase(1f, 8) < 1f);
-        // Eight ticks make one turn: the tick is what a lazy ring redraws on.
-        assertEquals(WindowActivityRing.SPIN_MS,
-            WindowActivityRing.LAZY_TICK_MS * WindowActivityRing.LAZY_STEPS);
-    }
-
     /**
      * The smooth arc used to be redrawn once per vsync, which on a 120 Hz panel is 154 redraws of
      * every working pill per turn. It now moves on a clock of its own, and the angle it draws at a
@@ -59,8 +47,6 @@ public class WindowActivityRingTest {
         // worth of vsyncs.
         assertTrue("steps " + WindowActivityRing.SMOOTH_STEPS, WindowActivityRing.SMOOTH_STEPS >= 32);
         assertTrue("steps " + WindowActivityRing.SMOOTH_STEPS, WindowActivityRing.SMOOTH_STEPS < 120);
-        // Still coarser than smooth and finer than lazy: one clock, two rates.
-        assertTrue(WindowActivityRing.SMOOTH_TICK_MS < WindowActivityRing.LAZY_TICK_MS);
 
         // The angle at a given elapsed time is what it always was: one full clockwise turn per
         // SPIN_MS, whoever asks for the redraw.

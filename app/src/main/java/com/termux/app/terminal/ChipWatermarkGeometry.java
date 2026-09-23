@@ -66,6 +66,12 @@ public final class ChipWatermarkGeometry {
      * {@link WindowChipInk} holds to {@code TARGET_LARGE_TEXT} — is what carries the fact.
      */
     public static final int RING_TRACK_ALPHA = 56;
+    /**
+     * How strongly lazy mode tints a working chip's fill with the ring colour. Lazy mode draws a
+     * working window as a still colour instead of a turning arc, so nothing redraws while it works;
+     * strong enough to read across the strip at a glance, faint enough that the label stays legible.
+     */
+    public static final int BUSY_TINT_ALPHA = 72;
 
     /** How much of the outline the indeterminate arc covers: the ring's 270°, as a fraction. */
     public static final float RING_SWEEP_FRACTION =
@@ -138,14 +144,9 @@ public final class ChipWatermarkGeometry {
         return direction > 0f ? Math.min(centre, limit) : Math.max(centre, limit);
     }
 
-    /**
-     * Where the turning arc starts on the outline at {@code phase} of the turn. Lazy mode quantises
-     * it to {@link WindowActivityRing#LAZY_STEPS} stops, exactly as the ring in the label did.
-     */
-    public static float ringStartFraction(float phase, boolean stepped) {
-        float turned = stepped
-            ? WindowActivityRing.steppedPhase(phase, WindowActivityRing.LAZY_STEPS) : phase;
-        return turned - (float) Math.floor(turned);
+    /** Where the turning arc starts on the outline at {@code phase} of the turn. */
+    public static float ringStartFraction(float phase) {
+        return phase - (float) Math.floor(phase);
     }
 
     /** How much of the outline a reported percentage has filled. Clamped, like the ring's sweep. */
