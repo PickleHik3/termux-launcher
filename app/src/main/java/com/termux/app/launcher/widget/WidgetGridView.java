@@ -258,6 +258,22 @@ public final class WidgetGridView extends ViewGroup {
     private boolean sizeDeliveryPending;
 
     /**
+     * Whether the wall rests on this page. Being on screen is not enough: the terminal's keyboard
+     * resizes the whole wall, so a page sliding out or in passes through sizes no one sees at
+     * rest, and a provider told one re-renders for it — then again on the way back, which is the
+     * widget squeezed and snapping to size after the page lands. At rest by default, for a grid
+     * that stands on no wall.
+     */
+    private boolean pageAtRest = true;
+
+    /** The wall came to rest on this page, or left it; a size held meanwhile goes out now. */
+    public void setPageAtRest(boolean atRest) {
+        if (pageAtRest == atRest) return;
+        pageAtRest = atRest;
+        if (atRest && sizeDeliveryPending) scheduleSizeDelivery();
+    }
+
+    /**
      * A layout pass that changed a cell's size waits this long for the next one before the size
      * reaches the provider. The grid is laid out once per frame while the wall slides or the
      * status bar animates between places, and each delivery makes the provider re-render and push
@@ -281,7 +297,7 @@ public final class WidgetGridView extends ViewGroup {
      * at the edges.
      */
     private void deliverCommittedSizes() {
-        if (controller == null || !isShown()) return;
+        if (controller == null || !isShown() || !pageAtRest) return;
         sizeDeliveryPending = false;
         int orientation = getResources().getConfiguration().orientation;
         for (LauncherWidgetRecord record : records) {

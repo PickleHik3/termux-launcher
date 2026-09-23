@@ -127,7 +127,18 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * The wall's Widgets page came to rest on screen, or left it. A page that has gone opens
      * again the way it always does — page 0, no menu — like the pull-down it replaces.
      */
+    /**
+     * The wall has committed to leaving this page; the slide may still be showing it. Sizes stop
+     * reaching the providers from here, not from the settle: the next place's keyboard resizes the
+     * wall mid-slide, and that is the size a provider must not hear.
+     */
+    public void onWallPageLeaving() {
+        pane.grid().setPageAtRest(false);
+    }
+
     public void onWallPageShown(boolean shown) {
+        // Sizes reach the providers only while the wall rests here; see WidgetGridView.
+        pane.grid().setPageAtRest(shown);
         if (shown) return;
         dismissPaneMenu();
         if (currentPage != 0) { currentPage = 0; render(); }

@@ -14841,6 +14841,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         if (mPaneWallController.widgetsPage() != null) {
                             mPaneWallController.widgetsPage().dismissControls();
                         }
+                        if (mWidgetPaneController != null
+                            && page != com.termux.app.wall.PaneWallPage.WIDGETS) {
+                            mWidgetPaneController.onWallPageLeaving();
+                        }
                         syncPlaceBar();
                         syncWallKeyboard(page);
                         syncDisplayTouchpad();
