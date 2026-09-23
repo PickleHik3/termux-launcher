@@ -88,16 +88,12 @@ public class ChipWatermarkGeometryTest {
     }
 
     @Test
-    public void theArcCoversThreeQuartersOfTheOutlineAndStepsInLazyMode() {
+    public void theArcCoversThreeQuartersOfTheOutline() {
         assertEquals(.75f, ChipWatermarkGeometry.RING_SWEEP_FRACTION, .0001f);
-        assertEquals(.25f, ChipWatermarkGeometry.ringStartFraction(.25f, false), .0001f);
-        // Eight stops a turn, as the label's ring had: .3 of a turn is the second stop.
-        assertEquals(.25f, ChipWatermarkGeometry.ringStartFraction(.3f, true), .0001f);
-        assertEquals(8, WindowActivityRing.LAZY_STEPS);
-        assertEquals(160L, WindowActivityRing.LAZY_TICK_MS);
+        assertEquals(.25f, ChipWatermarkGeometry.ringStartFraction(.25f), .0001f);
         assertEquals(1280L, WindowActivityRing.SPIN_MS);
         // A phase that has run past the turn starts again rather than running off the path.
-        assertEquals(.5f, ChipWatermarkGeometry.ringStartFraction(3.5f, false), .0001f);
+        assertEquals(.5f, ChipWatermarkGeometry.ringStartFraction(3.5f), .0001f);
     }
 
     @Test

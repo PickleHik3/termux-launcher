@@ -473,6 +473,33 @@ public class TerminalWindowBarTest {
         assertFalse(tabs.getChildAt(1).getContentDescription().toString().contains("working"));
     }
 
+    /**
+     * Lazy mode draws a working window as a still colour: the chip is tinted and nothing runs a
+     * clock, however long the window stays busy. Normal mode keeps the turning ring, and a reported
+     * percentage keeps its still ring in either mode.
+     */
+    @Test
+    public void lazyModeTintsAWorkingChipInsteadOfTurningARing() {
+        TerminalWindowBar bar = attachedBar();
+        TerminalWindowBar.WindowItem item = new TerminalWindowBar.WindowItem("home", "home").withBusy(true);
+        bar.setWindows(Arrays.asList(item), 0);
+        assertTrue(bar.isBusyAnimationRunning());
+        assertFalse(bar.chipWatermarkAt(0).workingTint());
+
+        bar.setLazyMode(true);
+        assertFalse("lazy mode must not run any clock for a working window", bar.isBusyAnimationRunning());
+        assertTrue(bar.chipWatermarkAt(0).busy());
+        assertTrue(bar.chipWatermarkAt(0).workingTint());
+
+        bar.setWindows(Arrays.asList(item.withProgress(40, false)), 0);
+        assertFalse("a reported percentage keeps its still ring", bar.chipWatermarkAt(0).workingTint());
+
+        bar.setLazyMode(false);
+        bar.setWindows(Arrays.asList(item), 0);
+        assertTrue(bar.isBusyAnimationRunning());
+        assertFalse(bar.chipWatermarkAt(0).workingTint());
+    }
+
     @Test
     public void busyGoingIdleStopsTheAnimation() {
         TerminalWindowBar bar = attachedBar();

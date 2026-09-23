@@ -72,7 +72,8 @@ final class ChipWatermarkDrawable extends Drawable {
 
     private boolean mBusy;
     private int mProgress = TerminalWindowBar.WindowItem.NO_PERCENTAGE;
-    private boolean mStepped;
+    /** Lazy mode: a working chip is a still tint rather than a turning arc. */
+    private boolean mTinted;
     private int mRingColor;
 
     @NonNull private Mark mMark = Mark.NONE;
@@ -145,14 +146,19 @@ final class ChipWatermarkDrawable extends Drawable {
         invalidateSelf();
     }
 
-    void setActivity(boolean busy, int progress, int ringColor, boolean stepped) {
+    void setActivity(boolean busy, int progress, int ringColor, boolean tinted) {
         if (mBusy == busy && mProgress == progress && mRingColor == ringColor
-            && mStepped == stepped) return;
+            && mTinted == tinted) return;
         mBusy = busy;
         mProgress = progress;
         mRingColor = ringColor;
-        mStepped = stepped;
+        mTinted = tinted;
         invalidateSelf();
+    }
+
+    /** Whether this chip draws its working state as a still tint (lazy mode, no percentage). */
+    boolean workingTint() {
+        return mBusy && mTinted && mProgress == TerminalWindowBar.WindowItem.NO_PERCENTAGE;
     }
 
     void setMark(@NonNull Mark mark, int markColor, int groundColor) {
@@ -281,6 +287,10 @@ final class ChipWatermarkDrawable extends Drawable {
         // ending at the title's edge on top of it is the two crossing pills the user saw.
         mFillPaint.setColor(restingAlpha(mFillColor));
         canvas.drawPath(mOutline, mFillPaint);
+        if (workingTint()) {
+            mFillPaint.setColor(ColorUtils.setAlphaComponent(mRingColor, ChipWatermarkGeometry.BUSY_TINT_ALPHA));
+            canvas.drawPath(mOutline, mFillPaint);
+        }
 
         drawWatermark(canvas);
         drawOutline(canvas);
@@ -339,8 +349,8 @@ final class ChipWatermarkDrawable extends Drawable {
 
     /**
      * The chip's edge, and — while a shell is working — the ring it becomes: an arc travelling the
-     * outline once a turn when the shell reports no number, a clockwise fill over a faint track
-     * when it does.
+     * outline once a turn when the shell reports no number (in lazy mode, the whole edge in the ring
+     * colour, still, over a tinted fill), a clockwise fill over a faint track when it does.
      */
     private void drawOutline(@NonNull Canvas canvas) {
         if (mStrokePx <= 0f) return;
@@ -351,11 +361,17 @@ final class ChipWatermarkDrawable extends Drawable {
         }
         if (!mBusy) return;
 
+        if (workingTint()) {
+            // The still form of the ring: the whole edge in the ring colour, drawn once.
+            mStrokePaint.setColor(mRingColor);
+            canvas.drawPath(mOutline, mStrokePaint);
+            return;
+        }
         float length = pathLengthPx();
         if (length <= 0f) return;
         if (mProgress == TerminalWindowBar.WindowItem.NO_PERCENTAGE) {
             float phase = ChipWatermarkGeometry.ringStartFraction(
-                WindowActivityRing.phase(SystemClock.uptimeMillis()), mStepped);
+                WindowActivityRing.phase(SystemClock.uptimeMillis()));
             mStrokePaint.setColor(mRingColor);
             drawSegment(canvas, length, ChipWatermarkGeometry.segmentStartPx(length, phase),
                 ChipWatermarkGeometry.segmentSweepPx(length,

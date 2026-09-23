@@ -1147,10 +1147,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * Lazy mode turns the ring in steps instead of spinning it: the animator redrew every working
-     * pill each vsync for as long as any shell was busy, which with a long-running agent meant
-     * forever. A stationary arc was tried first and read as stuck, so the ring still moves — eight
-     * stops a turn, on a timer, which is one redraw per stop rather than one per frame.
+     * Lazy mode shows a working window as a colour instead of a turning ring: the chip's fill takes
+     * a tint of the ring colour and its whole edge turns that colour, drawn once, so nothing redraws
+     * for as long as the window stays busy. A stationary arc was tried once and read as a stuck
+     * spinner; a changed chip reads as a state. A reported percentage still draws its still ring.
      */
     public void setLazyMode(boolean lazy) {
         if (mLazyMode == lazy) return;
@@ -1159,28 +1159,21 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     private boolean mLazyMode;
-    @Nullable private Runnable mLazyTick;
 
     /**
      * One clock for the whole bar rather than one per pill: setWindows's removeAllViews() then has
      * nothing to clean up, and every ring turns in phase. It only invalidates the pills that carry
-     * a turning arc; a percentage ring and a bell are as static as the label. Both modes drive it
-     * from a timer — smooth mode at about 30 a second, lazy mode at eight stops a turn.
+     * a turning arc; a percentage ring and a bell are as static as the label. It runs on a timer at
+     * about 30 a second, and not at all in lazy mode, where a working chip is a still tint.
      *
      * <p>Deliberately not folded into mSelectionAnimator. Both only invalidate, so they compose;
      * sharing one animator would stall the activity indication for the length of every window switch.
      */
     private void updateBusyAnimator() {
-        boolean wanted = hasIndeterminateWindow() && mAttached && mWindowVisible;
-        boolean smooth = wanted && !mLazyMode;
-        boolean stepped = wanted && mLazyMode;
+        boolean smooth = hasIndeterminateWindow() && mAttached && mWindowVisible && !mLazyMode;
         if (!smooth && mSmoothTick != null) {
             removeCallbacks(mSmoothTick);
             mSmoothTick = null;
-        }
-        if (!stepped && mLazyTick != null) {
-            removeCallbacks(mLazyTick);
-            mLazyTick = null;
         }
         if (smooth && mSmoothTick == null) {
             mSmoothTick = new Runnable() {
@@ -1191,16 +1184,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                 }
             };
             postDelayed(mSmoothTick, WindowActivityRing.SMOOTH_TICK_MS);
-        }
-        if (stepped && mLazyTick == null) {
-            mLazyTick = new Runnable() {
-                @Override public void run() {
-                    if (mLazyTick != this) return;
-                    invalidateTurningRings();
-                    postDelayed(this, WindowActivityRing.LAZY_TICK_MS);
-                }
-            };
-            postDelayed(mLazyTick, WindowActivityRing.LAZY_TICK_MS);
         }
     }
 
@@ -1242,10 +1225,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         if (mSmoothTick != null) {
             removeCallbacks(mSmoothTick);
             mSmoothTick = null;
-        }
-        if (mLazyTick != null) {
-            removeCallbacks(mLazyTick);
-            mLazyTick = null;
         }
         // A stream that was under way when the view left the window never gets its UP; the
         // tracker goes back to the pool and the latch does not survive into the next attach.
@@ -1299,10 +1278,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return mTabs.copyCurrentHighlightBounds(output);
     }
 
-    /** For tests: whether a working window's ring is turning right now, smoothly or in steps. */
+    /** For tests: whether a working window's ring is turning right now. */
     @androidx.annotation.VisibleForTesting
     public boolean isBusyAnimationRunning() {
-        return mSmoothTick != null || mLazyTick != null;
+        return mSmoothTick != null;
     }
 
     private TextView createTab(@NonNull WindowItem item, boolean selected) {
