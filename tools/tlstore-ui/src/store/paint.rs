@@ -38,6 +38,7 @@ fn fade(style: Style, surface: crate::render::Rgb, alpha: f32) -> Style {
 
 impl<'p, 'a> Paint<'p, 'a> {
     pub fn new(f: &'p mut Frame<'a>, fx: &'p Fx, scene: &'p mut Scene) -> Paint<'p, 'a> {
+        scene.cell = (f.ctx.size.cell_w, f.ctx.size.cell_h);
         Paint { f, fx, scene, clip: None, scroll: 0 }
     }
 
@@ -50,13 +51,16 @@ impl<'p, 'a> Paint<'p, 'a> {
         }
     }
 
-    fn note(&mut self, el: El, rect: Rect, pic: Option<(u32, u32)>, text: Option<&str>) {
+    pub fn note(&mut self, el: El, rect: Rect, pic: Option<(u32, u32)>, text: Option<&str>) {
         if let Some(e) = self.scene.elements.iter_mut().find(|e| e.el == el) {
             let r = e.rect;
             let (x, y) = (r.x.min(rect.x), r.y.min(rect.y));
             e.rect = Rect::new(x, y, r.right().max(rect.right()) - x, r.bottom().max(rect.bottom()) - y);
             if e.picture.is_none() {
                 e.picture = pic;
+            }
+            if e.text.is_none() {
+                e.text = text.map(str::to_string);
             }
         } else {
             self.scene.push(el, rect, pic, text);
@@ -140,7 +144,7 @@ impl<'p, 'a> Paint<'p, 'a> {
         let e = self.fx.get(el);
         if let Some(sy) = self.row(y) {
             let span = x1.saturating_sub(x0) as f32;
-            let x1 = x0 + (span * e.reveal.clamp(0.0, 1.0)).round() as u16;
+            let x1 = x0 + (span * e.reveal.min(e.line).clamp(0.0, 1.0)).round() as u16;
             self.f.leaders(x0, x1, sy, fade(style, self.f.pal().surface, e.alpha));
         }
     }
@@ -150,7 +154,7 @@ impl<'p, 'a> Paint<'p, 'a> {
         if let Some(sy) = self.row(y) {
             self.note(el, Rect::new(x0, sy, x1.saturating_sub(x0), 1), None, None);
             let span = x1.saturating_sub(x0) as f32;
-            let x1 = x0 + (span * e.reveal.clamp(0.0, 1.0)).round() as u16;
+            let x1 = x0 + (span * e.reveal.min(e.line).clamp(0.0, 1.0)).round() as u16;
             self.f.hline(x0, x1, sy, ch, fade(style, self.f.pal().surface, e.alpha));
         }
     }
@@ -217,14 +221,27 @@ impl<'p, 'a> Paint<'p, 'a> {
             crop.w = (cols - x).max(0) as u32;
         }
         if crop.w == 0 || crop.h == 0 || e.alpha < 0.5 {
+            // Hidden by its effect (or clipped away): still recorded where it rests, so motion
+            // knows the element is a picture and how big it is.
+            if let Some(sy) = self.row(row) {
+                let (c, r) = pic.cells(cw as u16, ch as u16);
+                self.note(el, Rect::new(col, sy, c, r), Some((pic.id(), pid)), None);
+            }
             return true;
         }
-        let rect = Rect::new(
-            (x / cw) as u16,
-            (top / ch) as u16,
-            crop.w.div_ceil(cw as u32) as u16,
-            crop.h.div_ceil(ch as u32) as u16,
-        );
+        // While an effect moves or crops it, the scene keeps the picture where it rests.
+        let rect = match self.row(row) {
+            Some(sy) if !e.at_rest() => {
+                let (c, r) = pic.cells(cw as u16, ch as u16);
+                Rect::new(col, sy, c, r)
+            }
+            _ => Rect::new(
+                (x / cw) as u16,
+                (top / ch) as u16,
+                crop.w.div_ceil(cw as u32) as u16,
+                crop.h.div_ceil(ch as u32) as u16,
+            ),
+        };
         let mut p =
             Placement::new(pic, 0, 0).at_px(x as u32, top as u32, cw as u16, ch as u16).pid(pid).z(-1);
         if crop != (Crop { x: 0, y: 0, w: pic.width(), h: pic.height() }) {

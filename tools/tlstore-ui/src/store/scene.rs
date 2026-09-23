@@ -1,7 +1,7 @@
 //! Motion hooks. Every screen records the elements it drew (a [`Scene`]) and draws each one
 //! through an [`Effect`] looked up in the frame's [`Fx`]. The router asks one [`Motion`] per
 //! frame which view to draw and with which effects, and tells it about every navigation.
-//! P3/P4 ship [`NoMotion`]: everything at rest, navigation instant.
+//! [`NoMotion`] keeps everything at rest; [`super::motion::Timeline`] is the store's motion.
 
 use std::collections::HashMap;
 use std::time::Instant;
@@ -57,11 +57,13 @@ pub struct Scene {
     /// "apps", "item", "updates", "installing", "nogh".
     pub screen: &'static str,
     pub elements: Vec<Element>,
+    /// Cell size in pixels when the frame was drawn (to turn rows into pixel offsets).
+    pub cell: (u16, u16),
 }
 
 impl Scene {
     pub fn new(screen: &'static str) -> Scene {
-        Scene { screen, elements: Vec::new() }
+        Scene { screen, elements: Vec::new(), cell: (0, 0) }
     }
     pub fn push(&mut self, el: El, rect: Rect, picture: Option<(u32, u32)>, text: Option<&str>) {
         self.elements.push(Element { el, rect, picture, text: text.map(str::to_string) });
@@ -83,8 +85,14 @@ pub struct Effect {
     /// 0.0 invisible – 1.0 opaque. Text colours mix toward the page; pictures are hidden
     /// below 0.5 (kitty has no per-placement alpha).
     pub alpha: f32,
-    /// Fraction of the text's characters drawn, 0.0–1.0 (dot leaders drawing out, typing).
+    /// Fraction of the text's characters drawn, 0.0–1.0 (typing). Leaders and hairlines
+    /// also draw out by it.
     pub reveal: f32,
+    /// Fraction of the element's dot leaders and hairlines drawn out from the left, 0.0–1.0,
+    /// without touching its text (a row's leaders drawing out behind the row).
+    pub line: f32,
+    /// An animated number the view shows instead of its own (the install count-up).
+    pub value: Option<f32>,
     /// Replacement text for this frame (the breadcrumb decoding from ░▒▓ glyphs). Same width
     /// as the text at rest.
     pub text: Option<String>,
@@ -92,7 +100,7 @@ pub struct Effect {
 
 impl Default for Effect {
     fn default() -> Effect {
-        Effect { dx: 0, dy: 0, shown: 1.0, alpha: 1.0, reveal: 1.0, text: None }
+        Effect { dx: 0, dy: 0, shown: 1.0, alpha: 1.0, reveal: 1.0, line: 1.0, value: None, text: None }
     }
 }
 
@@ -154,6 +162,14 @@ pub trait Motion {
     fn frame(&mut self, now: Instant, current: &Scene) -> Phase;
     /// True while anything moves; the app then ticks at 60 fps.
     fn active(&self) -> bool;
+    /// Called after every drawn frame while motion is on, with the current view's scene as
+    /// just drawn (empty while a leaving view was drawn). Returning true makes the router
+    /// draw the frame again at once, through a fresh [`Motion::frame`]: for a change that
+    /// must animate from its very first frame (rows swapped by a filter, a new install
+    /// percentage, the first look at an entering view's layout).
+    fn drawn(&mut self, _now: Instant, _current: &Scene) -> bool {
+        false
+    }
 }
 
 /// No motion: every navigation is instant.

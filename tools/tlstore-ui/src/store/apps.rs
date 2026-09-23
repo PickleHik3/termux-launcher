@@ -267,6 +267,9 @@ impl View for Apps {
             let el = El::Row(k_on);
             let cur = k == self.cursor;
             let on = self.sel.contains(&it.name);
+            // The number first: it names the row in the scene (motion re-staggers the rows
+            // when the numbers on screen change, not when a mark does).
+            let mut x = p.text(el, b.x + 2, y, &format!("{:02}", it.no), pal.dim_s());
             match (cur, on) {
                 (true, false) => p.fill(el, Rect::new(b.x, y, 1, 1), Style::new().bg(pal.accent)),
                 (true, true) => {
@@ -277,7 +280,6 @@ impl View for Apps {
                 }
                 _ => {}
             }
-            let mut x = p.text(el, b.x + 2, y, &format!("{:02}", it.no), pal.dim_s());
             let name_st = if cur || on { pal.accent_s().bold() } else { pal.ink_s() };
             x = p.text_clip(el, x + 2, y, &it.name, name_st, b.right());
             if !r.narrow && !it.category.is_empty() {

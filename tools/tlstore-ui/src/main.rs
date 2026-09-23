@@ -38,7 +38,7 @@ fn probe() -> std::io::Result<()> {
 fn main() -> ExitCode {
     let arg = std::env::args().nth(1).unwrap_or_default();
     let result = match arg.as_str() {
-        "" => app::run(Box::new(Router::new(Env::from_env())), Options::default()),
+        "" => app::run(Box::new(Router::animated(Env::from_env())), Options::default()),
         "--demo" => app::run(Box::new(Demo::new()), Options::default()),
         "--probe" => probe(),
         "--version" => {
