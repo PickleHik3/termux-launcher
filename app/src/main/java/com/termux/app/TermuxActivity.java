@@ -14683,7 +14683,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // as it happened, so writing its own answer back to it only ever pinned a default nobody
         // chose — and the store cannot tell a pinned default from a choice afterwards.
         mStatusBarPlace = page;
-        setTopStatusBarCollapsed(isStatusBarCompact(), true);
+        // Mid-slide the bar takes its new height in one step: animating it would re-lay out and
+        // repaint the terminal at every intermediate height while the terminal is itself sliding,
+        // which is what made crossing between a compact and an open place judder.
+        // The page change is announced before the slide starts, so a wall still carrying an offset
+        // counts as moving.
+        com.termux.app.wall.PaneWallLayout wall =
+            mPaneWallController == null ? null : mPaneWallController.wall();
+        boolean wallMoving = wall != null && (wall.isMoving() || wall.offsetPx() != 0f);
+        setTopStatusBarCollapsed(isStatusBarCompact(), !wallMoving);
     }
 
     /**
