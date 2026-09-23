@@ -6,6 +6,6 @@
 5. Command: cd tools/tlstore-ui && ~/.cargo/bin/cargo test && ~/.cargo/bin/cargo clippy --all-targets
 6. Script gap: no `tlstore picture <name> [demo]` yet; UI calls it and falls back to text stand-ins.
 7. Done: all screens, stars, fullscreen, progress, OSC 99, snapshots at 52x45/52x23/40x34.
-8. Next: build-ui.sh sizes, P5 contract in report.
+8. Done too: build-ui.sh builds both ABIs (arm64 943,544 B; x86_64 1,039,672 B); P5 contract appended to CONTRACT.md.
 9. Base: dev 56e9bd98. Never push/merge.
 10. Status: see git log.

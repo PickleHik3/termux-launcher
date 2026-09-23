@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use tlstore_ui::app::{Ctx, Nav, Screen};
 use tlstore_ui::render::{Frame, HitMap, Sym};
 use tlstore_ui::store::proc::Env;
+use tlstore_ui::store::scene::{Effect, El, Fx, Motion, NavKind, Phase, Scene};
 use tlstore_ui::store::Router;
 use tlstore_ui::term::{self, Caps, Event, Key, Mouse, MouseKind, Size};
 
@@ -56,11 +57,12 @@ struct Opts {
     opener: bool,
     pics: bool,
     caps: bool,
+    motion: Option<Box<dyn Motion>>,
 }
 
 impl Default for Opts {
     fn default() -> Opts {
-        Opts { gh: Gh::SignedIn, launcherctl: true, opener: true, pics: true, caps: false }
+        Opts { gh: Gh::SignedIn, launcherctl: true, opener: true, pics: true, caps: false, motion: None }
     }
 }
 
@@ -90,11 +92,14 @@ impl H {
             sink.clone(),
         );
         let mut ctx = Ctx::for_tests(cols, rows);
-        ctx.motion = false;
+        ctx.motion = o.motion.is_some();
         if o.caps {
             ctx.caps = Caps::all();
         }
-        let router = Router::new(env);
+        let router = match o.motion {
+            Some(m) => Router::with_motion(env, m),
+            None => Router::new(env),
+        };
         let mut h = H { dir, ctx, router: Some(router), hits: HitMap::default(), sink, text: String::new() };
         h.settle();
         h.draw();
@@ -646,4 +651,80 @@ fn no_picture_command_falls_back_to_stand_ins() {
     // Mark and hero word only; the cover is a text stand-in.
     assert_eq!(f.places.len(), 2);
     assert!(screen_text(&f).contains("S I G Y E"));
+}
+
+// ---------------------------------------------------------------------------
+// Motion hooks (P5)
+// ---------------------------------------------------------------------------
+
+type NavLog = Rc<RefCell<Vec<(NavKind, &'static str, &'static str, usize)>>>;
+
+/// Leaves for exactly one frame with the breadcrumb hidden, then enters for one frame with the
+/// hero word shifted down 40 px, then rests.
+struct Probe {
+    log: NavLog,
+    frames: u8,
+}
+
+impl Motion for Probe {
+    fn navigate(&mut self, kind: NavKind, from: &Scene, to: &'static str, _: Instant) {
+        self.log.borrow_mut().push((kind, from.screen, to, from.elements.len()));
+        self.frames = 2;
+    }
+    fn frame(&mut self, _: Instant, _: &Scene) -> Phase {
+        let mut fx = Fx::default();
+        let f = self.frames;
+        self.frames = self.frames.saturating_sub(1);
+        match f {
+            2 => {
+                fx.set(El::Crumb, Effect { alpha: 0.0, ..Effect::default() });
+                Phase::Leaving(fx)
+            }
+            1 => {
+                fx.set(El::Crumb, Effect { reveal: 0.5, ..Effect::default() });
+                Phase::Entering(fx)
+            }
+            _ => Phase::Idle,
+        }
+    }
+    fn active(&self) -> bool {
+        self.frames > 0
+    }
+}
+
+#[test]
+fn router_hands_navigation_and_frames_to_motion() {
+    let log: NavLog = Rc::new(RefCell::new(Vec::new()));
+    let probe = Probe { log: log.clone(), frames: 0 };
+    let mut h = H::new(52, 45, Opts { motion: Some(Box::new(probe)), ..Opts::default() });
+    assert!(h.r().scene.get(El::Row(0)).is_some(), "apps records its rows");
+    assert!(h.r().scene.get(El::HeroWord).is_some());
+    h.tap("sigye");
+    // Leaving frame: the old view (apps) drawn, crumb hidden.
+    assert!(h.r().animating());
+    assert!(h.has("A P P S") && !h.has("/ apps"), "{}", h.text);
+    // Entering frame: the item, crumb half revealed.
+    h.draw();
+    assert!(h.has("S I G Y E") && h.has("TLSTORE / apps ") && !h.has("/ apps / s"), "{}", h.text);
+    h.draw();
+    assert!(h.has("/ apps / sigye") && !h.r().animating());
+    h.key(Key::Esc);
+    h.draw();
+    h.draw();
+    h.tap("sigye");
+    h.draw();
+    h.draw();
+    h.tap("TLSTORE");
+    let log = log.borrow();
+    let kinds: Vec<_> = log.iter().map(|(k, f, t, _)| (*k, *f, *t)).collect();
+    assert_eq!(
+        kinds,
+        vec![
+            (NavKind::Push, "apps", "item"),
+            (NavKind::Pop, "item", "apps"),
+            (NavKind::Push, "apps", "item"),
+            (NavKind::Home, "item", "apps"),
+        ]
+    );
+    assert!(log.iter().all(|(_, _, _, n)| *n > 5), "the leaving scene is handed over: {log:?}");
 }
