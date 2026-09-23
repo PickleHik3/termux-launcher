@@ -795,4 +795,44 @@ public class ChromeInkTest {
         }
         return worstSurface;
     }
+
+    /**
+     * Every chrome pass asks the bar's ink questions again, several times a page change. The
+     * answer depends on the question alone, so a remembered one must be exactly what the walk
+     * would give, and asking again must not grow the memory.
+     */
+    @Test
+    public void aRememberedInkIsTheInkTheWalkGives() {
+        OnGlass.Resolution band = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT,
+            LIGHT_INK, NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
+        boolean pale = ink.polarity() == ChromeInk.Polarity.PALE_INK;
+        int[] grounds = {band.surface, 0xFF202020, 0xFFE0E0E0, 0xFF3355AA};
+        double[] targets = {OnGlass.TARGET_BODY_TEXT, OnGlass.TARGET_LARGE_TEXT,
+            OnGlass.TARGET_DECORATION};
+        for (int round = 0; round < 2; round++) {
+            for (int ground : grounds) {
+                for (double target : targets) {
+                    int opaque = OnGlass.opaque(ground);
+                    int preferred = pale ? NIGHT_INK : LIGHT_INK;
+                    int walked = OnGlass.inkOnBand(band, opaque, preferred, preferred, target, pale);
+                    if (OnGlass.ratio(walked, opaque) < target)
+                        walked = OnGlass.inkOnBand(band, opaque, LIGHT_INK, NIGHT_INK, target, null);
+                    assertEquals(walked, ink.inkOn(band, ground, LIGHT_INK, NIGHT_INK, target));
+                }
+            }
+        }
+        assertEquals("the second round asked nothing new",
+            grounds.length * targets.length, ink.inkAnswerCountForTests());
+    }
+
+    @Test
+    public void theInkMemoryStaysBounded() {
+        OnGlass.Resolution band = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT,
+            LIGHT_INK, NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
+        for (int i = 0; i < ChromeInk.MAX_INK_ANSWERS * 3; i++) {
+            ink.inkOn(band, 0xFF000000 | (i * 2654435), LIGHT_INK, NIGHT_INK,
+                OnGlass.TARGET_BODY_TEXT);
+        }
+        assertTrue(ink.inkAnswerCountForTests() <= ChromeInk.MAX_INK_ANSWERS);
+    }
 }
