@@ -70,7 +70,8 @@ _Avoid_: dependency, component
 
 **Upstream**:
 The outside project an item's program comes from, named by its GitHub repository
-(`fastfetch-cli/fastfetch`). Stars go to upstreams.
+(`fastfetch-cli/fastfetch`). Stars go to upstreams. An item keeps its upstream when its recipe
+patches the program.
 _Avoid_: origin, source (the catalog's `source` column is where the file is fetched from)
 
 **Setup**:
@@ -82,7 +83,15 @@ _Avoid_: dotfiles, config, bundle (the catalog kind that happens to hold it)
 The one item the home screen shows large, chosen by hand in the catalog.
 _Avoid_: hero, spotlight
 
-**Web inset**:
-A live web page the launcher sets into a band of terminal rows for a program, following the
-terminal's rows, font and colours. Only tlstore may open one.
-_Avoid_: web pane, web window, web view (the Android engine underneath)
+
+### Local AI
+
+**TAI**:
+The launcher's on-device AI: the models it holds and the local endpoint programs in the terminal
+talk to. Programs reach it the way they reach any OpenAI-compatible service.
+_Avoid_: the AI backend, the internal AI, the model server
+
+**Default assistant model**:
+The model TAI answers with when a program does not name one, chosen in the launcher's AI settings.
+_Avoid_: default model, current model, loaded model (a model can be the default without being
+loaded)
