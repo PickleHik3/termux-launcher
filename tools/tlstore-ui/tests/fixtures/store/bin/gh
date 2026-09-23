@@ -1,0 +1,21 @@
+#!/bin/sh
+# Stub gh: signed in when ../gh-signed-in exists; stars live in ../starred/<owner>_<repo>.
+d=$(cd "$(dirname "$0")/.." && pwd)
+printf '%s\n' "$*" >> "$d/gh.log"
+mkdir -p "$d/starred"
+case "$1" in
+    auth) [ -f "$d/gh-signed-in" ] ;;
+    api)
+        shift
+        method=GET
+        if [ "$1" = -X ]; then method=$2; shift 2; fi
+        f="$d/starred/$(printf '%s' "${1#/user/starred/}" | tr / _)"
+        case "$method" in
+            GET) [ -f "$f" ] ;;
+            PUT) : > "$f" ;;
+            DELETE) rm -f "$f" ;;
+            *) exit 1 ;;
+        esac
+        ;;
+    *) exit 1 ;;
+esac

@@ -158,6 +158,11 @@ impl<'a> Frame<'a> {
         true
     }
 
+    /// Makes the (already drawn) cells of one-row `rect` an OSC 8 hyperlink to `url`.
+    pub fn link(&mut self, rect: Rect, url: &str) {
+        self.buf.link(rect, url);
+    }
+
     /// Makes `rect` a tap target for `action`. Register after drawing; later regions win.
     pub fn hit(&mut self, rect: Rect, action: ActionId) {
         let r = rect.intersect(&self.buf.area());

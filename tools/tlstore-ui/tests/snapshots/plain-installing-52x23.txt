@@ -1,0 +1,23 @@
+00|  TLSTORE / installing
+01|  ────────────────────────────────────────────────
+02|             I N S T A L L I N G  sigye
+03|
+04|                        60%
+05|
+06|      ●●●●●●●●●●●●●●●●●●●●●●●●○○○○○○○○○○○○○○○○
+07|
+08|             ✓  fetched
+09|             ·  signature checked
+10|                putting files in place
+11|                ready
+12|
+13|              Switch away if you like.
+14|        You’ll get a notice when it’s done.
+15|
+16|
+17|
+18|
+19|
+20|
+21|
+22|  esc keep going quietly  c cancel

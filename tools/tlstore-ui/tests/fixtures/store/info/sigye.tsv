@@ -1,0 +1,20 @@
+Kind	binary
+Version	0.6.0
+From	binaries:sigye@2026.09.02
+Checksum	be095e85f54c2a462b924ce21916a6586580713785ab5efc79b63050eead5eea
+Needs	-
+Files	-
+Summary	A clock for the terminal.
+Category	Tools
+Upstream	am2rican5/sigye
+Setup	0
+Standfirst	a clock built for the terminal
+Does1	Shows the time in ascii art
+Does2	Switches between clock styles
+Does3	Cycles through colour themes
+Try	sigye
+Author	am2rican5
+Licence	MIT
+Picture	launcher:scripts/tlstore/pictures/sigye.jpg@5253e29ae8e128aad09b08fd57eb115ba66140d8
+Picture-digest	caf1206989e845c3433824f88df182c1e1f6d4dd2748dd630e2876cba1dfb666
+Featured	0

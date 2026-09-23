@@ -12,4 +12,5 @@ pub mod layout;
 pub mod palette;
 pub mod picture;
 pub mod render;
+pub mod store;
 pub mod term;

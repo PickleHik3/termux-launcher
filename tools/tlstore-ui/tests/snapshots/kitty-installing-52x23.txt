@@ -1,0 +1,23 @@
+00|  ░░░░░░░ / installing
+01|  ────────────────────────────────────────────────
+02|             I N S T A L L I N G  ░░░░
+03|
+04|                    6▒▒▒▒0▒▒▒▒
+05|                    ▒▒▒▒▒▒▒▒▒▒
+06|                    ▒▒▒▒▒▒▒▒▒▒
+07|                    ▒▒▒▒▒▒▒▒▒▒
+08|                    ▒▒▒▒▒▒▒▒▒▒%
+09|
+10|      ●●●●●●●●●●●●●●●●●●●●●●●●○○○○○○○○○○○○○○○○
+11|
+12|             ✓  fetched
+13|             ·  signature checked
+14|                putting files in place
+15|                ready
+16|
+17|              Switch away if you like.
+18|        You’ll get a notice when it’s done.
+19|
+20|
+21|
+22|  esc keep going quietly  c cancel

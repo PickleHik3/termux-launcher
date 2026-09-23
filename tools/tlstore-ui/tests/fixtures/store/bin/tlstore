@@ -1,0 +1,61 @@
+#!/bin/sh
+# Stub tlstore for tlstore-ui tests: answers from the fixture files next to it and logs
+# every call to calls.log. Speaks the Revision 5 TSV contract and progress stream.
+d=$(cd "$(dirname "$0")/.." && pwd)
+printf '%s\n' "$*" >> "$d/calls.log"
+TAB=$(printf '\t')
+cmd=$1; shift
+case "$cmd" in
+    list) cat "$d/list.tsv"; exit 0 ;;
+    update)
+        case " $* " in
+            *" --check "*) cat "$d/updates.tsv"; exit 0 ;;
+        esac
+        ;;
+    info)
+        [ "$1" = --tsv ] && shift
+        [ -f "$d/info/$1.tsv" ] || exit 1
+        cat "$d/info/$1.tsv"
+        exit 0
+        ;;
+    picture)
+        [ -f "$d/nopics" ] && exit 2
+        p="$d/pics/$1.jpg"
+        [ -f "$p" ] || exit 1
+        echo "$p"
+        exit 0
+        ;;
+esac
+case "$cmd" in
+    install|update|remove) ;;
+    *) exit 2 ;;
+esac
+[ "$1" = --progress ] || exit 2
+shift
+failed=0
+for n in "$@"; do
+    printf 'step\t%s\t10\tfetched\n' "$n"
+    if [ -f "$d/hold" ]; then
+        printf 'step\t%s\t60\tsignature checked\n' "$n"
+        sleep 30
+    fi
+    if [ "$n" = broken ]; then
+        printf 'done\t%s\tfailed\tcould not %s %s\n' "$n" "$cmd" "$n"
+        failed=1
+        continue
+    fi
+    printf 'step\t%s\t60\tsignature checked\n' "$n"
+    printf 'step\t%s\t90\tputting files in place\n' "$n"
+    printf 'step\t%s\t100\tready\n' "$n"
+    msg=installed
+    [ "$cmd" = remove ] && msg=removed
+    [ "$cmd" = update ] && msg=updated
+    [ -f "$d/kept" ] && msg="kept your config.fish"
+    printf 'done\t%s\tok\t%s\n' "$n" "$msg"
+    case "$cmd" in
+        install) sed -i "s/^$n${TAB}available${TAB}\([^$TAB]*\)${TAB}${TAB}/$n${TAB}installed${TAB}\1${TAB}\1${TAB}/" "$d/list.tsv" ;;
+        remove) sed -i "s/^$n${TAB}installed${TAB}\([^$TAB]*\)${TAB}[^$TAB]*${TAB}/$n${TAB}available${TAB}\1${TAB}${TAB}/" "$d/list.tsv" ;;
+        update) sed -i "/^$n$TAB/d" "$d/updates.tsv" ;;
+    esac
+done
+exit $failed

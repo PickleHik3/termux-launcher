@@ -1,0 +1,22 @@
+Kind	npm-musl
+Version	latest
+From	npm:@anthropic-ai/claude-code-linux-arm64-musl#claude
+Checksum	-
+Needs	musl-loader,claude-panes-skill
+Files	-
+Summary	Anthropic's Claude Code, about 200 MB.
+Category	AI
+Upstream	anthropics/claude-code
+Setup	0
+Standfirst	a coding agent that lives in your terminal
+Does1	Reads your codebase and explains it
+Does2	Writes code from plain language requests
+Does3	Handles git commits, branches and diffs
+Try	claude
+Notes	about 200 mb|needs a claude.ai account to sign in
+Author	Anthropic
+Licence	Proprietary
+Size	~200 MB
+Picture	launcher:scripts/tlstore/pictures/claude-code.jpg@5253e29ae8e128aad09b08fd57eb115ba66140d8
+Picture-digest	ea6d4cd3bf3211314e853595b1f5ac0c1a35441ceab4f28742d7fc7e0a8152ed
+Featured	0
