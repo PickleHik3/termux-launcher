@@ -201,26 +201,7 @@ public final class ChromeRenderer {
     public ChromeRenderer(@NonNull Surfaces surfaces, @Nullable Executor blurWorker) {
         mSurfaces = surfaces;
         mBlurWorker = blurWorker;
-        mRenderSyncRunnable = () -> {
-            mRenderSyncPending = false;
-            mRenderSyncAskedForItself = false;
-            // What the pass is for is re-cutting the crops that went stale under settled
-            // geometry. Anything the apply below invalidates is therefore work this pass cannot
-            // do — it has already read the geometry — and earns the one follow-up pass; anything
-            // it merely asks for again does not. Two page changes cost 37 of these passes for a
-            // handful of distinct states, because the apply asks unconditionally (Pong, 2026-09-09).
-            long dirtyBefore = mLedger.dirtyGeneration();
-            mRenderSyncRunning = true;
-            try {
-                mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
-                mSurfaces.enforceAccessoryFxInvariants();
-            } finally {
-                mRenderSyncRunning = false;
-            }
-            if (mRenderSyncAskedForItself && mLedger.dirtyGeneration() != dirtyBefore) {
-                requestSync(SCOPE_ACCESSORY_RENDER);
-            }
-        };
+        mRenderSyncRunnable = () -> runRenderSync(mSurfaces.buildChromeSpec());
         mBlurHeartbeatRunnable = new Runnable() {
             @Override
             public void run() {
@@ -328,6 +309,42 @@ public final class ChromeRenderer {
             sync(scopes);
         } finally {
             Trace.endSection();
+        }
+    }
+
+    /**
+     * A full apply against settled layout — a pre-draw gate's, which cannot wait for a post. It is
+     * the very pass a pending accessory render would run a moment later, so while one is pending
+     * it runs in that one's place: the posted pass is withdrawn and a follow-up is booked only if
+     * this one left something stale. With nothing pending it is a plain apply.
+     */
+    public void applySettled(@NonNull ChromeSpec spec) {
+        if (!mRenderSyncPending) {
+            mSurfaces.applyChromeSpec(spec);
+            return;
+        }
+        mHandler.removeCallbacks(mRenderSyncRunnable);
+        runRenderSync(spec);
+    }
+
+    private void runRenderSync(@NonNull ChromeSpec spec) {
+        mRenderSyncPending = false;
+        mRenderSyncAskedForItself = false;
+        // What the pass is for is re-cutting the crops that went stale under settled geometry.
+        // Anything the apply below invalidates is therefore work this pass cannot do — it has
+        // already read the geometry — and earns the one follow-up pass; anything it merely asks
+        // for again does not. Two page changes cost 37 of these passes for a handful of distinct
+        // states, because the apply asks unconditionally (Pong, 2026-09-09).
+        long dirtyBefore = mLedger.dirtyGeneration();
+        mRenderSyncRunning = true;
+        try {
+            mSurfaces.applyChromeSpec(spec);
+            mSurfaces.enforceAccessoryFxInvariants();
+        } finally {
+            mRenderSyncRunning = false;
+        }
+        if (mRenderSyncAskedForItself && mLedger.dirtyGeneration() != dirtyBefore) {
+            requestSync(SCOPE_ACCESSORY_RENDER);
         }
     }
 

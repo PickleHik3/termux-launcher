@@ -6250,7 +6250,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public void applyChromeSpec(@NonNull ChromeSpec spec) {
-                TermuxActivity.this.applyChromeSpec(spec);
+                // The gates apply against settled layout, which is what a pending accessory
+                // render was about to do after the draw: run it here instead of twice.
+                mChrome.applySettled(spec);
             }
 
             @Override public void applyKeyboardSurfaceState(@NonNull ChromeSpec spec) {
