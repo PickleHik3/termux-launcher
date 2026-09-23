@@ -86,3 +86,51 @@ only with the user's go.
 - B2 A: rustup and the Android Rust targets are installed on the dev machine; the phone build is local.
 - B3 A: P1–P3 run now; what follows is decided after they land (account budget).
 - B4 B: pictures are the upstream GitHub hero images or screenshots; where none exist we take our own.
+
+## TSV contract, Revision 5
+
+`catalog.tsv` (and `items.tsv`, minus the two digest columns) has the ten columns it always
+had — `name kind version prefixes source digest target requires options summary` — plus, in this
+order, `category upstream setup standfirst does1 does2 does3 try notes author licence size picture
+picture-digest demo featured`. New columns only ever land at the end: the tlstore already on a
+phone reads columns 1–10 by fixed position and requires at least 10 (`rows()`'s `NF < 10` gate), so
+it keeps working against this catalog unchanged — proved by `scripts/tlstore/test.sh`'s "the
+dev-branch tlstore reads the Revision 5 catalog" case, which runs the pre-Revision-5 script
+(`git show dev:...`) against a Revision 5 fixture. `picture` is a `launcher:` source exactly like
+any other file source (see `config-fish` in `items.tsv`); `picture-digest` is its digest, computed
+by `build-catalog.sh` the same way the item's own `source`/`digest` pair is. A hidden item (a part)
+carries `-` in every one of these columns and `0` in `setup`/`featured`.
+
+tlstore-ui reads all of it from two commands:
+
+- `tlstore info --tsv <name>` — the existing `Kind`/`Version`/.../`Summary` lines, then one more
+  line per Revision 5 field whose value is not `-` (`Setup` and `Featured` always print, since `0`
+  is itself the answer): `Category`, `Upstream`, `Setup`, `Standfirst`, `Does1`, `Does2`, `Does3`,
+  `Try`, `Notes` (still `|`-separated), `Author`, `Licence`, `Size`, `Picture`, `Picture-digest`
+  (only alongside `Picture`), `Demo`, `Featured`.
+- `tlstore list --tsv` / `tlstore search --tsv <term>` — the existing six columns (`name state
+  version installed kind summary`) plus `category` and `featured`, the two the Apps screen needs
+  for every row without an `info` call each.
+
+## Progress stream, Revision 5
+
+`tlstore install`, `update` and `remove` take `--progress`, which implies `-y` and reads/writes
+nothing a person would (human text that would otherwise go to stdout goes to stderr instead in this
+mode). A config file question is never asked in `--progress`: the user's file is always kept, and
+that shows up in the item's `done` line. stdout carries only:
+
+```
+step<TAB><item><TAB><percent 0-100><TAB><step words>
+```
+
+one or more times per item, its words being `fetched`, `signature checked`, `putting files in
+place`, `ready` in that order (the same four words for install, update and remove, so tlstore-ui
+has one vocabulary to animate), then exactly one line closing that item out:
+
+```
+done<TAB><item><TAB>ok|failed<TAB><message>
+```
+
+The steps are coarse milestones around the whole per-item operation, not a byte-level download
+progress (tlstore has no hook into curl for that); P4 should treat the percentages as a small,
+fixed sequence to animate through rather than a literal transfer fraction.

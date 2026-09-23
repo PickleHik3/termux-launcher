@@ -273,7 +273,7 @@ run_suite() {
         expect_file "the catalog landed" "$TPREFIX/libexec/termux-launcher/tlstore/catalog.tsv"
         expect_file "the trusted key landed" "$TPREFIX/libexec/termux-launcher/tlstore/trusted.pub"
         expect_content ".standalone names the base" "$TPREFIX/libexec/termux-launcher/tlstore/.standalone" "$RAW_BASE"
-        expect_out "the summary names browse" "tlstore browse"
+        expect_out "the summary names list" "tlstore list"
 
         # --- a tlstore this did not write is not silently replaced ---
         reset_prefix
