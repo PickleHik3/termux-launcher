@@ -57,3 +57,32 @@ _Avoid_: corner menu, pane menu, controls view
 **Settings → Layout**:
 The Settings entry that opens the Layout editor for a chosen place. A door, not an editor of its
 own.
+
+### Tlstore
+
+**Item**:
+One thing a person can choose to install from tlstore, by name (`fastfetch`, `fish-shell`).
+_Avoid_: package, app, tool
+
+**Part**:
+Something an item brings along that cannot be installed on its own (`fisher`, `musl-loader`).
+_Avoid_: dependency, component
+
+**Upstream**:
+The outside project an item's program comes from, named by its GitHub repository
+(`fastfetch-cli/fastfetch`). Stars go to upstreams.
+_Avoid_: origin, source (the catalog's `source` column is where the file is fetched from)
+
+**Setup**:
+An item that is the launcher's own arrangement of files and programs (`fish-shell`), not someone
+else's program. A setup has no upstream and is never starred, nor are the programs it brings.
+_Avoid_: dotfiles, config, bundle (the catalog kind that happens to hold it)
+
+**Featured item**:
+The one item the home screen shows large, chosen by hand in the catalog.
+_Avoid_: hero, spotlight
+
+**Web inset**:
+A live web page the launcher sets into a band of terminal rows for a program, following the
+terminal's rows, font and colours. Only tlstore may open one.
+_Avoid_: web pane, web window, web view (the Android engine underneath)
