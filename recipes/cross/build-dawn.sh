@@ -2,7 +2,9 @@
 # build-dawn.sh — cross-compile the dawn markdown drafter for Termux aarch64 from a Linux host.
 #
 # dawn is plain C with its parsers vendored in, so the only library it needs from the device is
-# libcurl. That one library is also the whole reason for a build per launcher edition: Termux
+# libcurl. The AI chat is built in: upstream's chat talks only to Apple Intelligence, and the
+# bridge patch points it at Termux Launcher's TAI instead, or at any OpenAI-compatible server
+# named in ~/.config/dawn/ai.json. That one library is also the whole reason for a build per launcher edition: Termux
 # removes LD_LIBRARY_PATH on Android 7+, so libcurl is found through DT_RUNPATH, and a RUNPATH
 # naming another edition's prefix does not resolve.
 #
@@ -15,7 +17,12 @@ DAWN_URL="https://github.com/andrewmd5/dawn.git"
 DAWN_COMMIT="0e9587477463ece157ef7eea66c9e34bc5c7737a"   # main, 2026-04-29 (v0.1.3 plus fixes)
 DAWN_VERSION_STRING="0.1.3+0e958747"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-PATCH="$SCRIPT_DIR/0001-dawn-termux-clipboard.patch"
+PATCHES=(
+    "$SCRIPT_DIR/0001-dawn-termux-clipboard.patch"
+    "$SCRIPT_DIR/0002-dawn-openai-bridge.patch"
+    "$SCRIPT_DIR/0003-dawn-edit-tools.patch"
+    "$SCRIPT_DIR/0004-dawn-skip-unchanged-frames.patch"
+)
 
 TL_NDK=${TL_NDK:-"$HOME/android-sdk/ndk/27.2.12479018"}
 TL_SYSROOT=${TL_SYSROOT:-"$PWD/sysroot"}
@@ -31,7 +38,9 @@ PREFIX_IN_SYSROOT="$TL_SYSROOT$TERMUX_PREFIX"
     exit 1
 }
 [ -d "$TL_NDK" ] || { echo "error: NDK not found at $TL_NDK (set TL_NDK)" >&2; exit 1; }
-[ -f "$PATCH" ] || { echo "error: clipboard patch not found at $PATCH" >&2; exit 1; }
+for patch in "${PATCHES[@]}"; do
+    [ -f "$patch" ] || { echo "error: patch not found at $patch" >&2; exit 1; }
+done
 
 mkdir -p "$TL_OUT" "$TL_BUILD_DIR"
 source_dir="$TL_BUILD_DIR/source"
@@ -43,8 +52,10 @@ if [ ! -d "$source_dir/.git" ]; then
     git -C "$source_dir" fetch -q --depth 1 origin "$DAWN_COMMIT"
     git -C "$source_dir" checkout -q --detach FETCH_HEAD
     git -C "$source_dir" submodule update -q --init --recursive --depth 1
-    echo "Applying the Termux clipboard patch..."
-    git -C "$source_dir" apply "$PATCH"
+    for patch in "${PATCHES[@]}"; do
+        echo "Applying $(basename "$patch")..."
+        git -C "$source_dir" apply "$patch"
+    done
 fi
 
 # The same CMAKE_FIND_ROOT_PATH_MODE_* reasoning as build-fastfetch.sh: with BOTH, CMake finds the
@@ -58,7 +69,7 @@ cmake -S "$source_dir" -B "$TL_BUILD_DIR/build" \
     -DANDROID_ABI=arm64-v8a \
     -DANDROID_PLATFORM="android-$TL_ANDROID_API" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DDAWN_VERSION="$DAWN_VERSION_STRING" \
+    -DDAWN_VERSION="$DAWN_VERSION_STRING"     -DUSE_LIBAI=ON \
     -DCMAKE_FIND_ROOT_PATH="$PREFIX_IN_SYSROOT" \
     -DCMAKE_FIND_ROOT_PATH_MODE_INCLUDE=ONLY \
     -DCMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY \
@@ -81,6 +92,17 @@ if ! grep -qa ']52;c;?' "$TL_OUT/dawn"; then
 fi
 if grep -qa 'xclip' "$TL_OUT/dawn"; then
     echo "error: the xclip path is still in the build — the patch did not replace it" >&2
+    exit 1
+fi
+
+# The chat is compiled out unless USE_LIBAI took effect, and then the panel simply never opens —
+# so the endpoint path and the edit tool names must both be in the binary.
+if ! grep -qa '/chat/completions' "$TL_OUT/dawn"; then
+    echo "error: the AI bridge is missing from the build — the chat panel would never open" >&2
+    exit 1
+fi
+if ! grep -qa 'replace_selection' "$TL_OUT/dawn"; then
+    echo "error: the edit tools are missing from the build — the chat could read but not edit" >&2
     exit 1
 fi
 

@@ -1,0 +1,1297 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index e9526f9..8f67ec8 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -10,7 +10,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
+ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+ set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+ 
+-option(USE_LIBAI "Build with Apple Intelligence (macOS 26+)" OFF)
++option(USE_LIBAI "Build the AI chat (Apple Intelligence on macOS 26+, an OpenAI-compatible endpoint elsewhere)" OFF)
+ option(ENABLE_ASAN "Enable AddressSanitizer" OFF)
+ option(ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
+ set(DAWN_VERSION "dev" CACHE STRING "Version string")
+@@ -108,12 +108,25 @@ if(NOT EMSCRIPTEN)
+         target_link_libraries(dawn PRIVATE "-framework ApplicationServices")
+     endif()
+ 
+-    if(APPLE AND USE_LIBAI)
++    if(USE_LIBAI)
+         target_sources(dawn PRIVATE src/search.c)
+         target_compile_definitions(dawn PRIVATE USE_LIBAI)
+         target_include_directories(dawn PRIVATE libai)
+         target_compile_options(dawn PRIVATE -Wno-unused-variable -Wno-unused-but-set-variable)
++    endif()
+ 
++    # Everywhere but macOS the chat talks to an OpenAI-compatible endpoint (Termux Launcher's
++    # TAI by default) through libai/ai_bridge_openai.c, built into the same libai front end.
++    if(USE_LIBAI AND NOT APPLE)
++        find_package(Threads REQUIRED)
++        add_library(libai_openai STATIC libai/ai.c libai/ai_bridge_openai.c)
++        target_include_directories(libai_openai PRIVATE libai third-party)
++        target_compile_definitions(libai_openai PRIVATE AI_VERSION_STRING="openai-compatible")
++        target_link_libraries(libai_openai PRIVATE CURL::libcurl Threads::Threads)
++        target_link_libraries(dawn PRIVATE libai_openai)
++    endif()
++
++    if(APPLE AND USE_LIBAI)
+         add_custom_target(libai_build
+             COMMAND make static-rel
+             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/libai
+diff --git a/libai/ai.c b/libai/ai.c
+index ccc8516..b9eaadc 100644
+--- a/libai/ai.c
++++ b/libai/ai.c
+@@ -130,6 +130,12 @@ ai_result_t ai_init(void) {
+   return AI_SUCCESS;
+ }
+ 
++void ai_pump(void) {
++#ifndef __APPLE__
++  if (atomic_load(&g_state.initialized)) ai_bridge_pump();
++#endif
++}
++
+ void ai_cleanup(void) {
+   if (!atomic_load(&g_state.initialized)) return;
+ 
+diff --git a/libai/ai.h b/libai/ai.h
+index 7c29398..9e8e75e 100644
+--- a/libai/ai.h
++++ b/libai/ai.h
+@@ -328,6 +328,14 @@ ai_result_t ai_init(void);
+  */
+ void ai_cleanup(void);
+ 
++/**
++ * @brief Deliver pending stream chunks and tool calls on the calling thread
++ *
++ * Call once per frame from the UI thread. Stream and tool callbacks run inside
++ * this call. A no-op with the FoundationModels bridge.
++ */
++void ai_pump(void);
++
+ /**
+  * @brief Get library version string
+  *
+diff --git a/libai/ai_bridge.h b/libai/ai_bridge.h
+index fa1e9d9..c2024b7 100644
+--- a/libai/ai_bridge.h
++++ b/libai/ai_bridge.h
+@@ -418,6 +418,15 @@ bool ai_bridge_add_message_to_history(ai_bridge_session_id_t session_id,
+  */
+ void ai_bridge_free_string(char *ptr);
+ 
++/**
++ * @brief Deliver queued stream chunks and run tools that touch the caller's state
++ *
++ * The OpenAI-compatible bridge never calls back from its worker threads: chunks
++ * and document tools wait until the caller's own thread calls this, once per
++ * frame. The FoundationModels bridge does not have it.
++ */
++void ai_bridge_pump(void);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/libai/ai_bridge_openai.c b/libai/ai_bridge_openai.c
+new file mode 100644
+index 0000000..f32447e
+--- /dev/null
++++ b/libai/ai_bridge_openai.c
+@@ -0,0 +1,1181 @@
++/**
++ * @file ai_bridge_openai.c
++ * @brief ai_bridge.h over an OpenAI-compatible Chat Completions endpoint.
++ *
++ * Replaces the FoundationModels bridge on every platform that is not macOS. The endpoint is
++ * Termux Launcher's TAI by default, or any OpenAI-compatible server named in
++ * <config>/dawn/ai.json:
++ *
++ *   { "provider": "tai", "model": "optional-model-id" }
++ *   { "provider": "openai", "base_url": "https://host/v1", "api_key": "optional", "model": "id" }
++ *
++ * The file is only ever read, and it is read again for every question, so an edit takes effect
++ * on the next message. In TAI mode the address comes from the first line of
++ * ~/.launcherctl/endpoint and the key from ~/.launcherctl/token, both written by the launcher;
++ * the token is optional because the launcher can serve without one.
++ *
++ * Threading: each question runs on its own worker thread, but dawn's state is only ever touched
++ * on dawn's own thread. Response chunks are queued and delivered from ai_bridge_pump(), which the
++ * frame loop calls, and tools that read or change the document run there too while the worker
++ * waits. Tools that only reach the network or the clock run on the worker, so a slow web search
++ * does not freeze typing.
++ */
++
++#include "ai_bridge.h"
++
++#include "cJSON.h"
++
++#include <curl/curl.h>
++#include <pthread.h>
++#include <stdarg.h>
++#include <stdatomic.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <time.h>
++
++#define MAX_SESSIONS 254
++#define MAX_STREAMS 254
++#define MAX_TOOL_ROUNDS 5
++#define MAX_TOOL_CALLS 8
++#define DOC_CONTEXT_LIMIT 8000
++
++// #region Small helpers
++
++typedef struct {
++    char* data;
++    size_t len;
++    size_t cap;
++} strbuf_t;
++
++static void sb_append(strbuf_t* sb, const char* s, size_t n)
++{
++    if (!s || n == 0)
++        return;
++    if (sb->len + n + 1 > sb->cap) {
++        size_t cap = sb->cap ? sb->cap : 256;
++        while (sb->len + n + 1 > cap)
++            cap *= 2;
++        char* grown = realloc(sb->data, cap);
++        if (!grown)
++            return;
++        sb->data = grown;
++        sb->cap = cap;
++    }
++    memcpy(sb->data + sb->len, s, n);
++    sb->len += n;
++    sb->data[sb->len] = '\0';
++}
++
++static void sb_free(strbuf_t* sb)
++{
++    free(sb->data);
++    sb->data = NULL;
++    sb->len = sb->cap = 0;
++}
++
++static char* dup_printf(const char* fmt, ...)
++{
++    va_list args;
++    va_start(args, fmt);
++    int n = vsnprintf(NULL, 0, fmt, args);
++    va_end(args);
++    if (n < 0)
++        return NULL;
++    char* out = malloc((size_t)n + 1);
++    if (!out)
++        return NULL;
++    va_start(args, fmt);
++    vsnprintf(out, (size_t)n + 1, fmt, args);
++    va_end(args);
++    return out;
++}
++
++static char* dup_str(const char* s) { return s ? dup_printf("%s", s) : NULL; }
++
++//! Reads a small text file whole, or returns NULL when it is missing or empty.
++static char* read_text_file(const char* path)
++{
++    FILE* f = fopen(path, "rb");
++    if (!f)
++        return NULL;
++    strbuf_t sb = { 0 };
++    char buf[4096];
++    size_t n;
++    while ((n = fread(buf, 1, sizeof(buf), f)) > 0 && sb.len < (1u << 20))
++        sb_append(&sb, buf, n);
++    fclose(f);
++    return sb.data;
++}
++
++//! The first line of s with surrounding whitespace removed, in place.
++static char* first_line_trimmed(char* s)
++{
++    if (!s)
++        return NULL;
++    while (*s == ' ' || *s == '\t' || *s == '\r' || *s == '\n')
++        s++;
++    char* end = s;
++    while (*end && *end != '\n' && *end != '\r')
++        end++;
++    while (end > s && (end[-1] == ' ' || end[-1] == '\t'))
++        end--;
++    *end = '\0';
++    return s;
++}
++
++// #endregion
++
++// #region Configuration
++
++typedef struct {
++    bool tai;
++    char* base_url; //!< Ends in /v1 (or wherever chat/completions lives), no trailing slash
++    char* api_key; //!< NULL when none is configured
++    char* model; //!< NULL to let the server choose
++    char* error; //!< Set instead of the rest when the configuration cannot be used
++} config_t;
++
++static void config_free(config_t* c)
++{
++    free(c->base_url);
++    free(c->api_key);
++    free(c->model);
++    free(c->error);
++    memset(c, 0, sizeof(*c));
++}
++
++static char* config_path(void)
++{
++    const char* xdg = getenv("XDG_CONFIG_HOME");
++    if (xdg && xdg[0] == '/')
++        return dup_printf("%s/dawn/ai.json", xdg);
++    const char* home = getenv("HOME");
++    return dup_printf("%s/.config/dawn/ai.json", home ? home : ".");
++}
++
++static char* json_string(cJSON* obj, const char* key)
++{
++    cJSON* item = cJSON_GetObjectItemCaseSensitive(obj, key);
++    if (!cJSON_IsString(item) || !item->valuestring || !item->valuestring[0])
++        return NULL;
++    return dup_str(item->valuestring);
++}
++
++static void strip_trailing_slashes(char* s)
++{
++    size_t n = s ? strlen(s) : 0;
++    while (n > 0 && s[n - 1] == '/')
++        s[--n] = '\0';
++}
++
++static config_t config_load(void)
++{
++    config_t c = { 0 };
++    char* path = config_path();
++    char* text = path ? read_text_file(path) : NULL;
++    cJSON* root = NULL;
++    char* provider = NULL;
++
++    if (text) {
++        root = cJSON_Parse(text);
++        if (!cJSON_IsObject(root)) {
++            c.error = dup_printf("Error: %s isn't valid JSON.", path);
++            goto done;
++        }
++        provider = json_string(root, "provider");
++        c.model = json_string(root, "model");
++    }
++
++    if (!provider || strcmp(provider, "tai") == 0) {
++        c.tai = true;
++        const char* home = getenv("HOME");
++        char* endpoint_path = dup_printf("%s/.launcherctl/endpoint", home ? home : ".");
++        char* token_path = dup_printf("%s/.launcherctl/token", home ? home : ".");
++        char* endpoint = read_text_file(endpoint_path);
++        char* token = read_text_file(token_path);
++        char* base = first_line_trimmed(endpoint);
++        char* key = first_line_trimmed(token);
++        if (base && base[0]) {
++            strip_trailing_slashes(base);
++            c.base_url = dup_printf("%s/v1", base);
++        } else {
++            c.error = dup_str("Error: Can't find TAI. Turn on AI in Termux Launcher's settings.");
++        }
++        if (key && key[0])
++            c.api_key = dup_str(key);
++        free(endpoint);
++        free(token);
++        free(endpoint_path);
++        free(token_path);
++    } else if (strcmp(provider, "openai") == 0) {
++        c.base_url = json_string(root, "base_url");
++        c.api_key = json_string(root, "api_key");
++        if (c.base_url)
++            strip_trailing_slashes(c.base_url);
++        else
++            c.error = dup_printf("Error: Add a base_url to %s.", path);
++    } else {
++        c.error = dup_printf("Error: Unknown provider \"%s\" in %s. Use \"tai\" or \"openai\".",
++            provider, path);
++    }
++
++done:
++    free(provider);
++    cJSON_Delete(root);
++    free(text);
++    free(path);
++    return c;
++}
++
++// #endregion
++
++// #region Sessions and streams
++
++typedef struct {
++    char* name;
++    ai_bridge_tool_callback_t callback;
++    void* user_data;
++} tool_t;
++
++typedef struct {
++    bool used;
++    bool closing; //!< Destroyed by the caller; freed once no stream holds it
++    int32_t refs;
++    char* instructions;
++    cJSON* tools; //!< OpenAI "tools" array, or NULL when the session has none
++    tool_t registered[16];
++    int32_t registered_count;
++    cJSON* history; //!< user / assistant messages, without the system message
++    bool tools_refused; //!< The endpoint refused tools once; ask without them from then on
++    bool told_tools_refused;
++} session_t;
++
++typedef struct {
++    bool used;
++    atomic_bool cancel;
++    uint8_t session;
++    char* prompt;
++    double temperature;
++    int32_t max_tokens;
++    void* context;
++    ai_bridge_stream_callback_t callback;
++    void* user_data;
++    bool inline_calls; //!< Synchronous generation: call back directly on the caller's thread
++    strbuf_t collected; //!< Synchronous generation: the whole reply
++} stream_t;
++
++static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
++static pthread_cond_t g_cond = PTHREAD_COND_INITIALIZER;
++// Indexed by the one-byte ids the header hands out, so every possible id is in bounds.
++static session_t g_sessions[256];
++static stream_t g_streams[256];
++static bool g_curl_ready;
++
++static void session_release_locked(uint8_t id)
++{
++    session_t* s = &g_sessions[id];
++    if (--s->refs > 0 || !s->closing)
++        return;
++    free(s->instructions);
++    cJSON_Delete(s->tools);
++    cJSON_Delete(s->history);
++    for (int32_t i = 0; i < s->registered_count; i++)
++        free(s->registered[i].name);
++    memset(s, 0, sizeof(*s));
++}
++
++//! Converts dawn's Claude-style tool list ({name, description, input_schema}) to OpenAI's.
++static cJSON* openai_tools_from(const char* tools_json)
++{
++    cJSON* source = tools_json ? cJSON_Parse(tools_json) : NULL;
++    if (!cJSON_IsArray(source) || cJSON_GetArraySize(source) == 0) {
++        cJSON_Delete(source);
++        return NULL;
++    }
++    cJSON* tools = cJSON_CreateArray();
++    cJSON* item;
++    cJSON_ArrayForEach(item, source)
++    {
++        cJSON* name = cJSON_GetObjectItemCaseSensitive(item, "name");
++        if (!cJSON_IsString(name))
++            continue;
++        cJSON* fn = cJSON_CreateObject();
++        cJSON_AddStringToObject(fn, "name", name->valuestring);
++        cJSON* desc = cJSON_GetObjectItemCaseSensitive(item, "description");
++        if (cJSON_IsString(desc))
++            cJSON_AddStringToObject(fn, "description", desc->valuestring);
++        cJSON* schema = cJSON_GetObjectItemCaseSensitive(item, "input_schema");
++        if (!schema)
++            schema = cJSON_GetObjectItemCaseSensitive(item, "parameters");
++        cJSON_AddItemToObject(fn, "parameters",
++            schema ? cJSON_Duplicate(schema, true) : cJSON_Parse("{\"type\":\"object\",\"properties\":{}}"));
++        cJSON* tool = cJSON_CreateObject();
++        cJSON_AddStringToObject(tool, "type", "function");
++        cJSON_AddItemToObject(tool, "function", fn);
++        cJSON_AddItemToArray(tools, tool);
++    }
++    cJSON_Delete(source);
++    return tools;
++}
++
++// #endregion
++
++// #region Main-thread queue
++
++typedef enum { EVENT_CHUNK, EVENT_CALL } event_kind_t;
++
++typedef struct event {
++    event_kind_t kind;
++    struct event* next;
++    // EVENT_CHUNK
++    ai_bridge_stream_callback_t stream_callback;
++    void* context;
++    void* user_data;
++    char* chunk; //!< NULL marks the end of the reply
++    // EVENT_CALL
++    ai_bridge_tool_callback_t tool_callback;
++    char* parameters;
++    char* result;
++    bool done;
++    bool abandoned; //!< The worker stopped waiting; whoever finishes last frees the event
++} event_t;
++
++static event_t* g_queue_head;
++static event_t* g_queue_tail;
++
++static void enqueue_locked(event_t* e)
++{
++    e->next = NULL;
++    if (g_queue_tail)
++        g_queue_tail->next = e;
++    else
++        g_queue_head = e;
++    g_queue_tail = e;
++}
++
++static void emit(stream_t* st, const char* chunk)
++{
++    if (st->inline_calls) {
++        if (chunk && strncmp(chunk, "Error:", 6) != 0)
++            sb_append(&st->collected, chunk, strlen(chunk));
++        else if (chunk) {
++            sb_free(&st->collected);
++            sb_append(&st->collected, chunk, strlen(chunk));
++        }
++        return;
++    }
++    event_t* e = calloc(1, sizeof(*e));
++    if (!e)
++        return;
++    e->kind = EVENT_CHUNK;
++    e->stream_callback = st->callback;
++    e->context = st->context;
++    e->user_data = st->user_data;
++    e->chunk = dup_str(chunk);
++    pthread_mutex_lock(&g_lock);
++    enqueue_locked(e);
++    pthread_mutex_unlock(&g_lock);
++}
++
++void ai_bridge_pump(void)
++{
++    pthread_mutex_lock(&g_lock);
++    event_t* e = g_queue_head;
++    g_queue_head = g_queue_tail = NULL;
++    pthread_mutex_unlock(&g_lock);
++
++    while (e) {
++        event_t* next = e->next;
++        if (e->kind == EVENT_CHUNK) {
++            e->stream_callback(e->context, e->chunk, e->user_data);
++            free(e->chunk);
++            free(e);
++        } else {
++            pthread_mutex_lock(&g_lock);
++            bool abandoned = e->abandoned;
++            pthread_mutex_unlock(&g_lock);
++            char* result = abandoned ? NULL : e->tool_callback(e->parameters, e->user_data);
++            pthread_mutex_lock(&g_lock);
++            if (e->abandoned) {
++                free(result);
++                free(e->parameters);
++                free(e);
++            } else {
++                e->result = result;
++                e->done = true;
++                pthread_cond_broadcast(&g_cond);
++            }
++            pthread_mutex_unlock(&g_lock);
++        }
++        e = next;
++    }
++}
++
++//! Tools that only reach the network or the clock; everything else touches the document.
++static bool runs_on_worker(const char* name)
++{
++    return strcmp(name, "web_search") == 0 || strcmp(name, "get_time") == 0
++        || strcmp(name, "past_sessions") == 0;
++}
++
++static char* call_tool(stream_t* st, const tool_t* tool, const char* parameters)
++{
++    if (st->inline_calls || runs_on_worker(tool->name))
++        return tool->callback(parameters, tool->user_data);
++
++    event_t* e = calloc(1, sizeof(*e));
++    if (!e)
++        return NULL;
++    e->kind = EVENT_CALL;
++    e->tool_callback = tool->callback;
++    e->user_data = tool->user_data;
++    e->parameters = dup_str(parameters);
++
++    pthread_mutex_lock(&g_lock);
++    enqueue_locked(e);
++    while (!e->done && !atomic_load(&st->cancel)) {
++        struct timespec until;
++        clock_gettime(CLOCK_REALTIME, &until);
++        until.tv_nsec += 100 * 1000 * 1000;
++        if (until.tv_nsec >= 1000000000L) {
++            until.tv_sec++;
++            until.tv_nsec -= 1000000000L;
++        }
++        pthread_cond_timedwait(&g_cond, &g_lock, &until);
++    }
++    char* result = NULL;
++    if (e->done) {
++        result = e->result;
++        free(e->parameters);
++        free(e);
++    } else {
++        e->abandoned = true; // the pump frees it
++    }
++    pthread_mutex_unlock(&g_lock);
++    return result;
++}
++
++// #endregion
++
++// #region One HTTP exchange
++
++typedef struct {
++    char* id;
++    strbuf_t name;
++    strbuf_t arguments;
++} tool_call_t;
++
++typedef struct {
++    stream_t* stream;
++    strbuf_t raw; //!< Everything received, for error bodies and non-streaming replies
++    strbuf_t line;
++    strbuf_t content;
++    tool_call_t calls[MAX_TOOL_CALLS];
++    int32_t call_count;
++    bool saw_event;
++    char* stream_error;
++} exchange_t;
++
++static void exchange_free(exchange_t* x)
++{
++    sb_free(&x->raw);
++    sb_free(&x->line);
++    sb_free(&x->content);
++    for (int32_t i = 0; i < x->call_count; i++) {
++        free(x->calls[i].id);
++        sb_free(&x->calls[i].name);
++        sb_free(&x->calls[i].arguments);
++    }
++    free(x->stream_error);
++}
++
++static char* error_message_from(cJSON* root)
++{
++    cJSON* err = cJSON_GetObjectItemCaseSensitive(root, "error");
++    cJSON* msg = cJSON_IsObject(err) ? cJSON_GetObjectItemCaseSensitive(err, "message") : NULL;
++    if (!cJSON_IsString(msg))
++        msg = cJSON_GetObjectItemCaseSensitive(root, "message");
++    if (!cJSON_IsString(msg) && cJSON_IsString(err))
++        msg = err;
++    return cJSON_IsString(msg) ? dup_str(msg->valuestring) : NULL;
++}
++
++//! Folds one message or delta ({content, tool_calls}) into the exchange.
++static void absorb_delta(exchange_t* x, cJSON* delta, bool streaming)
++{
++    cJSON* content = cJSON_GetObjectItemCaseSensitive(delta, "content");
++    if (cJSON_IsString(content) && content->valuestring[0]) {
++        sb_append(&x->content, content->valuestring, strlen(content->valuestring));
++        if (streaming)
++            emit(x->stream, content->valuestring);
++    }
++
++    cJSON* calls = cJSON_GetObjectItemCaseSensitive(delta, "tool_calls");
++    cJSON* call;
++    int32_t position = 0;
++    cJSON_ArrayForEach(call, calls)
++    {
++        cJSON* index = cJSON_GetObjectItemCaseSensitive(call, "index");
++        int32_t i = cJSON_IsNumber(index) ? index->valueint : position;
++        position++;
++        if (i < 0 || i >= MAX_TOOL_CALLS)
++            continue;
++        if (i >= x->call_count)
++            x->call_count = i + 1;
++        tool_call_t* tc = &x->calls[i];
++        cJSON* id = cJSON_GetObjectItemCaseSensitive(call, "id");
++        if (cJSON_IsString(id) && id->valuestring[0] && !tc->id)
++            tc->id = dup_str(id->valuestring);
++        cJSON* fn = cJSON_GetObjectItemCaseSensitive(call, "function");
++        cJSON* name = cJSON_GetObjectItemCaseSensitive(fn, "name");
++        cJSON* args = cJSON_GetObjectItemCaseSensitive(fn, "arguments");
++        if (cJSON_IsString(name))
++            sb_append(&tc->name, name->valuestring, strlen(name->valuestring));
++        if (cJSON_IsString(args))
++            sb_append(&tc->arguments, args->valuestring, strlen(args->valuestring));
++        else if (cJSON_IsObject(args)) {
++            char* printed = cJSON_PrintUnformatted(args);
++            if (printed)
++                sb_append(&tc->arguments, printed, strlen(printed));
++            free(printed);
++        }
++    }
++}
++
++static void handle_sse_line(exchange_t* x, char* line)
++{
++    size_t n = strlen(line);
++    while (n > 0 && (line[n - 1] == '\r' || line[n - 1] == ' '))
++        line[--n] = '\0';
++    if (strncmp(line, "data:", 5) != 0)
++        return;
++    char* payload = line + 5;
++    while (*payload == ' ')
++        payload++;
++    x->saw_event = true;
++    if (strcmp(payload, "[DONE]") == 0)
++        return;
++    cJSON* root = cJSON_Parse(payload);
++    if (!root)
++        return;
++    if (cJSON_GetObjectItemCaseSensitive(root, "error") && !x->stream_error)
++        x->stream_error = error_message_from(root);
++    cJSON* choices = cJSON_GetObjectItemCaseSensitive(root, "choices");
++    cJSON* choice = cJSON_GetArrayItem(choices, 0);
++    cJSON* delta = cJSON_GetObjectItemCaseSensitive(choice, "delta");
++    if (cJSON_IsObject(delta))
++        absorb_delta(x, delta, true);
++    cJSON_Delete(root);
++}
++
++static size_t on_body(char* data, size_t size, size_t count, void* userp)
++{
++    exchange_t* x = userp;
++    size_t n = size * count;
++    sb_append(&x->raw, data, n);
++    for (size_t i = 0; i < n; i++) {
++        if (data[i] == '\n') {
++            if (x->line.data) {
++                handle_sse_line(x, x->line.data);
++                x->line.len = 0;
++                x->line.data[0] = '\0';
++            }
++        } else {
++            sb_append(&x->line, &data[i], 1);
++        }
++    }
++    return n;
++}
++
++static int on_progress(void* userp, curl_off_t a, curl_off_t b, curl_off_t c, curl_off_t d)
++{
++    (void)a;
++    (void)b;
++    (void)c;
++    (void)d;
++    exchange_t* x = userp;
++    return atomic_load(&x->stream->cancel) ? 1 : 0;
++}
++
++typedef enum { SEND_OK, SEND_TOOLS_REFUSED, SEND_FAILED, SEND_CANCELLED } send_result_t;
++
++static bool mentions_tools(const char* s)
++{
++    return s && (strstr(s, "tool") || strstr(s, "Tool") || strstr(s, "function")
++                    || strstr(s, "capability_not_supported"));
++}
++
++static send_result_t send_request(const config_t* cfg, const char* body, exchange_t* x,
++    bool sent_tools, char** error_out)
++{
++    CURL* curl = curl_easy_init();
++    if (!curl) {
++        *error_out = dup_str("Error: Couldn't start a connection.");
++        return SEND_FAILED;
++    }
++    char* url = dup_printf("%s/chat/completions", cfg->base_url);
++    struct curl_slist* headers = NULL;
++    headers = curl_slist_append(headers, "Content-Type: application/json");
++    headers = curl_slist_append(headers, "Accept: text/event-stream");
++    char* auth = cfg->api_key ? dup_printf("Authorization: Bearer %s", cfg->api_key) : NULL;
++    if (auth)
++        headers = curl_slist_append(headers, auth);
++
++    curl_easy_setopt(curl, CURLOPT_URL, url);
++    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
++    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body);
++    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, on_body);
++    curl_easy_setopt(curl, CURLOPT_WRITEDATA, x);
++    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
++    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, on_progress);
++    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, x);
++    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
++    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
++    curl_easy_setopt(curl, CURLOPT_USERAGENT, "dawn");
++
++    CURLcode rc = curl_easy_perform(curl);
++    long status = 0;
++    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
++    if (x->line.len > 0)
++        handle_sse_line(x, x->line.data);
++
++    curl_slist_free_all(headers);
++    curl_easy_cleanup(curl);
++    free(auth);
++    free(url);
++
++    if (atomic_load(&x->stream->cancel) || rc == CURLE_ABORTED_BY_CALLBACK)
++        return SEND_CANCELLED;
++    if (rc != CURLE_OK) {
++        if (cfg->tai)
++            *error_out = dup_str("Error: Can't reach TAI. Turn on AI in Termux Launcher's settings.");
++        else
++            *error_out = dup_printf("Error: Can't reach %s (%s).", cfg->base_url, curl_easy_strerror(rc));
++        return SEND_FAILED;
++    }
++
++    cJSON* root = x->saw_event ? NULL : cJSON_Parse(x->raw.data ? x->raw.data : "");
++    char* server_message = x->stream_error ? dup_str(x->stream_error) : (root ? error_message_from(root) : NULL);
++
++    if (status == 401 || status == 403) {
++        if (cfg->tai)
++            *error_out = dup_str("Error: TAI refused the connection. Check the token in Termux Launcher's AI settings.");
++        else
++            *error_out = dup_str("Error: The server refused the API key in your dawn AI settings.");
++        free(server_message);
++        cJSON_Delete(root);
++        return SEND_FAILED;
++    }
++    if (status >= 400 || x->stream_error) {
++        bool refused = sent_tools && status == 400
++            && (mentions_tools(server_message) || mentions_tools(x->raw.data));
++        if (!refused)
++            *error_out = dup_printf("Error: %s",
++                server_message ? server_message : "The AI server couldn't answer.");
++        free(server_message);
++        cJSON_Delete(root);
++        return refused ? SEND_TOOLS_REFUSED : SEND_FAILED;
++    }
++    free(server_message);
++
++    // A server that ignored "stream": true answers with one ordinary completion.
++    if (!x->saw_event && root) {
++        cJSON* choice = cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(root, "choices"), 0);
++        cJSON* message = cJSON_GetObjectItemCaseSensitive(choice, "message");
++        if (cJSON_IsObject(message)) {
++            absorb_delta(x, message, false);
++            if (x->content.len > 0)
++                emit(x->stream, x->content.data);
++        }
++    }
++    cJSON_Delete(root);
++    return SEND_OK;
++}
++
++// #endregion
++
++// #region Conversation
++
++static const char* NO_TOOLS_NOTICE
++    = "This model can't use tools, so it answers from your note's text and can't search the web "
++      "or edit.\n\n";
++
++static const tool_t* find_tool(session_t* s, const char* name)
++{
++    for (int32_t i = 0; i < s->registered_count; i++)
++        if (strcmp(s->registered[i].name, name) == 0)
++            return &s->registered[i];
++    return NULL;
++}
++
++//! The selection, or the start of the note when nothing is selected, read through dawn's own
++//! read_document tool so the document is only touched on dawn's thread.
++static char* document_context(stream_t* st, session_t* s)
++{
++    const tool_t* reader = find_tool(s, "read_document");
++    if (!reader)
++        return NULL;
++    const char* actions[] = { "{\"action\":\"selection\"}", "{\"action\":\"full\"}" };
++    for (size_t i = 0; i < sizeof(actions) / sizeof(actions[0]); i++) {
++        char* result = call_tool(st, reader, actions[i]);
++        cJSON* root = result ? cJSON_Parse(result) : NULL;
++        free(result);
++        cJSON* text = cJSON_GetObjectItemCaseSensitive(root, "text");
++        char* out = NULL;
++        if (cJSON_IsString(text) && text->valuestring[0]) {
++            size_t n = strlen(text->valuestring);
++            if (n > DOC_CONTEXT_LIMIT)
++                text->valuestring[DOC_CONTEXT_LIMIT] = '\0';
++            out = dup_printf("%s%s", i == 0 ? "Selected text:\n" : "The note:\n", text->valuestring);
++        }
++        cJSON_Delete(root);
++        if (out)
++            return out;
++    }
++    return NULL;
++}
++
++static cJSON* message_new(const char* role, const char* content)
++{
++    cJSON* m = cJSON_CreateObject();
++    cJSON_AddStringToObject(m, "role", role);
++    if (content)
++        cJSON_AddStringToObject(m, "content", content);
++    else
++        cJSON_AddNullToObject(m, "content");
++    return m;
++}
++
++static char* build_body(const config_t* cfg, session_t* s, const stream_t* st, cJSON* turn,
++    const char* context, bool with_tools)
++{
++    cJSON* body = cJSON_CreateObject();
++    if (cfg->model)
++        cJSON_AddStringToObject(body, "model", cfg->model);
++    cJSON_AddBoolToObject(body, "stream", true);
++    if (st->temperature > 0)
++        cJSON_AddNumberToObject(body, "temperature", st->temperature);
++    if (st->max_tokens > 0)
++        cJSON_AddNumberToObject(body, "max_tokens", st->max_tokens);
++
++    cJSON* messages = cJSON_AddArrayToObject(body, "messages");
++    const char* instructions = s->instructions ? s->instructions : "";
++    char* system = with_tools
++        ? dup_str(instructions)
++        : dup_printf("%s\n\nNo tools are available in this chat. When the user's message includes "
++                     "their note or selected text, answer from it.",
++              instructions);
++    if (system && system[0])
++        cJSON_AddItemToArray(messages, message_new("system", system));
++    free(system);
++
++    cJSON* m;
++    cJSON_ArrayForEach(m, s->history) cJSON_AddItemToArray(messages, cJSON_Duplicate(m, true));
++    int32_t turn_count = cJSON_GetArraySize(turn);
++    for (int32_t i = 0; i < turn_count; i++) {
++        cJSON* copy = cJSON_Duplicate(cJSON_GetArrayItem(turn, i), true);
++        // The note rides on this question only, so history never carries a copy of it per turn.
++        if (i == 0 && context) {
++            cJSON* content = cJSON_GetObjectItemCaseSensitive(copy, "content");
++            char* joined = dup_printf("%s\n\n---\n%s", cJSON_IsString(content) ? content->valuestring : "", context);
++            cJSON_ReplaceItemInObject(copy, "content", cJSON_CreateString(joined ? joined : ""));
++            free(joined);
++        }
++        cJSON_AddItemToArray(messages, copy);
++    }
++
++    if (with_tools && s->tools)
++        cJSON_AddItemToObject(body, "tools", cJSON_Duplicate(s->tools, true));
++
++    char* out = cJSON_PrintUnformatted(body);
++    cJSON_Delete(body);
++    return out;
++}
++
++static cJSON* assistant_tool_message(exchange_t* x)
++{
++    cJSON* m = message_new("assistant", x->content.len ? x->content.data : NULL);
++    cJSON* calls = cJSON_AddArrayToObject(m, "tool_calls");
++    for (int32_t i = 0; i < x->call_count; i++) {
++        tool_call_t* tc = &x->calls[i];
++        if (!tc->name.data)
++            continue;
++        if (!tc->id)
++            tc->id = dup_printf("call_%d", (int)i);
++        cJSON* call = cJSON_CreateObject();
++        cJSON_AddStringToObject(call, "id", tc->id);
++        cJSON_AddStringToObject(call, "type", "function");
++        cJSON* fn = cJSON_AddObjectToObject(call, "function");
++        cJSON_AddStringToObject(fn, "name", tc->name.data);
++        cJSON_AddStringToObject(fn, "arguments", tc->arguments.data ? tc->arguments.data : "{}");
++        cJSON_AddItemToArray(calls, call);
++    }
++    return m;
++}
++
++//! Answers one question, including any tool rounds, then records the question and the final
++//! answer in the session history. Tool traffic is dropped from the history afterwards: a small
++//! on-device context window would otherwise fill with old document reads.
++static void run_turn(stream_t* st)
++{
++    config_t cfg = config_load();
++    if (cfg.error) {
++        emit(st, cfg.error);
++        config_free(&cfg);
++        return;
++    }
++
++    pthread_mutex_lock(&g_lock);
++    session_t* s = &g_sessions[st->session];
++    bool use_tools = s->tools && !s->tools_refused;
++    pthread_mutex_unlock(&g_lock);
++
++    cJSON* turn = cJSON_CreateArray();
++    cJSON_AddItemToArray(turn, message_new("user", st->prompt));
++    char* context = use_tools ? NULL : document_context(st, s);
++
++    for (int32_t round = 0; round <= MAX_TOOL_ROUNDS && !atomic_load(&st->cancel); round++) {
++        pthread_mutex_lock(&g_lock);
++        char* body = build_body(&cfg, s, st, turn, context, use_tools);
++        pthread_mutex_unlock(&g_lock);
++
++        exchange_t x = { .stream = st };
++        char* error = NULL;
++        send_result_t result = send_request(&cfg, body ? body : "{}", &x, use_tools, &error);
++        free(body);
++
++        if (result == SEND_TOOLS_REFUSED) {
++            pthread_mutex_lock(&g_lock);
++            s->tools_refused = true;
++            bool tell = !s->told_tools_refused;
++            s->told_tools_refused = true;
++            pthread_mutex_unlock(&g_lock);
++            if (tell)
++                emit(st, NO_TOOLS_NOTICE);
++            use_tools = false;
++            free(context);
++            context = document_context(st, s);
++            // Keep only the question: tool rounds already taken cannot be sent without tools.
++            while (cJSON_GetArraySize(turn) > 1)
++                cJSON_DeleteItemFromArray(turn, 1);
++            exchange_free(&x);
++            round = -1;
++            continue;
++        }
++        if (result != SEND_OK) {
++            if (result == SEND_FAILED)
++                emit(st, error);
++            free(error);
++            exchange_free(&x);
++            break;
++        }
++
++        if (x.call_count == 0 || round == MAX_TOOL_ROUNDS) {
++            if (x.call_count > 0 && x.content.len == 0) {
++                const char* stopped = "I stopped after too many steps. Try asking something more specific.";
++                emit(st, stopped);
++                sb_append(&x.content, stopped, strlen(stopped));
++            }
++            pthread_mutex_lock(&g_lock);
++            cJSON_AddItemToArray(s->history, cJSON_Duplicate(cJSON_GetArrayItem(turn, 0), true));
++            cJSON_AddItemToArray(s->history, message_new("assistant", x.content.data ? x.content.data : ""));
++            pthread_mutex_unlock(&g_lock);
++            exchange_free(&x);
++            break;
++        }
++
++        cJSON_AddItemToArray(turn, assistant_tool_message(&x));
++        if (x.content.len > 0)
++            emit(st, "\n\n");
++        for (int32_t i = 0; i < x.call_count && !atomic_load(&st->cancel); i++) {
++            tool_call_t* tc = &x.calls[i];
++            if (!tc->name.data)
++                continue;
++            pthread_mutex_lock(&g_lock);
++            const tool_t* tool = find_tool(s, tc->name.data);
++            pthread_mutex_unlock(&g_lock);
++            char* output = tool ? call_tool(st, tool, tc->arguments.data ? tc->arguments.data : "{}")
++                                : dup_printf("{\"error\":\"No tool named %s\"}", tc->name.data);
++            cJSON* reply = message_new("tool", output ? output : "{\"error\":\"The tool failed\"}");
++            cJSON_AddStringToObject(reply, "tool_call_id", tc->id ? tc->id : "");
++            cJSON_AddItemToArray(turn, reply);
++            free(output);
++        }
++        exchange_free(&x);
++    }
++
++    free(context);
++    cJSON_Delete(turn);
++    config_free(&cfg);
++}
++
++static void* stream_worker(void* arg)
++{
++    stream_t* st = arg;
++    run_turn(st);
++    emit(st, NULL);
++
++    pthread_mutex_lock(&g_lock);
++    uint8_t session = st->session;
++    free(st->prompt);
++    uint8_t id = (uint8_t)(st - g_streams);
++    memset(&g_streams[id], 0, sizeof(stream_t));
++    session_release_locked(session);
++    pthread_mutex_unlock(&g_lock);
++    return NULL;
++}
++
++// #endregion
++
++// #region ai_bridge.h
++
++bool ai_bridge_init(void)
++{
++    pthread_mutex_lock(&g_lock);
++    if (!g_curl_ready)
++        g_curl_ready = curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK;
++    bool ready = g_curl_ready;
++    pthread_mutex_unlock(&g_lock);
++    return ready;
++}
++
++// Whether a model is ready is only known by asking it, so the panel is always offered and a
++// missing or unloaded model is reported as the answer to the first question.
++ai_availability_status_t ai_bridge_check_availability(void) { return AI_BRIDGE_AVAILABLE; }
++
++char* ai_bridge_get_availability_reason(void) { return dup_str("Ready"); }
++
++int32_t ai_bridge_get_supported_languages_count(void) { return 0; }
++
++char* ai_bridge_get_supported_language(int32_t index)
++{
++    (void)index;
++    return NULL;
++}
++
++ai_bridge_session_id_t ai_bridge_create_session(const char* instructions, const char* tools_json,
++    bool enable_guardrails, bool prewarm)
++{
++    (void)enable_guardrails;
++    (void)prewarm;
++    pthread_mutex_lock(&g_lock);
++    ai_bridge_session_id_t id = AI_BRIDGE_INVALID_ID;
++    for (int32_t i = 1; i <= MAX_SESSIONS; i++) {
++        if (!g_sessions[i].used) {
++            id = (ai_bridge_session_id_t)i;
++            break;
++        }
++    }
++    if (id != AI_BRIDGE_INVALID_ID) {
++        session_t* s = &g_sessions[id];
++        memset(s, 0, sizeof(*s));
++        s->used = true;
++        s->refs = 1;
++        s->instructions = dup_str(instructions);
++        s->tools = openai_tools_from(tools_json);
++        s->history = cJSON_CreateArray();
++    }
++    pthread_mutex_unlock(&g_lock);
++    return id;
++}
++
++bool ai_bridge_register_tool(ai_bridge_session_id_t session_id, const char* tool_name,
++    ai_bridge_tool_callback_t callback, void* user_data)
++{
++    bool ok = false;
++    pthread_mutex_lock(&g_lock);
++    session_t* s = &g_sessions[session_id];
++    if (session_id != AI_BRIDGE_INVALID_ID && s->used && !s->closing && tool_name && callback
++        && s->registered_count < (int32_t)(sizeof(s->registered) / sizeof(s->registered[0]))) {
++        tool_t* t = &s->registered[s->registered_count++];
++        t->name = dup_str(tool_name);
++        t->callback = callback;
++        t->user_data = user_data;
++        ok = true;
++    }
++    pthread_mutex_unlock(&g_lock);
++    return ok;
++}
++
++void ai_bridge_destroy_session(ai_bridge_session_id_t session_id)
++{
++    if (session_id == AI_BRIDGE_INVALID_ID)
++        return;
++    pthread_mutex_lock(&g_lock);
++    session_t* s = &g_sessions[session_id];
++    if (s->used && !s->closing) {
++        for (int32_t i = 1; i <= MAX_STREAMS; i++)
++            if (g_streams[i].used && g_streams[i].session == session_id)
++                atomic_store(&g_streams[i].cancel, true);
++        s->closing = true;
++        session_release_locked(session_id);
++        pthread_cond_broadcast(&g_cond);
++    }
++    pthread_mutex_unlock(&g_lock);
++}
++
++static stream_t* stream_claim_locked(ai_bridge_session_id_t session_id, ai_bridge_stream_id_t* id_out)
++{
++    session_t* s = &g_sessions[session_id];
++    if (session_id == AI_BRIDGE_INVALID_ID || !s->used || s->closing)
++        return NULL;
++    for (int32_t i = 1; i <= MAX_STREAMS; i++) {
++        if (!g_streams[i].used) {
++            stream_t* st = &g_streams[i];
++            memset(st, 0, sizeof(*st));
++            st->used = true;
++            st->session = session_id;
++            s->refs++;
++            *id_out = (ai_bridge_stream_id_t)i;
++            return st;
++        }
++    }
++    return NULL;
++}
++
++char* ai_bridge_generate_response(ai_bridge_session_id_t session_id, const char* prompt,
++    double temperature, int32_t max_tokens)
++{
++    ai_bridge_stream_id_t id = AI_BRIDGE_INVALID_ID;
++    pthread_mutex_lock(&g_lock);
++    stream_t* st = stream_claim_locked(session_id, &id);
++    pthread_mutex_unlock(&g_lock);
++    if (!st)
++        return dup_str("Error: Session not found");
++
++    st->prompt = dup_str(prompt ? prompt : "");
++    st->temperature = temperature;
++    st->max_tokens = max_tokens;
++    st->inline_calls = true;
++    run_turn(st);
++    char* reply = st->collected.data ? st->collected.data : dup_str("");
++
++    pthread_mutex_lock(&g_lock);
++    free(st->prompt);
++    memset(st, 0, sizeof(*st));
++    session_release_locked(session_id);
++    pthread_mutex_unlock(&g_lock);
++    return reply;
++}
++
++char* ai_bridge_generate_structured_response(ai_bridge_session_id_t session_id, const char* prompt,
++    const char* schema_json, double temperature, int32_t max_tokens)
++{
++    (void)session_id;
++    (void)prompt;
++    (void)schema_json;
++    (void)temperature;
++    (void)max_tokens;
++    return dup_str("Error: Structured responses are not supported by this bridge");
++}
++
++ai_bridge_stream_id_t ai_bridge_generate_response_stream(ai_bridge_session_id_t session_id,
++    const char* prompt, double temperature, int32_t max_tokens, void* context,
++    ai_bridge_stream_callback_t callback, void* user_data)
++{
++    if (!callback)
++        return AI_BRIDGE_INVALID_ID;
++    ai_bridge_stream_id_t id = AI_BRIDGE_INVALID_ID;
++    pthread_mutex_lock(&g_lock);
++    stream_t* st = stream_claim_locked(session_id, &id);
++    if (st) {
++        st->prompt = dup_str(prompt ? prompt : "");
++        st->temperature = temperature;
++        st->max_tokens = max_tokens;
++        st->context = context;
++        st->callback = callback;
++        st->user_data = user_data;
++    }
++    pthread_mutex_unlock(&g_lock);
++    if (!st)
++        return AI_BRIDGE_INVALID_ID;
++
++    pthread_t thread;
++    pthread_attr_t attr;
++    pthread_attr_init(&attr);
++    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
++    bool started = pthread_create(&thread, &attr, stream_worker, st) == 0;
++    pthread_attr_destroy(&attr);
++    if (!started) {
++        pthread_mutex_lock(&g_lock);
++        free(st->prompt);
++        memset(st, 0, sizeof(*st));
++        session_release_locked(session_id);
++        pthread_mutex_unlock(&g_lock);
++        return AI_BRIDGE_INVALID_ID;
++    }
++    return id;
++}
++
++ai_bridge_stream_id_t ai_bridge_generate_structured_response_stream(
++    ai_bridge_session_id_t session_id, const char* prompt, const char* schema_json,
++    double temperature, int32_t max_tokens, void* context, ai_bridge_stream_callback_t callback,
++    void* user_data)
++{
++    (void)session_id;
++    (void)prompt;
++    (void)schema_json;
++    (void)temperature;
++    (void)max_tokens;
++    (void)context;
++    (void)callback;
++    (void)user_data;
++    return AI_BRIDGE_INVALID_ID;
++}
++
++bool ai_bridge_cancel_stream(ai_bridge_stream_id_t stream_id)
++{
++    bool found = false;
++    pthread_mutex_lock(&g_lock);
++    if (stream_id != AI_BRIDGE_INVALID_ID && g_streams[stream_id].used) {
++        atomic_store(&g_streams[stream_id].cancel, true);
++        pthread_cond_broadcast(&g_cond);
++        found = true;
++    }
++    pthread_mutex_unlock(&g_lock);
++    return found;
++}
++
++char* ai_bridge_get_session_history(ai_bridge_session_id_t session_id)
++{
++    char* out = NULL;
++    pthread_mutex_lock(&g_lock);
++    session_t* s = &g_sessions[session_id];
++    if (session_id != AI_BRIDGE_INVALID_ID && s->used && !s->closing)
++        out = cJSON_PrintUnformatted(s->history);
++    pthread_mutex_unlock(&g_lock);
++    return out;
++}
++
++bool ai_bridge_clear_session_history(ai_bridge_session_id_t session_id)
++{
++    bool ok = false;
++    pthread_mutex_lock(&g_lock);
++    session_t* s = &g_sessions[session_id];
++    if (session_id != AI_BRIDGE_INVALID_ID && s->used && !s->closing) {
++        cJSON_Delete(s->history);
++        s->history = cJSON_CreateArray();
++        ok = true;
++    }
++    pthread_mutex_unlock(&g_lock);
++    return ok;
++}
++
++bool ai_bridge_add_message_to_history(ai_bridge_session_id_t session_id, const char* role,
++    const char* content)
++{
++    bool ok = false;
++    pthread_mutex_lock(&g_lock);
++    session_t* s = &g_sessions[session_id];
++    if (session_id != AI_BRIDGE_INVALID_ID && s->used && !s->closing && role && content) {
++        cJSON_AddItemToArray(s->history, message_new(role, content));
++        ok = true;
++    }
++    pthread_mutex_unlock(&g_lock);
++    return ok;
++}
++
++void ai_bridge_free_string(char* ptr) { free(ptr); }
++
++// #endregion
+diff --git a/src/dawn.c b/src/dawn.c
+index 79b8072..898e776 100644
+--- a/src/dawn.c
++++ b/src/dawn.c
+@@ -4970,6 +4970,9 @@ bool dawn_frame(void)
+             }
+         }
+     }
++#if HAS_LIBAI
++    ai_pump();
++#endif
+     handle_input();
+     render();
+ 

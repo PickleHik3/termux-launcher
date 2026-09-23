@@ -1,0 +1,147 @@
+diff --git a/src/dawn_backend_posix.c b/src/dawn_backend_posix.c
+index 728d43b..05644b8 100644
+--- a/src/dawn_backend_posix.c
++++ b/src/dawn_backend_posix.c
+@@ -80,11 +80,86 @@ static struct {
+     DawnColor* print_bg; //!< Default background for print mode margins (NULL if not set)
+ } posix_state = { 0 };
+ 
++// #region Frame dedup
++// The frame loop repaints ten times a second whether or not anything changed, which made an idle
++// dawn stream 50-100 KB/s of identical screens into the terminal. Between sync_begin and the
++// frame's flush, output is gathered here instead; a frame byte-identical to the last one written
++// is dropped. Every real change still reaches the screen, and a key, a mouse event or a resize
++// forces the next frame out even when it matches, so a redraw request still repaints.
++
++static char* frame_buf = NULL;
++static size_t frame_len = 0;
++static size_t frame_cap = 0;
++static char* last_frame = NULL;
++static size_t last_frame_len = 0;
++static bool frame_capturing = false;
++static bool frame_forced = true;
++
++static void frame_append(const char* s, size_t len)
++{
++    if (frame_len + len > frame_cap) {
++        size_t cap = frame_cap ? frame_cap : OUTPUT_BUF_SIZE;
++        while (frame_len + len > cap)
++            cap *= 2;
++        char* grown = realloc(frame_buf, cap);
++        if (!grown) {
++            // Out of memory: fall back to writing straight through.
++            fwrite(frame_buf, 1, frame_len, stdout);
++            fwrite(s, 1, len, stdout);
++            frame_len = 0;
++            frame_forced = true;
++            return;
++        }
++        frame_buf = grown;
++        frame_cap = cap;
++    }
++    memcpy(frame_buf + frame_len, s, len);
++    frame_len += len;
++}
++
++static inline void out_write(const char* s, size_t len)
++{
++    if (frame_capturing)
++        frame_append(s, len);
++    else
++        fwrite(s, 1, len, stdout);
++}
++
++static void frame_begin(void)
++{
++    frame_len = 0;
++    frame_capturing = true;
++}
++
++static void frame_commit(void)
++{
++    frame_capturing = false;
++    bool same = !frame_forced && last_frame && frame_len == last_frame_len
++        && memcmp(frame_buf, last_frame, frame_len) == 0;
++    if (!same && frame_len > 0) {
++        fwrite(frame_buf, 1, frame_len, stdout);
++        char* keep = realloc(last_frame, frame_len);
++        if (keep) {
++            memcpy(keep, frame_buf, frame_len);
++            last_frame = keep;
++            last_frame_len = frame_len;
++        } else {
++            free(last_frame);
++            last_frame = NULL;
++            last_frame_len = 0;
++        }
++    }
++    frame_forced = false;
++    frame_len = 0;
++}
++
++// #endregion
++
+ // Fast output buffer append
+ static inline void buf_flush(void)
+ {
+     if (output_buf_pos > 0) {
+-        fwrite(output_buf, 1, output_buf_pos, stdout);
++        out_write(output_buf, output_buf_pos);
+         output_buf_pos = 0;
+     }
+ }
+@@ -95,7 +170,7 @@ static inline void buf_append(const char* s, size_t len)
+         buf_flush();
+         if (len > OUTPUT_BUF_SIZE) {
+             // Too large for buffer, write directly
+-            fwrite(s, 1, len, stdout);
++            out_write(s, len);
+             return;
+         }
+     }
+@@ -927,11 +1002,18 @@ static void posix_write_scaled_frac(const char* str, size_t len, int32_t scale,
+ static void posix_flush(void)
+ {
+     buf_flush();
++    if (frame_capturing)
++        frame_commit();
+     fflush(stdout);
+ }
+ 
+ static void posix_sync_begin(void)
+ {
++    // Whatever was queued before the frame (a title change) goes out on its own, unconditionally.
++    if (posix_state.mode != DAWN_MODE_PRINT) {
++        buf_flush();
++        frame_begin();
++    }
+     if (posix_state.capabilities & DAWN_CAP_SYNC_OUTPUT) {
+         buf_append_str(SYNC_START);
+     }
+@@ -989,7 +1071,18 @@ static void drain_escape_sequence(void)
+     tcsetattr(STDIN_FILENO, TCSANOW, &t);
+ }
+ 
++static int32_t posix_read_key_raw(void);
++
++//! Any real input forces the next frame out, so a redraw request repaints even an unchanged screen.
+ static int32_t posix_read_key(void)
++{
++    int32_t key = posix_read_key_raw();
++    if (key != DAWN_KEY_NONE)
++        frame_forced = true;
++    return key;
++}
++
++static int32_t posix_read_key_raw(void)
+ {
+     char c;
+     if (read(STDIN_FILENO, &c, 1) <= 0)
+@@ -1312,6 +1405,7 @@ static bool posix_check_resize(void)
+ {
+     if (posix_state.resize_needed) {
+         posix_state.resize_needed = 0;
++        frame_forced = true;
+         return true;
+     }
+     return false;
