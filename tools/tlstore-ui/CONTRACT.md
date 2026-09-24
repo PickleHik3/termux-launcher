@@ -19,7 +19,7 @@ header(cols,rows,body_need,pic_rows:Option<u16>) -> Header { tier, narrow, gutte
   name:Rect(3 rows, 2 Compact), standfirst, facts, body:Rect, notice:rows-2, keys:rows-1 }
   Rows: masthead, blank, [picture P, blank], name, standfirst, facts, blank, body, notice, keys. P = rows − 11 − body_need, ≤12, ≤pic_rows
   (the picture's own rows; u16::MAX = reserve), 0 under 4 or when pic_rows is None; Compact never. 53×26 Front: P 8 over 7 rows; 53×40: P 9 over 20.
-key_slots(cols) = [2,12,24,34,44] (≥53) | [1,8,16,24,32] (<44) | spread between; key_rooms(cols) = columns per slot.
+key_slots(cols) = [2,12,24,34,45] (≥53) | [1,8,16,24,32] (<44) | spread between; key_rooms(cols) = columns per slot.
 wrap(s,w,max_lines)/fit_line(s,w): whole words, `…` when cut. centre_x(rect,w).
 
 use tlstore_ui::store::{Router, Store, Go, View, Verb, Job, Gh, Got, Readme, GH_NOTICE, header_for, paint::*, scene::*, readme, motion::Timeline};
@@ -48,3 +48,16 @@ motion (D7): leave 120 ms body fade (pictures hidden at once); enter: body eleme
   TLSTORE_MOTION=0: no navigate/frame/drawn, frames at rest, header pictures placed at once.
 Measured (tests/screens.rs, 53×26 kitty, push to item): frames ≤ 8 KB, nothing written at rest. Release binary (host x86_64, stripped): 1.41 MB.
 Binary: tlstore-ui | --probe | --version. Fixture store: tests/fixtures/store (stub tlstore speaks list/info/update/picture/readme/readme-asset/jobs).
+
+# preview renderer (cargo feature `shot`; dev only, build-ui.sh never enables it)
+tlstore-ui --shot <cols>x<rows> --screen <spec> --out <file.png> [--store <dir>]  |  --shot-all --out <dir> [--store <dir>]
+  <spec>: front[:cursor] · front:selected=<a,b> · front:updates · item:<name>[:scroll] · installing:<name>:<pct>; --store defaults to
+  tests/fixtures/store (copied to a temp dir, pictures from scripts/tlstore/pictures, gh signed in). --shot-all: front, item:dawn,
+  installing:dawn:64 at 53×26, 53×40, 40×24 as <slug>-<cols>x<rows>.png.
+Drives the real Router (Caps::all(), motion off, 12×26 px cells), settles every task (refresh, gh, picture, readme, assets) like
+  tests/screens.rs, and paints the resting frame: surface, cell backgrounds, placements z<0, glyphs from bundled JetBrains Mono
+  (assets/fonts/jetbrainsmono, OFL) with bold/italic/dim/reverse, underline styles + colour, strike, OSC 66 runs at scale×num/den
+  with their alignment, then placements z≥0 with their alpha. ★/☆ drawn by hand; other missing glyphs are boxes.
+shot::{Spec::parse, render(cols,rows,&Spec,store)->Image{width,height,rgba,pixel(),png()}, shoot(..,&Path), shoot_all(dir,store), cli(args)}
+  installing:<name>:<pct> uses Store::fake_job(verb,name,pct) + Router::show_installing() (both cfg(feature="shot"); no script runs).
+Test: tests/shot.rs (`cargo test --features shot`): front 53×26 is a PNG with ink on the name rows.

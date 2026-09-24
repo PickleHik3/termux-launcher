@@ -12,5 +12,7 @@ pub mod layout;
 pub mod palette;
 pub mod picture;
 pub mod render;
+#[cfg(feature = "shot")]
+pub mod shot;
 pub mod store;
 pub mod term;

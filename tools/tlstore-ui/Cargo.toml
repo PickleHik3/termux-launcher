@@ -10,6 +10,10 @@ publish = false
 name = "tlstore-ui"
 path = "src/main.rs"
 
+[features]
+# Dev-only PNG preview renderer (`--shot`); bundles JetBrains Mono. Never on in build-ui.sh.
+shot = []
+
 [dependencies]
 libc = "0.2"
 fontdue = { version = "0.9", default-features = false, features = ["std"] }

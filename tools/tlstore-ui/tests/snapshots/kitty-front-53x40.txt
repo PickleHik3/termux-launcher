@@ -37,4 +37,4 @@
 36|  0▒7▒ sigye Tools
 37|  ▒▒▒▒ A clock for the terminal.
 38|
-39|  ⏎ open    i install   ␣ select  f keyboa… q quit
+39|  ⏎ open    i install   ␣ select  f keyboard q quit

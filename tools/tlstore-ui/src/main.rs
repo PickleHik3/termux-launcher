@@ -68,6 +68,11 @@ fn main() -> ExitCode {
     let arg = std::env::args().nth(1).unwrap_or_default();
     let result = match arg.as_str() {
         "" => return store(),
+        #[cfg(feature = "shot")]
+        "--shot" | "--shot-all" => {
+            let args: Vec<String> = std::env::args().skip(1).collect();
+            tlstore_ui::shot::cli(&args)
+        }
         "--probe" => probe(),
         "--version" => {
             // The second line is one compile-time literal (`concat!`, not two prints that just

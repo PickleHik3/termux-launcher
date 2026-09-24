@@ -23,4 +23,4 @@
 22|
 23|  ICAT
 24|
-25|  r remove  u update    s star    o repo    esc back
+25|  r remove  u update    s star    o repo     esc back

@@ -37,4 +37,4 @@
 36|
 37|
 38|
-39|  x cancel                                  esc back
+39|  x cancel                                   esc back
