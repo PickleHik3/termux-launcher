@@ -227,11 +227,19 @@ public final class MnnTaiRuntime implements TaiRuntime {
         }
 
         LlmSession initialized;
+        long measured;
         try {
             String mergedConfig = mergedConfigJson(config, modelSpec, options);
             String extraConfig = extraConfigJson(modelSpec);
             initialized = new LlmSession();
-            initialized.load(config.getAbsolutePath(), null, mergedConfig, extraConfig);
+            // MemAvailable is sampled across native init only; the figure is booked below, so a
+            // failed load never records one.
+            TaiLoadMeter meter = TaiLoadMeter.start(appContext);
+            try {
+                initialized.load(config.getAbsolutePath(), null, mergedConfig, extraConfig);
+            } finally {
+                measured = meter.stop();
+            }
         } catch (Throwable t) {
             TaiRuntimeCrashMarker.clear(appContext);
             TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
@@ -254,9 +262,14 @@ public final class MnnTaiRuntime implements TaiRuntime {
             keepWarmUntilMs = keepWarmMinutes > 0 ? loadedAtMs + TimeUnit.MINUTES.toMillis(keepWarmMinutes) : 0L;
             TaiRuntimeCrashMarker.clear(appContext);
             String accelerator = TaiLoadPreflight.normalizeAccelerator(backendName(options));
-            residency.register(TaiResidency.Entry.chat(modelSpec, TaiModelSpec.BACKEND_MNN_LLM,
-                accelerator == null ? "cpu" : accelerator,
-                options.contextWindow != null ? options.contextWindow : TaiLoadBudget.FLOOR_CONTEXT));
+            if (accelerator == null) accelerator = "cpu";
+            int loadedContext = options.contextWindow != null ? options.contextWindow : TaiLoadBudget.FLOOR_CONTEXT;
+            if (measured >= 0L) {
+                TaiRuntimeHistory.recordMeasuredLoad(appContext, modelSpec, deviceCapabilities,
+                    TaiModelSpec.BACKEND_MNN_LLM, accelerator, loadedContext, measured);
+            }
+            residency.register(TaiResidency.Entry.chat(modelSpec, TaiModelSpec.BACKEND_MNN_LLM, accelerator, loadedContext)
+                .withMeasured(measured >= 0L ? measured : null));
             TaiRuntimeHistory.recordSuccess(appContext, modelSpec, deviceCapabilities,
                 TaiModelSpec.BACKEND_MNN_LLM, backendName(options));
             runtimeState = "loaded";
@@ -267,6 +280,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
             data.put("modelPath", loadedModelPath);
             data.put("options", options.toJson());
             data.put("effectiveConfig", safeJson(initialized.dumpConfig()));
+            if (measured >= 0L) data.put("measuredLoadBytes", measured);
             if (keepWarmUntilMs > 0L) {
                 data.put("keepWarm", true);
                 data.put("keepWarmMinutes", keepWarmMinutes);

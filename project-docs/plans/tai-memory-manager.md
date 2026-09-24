@@ -200,7 +200,40 @@ and an "Unload all" action. `tai status` / `/v1/status` return the same table.
    is credited the resident chat model even when it is the same model, since the backend closes it
    before reloading. Device check pending: `tai --json runtime` residents with chat + embedding
    loaded, and that the MNN embedding package passes the preflight's `llm.mnn` sidecar checks.
-3. Eviction planning in `TaiLoadBudget` + PSS measurement and history correction.
+3. **Done 2026-09-24 (in dev), device check pending.** Measurement: `TaiLoadMeter` samples
+   `MemoryInfo.availMem` every 100 ms on a helper thread across native init only (LiteRT engine
+   init, MNN session load, both embedding interpreters — the benchmark uses the same meter) and
+   `before − minimum` lands on the resident's `measuredBytes` and in `TaiRuntimeHistory` under
+   `load|<base model>|<device>|<backend>|<accelerator>|<window bucket>` (bucket = window rounded up
+   to a power of two, 0 for embeddings), keeping the largest value per key; cancelled and failed
+   loads record nothing. Budget: the estimate is the recorded worst case × 1.1 when the key has one
+   (`estimateSource: "measured"`), else the ratio (`"ratio"`), now split into non-reclaimable and
+   reclaimable — LiteRT CPU counts only the KV cache plus 5% of the file as anonymous, since its
+   weights are mapped file pages (E4B CPU 16k: 0.45 GB measured vs 4.25 GB estimated before);
+   GPU and MNN stay fully non-reclaimable. The reserve became `floor = max(2 × MemoryInfo.threshold,
+   512 MiB)` (pong: 630 MB) plus a 25% margin of a ratio estimate, none for a measured one; the old
+   max(1.5 GiB, 15%) reserve remains only when the threshold is unknown (`TaiDeviceCapabilities.
+   memoryThresholdBytes`). An automatic GPU window is capped at 4096 (`GPU_AUTO_CONTEXT`); an
+   explicit setting or `context_window` above it is honoured, subject to the budget. Eviction: at
+   every ladder step a load that does not fit is retried with idle residents evicted in the order
+   embeddings → STT → idle chat (chat only for non-chat loads; a chat load replaces chat and is
+   credited it), shortest covering prefix, never a busy resident, then the window shrinks / the
+   next accelerator at the floor, then refusal. `TaiResidency.evictionCandidates` orders them
+   (LRU within a kind), `MultiBackendTaiRuntime.evict` closes them through their runtimes under the
+   load lock (skipping any that became busy or left since the plan), and the load result carries
+   `evicted: [...]` plus `memoryBudget.{estimateSource, reclaimableBytes, marginBytes, evicted}`.
+   Bug fixed: LiteRT's auto GPU→CPU fallback re-ran the CPU with the GPU plan's window; it now runs
+   at min(window, 4096) with the accelerator set to cpu and re-checks the budget for the CPU against
+   what is free after the GPU attempt (a refusal answers 409 `insufficient_memory` and is not
+   recorded as a CPU failure). Deviations from the text above: PSS is not recorded at all (only
+   MemAvailable, the one measure that covers GPU); eviction runs before the context shrinks at each
+   step rather than only once before the ladder, because an idle embedding model is cheaper to
+   drop than half a window; idle chat is evictable by an embedding load as instructed for this
+   phase (§2's "only when the user explicitly asked" rule is left for the STT phase); the
+   `advertisedContextWindow` path shares floor, history and GPU cap but does not model evictions.
+   Device check pending: a `tai load` with an embedding resident short of memory shows `evicted`;
+   two E4B GPU loads record a growing `bytes` under the `load|…|gpu|4096` key; a GPU failure with
+   an 8k plan falls back to CPU 4k.
 4. Tiered pressure watch, `onTrimMemory`, idle timers.
 5. STT kind (lands with the Whisper runtime).
 6. Memory row in settings and status.

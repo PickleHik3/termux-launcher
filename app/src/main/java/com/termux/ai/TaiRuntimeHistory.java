@@ -97,6 +97,75 @@ public final class TaiRuntimeHistory {
         return entry;
     }
 
+    /**
+     * Keeps the largest MemAvailable drop any load of this model has measured on this device,
+     * backend and accelerator at this window bucket — the worst case is what the budget plans
+     * against, since identical GPU loads spread over ±0.9 GB on pong. Non-positive drops are not
+     * recorded; callers skip cancelled and failed loads.
+     */
+    public static void recordMeasuredLoad(
+        @NonNull Context context,
+        @NonNull TaiModelSpec model,
+        @NonNull TaiDeviceCapabilities device,
+        @NonNull String backend,
+        @NonNull String accelerator,
+        int contextWindow,
+        long measuredBytes
+    ) {
+        if (measuredBytes <= 0L) return;
+        try {
+            JSONObject history = history(context);
+            String key = measuredKey(model, device, backend, accelerator, contextWindow);
+            JSONObject entry = history.optJSONObject(key);
+            long worst = entry == null ? 0L : entry.optLong("bytes", 0L);
+            int samples = entry == null ? 0 : entry.optInt("samples", 0);
+            if (entry == null) entry = new JSONObject();
+            entry.put("modelId", model.id);
+            entry.put("device", deviceKey(device));
+            entry.put("backend", backend);
+            entry.put("accelerator", normalizeAccelerator(accelerator));
+            entry.put("contextBucket", contextBucket(contextWindow));
+            entry.put("bytes", Math.max(worst, measuredBytes));
+            entry.put("lastBytes", measuredBytes);
+            entry.put("samples", samples + 1);
+            entry.put("updatedAtMs", System.currentTimeMillis());
+            history.put(key, entry);
+            prefs(context).edit().putString(KEY_HISTORY, history.toString()).apply();
+        } catch (JSONException ignored) {
+        }
+    }
+
+    /** The worst measured drop for this key, or {@code 0} when no load of it has been measured. */
+    public static long measuredLoadBytes(
+        @NonNull Context context,
+        @NonNull TaiModelSpec model,
+        @NonNull TaiDeviceCapabilities device,
+        @NonNull String backend,
+        @NonNull String accelerator,
+        int contextWindow
+    ) {
+        JSONObject entry = history(context).optJSONObject(measuredKey(model, device, backend, accelerator, contextWindow));
+        return entry == null ? 0L : Math.max(0L, entry.optLong("bytes", 0L));
+    }
+
+    /**
+     * Windows are bucketed to the power of two at or above them, so 4000 and 4096 share a record
+     * and a 6k window plans against what 8k cost. {@code 0} (no window) stays {@code 0}.
+     */
+    static int contextBucket(int contextWindow) {
+        if (contextWindow <= 0) return 0;
+        int bucket = 1;
+        while (bucket < contextWindow && bucket < (1 << 30)) bucket <<= 1;
+        return bucket;
+    }
+
+    @NonNull
+    private static String measuredKey(@NonNull TaiModelSpec model, @NonNull TaiDeviceCapabilities device,
+                                      @NonNull String backend, @NonNull String accelerator, int contextWindow) {
+        return "load|" + TaiModelVariants.baseModelId(model.id) + "|" + deviceKey(device) + "|" + backend + "|"
+            + normalizeAccelerator(accelerator) + "|" + contextBucket(contextWindow);
+    }
+
     @NonNull
     public static JSONObject summary(@NonNull Context context) throws JSONException {
         JSONObject data = new JSONObject();

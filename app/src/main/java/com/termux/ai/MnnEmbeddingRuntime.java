@@ -1,5 +1,7 @@
 package com.termux.ai;
 
+import android.content.Context;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -23,13 +25,20 @@ import java.util.List;
  */
 final class MnnEmbeddingRuntime implements AutoCloseable {
     private final TaiResidency residency;
+    /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
+    @Nullable private final Context appContext;
     @Nullable private MnnEmbeddingSession session;
     @Nullable private String loadedModelId;
     @Nullable private String loadedConfigPath;
     private int outputDimensions = 0;
 
     MnnEmbeddingRuntime(@NonNull TaiResidency residency) {
+        this(residency, null);
+    }
+
+    MnnEmbeddingRuntime(@NonNull TaiResidency residency, @Nullable Context context) {
         this.residency = residency;
+        this.appContext = context == null ? null : context.getApplicationContext();
     }
 
     @NonNull
@@ -97,12 +106,23 @@ final class MnnEmbeddingRuntime implements AutoCloseable {
         if (session != null && configPath.equals(loadedConfigPath) && session.isLoaded()) return;
         close();
         MnnEmbeddingSession created = new MnnEmbeddingSession();
-        created.load(configPath);
+        // The same MemAvailable meter a chat load runs, across native load only.
+        TaiLoadMeter meter = TaiLoadMeter.start(appContext);
+        long measured;
+        try {
+            created.load(configPath);
+        } finally {
+            measured = meter.stop();
+        }
         session = created;
         loadedModelId = spec.id;
         loadedConfigPath = configPath;
         outputDimensions = created.dim();
-        residency.register(TaiResidency.Entry.embedding(spec, 0));
+        residency.register(TaiResidency.Entry.embedding(spec, 0).withMeasured(measured >= 0L ? measured : null));
+        if (measured >= 0L && appContext != null) {
+            TaiRuntimeHistory.recordMeasuredLoad(appContext, spec, TaiDeviceCapabilities.detect(appContext),
+                TaiModelSpec.BACKEND_MNN_LLM, "cpu", 0, measured);
+        }
     }
 
     /**
