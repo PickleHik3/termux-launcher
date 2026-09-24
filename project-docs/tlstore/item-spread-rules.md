@@ -18,7 +18,7 @@ others the day it is added. The upstream README is never shown as it is. Design 
 | 7 | What it does | Exactly three lines of 40 characters or fewer, each starting with a third-person verb (Shows, Sends, Keeps). An arrow → in the accent leads each line. | `does[3]` |
 | 8 | Try it | One command a newcomer can safely run right after installing. No sudo, no flags they would have to look up. | `try` |
 | 9 | Demo | One picture or short clip of the command from slot 8 working. Optional; the slot disappears when there is none. | `demo` |
-| 10 | Good to know | Zero to two dim italic lines: size warnings over 100 MB, what it needs, where it works best. Never marketing. | `notes[0..2]` |
+| 10 | Good to know | Zero to two dim italic lines of 40 characters or fewer: size warnings over 100 MB, what it needs, where it works best. Never marketing. | `notes[0..2]` |
 | 11 | Keys | `u update` (only when there is one) · `i install` / `r remove` · `s star` · `o repo` · `esc back`. | — |
 
 ## Tone

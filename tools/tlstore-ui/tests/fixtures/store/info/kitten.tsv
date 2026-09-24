@@ -14,7 +14,7 @@ Does1	Shows pictures right in the terminal
 Does2	Sends files between machines
 Does3	Compares files side by side
 Try	kitten --help
-Notes	works best in a kitty-compatible terminal
+Notes	best in a kitty-compatible terminal
 Author	Kovid Goyal
 Licence	GPL-3.0
 Picture	launcher:scripts/tlstore/pictures/kitten.jpg@5253e29ae8e128aad09b08fd57eb115ba66140d8
