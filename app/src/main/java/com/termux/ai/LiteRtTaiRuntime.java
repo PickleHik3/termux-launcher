@@ -769,7 +769,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         }
         closeConversationLocked();
         conversationTranscript = requestTranscript == null ? null : Collections.unmodifiableList(requestTranscript);
-        Contents systemContents = contents(request.systemPrompt);
+        // A blank prompt must be null: LiteRT-LM adds a system turn for any non-null instruction.
+        Contents systemContents = request.systemPrompt.trim().isEmpty() ? null : contents(request.systemPrompt);
         ConversationConfig conversationConfig = conversationConfig(systemContents, request, options);
         synchronized (EXPERIMENTAL_FLAGS_LOCK) {
             ExperimentalFlags.INSTANCE.setConvertCamelToSnakeCaseInToolDescription(false);
@@ -954,7 +955,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
 
     @NonNull
     private ConversationConfig conversationConfig(
-        @NonNull Contents systemPrompt,
+        @Nullable Contents systemPrompt,
         @NonNull TaiChatRequest request,
         @NonNull TaiRuntimeOptions options
     ) {

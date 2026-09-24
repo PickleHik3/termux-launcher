@@ -26,6 +26,8 @@ public final class TaiSettings {
 
     public static final String KEY_ROLE_DEFAULT_ASSISTANT = "tai_role_default_assistant";
     public static final String KEY_SYSTEM_PROMPT_GENERAL = "tai_system_prompt_general";
+    static final String LEGACY_DEFAULT_SYSTEM_PROMPT =
+        "You are TAI, Termux AI, a local assistant integrated with Termux Launcher. Prefer safe, reviewable actions.";
     public static final String KEY_MAX_TOKENS = "tai_max_tokens";
     public static final String KEY_TOP_K = "tai_top_k";
     public static final String KEY_TOP_P = "tai_top_p";
@@ -607,10 +609,16 @@ public final class TaiSettings {
         }
     }
 
+    /**
+     * The system prompt TAI adds when a client sends none: empty by default, like any other
+     * OpenAI-compatible server, so API clients get the model's own behaviour and no extra prefill.
+     * The old built-in identity prompt, if it was ever persisted, reads as empty too.
+     */
     @NonNull
     public String getGeneralSystemPrompt() {
-        return preferences.getString(KEY_SYSTEM_PROMPT_GENERAL,
-            "You are TAI, Termux AI, a local assistant integrated with Termux Launcher. Prefer safe, reviewable actions.");
+        String prompt = preferences.getString(KEY_SYSTEM_PROMPT_GENERAL, "");
+        if (prompt == null || LEGACY_DEFAULT_SYSTEM_PROMPT.equals(prompt.trim())) return "";
+        return prompt;
     }
 
     @NonNull

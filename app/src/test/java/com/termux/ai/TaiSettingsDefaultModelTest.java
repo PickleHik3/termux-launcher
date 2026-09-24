@@ -34,6 +34,15 @@ public class TaiSettingsDefaultModelTest {
     }
 
     @Test
+    public void systemPrompt_isEmptyByDefaultAndForTheLegacyBuiltIn() {
+        assertEquals("", settings.getSystemPrompt("any-model"));
+        preferences.edit().putString(TaiSettings.KEY_SYSTEM_PROMPT_GENERAL, TaiSettings.LEGACY_DEFAULT_SYSTEM_PROMPT).commit();
+        assertEquals("", settings.getSystemPrompt("any-model"));
+        preferences.edit().putString(TaiSettings.KEY_SYSTEM_PROMPT_GENERAL, "Answer in French.").commit();
+        assertEquals("Answer in French.", settings.getSystemPrompt("any-model"));
+    }
+
+    @Test
     public void builtInModel_isReturnedAsStored() {
         preferences.edit().putString(TaiSettings.KEY_ROLE_DEFAULT_ASSISTANT, TaiModelRegistry.MODEL_GEMMA_4_E4B_IT).commit();
 
