@@ -54,6 +54,7 @@ final class WhisperSttRuntime implements AutoCloseable {
     /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
     @Nullable private final Context appContext;
     @Nullable private Interpreter interpreter;
+    @Nullable private TaiXnnpackDelegate xnnpackDelegate;
     @Nullable private WhisperTokenizer tokenizer;
     @Nullable private String loadedModelId;
     @Nullable private String loadedModelPath;
@@ -229,9 +230,14 @@ final class WhisperSttRuntime implements AutoCloseable {
         File tokenizerFile = tokenizerFileFor(modelFile);
         if (tokenizerFile == null) throw new IllegalStateException("tokenizer.json is missing");
         tokenizer = WhisperTokenizer.fromFile(tokenizerFile);
-        Interpreter.Options options = new Interpreter.Options()
-            .setNumThreads(Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors())))
-            .setUseXNNPACK(true);
+        int threads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
+        // simpleperf found litert 1.4.2's own XNNPACK delegate never gets worker threads (99.56%
+        // of inference samples on one tid); our JNI shim builds a real one instead, and only the
+        // interpreter's own thread count (which is fine) falls back to Interpreter's XNNPACK path.
+        xnnpackDelegate = TaiXnnpackDelegate.create(threads);
+        Interpreter.Options options = xnnpackDelegate != null
+            ? new Interpreter.Options().setNumThreads(threads).setUseXNNPACK(false).addDelegate(xnnpackDelegate)
+            : new Interpreter.Options().setNumThreads(threads).setUseXNNPACK(true);
         // The same MemAvailable meter a chat load runs, across the interpreter's construction only.
         TaiLoadMeter meter = TaiLoadMeter.start(appContext);
         long measured;
@@ -411,6 +417,10 @@ final class WhisperSttRuntime implements AutoCloseable {
         if (interpreter != null) {
             interpreter.close();
             interpreter = null;
+        }
+        if (xnnpackDelegate != null) {
+            xnnpackDelegate.close();
+            xnnpackDelegate = null;
         }
         tokenizer = null;
         if (loadedModelId != null) residency.deregister(TaiResidency.Kind.STT, loadedModelId);

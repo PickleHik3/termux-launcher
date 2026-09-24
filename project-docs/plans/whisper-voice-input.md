@@ -291,9 +291,13 @@ voice input falls back to the Android recognizer. STT unloads after 2 minutes id
    `benchmark_model --num_threads=1` (118 / 60) against 76 / 28 at 4 threads. litert 1.4.2's
    NativeInterpreterWrapper does pass getNumThreads()/getUseXNNPACK() to createInterpreter, yet
    neither dropping the explicit setUseXNNPACK(true) nor a hard-coded setNumThreads(4) produced a
-   worker thread (LiteRT 2.2.0 measured the same). Next: the setUseXNNPACK(false) control (is it
-   XNNPACK's pthreadpool or the interpreter's thread count that is lost?), then either the LiteRT
-   2.x CompiledModel API with explicit CPU thread options or a bundled benchmark-grade runtime. **Done** (2026-09-24): `WhisperMel`
+   worker thread (LiteRT 2.2.0 measured the same). The setUseXNNPACK(false) control confirmed
+   which half was lost: the interpreter itself still spawns 7 threads, so it is specifically
+   XNNPACK's pthreadpool that litert's own delegate never gets. Fix (pending device verification):
+   a tiny JNI shim (`TaiXnnpackDelegate` / `libtai_xnnpack.so`) dlopens the already-resident
+   `libtensorflowlite_jni.so` and calls its exported `TfLiteXNNPackDelegateCreate` directly with
+   `num_threads=4`, handing the result to `Interpreter.Options.addDelegate()` in place of the
+   stock `setUseXNNPACK(true)` path. **Done** (2026-09-24): `WhisperMel`
    (16 × 25 DFT, pinned to the reference fixture), `WhisperTokenizer` (decode + merge-rank BPE
    encode for the bias line), `WhisperDecoder` (prompt, suppressions, repetition guard),
    `WhisperSegmenter` (pause split, < 0.3 s voiced dropped, 300 ms padding), `WhisperAudio`
