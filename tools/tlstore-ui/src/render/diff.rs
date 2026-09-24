@@ -97,12 +97,21 @@ impl PartialEq for Placement {
     }
 }
 
+/// An animated picture whose frames after the first are still to be sent.
+struct Stream {
+    pic: Picture,
+    /// Frames sent so far.
+    next: usize,
+}
+
 /// Keeps the last frame and writes only what changed.
 #[derive(Default)]
 pub struct Renderer {
     prev: Option<Buffer>,
     prev_places: Vec<Placement>,
     uploaded: HashSet<u32>,
+    /// Animated pictures uploaded but not yet streamed to the end, oldest first.
+    streams: Vec<Stream>,
     /// zlib-compress picture uploads (`o=z`).
     pub compress: bool,
     /// Wrap each frame in synchronized output (mode 2026).
@@ -120,12 +129,39 @@ impl Renderer {
         self.prev = None;
     }
 
-    /// Frees a picture's data in the terminal; it is uploaded again if drawn later.
+    /// Frees a picture's data in the terminal (its frames with it); it is uploaded again if
+    /// drawn later.
     pub fn forget(&mut self, out: &mut String, pic_id: u32) {
         if self.uploaded.remove(&pic_id) {
             escapes::kitty_delete_image(out, pic_id);
         }
         self.prev_places.retain(|p| p.pic.id() != pic_id);
+        self.streams.retain(|s| s.pic.id() != pic_id);
+    }
+
+    /// True while an animated picture on screen still has frames to send: the caller keeps
+    /// calling [`Renderer::stream`] between events.
+    pub fn pending(&self) -> bool {
+        !self.streams.is_empty()
+    }
+
+    /// Sends the next frame (`a=f`) of the oldest animated picture still streaming, when it
+    /// has arrived from its decoder; after the last frame, starts the loop (`a=a`). One
+    /// frame per call, so input is read between frames.
+    pub fn stream(&mut self, out: &mut String) {
+        let compress = self.compress;
+        let Some(s) = self.streams.first_mut() else { return };
+        let id = s.pic.id();
+        if s.next < s.pic.cel_count() {
+            let (w, h) = (s.pic.width(), s.pic.height());
+            s.pic.with_cel(s.next, |c| escapes::kitty_frame(out, id, w, h, c.gap_ms, &c.rgba, compress));
+            s.next += 1;
+        } else if s.pic.complete() {
+            if s.next > 0 {
+                escapes::kitty_animate(out, id, s.pic.gap_ms());
+            }
+            self.streams.remove(0);
+        }
     }
 
     /// Appends the escapes that turn the previous frame into `buf` + `places`; appends
@@ -143,6 +179,18 @@ impl Renderer {
             Some(p) => p.w != buf.w || p.h != buf.h,
             None => true,
         };
+        // An animated picture leaves the screen with its placements: its frames are freed at
+        // once (they count against the terminal's frame quota) and sent again if it returns.
+        let mut gone: Vec<u32> = Vec::new();
+        for old in &self.prev_places {
+            let id = old.pic.id();
+            if old.pic.is_animated() && !places.iter().any(|p| p.pic.id() == id) && !gone.contains(&id) {
+                gone.push(id);
+            }
+        }
+        for id in gone {
+            self.forget(out, id);
+        }
         if fresh {
             out.push_str("\x1b[0m\x1b[H\x1b[2J");
             pen = Some(Style::new());
@@ -231,6 +279,10 @@ impl Renderer {
             let id = p.pic.id();
             if self.uploaded.insert(id) {
                 escapes::kitty_transmit(out, id, p.pic.width(), p.pic.height(), p.pic.rgba(), self.compress);
+                if p.pic.is_animated() {
+                    // The still is on screen first; the frames follow one per `stream` call.
+                    self.streams.push(Stream { pic: p.pic.clone(), next: 0 });
+                }
             }
             if cur != Some((p.col, p.row)) {
                 let _ = write!(out, "\x1b[{};{}H", p.row + 1, p.col + 1);
@@ -378,6 +430,67 @@ mod tests {
         out.clear();
         rr.render(&b, &[], &mut out);
         assert_eq!(out, format!("\x1b_Ga=d,d=i,i={id},p=1,q=2\x1b\\"));
+    }
+
+    #[test]
+    fn animated_pictures_stream_their_frames_then_loop_and_are_freed_on_leave() {
+        use crate::picture::Cel;
+        let cels = vec![
+            Cel { gap_ms: 50, rgba: vec![1, 1, 1, 255] },
+            Cel { gap_ms: 70, rgba: vec![2, 2, 2, 255] },
+        ];
+        let pic = Picture::animated(1, 1, vec![0, 0, 0, 255], 90, cels);
+        let id = pic.id();
+        let mut rr = r();
+        rr.sync = false;
+        let b = Buffer::new(4, 4);
+        let mut out = String::new();
+        rr.render(&b, &[Placement::new(&pic, 1, 2)], &mut out);
+        // The still first, placed as any picture; no frame yet.
+        assert_eq!(
+            out,
+            format!(
+                "\x1b[0m\x1b[H\x1b[2J\x1b_Ga=t,f=32,s=1,v=1,i={id},q=2,m=0;AAAA/w==\x1b\\\x1b[3;2H\x1b_Ga=p,i={id},p=1,z=-1,C=1,q=2\x1b\\"
+            )
+        );
+        assert!(rr.pending());
+        out.clear();
+        rr.stream(&mut out);
+        assert_eq!(out, format!("\x1b_Ga=f,i={id},f=32,s=1,v=1,X=1,z=50,q=2,m=0;AQEB/w==\x1b\\"));
+        out.clear();
+        rr.stream(&mut out);
+        assert_eq!(out, format!("\x1b_Ga=f,i={id},f=32,s=1,v=1,X=1,z=70,q=2,m=0;AgIC/w==\x1b\\"));
+        assert!(rr.pending());
+        out.clear();
+        rr.stream(&mut out);
+        assert_eq!(out, format!("\x1b_Ga=a,i={id},r=1,z=90,s=3,v=1,q=2\x1b\\"));
+        assert!(!rr.pending());
+        out.clear();
+        rr.stream(&mut out);
+        assert_eq!(out, "", "nothing more to send");
+        // The same frame again: nothing.
+        rr.render(&b, &[Placement::new(&pic, 1, 2)], &mut out);
+        assert_eq!(out, "");
+        // Gone from the screen: the image (and its frames) is deleted, not just the placement.
+        rr.render(&b, &[], &mut out);
+        assert_eq!(out, format!("\x1b_Ga=d,d=I,i={id},q=2\x1b\\"));
+        // Back again: uploaded and streamed afresh.
+        out.clear();
+        rr.render(&b, &[Placement::new(&pic, 0, 0)], &mut out);
+        assert!(out.contains(&format!("\x1b_Ga=t,f=32,s=1,v=1,i={id},q=2,m=0;")), "{out:?}");
+        assert!(rr.pending());
+        // Leaving mid-stream drops the rest of the stream with the image.
+        out.clear();
+        rr.render(&b, &[], &mut out);
+        assert_eq!(out, format!("\x1b_Ga=d,d=I,i={id},q=2\x1b\\"));
+        assert!(!rr.pending());
+        // A still keeps its data when its placement goes, as before.
+        let still = Picture::new(1, 1, vec![0, 0, 0, 255]);
+        rr.render(&b, &[Placement::new(&still, 0, 0)], &mut out);
+        out.clear();
+        rr.render(&b, &[], &mut out);
+        let sid = still.id();
+        assert_eq!(out, format!("\x1b_Ga=d,d=i,i={sid},p=1,q=2\x1b\\"));
     }
 
     #[test]

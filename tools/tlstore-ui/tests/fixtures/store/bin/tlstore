@@ -19,11 +19,14 @@ case "$cmd" in
         exit 0
         ;;
     picture)
+        # A .png (a test's APNG clip) wins over the .jpg still.
         [ -f "$d/nopics" ] && exit 2
-        p="$d/pics/$1.jpg"
-        [ -f "$p" ] || exit 1
-        echo "$p"
-        exit 0
+        for p in "$d/pics/$1.png" "$d/pics/$1.jpg"; do
+            [ -f "$p" ] || continue
+            echo "$p"
+            exit 0
+        done
+        exit 1
         ;;
     readme)
         # Exit 2: no upstream (a setup). Exit 1: nothing fetched and nothing cached.

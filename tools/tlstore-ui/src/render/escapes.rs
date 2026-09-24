@@ -105,19 +105,57 @@ pub const KITTY_CHUNK: usize = 4096;
 /// Transmits straight-alpha RGBA pixels as image `id` (`a=t,f=32`), zlib-compressed when
 /// `compress`, chunked. Quiet (`q=2`): the terminal sends no replies.
 pub fn kitty_transmit(out: &mut String, id: u32, width: u32, height: u32, rgba: &[u8], compress: bool) {
-    let payload =
-        if compress { base64(&miniz_oxide::deflate::compress_to_vec_zlib(rgba, 6)) } else { base64(rgba) };
+    let head = format!("a=t,f=32,s={width},v={height},i={id},q=2");
+    chunked(out, &head, rgba, compress, 6);
+}
+
+/// zlib level for animation frames: they come in a burst, so speed over size.
+const FRAME_ZLIB_LEVEL: u8 = 1;
+
+/// Adds one animation frame to image `id` (`a=f`): the whole canvas again (`s`×`v`, straight
+/// RGBA), replacing the frame before it rather than blending (`X=1`), shown for `gap_ms`
+/// (`z`, at least 1 so the terminal does not fall back to its default gap). Chunked like a
+/// transmit; quiet.
+pub fn kitty_frame(
+    out: &mut String,
+    id: u32,
+    width: u32,
+    height: u32,
+    gap_ms: u32,
+    rgba: &[u8],
+    compress: bool,
+) {
+    let gap = gap_ms.max(1);
+    let head = format!("a=f,i={id},f=32,s={width},v={height},X=1,z={gap},q=2");
+    chunked(out, &head, rgba, compress, FRAME_ZLIB_LEVEL);
+}
+
+/// Starts image `id` looping (`a=a`): frame 1, the picture itself, shows for `first_gap_ms`
+/// (`r=1,z=`), then the animation runs (`s=3`) round and round (`v=1`: for ever). Quiet.
+pub fn kitty_animate(out: &mut String, id: u32, first_gap_ms: u32) {
+    let gap = first_gap_ms.max(1);
+    let _ = write!(out, "\x1b_Ga=a,i={id},r=1,z={gap},s=3,v=1,q=2\x1b\\");
+}
+
+/// Writes `head` plus the payload (`o=z` when `compress`, at zlib `level`) in
+/// [`KITTY_CHUNK`]-sized chunks: the first carries the head, the rest only `m`.
+fn chunked(out: &mut String, head: &str, data: &[u8], compress: bool, level: u8) {
+    let payload = if compress {
+        base64(&miniz_oxide::deflate::compress_to_vec_zlib(data, level))
+    } else {
+        base64(data)
+    };
     let bytes = payload.as_bytes();
     let mut chunks = bytes.chunks(KITTY_CHUNK).peekable();
     let mut first = true;
     if chunks.peek().is_none() {
-        let _ = write!(out, "\x1b_Ga=t,f=32,s={width},v={height},i={id},q=2;\x1b\\");
+        let _ = write!(out, "\x1b_G{head};\x1b\\");
         return;
     }
     while let Some(chunk) = chunks.next() {
         let more = u8::from(chunks.peek().is_some());
         if first {
-            let _ = write!(out, "\x1b_Ga=t,f=32,s={width},v={height},i={id},q=2");
+            let _ = write!(out, "\x1b_G{head}");
             if compress {
                 out.push_str(",o=z");
             }
@@ -262,6 +300,27 @@ mod tests {
         let mut s = String::new();
         kitty_transmit(&mut s, 3, 10, 100, &rgba, true);
         assert!(s.starts_with("\x1b_Ga=t,f=32,s=10,v=100,i=3,q=2,o=z,m=0;"));
+    }
+
+    #[test]
+    fn frame_and_loop() {
+        let mut s = String::new();
+        kitty_frame(&mut s, 7, 1, 1, 83, &[255, 0, 0, 255], false);
+        assert_eq!(s, "\x1b_Ga=f,i=7,f=32,s=1,v=1,X=1,z=83,q=2,m=0;/wAA/w==\x1b\\");
+        s.clear();
+        kitty_frame(&mut s, 7, 1, 1, 0, &[255, 0, 0, 255], true);
+        assert!(s.starts_with("\x1b_Ga=f,i=7,f=32,s=1,v=1,X=1,z=1,q=2,o=z,m=0;"), "{s:?}");
+        s.clear();
+        let rgba = vec![0x5a; 64 * 64 * 4];
+        kitty_frame(&mut s, 9, 64, 64, 40, &rgba, false);
+        let n = s.matches("\x1b_G").count();
+        assert_eq!(n, base64(&rgba).len().div_ceil(KITTY_CHUNK));
+        assert!(s.starts_with("\x1b_Ga=f,i=9,f=32,s=64,v=64,X=1,z=40,q=2,m=1;"));
+        assert_eq!(s.matches("\x1b_Gm=").count(), n - 1, "continuation chunks carry only m");
+        assert!(s.ends_with("\x1b\\") && s.contains("\x1b_Gm=0;"));
+        s.clear();
+        kitty_animate(&mut s, 7, 90);
+        assert_eq!(s, "\x1b_Ga=a,i=7,r=1,z=90,s=3,v=1,q=2\x1b\\");
     }
 
     #[test]

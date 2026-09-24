@@ -169,7 +169,7 @@ impl View for Front {
         // Header: the item under the cursor.
         let cur = list.get(self.cursor).cloned();
         let name = cur.as_ref().map(|i| i.name.clone()).unwrap_or_default();
-        let (hdr, pic) = header_for(p, st, &name, body_need, false, true);
+        let (hdr, pic) = header_for(p, st, &name, body_need, false, true, true);
         let info = if name.is_empty() { Info::default() } else { st.cat.info(&st.env, &name).clone() };
         let state = st.job.as_ref().and_then(|j| {
             if j.running() && j.current.as_deref() == Some(name.as_str()) {

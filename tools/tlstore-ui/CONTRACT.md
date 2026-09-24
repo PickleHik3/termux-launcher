@@ -10,9 +10,19 @@ Frame (fresh blank each draw; all clipped): f.text/text_clip/text_right/text_cen
 Sizing::scale(n) | Sizing::frac(scale,num,den) {valign 0 top/1 bottom/2 centre}  Style::new().fg().bg().bold().italic().dim().strike()
   .underline(Underline::{Single,Double,Curly,Dotted,Dashed}).ul_color(Rgb)  // strike = SGR 9
 Placement::new(&pic,col,row) /*z -1*/ .at_px(x,y,cw,ch) .pid(n) .z(i) .crop(Crop)  Same (pic.id,pid) next frame = moved in place; omitted = deleted.
-Picture::new(w,h,rgba) .id() .width() .height() .rgba() .cells(cw,ch)
-ctx.pics: .script_word(text,px_h,Rgb) /*Pinyon*/ .mark(px,Rgb) .file(path,w,h,Fit) .header_picture(path,w,h) /*contain + bottom 38% fade*/
-  .shape(key, ||(w,h,rgba)) /*cached drawn shape*/;  picture::shapes::{fade_bottom, pill(w,h,r,Rgb,alpha), progress_line(w,h,line_h,pct,track,fill)}
+  An animated picture whose placements all go is deleted outright (`a=d,d=I`, frames freed) and uploaded again if it returns.
+Picture::new(w,h,rgba) .id() .width() .height() .rgba() .cells(cw,ch); Picture::animated(w,h,rgba,first_gap_ms,Vec<Cel{gap_ms,rgba}>)
+  .is_animated() .gap_ms() .cel_count() /*frames after the first, arrived so far*/ .with_cel(i,|c|..) .complete()
+ctx.pics: .script_word(text,px_h,Rgb) /*Pinyon*/ .mark(px,Rgb) .file(path,w,h,Fit) .header_picture(path,w,h,animate) /*contain + bottom 38% fade;
+  animate + APNG = a clip: frame 1 now, the rest fitted+faded by a worker thread (picture::apng), thinned to ≤32 MB / ≤48 frames by dropping every
+  other frame (gaps folded) until it fits; one clip cached at a time*/ .shape(key, ||(w,h,rgba)) /*cached drawn shape*/;
+  picture::shapes::{fade_bottom, pill(w,h,r,Rgb,alpha), progress_line(w,h,line_h,pct,track,fill)}
+picture::apng: Apng::open(&bytes)->Option<Apng> (acTL) .size() .frames() .next_frame()->Option<Cel> (full canvas; dispose NONE/BACKGROUND/PREVIOUS,
+  blend SOURCE/OVER); stride(frames,frame_bytes); thin(cels,stride); stream(bytes,w,h,fit,fade,stride,&tx) /*Msg::StillGap then Msg::Frame*/
+Renderer: render(buf,places,out) diffs; pending() while a clip on screen has frames to send; stream(out) sends one `a=f` frame (i, f=32, s, v, X=1,
+  z=gap ms, o=z, chunked m=) per call, then `a=a,i,r=1,z=<frame 1 gap>,s=3,v=1` to loop; app loop calls it between events at STREAM_PACE (one frame
+  per 60 fps tick). The launcher's KittyGraphicsProtocol accepts a=f (i,s,v,x,y,z,c,r,X,Y,o,m,q) and a=a (r+z, c, s, v); frame quota RAM/48
+  clamped 64–256 MB, folded rather than refused; frames die with the session.
 
 layout: BASE 53×26. tier(cols,rows)->Tier::{Tall ≥40, Base 26–39, Compact <26}; narrow(cols)=cols<44; gutter 2 (1 narrow); item_rows(tier)=3|1
 header(cols,rows,body_need,pic_rows:Option<u16>) -> Header { tier, narrow, gutter, cols, rows, content, masthead:0, picture:Option<Rect>,
@@ -32,7 +42,8 @@ Store: cat (Catalog: items, updates, info(env,name)), job: Option<Job{verb,names
   facts(name,state)->Facts, fetch(Fetch)->Got::{Pending,Ready(path),Failed(code)} (spawns `tlstore picture|readme|readme-asset` once, off the draw path),
   picture_path(name), readme(name)->Readme::{Loading,Doc(Rc<Doc>),NoUpstream /*exit 2*/,Unavailable /*exit 1*/}, asset_path(name,src),
   header_shown(name)/header_rested(name,motion) /*150 ms rest, wake_at ticks the router*/, tasks_pending(), leaving.
-header_for(p, st, name, body_need, readme_first, reserve) -> (Header, Option<Picture>)  // fitted+faded picture, placed only once rested
+header_for(p, st, name, body_need, readme_first, reserve, animate) -> (Header, Option<Picture>)  // fitted+faded picture, placed only once rested;
+  animate && ctx.motion: an APNG plays (Front after the 150 ms rest, Item); Installing passes false. TLSTORE_MOTION=0 or --shot: frame 1 only.
 paint: Paint{f,fx,scene,clip,scroll}: text/text_clip/right/centred/fill/hline/sized/picture(el,pic,col,row,(off_x,off_y),pid)/hit/link; alpha fades
   toward the surface, pictures hide under 0.5. draw_header(p,&Header,&HeaderContent{masthead: Masthead::{Front{updates,filter},Page{repo,setup}},
   picture, name, standfirst, facts: Facts{state,version,new,more}}); draw_keys(p,&Header,&Slots) /*[Option<Slot{label,words,key,on}>;5]*/;
@@ -47,7 +58,8 @@ motion (D7): leave 120 ms body fade (pictures hidden at once); enter: body eleme
   header/notice/keys never move; Installing count-up 200+6·|Δ| ms (≤700) on Block(0).value. Input goes to the new view at once, during the leave too.
   TLSTORE_MOTION=0: no navigate/frame/drawn, frames at rest, header pictures placed at once.
 Measured (tests/screens.rs, 53×26 kitty, push to item): frames ≤ 8 KB, nothing written at rest. Release binary (host x86_64, stripped): 1.41 MB.
-Binary: tlstore-ui | --probe | --version. Fixture store: tests/fixtures/store (stub tlstore speaks list/info/update/picture/readme/readme-asset/jobs).
+Binary: tlstore-ui | --probe | --version. Fixture store: tests/fixtures/store (stub tlstore speaks list/info/update/picture/readme/readme-asset/jobs;
+  `picture` answers pics/<name>.png before .jpg, so a test can drop in an APNG).
 
 # preview renderer (cargo feature `shot`; dev only, build-ui.sh never enables it)
 tlstore-ui --shot <cols>x<rows> --screen <spec> --out <file.png> [--store <dir>]  |  --shot-all --out <dir> [--store <dir>]

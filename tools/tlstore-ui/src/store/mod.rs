@@ -738,7 +738,9 @@ impl Store {
 
 /// The header for `name` with its picture fitted: asks for the picture off the draw path,
 /// reserves its rows while it may still come (`reserve`), clamps them to the picture's own
-/// height once it is here, and only places it after the item has rested in the header.
+/// height once it is here, and only places it after the item has rested in the header. With
+/// `animate` (and motion on), an APNG picture plays: the still is placed first and its
+/// frames follow in place (`Renderer::stream`).
 pub fn header_for(
     p: &mut Paint,
     st: &mut Store,
@@ -746,6 +748,7 @@ pub fn header_for(
     body_need: u16,
     readme_first: bool,
     reserve: bool,
+    animate: bool,
 ) -> (Header, Option<Picture>) {
     let (cols, rows) = (p.f.cols(), p.f.rows());
     let (cw, ch) = p.cell();
@@ -762,9 +765,12 @@ pub fn header_for(
         let pic_rows = (pending || reserve).then_some(u16::MAX);
         return (layout::header(cols, rows, body_need, pic_rows), None);
     };
+    let animate = animate && p.f.ctx.motion;
     let probe_hdr = layout::header(cols, rows, body_need, Some(u16::MAX));
     let box_w = probe_hdr.content.w as u32 * cw as u32;
-    let probe = p.f.ctx.pics.header_picture(&path, box_w, PICTURE_MAX_ROWS as u32 * ch as u32).ok();
+    let box_h = PICTURE_MAX_ROWS as u32 * ch as u32;
+    // The probe is a still: it only measures, and may never be placed.
+    let probe = p.f.ctx.pics.header_picture(&path, box_w, box_h, false).ok();
     let Some(probe) = probe else {
         let pic_rows = reserve.then_some(u16::MAX);
         return (layout::header(cols, rows, body_need, pic_rows), None);
@@ -777,9 +783,13 @@ pub fn header_for(
     }
     let (bw, bh) = (r.w as u32 * cw as u32, r.h as u32 * ch as u32);
     let pic = if probe.width() <= bw && probe.height() <= bh {
-        Some(probe)
+        if animate {
+            p.f.ctx.pics.header_picture(&path, box_w, box_h, true).ok()
+        } else {
+            Some(probe)
+        }
     } else {
-        p.f.ctx.pics.header_picture(&path, bw, bh).ok()
+        p.f.ctx.pics.header_picture(&path, bw, bh, animate).ok()
     };
     (hdr, pic)
 }

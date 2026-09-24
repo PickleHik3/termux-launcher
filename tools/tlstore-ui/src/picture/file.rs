@@ -35,17 +35,21 @@ fn decode_png(bytes: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
     let info = r.next_frame(&mut buf).map_err(bad)?;
     let (w, h) = (info.width, info.height);
     let px = (w * h) as usize;
-    let src = &buf[..info.buffer_size()];
-    let rgba = match info.color_type {
-        png::ColorType::Rgba => src.to_vec(),
+    let rgba = to_rgba(info.color_type, &buf[..info.buffer_size()], px)?;
+    Ok((w, h, rgba))
+}
+
+/// Expanded, 8-bit PNG samples of `px` pixels in `color` to straight RGBA.
+pub(crate) fn to_rgba(color: png::ColorType, src: &[u8], px: usize) -> io::Result<Vec<u8>> {
+    Ok(match color {
+        png::ColorType::Rgba => src.chunks(4).take(px).flatten().copied().collect(),
         png::ColorType::Rgb => src.chunks(3).take(px).flat_map(|c| [c[0], c[1], c[2], 255]).collect(),
         png::ColorType::GrayscaleAlpha => {
             src.chunks(2).take(px).flat_map(|c| [c[0], c[0], c[0], c[1]]).collect()
         }
         png::ColorType::Grayscale => src.iter().take(px).flat_map(|&g| [g, g, g, 255]).collect(),
         png::ColorType::Indexed => return Err(bad("indexed PNG was not expanded")),
-    };
-    Ok((w, h, rgba))
+    })
 }
 
 fn decode_jpeg(bytes: &[u8]) -> io::Result<(u32, u32, Vec<u8>)> {
