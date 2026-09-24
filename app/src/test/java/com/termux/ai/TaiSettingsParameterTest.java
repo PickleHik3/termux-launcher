@@ -108,13 +108,15 @@ public class TaiSettingsParameterTest {
         assertEquals("cpu", mobileActions.compatibleAccelerators.get(0));
 
         TaiModelProfile deepSeek = TaiModelProfile.forModel(registry.getModel("deepseek-r1-distill-qwen-1.5b-litert-lm"));
-        assertEquals(4096, deepSeek.defaultMaxTokens);
+        // A 4096 window with a 4096 output cap leaves no room for the prompt; the cap is min(1024, window/4).
+        assertEquals(1024, deepSeek.defaultMaxTokens);
         assertEquals(64, deepSeek.defaultTopK);
         assertEquals(0.95d, deepSeek.defaultTopP, 0.0d);
         assertEquals(1.0d, deepSeek.defaultTemperature, 0.0d);
 
         TaiModelProfile qwen = TaiModelProfile.forModel(registry.getModel("qwen2.5-1.5b-instruct-litert-lm"));
-        assertEquals(4096, qwen.defaultMaxTokens);
+        assertEquals(1024, qwen.defaultMaxTokens);
+        assertEquals(4096, qwen.maxContextTokens);
         assertEquals(20, qwen.defaultTopK);
         assertEquals(0.80d, qwen.defaultTopP, 0.0d);
         assertEquals(0.70d, qwen.defaultTemperature, 0.0d);

@@ -61,15 +61,16 @@ public class TaiModelProfileGalleryDefaultsTest {
     }
 
     @Test
-    public void gemma4Profiles_capContextAtGalleryMaxContextLengthButKeepOutputCap() {
+    public void gemma4Profiles_keepTheCatalogWindowAndTheOutputCap() {
         TaiModelProfile e2b = TaiModelProfile.forModel(
             new TaiModelRegistry().getModel(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
         TaiModelProfile e4b = TaiModelProfile.forModel(
             new TaiModelRegistry().getModel(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
 
-        assertEquals(32000, e2b.maxContextTokens);
+        // Gallery's 32000 slider is not imposed: the window follows TAI's tiers up to 32768.
+        assertEquals(0, e2b.maxContextTokens);
         assertEquals(4000, e2b.defaultMaxTokens);
-        assertEquals(32000, e4b.maxContextTokens);
+        assertEquals(0, e4b.maxContextTokens);
         assertEquals(4000, e4b.defaultMaxTokens);
     }
 

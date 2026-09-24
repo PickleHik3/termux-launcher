@@ -106,16 +106,15 @@ public final class TaiModelProfile {
             return new TaiModelProfile(Collections.singletonList("cpu"), 1024, 40, 0.90d, 0.80d,
                 modelSpec.recommendedRamGb > 0 ? modelSpec.recommendedRamGb : null, "tai-mnn-config-default");
         }
-        // Gallery's maxTokens (AL:19,65) is EngineConfig.maxNumTokens, the total KV-cache budget
-        // (doc: "Gallery sizes GPU and CPU loads with the same context"). Gallery also gives
-        // Gemma 4 a maxContextLength slider up to 32000 (AL:18-19,64-65), so that value, not
-        // 4000, is the real ceiling on the window; 4000 stays a sensible default output cap
-        // (doc: "the effect is harmless" for Gemma 4 today).
+        // Gallery's maxTokens (AL:19,65) is EngineConfig.maxNumTokens, the total KV-cache budget.
+        // Its 32000 maxContextLength slider (AL:18-19,64-65) is an app ceiling, not the model's:
+        // the window stays on TAI's RAM tiers up to the catalog's 32768, capped on GPU by the
+        // budget. 4000 stays the default output cap (doc: "the effect is harmless" for Gemma 4).
         if ("gemma4e2bit".equals(id) || "gemma4e2bitlitertlm".equals(id) || path.contains("gemma-4-e2b-it.litertlm")) {
-            return edgeGalleryThinkingProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 8, 32000);
+            return edgeGalleryThinkingProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 8);
         }
         if ("gemma4e4bit".equals(id) || "gemma4e4bitlitertlm".equals(id) || path.contains("gemma-4-e4b-it.litertlm")) {
-            return edgeGalleryThinkingProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 12, 32000);
+            return edgeGalleryThinkingProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 12);
         }
         if (normalizedIdentity(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M).equals(id)
             || path.contains("mobile_actions_q8_ekv1024")) {
@@ -152,7 +151,7 @@ public final class TaiModelProfile {
         // maxContextLength slider — the same "no separate ceiling" shape as MobileActions/
         // TinyGarden above, so context and output cap both stay 1024.
         if (id.contains("gemma31bit") || path.contains("gemma3-1b-it")) {
-            return edgeGalleryProfile(Arrays.asList("gpu", "cpu"), 1024, 1.0d, 6);
+            return edgeGalleryProfile(Arrays.asList("gpu", "cpu"), 1024, 1.0d, 6, 1024);
         }
 
         // litert-community files that carry an `_ekvNNNN` token (e.g. `..._ekv4096.litertlm`)
