@@ -8,13 +8,14 @@ import androidx.annotation.Nullable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * Routes the one loaded assistant between the LiteRT-LM and MNN backends and serves embeddings from
- * their own runtimes.
+ * Routes the one loaded assistant between the LiteRT-LM and MNN backends and serves embeddings and
+ * speech-to-text from their own runtimes.
  *
  * <p>Locking. {@link #loadLock} serializes what changes the loaded model — load, keep-warm and unload,
  * including the backend switch — and is the only router lock held across native initialization or
@@ -22,10 +23,10 @@ import java.util.Locale;
  * {@link #cancel()} and the generation entry points take no router lock at all: a status poll or a
  * cancel that arrives mid-load reaches the backend's own short monitor instead of queuing behind the
  * load. Each backend keeps its monitor off its native load and generation paths, and each embedding
- * runtime serializes embed/close on its own monitor, so nothing here is held for the duration of
- * native work.
+ * runtime — the STT runtime too — serializes its work and close on its own monitor, so nothing
+ * here is held for the duration of native work.
  *
- * <p>Residency. The router owns the one {@link TaiResidency} table and hands it to all four
+ * <p>Residency. The router owns the one {@link TaiResidency} table and hands it to all five
  * runtimes, which register and deregister at their own load and close points — the backends close
  * engines on idle timers and after cancelled generations without passing through here, so the
  * router itself never writes the table. {@link #residency()} is read without any lock.
@@ -35,6 +36,7 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     private final TaiRuntime mnn;
     private final LiteRtEmbeddingRuntime embeddings;
     private final MnnEmbeddingRuntime mnnEmbeddings;
+    private final WhisperSttRuntime stt;
     private final TaiResidency residency;
     /** Held across load, keep-warm and unload; never by a read, a cancel or a generation. */
     private final Object loadLock = new Object();
@@ -76,6 +78,7 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         this.residency = residency;
         embeddings = new LiteRtEmbeddingRuntime(residency, context);
         mnnEmbeddings = new MnnEmbeddingRuntime(residency, context);
+        stt = new WhisperSttRuntime(residency, context);
         activeAssistant = liteRt;
     }
 
@@ -112,6 +115,7 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
             JSONObject result = activeAssistant.unload();
             embeddings.close();
             mnnEmbeddings.close();
+            stt.close();
             return result;
         }
     }
@@ -145,6 +149,10 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
                     case EMBEDDING:
                         if (TaiModelSpec.BACKEND_MNN_LLM.equals(victim.backend)) mnnEmbeddings.close();
                         else embeddings.close();
+                        break;
+                    case STT:
+                        // Waits on the STT monitor for a transcription that started since the plan.
+                        stt.close();
                         break;
                     case CHAT: {
                         TaiRuntime holder = chatHolder(victim.modelId);
@@ -207,6 +215,43 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         if (inputs.size() == 1 && dimensions <= 0) return embed(model.id, inputs.get(0));
         JSONObject error = new JSONObject();
         error.put("message", "Embeddings are not available for model '" + model.id + "'.");
+        error.put("type", "invalid_request_error");
+        error.put("param", "model");
+        error.put("code", "capability_not_supported");
+        JSONObject response = new JSONObject();
+        response.put("error", error);
+        response.put("_statusCode", 400);
+        return response;
+    }
+
+    /**
+     * Speech-to-text for a {@code speech_to_text} model. Like {@link #embed}, no router lock: the
+     * STT runtime serializes transcribe/warm/close on its own monitor, and this is the path that
+     * must stay open while a chat generation runs (dictating to an agent as it answers).
+     */
+    @NonNull
+    public JSONObject transcribe(@NonNull TaiModelSpec model, @NonNull File audio,
+                                 @Nullable String language, @Nullable String biasPrompt) throws JSONException {
+        if (!isSpeechToTextModel(model)) return notSpeechToText(model);
+        return stt.transcribe(model, audio, language, biasPrompt);
+    }
+
+    /** Loads a {@code speech_to_text} model ahead of its first request; see {@link WhisperSttRuntime#warm}. */
+    @NonNull
+    public JSONObject sttWarm(@NonNull TaiModelSpec model) throws JSONException {
+        if (!isSpeechToTextModel(model)) return notSpeechToText(model);
+        return stt.warm(model);
+    }
+
+    private boolean isSpeechToTextModel(@NonNull TaiModelSpec model) {
+        String path = model.localPath == null ? "" : model.localPath.toLowerCase(Locale.ROOT);
+        return model.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT) && path.endsWith(".tflite");
+    }
+
+    @NonNull
+    private JSONObject notSpeechToText(@NonNull TaiModelSpec model) throws JSONException {
+        JSONObject error = new JSONObject();
+        error.put("message", "Speech-to-text is not available for model '" + model.id + "'.");
         error.put("type", "invalid_request_error");
         error.put("param", "model");
         error.put("code", "capability_not_supported");

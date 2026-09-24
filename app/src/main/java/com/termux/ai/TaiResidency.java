@@ -54,6 +54,12 @@ public final class TaiResidency {
      */
     static final long LITERT_EMBEDDING_FACTOR_TENTHS = 13L;
     static final long MNN_EMBEDDING_FACTOR_TENTHS = 10L;
+    /**
+     * Speech-to-text footprint per model-file byte until a measured load is on record: the Whisper
+     * ACFT graphs peaked at 193 MB (base.en, 101 MB file) and 538 MB (small.en, 286 MB file) under
+     * TFLite's benchmark on pong, about 1.9× the file.
+     */
+    static final long STT_FACTOR_TENTHS = 19L;
 
     /** One resident. Immutable; {@link #setBusy} replaces the entry rather than mutating it. */
     public static final class Entry {
@@ -95,6 +101,13 @@ public final class TaiResidency {
         public static Entry embedding(@NonNull TaiModelSpec spec, int sequenceLength) {
             return new Entry(spec.id, Kind.EMBEDDING, spec.backend, "cpu", sequenceLength,
                 embeddingEstimateBytes(spec), null, System.currentTimeMillis(), false);
+        }
+
+        /** A Whisper interpreter on the CPU; {@code windowSeconds} is the graph's audio window (5 or 10). */
+        @NonNull
+        public static Entry stt(@NonNull TaiModelSpec spec, int windowSeconds) {
+            return new Entry(spec.id, Kind.STT, spec.backend, "cpu", windowSeconds,
+                sttEstimateBytes(spec), null, System.currentTimeMillis(), false);
         }
 
         /** The bytes the budget counts for this resident: measured when known, else the estimate. */
@@ -232,8 +245,10 @@ public final class TaiResidency {
      * the new one initializes (whichever backend it is on), so a chat load is credited every CHAT
      * resident. Each backend's embedding runtime holds one model and replaces it only with another
      * for the same backend, so an embedding load is credited that backend's EMBEDDING resident.
-     * Nothing else is credited: other residents stay, and {@code availableBytes} already reflects
-     * them, the RUNTIME baseline included. Unknown free memory ({@code <= 0}) stays unknown.
+     * The one STT runtime likewise holds one graph and closes it before loading another, so an
+     * STT load is credited every STT resident. Nothing else is credited: other residents stay, and
+     * {@code availableBytes} already reflects them, the RUNTIME baseline included. Unknown free
+     * memory ({@code <= 0}) stays unknown.
      */
     public static long creditedAvailable(long availableBytes, @NonNull List<Entry> residents,
                                          @NonNull Kind kind, @Nullable String backend) {
@@ -243,6 +258,8 @@ public final class TaiResidency {
                 return availableBytes + bytes(residents, Kind.CHAT, null);
             case EMBEDDING:
                 return availableBytes + bytes(residents, Kind.EMBEDDING, backend);
+            case STT:
+                return availableBytes + bytes(residents, Kind.STT, null);
             default:
                 return availableBytes;
         }
@@ -253,15 +270,17 @@ public final class TaiResidency {
      * the budget evicts them: embeddings, then STT, then idle chat; the least recently used first
      * within a kind. Left out: anything busy, the RUNTIME baseline, and what {@link
      * #creditedAvailable} already counts as replaced — every CHAT resident for a chat load (so a
-     * chat load never "evicts" chat; it replaces it), and this backend's EMBEDDING resident for an
-     * embedding load. Only an STT load may evict idle chat: an embedding load saving a few hundred
-     * MB by closing a multi-GB chat model would make the next chat turn pay a full reload.
+     * chat load never "evicts" chat; it replaces it), this backend's EMBEDDING resident for an
+     * embedding load, and every STT resident for an STT load. Only an STT load may evict idle
+     * chat: an embedding load saving a few hundred MB by closing a multi-GB chat model would make
+     * the next chat turn pay a full reload.
      */
     @NonNull
     public static List<Entry> evictionCandidates(@NonNull List<Entry> residents, @NonNull Kind kind, @Nullable String backend) {
         ArrayList<Entry> ordered = new ArrayList<>();
         for (Kind victimKind : new Kind[] {Kind.EMBEDDING, Kind.STT, Kind.CHAT}) {
             if (victimKind == Kind.CHAT && kind != Kind.STT) continue;
+            if (victimKind == Kind.STT && kind == Kind.STT) continue;
             ArrayList<Entry> ofKind = new ArrayList<>();
             for (Entry entry : residents) {
                 if (entry.kind != victimKind || entry.busy) continue;
@@ -287,6 +306,11 @@ public final class TaiResidency {
         long factorTenths = TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)
             ? MNN_EMBEDDING_FACTOR_TENTHS : LITERT_EMBEDDING_FACTOR_TENTHS;
         return fileBytes(spec) * factorTenths / 10L;
+    }
+
+    /** What a speech-to-text load of this spec costs: the graph file times {@link #STT_FACTOR_TENTHS}. */
+    public static long sttEstimateBytes(@NonNull TaiModelSpec spec) {
+        return fileBytes(spec) * STT_FACTOR_TENTHS / 10L;
     }
 
     /**

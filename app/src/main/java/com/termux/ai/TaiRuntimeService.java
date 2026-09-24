@@ -70,6 +70,17 @@ public final class TaiRuntimeService extends Service {
         return thread;
     });
     /**
+     * Speech-to-text has a lane of its own: on the serial executor a transcription would queue
+     * behind a chat generation, which is exactly the "talk to an agent while it answers" case.
+     * One thread, so transcriptions still run one at a time and the Whisper runtime's monitor is
+     * never contended by two requests.
+     */
+    private final ExecutorService sttExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "tai-runtime-stt");
+        thread.setDaemon(true);
+        return thread;
+    });
+    /**
      * Carries out what the watch decides. Evictions take the router's load lock, so a load in
      * progress holds them up; that must stall neither the watch tick (which also publishes
      * presence) nor the cancel/unload lane, hence a lane of their own. One action is queued at a
@@ -133,6 +144,7 @@ public final class TaiRuntimeService extends Service {
         watchScheduler.shutdownNow();
         executor.shutdownNow();
         controlExecutor.shutdownNow();
+        sttExecutor.shutdownNow();
         pressureExecutor.shutdownNow();
         super.onDestroy();
         if (idleExitAnnounced) {
@@ -198,12 +210,21 @@ public final class TaiRuntimeService extends Service {
                 controlExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
                 return;
             }
+            if (isSttOperation(operation)) {
+                sttExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
+                return;
+            }
             executor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
         }
     }
 
     static boolean isConcurrentControlOperation(@NonNull String operation) {
         return TaiRuntimeIpc.OP_CANCEL.equals(operation) || TaiRuntimeIpc.OP_UNLOAD_MODEL.equals(operation);
+    }
+
+    /** Speech-to-text runs on {@link #sttExecutor}, never behind a generation on the serial lane. */
+    static boolean isSttOperation(@NonNull String operation) {
+        return TaiRuntimeIpc.OP_TRANSCRIBE.equals(operation) || TaiRuntimeIpc.OP_STT_WARM.equals(operation);
     }
 
     /** Status reads report; they do not count as the client using the runtime. */
@@ -266,6 +287,10 @@ public final class TaiRuntimeService extends Service {
                 return manager.preflight(body);
             case TaiRuntimeIpc.OP_BENCHMARK:
                 return manager.benchmark(body);
+            case TaiRuntimeIpc.OP_TRANSCRIBE:
+                return manager.transcribe(body);
+            case TaiRuntimeIpc.OP_STT_WARM:
+                return manager.sttWarm(body);
             default:
                 return error(400, "bad_runtime_operation", "Unknown TAI runtime operation: " + operation);
         }
@@ -427,9 +452,13 @@ public final class TaiRuntimeService extends Service {
             "pressure tier " + number + " (" + source + "): " + reading));
     }
 
-    /** Closes the residents that have outlived their kind's idle limit; see {@link TaiPressureWatch#idleExpired}. */
+    /**
+     * Closes the residents that have outlived their kind's idle limit; see {@link TaiPressureWatch#idleExpired}.
+     * The STT limit is the settings value the app process sent with its last speech request.
+     */
     private void evaluateIdle(@NonNull List<TaiResidency.Entry> residents) {
-        List<TaiResidency.Entry> expired = TaiPressureWatch.idleExpired(residents, System.currentTimeMillis());
+        long sttIdleMs = TaiManager.getRuntimeProcessInstance(this).sttIdleLimitMs();
+        List<TaiResidency.Entry> expired = TaiPressureWatch.idleExpired(residents, System.currentTimeMillis(), sttIdleMs);
         if (expired.isEmpty()) return;
         queuePressureAction(() -> evict(expired, "idle"));
     }

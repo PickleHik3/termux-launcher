@@ -42,6 +42,10 @@ public final class TaiManager {
     private static final int MAX_MEDIA_BYTES = 25 * 1024 * 1024;
     private static final String INTERNAL_MODEL_SPEC = "_taiModelSpec";
     private static final String INTERNAL_RUNTIME_OPTIONS = "_taiRuntimeOptions";
+    /** The STT idle-unload setting, carried to the runtime process with every speech request. */
+    private static final String INTERNAL_STT_IDLE_MINUTES = "_taiSttIdleUnloadMinutes";
+    /** Where the app process puts audio for the runtime process; files here are deleted once transcribed. */
+    public static final String STT_IPC_DIR = "tai-ipc";
 
     private final Context appContext;
     private final TaiSettings settings;
@@ -53,6 +57,11 @@ public final class TaiManager {
     private final boolean runtimeProcess;
     /** Total device RAM, detected once; {@code -1} until first use, {@code 0} when unknown. */
     private volatile long deviceMemoryBytes = -1L;
+    /**
+     * In the runtime process: how long an idle Whisper model is kept, as the app process's settings
+     * last said ({@link TaiSettings#getSttIdleUnloadMinutes}); the plan's default until told.
+     */
+    private volatile long sttIdleLimitMs = TaiPressureWatch.STT_IDLE_MS;
 
     public interface OpenAiStreamSink {
         void onEvent(@NonNull JSONObject event) throws IOException;
@@ -170,6 +179,7 @@ public final class TaiManager {
         endpoints.put("/v1/responses");
         endpoints.put("/v1/completions");
         endpoints.put("/v1/embeddings");
+        endpoints.put("/v1/audio/transcriptions");
         data.put("openAiCompatibleEndpoints", endpoints);
         data.put("ollamaCompatibleEndpoints", new JSONArray()
             .put("/api/version").put("/api/tags").put("/api/show").put("/api/chat")
@@ -467,11 +477,11 @@ public final class TaiManager {
                     + "/api/embed and does not need to be loaded into the generation runtime.");
         }
         if (spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) {
-            // Phase 1 is downloader + catalog + settings only; MultiBackendTaiRuntime doesn't route
-            // speech_to_text yet (that's WhisperSttRuntime, phase 2), so refuse the chat-load path
-            // instead of accepting a model this runtime can't actually run.
+            // Speech models never enter the chat runtime: WhisperSttRuntime loads them on demand
+            // behind /v1/audio/transcriptions and tai transcribe (or ahead of time via sttWarm).
             return error(400, "speech_model_not_loadable",
-                "Model " + modelId + " is a speech-to-text model. Voice input inference isn't available yet.");
+                "Model " + modelId + " is a speech-to-text model. It is served on demand via /v1/audio/transcriptions "
+                    + "and tai transcribe and does not load into the chat runtime.");
         }
         String requestedBackend = request.optString("backend", "").trim();
         if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
@@ -1442,6 +1452,151 @@ public final class TaiManager {
         return inputs;
     }
 
+    /**
+     * OpenAI-style speech-to-text: {@code file} (a path — the API server writes uploads to
+     * {@code cacheDir/tai-ipc}, and a path under Termux home or shared storage is accepted from
+     * scripts), {@code model} (default: the installed speech model from settings), {@code language}
+     * (ISO 639-1, multilingual graphs only), {@code prompt} (a vocabulary line to bias towards) or
+     * {@code prompt_mode: "terminal"} for the default shell vocabulary. The app process resolves the
+     * model and forwards to the runtime process, whose STT lane runs the Whisper interpreter.
+     * Answers {@code {text, language, duration, segments, ...}}.
+     */
+    @NonNull
+    public JSONObject transcribe(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        TaiModelSpec spec = resolveSpeechModel(request);
+        if (spec == null) return speechModelError(request);
+        String path = request.optString("file", "").trim();
+        if (path.isEmpty()) return openAiRequestError(400, "stt_audio_missing", "Provide the audio as multipart 'file' or a 'file' path.", "file");
+        if (shouldDelegateRuntime()) {
+            File audio = new File(path);
+            if (!isSttIpcFile(audio)) {
+                // A path from a script: the same roots /v1/chat/completions accepts local media from.
+                try {
+                    path = TaiMediaAccess.resolveLocalPath(path);
+                } catch (JSONException e) {
+                    return openAiRequestError(400, "stt_audio_unreadable", mediaAccessMessage(e), "file");
+                }
+            }
+            if (!new File(path).isFile()) return openAiRequestError(400, "stt_audio_missing", "Audio file not found: " + path, "file");
+            request.put("file", path);
+            return runtimeRequest(TaiRuntimeIpc.OP_TRANSCRIBE, delegatedSpeechBody(request, spec));
+        }
+        rememberSttIdleLimit(request);
+        File audio = new File(path);
+        if (!audio.isFile()) return openAiRequestError(400, "stt_audio_missing", "Audio file not found: " + path, "file");
+        try {
+            TaiRuntime local = localRuntime();
+            if (!(local instanceof MultiBackendTaiRuntime)) {
+                return openAiRequestError(501, "capability_not_supported", "Speech-to-text needs the multi-backend runtime.", "model");
+            }
+            MultiBackendTaiRuntime router = (MultiBackendTaiRuntime) local;
+            if (!router.residency().isResident(TaiResidency.Kind.STT, spec.id)) {
+                JSONObject refusal = decideSttLoad(spec);
+                if (refusal != null) return refusal;
+            }
+            String language = stringOverride(request, "language");
+            return router.transcribe(spec, audio, language, biasPromptFor(request));
+        } finally {
+            // The upload was written for this one request; scripts' own files are left alone.
+            if (isSttIpcFile(audio)) {
+                //noinspection ResultOfMethodCallIgnored
+                audio.delete();
+            }
+        }
+    }
+
+    /** Loads the speech model ahead of its first request, so the load overlaps the first words spoken. */
+    @NonNull
+    public JSONObject sttWarm(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        TaiModelSpec spec = resolveSpeechModel(request);
+        if (spec == null) return speechModelError(request);
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_STT_WARM, delegatedSpeechBody(request, spec));
+        rememberSttIdleLimit(request);
+        TaiRuntime local = localRuntime();
+        if (!(local instanceof MultiBackendTaiRuntime)) {
+            return openAiRequestError(501, "capability_not_supported", "Speech-to-text needs the multi-backend runtime.", "model");
+        }
+        MultiBackendTaiRuntime router = (MultiBackendTaiRuntime) local;
+        if (!router.residency().isResident(TaiResidency.Kind.STT, spec.id)) {
+            JSONObject refusal = decideSttLoad(spec);
+            if (refusal != null) return refusal;
+        }
+        return router.sttWarm(spec);
+    }
+
+    /** The idle limit for a resident speech model, for the runtime process's memory watch. */
+    public long sttIdleLimitMs() {
+        return sttIdleLimitMs;
+    }
+
+    /**
+     * The vocabulary line behind {@code <|startofprev|>}: an explicit OpenAI {@code prompt} wins,
+     * {@code prompt_mode: "terminal"} gives the measured shell vocabulary, anything else no prompt
+     * (plain dictation).
+     */
+    @Nullable
+    static String biasPromptFor(@NonNull JSONObject request) {
+        String prompt = request.optString("prompt", "").trim();
+        if (!prompt.isEmpty()) return prompt;
+        String mode = request.optString("prompt_mode", request.optString("promptMode", "")).trim();
+        return "terminal".equalsIgnoreCase(mode) ? WhisperDecoder.TERMINAL_VOCABULARY : null;
+    }
+
+    /** The speech model a request names, or the settings' installed one; {@code null} when neither resolves. */
+    @Nullable
+    private TaiModelSpec resolveSpeechModel(@NonNull JSONObject request) {
+        String modelId = requestedModelId(request, settings.getSttModelId());
+        if (modelId.isEmpty()) return null;
+        TaiModelSpec spec = resolveModel(request, modelId);
+        return spec != null && spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT) ? spec : null;
+    }
+
+    @NonNull
+    private JSONObject speechModelError(@NonNull JSONObject request) throws JSONException {
+        String modelId = requestedModelId(request, settings.getSttModelId());
+        if (modelId.isEmpty()) {
+            return openAiRequestError(400, "stt_model_not_configured",
+                "No speech-to-text model is installed. Download one under TAI settings > Speech-to-text.", "model");
+        }
+        TaiModelSpec spec = resolveModel(request, modelId);
+        if (spec == null) return openAiRequestError(404, "model_not_found", "Unknown TAI model: " + modelId, "model");
+        return openAiRequestError(400, "not_a_speech_model", "Model '" + modelId + "' is not a speech-to-text model.", "model");
+    }
+
+    /** The runtime-process body for a speech request: the resolved spec and the STT idle setting ride along. */
+    @NonNull
+    private String delegatedSpeechBody(@NonNull JSONObject request, @NonNull TaiModelSpec spec) throws JSONException {
+        request.remove(INTERNAL_RUNTIME_OPTIONS);
+        request.put("model", spec.id);
+        request.put(INTERNAL_MODEL_SPEC, spec.toJson());
+        request.put(INTERNAL_STT_IDLE_MINUTES, settings.getSttIdleUnloadMinutes());
+        return request.toString();
+    }
+
+    private void rememberSttIdleLimit(@NonNull JSONObject request) {
+        if (!runtimeProcess || !request.has(INTERNAL_STT_IDLE_MINUTES)) return;
+        sttIdleLimitMs = java.util.concurrent.TimeUnit.MINUTES.toMillis(Math.max(0, request.optInt(INTERNAL_STT_IDLE_MINUTES, 0)));
+    }
+
+    /** Whether {@code file} is one of the uploads the API server wrote under {@code cacheDir/tai-ipc}. */
+    private boolean isSttIpcFile(@NonNull File file) {
+        try {
+            File dir = new File(appContext.getCacheDir(), STT_IPC_DIR).getCanonicalFile();
+            return file.getCanonicalFile().getParentFile() != null && dir.equals(file.getCanonicalFile().getParentFile());
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    @NonNull
+    private static String mediaAccessMessage(@NonNull JSONException e) {
+        String message = e.getMessage() == null ? "" : e.getMessage();
+        int colon = message.indexOf(':');
+        return colon > 0 ? message.substring(colon + 1) : message;
+    }
+
     @NonNull
     private JSONObject openAiRequestError(int statusCode, @NonNull String code,
                                           @NonNull String message, @Nullable String param) throws JSONException {
@@ -1603,6 +1758,28 @@ public final class TaiManager {
             : TaiLoadBudget.Estimate.ratio(TaiResidency.embeddingEstimateBytes(spec), 0L);
         TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
             device.memoryThresholdBytes, TaiResidency.evictionCandidates(residents, TaiResidency.Kind.EMBEDDING, spec.backend));
+        if (!plan.fits) return openAiError(insufficientMemory(spec.displayName, plan));
+        evict(plan);
+        return null;
+    }
+
+    /**
+     * The budget for a speech model that is not resident yet, the embedding decision's twin: the
+     * measured or file-size estimate (× 1.9, see {@link TaiResidency#STT_FACTOR_TENTHS}) against
+     * what is free plus the STT resident it replaces, idle embeddings — and, for STT alone, idle
+     * chat — evicted if that is what it takes. {@code null} means go ahead.
+     */
+    @Nullable
+    private JSONObject decideSttLoad(@NonNull TaiModelSpec spec) throws JSONException {
+        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+        List<TaiResidency.Entry> residents = residency().snapshot();
+        long available = TaiResidency.creditedAvailable(device.availableMemoryBytes, residents,
+            TaiResidency.Kind.STT, spec.backend);
+        long worst = TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 0);
+        TaiLoadBudget.Estimate estimate = worst > 0L ? TaiLoadBudget.Estimate.measured(worst)
+            : TaiLoadBudget.Estimate.ratio(TaiResidency.sttEstimateBytes(spec), 0L);
+        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
+            device.memoryThresholdBytes, TaiResidency.evictionCandidates(residents, TaiResidency.Kind.STT, spec.backend));
         if (!plan.fits) return openAiError(insufficientMemory(spec.displayName, plan));
         evict(plan);
         return null;
