@@ -931,7 +931,7 @@ y
     tl_stdout readme readmepinned
     expect_status "a pinned readme is served without touching GitHub" 0
     expect_out "from a digest-keyed cache path, like a picture" "^$READMEPIN_CACHE\$"
-    expect_content "and it really is the pinned copy" "$OUT" "read from the pinned copy, never from upstream"
+    expect_content "and it really is the pinned copy" "$OUT" "$(printf '# pinned\n\nread from the pinned copy, never from upstream')"
     mv "$FX/gh.away" "$FX/gh"
 
     tl_stdout readme readmepinnedbad
@@ -1365,7 +1365,7 @@ OUT="$(env -i HOME="$BC_ROOT/home" PATH="/usr/bin:/bin" TLSTORE_PREFIX="$bc_pref
 if [ "$ST" = 0 ]; then pass; else fail "tlstore reads the catalog build-catalog.sh wrote" "$OUT"; fi
 if printf '%s' "$OUT" | grep -q $'^Readme-skip\tPortability|Star history$'; then pass; else fail "and info --tsv prints Readme-skip from it" "$OUT"; fi
 if printf '%s' "$OUT" | grep -q $'^Readme\tbinaries:readme/demo.md@1.0$'; then pass; else fail "and info --tsv prints the pinned readme source" "$OUT"; fi
-if printf '%s' "$OUT" | grep -q '^Readme-digest\t3333333333333333333333333333333333333333333333333333333333333333$'; then pass; else fail "and its digest alongside it" "$OUT"; fi
+if printf '%s' "$OUT" | grep -q $'^Readme-digest\t3333333333333333333333333333333333333333333333333333333333333333$'; then pass; else fail "and its digest alongside it" "$OUT"; fi
 if awk -F'\t' -v want="$BC_PIC_DIGEST" '$1=="demo" { exit ($24==want) ? 0 : 1 }' "$bc_cat"; then
     pass
 else
