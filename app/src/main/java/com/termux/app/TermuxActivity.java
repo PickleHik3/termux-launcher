@@ -18211,6 +18211,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable TerminalSession createCommandShell(@NonNull java.util.List<String> command,
                                                  @Nullable String cwd, @Nullable String title) {
+        return createCommandShell(command, cwd, title, true);
+    }
+
+    /**
+     * As {@link #createCommandShell(java.util.List, String, String)}, but with {@code stayBehind}
+     * false the session ends with the command instead of dropping into the login shell: what a
+     * window opened for one program wants, so that the program quitting closes its window through
+     * {@link #onWindowEmptied} rather than leaving an idle shell holding an empty chip. The
+     * command still runs through the login shell so it sees the user's own PATH and environment.
+     */
+    @Nullable TerminalSession createCommandShell(@NonNull java.util.List<String> command,
+                                                 @Nullable String cwd, @Nullable String title,
+                                                 boolean stayBehind) {
         if (mTermuxService == null) return null;
         if (mTermuxService.getTermuxSessionsSize()
                 >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS) {
@@ -18226,8 +18239,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // shell stays behind once it exits so a pane restoring `make` does not vanish with
                 // the build.
                 boolean fishStyle = isFishShell(shell);
-                String script = shellCommandLine(command, fishStyle)
-                    + "; exec " + shellQuote(shell, fishStyle) + " -l";
+                String script = shellCommandLine(command, fishStyle);
+                if (stayBehind) script += "; exec " + shellQuote(shell, fishStyle) + " -l";
                 String login = loginProgramPath();
                 if (login != null) {
                     // Termux's login ends in `exec "$SHELL" -l "$@"`, so this runs the same shell
@@ -18255,11 +18268,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * A new top-level window (not a split) running {@code command} through the login shell, for
      * the local API's {@code window.open} — the same full-size window {@link #createNewWindow()}
      * makes for the window strip's +, but seeded with a command and a title and reachable while
-     * the launcher is merely running with another app in front. {@code title} names the window
-     * itself — the chip reads the window's name, not the shell's. Null exactly when
-     * {@link #createCommandShell} is (no session yet to attach a window to, the service is not
-     * ready, or the terminal limit is reached), or when the new shell could not be given a
-     * starting size and nothing is on screen to eventually give it one (see
+     * the launcher is merely running with another app in front. The window is the command's: its
+     * session ends when the command exits, and the usual last-pane path ({@link #onWindowEmptied})
+     * then closes the window, so a program that quits leaves no idle shell and no chip behind.
+     * {@code title} names the window itself — the chip reads the window's name, not the shell's.
+     * Null exactly when {@link #createCommandShell} is (no session yet to attach a window to, the
+     * service is not ready, or the terminal limit is reached), or when the new shell could not be
+     * given a starting size and nothing is on screen to eventually give it one (see
      * {@link #seedWindowSize}) — handing back a pane that can never actually run would be worse
      * than refusing it.
      */
@@ -18267,7 +18282,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                 @Nullable String cwd, @Nullable String title,
                                                 boolean focus) {
         if (!isSplitPanesEnabled() || mPaneController == null || mCurrentWSession == null) return null;
-        TerminalSession shell = createCommandShell(command, cwd, title);
+        TerminalSession shell = createCommandShell(command, cwd, title, false);
         if (shell == null) return null;
         boolean seeded = seedWindowSize(shell);
         if (!seeded && !isVisible()) {
@@ -18488,26 +18503,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /** Drop a window from its session after its last pane finished (called from onSessionFinished). */
+    /**
+     * Drop a window from its session after its last pane finished (called from onSessionFinished).
+     * The window closes whether or not it was the one on screen — a background window's command
+     * exiting takes its chip with it — and the session's selection follows
+     * {@link com.termux.app.terminal.WindowCloseFocus}: unchanged when the emptied window was
+     * elsewhere in the strip, a neighbour when it was the one shown. A session losing its last
+     * window goes with it; if that was the current session, the next one is shown or a fresh empty
+     * home is started, as when a session is closed by hand.
+     */
     void onWindowEmptied(com.termux.app.terminal.TerminalPaneController.Window w) {
         WSession ws = wsessionOwning(w);
         if (ws == null) return;
+        int removed = ws.windows.indexOf(w);
         int oldIndex = ws.current;
         ws.windows.remove(w);
-        if (ws == mCurrentWSession) {
-            if (ws.windows.isEmpty()) {
-                mWSessions.remove(ws);
+        int next = com.termux.app.terminal.WindowCloseFocus.afterRemoval(oldIndex, removed, ws.windows.size());
+        if (next < 0) {
+            mWSessions.remove(ws);
+            if (ws == mCurrentWSession) {
                 mCurrentWSession = null;
                 showNextSessionAfterClose();
-            } else {
-                ws.current = Math.min(oldIndex, ws.windows.size() - 1);
+            }
+        } else {
+            ws.current = next;
+            if (ws == mCurrentWSession && removed == oldIndex) {
                 mPaneController.showWindow(ws.currentWindow());
                 // No departure snapshot here — the window died with its last shell and its panes
                 // are already gone — but the neighbour still arrives with the travel language.
-                animateTerminalWindowLifecycleArrival(ws.current < oldIndex ? -1 : 1);
+                animateTerminalWindowLifecycleArrival(next < oldIndex ? -1 : 1);
             }
-        } else if (ws.windows.isEmpty()) {
-            mWSessions.remove(ws);
         }
         rebuildDrawerSessions();
     }

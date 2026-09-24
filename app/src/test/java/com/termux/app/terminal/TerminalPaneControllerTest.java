@@ -41,7 +41,7 @@ import static org.junit.Assert.assertTrue;
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class TerminalPaneControllerTest {
 
-    // --- A window opened for one command carries its title ---
+    // --- A window opened for one command: its title, and its last pane closing ---
 
     @Test
     public void windowOpenedWithATitleCarriesItOnItsChip() {
@@ -55,6 +55,55 @@ public class TerminalPaneControllerTest {
             .label.endsWith(" tlstore"));
         assertNull(controller.windowName(controller.newWindow(terminal(), "   ")));
         assertNull(controller.windowName(controller.newWindow(terminal())));
+    }
+
+    @Test
+    public void lastPaneOfAWindowClosesThatWindowAndLeavesItsNeighbours() {
+        TerminalPaneController controller = newController();
+        TerminalSession homeShell = terminal();
+        TerminalSession storeShell = terminal();
+        TerminalPaneController.Window home = controller.newWindow(homeShell);
+        TerminalPaneController.Window store = controller.newWindow(storeShell, "tlstore");
+        controller.showWindow(store);
+
+        assertEquals(TerminalPaneController.FINISHED_WINDOW, controller.onSessionFinished(storeShell));
+        assertNull(controller.windowOf(storeShell));
+        assertSame(home, controller.windowOf(homeShell));
+        assertEquals(Collections.singletonList(homeShell), controller.shellsOf(home));
+        // The host then selects the neighbour: strip [home, tlstore] with tlstore shown -> home.
+        assertEquals(0, WindowCloseFocus.afterRemoval(1, 1, 1));
+    }
+
+    @Test
+    public void lastPaneOfTheOnlyWindowHandsTheSessionBackToItsHost() {
+        TerminalPaneController controller = newController();
+        TerminalSession shell = terminal();
+        TerminalPaneController.Window only = controller.newWindow(shell, "tlstore");
+        controller.showWindow(only);
+
+        assertEquals(TerminalPaneController.FINISHED_WINDOW, controller.onSessionFinished(shell));
+        assertNull(controller.windowOf(shell));
+        // Nothing left to select: the host shows the next session or starts the empty home.
+        assertEquals(-1, WindowCloseFocus.afterRemoval(0, 0, 0));
+    }
+
+    @Test
+    public void paneClosingBesideASiblingLeavesItsWindowUp() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalSession first = terminal();
+        TerminalPaneController.Window window = controller.newWindow(first, "tlstore");
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.split(LinearLayout.VERTICAL));
+        List<TerminalSession> shells = controller.shellsOf(window);
+        assertEquals(2, shells.size());
+        TerminalSession second = shells.get(1);
+
+        assertEquals(TerminalPaneController.FINISHED_PANE, controller.onSessionFinished(second));
+        assertSame(window, controller.windowOf(first));
+        assertEquals(Collections.singletonList(first), controller.shellsOf(window));
+        assertEquals("tlstore", controller.windowName(window));
     }
 
     @Test

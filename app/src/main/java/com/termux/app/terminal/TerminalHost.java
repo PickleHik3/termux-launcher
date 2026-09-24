@@ -296,9 +296,12 @@ public interface TerminalHost extends SoftKeyboardPolicy {
      * Open a NEW full-size window (not a split) running {@code command} through the user's login
      * shell, the way tapping the window strip's + does — or null when none can be opened (no
      * session, terminal limit reached, service not ready, split panes disabled by compatibility
-     * mode, or the window could never actually start; see the implementation's own doc). The
-     * shell stays behind once the command exits. {@code focus} switches the window strip to it;
-     * false leaves whichever window is on screen alone, with the new one still running behind it.
+     * mode, or the window could never actually start; see the implementation's own doc). Unlike
+     * {@link #openCommandPane}, the window is the command's: it closes when the command exits
+     * (unless it is the last window, which becomes the empty home as any last window does).
+     * {@code title} names the window, i.e. its chip. {@code focus} switches the window strip to
+     * it; false leaves whichever window is on screen alone, with the new one still running behind
+     * it.
      */
     @Nullable default TerminalSession openCommandWindow(@NonNull List<String> command,
                                                          @Nullable String cwd, @Nullable String title,

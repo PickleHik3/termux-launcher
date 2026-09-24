@@ -233,8 +233,10 @@ launcher only needs to be running, not in the foreground.
 - `command` — an argv array, or a string that is run through `sh -c`. Unlike `POST /v1/panes`, this
   is required: a window with nothing to run is just `launcherctl window open`'s job in the
   interactive UI (Ctrl+Alt+C / the strip's `+`), not this API's. The command runs through the
-  user's login shell and the shell stays behind when it exits, exactly like a pane opened through
-  `POST /v1/panes`.
+  user's login shell, and the window is the command's: when it exits, the window closes and its
+  chip goes with it — unlike a pane opened through `POST /v1/panes`, where the shell stays behind.
+  If it was the last window, you are left with an empty home, as when you close the last window
+  yourself.
 - `title` — the name shown on the window's chip.
 - `focus` — default `true`, switches the window strip to it; `false` leaves whichever window is on
   screen alone while the new one keeps running behind it.
