@@ -55,6 +55,8 @@ android {
 
 dependencies {
     testImplementation "junit:junit:4.13.2"
+    // Touch handling is framework code (GestureDetector, MotionEvent); these tests run it for real.
+    testImplementation "org.robolectric:robolectric:4.13"
 }
 
 task sourceJar(type: Jar) {
