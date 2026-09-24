@@ -2,10 +2,6 @@ package com.termux.terminal;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.Paint;
-import android.graphics.Rect;
-import android.graphics.RectF;
 import android.os.SystemClock;
 
 import androidx.annotation.Nullable;
@@ -16,10 +12,8 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.zip.DataFormatException;
@@ -45,6 +39,10 @@ final class KittyGraphicsProtocol {
     private Upload upload;
     private long generation;
     private long decodeBytesInFlight;
+    /** Placements waiting on the worker behind an earlier transmission; see {@link #handlePlacement}. */
+    private int placementsInFlight;
+    /** How many decodes this protocol has started: a test hook for "a re-placement decodes nothing". */
+    int decodeCount;
 
     KittyGraphicsProtocol(TerminalEmulator emulator, TerminalOutput output) {
         this.emulator = emulator;
@@ -635,11 +633,11 @@ final class KittyGraphicsProtocol {
     }
 
     /**
-     * The shared display tail: bound checks, cursor advance, then decode and scale off-thread. The
-     * producer returns the unscaled bitmap or throws {@link IllegalArgumentException} with the reply
-     * text after the {@code EINVAL:} prefix. When {@code storeRequested} is set the full-size decode
-     * is also attached to this image's store reservation, and the placed bitmap is guaranteed to be
-     * a different instance so placement recycling can never corrupt the store.
+     * The shared display tail: bound checks, cursor advance, then decode off-thread. The producer
+     * returns the bitmap or throws {@link IllegalArgumentException} with the reply text after the
+     * {@code EINVAL:} prefix. When {@code storeRequested} is set the decode is also attached to this
+     * image's store reservation and the placement shares it; otherwise the placement owns it.
+     * Either way it is never scaled or copied: the renderer draws it at its display size.
      */
     private void submitDecode(Command command, int transmittedBytes, long effectiveId,
                               boolean storeRequested, int sourceWidth, int sourceHeight,
@@ -679,49 +677,31 @@ final class KittyGraphicsProtocol {
         final boolean storeCopy = storeRequested;
 
         PNG_DECODER.execute(() -> {
-            Bitmap display = null;
-            Bitmap original = null;
+            Bitmap decodedBitmap = null;
             String error = null;
             try {
-                original = producer.produce();
-                display = original;
-                if (display == null) {
+                decodeCount++;
+                decodedBitmap = producer.produce();
+                if (decodedBitmap == null) {
                     error = "EINVAL:image decode failed";
-                } else if (display.getAllocationByteCount() > MAX_DECODED_BYTES) {
-                    display.recycle();
-                    display = null;
-                    original = null;
+                } else if (decodedBitmap.getAllocationByteCount() > MAX_DECODED_BYTES) {
+                    decodedBitmap.recycle();
+                    decodedBitmap = null;
                     error = "ENOSPC:decoded image exceeds session limit";
-                } else {
-                    if (display.getWidth() != displaySize[0] || display.getHeight() != displaySize[1]) {
-                        Bitmap scaled = Bitmap.createScaledBitmap(display, displaySize[0], displaySize[1], true);
-                        if (scaled != display && !storeCopy) display.recycle();
-                        display = scaled;
-                    }
-                    if (offsetX > 0 || offsetY > 0)
-                        display = offsetComposite(display, offsetX, offsetY, storeCopy ? original : null);
-                    if (storeCopy && display == original) {
-                        // The store keeps the original; the placement layer owns and may recycle
-                        // its bitmap, so the two must never share an instance.
-                        display = original.copy(Bitmap.Config.ARGB_8888, false);
-                        if (display == null) throw new OutOfMemoryError("bitmap copy failed");
-                    }
                 }
             } catch (IllegalArgumentException e) {
                 error = "EINVAL:" + printable(e.getMessage());
-                if (display != null && display != original) display.recycle();
-                if (original != null) original.recycle();
-                display = null;
-                original = null;
+                if (decodedBitmap != null) decodedBitmap.recycle();
+                decodedBitmap = null;
             } catch (RuntimeException | OutOfMemoryError e) {
                 error = "ENOMEM:image decode failed";
-                if (display != null && display != original) display.recycle();
-                if (original != null) original.recycle();
-                display = null;
-                original = null;
+                if (decodedBitmap != null) decodedBitmap.recycle();
+                decodedBitmap = null;
             }
-            final Bitmap result = display;
-            final Bitmap decoded = original;
+            // The decode is the only pixel work: the placement draws this very bitmap, scaled and
+            // offset by the renderer, so there is no display-sized copy to make and nothing to
+            // composite. Stored or not, it is one bitmap.
+            final Bitmap decoded = decodedBitmap;
             final String decodeError = error;
             output.postTerminalUpdate(() -> {
                 decodeBytesInFlight = Math.max(0, decodeBytesInFlight - transmittedBytes);
@@ -731,23 +711,19 @@ final class KittyGraphicsProtocol {
                         reply(command, decodeError, true, false, effectiveId);
                     return;
                 }
-                if (storeCopy) {
-                    // Completed regardless of screen generation: the store is not screen state.
-                    if (!store.complete(effectiveId, decoded, decoded.getAllocationByteCount())
-                        && decoded != result) {
-                        decoded.recycle();
-                    }
-                }
+                long bytes = decoded.getAllocationByteCount();
+                // Completed regardless of screen generation: the store is not screen state. A
+                // delete that raced the decode leaves the placement owning the pixels instead.
+                boolean shared = storeCopy && store.complete(effectiveId, decoded, (int) bytes);
                 if (acceptedGeneration != generation) {
-                    result.recycle();
+                    if (!shared) decoded.recycle();
                     return;
                 }
-                int[] transform = storeCopy
-                    ? new int[] { 0, 0, sourceWidth, sourceHeight, displaySize[0], displaySize[1], offsetX, offsetY }
-                    : null;
                 int anchorRow = row - (int) (emulator.scrollEventCount() - scrollsAtSubmit);
-                if (!emulator.placeKittyGraphics(result, command, effectiveId, anchorRow, col, cellWidth, cellHeight, transform)) {
-                    result.recycle();
+                if (!emulator.placeKittyGraphics(decoded, !shared, estimatedBytes(sourceWidth, sourceHeight, bytes),
+                    command, effectiveId, anchorRow, col, new int[] { 0, 0, sourceWidth, sourceHeight },
+                    displaySize[0], displaySize[1], offsetX, offsetY, cellWidth, cellHeight)) {
+                    if (!shared) decoded.recycle();
                     reply(command, "EINVAL:image placement failed", true, false, effectiveId);
                     return;
                 }
@@ -757,12 +733,18 @@ final class KittyGraphicsProtocol {
         });
     }
 
+    /** Bytes a decoded bitmap costs; the JVM's stub bitmaps report 0, so fall back to w*h*4. */
+    private static long estimatedBytes(int width, int height, long reported) {
+        return reported > 0 ? reported : (long) width * height * 4L;
+    }
+
     /**
-     * A placement of a stored image ({@code a=p}): crop, scale, offset, and stamp. Resolution and
-     * cursor movement are synchronous against the store's reservation metadata; the pixel work is
-     * bounced through the decode worker and back so it runs strictly after the referenced
-     * transmission's own completion, which is what makes back-to-back {@code a=t} then {@code a=p}
-     * from real clients safe with an asynchronous decoder.
+     * A placement of a stored image ({@code a=p}). Resolution and cursor movement are synchronous
+     * against the store's reservation metadata. The placement itself is a rectangle over the
+     * store's bitmap — no pixel is touched — and lands synchronously when nothing earlier is still
+     * on the decode worker; otherwise it is bounced through the worker and back so it lands
+     * strictly after the referenced transmission's own completion, which is what makes
+     * back-to-back {@code a=t} then {@code a=p} from real clients safe with an asynchronous decoder.
      */
     private void handlePlacement(Command command) {
         final long id = store.resolveId(command.imageId, command.number);
@@ -815,65 +797,42 @@ final class KittyGraphicsProtocol {
         emulator.advanceKittyGraphicsCursor(command, displaySize[0] + offsetX, displaySize[1] + offsetY,
             row, col, cellWidth, cellHeight);
 
-        PNG_DECODER.execute(() -> output.postTerminalUpdate(() -> {
+        final Runnable place = () -> {
             KittyImageStore.Entry ready = store.get(id);
             if (ready == null || ready.bitmap == null) {
                 if (acceptedGeneration == generation)
                     reply(command, "ENOENT:image not found", true, false, id);
                 return;
             }
+            if (acceptedGeneration != generation) return;
             // An animated image places its current frame, so a client-driven animation's new
             // placements agree with what a=a,c=N selected; a still-decoding frame falls back to root.
             Bitmap currentFrame = KittyImageStore.frameBitmap(ready, ready.currentFrame + 1);
             final Bitmap source = currentFrame != null ? currentFrame : ready.bitmap;
-            PNG_DECODER.execute(() -> {
-                Bitmap placed = null;
-                String error = null;
-                try {
-                    Bitmap cropped = Bitmap.createBitmap(source, crop[0], crop[1], crop[2], crop[3]);
-                    if (cropped.getWidth() != displaySize[0] || cropped.getHeight() != displaySize[1]) {
-                        Bitmap scaled = Bitmap.createScaledBitmap(cropped, displaySize[0], displaySize[1], true);
-                        if (scaled != cropped && cropped != source) cropped.recycle();
-                        cropped = scaled;
-                    }
-                    if (offsetX > 0 || offsetY > 0)
-                        cropped = offsetComposite(cropped, offsetX, offsetY, source);
-                    // The placement layer owns and may recycle its bitmap, so it must never share
-                    // an instance with the store.
-                    placed = cropped == source ? source.copy(Bitmap.Config.ARGB_8888, false) : cropped;
-                    if (placed == null) throw new OutOfMemoryError("bitmap copy failed");
-                } catch (IllegalArgumentException e) {
-                    error = "EINVAL:" + printable(e.getMessage());
-                    if (placed != null && placed != source) placed.recycle();
-                    placed = null;
-                } catch (RuntimeException | OutOfMemoryError e) {
-                    error = "ENOMEM:image rasterization failed";
-                    if (placed != null && placed != source) placed.recycle();
-                    placed = null;
-                }
-                final Bitmap result = placed;
-                final String rasterError = error;
-                output.postTerminalUpdate(() -> {
-                    if (acceptedGeneration != generation) {
-                        if (result != null) result.recycle();
-                        return;
-                    }
-                    if (rasterError != null) {
-                        reply(command, rasterError, true, false, id);
-                        return;
-                    }
-                    int[] transform = new int[] { crop[0], crop[1], crop[2], crop[3],
-                        displaySize[0], displaySize[1], offsetX, offsetY };
-                    int anchorRow = row - (int) (emulator.scrollEventCount() - scrollsAtSubmit);
-                    if (!emulator.placeKittyGraphics(result, command, id, anchorRow, col, cellWidth, cellHeight, transform)) {
-                        result.recycle();
-                        reply(command, "EINVAL:image placement failed", true, false, id);
-                        return;
-                    }
-                    markPlaced(id);
-                    reply(command, "OK", false, false, id);
-                });
-            });
+            int anchorRow = row - (int) (emulator.scrollEventCount() - scrollsAtSubmit);
+            // The store's own bitmap, shared: a re-placement moves a rectangle, it never copies.
+            if (!emulator.placeKittyGraphics(source, false, 0, command, id, anchorRow, col, crop,
+                displaySize[0], displaySize[1], offsetX, offsetY, cellWidth, cellHeight)) {
+                reply(command, "EINVAL:image placement failed", true, false, id);
+                return;
+            }
+            markPlaced(id);
+            reply(command, "OK", false, false, id);
+        };
+        KittyImageStore.Entry now = store.get(id);
+        if (now != null && now.bitmap != null && decodeBytesInFlight == 0 && placementsInFlight == 0) {
+            // Nothing earlier in the stream is still on the worker, so placing right here keeps
+            // stream order — and keeps the placement inside the synchronized update (mode 2026)
+            // that carried it, so a moving picture never shows a frame of the move half done.
+            place.run();
+            return;
+        }
+        // Otherwise wait behind whatever is on the worker (the transmission this refers to above
+        // all), then place on the update thread, in the order the commands arrived.
+        placementsInFlight++;
+        PNG_DECODER.execute(() -> output.postTerminalUpdate(() -> {
+            placementsInFlight = Math.max(0, placementsInFlight - 1);
+            place.run();
         }));
     }
 
@@ -1212,7 +1171,6 @@ final class KittyGraphicsProtocol {
 
     // ------------------------------------------------------------------ terminal-driven playback
 
-    private static final Paint FRAME_PAINT = new Paint(Paint.FILTER_BITMAP_FLAG);
     private boolean animationTickScheduled;
     /**
      * Whether this terminal is on screen. Playback is suspended, never discarded, while it is not:
@@ -1293,9 +1251,8 @@ final class KittyGraphicsProtocol {
                 onScreen = placeholderCellsOnScreen;
             }
             if (!onScreen) continue;
-            // A placement re-composites off the update thread and asks for the redraw itself when
-            // its new pixels are swapped in; an image displayed through Unicode placeholders is
-            // drawn straight out of the store, so for that one the flip is the whole change.
+            // Placements and Unicode placeholders both draw straight out of the store, so the flip
+            // is the whole change and a redraw shows it.
             if (!renderAnimationFrame(entry)) redraw = true;
         }
         // At most one redraw request per tick, and none for a tick that only moved a scrolled-away
@@ -1357,7 +1314,11 @@ final class KittyGraphicsProtocol {
      */
     void dropAllAnimationFrames() {
         for (KittyImageStore.Entry entry : store.entries()) {
-            if (!entry.frames.isEmpty()) store.dropFrames(entry);
+            if (entry.frames.isEmpty()) continue;
+            store.dropFrames(entry);
+            // Placements point at the frame they last showed; move them back to the still image
+            // so the dropped frame's pixels can actually be collected.
+            renderAnimationFrame(entry);
         }
         cancelAnimationTick();
     }
@@ -1375,63 +1336,25 @@ final class KittyGraphicsProtocol {
     }
 
     /**
-     * Re-render every placement of this image from its current frame. Each placement rotates two
-     * buffers: the frame is drawn into the spare one off-thread with the placement's stored
-     * crop/scale/offset transform, then swapped in as the displayed bitmap on the update thread —
-     * cells are never restamped, so a flip cannot flicker, and steady-state playback allocates
-     * nothing. Displaced immutable bitmaps are dropped to the garbage collector, never recycled,
-     * because the render thread may still be uploading them.
+     * Show this image's current frame in every placement of it. A placement draws straight from a
+     * bitmap the store owns, so a flip is pointing each placement at the frame's bitmap and telling
+     * the renderer — nothing is drawn off-thread, nothing is allocated, and the cells never move,
+     * so a flip cannot flicker.
+     *
+     * @return false always: the caller asks for the redraw, which is the whole of the change.
      */
     private boolean renderAnimationFrame(KittyImageStore.Entry entry) {
-        final Bitmap frame = KittyImageStore.frameBitmap(entry, entry.currentFrame + 1);
+        Bitmap frame = KittyImageStore.frameBitmap(entry, entry.currentFrame + 1);
+        if (frame == null) frame = entry.bitmap;
         if (frame == null) return false;
-        final List<TerminalBitmap> placements = emulator.kittyPlacementsFor(entry.id);
-        if (placements.isEmpty()) return false;
-        final Bitmap[] buffers = new Bitmap[placements.size()];
-        for (int i = 0; i < placements.size(); i++) {
-            TerminalBitmap placement = placements.get(i);
-            buffers[i] = placement.kittyBackBuffer;
-            placement.kittyBackBuffer = null;
+        boolean changed = false;
+        for (KittyPlacement placement : emulator.kittyPlacementsFor(entry.id)) {
+            if (placement.ownsBitmap || placement.bitmap == frame) continue;
+            placement.bitmap = frame;
+            changed = true;
         }
-        PNG_DECODER.execute(() -> {
-            for (int i = 0; i < placements.size(); i++) {
-                TerminalBitmap placement = placements.get(i);
-                try {
-                    int width = placement.bitmap.getWidth();
-                    int height = placement.bitmap.getHeight();
-                    Bitmap buffer = buffers[i];
-                    if (buffer == null || !buffer.isMutable()
-                        || buffer.getWidth() != width || buffer.getHeight() != height) {
-                        buffer = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-                    }
-                    buffer.eraseColor(0);
-                    int[] t = placement.kittyTransform;
-                    Canvas canvas = new Canvas(buffer);
-                    canvas.drawBitmap(frame, new Rect(t[0], t[1], t[0] + t[2], t[1] + t[3]),
-                        new RectF(t[6], t[7], t[6] + t[4], t[7] + t[5]), FRAME_PAINT);
-                    buffers[i] = buffer;
-                } catch (RuntimeException | OutOfMemoryError e) {
-                    // This placement keeps its previous frame; playback continues.
-                    buffers[i] = null;
-                }
-            }
-            output.postTerminalUpdate(() -> {
-                boolean swapped = false;
-                for (int i = 0; i < placements.size(); i++) {
-                    Bitmap fresh = buffers[i];
-                    if (fresh == null) continue;
-                    TerminalBitmap placement = placements.get(i);
-                    Bitmap old = placement.bitmap;
-                    placement.bitmap = fresh;
-                    placement.kittyBackBuffer = (old != null && old.isMutable()) ? old : null;
-                    swapped = true;
-                }
-                // The pixels of a placement are replaced under an unchanged cell style, so the
-                // renderer cannot see this any other way.
-                if (swapped) emulator.noteKittyPlacementPixelsReplaced();
-            });
-        });
-        return true;
+        if (changed) emulator.noteKittyPlacementPixelsReplaced();
+        return false;
     }
 
     /**
@@ -1481,7 +1404,7 @@ final class KittyGraphicsProtocol {
         else if (form == 'a' && command.number != 0) form = 'n';
         switch (form) {
             case 'a':
-                emulator.deleteKittyPlacements((bitmap, column, row) -> true, true);
+                emulator.deleteKittyPlacements((placement, row) -> true, true);
                 if (free) store.removeImagesWithoutVirtualPlacements();
                 break;
             case 'i':
@@ -1500,9 +1423,9 @@ final class KittyGraphicsProtocol {
                     KittyImageStore.Entry entry = store.get(id);
                     if (entry != null)
                         KittyImageStore.removeVirtualPlacements(entry, command.placementId);
-                    emulator.deleteKittyPlacements((bitmap, column, row) ->
-                        bitmap.kittyImageId == id
-                            && (command.placementId == 0 || bitmap.kittyPlacementId == command.placementId), true);
+                    emulator.deleteKittyPlacements((placement, row) ->
+                        placement.imageId == id
+                            && (command.placementId == 0 || placement.placementId == command.placementId), true);
                     if (free && emulator.kittyPlacementsFor(id).isEmpty())
                         store.removeIfNoVirtualPlacements(id);
                 }
@@ -1522,8 +1445,8 @@ final class KittyGraphicsProtocol {
                 if (!store.removeFrame(entry, command.displayRows)) {
                     // No extra frames: d=F deletes the whole image, d=f is a no-op — kitty's rule.
                     if (free) {
-                        emulator.deleteKittyPlacements((bitmap, column, row) ->
-                            bitmap.kittyImageId == id, true);
+                        emulator.deleteKittyPlacements((placement, row) ->
+                            placement.imageId == id, true);
                         store.removeIfNoVirtualPlacements(id);
                     }
                 } else if (entry.currentFrame != before) {
@@ -1547,7 +1470,8 @@ final class KittyGraphicsProtocol {
                     return;
                 }
                 int column = command.srcX - 1;
-                deleteMatching((bitmap, cellColumn, cellRow) -> cellColumn == column, false, free);
+                deleteMatching((placement, anchorRow) ->
+                    column >= placement.column && column < placement.column + placement.columns, false, free);
                 break;
             }
             case 'y': {
@@ -1556,7 +1480,8 @@ final class KittyGraphicsProtocol {
                     return;
                 }
                 int row = command.srcY - 1;
-                deleteMatching((bitmap, cellColumn, cellRow) -> cellRow == row, false, free);
+                deleteMatching((placement, anchorRow) ->
+                    row >= anchorRow && row < anchorRow + placement.rows, false, free);
                 break;
             }
             case 'z': {
@@ -1564,7 +1489,7 @@ final class KittyGraphicsProtocol {
                     reply(command, "EINVAL:delete by z requires z", true, true);
                     return;
                 }
-                deleteMatching((bitmap, cellColumn, cellRow) -> bitmap.kittyZ == command.z, true, free);
+                deleteMatching((placement, anchorRow) -> placement.z == command.z, true, free);
                 break;
             }
             default:
@@ -1574,32 +1499,20 @@ final class KittyGraphicsProtocol {
         reply(command, "OK", false, false);
     }
 
-    /** Delete placements whose cells intersect one screen cell, optionally also matching a z value. */
+    /** Delete placements that cover one screen cell, optionally also matching a z value. */
     private void deleteAtCell(int column, int row, Integer z, boolean free) {
-        deleteMatching((bitmap, cellColumn, cellRow) ->
-            cellColumn == column && cellRow == row && (z == null || bitmap.kittyZ == z), false, free);
+        deleteMatching((placement, anchorRow) ->
+            placement.covers(column, row) && (z == null || placement.z == z), false, free);
     }
 
-    /**
-     * Delete every placement with at least one cell the filter matches — the whole placement goes,
-     * not just the matched cells, which is what the intersection delete forms ask for. Two passes:
-     * a scan that deletes nothing, then deletion by membership, because a placement's cells before
-     * the matching one have already been visited when the match is found.
-     */
+    /** Delete every placement the filter matches; the uppercase forms also free unplaced images. */
     private void deleteMatching(TerminalBuffer.KittyPlacementFilter filter, boolean includeScrollback,
                                 boolean free) {
-        Set<TerminalBitmap> hits = new HashSet<>();
-        emulator.deleteKittyPlacements((bitmap, cellColumn, cellRow) -> {
-            if (filter.matches(bitmap, cellColumn, cellRow)) hits.add(bitmap);
-            return false;
-        }, includeScrollback);
-        if (hits.isEmpty()) return;
-        // Membership deletion always covers scrollback so a placement straddling the screen edge
-        // does not leave orphan cells behind.
-        emulator.deleteKittyPlacements((bitmap, cellColumn, cellRow) -> hits.contains(bitmap), true);
-        if (free) {
-            for (TerminalBitmap bitmap : hits)
-                store.removeIfNoVirtualPlacements(bitmap.kittyImageId);
+        List<KittyPlacement> deleted = emulator.deleteKittyPlacements(filter, includeScrollback);
+        if (!free) return;
+        for (KittyPlacement placement : deleted) {
+            if (emulator.kittyPlacementsFor(placement.imageId).isEmpty())
+                store.removeIfNoVirtualPlacements(placement.imageId);
         }
     }
 
@@ -1675,20 +1588,6 @@ final class KittyGraphicsProtocol {
         int cropHeight = h == 0 ? sourceHeight - y : Math.min(h, sourceHeight - y);
         if (cropWidth <= 0 || cropHeight <= 0) return null;
         return new int[] { x, y, cropWidth, cropHeight };
-    }
-
-    /**
-     * Shift an image right and down by a sub-cell pixel offset, producing a bitmap whose top-left
-     * corner is transparent padding. Recycles the input unless it is the protected instance.
-     */
-    private static Bitmap offsetComposite(Bitmap image, int offsetX, int offsetY, Bitmap protectedInstance) {
-        Bitmap combined = Bitmap.createBitmap(image.getWidth() + offsetX, image.getHeight() + offsetY,
-            Bitmap.Config.ARGB_8888);
-        if (combined == null) throw new OutOfMemoryError("offset composite failed");
-        Canvas canvas = new Canvas(combined);
-        canvas.drawBitmap(image, offsetX, offsetY, null);
-        if (image != protectedInstance) image.recycle();
-        return combined;
     }
 
     private static int[] pngDimensions(byte[] png) {
