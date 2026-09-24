@@ -35,7 +35,7 @@ pub const PICTURE_REST: Duration = Duration::from_millis(150);
 /// What a view wants after an event.
 pub enum Go {
     Stay,
-    /// Not mine: the router may use it (`f` keyboard, `q` quit, `esc` back).
+    /// Not mine: the router may use it (`f` full screen, `q` quit, `esc` back).
     Pass,
     Push(Box<dyn View>),
     Replace(Box<dyn View>),

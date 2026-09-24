@@ -65,8 +65,8 @@ fn store() -> ExitCode {
 }
 
 fn main() -> ExitCode {
-    name_process();
     let arg = std::env::args().nth(1).unwrap_or_default();
+    name_process(arg.is_empty());
     let result = match arg.as_str() {
         "" => return store(),
         #[cfg(feature = "shot")]
@@ -100,12 +100,21 @@ fn main() -> ExitCode {
     }
 }
 
-/// The launcher labels a pane or window chip with the foreground process's name (the `comm`
-/// field of `/proc/<pid>/stat`), which for this binary would read `tlstore-ui`. People know the
-/// store as `tlstore`, so the process calls itself that.
-fn name_process() {
+/// The launcher labels a pane or window chip with the foreground process's name: argv[0] from
+/// `/proc/<pid>/cmdline` (WindowForegroundResolver), which for this binary is the path of
+/// `tlstore-ui`. People know the store as `tlstore`, so the store re-executes itself once with
+/// that argv[0], and also sets `comm` for `ps` and `top`.
+fn name_process(store: bool) {
     #[cfg(any(target_os = "linux", target_os = "android"))]
-    unsafe {
-        libc::prctl(libc::PR_SET_NAME, c"tlstore".as_ptr());
+    {
+        use std::os::unix::process::CommandExt;
+        let argv0 = std::env::args_os().next().unwrap_or_default();
+        if store && argv0 != "tlstore" {
+            // exec only returns on failure; the store then runs under its own name.
+            let _ = std::process::Command::new("/proc/self/exe").arg0("tlstore").exec();
+        }
+        unsafe {
+            libc::prctl(libc::PR_SET_NAME, c"tlstore".as_ptr());
+        }
     }
 }

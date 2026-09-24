@@ -51,10 +51,11 @@ Gutter: 2 columns each side (1 under 44 columns). Content columns at 53 wide: 2�
 
 | Row | Content |
 |---|---|
-| 0 | Masthead. Front: `tlstore` in two rows of half-block letters at the gutter, as dawn draws its name (rows 0–1; tap: home; plain bold `tlstore` in one row where the header has no blank row or no room), and, right-aligned, `↑ N updates` in the accent when N > 0 (tap: the updates filter) with `N items · M installed` dim on row 1 under it; with no updates the counts sit on row 0, level with the mark's top. Item and Installing: `‹ apps` at the gutter (`‹` accent, `apps` dim; tap: back) and the upstream `owner/repo ↗` right-aligned, accent, curly underline, OSC 8 link; a setup shows `our setup` dim instead. |
-| 1 | Blank. |
-| 2 … 1+P | Picture, P rows, fitted to the full 49-column width (cropped evenly top and bottom when taller than P rows; Revision 6 round 3, was contain-fit), bottom 38 % faded to alpha 0. P = spare rows after the fixed rows, clamped to at most 12 and to the picture's aspect height; under 4 the picture is not drawn and its rows go to the body. The catalog picture on Front; the README's first image on Item and Installing (falling back to the catalog picture). Fetched through `tlstore picture` / `tlstore readme-asset` off the draw path; nothing is drawn where a picture has not arrived. |
-| 2+P | Blank (only when a picture is drawn). |
+| 0 | Masthead. Front: the 3×5 pixel TLSTORE mark in square pixels over rows 0–1, blocky like dawn's name (half-block letters where pictures cannot be shown; tap: home; plain bold `tlstore` in one row where the header has no blank row or no room), and, right-aligned, `↑ N updates` in the accent when N > 0 (tap: the updates filter) with `N items · M installed` dim on row 1 under it; with no updates the counts sit on row 0, level with the mark's top. Item and Installing: `‹ apps` at the gutter (`‹` accent, `apps` dim; tap: back) and the upstream `owner/repo ↗` right-aligned, accent, curly underline, OSC 8 link; a setup shows `our setup` dim instead. |
+| 1 | Blank (the mark's second row on Front). |
+| 2 | Blank, so the picture and name stand clear of the mark (not in Compact, which starts at row 2). |
+| 3 … 2+P | Picture, P rows, fitted to the full 49-column width (cropped evenly top and bottom when taller than P rows; Revision 6 round 3, was contain-fit), bottom 38 % faded to alpha 0. P = spare rows after the fixed rows, clamped to at most 12 and to the picture's aspect height; under 4 the picture is not drawn and its rows go to the body. The catalog picture on Front; the README's first image on Item and Installing (falling back to the catalog picture). Fetched through `tlstore picture` / `tlstore readme-asset` off the draw path; nothing is drawn where a picture has not arrived. |
+| 3+P | Blank (only when a picture is drawn). |
 | next 3 | Name: the script face rasterised at exactly 3 × cell height pixels in the ink colour, left at the gutter. If wider than 49 columns, or pictures are unavailable, mono OSC 66 scale 3 (scale 2 under 44 columns or if 3 does not fit). |
 | next | Standfirst, dim italic, `fit_line` to the content width. |
 | next | Facts strip, dim: `[installed \| installing \| updating \| removing] <version>` or plain `<version>`; then `· <licence>`, `· <author>`, `· <size>`, `· starred` as known. With an update: `<old>` struck through, ` → <new>`. |
@@ -92,7 +93,7 @@ seven two-line items. Header geometry is one pure function in `layout.rs`, teste
   (→ Installing).
 - `s` with gh not ready: notice row `starring needs gh: pkg install gh, then gh auth login`
   until the next key. Otherwise stars silently and the facts strip gains `· starred`.
-- Keys: slots `⏎ open` · `i install` / `r remove` / `u update` · `␣ select` · `f keyboard` · `q quit`.
+- Keys: slots `⏎ open` · `i install` / `r remove` / `u update` · `␣ select` · `f full` (the launcher's keyboard held down) · `q quit`.
 
 ## Item
 
@@ -144,7 +145,7 @@ first body row b:
 
 ## Key row: fixed slots
 
-Five slots at columns 2, 12, 24, 34, 44 (at 53 columns; under 44 columns the slots are 1, 8, 16,
+Five slots at columns 2, 13, 24, 34, 42 (at 53 columns: two blank columns after the widest hint any screen puts in a slot; under 44 columns the slots are 1, 8, 16,
 24, 32 and words are `fit_line`d to 7). A slot's position never changes; its content may
 (`i install` / `r remove` / `u update` share slot 2 on Front and slot 1 on Item). An unavailable
 hint stays in place, dim. Tapping a slot sends its key.

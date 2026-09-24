@@ -325,7 +325,7 @@ impl View for Front {
             Some(Slot::new("⏎", "open", Key::Enter).when(has)),
             Some(verb.when(has)),
             Some(Slot::new("␣", "select", Key::Char(' ')).when(has)),
-            Some(Slot::new("f", "keyboard", Key::Char('f')).when(st.env.launcherctl.is_some())),
+            Some(Slot::new("f", "full", Key::Char('f')).when(st.env.launcherctl.is_some())),
             Some(Slot::new("q", "quit", Key::Char('q'))),
         ]
     }

@@ -2,31 +2,31 @@
 01|   █  █▄ ▄▄█  █  █▄█ █▀▄ ██▄  7 items · 3 installed
 02|
 03|
-04|  dawn
-05|  a quiet place to write, headings and all
-06|  0.1.3+0e958747 · MIT · andrewmd5
-07|
-08|  01   claude-code AI
-09|       Anthropic's Claude Code, about 200 MB.
-10|
-11|  02   dawn Note taking                         new
-12|       A quiet place to write, with your markdown…
-13|
-14|  03   fastfetch Tools                     ↑ 2.67.0
-15|       System information beside an animated logo…
-16|
-17|  04   fish-shell Tools                   installed
-18|       The fish shell with the launcher's setup…
-19|
-20|  05   kitten Tools                          ↑ 0.49
-21|       Kitty's companion tool, for images and…
-22|
-23|  06   opencode AI
-24|       The open source coding agent, about 200 MB.
-25|
-26|  07   sigye Tools
-27|       A clock for the terminal.
-28|
+04|
+05|  dawn
+06|  a quiet place to write, headings and all
+07|  0.1.3+0e958747 · MIT · andrewmd5
+08|
+09|  01   claude-code AI
+10|       Anthropic's Claude Code, about 200 MB.
+11|
+12|  02   dawn Note taking                         new
+13|       A quiet place to write, with your markdown…
+14|
+15|  03   fastfetch Tools                     ↑ 2.67.0
+16|       System information beside an animated logo…
+17|
+18|  04   fish-shell Tools                   installed
+19|       The fish shell with the launcher's setup…
+20|
+21|  05   kitten Tools                          ↑ 0.49
+22|       Kitty's companion tool, for images and…
+23|
+24|  06   opencode AI
+25|       The open source coding agent, about 200 MB.
+26|
+27|  07   sigye Tools
+28|       A clock for the terminal.
 29|
 30|
 31|
@@ -37,4 +37,4 @@
 36|
 37|
 38|
-39|  ⏎ open    i install   ␣ select  f keyboard q quit
+39|  ⏎ open     i install  ␣ select  f full  q quit

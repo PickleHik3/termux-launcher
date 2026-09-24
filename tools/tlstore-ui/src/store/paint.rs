@@ -2,7 +2,7 @@
 //! picture, name, standfirst, facts strip; plus the notice row and the fixed key slots.
 
 use crate::layout::{self, Header, Tier};
-use crate::picture::Picture;
+use crate::picture::{mark, Picture};
 use crate::render::{text_width, Color, Crop, Frame, Placement, Rect, Sizing, Style, Underline};
 use crate::term::Key;
 
@@ -246,6 +246,7 @@ impl<'p, 'a> Paint<'p, 'a> {
 }
 
 /// `tlstore` in half-block letters, two rows, as dawn draws its own name.
+/// The fallback where pictures cannot be shown.
 const BLOCK_MARK: [&str; 2] = ["▀█▀ █  █▀▀ ▀█▀ █▀█ █▀█ █▀▀", " █  █▄ ▄▄█  █  █▄█ █▀▄ ██▄"];
 const BLOCK_MARK_W: u16 = 26;
 
@@ -302,9 +303,26 @@ pub fn draw_header(p: &mut Paint, h: &Header, c: &HeaderContent) {
             // room; plain bold text in one row otherwise.
             let two = h.name.y >= y + 2 && x0 + BLOCK_MARK_W + 2 <= right;
             let (mark_end, mark_rows) = if two {
-                let st = pal.ink_s().bold();
-                p.text(El::Mark, x0, y, BLOCK_MARK[0], st);
-                (p.text(El::Mark, x0, y + 1, BLOCK_MARK[1], st), 2)
+                // Where the terminal shows pictures, the 3×5 pixel mark in square pixels, centred
+                // on the two rows; half-block text otherwise.
+                let pic = (p.f.ctx.cell_known && p.f.ctx.caps.kitty_graphics)
+                    .then(|| p.f.ctx.pics.mark((2 * ch as u32 / mark::MARK_H).max(1), pal.ink));
+                let placed = pic.as_ref().is_some_and(|m| {
+                    let dy = (2 * ch as u32).saturating_sub(m.height()) / 2;
+                    p.picture(El::Mark, m, x0, y, (0, dy), 1)
+                });
+                match (&pic, placed) {
+                    (Some(m), true) => {
+                        let (mcols, _) = m.cells(cw, ch);
+                        p.note(El::Mark, Rect::new(x0, y, mcols, 2), Some((m.id(), 1)), None);
+                        (x0 + mcols, 2)
+                    }
+                    _ => {
+                        let st = pal.ink_s().bold();
+                        p.text(El::Mark, x0, y, BLOCK_MARK[0], st);
+                        (p.text(El::Mark, x0, y + 1, BLOCK_MARK[1], st), 2)
+                    }
+                }
             } else {
                 (p.text(El::Mark, x0, y, "tlstore", pal.ink_s().bold()), 1)
             };

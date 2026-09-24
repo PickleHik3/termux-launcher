@@ -2,17 +2,17 @@
 01|
 02|
 03|
-04|  sigye
-05|  a clock built for the terminal
-06|  installing 0.6.0 · MIT · am2rican5
-07|
-08|  60%         fetched
-09|              signature checked
-10|              putting files in place
-11|              ready
-12|
-13|  ─────────────────────────────────────────────────
-14|
+04|
+05|  sigye
+06|  a clock built for the terminal
+07|  installing 0.6.0 · MIT · am2rican5
+08|
+09|  60%         fetched
+10|              signature checked
+11|              putting files in place
+12|              ready
+13|
+14|  ─────────────────────────────────────────────────
 15|
 16|
 17|
@@ -23,4 +23,4 @@
 22|
 23|
 24|
-25|  x cancel                                   esc back
+25|  x cancel                                esc back

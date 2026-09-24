@@ -79,13 +79,24 @@ pub struct Header {
     pub keys: u16,
 }
 
-/// Rows the header takes besides the picture and its blank: masthead, blank, name, standfirst,
+/// Rows the header takes besides the picture and its blank: masthead, blank (the wordmark's
+/// second row on Front), a second blank above the picture (not in Compact), name, standfirst,
 /// facts, blank, notice, keys.
 fn fixed_rows(t: Tier) -> u16 {
     if t == Tier::Compact {
         9
     } else {
-        10
+        11
+    }
+}
+
+/// The first row under the masthead: row 3, one row clear of the two-row wordmark, except in
+/// Compact, where every row counts.
+fn below_masthead(t: Tier) -> u16 {
+    if t == Tier::Compact {
+        2
+    } else {
+        3
     }
 }
 
@@ -110,7 +121,7 @@ pub fn header(cols: u16, rows: u16, body_need: u16, pic_rows: Option<u16>) -> He
     };
     let pic_h = if pic_h >= PICTURE_MIN_ROWS { pic_h } else { 0 };
 
-    let mut y = 2;
+    let mut y = below_masthead(t);
     let picture = (pic_h > 0).then(|| {
         let r = Rect::new(g, y, inner_w, pic_h);
         y += pic_h + 1;
@@ -143,12 +154,13 @@ pub fn header(cols: u16, rows: u16, body_need: u16, pic_rows: Option<u16>) -> He
     }
 }
 
-/// The five key-row slots' columns. At 53 columns and up: 2, 12, 24, 34, 45 (`f keyboard`
-/// fills slot 4 with a gap to spare and `q quit` / `esc back` fit the last 8); under 44
+/// The five key-row slots' columns. At 53 columns and up: 2, 13, 24, 34, 42 — two blank
+/// columns after the widest hint any screen puts in each slot (`i install`, `i install`,
+/// `␣ select`/`s unstar`, `f full`, `esc back`), and `esc back` ends inside the gutter; under 44
 /// columns: 1, 8, 16, 24, 32; between, evenly inside the gutters.
 pub fn key_slots(cols: u16) -> [u16; 5] {
     if cols >= BASE_COLS {
-        [2, 12, 24, 34, 45]
+        [2, 13, 24, 34, 42]
     } else if narrow(cols) {
         [1, 8, 16, 24, 32]
     } else {
@@ -260,13 +272,13 @@ mod tests {
     }
 
     #[test]
-    fn baseline_front_has_an_eight_row_picture_over_seven_rows() {
+    fn baseline_front_has_a_seven_row_picture_over_seven_rows() {
         let h = header(53, 26, 7, Some(u16::MAX));
         assert_eq!(h.tier, Tier::Base);
         assert_eq!(h.gutter, 2);
         assert_eq!(h.content, Rect::new(2, 0, 49, 26));
         assert_eq!(h.masthead, 0);
-        assert_eq!(h.picture, Some(Rect::new(2, 2, 49, 8)));
+        assert_eq!(h.picture, Some(Rect::new(2, 3, 49, 7)));
         assert_eq!(h.name, Rect::new(2, 11, 49, 3));
         assert_eq!(h.standfirst, 14);
         assert_eq!(h.facts, 15);
@@ -276,10 +288,10 @@ mod tests {
     }
 
     #[test]
-    fn tall_front_has_a_nine_row_picture_over_seven_two_line_items() {
+    fn tall_front_has_an_eight_row_picture_over_seven_two_line_items() {
         let h = header(53, 40, 7 * 3 - 1, Some(u16::MAX));
         assert_eq!(h.tier, Tier::Tall);
-        assert_eq!(h.picture, Some(Rect::new(2, 2, 49, 9)));
+        assert_eq!(h.picture, Some(Rect::new(2, 3, 49, 8)));
         assert_eq!(h.name, Rect::new(2, 12, 49, 3));
         assert_eq!(h.standfirst, 15);
         assert_eq!(h.facts, 16);
@@ -294,16 +306,16 @@ mod tests {
         assert_eq!(h.picture.map(|p| p.h), Some(PICTURE_MAX_ROWS));
         let h = header(53, 40, 7, Some(6));
         assert_eq!(h.picture.map(|p| p.h), Some(6));
-        assert_eq!(h.body.y, 2 + 6 + 1 + 3 + 3);
+        assert_eq!(h.body.y, 3 + 6 + 1 + 3 + 3);
         // Spare rows the picture cannot use stay blank before the notice row.
         assert!(h.body.h > 7);
         // Under four spare rows there is no picture and the body starts higher.
         let h = header(53, 26, 12, Some(u16::MAX));
         assert_eq!(h.picture, None);
-        assert_eq!(h.name.y, 2);
-        assert_eq!(h.body, Rect::new(2, 8, 49, 16));
+        assert_eq!(h.name.y, 3);
+        assert_eq!(h.body, Rect::new(2, 9, 49, 15));
         // No picture at all gives the same rows.
-        assert_eq!(header(53, 26, 7, None).body, Rect::new(2, 8, 49, 16));
+        assert_eq!(header(53, 26, 7, None).body, Rect::new(2, 9, 49, 15));
     }
 
     #[test]
@@ -326,7 +338,7 @@ mod tests {
         assert_eq!(h.tier, Tier::Base);
         assert!(!h.narrow && h.gutter == 2);
         assert_eq!(h.content.w, 40);
-        assert_eq!(h.picture, Some(Rect::new(2, 2, 40, 12)));
+        assert_eq!(h.picture, Some(Rect::new(2, 3, 40, 11)));
         assert_eq!(h.name.y, 15);
         assert_eq!(h.body, Rect::new(2, 21, 40, 7));
         assert_eq!(h.keys, 29);
@@ -334,12 +346,15 @@ mod tests {
 
     #[test]
     fn key_slots_are_fixed() {
-        assert_eq!(key_slots(53), [2, 12, 24, 34, 45]);
-        assert_eq!(key_slots(60), [2, 12, 24, 34, 45]);
+        assert_eq!(key_slots(53), [2, 13, 24, 34, 42]);
+        assert_eq!(key_slots(60), [2, 13, 24, 34, 42]);
         assert_eq!(key_slots(40), [1, 8, 16, 24, 32]);
-        assert_eq!(key_rooms(53), [10, 12, 10, 11, 8]);
-        // `f keyboard` (10 columns) needs slot 4 to leave a gap before slot 5.
-        assert!(key_rooms(53)[3] > "f keyboard".len() as u16);
+        assert_eq!(key_rooms(53), [11, 11, 10, 8, 11]);
+        // Two blank columns after the widest hint in each slot.
+        for (room, widest) in key_rooms(53).iter().zip(["i install", "i install", "s unstar", "f full"]) {
+            assert!(*room >= widest.len() as u16 + 2, "{widest}");
+        }
+        assert!(key_slots(53)[4] + "esc back".len() as u16 <= 53 - 2);
         assert_eq!(key_rooms(40), [7, 8, 8, 8, 8]);
         let mid = key_slots(48);
         assert!(mid.windows(2).all(|w| w[1] > w[0]) && mid[4] + key_rooms(48)[4] <= 48);

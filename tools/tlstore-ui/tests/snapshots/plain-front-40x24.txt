@@ -21,4 +21,4 @@
 20|
 21|
 22|
-23| ⏎ open i inst… ␣ sele… f keyb… q quit
+23| ⏎ open i inst… ␣ sele… f full  q quit
