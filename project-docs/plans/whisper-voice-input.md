@@ -68,6 +68,23 @@ A command (2–4 decode steps) is ~150 ms on base.en 10 s; a 20-token sentence ~
 ~2 s). 4 threads = 6 threads; 2 threads is 1.6× slower. **GPU delegate: 0 GPU kernels created**
 (unsupported ops), so the graph runs entirely on CPU anyway.
 
+### Far-field check on pong (2026-09-24)
+
+20 s recorded through pong's microphone (Termux:API `termux-microphone-record`, AAC 16 kHz mono)
+of a YouTube video on an external loudspeaker — quiet far-field audio, mean −33.7 dB, peak
+−16.5 dB — transcribed with the reference decoder in 10 s windows:
+
+- **small.en** 10 s: "…because when a metric becomes a target, it ceases to become a good metric.
+  So, for example, in the example of our cleaning robot, if you / you could imagine rewarding it
+  that way" — correct apart from the window cut.
+- **base.en** 10 s: `[pause]`, `¶¶` — no speech recognised; +11 dB AGC to −20 dBFS did not help.
+- The 0.1 s remainder after the two windows produced invented text on both (`*`, `(B)`, `(S)`).
+
+Consequences: far-field/loudspeaker audio needs small (offer it as the recommended size where
+RAM allows, not just "more accurate"); base is still to be judged on close-talk speech, which is the
+keyboard's main case; segments shorter than ~0.3 s of voiced audio are dropped, never decoded; and
+fixed-window cuts split phrases, so pause-based segmentation (below) is required, not optional.
+
 ## Decisions
 
 ### Window ("buffer") length
