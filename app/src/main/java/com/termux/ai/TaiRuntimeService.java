@@ -328,7 +328,11 @@ public final class TaiRuntimeService extends Service {
             || TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
             || TaiRuntimeIpc.OP_OPENAI_COMPLETION.equals(operation)
             || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)
-            || TaiRuntimeIpc.OP_BENCHMARK.equals(operation);
+            || TaiRuntimeIpc.OP_BENCHMARK.equals(operation)
+            // Not only for keep-alive: as a plain bound service this process sits in the OEM's
+            // little-core cpuset (pong: nt_foreground = CPUs 0-3), which made Whisper 2.5-3x slower.
+            || TaiRuntimeIpc.OP_TRANSCRIBE.equals(operation)
+            || TaiRuntimeIpc.OP_STT_WARM.equals(operation);
     }
 
     /** A chat model is held, coming up, warm or generating: the foreground and presence cases. */
