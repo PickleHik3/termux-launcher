@@ -1620,9 +1620,9 @@ public final class TaiManager {
      */
     @Nullable
     private JSONObject decideEmbeddingLoad(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
-        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
-        if (preflight.blocked) return openAiError(preflight.blockingError(preflightStatusCode(preflight)));
-        TaiDeviceCapabilities device = preflight.device;
+        // Memory only: the chat preflight's ABI, native-library and sidecar checks do not describe an
+        // embedding package, and the embedding runtimes report their own load errors.
+        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
         // This backend's embedding runtime replaces the model it holds; that one is credited back.
         long available = TaiResidency.creditedAvailable(device.availableMemoryBytes, residency().snapshot(),
             TaiResidency.Kind.EMBEDDING, spec.backend);
