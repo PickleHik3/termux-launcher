@@ -56,6 +56,7 @@ impl View for Installing {
             }),
             lead: job.verb.ing().into(),
             word: job.shown_name(),
+            script: false,
             keys,
         }
     }

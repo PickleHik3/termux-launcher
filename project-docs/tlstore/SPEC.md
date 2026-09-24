@@ -116,7 +116,7 @@ item (`setup-nvim`); a `fastfetch-libs` pkg item carries fastfetch's runtime lib
 fastfetch rows require it; the `npm-musl` wrapper is named after the executable in the source
 (`claude`), its directory after the item; `musl-loader` targets `~/.local/lib/musl/` and the
 npm-musl install copies it from there; `claude-code` is limited to the editions with a loader;
-`update --check` does not guess about `latest`-pinned items; a refused refresh exits 1;
+`update --check` asks the npm registry what a `latest`-pinned item's dist-tag points at and names it only when that differs from what is installed (offline or unreachable: not named); a refused refresh exits 1;
 `remove` on a pkg item only stops tracking it; a bundle member with no row on this device is
 skipped with a line; the picker lists only what is not installed; the CLI reads two test knobs,
 `TLSTORE_ARCH` and `TLSTORE_PATCHELF`. The app installer stamps the marker with the app's
@@ -263,7 +263,7 @@ list   --tsv [-i|-a]    name  state  version  installed  kind  summary      stat
 search --tsv <query>    same columns as list
 info   --tsv <name>     key  value   one row per line info prints (Kind, Version, From, Checksum,
                                      Needs, Builds with, Files, Installed, Summary)
-update --check --tsv    name  installed  available  note   note: "" | config-asks | latest
+update --check --tsv    name  installed  available  note   note: "" | config-asks | latest (available is then the resolved version)
 ```
 
 Nothing else changes shape. The browser and any later front end read only these.

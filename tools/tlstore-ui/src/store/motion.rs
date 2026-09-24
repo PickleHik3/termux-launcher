@@ -4,13 +4,12 @@
 //! A navigation plays in two parts. **Leave** (160 ms): the old view's content fades toward
 //! the page and its pictures lift a little; the masthead stays. **Enter** (≈820 ms, input
 //! already goes to the new view): the breadcrumb decodes from `░▒▓/_<>=+` left to right,
-//! the rule draws out, the hero lead fades up, the hero word rises out of its mask on a
-//! spring, the cover wipes down, and the rows (or text blocks) arrive 45 ms apart with their
-//! leaders drawing out behind them. Inside a screen: rows re-stagger quickly when the list
+//! the rule draws out, the hero lead fades up, and the rows (or text blocks) arrive 45 ms
+//! apart with their leaders drawing out behind them. Pictures never move: they are hidden
+//! for the leave and the entry, and simply appear when the screen has settled. Inside a screen: rows re-stagger quickly when the list
 //! changes (filter, category, page), and the install number counts up to each new value.
 //!
-//! Terminals without pictures get the text parts only: pictures' moves, crops and wipes
-//! apply to picture elements, while text stand-ins just fade.
+//! Where the hero word is text (no pictures, or an item name), it fades up like the rest.
 
 use std::time::{Duration, Instant};
 
@@ -256,14 +255,13 @@ impl Timeline {
     fn leave_fx(t: f32, from: &Scene) -> Fx {
         let mut fx = Fx::default();
         let p = prog(t, 0.0, LEAVE);
-        let lift = (from.cell.1 as f32 * 0.4 * ease::out(p)).round() as i32;
         for e in &from.elements {
             if matches!(e.el, El::Mark | El::Crumb | El::Context) {
                 continue;
             }
             let eff = if e.picture.is_some() {
-                // Kitty has no per-placement alpha: the picture is gone once alpha < 0.5.
-                Effect { dy: -lift, alpha: 1.0 - p, ..Effect::default() }
+                // Pictures do not move: they are simply gone for the leave.
+                Effect { alpha: 0.0, ..Effect::default() }
             } else {
                 fade(1.0 - ease::out(p))
             };
@@ -294,26 +292,15 @@ impl Timeline {
         // Rule and hero.
         set(&mut fx, El::Rule, Effect { reveal: ease::out(prog(e, 0.0, RULE)), ..Effect::default() });
         set(&mut fx, El::HeroLead, fade(ease::out(prog(e, LEAD_AT, LEAD))));
-        let wp = prog(e, WORD_AT, WORD);
+        // Pictures do not move: the hero word, the cover and a demo stay hidden until the
+        // screen has settled, then simply appear. Text versions of them fade up.
         if is_pic(El::HeroWord) {
-            let s = ease::spring(wp);
-            let h = cur.get(El::HeroWord).map_or(0.0, |x| x.rect.h as f32 * cur.cell.1 as f32);
-            set(
-                &mut fx,
-                El::HeroWord,
-                Effect { dy: (h * (1.0 - s)).round() as i32, shown: s.min(1.0), ..Effect::default() },
-            );
+            set(&mut fx, El::HeroWord, Effect { alpha: 0.0, ..Effect::default() });
         } else {
-            set(&mut fx, El::HeroWord, fade(ease::out(wp)));
+            set(&mut fx, El::HeroWord, fade(ease::out(prog(e, WORD_AT, WORD))));
         }
-
-        // Cover and caption.
         if is_pic(El::Cover) {
-            set(
-                &mut fx,
-                El::Cover,
-                Effect { shown: ease::dram(prog(e, COVER_AT, COVER)), ..Effect::default() },
-            );
+            set(&mut fx, El::Cover, Effect { alpha: 0.0, ..Effect::default() });
         } else {
             set(&mut fx, El::Cover, fade(ease::out(prog(e, COVER_AT, ARRIVE))));
         }
@@ -355,10 +342,14 @@ impl Timeline {
                 continue;
             }
             let at = BLOCKS_AT + gap * b as f32;
-            let eff = Effect {
-                alpha: alpha_steps(ease::out(prog(e, at, ARRIVE))),
-                line: ease::out(prog(e, at + LEADERS_BEHIND, LEADERS)),
-                ..Effect::default()
+            let eff = if is_pic(El::Block(b)) {
+                Effect { alpha: 0.0, ..Effect::default() }
+            } else {
+                Effect {
+                    alpha: alpha_steps(ease::out(prog(e, at, ARRIVE))),
+                    line: ease::out(prog(e, at + LEADERS_BEHIND, LEADERS)),
+                    ..Effect::default()
+                }
             };
             set(&mut fx, El::Block(b), eff);
         }

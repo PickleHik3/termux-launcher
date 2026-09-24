@@ -8,14 +8,13 @@ use crate::render::{text_width, Rect, Sizing, Style};
 use crate::term::{Event, Key, MouseKind};
 
 use super::data::{Item, CATEGORIES};
-use super::paint::{stand_in, Chrome, Hint, Paint};
+use super::paint::{Chrome, Hint, Paint};
 use super::scene::El;
 use super::{installing::Installing, item::ItemView, updates::Updates, Go, Store, Verb, View};
 
 const A_COVER: u32 = 100;
 const A_PREV: u32 = 101;
 const A_NEXT: u32 = 102;
-const A_BAND: u32 = 103;
 const A_CHIP: u32 = 110;
 const A_DOT: u32 = 120;
 const A_ROW: u32 = 200;
@@ -25,7 +24,6 @@ const A_MARK: u32 = 300;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AppsLayout {
     pub cover: Option<Rect>,
-    pub header_y: Option<u16>,
     pub chips_y: u16,
     pub rows_y: u16,
     pub per_page: usize,
@@ -33,25 +31,27 @@ pub struct AppsLayout {
     pub bar_y: u16,
 }
 
-pub fn apps_layout(r: &Regions, cols: u16) -> AppsLayout {
+/// Rows the list needs at the baseline: chips, blank, six rows two apart, blank, pager, bar.
+const LIST_NEEDS: u16 = 2 + 11 + 1 + 1 + 1;
+
+/// The Apps body. `cover_pic`: the featured item's picture can be shown, so a cover goes on
+/// top when the body has eight rows to spare beyond the baseline list.
+pub fn apps_layout(r: &Regions, cols: u16, cover_pic: bool) -> AppsLayout {
     let b = r.body;
     let mut y = b.y;
-    let cover = (r.cover_rows > 0).then(|| {
-        let c = Rect::new(0, y, cols, r.cover_rows);
-        y += r.cover_rows + 1;
+    let spare = b.h.saturating_sub(LIST_NEEDS);
+    let rows = if cover_pic { layout::cover_rows(spare, 12) } else { 0 };
+    let cover = (rows > 0).then(|| {
+        let c = Rect::new(0, y, cols, rows);
+        y += rows + 1;
         c
-    });
-    let header_y = (r.tier != Tier::Compact).then(|| {
-        let h = y;
-        y += 1;
-        h
     });
     let chips_y = y;
     let rows_y = if r.tier == Tier::Compact { y + 1 } else { y + 2 };
     let bar_y = b.bottom().saturating_sub(1);
     let pager_y = bar_y.saturating_sub(1);
     let per_page = (pager_y.saturating_sub(rows_y) / 2).max(1) as usize;
-    AppsLayout { cover, header_y, chips_y, rows_y, per_page, pager_y, bar_y }
+    AppsLayout { cover, chips_y, rows_y, per_page, pager_y, bar_y }
 }
 
 pub struct Apps {
@@ -163,16 +163,26 @@ impl View for Apps {
     }
 
     fn chrome(&mut self, st: &mut Store) -> Chrome {
-        let mut keys = vec![Hint::new("␣", "select", Key::Char(' ')), Hint::new("⏎", "open", Key::Enter)];
-        keys.push(Hint::new("i", "install", Key::Char('i')));
-        keys.push(Hint::new("r", "remove", Key::Char('r')));
+        // In order of what matters most; the key row drops from the end to fit, keeping q.
+        let installed = self.filtered(st).get(self.cursor).is_some_and(|i| i.installed.is_some());
+        let mut keys = vec![Hint::new("⏎", "open", Key::Enter)];
+        if installed && self.sel.is_empty() {
+            keys.push(Hint::new("r", "remove", Key::Char('r')));
+        } else {
+            keys.push(Hint::new("i", "install", Key::Char('i')));
+        }
+        keys.push(Hint::new("␣", "select", Key::Char(' ')));
+        if st.env.launcherctl.is_some() {
+            keys.push(Hint::new("f", "keyboard", Key::Char('f')));
+        }
         keys.push(Hint::new("/", "search", Key::Char('/')));
-        keys.push(Hint::new("esc", "leave", Key::Esc));
+        keys.push(Hint::new("q", "quit", Key::Char('q')));
         Chrome {
             crumb: "/ apps".into(),
             context: st.updates_link(),
             lead: "terminal".into(),
             word: "goodies".into(),
+            script: true,
             keys,
         }
     }
@@ -180,50 +190,54 @@ impl View for Apps {
     fn body(&mut self, p: &mut Paint, st: &mut Store, r: &Regions) {
         let pal = *p.f.pal();
         let cols = p.f.cols();
-        let lay = apps_layout(r, cols);
-        self.per_page = lay.per_page;
-        self.clamp(st);
         let b = r.body;
         let (cw, ch) = (p.f.ctx.size.cell_w, p.f.ctx.size.cell_h);
 
-        // Cover of the featured item.
-        if let (Some(c), Some(feat)) = (lay.cover, st.cat.featured().cloned()) {
-            let path =
-                if p.f.ctx.caps.kitty_graphics { st.cat.picture(&st.env, &feat.name, false) } else { None };
-            let pic = path.and_then(|path| {
-                p.f.ctx.pics.file(&path, c.w as u32 * cw as u32, c.h as u32 * ch as u32, Fit::Cover).ok()
-            });
-            let placed = pic.is_some_and(|pic| p.picture(El::Cover, &pic, c.x, c.y, (0, 0), 1));
-            let caption_st = if placed { pal.ink_s() } else { Style::new().fg(pal.ink).bg(pal.tonal) };
-            if !placed {
-                stand_in(p, El::Cover, c, "");
+        // The featured item's cover, only when its picture is really there: no picture, no
+        // cover (never an empty box).
+        let feat = st.cat.featured().cloned();
+        // Ask for the picture (the script may fetch it) only when there is room to show it.
+        let room = apps_layout(r, cols, true).cover.is_some();
+        let path = match &feat {
+            Some(f) if room && p.f.ctx.caps.kitty_graphics => st.cat.picture(&st.env, &f.name, false),
+            _ => None,
+        };
+        let lay = apps_layout(r, cols, path.is_some());
+        let pic = match (lay.cover, &path) {
+            (Some(c), Some(path)) => {
+                p.f.ctx.pics.file(path, c.w as u32 * cw as u32, c.h as u32 * ch as u32, Fit::Cover).ok()
             }
+            _ => None,
+        };
+        // A picture that fails to decode gives its rows back to the list.
+        let lay = if lay.cover.is_some() && pic.is_none() { apps_layout(r, cols, false) } else { lay };
+        self.per_page = lay.per_page;
+        self.clamp(st);
+        if let (Some(c), Some(pic), Some(feat)) = (lay.cover, pic, feat) {
+            p.picture(El::Cover, &pic, c.x, c.y, (0, 0), 1);
             let status = st.cat.status(&feat).label();
             let no = format!("No. {:02}", feat.no);
             let x = b.x + 1;
+            let cap_st = pal.ink_s();
             if c.h >= 6 {
                 let cap = if status.is_empty() { no } else { format!("{no} · {status}") };
-                p.text(El::Caption, x, c.bottom() - 3, &cap, caption_st);
+                p.text(El::Caption, x, c.bottom() - 3, &cap, cap_st);
                 let name = layout::spaced_caps(&feat.name);
                 let big = Sizing::scale(2);
                 let fits = p.f.ctx.caps.text_sizing && x + big.cells(&name).0 <= b.right();
                 if fits {
-                    p.sized(El::Caption, x, c.bottom() - 2, &name, big, caption_st.bold());
+                    p.sized(El::Caption, x, c.bottom() - 2, &name, big, cap_st.bold());
                 } else {
-                    p.text(El::Caption, x, c.bottom() - 2, &name, caption_st.bold());
+                    p.text_clip(El::Caption, x, c.bottom() - 2, &name, cap_st.bold(), b.right());
                 }
             } else {
                 let mut cap = format!("{no} · {}", feat.name);
                 if !status.is_empty() {
                     cap = format!("{cap} · {status}");
                 }
-                p.text(El::Caption, x, c.bottom() - 1, &cap, caption_st);
+                p.text_clip(El::Caption, x, c.bottom() - 1, &cap, cap_st, b.right());
             }
             p.hit(c, A_COVER);
-        }
-
-        if let Some(hy) = lay.header_y {
-            p.text(El::Header, b.x, hy, &layout::spaced_caps("apps"), pal.ink_s().bold());
         }
 
         // Chips, or the search line.
@@ -310,7 +324,7 @@ impl View for Apps {
             p.hit(Rect::new(x + text_width(&s) as u16 - 1, lay.pager_y, 1, 1), A_NEXT);
         }
 
-        // Selection bar, or (keyboard open) the fullscreen band.
+        // Selection bar.
         let bar = Rect::new(b.x, lay.bar_y, b.w, 1);
         if !self.sel.is_empty() {
             p.fill(El::SelBar, bar, Style::new().bg(pal.tonal));
@@ -326,18 +340,6 @@ impl View for Apps {
             let tail =
                 if x + text_width(long) as u16 <= b.right() { long } else { "  i install · r remove" };
             p.text_clip(El::SelBar, x, lay.bar_y, tail, Style::new().fg(pal.dim).bg(pal.tonal), b.right());
-        } else if r.tier == Tier::Compact && st.env.launcherctl.is_some() {
-            p.fill(El::SelBar, bar, Style::new().bg(pal.tonal));
-            let on = Style::new().fg(pal.accent).bg(pal.tonal);
-            let (word, why) = if st.fullscreen {
-                ("keyboard", " · bring the keyboard back")
-            } else {
-                ("fullscreen", " · hide the keyboard for more room")
-            };
-            let mut x = p.text(El::SelBar, b.x + 2, lay.bar_y, "f", on.bold());
-            x = p.text(El::SelBar, x + 1, lay.bar_y, word, on);
-            p.text_clip(El::SelBar, x, lay.bar_y, why, Style::new().fg(pal.dim).bg(pal.tonal), b.right());
-            p.hit(bar, A_BAND);
         }
     }
 
@@ -423,7 +425,6 @@ impl View for Apps {
                     }
                     A_PREV => self.cursor = self.page().saturating_sub(1) * per,
                     A_NEXT => self.cursor = ((self.page() + 1) * per).min(n.saturating_sub(1)),
-                    A_BAND => st.toggle_fullscreen(),
                     _ if (A_CHIP..A_CHIP + 4).contains(&a) => self.set_cat((a - A_CHIP) as usize, st),
                     _ if (A_DOT..A_DOT + 50).contains(&a) => {
                         self.cursor = ((a - A_DOT) as usize * per).min(n.saturating_sub(1))

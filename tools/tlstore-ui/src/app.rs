@@ -27,6 +27,10 @@ pub struct Ctx {
     pub motion: bool,
     /// `$HOME`, for the palette and anything else screens read.
     pub home: PathBuf,
+    /// The terminal told us its cell size in pixels (the kernel's window size or a CSI 16 t
+    /// answer). When false, `size` holds a guess and pictures that must sit at exact pixel
+    /// sizes (the script word) are not drawn.
+    pub cell_known: bool,
 }
 
 impl Ctx {
@@ -39,6 +43,7 @@ impl Ctx {
             pics: Pictures::new(),
             motion: true,
             home: PathBuf::from("/nonexistent"),
+            cell_known: true,
         }
     }
 }
@@ -139,7 +144,9 @@ pub fn run(first: Box<dyn Screen>, opts: Options) -> io::Result<()> {
     let home = std::env::var_os("HOME").map(PathBuf::from).unwrap_or_else(|| PathBuf::from("/"));
     let home_mode = Palette::exported_mode(&home);
     let dark = caps.dark().or(home_mode).unwrap_or(true);
-    let size = resolve_cell(tty.size()?, &caps, Size::new(0, 0, 0, 0));
+    let raw = tty.size()?;
+    let cell_known = (raw.cell_w > 0 && raw.cell_h > 0) || caps.cell_px.is_some();
+    let size = resolve_cell(raw, &caps, Size::new(0, 0, 0, 0));
     let mut ctx = Ctx {
         size,
         caps,
@@ -147,6 +154,7 @@ pub fn run(first: Box<dyn Screen>, opts: Options) -> io::Result<()> {
         pics: Pictures::new(),
         motion: opts.motion,
         home,
+        cell_known,
     };
 
     let mut stack: Vec<Box<dyn Screen>> = vec![first];

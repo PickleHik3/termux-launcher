@@ -300,16 +300,19 @@ pub struct Chrome {
     pub context: Option<ContextItem>,
     pub lead: String,
     pub word: String,
+    /// Set the word in the script face (a picture at the exact pixel size) where the terminal
+    /// allows; otherwise, and for item names, it is sized text.
+    pub script: bool,
     pub keys: Vec<Hint>,
 }
 
 /// The hints that fit in `width` columns, two spaces apart: dropped from the end, except
-/// that a last `esc` hint always stays.
+/// that a last `esc` or `q` hint (the way out) always stays.
 pub fn fit_hints(hints: &[Hint], width: u16) -> Vec<Hint> {
     let mut v: Vec<Hint> = hints.to_vec();
     let total = |v: &[Hint]| v.iter().map(|h| h.width()).sum::<u16>() + 2 * v.len().saturating_sub(1) as u16;
     while v.len() > 1 && total(&v) > width {
-        let keep_last = v.last().is_some_and(|h| h.key == Key::Esc);
+        let keep_last = v.last().is_some_and(|h| matches!(h.key, Key::Esc | Key::Char('q')));
         let at = if keep_last { v.len() - 2 } else { v.len() - 1 };
         v.remove(at);
     }
@@ -326,14 +329,19 @@ pub fn draw_chrome(p: &mut Paint, r: &Regions, c: &Chrome, notice: Option<&str>)
     let y = r.masthead.y;
     let x0 = r.masthead.x;
     let px = (ch as u32 / 10).max(1);
-    let mark = p.f.ctx.pics.mark(px, pal.ink);
-    let (mcols, _) = mark.cells(cw, ch);
-    let off_y = (ch as u32).saturating_sub(mark.height()) / 2;
-    let mark_end = if p.picture(El::Mark, &mark, x0, y, (0, off_y), 1) {
-        p.note(El::Mark, Rect::new(x0, y, mcols, 1), Some((mark.id(), 1)), None);
-        x0 + mcols
-    } else {
-        p.text(El::Mark, x0, y, "TLSTORE", pal.ink_s().bold())
+    // The pixel mark only where cells have a known pixel size (it is drawn pixel for pixel).
+    let mark = p.f.ctx.cell_known.then(|| p.f.ctx.pics.mark(px, pal.ink));
+    let placed = mark.as_ref().is_some_and(|m| {
+        let off_y = (ch as u32).saturating_sub(m.height()) / 2;
+        p.picture(El::Mark, m, x0, y, (0, off_y), 1)
+    });
+    let mark_end = match (&mark, placed) {
+        (Some(m), true) => {
+            let (mcols, _) = m.cells(cw, ch);
+            p.note(El::Mark, Rect::new(x0, y, mcols, 1), Some((m.id(), 1)), None);
+            x0 + mcols
+        }
+        _ => p.text(El::Mark, x0, y, "TLSTORE", pal.ink_s().bold()),
     };
     p.hit(Rect::new(x0, y, mark_end - x0, 1), A_HOME);
     let crumb_x = mark_end + 1;
@@ -353,12 +361,13 @@ pub fn draw_chrome(p: &mut Paint, r: &Regions, c: &Chrome, notice: Option<&str>)
     p.text_clip(El::Crumb, crumb_x, y, &c.crumb, pal.dim_s(), crumb_max);
     p.hline(El::Rule, r.rule.x, r.rule.right(), r.rule.y, '─', pal.rule_s());
 
-    draw_hero(p, r, &c.lead, &c.word);
+    draw_hero(p, r, &c.lead, &c.word, c.script);
 
     if let Some(n) = notice {
         let ny = r.keys.y.saturating_sub(1);
         if ny > r.hero.bottom() {
-            p.centred(El::Notice, r.keys, ny, n, pal.dim_s().italic());
+            let line = layout::fit_line(n, r.keys.w);
+            p.centred(El::Notice, r.keys, ny, &line, pal.dim_s().italic());
         }
     }
 
@@ -375,63 +384,61 @@ pub fn draw_chrome(p: &mut Paint, r: &Regions, c: &Chrome, notice: Option<&str>)
     shown
 }
 
-/// The hero: spaced lead line and the script word, both centred (Compact: side by side on
-/// one row).
-pub fn draw_hero(p: &mut Paint, r: &Regions, lead: &str, word: &str) {
+/// The hero: spaced lead line and the word, both centred (Compact: side by side on one
+/// row). The word is the script face as a picture — rasterised at exactly the pixels it is
+/// placed at, never scaled — when `script` is set, the terminal shows pictures and told us
+/// its cell size; otherwise it is text, sized with OSC 66 where the terminal can.
+pub fn draw_hero(p: &mut Paint, r: &Regions, lead: &str, word: &str, script: bool) {
     let pal = *p.f.pal();
     let (cw, ch) = (p.f.ctx.size.cell_w as u32, p.f.ctx.size.cell_h as u32);
+    let inner = r.hero;
     let lead_s = layout::spaced_caps(lead);
+    let lead_s = if text_width(&lead_s) as u16 > inner.w { lead.to_uppercase() } else { lead_s };
     let lead_w = text_width(&lead_s) as u16;
     let compact = r.tier == Tier::Compact;
     let rows = if compact { 1 } else { r.hero_word.h.max(1) };
-    let pics = p.f.ctx.caps.kitty_graphics;
-    let word_pic =
-        (pics && !word.is_empty()).then(|| p.f.ctx.pics.script_word(word, rows as u32 * ch, pal.ink));
-    let plain_scale = if compact || !p.f.ctx.caps.text_sizing { 1 } else { rows.clamp(1, 7) };
-    let word_cols = match &word_pic {
-        Some(w) => w.cells(cw as u16, ch as u16).0,
-        None => text_width(word) as u16 * plain_scale,
-    };
-    let inner = r.hero;
+    let ctx = &p.f.ctx;
+    let pic_ok = script && ctx.caps.kitty_graphics && ctx.cell_known && !word.is_empty();
+    let word_pic = pic_ok
+        .then(|| p.f.ctx.pics.script_word(word, rows as u32 * ch, pal.ink))
+        .filter(|w| w.width() <= inner.w as u32 * cw);
+    let word_st = if script { pal.ink_s().italic() } else { pal.ink_s().bold() };
     if compact {
+        let word_cols = match &word_pic {
+            Some(w) => w.cells(cw as u16, ch as u16).0,
+            None => text_width(word) as u16,
+        };
         let group = lead_w + 2 + word_cols;
-        let x = layout::centre_x(inner, group);
-        let end = p.text(El::HeroLead, x, inner.y, &lead_s, pal.dim_s());
-        draw_word(p, word_pic.as_ref(), word, end + 2, inner.y, 0, 1);
-    } else {
-        p.centred(El::HeroLead, r.hero_lead, r.hero_lead.y, &lead_s, pal.dim_s());
-        match &word_pic {
-            Some(w) => {
-                let total = inner.w as u32 * cw;
-                let x_px = inner.x as u32 * cw + total.saturating_sub(w.width()) / 2;
-                p.picture(El::HeroWord, w, (x_px / cw) as u16, r.hero_word.y, (x_px % cw, 0), 1);
-            }
-            None => {
-                let x = layout::centre_x(inner, word_cols);
-                draw_word(p, None, word, x, r.hero_word.y, 0, plain_scale);
+        let (x, show_word) = if group <= inner.w {
+            (layout::centre_x(inner, group), true)
+        } else {
+            (layout::centre_x(inner, lead_w), false)
+        };
+        let end = p.text_clip(El::HeroLead, x, inner.y, &lead_s, pal.dim_s(), inner.right());
+        if show_word {
+            let placed =
+                word_pic.as_ref().is_some_and(|w| p.picture(El::HeroWord, w, end + 2, inner.y, (0, 0), 1));
+            if !placed {
+                p.text(El::HeroWord, end + 2, inner.y, word, word_st);
             }
         }
+        return;
     }
-}
-
-fn draw_word(p: &mut Paint, pic: Option<&Picture>, word: &str, x: u16, y: u16, off_x: u32, scale: u16) {
-    let pal = *p.f.pal();
-    if let Some(w) = pic {
-        if p.picture(El::HeroWord, w, x, y, (off_x, 0), 1) {
+    p.centred(El::HeroLead, r.hero_lead, r.hero_lead.y, &lead_s, pal.dim_s());
+    if let Some(w) = &word_pic {
+        let total = inner.w as u32 * cw;
+        let x_px = inner.x as u32 * cw + total.saturating_sub(w.width()) / 2;
+        if p.picture(El::HeroWord, w, (x_px / cw) as u16, r.hero_word.y, (x_px % cw, 0), 1) {
             return;
         }
     }
-    p.sized(El::HeroWord, x, y, word, Sizing::scale(scale as u8), pal.ink_s().italic());
-}
-
-/// A picture stand-in: a tonal block with the label centred in spaced caps.
-pub fn stand_in(p: &mut Paint, el: El, rect: Rect, label: &str) {
-    let pal = *p.f.pal();
-    let st = Style::new().fg(pal.dim).bg(pal.tonal);
-    p.fill(el, rect, st);
-    if rect.h > 0 && !label.is_empty() {
-        let s = layout::spaced_caps(label);
-        let s = if text_width(&s) as u16 > rect.w { label.to_uppercase() } else { s };
-        p.centred(el, rect, rect.y + rect.h / 2, &s, st);
+    // Sized text: the largest scale up to the hero's rows that fits across.
+    let tw = text_width(word) as u16;
+    let mut scale = if p.f.ctx.caps.text_sizing { rows.clamp(1, 7) } else { 1 };
+    while scale > 1 && tw * scale > inner.w {
+        scale -= 1;
     }
+    let shown = if tw > inner.w { layout::fit_line(word, inner.w) } else { word.to_string() };
+    let x = layout::centre_x(inner, text_width(&shown) as u16 * scale);
+    p.sized(El::HeroWord, x, r.hero_word.y, &shown, Sizing::scale(scale as u8), word_st);
 }

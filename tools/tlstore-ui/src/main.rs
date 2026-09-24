@@ -2,6 +2,7 @@ use std::process::ExitCode;
 
 use tlstore_ui::app::{self, Options};
 use tlstore_ui::demo::Demo;
+use tlstore_ui::launch;
 use tlstore_ui::store::{proc::Env, Router};
 use tlstore_ui::term::{self, Parser, Tty};
 
@@ -35,10 +36,40 @@ fn probe() -> std::io::Result<()> {
     Ok(())
 }
 
+/// Opens the store here, or in a window of its own when this pane is smaller than the store
+/// is designed for (see `launch`).
+fn store() -> ExitCode {
+    let env = Env::from_env();
+    let size = Tty::open().and_then(|t| t.size()).ok();
+    let hint = match size {
+        Some(s) => {
+            let no_window = std::env::var("TLSTORE_NO_WINDOW").is_ok_and(|v| v == "1");
+            let exe = std::env::current_exe().unwrap_or_else(|_| "tlstore-ui".into());
+            match launch::start(s.cols, s.rows, no_window, env.launcherctl.as_deref(), &exe) {
+                launch::Start::Moved => {
+                    println!("{}", launch::OPENED);
+                    return ExitCode::SUCCESS;
+                }
+                launch::Start::Here(hint) => hint,
+            }
+        }
+        None => None,
+    };
+    let mut router = Router::animated(env);
+    router.st.notice = hint.map(str::to_string);
+    match app::run(Box::new(router), Options::default()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("tlstore-ui: {e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn main() -> ExitCode {
     let arg = std::env::args().nth(1).unwrap_or_default();
     let result = match arg.as_str() {
-        "" => app::run(Box::new(Router::animated(Env::from_env())), Options::default()),
+        "" => return store(),
         "--demo" => app::run(Box::new(Demo::new()), Options::default()),
         "--probe" => probe(),
         "--version" => {
