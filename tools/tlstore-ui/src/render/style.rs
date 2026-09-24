@@ -68,6 +68,8 @@ pub struct Style {
     pub italic: bool,
     pub dim: bool,
     pub reverse: bool,
+    /// Strikethrough (SGR 9).
+    pub strike: bool,
 }
 
 impl Style {
@@ -81,6 +83,7 @@ impl Style {
             italic: false,
             dim: false,
             reverse: false,
+            strike: false,
         }
     }
     pub fn fg(mut self, c: impl Into<Color>) -> Style {
@@ -105,6 +108,10 @@ impl Style {
     }
     pub fn reverse(mut self) -> Style {
         self.reverse = true;
+        self
+    }
+    pub fn strike(mut self) -> Style {
+        self.strike = true;
         self
     }
     pub fn underline(mut self, u: Underline) -> Style {
@@ -139,6 +146,9 @@ impl Style {
         }
         if self.reverse {
             out.push_str(";7");
+        }
+        if self.strike {
+            out.push_str(";9");
         }
         if let Color::Rgb(Rgb(r, g, b)) = self.fg {
             let _ = write!(out, ";38;2;{r};{g};{b}");
@@ -177,6 +187,13 @@ mod tests {
             .ul_color(Rgb(7, 8, 9))
             .write_sgr(&mut s);
         assert_eq!(s, "\x1b[0;1;3;4:3;38;2;1;2;3;48;2;4;5;6;58:2::7:8:9m");
+    }
+
+    #[test]
+    fn strike_is_sgr_9() {
+        let mut s = String::new();
+        Style::new().strike().dim().write_sgr(&mut s);
+        assert_eq!(s, "\x1b[0;2;9m");
     }
 
     #[test]
