@@ -107,8 +107,7 @@ public final class TaiRuntimeServiceClient {
         boolean stream,
         @Nullable TaiManager.OpenAiStreamSink sink
     ) throws JSONException {
-        Messenger target = ensureConnected();
-        if (target == null) {
+        if (ensureConnected() == null) {
             PendingRequest failed = new PendingRequest(UUID.randomUUID().toString(), stream, sink);
             failed.result = runtimeUnavailable("tai_runtime_unavailable", "TAI runtime service is not connected.");
             failed.signalEnd();
@@ -118,12 +117,10 @@ public final class TaiRuntimeServiceClient {
 
         String requestId = UUID.randomUUID().toString();
         PendingRequest pendingRequest = new PendingRequest(requestId, stream, sink);
-        pending.put(requestId, pendingRequest);
         TransportBody transportBody;
         try {
             transportBody = transportBody(requestId, body == null ? "" : body);
         } catch (IOException e) {
-            pending.remove(requestId);
             pendingRequest.result = runtimeUnavailable("tai_runtime_transport_failed", e.getMessage());
             pendingRequest.signalEnd();
             pendingRequest.done.countDown();
@@ -138,15 +135,32 @@ public final class TaiRuntimeServiceClient {
         if (transportBody.inlineBody != null) data.putString(TaiRuntimeIpc.KEY_BODY, transportBody.inlineBody);
         if (transportBody.bodyFile != null) data.putString(TaiRuntimeIpc.KEY_BODY_FILE, transportBody.bodyFile);
         message.setData(data);
-        try {
-            target.send(message);
-        } catch (RemoteException e) {
-            pending.remove(requestId);
-            pendingRequest.result = runtimeCrashed("tai_runtime_send_failed", "TAI runtime service disconnected while starting the request.");
-            pendingRequest.signalEnd();
-            pendingRequest.done.countDown();
+        // Registered and sent under the connection lock, so the runtime's idle-exit notice
+        // (onIdleExitRequested) either finds this request pending and leaves the binding alone, or
+        // has already unbound — then the runtime is bound again, in a fresh process, and the
+        // request sent there. Messenger.send is one-way; nothing waits under the lock.
+        for (boolean rebound = false; ; rebound = true) {
+            synchronized (connectionLock) {
+                if (service != null) {
+                    pending.put(requestId, pendingRequest);
+                    try {
+                        service.send(message);
+                    } catch (RemoteException e) {
+                        pending.remove(requestId);
+                        pendingRequest.result = runtimeCrashed("tai_runtime_send_failed", "TAI runtime service disconnected while starting the request.");
+                        pendingRequest.signalEnd();
+                        pendingRequest.done.countDown();
+                    }
+                    return pendingRequest;
+                }
+            }
+            if (rebound || ensureConnected() == null) {
+                pendingRequest.result = runtimeUnavailable("tai_runtime_unavailable", "TAI runtime service is not connected.");
+                pendingRequest.signalEnd();
+                pendingRequest.done.countDown();
+                return pendingRequest;
+            }
         }
-        return pendingRequest;
     }
 
     @Nullable
@@ -214,6 +228,28 @@ public final class TaiRuntimeServiceClient {
         }
     };
 
+    /**
+     * The runtime has held nothing but its process baseline for {@link TaiPressureWatch#IDLE_EXIT_MS}
+     * and asks to be let go. Unbinding is the only way its process can end: {@code BIND_AUTO_CREATE}
+     * keeps a bound service alive for as long as this binding exists, and the runtime exits once it
+     * is destroyed. Refused while a request is pending — the runtime is not idle from this side, and
+     * it asks again after its next idle period. No binder-death callback follows an unbind, so an
+     * idle exit never reaches {@link #onRuntimeBinderDied} and is never reported as a crash; the
+     * next request binds again and starts a fresh process.
+     */
+    private void onIdleExitRequested() {
+        synchronized (connectionLock) {
+            if (service == null || !pending.isEmpty()) return;
+            try {
+                appContext.unbindService(connection);
+            } catch (IllegalArgumentException ignored) {
+                // Not bound from this context's point of view; there is nothing to release.
+            }
+            service = null;
+            binding = false;
+        }
+    }
+
     private void onRuntimeBinderDied() {
         synchronized (connectionLock) {
             service = null;
@@ -239,6 +275,10 @@ public final class TaiRuntimeServiceClient {
 
         @Override
         public void handleMessage(@NonNull Message message) {
+            if (message.what == TaiRuntimeService.MSG_IDLE_EXIT) {
+                onIdleExitRequested();
+                return;
+            }
             Bundle data = message.getData();
             String requestId = data.getString(TaiRuntimeIpc.KEY_REQUEST_ID, "");
             PendingRequest request = pending.get(requestId);

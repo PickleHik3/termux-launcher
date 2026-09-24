@@ -238,7 +238,43 @@ and an "Unload all" action. `tai status` / `/v1/status` return the same table.
    Device check pending: a `tai load` with an embedding resident short of memory shows `evicted`;
    two E4B GPU loads record a growing `bytes` under the `load|…|gpu|4096` key; a GPU failure with
    an 8k plan falls back to CPU 4k.
-4. Tiered pressure watch, `onTrimMemory`, idle timers.
+4. **Done 2026-09-24 (in dev), device check pending.** The watch (`TaiRuntimeService`, 2 s) runs
+   while anything is resident — chat loaded / loading / warm, or any EMBEDDING / STT entry — and
+   decides from one `MemoryInfo` reading per tick (`TaiPressureWatch.tier`): `lowMemory` → tier 3,
+   cancel in-flight work and unload everything (the old behaviour); else `availMem < threshold ×
+   1.25` → tier 2, idle chat may go; else `availMem < floor` (`TaiLoadBudget.floorBytes`, pong
+   630 MB) → tier 1, idle embeddings then idle STT. Tiers 1–2 give up **one** resident per tick —
+   embeddings → STT → chat, LRU within a kind, never a busy one, never RUNTIME — and look again
+   2 s later, because MemAvailable is noisy and memory comes back late (§3c). The eviction goes
+   through `MultiBackendTaiRuntime.evict` on its own thread (`tai-runtime-pressure`, one action
+   queued at a time), so neither the watch tick nor the cancel/unload lane waits behind the load
+   lock; `evict` now re-reads each victim and skips one that became busy (embeddings included).
+   `onTrimMemory`: `RUNNING_LOW` → tier 1, `RUNNING_CRITICAL` → tier 2, every other level ignored.
+   Idle timers on the registry's `lastUsedMs`: embeddings 5 min, STT 2 min
+   (`TaiPressureWatch.EMBEDDING_IDLE_MS` / `STT_IDLE_MS`; constants, no setting this phase), so the
+   Whisper runtime gets its timer by registering as STT. MNN chat gained LiteRT's scheduler
+   (`tai-mnn-idle`): the idle-unload setting and keep-warm expiry now release the session (before,
+   the keep-warm only stopped being reported), `keepWarm` on the loaded model extends instead of
+   reloading, and status reports `idleUnloadAtMs` / `idle-warm`. Runtime baseline (§3b): when only
+   the RUNTIME entry remains, no request is in flight and 10 min (`IDLE_EXIT_MS`) have passed since
+   the later of the last non-status request and the last model leaving, the service sends
+   `MSG_IDLE_EXIT` to the last client's reply Messenger; `TaiRuntimeServiceClient` unbinds — only
+   when it has nothing pending, otherwise it ignores the notice and the service asks again after its
+   next idle period — the service is destroyed, and `onDestroy` calls `Process.killProcess` on
+   itself, on that announced path only (any other destroy leaves the process to Android, so a
+   restarted UI process still finds its model). No binder-death callback follows an unbind, so the
+   client never reports `tai_runtime_crashed`; the crash marker is only set inside a load, which the
+   exit check refuses to overlap. The client now registers and sends a request under its connection
+   lock so a notice cannot slip between the two. Status reads (`status` / `runtimeStatus`) do not
+   count as activity, so a UI poll does not keep the baseline alive; the next request binds a fresh
+   process. Every action logs at info under the `TaiMemory` tag (`adb logcat -s TaiMemory`).
+   Deviations: the service reaches the router through `MultiBackendTaiRuntime.processInstance()`
+   (TaiManager exposes no handle and was not to change); one victim per tick rather than a whole
+   tier at once; the STT timer is not in settings yet (left for phase 6 with the memory row).
+   Device check pending: with E4B + EmbeddingGemma resident, a Termux job that eats RAM logs
+   `pressure tier 1` then `tier 2` lines with `availMem`; an embedding left alone 5 min logs
+   `idle: evicted embedding …`; ten minutes after `tai unload` the `:tai_runtime` pid is gone and
+   the next `tai status` starts a new one.
 5. STT kind (lands with the Whisper runtime).
 6. Memory row in settings and status.
 

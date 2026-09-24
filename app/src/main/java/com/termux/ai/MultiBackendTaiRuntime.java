@@ -40,9 +40,24 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     private final Object loadLock = new Object();
     /** The backend that owns the loaded model. Written under {@link #loadLock}, read without it. */
     private volatile TaiRuntime activeAssistant;
+    /** The one router the runtime process runs; see {@link #processInstance()}. */
+    @Nullable private static volatile MultiBackendTaiRuntime processInstance;
 
     public MultiBackendTaiRuntime(@NonNull Context context) {
         this(context, new TaiResidency());
+        processInstance = this;
+    }
+
+    /**
+     * The router {@link TaiManager} built for this process, for the service's memory watch, which
+     * evicts through {@link #evict} and reads {@link #residency()} but reaches the runtime only
+     * through the manager's request API otherwise. {@code null} until the manager has built it,
+     * and always in a process that is not {@code :tai_runtime}; the test-seam constructor never
+     * sets it.
+     */
+    @Nullable
+    static MultiBackendTaiRuntime processInstance() {
+        return processInstance;
     }
 
     private MultiBackendTaiRuntime(@NonNull Context context, @NonNull TaiResidency residency) {
@@ -122,7 +137,10 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         ArrayList<String> evicted = new ArrayList<>();
         synchronized (loadLock) {
             for (TaiResidency.Entry victim : victims) {
-                if (!residency.isResident(victim.kind, victim.modelId)) continue;
+                // Re-read the entry: the budget's plan or the pressure watch chose it lock-free,
+                // and an embedding batch may have started on it since.
+                TaiResidency.Entry current = residency.find(victim.kind, victim.modelId);
+                if (current == null || current.busy) continue;
                 switch (victim.kind) {
                     case EMBEDDING:
                         if (TaiModelSpec.BACKEND_MNN_LLM.equals(victim.backend)) mnnEmbeddings.close();

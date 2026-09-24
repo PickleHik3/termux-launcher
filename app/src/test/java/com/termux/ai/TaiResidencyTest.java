@@ -47,6 +47,26 @@ public class TaiResidencyTest {
         residency.deregister(TaiResidency.Kind.EMBEDDING, "never-loaded");
     }
 
+    /** What the pressure watch asks: is any model resident (the baseline alone is not), and is this one busy right now. */
+    @Test
+    public void hasModelsIgnoresTheBaselineAndFindReturnsTheLiveEntry() {
+        TaiResidency residency = new TaiResidency();
+        assertFalse(residency.hasModels());
+        assertNull(residency.find(TaiResidency.Kind.CHAT, "e4b"));
+
+        residency.register(chatEntry("e4b", "gpu", 4096));
+        assertTrue(residency.hasModels());
+        residency.setBusy(TaiResidency.Kind.CHAT, "e4b", true);
+        assertTrue(residency.find(TaiResidency.Kind.CHAT, "e4b").busy);
+        residency.setBusy(TaiResidency.Kind.CHAT, "e4b", false);
+        assertFalse(residency.find(TaiResidency.Kind.CHAT, "e4b").busy);
+
+        residency.deregister(TaiResidency.Kind.CHAT, "e4b");
+        assertTrue(residency.isResident(TaiResidency.Kind.RUNTIME, TaiResidency.RUNTIME_ID));
+        assertFalse(residency.hasModels());
+        assertNull(residency.find(TaiResidency.Kind.CHAT, "e4b"));
+    }
+
     @Test
     public void theSameIdUnderAnotherKindIsAnotherResident() {
         TaiResidency residency = new TaiResidency();
