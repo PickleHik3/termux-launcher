@@ -605,6 +605,8 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "unload", TaiManager.getInstance(context).unloadModel());
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/keep-warm".equals(request.path)) {
                 return maybeTextResponse(request, "keep-warm", TaiManager.getInstance(context).keepWarmRuntime(request.body));
+            } else if ("POST".equals(request.method) && "/v1/ai/runtime/benchmark".equals(request.path)) {
+                return maybeTextResponse(request, "benchmark", TaiManager.getInstance(context).benchmark(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/cancel".equals(request.path)) {
                 return maybeTextResponse(request, "cancel", TaiManager.getInstance(context).cancelRuntime());
             } else if ("GET".equals(request.method) && "/v1/models".equals(request.path)) {
@@ -1428,6 +1430,9 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/ai/runtime/preflight", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/ai/runtime/unload", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/ai/runtime/keep-warm", new SimpleRateLimiter(60, 60_000));
+        // A benchmark run does real generation for minutes; a request budget generous callers never
+        // hit is still a guard against a runaway script hammering it.
+        rateLimiters.put("POST:/v1/ai/runtime/benchmark", new SimpleRateLimiter(6, 60_000));
         rateLimiters.put("POST:/v1/ai/runtime/cancel", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("GET:/v1/models", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/chat/completions", new SimpleRateLimiter(60, 60_000));
@@ -1604,6 +1609,7 @@ public class LauncherCtlApiServer {
             "  tai unload\n" +
             "  tai keep-warm [model] [--minutes N] [--auto|--cpu|--gpu]\n" +
             "  tai cancel\n" +
+            "  tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\n" +
             "  tai doctor\n" +
             "\n" +
             "TAI is authenticated through ~/.launcherctl and runs native AI in the isolated :tai_runtime process.\n" +
@@ -1613,6 +1619,10 @@ public class LauncherCtlApiServer {
             "Auto tries the GPU first and the CPU after a recorded GPU failure. Every load is sized to the memory\n" +
             "free at that moment: the context window shrinks to fit (down to 4096 tokens), and a load that\n" +
             "cannot fit is refused rather than started.\n" +
+            "tai benchmark runs LiteRT-LM's own benchmark() in the runtime process (256 prefill/256 decode\n" +
+            "tokens by default, 3 runs), the same call and defaults Google AI Edge Gallery's Benchmark screen\n" +
+            "uses, so the two are comparable 1:1. It refuses while a chat model is loaded (unload first) and\n" +
+            "checks the same memory budget as tai load unless --force skips it, since Gallery has none.\n" +
             "OpenAI-compatible endpoints (default bind mode is localhost):\n" +
             "  /v1/models\n" +
             "  /v1/chat/completions\n" +
@@ -1662,6 +1672,18 @@ public class LauncherCtlApiServer {
             "    curl $CURL_COMMON -H \"Authorization: Bearer $TOKEN\" -H \"X-TAI-Output: text\" \"$BASE$path\"\n" +
             "  else\n" +
             "    curl $CURL_COMMON -H \"Authorization: Bearer $TOKEN\" \"$BASE$path\"\n" +
+            "  fi\n" +
+            "}\n" +
+            // A benchmark run does real generation for minutes across up to 10 runs; CURL_COMMON's
+            // --max-time 180 is sized for status/load calls, not this one.
+            "CURL_LONG=\"--fail-with-body -sS --connect-timeout 2 --max-time 1200\"\n" +
+            "post_json_long() {\n" +
+            "  path=\"$1\"\n" +
+            "  data=\"$2\"\n" +
+            "  if [ \"$OUTPUT_MODE\" = \"text\" ]; then\n" +
+            "    curl $CURL_LONG -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" -H \"X-TAI-Output: text\" --data \"$data\" \"$BASE$path\"\n" +
+            "  else\n" +
+            "    curl $CURL_LONG -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" --data \"$data\" \"$BASE$path\"\n" +
             "  fi\n" +
             "}\n" +
             "OUTPUT_MODE=text\n" +
@@ -1774,6 +1796,37 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  cancel)\n" +
             "    post_json /v1/ai/runtime/cancel '{}'\n" +
+            "    ;;\n" +
+            "  benchmark)\n" +
+            "    model=\"\"\n" +
+            "    accelerator=\"\"\n" +
+            "    prefill=\"\"\n" +
+            "    decode=\"\"\n" +
+            "    runs=\"\"\n" +
+            "    force=\"\"\n" +
+            "    while [ \"$#\" -gt 0 ]; do\n" +
+            "      case \"$1\" in\n" +
+            "        --gpu) accelerator=gpu ;;\n" +
+            "        --cpu) accelerator=cpu ;;\n" +
+            "        --prefill) shift; [ \"$#\" -gt 0 ] || { echo \"usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }; prefill=\"$1\" ;;\n" +
+            "        --decode) shift; [ \"$#\" -gt 0 ] || { echo \"usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }; decode=\"$1\" ;;\n" +
+            "        --runs) shift; [ \"$#\" -gt 0 ] || { echo \"usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }; runs=\"$1\" ;;\n" +
+            "        --force) force=true ;;\n" +
+            "        --*) echo \"usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2 ;;\n" +
+            "        *) [ -z \"$model\" ] || { echo \"usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }; model=\"$1\" ;;\n" +
+            "      esac\n" +
+            "      shift\n" +
+            "    done\n" +
+            "    body=\"{}\"\n" +
+            "    sep=\"\"\n" +
+            "    if [ -n \"$model\" ]; then model_escaped=$(json_escape \"$model\"); body=\"{\\\"model\\\":\\\"$model_escaped\\\"\"; sep=\",\"; fi\n" +
+            "    if [ -n \"$accelerator\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"accelerator\\\":\\\"$accelerator\\\"\"; sep=\",\"; fi\n" +
+            "    if [ -n \"$prefill\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"prefillTokens\\\":$prefill\"; sep=\",\"; fi\n" +
+            "    if [ -n \"$decode\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"decodeTokens\\\":$decode\"; sep=\",\"; fi\n" +
+            "    if [ -n \"$runs\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"runs\\\":$runs\"; sep=\",\"; fi\n" +
+            "    if [ -n \"$force\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"force\\\":true\"; sep=\",\"; fi\n" +
+            "    [ \"$body\" = \"{}\" ] || body=\"$body}\"\n" +
+            "    post_json_long /v1/ai/runtime/benchmark \"$body\"\n" +
             "    ;;\n" +
             "  doctor)\n" +
             "    get_json /v1/ai/runtime\n" +

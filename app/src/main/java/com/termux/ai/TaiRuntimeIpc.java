@@ -29,6 +29,7 @@ final class TaiRuntimeIpc {
     static final String OP_OPENAI_COMPLETION_STREAM = "openAiCompletionsStream";
     static final String OP_EMBEDDINGS = "embeddings";
     static final String OP_PREFLIGHT = "preflight";
+    static final String OP_BENCHMARK = "benchmark";
 
     private TaiRuntimeIpc() {
     }

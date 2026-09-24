@@ -1,5 +1,6 @@
 package com.termux.ai;
 
+import android.app.ActivityManager;
 import android.content.Context;
 import android.net.Uri;
 import android.os.Process;
@@ -8,6 +9,9 @@ import java.util.Base64;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.ai.edge.litertlm.Backend;
+import com.google.ai.edge.litertlm.BenchmarkInfo;
+import com.google.ai.edge.litertlm.BenchmarkKt;
 import com.google.ai.edge.litertlm.Content;
 import com.google.ai.edge.litertlm.Contents;
 import com.google.ai.edge.litertlm.Message;
@@ -516,6 +520,265 @@ public final class TaiManager {
     public JSONObject cancelRuntime() throws JSONException {
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_CANCEL, "{}");
         return localRuntime().cancel();
+    }
+
+    /** Runs can each spend tens of seconds; the whole {@code tai benchmark} call may take minutes. */
+    private static final long BENCHMARK_TIMEOUT_MS = 20 * 60_000L;
+    private static final String BENCHMARK_PROMPT = "How are you";
+
+    /**
+     * Runs LiteRT-LM's own {@code com.google.ai.edge.litertlm.benchmark()} in the runtime process, so
+     * TAI's numbers are comparable 1:1 with Google AI Edge Gallery's Benchmark screen: same API, same
+     * default prefill/decode token counts, its own throwaway engine and cache directory. That engine
+     * is independent of the one {@link MultiBackendTaiRuntime} tracks, so it is refused while a chat
+     * model is loaded or loading rather than silently doubling the memory a resident model already
+     * holds — the caller unloads first, or passes {@code force} to accept that risk instead of the
+     * memory-budget refusal below.
+     */
+    @NonNull
+    public JSONObject benchmark(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        TaiModelSpec spec = resolveModel(request, modelId);
+        if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
+        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
+            return error(400, "capability_not_supported", "Model " + modelId + " is not a chat model.");
+        }
+        if (!TaiModelSpec.BACKEND_LITERT_LM.equals(spec.backend)) {
+            return error(400, "backend_not_supported",
+                "tai benchmark calls com.google.ai.edge.litertlm.benchmark(), which is LiteRT-LM only.");
+        }
+        TaiBenchmarkParams params = TaiBenchmarkParams.fromRequest(request);
+        if (params == null) return error(400, "bad_request", "accelerator must be gpu or cpu");
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_BENCHMARK, delegatedRuntimeBody(body), BENCHMARK_TIMEOUT_MS);
+
+        TaiRuntimeState state = localRuntime().getState();
+        if (state.loaded || state.activeGeneration || "loading".equals(state.state)) {
+            JSONObject busy = error(409, "model_loaded", "Unload the loaded model first: tai benchmark runs its "
+                + "own LiteRT-LM engine and cannot share memory with a resident model.");
+            if (state.loadedModelId != null) busy.put("loadedModelId", state.loadedModelId);
+            return busy;
+        }
+
+        File modelFile = spec.localPath == null ? null : new File(spec.localPath);
+        if (modelFile == null || !modelFile.isFile() || !modelFile.canRead()) {
+            return error(404, "model_file_not_readable", "Model file does not exist or is not readable: " + modelId);
+        }
+
+        if (!params.force) {
+            TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+            long fileBytes = TaiResidency.fileBytes(spec);
+            TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, fileBytes, false,
+                device.physicalMemoryBytes, device.availableMemoryBytes,
+                Collections.singletonList(params.accelerator), params.prefillTokens + params.decodeTokens, null, 0));
+            if (!plan.fits) {
+                JSONObject refusal = insufficientMemory(spec.displayName, plan);
+                refusal.put("hint", "Pass force=true to skip this budget check. Google AI Edge Gallery's Benchmark "
+                    + "screen has no memory budget, and force is how tai benchmark stays comparable to it.");
+                return refusal;
+            }
+        }
+
+        File cacheDir = new File(appContext.getCacheDir(), "tai-benchmark-" + System.nanoTime());
+        if (!cacheDir.mkdirs()) {
+            return error(500, "benchmark_cache_dir_failed",
+                "Could not create a benchmark cache directory under " + appContext.getCacheDir());
+        }
+        try {
+            return runBenchmark(spec, modelFile, params, cacheDir);
+        } finally {
+            deleteRecursively(cacheDir);
+        }
+    }
+
+    @NonNull
+    private JSONObject runBenchmark(@NonNull TaiModelSpec spec, @NonNull File modelFile,
+                                     @NonNull TaiBenchmarkParams params, @NonNull File cacheDir) throws JSONException {
+        Backend backend = TaiBenchmarkParams.ACCELERATOR_CPU.equals(params.accelerator)
+            ? new Backend.CPU() : new Backend.GPU();
+        JSONArray runsJson = new JSONArray();
+        ValueSeries initMsSeries = new ValueSeries();
+        ValueSeries ttftMsSeries = new ValueSeries();
+        ValueSeries prefillTpsSeries = new ValueSeries();
+        ValueSeries decodeTpsSeries = new ValueSeries();
+        Double firstInitMs = null;
+        for (int i = 0; i < params.runs; i++) {
+            MemorySampler sampler = new MemorySampler(appContext);
+            sampler.start();
+            BenchmarkInfo info;
+            try {
+                info = BenchmarkKt.benchmark(modelFile.getAbsolutePath(), backend, params.prefillTokens,
+                    params.decodeTokens, cacheDir.getAbsolutePath(), BENCHMARK_PROMPT);
+            } catch (Throwable t) {
+                sampler.stop();
+                String message = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
+                JSONObject failure = error(500, "benchmark_failed", "Benchmark run " + (i + 1) + " failed: " + message);
+                failure.put("run", i + 1);
+                if (runsJson.length() > 0) failure.put("runs", runsJson);
+                return failure;
+            }
+            sampler.stop();
+            double initMs = info.getInitTimeInSecond() * 1000.0;
+            double ttftMs = info.getTimeToFirstTokenInSecond() * 1000.0;
+            double prefillTps = info.getLastPrefillTokensPerSecond();
+            double decodeTps = info.getLastDecodeTokensPerSecond();
+            // The first init reads the package off disk cold; later ones are warm. Averaging them
+            // together would hide exactly the number Gallery's screen calls out separately.
+            if (i == 0) firstInitMs = initMs; else initMsSeries.add(initMs);
+            ttftMsSeries.add(ttftMs);
+            prefillTpsSeries.add(prefillTps);
+            decodeTpsSeries.add(decodeTps);
+            JSONObject run = new JSONObject();
+            run.put("initMs", initMs);
+            run.put("ttftMs", ttftMs);
+            run.put("prefillTps", prefillTps);
+            run.put("decodeTps", decodeTps);
+            run.put("prefillTokenCount", info.getLastPrefillTokenCount());
+            run.put("decodeTokenCount", info.getLastDecodeTokenCount());
+            run.put("availBeforeMb", sampler.beforeMb());
+            run.put("availMinMb", sampler.minMb());
+            runsJson.put(run);
+        }
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("model", spec.id);
+        data.put("accelerator", params.accelerator);
+        data.put("prefillTokens", params.prefillTokens);
+        data.put("decodeTokens", params.decodeTokens);
+        data.put("runs", runsJson);
+        JSONObject initSummary = new JSONObject();
+        if (firstInitMs != null) initSummary.put("firstMs", firstInitMs);
+        if (!initMsSeries.isEmpty()) {
+            initSummary.put("laterAvgMs", initMsSeries.avg());
+            initSummary.put("laterMinMs", initMsSeries.min());
+            initSummary.put("laterMaxMs", initMsSeries.max());
+        }
+        JSONObject summary = new JSONObject();
+        summary.put("initMs", initSummary);
+        summary.put("ttftMs", ttftMsSeries.toJson());
+        summary.put("prefillTps", prefillTpsSeries.toJson());
+        summary.put("decodeTps", decodeTpsSeries.toJson());
+        data.put("summary", summary);
+        data.put("litertLmVersion", com.termux.BuildConfig.LITERT_LM_VERSION);
+        return data;
+    }
+
+    /** avg/min/max/count over a run of values, the shape Gallery's own ValueSeries reports. */
+    private static final class ValueSeries {
+        private double sum;
+        private double minValue = Double.NaN;
+        private double maxValue = Double.NaN;
+        private int count;
+
+        void add(double value) {
+            minValue = count == 0 ? value : Math.min(minValue, value);
+            maxValue = count == 0 ? value : Math.max(maxValue, value);
+            sum += value;
+            count++;
+        }
+
+        boolean isEmpty() {
+            return count == 0;
+        }
+
+        double avg() {
+            return count == 0 ? 0.0 : sum / count;
+        }
+
+        double min() {
+            return count == 0 ? 0.0 : minValue;
+        }
+
+        double max() {
+            return count == 0 ? 0.0 : maxValue;
+        }
+
+        @NonNull
+        JSONObject toJson() throws JSONException {
+            JSONObject json = new JSONObject();
+            json.put("avg", avg());
+            json.put("min", min());
+            json.put("max", max());
+            json.put("count", count);
+            return json;
+        }
+    }
+
+    /**
+     * Samples MemAvailable every 100 ms while a benchmark run is in flight, the way {@link
+     * TaiRuntimeService#systemIsLowOnMemory} samples it for the idle watch — but here to report
+     * before/min per run rather than to act on it.
+     */
+    private static final class MemorySampler {
+        private static final long SAMPLE_INTERVAL_MS = 100L;
+        private static final long BYTES_PER_MB = 1024L * 1024L;
+
+        @Nullable private final ActivityManager activityManager;
+        private final long beforeAvailBytes;
+        private volatile long minAvailBytes;
+        private volatile boolean running;
+        @Nullable private Thread thread;
+
+        MemorySampler(@NonNull Context context) {
+            activityManager = context.getSystemService(ActivityManager.class);
+            beforeAvailBytes = sample();
+            minAvailBytes = beforeAvailBytes;
+        }
+
+        private long sample() {
+            if (activityManager == null) return 0L;
+            ActivityManager.MemoryInfo info = new ActivityManager.MemoryInfo();
+            activityManager.getMemoryInfo(info);
+            return info.availMem;
+        }
+
+        void start() {
+            running = true;
+            thread = new Thread(() -> {
+                while (running) {
+                    long avail = sample();
+                    if (avail > 0L && (minAvailBytes <= 0L || avail < minAvailBytes)) minAvailBytes = avail;
+                    try {
+                        Thread.sleep(SAMPLE_INTERVAL_MS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
+                }
+            }, "tai-benchmark-mem-sample");
+            thread.setDaemon(true);
+            thread.start();
+        }
+
+        void stop() {
+            running = false;
+            Thread toJoin = thread;
+            if (toJoin == null) return;
+            toJoin.interrupt();
+            try {
+                toJoin.join(500L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        long beforeMb() {
+            return beforeAvailBytes / BYTES_PER_MB;
+        }
+
+        long minMb() {
+            return minAvailBytes / BYTES_PER_MB;
+        }
+    }
+
+    private static void deleteRecursively(@Nullable File file) {
+        if (file == null) return;
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) deleteRecursively(child);
+        }
+        //noinspection ResultOfMethodCallIgnored
+        file.delete();
     }
 
     /**
