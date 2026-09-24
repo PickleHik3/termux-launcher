@@ -4806,7 +4806,10 @@ public final class TerminalEmulator {
                                KittyGraphicsProtocol.Command command, long imageId, int row, int col,
                                int[] source, int width, int height, int offsetX, int offsetY,
                                int cellWidth, int cellHeight) {
-        if (bitmap == null || row < 0 || row >= mRows || col < 0 || col >= mColumns)
+        // A picture taller than the screen may have pushed its own top row into the scrollback
+        // while the cursor moved past it; it is anchored there, as the text it came with is.
+        if (bitmap == null || row < -mScreen.getActiveTranscriptRows() || row >= mRows
+            || col < 0 || col >= mColumns)
             return false;
         mPlacingKittyGraphics = true;
         try {

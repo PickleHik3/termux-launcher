@@ -130,6 +130,11 @@ final class KittyLayerPainter {
                 placement.getSourceX() + placement.getSourceWidth(),
                 placement.getSourceY() + placement.getSourceHeight());
             mDestination.set(destination[0], destination[1], destination[2], destination[3]);
+            // Filtering alone smooths a picture drawn near its own size; one drawn at under half
+            // of it would skip source pixels and shimmer, which mip levels prevent.
+            if ((mDestination.width() * 2 < placement.getSourceWidth()
+                || mDestination.height() * 2 < placement.getSourceHeight()) && !bitmap.hasMipMap())
+                bitmap.setHasMipMap(true);
             int saved = mCanvas.save();
             mCanvas.clipRect(clip[0], clip[1], clip[2], clip[3]);
             mCanvas.drawBitmap(bitmap, mSource, mDestination, mPaint);
