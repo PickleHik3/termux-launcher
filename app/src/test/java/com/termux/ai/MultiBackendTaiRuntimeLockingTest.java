@@ -48,6 +48,22 @@ public class MultiBackendTaiRuntimeLockingTest {
         assertFalse(load.isAlive());
     }
 
+    /** The resident table is read lock-free: a status poll mid-load sees it without queuing behind the load. */
+    @Test
+    public void residencySnapshot_returnsWhileLoadIsBlocked() throws Exception {
+        BlockingLoadRuntime liteRt = new BlockingLoadRuntime();
+        MultiBackendTaiRuntime runtime = new MultiBackendTaiRuntime(liteRt, new IdleRuntime());
+        Thread load = startLoad(runtime, chatModel("blocked-load", TaiModelSpec.BACKEND_LITERT_LM));
+        assertTrue(liteRt.loadEntered.await(PROMPT_MS, TimeUnit.MILLISECONDS));
+
+        assertTrue(promptly(() -> runtime.residency().snapshot()).isEmpty());
+        assertTrue(load.isAlive());
+
+        liteRt.release.countDown();
+        load.join(PROMPT_MS);
+        assertFalse(load.isAlive());
+    }
+
     @Test
     public void unloadDuringLoad_cancelsTheLoadBeforeWaitingForIt() throws Exception {
         BlockingLoadRuntime liteRt = new BlockingLoadRuntime();

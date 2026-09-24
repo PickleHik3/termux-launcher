@@ -219,8 +219,9 @@ public final class TaiRuntimeService extends Service {
 
     private void updateForegroundAfterOperation() {
         try {
-            TaiRuntimeState state = TaiManager.getRuntimeProcessInstance(this).getRuntimeState();
-            TaiRuntimePresence.publish(this, state);
+            TaiManager manager = TaiManager.getRuntimeProcessInstance(this);
+            TaiRuntimeState state = manager.getRuntimeState();
+            TaiRuntimePresence.publish(this, state, manager.residentChatBytes());
             if (state.loaded || state.activeGeneration || "loading".equals(state.state) || "idle-warm".equals(state.state)) {
                 ensureForeground("TAI runtime", state.status);
                 startPresenceWatch();
@@ -242,8 +243,9 @@ public final class TaiRuntimeService extends Service {
         if (presenceWatch != null && !presenceWatch.isCancelled()) return;
         presenceWatch = presenceScheduler.scheduleWithFixedDelay(() -> {
             try {
-                TaiRuntimeState state = TaiManager.getRuntimeProcessInstance(this).getRuntimeState();
-                TaiRuntimePresence.publish(this, state);
+                TaiManager manager = TaiManager.getRuntimeProcessInstance(this);
+                TaiRuntimeState state = manager.getRuntimeState();
+                TaiRuntimePresence.publish(this, state, manager.residentChatBytes());
                 if (state.loaded && systemIsLowOnMemory()) releaseUnderPressure();
                 if (!state.loaded && !state.activeGeneration && !"loading".equals(state.state))
                     stopPresenceWatch();

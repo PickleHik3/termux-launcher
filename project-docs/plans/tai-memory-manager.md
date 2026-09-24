@@ -140,7 +140,30 @@ and an "Unload all" action. `tai status` / `/v1/status` return the same table.
    snapshot would go stale. Device-verified on pong 2026-09-24: `tai cancel` 0.3 s into an E4B load answered in 42 ms and the load returned `model_load_cancelled` at 735 ms; status during the load answered in ~50 ms.
    Also: the 2026-09-24 probe lost pong's network while a CPU 16k E4B generation ran; nothing was
    killed, but a re-run with logcat captured belongs in this phase's device check.
-2. Residency registry; chat and both embedding runtimes register; embeddings go through the budget.
+2. **Done 2026-09-24 (in dev).** `TaiResidency`: an immutable table behind a volatile field, writes
+   under its own leaf monitor, reads lock-free (never the router's load lock). Owned by
+   `MultiBackendTaiRuntime` rather than the service as planned above, because it has to be handed
+   to the backends: LiteRT and MNN chat register in their load-success block and deregister in
+   `closeEngineLocked` / `releaseSessionLocked`, which every close funnels through (unload, idle
+   timer, keep-warm expiry, the close before a replacing load, the pending unload after a cancelled
+   generation, and the service's low-memory release). Both embedding runtimes register in
+   `ensureLoaded` and deregister in `close()`; `busy`/`lastUsedMs` bracket generation and embed
+   batches. The first chat load adds the 330 MB `RUNTIME` entry, which never deregisters (the
+   process-exit half of §3b is phase 4). Budget: `free = availMem + Σ(residents this load replaces)
+   − reserve`, where a chat load is credited every CHAT resident and an embedding load only its own
+   backend's EMBEDDING resident; nothing else is credited (`TaiResidency.creditedAvailable`).
+   `decideLoad` and `advertisedContextWindow` now share that credit — the runtime process publishes
+   `residentChatBytes` in the presence snapshot, replacing the app-side CPU guess. Embeddings go
+   through `TaiLoadPreflight` and `TaiLoadBudget.planFixed` (estimate = file × 1.3 for LiteRT
+   `.tflite`, × 1.0 for MNN, until phase 3 measures) the first time a model is requested, and are
+   refused with the chat path's 409 `insufficient_memory` (OpenAI-wrapped). `tai --json runtime`
+   carries a `residents` array (id, kind, backend, accelerator, window, estimatedBytes,
+   measuredBytes, busy, lastUsedMs); the app process forwards it from the runtime's status reply.
+   Deviations: the estimate a chat resident registers with uses the accelerator the engine actually
+   came up on (so a GPU→CPU fallback is booked at the CPU footprint), not the plan's; a chat load
+   is credited the resident chat model even when it is the same model, since the backend closes it
+   before reloading. Device check pending: `tai --json runtime` residents with chat + embedding
+   loaded, and that the MNN embedding package passes the preflight's `llm.mnn` sidecar checks.
 3. Eviction planning in `TaiLoadBudget` + PSS measurement and history correction.
 4. Tiered pressure watch, `onTrimMemory`, idle timers.
 5. STT kind (lands with the Whisper runtime).

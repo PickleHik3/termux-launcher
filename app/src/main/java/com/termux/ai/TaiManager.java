@@ -176,10 +176,13 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject runtimeStatus() throws JSONException {
-        TaiRuntimeState state = getRuntimeState();
+        // One round trip to the runtime process answers both the state and the resident table.
+        JSONObject remote = shouldDelegateRuntime() ? remoteRuntimeStatus() : null;
+        TaiRuntimeState state = shouldDelegateRuntime() ? remoteRuntimeState(remote) : localRuntime().getState();
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("runtime", state.toJson());
+        data.put("residents", residentsJson(remote));
         data.put("settings", settings.toJson());
         data.put("appProcessRuntime", false);
         data.put("runtimeProcess", TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
@@ -188,6 +191,17 @@ public final class TaiManager {
         appendCrashMarker(data);
         appendDeviceCompatibility(data, state);
         return data;
+    }
+
+    /** The resident table: the runtime process's own, or the one its status reply carried. */
+    @NonNull
+    private JSONArray residentsJson(@Nullable JSONObject remoteStatus) throws JSONException {
+        if (shouldDelegateRuntime()) {
+            JSONArray residents = remoteStatus == null ? null : remoteStatus.optJSONArray("residents");
+            return residents == null ? new JSONArray() : residents;
+        }
+        if (!(runtime instanceof MultiBackendTaiRuntime)) return new JSONArray();
+        return ((MultiBackendTaiRuntime) runtime).residency().toJson();
     }
 
     @NonNull
@@ -515,14 +529,25 @@ public final class TaiManager {
     @NonNull
     public TaiRuntimeState getRuntimeState() {
         if (!shouldDelegateRuntime()) return localRuntime().getState();
+        return remoteRuntimeState(remoteRuntimeStatus());
+    }
+
+    /** The runtime process's full status reply, or {@code null} when it could not be reached. */
+    @Nullable
+    private JSONObject remoteRuntimeStatus() {
         try {
-            JSONObject status = runtimeRequest(TaiRuntimeIpc.OP_RUNTIME_STATUS, "{}", RUNTIME_STATUS_TIMEOUT_MS);
-            JSONObject runtimeJson = status.optJSONObject("runtime");
-            if (runtimeJson == null) runtimeJson = status.optJSONObject("state");
-            return TaiRuntimeState.fromJson(runtimeJson);
+            return runtimeRequest(TaiRuntimeIpc.OP_RUNTIME_STATUS, "{}", RUNTIME_STATUS_TIMEOUT_MS);
         } catch (JSONException e) {
-            return TaiRuntimeState.fromJson(null);
+            return null;
         }
+    }
+
+    @NonNull
+    private static TaiRuntimeState remoteRuntimeState(@Nullable JSONObject status) {
+        if (status == null) return TaiRuntimeState.fromJson(null);
+        JSONObject runtimeJson = status.optJSONObject("runtime");
+        if (runtimeJson == null) runtimeJson = status.optJSONObject("state");
+        return TaiRuntimeState.fromJson(runtimeJson);
     }
 
     @NonNull
@@ -934,7 +959,7 @@ public final class TaiManager {
             // generation discovery must publish only models with at least one runnable endpoint.
             if (stored.endpointCapabilities.isEmpty()) continue;
             TaiModelSpec spec = advertisedContextWindow(TaiContextWindowPolicy.apply(stored, device.memoryBytes,
-                settings.getRuntimeOptions(stored).contextWindow), device, presence, availableModels);
+                settings.getRuntimeOptions(stored).contextWindow), device, presence);
             // Advertise multimodal LiteRT models as separate modality-scoped ids (chat / -vision /
             // -audio), matching Edge Gallery's per-task loading. See TaiModelVariants.
             for (TaiModelSpec variant : TaiModelVariants.expand(spec,
@@ -1167,7 +1192,12 @@ public final class TaiManager {
             return openAiRequestError(501, "capability_not_supported",
                 "Embeddings are not supported for model '" + modelId + "'.", "model");
         }
-        return ((MultiBackendTaiRuntime) localRuntime()).embed(spec, inputs, dimensions);
+        MultiBackendTaiRuntime local = (MultiBackendTaiRuntime) localRuntime();
+        if (!local.residency().isResident(TaiResidency.Kind.EMBEDDING, spec.id)) {
+            JSONObject refusal = decideEmbeddingLoad(spec, runtimeOptionsFromRequest(request, spec));
+            if (refusal != null) return refusal;
+        }
+        return local.embed(spec, inputs, dimensions);
     }
 
     @Nullable
@@ -1305,17 +1335,14 @@ public final class TaiManager {
             crashedAccelerator = TaiLoadPreflight.normalizeAccelerator(marker.optString("accelerator", null));
             crashedContext = marker.optInt("contextWindow", 0);
         }
-        long available = device.availableMemoryBytes;
-        if (available > 0L) available += residentModelBytes(spec.id);
+        // The resident chat model is closed before this one initializes, so its bytes are this
+        // load's to spend; every other resident stays and is already missing from availMem.
+        long available = TaiResidency.creditedAvailable(device.availableMemoryBytes, residency().snapshot(),
+            TaiResidency.Kind.CHAT, spec.backend);
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, fileBytes, encoders,
             device.physicalMemoryBytes, available, accelerators, cap,
             crashedAccelerator, crashedContext));
-        if (!plan.fits) {
-            JSONObject refusal = error(409, "insufficient_memory",
-                "Not enough free memory to load " + spec.displayName + ". Close some apps and try again.");
-            refusal.put("memoryBudget", planJson(plan));
-            return new LoadDecision(null, refusal, plan);
-        }
+        if (!plan.fits) return new LoadDecision(null, insufficientMemory(spec.displayName, plan), plan);
         TaiRuntimeOptions loadOptions = optionsForPreflight(spec, options, preflight);
         if (!TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && plan.accelerator != null
                 && !plan.accelerator.equals(preflight.effectiveAccelerator)) {
@@ -1325,24 +1352,47 @@ public final class TaiManager {
     }
 
     /**
-     * What the model resident now holds, when it is not {@code modelId}: the load about to happen
-     * closes it first, so that memory is the new load's to spend even though it is not free yet.
+     * The one budget for an embedding model that is not resident yet: the same preflight a chat
+     * load passes, then the file-size estimate against what is free. Checked only when the
+     * runtime does not already hold this model, never per batch. {@code null} means go ahead.
      */
-    private long residentModelBytes(@NonNull String modelId) {
-        TaiRuntimeState state = localRuntime().getState();
-        if (!state.loaded || state.loadedModelId == null || modelId.equals(state.loadedModelId)
-                || state.loadedModelPath == null) return 0L;
-        long size = new File(state.loadedModelPath).length();
-        if (size <= 0L) return 0L;
-        int window = TaiLoadBudget.FLOOR_CONTEXT;
-        try {
-            window = state.toJson().optInt("contextWindow", window);
-        } catch (JSONException ignored) {
-        }
-        String backend = TaiModelSpec.BACKEND_MNN_LLM.equals(state.runtimeName)
-            ? TaiModelSpec.BACKEND_MNN_LLM : TaiModelSpec.BACKEND_LITERT_LM;
-        String accelerator = state.backend.toLowerCase(Locale.ROOT).contains("gpu") ? "gpu" : "cpu";
-        return TaiLoadBudget.estimateBytes(backend, accelerator, size, false, window);
+    @Nullable
+    private JSONObject decideEmbeddingLoad(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
+        TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
+        if (preflight.blocked) return openAiError(preflight.blockingError(preflightStatusCode(preflight)));
+        TaiDeviceCapabilities device = preflight.device;
+        // This backend's embedding runtime replaces the model it holds; that one is credited back.
+        long available = TaiResidency.creditedAvailable(device.availableMemoryBytes, residency().snapshot(),
+            TaiResidency.Kind.EMBEDDING, spec.backend);
+        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(TaiResidency.embeddingEstimateBytes(spec), "cpu",
+            device.physicalMemoryBytes, available);
+        if (!plan.fits) return openAiError(insufficientMemory(spec.displayName, plan));
+        return null;
+    }
+
+    /** The refusal every load path answers when the budget says no, chat and embedding alike. */
+    @NonNull
+    static JSONObject insufficientMemory(@NonNull String displayName, @NonNull TaiLoadBudget.Plan plan) throws JSONException {
+        JSONObject refusal = new JSONObject();
+        refusal.put("ok", false);
+        refusal.put("error", "insufficient_memory");
+        refusal.put("message", "Not enough free memory to load " + displayName + ". Close some apps and try again.");
+        refusal.put("_statusCode", 409);
+        refusal.put("memoryBudget", planJson(plan));
+        return refusal;
+    }
+
+    /** The registry of resident models; an empty one when a test has injected a bare runtime. */
+    @NonNull
+    private TaiResidency residency() {
+        TaiRuntime local = localRuntime();
+        return local instanceof MultiBackendTaiRuntime ? ((MultiBackendTaiRuntime) local).residency() : new TaiResidency();
+    }
+
+    /** What the resident chat model holds by the registry's estimate; published for the app process. */
+    public long residentChatBytes() {
+        if (!(runtime instanceof MultiBackendTaiRuntime)) return 0L;
+        return ((MultiBackendTaiRuntime) runtime).residency().bytes(TaiResidency.Kind.CHAT, null);
     }
 
     @NonNull
@@ -1492,18 +1542,15 @@ public final class TaiManager {
      */
     @NonNull
     private TaiModelSpec advertisedContextWindow(@NonNull TaiModelSpec spec, @NonNull TaiDeviceCapabilities device,
-                                                 @NonNull TaiRuntimePresence.Snapshot presence,
-                                                 @NonNull Map<String, TaiModelSpec> installed) {
+                                                 @NonNull TaiRuntimePresence.Snapshot presence) {
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) return spec;
         if (presence.loaded && spec.id.equals(presence.modelId) && presence.contextWindow > 0) {
             return spec.withEndpointContextWindow(Math.min(spec.endpointContextWindow, presence.contextWindow));
         }
+        // The same credit decideLoad takes from the registry, published by the runtime process so
+        // this process advertises the window the load would actually be given.
         long available = device.availableMemoryBytes;
-        TaiModelSpec resident = presence.loaded && presence.modelId != null ? installed.get(presence.modelId) : null;
-        if (available > 0L && resident != null && !resident.id.equals(spec.id)) {
-            available += TaiLoadBudget.estimateBytes(resident.backend, "cpu", resident.sizeBytes, false,
-                presence.contextWindow > 0 ? presence.contextWindow : TaiLoadBudget.FLOOR_CONTEXT);
-        }
+        if (available > 0L && presence.loaded) available += presence.residentChatBytes;
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, spec.sizeBytes,
             false, device.physicalMemoryBytes, available,
             TaiLoadPreflight.autoAccelerators(appContext, spec, device, TaiModelProfile.forModel(spec)),
