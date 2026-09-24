@@ -261,6 +261,18 @@ public class TaiResidencyTest {
         throw new AssertionError("no " + kind + " resident " + id);
     }
 
+    @Test
+    public void fileBytes_sumsAnMnnPackageDirectory() throws Exception {
+        java.io.File dir = java.nio.file.Files.createTempDirectory("mnn-embed").toFile();
+        java.nio.file.Files.write(new java.io.File(dir, "config.json").toPath(), new byte[10]);
+        java.nio.file.Files.write(new java.io.File(dir, "llm.mnn.weight").toPath(), new byte[1000]);
+
+        assertEquals(1010L, TaiResidency.fileBytes(spec("dir-embed", TaiModelSpec.BACKEND_MNN_LLM,
+            dir.getAbsolutePath(), 0L, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)));
+        assertEquals(1010L, TaiResidency.fileBytes(spec("cfg-embed", TaiModelSpec.BACKEND_MNN_LLM,
+            new java.io.File(dir, "config.json").getAbsolutePath(), 0L, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)));
+    }
+
     private static TaiModelSpec chatSpec(String id, String backend, long sizeBytes) {
         String path = TaiModelSpec.BACKEND_MNN_LLM.equals(backend) ? "/models/" + id + "/config.json" : "/models/" + id + "/model.litertlm";
         return spec(id, backend, path, sizeBytes, TaiModelSpec.CAPABILITY_TEXT_CHAT);

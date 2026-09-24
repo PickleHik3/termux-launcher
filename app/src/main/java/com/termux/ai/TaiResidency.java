@@ -244,24 +244,22 @@ public final class TaiResidency {
 
     /**
      * The model's size on disk: the catalog's figure when it has one, else the file itself. An MNN
-     * package points at its config.json, so its weights are summed from the siblings in that
-     * directory.
+     * package points at its config.json or at the package directory, so its weights are summed from
+     * the files in that directory.
      */
     public static long fileBytes(@NonNull TaiModelSpec spec) {
         if (spec.sizeBytes > 0L) return spec.sizeBytes;
         if (spec.localPath == null || spec.localPath.trim().isEmpty()) return 0L;
         File file = new File(spec.localPath);
-        if ("config.json".equals(file.getName())) {
-            File dir = file.getParentFile();
-            File[] siblings = dir == null ? null : dir.listFiles();
-            if (siblings == null) return file.length();
-            long total = 0L;
-            for (File sibling : siblings) {
-                if (sibling.isFile()) total += sibling.length();
-            }
-            return total;
+        File dir = file.isDirectory() ? file : "config.json".equals(file.getName()) ? file.getParentFile() : null;
+        if (dir == null) return file.length();
+        File[] children = dir.listFiles();
+        if (children == null) return file.isDirectory() ? 0L : file.length();
+        long total = 0L;
+        for (File child : children) {
+            if (child.isFile()) total += child.length();
         }
-        return file.length();
+        return total;
     }
 
     @NonNull
