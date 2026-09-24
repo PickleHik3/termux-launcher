@@ -140,7 +140,11 @@ and an "Unload all" action. `tai status` / `/v1/status` return the same table.
    snapshot would go stale. Device-verified on pong 2026-09-24: `tai cancel` 0.3 s into an E4B load answered in 42 ms and the load returned `model_load_cancelled` at 735 ms; status during the load answered in ~50 ms.
    Also: the 2026-09-24 probe lost pong's network while a CPU 16k E4B generation ran; nothing was
    killed, but a re-run with logcat captured belongs in this phase's device check.
-2. **Done 2026-09-24 (in dev).** `TaiResidency`: an immutable table behind a volatile field, writes
+2. **Done 2026-09-24 (in dev), device-verified on pong:** E4B chat + EmbeddingGemma + Qwen3
+   Embedding MNN listed as residents (1799 / 227 / 360 MB estimated, plus the 330 MB runtime entry);
+   `tai unload` leaves only the runtime entry. The check found downloaded MNN specs record
+   config.json's length as `sizeBytes`; `TaiResidency.fileBytes` now sums the package on disk and
+   sizes chat loads too (f30d76ff). `TaiResidency`: an immutable table behind a volatile field, writes
    under its own leaf monitor, reads lock-free (never the router's load lock). Owned by
    `MultiBackendTaiRuntime` rather than the service as planned above, because it has to be handed
    to the backends: LiteRT and MNN chat register in their load-success block and deregister in
