@@ -1,0 +1,32 @@
+{
+ "clip": "git_status_16k.wav",
+ "window_frames": 1000,
+ "model": "acft_whisper_base.en_10s_drq.tflite",
+ "unbiased_text": "Get status",
+ "biased_text": "git status",
+ "bias_prompt_ids": [
+  50360,
+  17606,
+  43979,
+  22927,
+  21061,
+  15409,
+  7400,
+  3802,
+  6654
+ ],
+ "task_prompt_ids": [
+  50257,
+  50258,
+  50358,
+  50362
+ ],
+ "mel_stats": {
+  "min": -0.5656465291976929,
+  "max": 1.4343534708023071,
+  "mean": -0.49756357073783875
+ },
+ "mask": "additive causal: 0 on/below diagonal, -1e9 above, shape [1,1,128,128]",
+ "decode_inputs": "args_0 audio [1,500,512] f32, args_1 tokens [1,128] i32 (pad with EOT 50256), args_2 mask",
+ "notes": "log-mel: n_fft 400, hop 160, periodic Hann, reflect pad n_fft/2, power spectrum, drop last frame, Slaney mel 80 bins 0-8 kHz (mel_filters_80x201.f32 row-major), log10(max(x,1e-10)), clamp to max-8, (x+4)/4, zero-pad audio to frames*160 samples first"
+}
