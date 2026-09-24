@@ -240,13 +240,14 @@ public final class TaiResidency {
      * within a kind. Left out: anything busy, the RUNTIME baseline, and what {@link
      * #creditedAvailable} already counts as replaced — every CHAT resident for a chat load (so a
      * chat load never "evicts" chat; it replaces it), and this backend's EMBEDDING resident for an
-     * embedding load.
+     * embedding load. Only an STT load may evict idle chat: an embedding load saving a few hundred
+     * MB by closing a multi-GB chat model would make the next chat turn pay a full reload.
      */
     @NonNull
     public static List<Entry> evictionCandidates(@NonNull List<Entry> residents, @NonNull Kind kind, @Nullable String backend) {
         ArrayList<Entry> ordered = new ArrayList<>();
         for (Kind victimKind : new Kind[] {Kind.EMBEDDING, Kind.STT, Kind.CHAT}) {
-            if (victimKind == Kind.CHAT && kind == Kind.CHAT) continue;
+            if (victimKind == Kind.CHAT && kind != Kind.STT) continue;
             ArrayList<Entry> ofKind = new ArrayList<>();
             for (Entry entry : residents) {
                 if (entry.kind != victimKind || entry.busy) continue;

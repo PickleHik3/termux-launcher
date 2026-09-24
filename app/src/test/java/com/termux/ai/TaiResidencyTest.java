@@ -276,6 +276,22 @@ public class TaiResidencyTest {
             new java.io.File(dir, "config.json").getAbsolutePath(), 10L, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)));
     }
 
+    @Test
+    public void onlyAnSttLoadMayEvictIdleChat() {
+        TaiResidency.Entry chat = new TaiResidency.Entry("e4b", TaiResidency.Kind.CHAT, "litert-lm", "gpu", 4096,
+            3_000_000_000L, null, 1L, false);
+        TaiResidency.Entry emb = new TaiResidency.Entry("emb", TaiResidency.Kind.EMBEDDING, "mnn-llm", "cpu", 0,
+            300_000_000L, null, 2L, false);
+        List<TaiResidency.Entry> residents = java.util.Arrays.asList(chat, emb);
+
+        assertEquals(java.util.Arrays.asList(emb, chat),
+            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.STT, null));
+        assertEquals(Collections.singletonList(emb),
+            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.EMBEDDING, "litert-lm"));
+        assertTrue(TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, null).contains(emb));
+        assertFalse(TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, null).contains(chat));
+    }
+
     private static TaiModelSpec chatSpec(String id, String backend, long sizeBytes) {
         String path = TaiModelSpec.BACKEND_MNN_LLM.equals(backend) ? "/models/" + id + "/config.json" : "/models/" + id + "/model.litertlm";
         return spec(id, backend, path, sizeBytes, TaiModelSpec.CAPABILITY_TEXT_CHAT);
