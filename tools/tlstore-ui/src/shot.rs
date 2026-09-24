@@ -413,6 +413,10 @@ fn glyph(img: &mut Image, face: &Font, c: char, px: f32, left: i32, baseline: i3
         star(img, c == '★', px, left, baseline, color);
         return;
     }
+    if matches!(c, '☐' | '☑') {
+        checkbox(img, c == '☑', px, left, baseline, color);
+        return;
+    }
     if !face.has_glyph(c) {
         let w = (px * 0.5).round() as i32;
         let h = (px * 0.7).round() as i32;
@@ -476,6 +480,35 @@ fn star(img: &mut Image, filled: bool, px: f32, left: i32, baseline: i32, color:
                 }
             }
             img.blend(xx, yy, color, cover);
+        }
+    }
+}
+
+/// A task-list box (JetBrains Mono has neither): a square outline about the size of a
+/// capital letter, with a tick inside for `☑`.
+fn checkbox(img: &mut Image, ticked: bool, px: f32, left: i32, baseline: i32, color: Rgb) {
+    let side = (px * 0.62).round() as i32;
+    let t = ((px / 12.0).round() as i32).max(1);
+    let x = left + (px * 0.02).round() as i32;
+    let y = baseline - side;
+    img.rect(x, y, side, t, color, 1.0);
+    img.rect(x, y + side - t, side, t, color, 1.0);
+    img.rect(x, y, t, side, color, 1.0);
+    img.rect(x + side - t, y, t, side, color, 1.0);
+    if !ticked {
+        return;
+    }
+    // Two strokes from the left edge down to the bottom third and up to the top right corner.
+    let (cx, cy) = (x as f32 + side as f32 / 2.0, y as f32 + side as f32 / 2.0);
+    let pts = [(-0.3, 0.05), (-0.08, 0.28), (0.34, -0.3)];
+    for seg in pts.windows(2) {
+        let (x0, y0) = (cx + seg[0].0 * side as f32, cy + seg[0].1 * side as f32);
+        let (x1, y1) = (cx + seg[1].0 * side as f32, cy + seg[1].1 * side as f32);
+        let n = ((x1 - x0).abs().max((y1 - y0).abs()) * 2.0).ceil().max(1.0) as i32;
+        for i in 0..=n {
+            let k = i as f32 / n as f32;
+            let (sx, sy) = (x0 + (x1 - x0) * k, y0 + (y1 - y0) * k);
+            img.rect(sx.round() as i32, sy.round() as i32, t, t, color, 1.0);
         }
     }
 }
