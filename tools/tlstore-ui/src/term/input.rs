@@ -314,6 +314,10 @@ fn parse_csi(b: &[u8]) -> Step {
             }
             let code = p0;
             let button = (code & 3) as u8;
+            // 66/67 are the sideways wheel; the store has nothing to scroll sideways.
+            if code & 64 != 0 && code & 2 != 0 {
+                return Step::Skip(total);
+            }
             let kind = if code & 64 != 0 {
                 if code & 1 == 0 {
                     MouseKind::ScrollUp
@@ -509,7 +513,7 @@ mod tests {
     #[test]
     fn sgr_mouse() {
         let ev = run(
-            b"\x1b[<0;10;5M\x1b[<32;11;5M\x1b[<0;11;6m\x1b[<64;1;1M\x1b[<65;1;1M\x1b[<35;2;2M\x1b[<16;3;4M",
+            b"\x1b[<66;1;1M\x1b[<67;1;1M\x1b[<0;10;5M\x1b[<32;11;5M\x1b[<0;11;6m\x1b[<64;1;1M\x1b[<65;1;1M\x1b[<35;2;2M\x1b[<16;3;4M",
         );
         let m: Vec<(MouseKind, u16, u16)> = ev
             .iter()
