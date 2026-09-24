@@ -625,6 +625,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                             profile, deviceCapabilities, backend, "gpu");
                     } catch (Exception gpuException) {
                         TaiRuntimeCrashMarker.clear(appContext);
+                        // A cancelled load says nothing about the GPU; do not record it or fall back.
+                        if (isCancellation(gpuException) || isLoadCancellationRequested()) throw gpuException;
                         TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
                             TaiModelSpec.BACKEND_LITERT_LM, "gpu", gpuException.getMessage() == null ? "GPU initialization failed." : gpuException.getMessage());
                         if (!autoAccelerators.contains("cpu")) throw gpuException;
@@ -654,11 +656,15 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             }
         } catch (Exception e) {
             TaiRuntimeCrashMarker.clear(appContext);
-            TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
-                TaiModelSpec.BACKEND_LITERT_LM, acceleratorFromBackendName(initializedBackendName, requestedAccelerator),
-                e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
-            if (modelSpec.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) {
-                TaiRuntimeHistory.recordAudioInputOutcome(appContext, modelSpec.id, deviceCapabilities, false);
+            // A cancelled load is not an accelerator or audio failure: recording it would lock the
+            // model out of the GPU (known_failed_accelerator) after a user's cancel.
+            if (!isCancellation(e) && !isLoadCancellationRequested()) {
+                TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
+                    TaiModelSpec.BACKEND_LITERT_LM, acceleratorFromBackendName(initializedBackendName, requestedAccelerator),
+                    e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
+                if (modelSpec.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) {
+                    TaiRuntimeHistory.recordAudioInputOutcome(appContext, modelSpec.id, deviceCapabilities, false);
+                }
             }
             synchronized (this) {
                 boolean cancelled = loadCancellationRequested;
@@ -1143,6 +1149,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         loading = false;
         loadCancellationRequested = false;
         loadingModelId = null;
+    }
+
+    private synchronized boolean isLoadCancellationRequested() {
+        return loadCancellationRequested;
     }
 
     private synchronized void throwIfLoadCancellationRequested() {

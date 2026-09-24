@@ -331,6 +331,13 @@ public final class TaiLoadPreflight {
                 warning("previous_cpu_failure", "This model/backend failed previously on CPU: " + failed.optString("reason", "unknown"));
                 return;
             }
+            // An explicit accelerator request is a deliberate retry: warn, but let it run, otherwise a
+            // single failure locks the accelerator out for good (only a success overwrites the record).
+            if (!autoLoad && !"auto".equals(requestedAccelerator)) {
+                warning("previous_accelerator_failure", "This model/backend previously failed on "
+                    + effectiveAccelerator + ": " + failed.optString("reason", "unknown"));
+                return;
+            }
             block("known_failed_accelerator",
                 "This model/backend previously failed on " + effectiveAccelerator + ": " + failed.optString("reason", "unknown"));
         }
