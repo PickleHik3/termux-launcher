@@ -3,6 +3,7 @@ package com.termux.ai;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -10,63 +11,88 @@ import org.json.JSONObject;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Routes the one loaded assistant between the LiteRT-LM and MNN backends and serves embeddings from
+ * their own runtimes.
+ *
+ * <p>Locking. {@link #loadLock} serializes what changes the loaded model — load, keep-warm and unload,
+ * including the backend switch — and is the only router lock held across native initialization or
+ * close. Which backend is active is a volatile pointer, so {@link #getState()}, {@link #isModelLoaded},
+ * {@link #cancel()} and the generation entry points take no router lock at all: a status poll or a
+ * cancel that arrives mid-load reaches the backend's own short monitor instead of queuing behind the
+ * load. Each backend keeps its monitor off its native load and generation paths, and each embedding
+ * runtime serializes embed/close on its own monitor, so nothing here is held for the duration of
+ * native work.
+ */
 public class MultiBackendTaiRuntime implements TaiRuntime {
-    private final LiteRtTaiRuntime liteRt;
-    private final MnnTaiRuntime mnn;
+    private final TaiRuntime liteRt;
+    private final TaiRuntime mnn;
     private final LiteRtEmbeddingRuntime embeddings;
     private final MnnEmbeddingRuntime mnnEmbeddings;
-    private TaiRuntime activeAssistant;
+    /** Held across load, keep-warm and unload; never by a read, a cancel or a generation. */
+    private final Object loadLock = new Object();
+    /** The backend that owns the loaded model. Written under {@link #loadLock}, read without it. */
+    private volatile TaiRuntime activeAssistant;
 
     public MultiBackendTaiRuntime(@NonNull Context context) {
-        liteRt = new LiteRtTaiRuntime(context);
-        mnn = new MnnTaiRuntime(context);
+        this(new LiteRtTaiRuntime(context), new MnnTaiRuntime(context));
+    }
+
+    /** Test seam: the backends stand in for the native runtimes. */
+    MultiBackendTaiRuntime(@NonNull TaiRuntime liteRt, @NonNull TaiRuntime mnn) {
+        this.liteRt = liteRt;
+        this.mnn = mnn;
         embeddings = new LiteRtEmbeddingRuntime();
         mnnEmbeddings = new MnnEmbeddingRuntime();
         activeAssistant = liteRt;
     }
 
-    @NonNull @Override public synchronized TaiRuntimeState getState() {
+    @NonNull @Override public TaiRuntimeState getState() {
         return activeAssistant.getState();
     }
 
-    @Override public synchronized boolean isModelLoaded(@NonNull String modelId) {
+    @Override public boolean isModelLoaded(@NonNull String modelId) {
         return runtimeForId(modelId).isModelLoaded(modelId);
     }
 
-    @NonNull @Override public synchronized JSONObject load(@NonNull TaiModelSpec model, @NonNull TaiRuntimeOptions options) throws JSONException {
-        TaiRuntime target = runtimeForModel(model);
-        if (target != activeAssistant) {
-            TaiRuntimeState current = activeAssistant.getState();
-            if (current.activeGeneration) return error("generation_active", "Cancel active generation before switching AI backends.");
-            activeAssistant.unload();
-            activeAssistant = target;
+    @NonNull @Override public JSONObject load(@NonNull TaiModelSpec model, @NonNull TaiRuntimeOptions options) throws JSONException {
+        synchronized (loadLock) {
+            TaiRuntime target = runtimeForModel(model);
+            JSONObject conflict = activateLocked(target);
+            if (conflict != null) return conflict;
+            return target.load(model, options);
         }
-        return target.load(model, options);
     }
 
-    @NonNull @Override public synchronized JSONObject unload() throws JSONException {
-        JSONObject result = activeAssistant.unload();
-        embeddings.close();
-        mnnEmbeddings.close();
-        return result;
-    }
-
-    @NonNull @Override public synchronized JSONObject keepWarm(@NonNull TaiModelSpec model, @NonNull TaiRuntimeOptions options, int minutes) throws JSONException {
-        TaiRuntime target = runtimeForModel(model);
-        if (target != activeAssistant) {
-            TaiRuntimeState current = activeAssistant.getState();
-            if (current.activeGeneration) return error("generation_active", "Cancel active generation before switching AI backends.");
-            activeAssistant.unload();
-            activeAssistant = target;
+    @NonNull @Override public JSONObject unload() throws JSONException {
+        // A load in progress holds loadLock. Asking the loading backend to cancel first lets LiteRT
+        // discard its engine as soon as native initialization returns, instead of finishing a load
+        // that this unload would throw away a moment later.
+        TaiRuntime loading = activeAssistant;
+        if ("loading".equals(loading.getState().state)) loading.cancel();
+        synchronized (loadLock) {
+            JSONObject result = activeAssistant.unload();
+            embeddings.close();
+            mnnEmbeddings.close();
+            return result;
         }
-        return target.keepWarm(model, options, minutes);
     }
 
-    @NonNull @Override public synchronized JSONObject cancel() throws JSONException {
+    @NonNull @Override public JSONObject keepWarm(@NonNull TaiModelSpec model, @NonNull TaiRuntimeOptions options, int minutes) throws JSONException {
+        synchronized (loadLock) {
+            TaiRuntime target = runtimeForModel(model);
+            JSONObject conflict = activateLocked(target);
+            if (conflict != null) return conflict;
+            return target.keepWarm(model, options, minutes);
+        }
+    }
+
+    // Never waits on loadLock: a load-cancel is only worth anything while the load is still running.
+    @NonNull @Override public JSONObject cancel() throws JSONException {
         return activeAssistant.cancel();
     }
 
-    // Native generation is long-running. Do not hold this router monitor while it runs, otherwise
+    // Native generation is long-running. Do not hold any router lock while it runs, otherwise
     // cancel/unload cannot reach the active backend until generation has already finished.
     @NonNull @Override public JSONObject chat(@NonNull String id, @NonNull String system, @NonNull String user, @NonNull TaiRuntimeOptions options) throws JSONException { return runtimeForId(id).chat(id, system, user, options); }
     @NonNull @Override public JSONObject chat(@NonNull String id, @NonNull String system, @NonNull String user, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).chat(id, system, user, options, callback); }
@@ -76,7 +102,7 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     @NonNull @Override public JSONObject complete(@NonNull String id, @NonNull String prompt, @NonNull TaiRuntimeOptions options, @NonNull TaiGenerationCallback callback) throws JSONException { return runtimeForId(id).complete(id, prompt, options, callback); }
 
     @NonNull
-    public synchronized JSONObject embed(@NonNull String modelId, @NonNull String input) throws JSONException {
+    public JSONObject embed(@NonNull String modelId, @NonNull String input) throws JSONException {
         JSONObject error = new JSONObject();
         error.put("message", "Embeddings are not available for the active LiteRT/MNN backends.");
         error.put("type", "invalid_request_error");
@@ -87,8 +113,11 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         return response;
     }
 
+    // Each embedding runtime serializes embed() and close() on its own monitor, so a running batch
+    // finishes before unload() can close it. No router lock here: status and cancel never queue
+    // behind an embedding batch.
     @NonNull
-    public synchronized JSONObject embed(@NonNull TaiModelSpec model, @NonNull List<String> inputs, int dimensions) throws JSONException {
+    public JSONObject embed(@NonNull TaiModelSpec model, @NonNull List<String> inputs, int dimensions) throws JSONException {
         if (isLiteRtEmbeddingFlatbuffer(model)) return embeddings.embed(model, inputs, dimensions);
         if (isMnnEmbeddingModel(model)) return mnnEmbeddings.embed(model, inputs, dimensions);
         if (inputs.size() == 1 && dimensions <= 0) return embed(model.id, inputs.get(0));
@@ -103,7 +132,18 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         return response;
     }
 
-    private synchronized TaiRuntime runtimeForId(String id) {
+    /** Makes {@code target} the active backend, unloading the previous one. Caller holds loadLock. */
+    @Nullable
+    private JSONObject activateLocked(@NonNull TaiRuntime target) throws JSONException {
+        TaiRuntime current = activeAssistant;
+        if (target == current) return null;
+        if (current.getState().activeGeneration) return error("generation_active", "Cancel active generation before switching AI backends.");
+        current.unload();
+        activeAssistant = target;
+        return null;
+    }
+
+    private TaiRuntime runtimeForId(String id) {
         TaiRuntimeState mnnState = mnn.getState();
         if (mnnState.loadedModelId != null && mnnState.loadedModelId.equals(id)) return mnn;
         TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(id);
