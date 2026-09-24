@@ -1,43 +1,27 @@
-# kitty — the fast, feature-rich, GPU based terminal emulator
+# kitty
 
-![kitty logo](logo/kitty.png)
+The fast, feature-rich, GPU based terminal emulator.
 
-[Documentation](https://sw.kovidgoyal.net/kitty/) · [Changelog](https://sw.kovidgoyal.net/kitty/changelog/)
+## kitten
 
-## Features
-
-- Offloads rendering to the GPU for **lower system load**
-- Supports *all* modern terminal features: [graphics](https://sw.kovidgoyal.net/kitty/graphics-protocol/), unicode, ligatures
-- Scriptable with `kitten @`
-  - Send text, open windows, resize
-  - Deeper levels are flattened
-
-## kittens
-
-The `kitten` command carries a set of small programs:
-
-| Kitten | What it does |
-| --- | --- |
-| `icat` | shows a picture in the terminal |
-| `diff` | compares two files side by side |
-| `transfer` | sends files between machines |
+`kitten` is kitty's companion: pictures, files and diffs in the terminal.
 
 ### icat
 
-```sh
-kitten icat picture.png
+Shows a picture:
+
+```
+kitten icat photo.png
 ```
 
-An animated demonstration: ![icat in motion](https://github.com/kovidgoyal/kitty/raw/master/docs/screenshots/icat.gif)
+### transfer
 
-> kittens are cats too.
+Sends files between machines over the terminal connection, in both directions, resuming where it left off when the connection drops and keeping permissions intact.
 
-***
+## Screenshots
 
-## Requirements
+![icat](https://github.com/kovidgoyal/kitty/raw/master/docs/screenshots/screenshot.png)
 
-Dropped as a stock section: a terminal that speaks the kitty protocols.
+## Contributing
 
-## Sponsors
-
-Dropped as a stock section.
+Please read the guidelines first.

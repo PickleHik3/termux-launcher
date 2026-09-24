@@ -1,21 +1,25 @@
-//! The shared screen structure at each grid size: masthead, hairline rule, hero, body, key row.
+//! The shared header every screen has (Revision 6): masthead, picture, name, standfirst,
+//! facts strip, body, notice row and key row, as one pure function of the grid size.
 
 use crate::render::{text_width, Rect};
 
 /// The grid the store is designed for: an in-app terminal with the launcher's keyboard up.
-/// Every screen is laid out for this first; more room adds to it (a cover, more rows).
 pub const BASE_COLS: u16 = 53;
 pub const BASE_ROWS: u16 = 26;
+
+/// The header picture never takes more than this many rows, and is not drawn under
+/// [`PICTURE_MIN_ROWS`] (its rows go to the body instead).
+pub const PICTURE_MAX_ROWS: u16 = 12;
+pub const PICTURE_MIN_ROWS: u16 = 4;
 
 /// Layout tier from the live grid height.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Tier {
-    /// 40 rows or more: a gap under the rule and a three-row hero word; screens add a cover
-    /// when they have eight rows to spare.
+    /// 40 rows or more: Front rows are two lines (name, standfirst) with a blank between.
     Tall,
-    /// 26–39 rows (the baseline): the hero word is two rows tall.
+    /// 26–39 rows (the baseline): single-line rows.
     Base,
-    /// Under 26 rows: no margins, the hero on one row.
+    /// Under 26 rows: no picture, the name two rows tall.
     Compact,
 }
 
@@ -27,74 +31,135 @@ pub fn tier(_cols: u16, rows: u16) -> Tier {
     }
 }
 
-/// Under 44 columns category tags drop and the gutter narrows.
+/// Under 44 columns category tags drop and the gutter narrows to one column.
 pub fn narrow(cols: u16) -> bool {
     cols < 44
 }
 
-/// Where each part of the shared structure goes. Everything sits inside the one side gutter.
+pub fn gutter(cols: u16) -> u16 {
+    if narrow(cols) {
+        1
+    } else {
+        2
+    }
+}
+
+/// Rows one Front item takes in a tier (Tall: name, standfirst, blank).
+pub fn item_rows(t: Tier) -> u16 {
+    if t == Tier::Tall {
+        3
+    } else {
+        1
+    }
+}
+
+/// Where each part of the header goes. Row numbers are screen rows; `body` is what is left
+/// between the header and the notice row.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Regions {
+pub struct Header {
     pub tier: Tier,
     pub narrow: bool,
-    /// Side margin in columns.
     pub gutter: u16,
-    /// Masthead line: mark at the left, breadcrumb after it, one context item right-aligned.
-    pub masthead: Rect,
-    /// The hairline rule row.
-    pub rule: Rect,
-    /// The whole hero block.
-    pub hero: Rect,
-    /// The spaced small-caps lead line (Compact: the one hero row; the word follows the lead).
-    pub hero_lead: Rect,
-    /// The rows the hero word fills (Compact: same row as the lead).
-    pub hero_word: Rect,
-    /// Content between the hero and the key row. The row under it is the notice line.
+    pub cols: u16,
+    pub rows: u16,
+    /// The content column: inside the gutters, every row.
+    pub content: Rect,
+    /// Row 0.
+    pub masthead: u16,
+    /// The picture rows (content width), when one is drawn.
+    pub picture: Option<Rect>,
+    /// The name rows: three (two in Compact).
+    pub name: Rect,
+    pub standfirst: u16,
+    pub facts: u16,
     pub body: Rect,
-    /// The key-hint row.
-    pub keys: Rect,
+    /// `rows - 2`: a notice or the selection bar.
+    pub notice: u16,
+    /// `rows - 1`.
+    pub keys: u16,
 }
 
-/// Regions for a `cols`×`rows` grid. Degrades without panicking on tiny grids (rects may be
-/// empty).
-pub fn regions(cols: u16, rows: u16) -> Regions {
+/// Rows the header takes besides the picture and its blank: masthead, blank, name, standfirst,
+/// facts, blank, notice, keys.
+fn fixed_rows(t: Tier) -> u16 {
+    if t == Tier::Compact {
+        9
+    } else {
+        10
+    }
+}
+
+/// The header for a `cols`×`rows` grid. `body_need` is what the screen's body wants (Front:
+/// its rows; Item and Installing: a first look at the body); `pic_rows` is `None` when the
+/// screen has no picture to show and otherwise the picture's own height in rows
+/// (`u16::MAX` when unknown). The picture takes what is spare after the fixed rows and the
+/// body, at most [`PICTURE_MAX_ROWS`] and its own height; under [`PICTURE_MIN_ROWS`] it is not
+/// drawn. Never panics on tiny grids (rects may be empty).
+pub fn header(cols: u16, rows: u16, body_need: u16, pic_rows: Option<u16>) -> Header {
     let t = tier(cols, rows);
     let nar = narrow(cols);
-    let gutter = if nar { 1 } else { 2 };
-    let inner_w = cols.saturating_sub(gutter * 2);
-    let line = |y: u16, h: u16| Rect::new(gutter, y.min(rows), inner_w, h.min(rows.saturating_sub(y)));
+    let g = gutter(cols);
+    let inner_w = cols.saturating_sub(g * 2);
+    let line = |y: u16| y.min(rows.saturating_sub(1));
+    let name_rows: u16 = if t == Tier::Compact { 2 } else { 3 };
 
-    // (top margin, blank rows between rule and hero, word rows, blank after hero, bottom margin)
-    let (top, gap, word_rows, after, bottom) = match t {
-        Tier::Tall => (1, 1, 3, 1, 1),
-        Tier::Base => (1, u16::from(rows >= 30), 2, 1, 1),
-        Tier::Compact => (0, 0, 0, 1, 0),
+    let spare = rows.saturating_sub(fixed_rows(t) + 1 + body_need);
+    let pic_h = match pic_rows {
+        Some(own) if t != Tier::Compact => spare.min(PICTURE_MAX_ROWS).min(own),
+        _ => 0,
     };
-    let masthead = line(top, 1);
-    let rule = line(top + 1, 1);
-    let hero_y = top + 2 + gap;
-    let (hero, hero_lead, hero_word) = if t == Tier::Compact {
-        let r = line(hero_y, 1);
-        (r, r, r)
-    } else {
-        (line(hero_y, 1 + word_rows), line(hero_y, 1), line(hero_y + 1, word_rows))
-    };
-    let keys_y = rows.saturating_sub(1 + bottom);
-    let keys = line(keys_y, 1);
-    let body_y = hero.bottom() + after;
-    let body_h = keys_y.saturating_sub(body_y + 1);
-    let body = line(body_y, body_h);
-    Regions { tier: t, narrow: nar, gutter, masthead, rule, hero, hero_lead, hero_word, body, keys }
+    let pic_h = if pic_h >= PICTURE_MIN_ROWS { pic_h } else { 0 };
+
+    let mut y = 2;
+    let picture = (pic_h > 0).then(|| {
+        let r = Rect::new(g, y, inner_w, pic_h);
+        y += pic_h + 1;
+        r
+    });
+    let name = Rect::new(g, line(y), inner_w, name_rows);
+    y += name_rows;
+    let standfirst = line(y);
+    let facts = line(y + 1);
+    let body_y = y + 3;
+    let keys = rows.saturating_sub(1);
+    let notice = rows.saturating_sub(2);
+    let body_h = notice.saturating_sub(body_y);
+    let body = Rect::new(g, line(body_y), inner_w, body_h);
+    Header {
+        tier: t,
+        narrow: nar,
+        gutter: g,
+        cols,
+        rows,
+        content: Rect::new(g, 0, inner_w, rows),
+        masthead: 0,
+        picture,
+        name,
+        standfirst,
+        facts,
+        body,
+        notice,
+        keys,
+    }
 }
 
-/// Rows a cover picture may take when a screen has `spare` rows left over: none under eight
-/// (a cover is never squeezed), otherwise seven, growing by one for every two more spare
-/// rows, at most `max` — and always one row left for the blank under it.
-pub fn cover_rows(spare: u16, max: u16) -> u16 {
-    if spare < 8 {
-        return 0;
+/// The five key-row slots' columns. At 53 columns and up: 2, 12, 24, 34, 44; under 44
+/// columns: 1, 8, 16, 24, 32; between, evenly inside the gutters.
+pub fn key_slots(cols: u16) -> [u16; 5] {
+    if cols >= BASE_COLS {
+        [2, 12, 24, 34, 44]
+    } else if narrow(cols) {
+        [1, 8, 16, 24, 32]
+    } else {
+        let step = cols.saturating_sub(4) / 5;
+        [2, 2 + step, 2 + 2 * step, 2 + 3 * step, 2 + 4 * step]
     }
-    (7 + spare.saturating_sub(12) / 2).min(max).min(spare - 1)
+}
+
+/// Columns each key slot may use: up to the next slot, the last one up to the edge.
+pub fn key_rooms(cols: u16) -> [u16; 5] {
+    let s = key_slots(cols);
+    [s[1] - s[0], s[2] - s[1], s[3] - s[2], s[4] - s[3], cols.saturating_sub(s[4])]
 }
 
 /// `s` word-wrapped to lines of at most `width` columns, at most `max_lines` of them; when the
@@ -177,24 +242,6 @@ pub fn centre_x(within: Rect, w: u16) -> u16 {
     within.x + within.w.saturating_sub(w) / 2
 }
 
-/// Letter-spaces a lead line: `"terminal"` → `"T E R M I N A L"`. Words are separated by
-/// three spaces.
-pub fn spaced_caps(s: &str) -> String {
-    let mut out = String::new();
-    for (wi, word) in s.split_whitespace().enumerate() {
-        if wi > 0 {
-            out.push_str("   ");
-        }
-        for (ci, c) in word.chars().enumerate() {
-            if ci > 0 {
-                out.push(' ');
-            }
-            out.extend(c.to_uppercase());
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,56 +254,99 @@ mod tests {
         assert_eq!(tier(53, 26), Tier::Base);
         assert_eq!(tier(53, 25), Tier::Compact);
         assert!(narrow(43) && !narrow(44));
+        assert_eq!(item_rows(Tier::Tall), 3);
+        assert_eq!(item_rows(Tier::Base), 1);
     }
 
     #[test]
-    fn baseline_regions() {
-        let r = regions(53, 26);
-        assert_eq!(r.tier, Tier::Base);
-        assert_eq!(r.masthead, Rect::new(2, 1, 49, 1));
-        assert_eq!(r.rule, Rect::new(2, 2, 49, 1));
-        assert_eq!(r.hero_lead, Rect::new(2, 3, 49, 1));
-        assert_eq!(r.hero_word, Rect::new(2, 4, 49, 2));
-        assert_eq!(r.body, Rect::new(2, 7, 49, 16));
-        assert_eq!(r.keys, Rect::new(2, 24, 49, 1));
+    fn baseline_front_has_an_eight_row_picture_over_seven_rows() {
+        let h = header(53, 26, 7, Some(u16::MAX));
+        assert_eq!(h.tier, Tier::Base);
+        assert_eq!(h.gutter, 2);
+        assert_eq!(h.content, Rect::new(2, 0, 49, 26));
+        assert_eq!(h.masthead, 0);
+        assert_eq!(h.picture, Some(Rect::new(2, 2, 49, 8)));
+        assert_eq!(h.name, Rect::new(2, 11, 49, 3));
+        assert_eq!(h.standfirst, 14);
+        assert_eq!(h.facts, 15);
+        assert_eq!(h.body, Rect::new(2, 17, 49, 7));
+        assert_eq!(h.notice, 24);
+        assert_eq!(h.keys, 25);
     }
 
     #[test]
-    fn tall_regions() {
-        let r = regions(53, 40);
-        assert_eq!(r.tier, Tier::Tall);
-        assert_eq!(r.hero_lead.y, 4);
-        assert_eq!(r.hero_word, Rect::new(2, 5, 49, 3));
-        assert_eq!(r.body, Rect::new(2, 9, 49, 28));
-        assert_eq!(r.keys.y, 38);
+    fn tall_front_has_a_nine_row_picture_over_seven_two_line_items() {
+        let h = header(53, 40, 7 * 3 - 1, Some(u16::MAX));
+        assert_eq!(h.tier, Tier::Tall);
+        assert_eq!(h.picture, Some(Rect::new(2, 2, 49, 9)));
+        assert_eq!(h.name, Rect::new(2, 12, 49, 3));
+        assert_eq!(h.standfirst, 15);
+        assert_eq!(h.facts, 16);
+        assert_eq!(h.body, Rect::new(2, 18, 49, 20));
+        assert_eq!(h.notice, 38);
+        assert_eq!(h.keys, 39);
     }
 
     #[test]
-    fn short_grid_is_compact() {
-        let r = regions(52, 23);
-        assert_eq!(r.tier, Tier::Compact);
-        assert_eq!(r.masthead.y, 0);
-        assert_eq!(r.hero, Rect::new(2, 2, 48, 1));
-        assert_eq!(r.keys.y, 22);
-        assert_eq!(r.body, Rect::new(2, 4, 48, 17));
+    fn picture_is_clamped_to_its_own_height_and_the_cap() {
+        let h = header(53, 40, 7, Some(u16::MAX));
+        assert_eq!(h.picture.map(|p| p.h), Some(PICTURE_MAX_ROWS));
+        let h = header(53, 40, 7, Some(6));
+        assert_eq!(h.picture.map(|p| p.h), Some(6));
+        assert_eq!(h.body.y, 2 + 6 + 1 + 3 + 3);
+        // Spare rows the picture cannot use stay blank before the notice row.
+        assert!(h.body.h > 7);
+        // Under four spare rows there is no picture and the body starts higher.
+        let h = header(53, 26, 12, Some(u16::MAX));
+        assert_eq!(h.picture, None);
+        assert_eq!(h.name.y, 2);
+        assert_eq!(h.body, Rect::new(2, 8, 49, 16));
+        // No picture at all gives the same rows.
+        assert_eq!(header(53, 26, 7, None).body, Rect::new(2, 8, 49, 16));
     }
 
     #[test]
-    fn covers_need_eight_spare_rows() {
-        assert_eq!(cover_rows(7, 12), 0);
-        assert_eq!(cover_rows(8, 12), 7);
-        assert_eq!(cover_rows(12, 12), 7);
-        assert_eq!(cover_rows(20, 12), 11);
-        assert_eq!(cover_rows(40, 12), 12);
-        assert_eq!(cover_rows(8, 5), 5);
+    fn compact_has_no_picture_and_a_two_row_name() {
+        let h = header(40, 24, 7, Some(u16::MAX));
+        assert_eq!(h.tier, Tier::Compact);
+        assert!(h.narrow && h.gutter == 1);
+        assert_eq!(h.picture, None);
+        assert_eq!(h.name, Rect::new(1, 2, 38, 2));
+        assert_eq!(h.standfirst, 4);
+        assert_eq!(h.facts, 5);
+        assert_eq!(h.body, Rect::new(1, 7, 38, 15));
+        assert_eq!(h.notice, 22);
+        assert_eq!(h.keys, 23);
     }
 
     #[test]
-    fn narrow_and_tiny_grids_do_not_panic() {
-        let r = regions(40, 26);
-        assert!(r.narrow && r.gutter == 1 && r.tier == Tier::Base);
-        for (c, rr) in [(0, 0), (1, 1), (5, 3), (10, 8)] {
-            let _ = regions(c, rr);
+    fn forty_four_columns_is_not_narrow() {
+        let h = header(44, 30, 7, Some(u16::MAX));
+        assert_eq!(h.tier, Tier::Base);
+        assert!(!h.narrow && h.gutter == 2);
+        assert_eq!(h.content.w, 40);
+        assert_eq!(h.picture, Some(Rect::new(2, 2, 40, 12)));
+        assert_eq!(h.name.y, 15);
+        assert_eq!(h.body, Rect::new(2, 21, 40, 7));
+        assert_eq!(h.keys, 29);
+    }
+
+    #[test]
+    fn key_slots_are_fixed() {
+        assert_eq!(key_slots(53), [2, 12, 24, 34, 44]);
+        assert_eq!(key_slots(60), [2, 12, 24, 34, 44]);
+        assert_eq!(key_slots(40), [1, 8, 16, 24, 32]);
+        assert_eq!(key_rooms(53), [10, 12, 10, 10, 9]);
+        assert_eq!(key_rooms(40), [7, 8, 8, 8, 8]);
+        let mid = key_slots(48);
+        assert!(mid.windows(2).all(|w| w[1] > w[0]) && mid[4] + key_rooms(48)[4] <= 48);
+    }
+
+    #[test]
+    fn tiny_grids_do_not_panic() {
+        for (c, r) in [(0, 0), (1, 1), (5, 3), (10, 8), (20, 5)] {
+            let h = header(c, r, 7, Some(u16::MAX));
+            assert!(h.body.bottom() <= r.max(1));
         }
     }
 
@@ -271,12 +361,6 @@ mod tests {
         for l in wrap("one two three four five six seven eight nine", 10, 3) {
             assert!(text_width(&l) <= 10, "{l}");
         }
-    }
-
-    #[test]
-    fn helpers() {
         assert_eq!(centre_x(Rect::new(2, 0, 10, 1), 4), 5);
-        assert_eq!(spaced_caps("terminal"), "T E R M I N A L");
-        assert_eq!(spaced_caps("no. 03"), "N O .   0 3");
     }
 }

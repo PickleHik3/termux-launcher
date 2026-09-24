@@ -2,34 +2,40 @@
 //! ([`Store`]), a stack of [`View`]s, the background tasks, and the single place navigation
 //! happens (where [`scene::Motion`] gets its leave/enter hooks).
 
-pub mod apps;
 pub mod data;
+pub mod front;
 pub mod installing;
 pub mod item;
 pub mod motion;
-pub mod nogh;
 pub mod paint;
 pub mod proc;
+pub mod readme;
 pub mod scene;
-pub mod updates;
 
 use std::collections::HashMap;
 use std::os::fd::RawFd;
-use std::time::Instant;
+use std::path::PathBuf;
+use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use crate::app::{Ctx, Nav, Screen};
+use crate::layout::{self, Header, PICTURE_MAX_ROWS};
+use crate::picture::Picture;
 use crate::render::Frame;
 use crate::term::{Event, Key};
 
 use data::{parse_progress, parse_updates, Catalog, Progress, STEPS};
-use paint::{draw_chrome, Chrome, ContextItem, Hint, Paint, A_CONTEXT, A_HOME, A_KEY0};
-use proc::{Env, Task, TaskKind};
+use paint::{draw_keys, draw_notice, Facts, Paint, Slots, A_HOME, A_KEY0};
+use proc::{Env, Fetch, Task, TaskKind};
 use scene::{Fx, Motion, NavKind, NoMotion, Phase, Scene};
+
+/// How long an item rests under the cursor before its header picture is placed.
+pub const PICTURE_REST: Duration = Duration::from_millis(150);
 
 /// What a view wants after an event.
 pub enum Go {
     Stay,
-    /// Not mine: the router may use it (`f` fullscreen, `q` quit).
+    /// Not mine: the router may use it (`f` keyboard, `q` quit, `esc` back).
     Pass,
     Push(Box<dyn View>),
     Replace(Box<dyn View>),
@@ -40,12 +46,12 @@ pub enum Go {
 
 /// One screen of the store, drawn inside the shared frame.
 pub trait View {
-    /// "apps", "item", "updates", "installing", "nogh".
+    /// "front", "item", "installing".
     fn name(&self) -> &'static str;
-    /// Breadcrumb, context item, hero and key hints.
-    fn chrome(&mut self, st: &mut Store) -> Chrome;
-    /// The content between the hero and the key row.
-    fn body(&mut self, p: &mut Paint, st: &mut Store, r: &crate::layout::Regions);
+    /// Draws the header and the body (the router draws the notice and key rows after).
+    fn draw(&mut self, p: &mut Paint, st: &mut Store);
+    /// The five key slots.
+    fn keys(&self, st: &mut Store) -> Slots;
     fn handle(&mut self, ev: &Event, st: &mut Store) -> Go;
     /// The catalog was reloaded (after an install, a refresh): fix cursors.
     fn refresh(&mut self, _st: &Store) {}
@@ -67,7 +73,7 @@ impl Verb {
             Verb::Remove => "remove",
         }
     }
-    /// The hero lead and breadcrumb word.
+    /// The facts-strip word while it runs.
     pub fn ing(self) -> &'static str {
         match self {
             Verb::Install => "installing",
@@ -127,13 +133,7 @@ impl Job {
         self.exit.is_none()
     }
 
-    /// 1-based position of the requested item being worked on.
-    pub fn index(&self) -> usize {
-        let done = self.names.iter().filter(|n| self.done.iter().any(|d| &d.name == *n)).count();
-        (done + usize::from(self.running())).clamp(1, self.names.len().max(1))
-    }
-
-    /// The requested item the hero shows: the one in progress, else the next, else the last.
+    /// The requested item the header shows: the one in progress, else the next, else the last.
     pub fn shown_name(&self) -> String {
         if let Some(c) = &self.current {
             if self.names.contains(c) && !self.done.iter().any(|d| &d.name == c) {
@@ -156,6 +156,23 @@ impl Job {
             .filter(|n| **n != shown && !self.done.iter().any(|d| &d.name == *n))
             .cloned()
             .collect()
+    }
+
+    /// The word a Front row shows for `name` while this job touches it: a step word while it
+    /// is in progress, `ready` / `failed` once done (`failed` also after the job ended).
+    pub fn word_for(&self, name: &str) -> Option<(&'static str, bool)> {
+        if let Some(d) = self.done.iter().find(|d| d.name == name) {
+            return if d.ok { self.running().then_some(("ready", false)) } else { Some(("failed", true)) };
+        }
+        if self.running() && self.current.as_deref() == Some(name) {
+            return Some((data::step_word(self.step), false));
+        }
+        None
+    }
+
+    /// True when `name` was asked for and did not make it.
+    pub fn failed(&self, name: &str) -> bool {
+        self.done.iter().any(|d| d.name == name && !d.ok)
     }
 
     fn feed(&mut self, line: &str) {
@@ -233,6 +250,28 @@ pub enum Gh {
     Missing,
 }
 
+/// What the script has answered for a [`Fetch`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Got {
+    Pending,
+    Ready(PathBuf),
+    Failed(i32),
+}
+
+/// An item's README as far as the script and the cache go.
+#[derive(Clone, Debug)]
+pub enum Readme {
+    Loading,
+    Doc(Rc<readme::Doc>),
+    /// A setup: nothing upstream to read.
+    NoUpstream,
+    /// Offline with nothing cached.
+    Unavailable,
+}
+
+/// The notice Front shows when `s` is pressed without a working gh.
+pub const GH_NOTICE: &str = "starring needs gh: pkg install gh, then gh auth login";
+
 /// State every view reads and changes.
 pub struct Store {
     pub env: Env,
@@ -244,13 +283,24 @@ pub struct Store {
     pub stars: HashMap<String, Option<bool>>,
     /// The launcher's keyboard is held down for us.
     pub fullscreen: bool,
-    /// A one-line message above the key row until the next key or tap.
+    /// A one-line message on the notice row until the next key or tap.
     pub notice: Option<String>,
     /// True while the startup catalog refresh runs (a job waits for it).
     pub refreshing: bool,
-    refresh_buf: String,
     /// Star this repo as soon as gh says it is not starred yet (`s` pressed while asking).
     pub pending_star: Option<String>,
+    /// Files the script fetches for the screens, by request.
+    fetched: HashMap<Fetch, Got>,
+    /// Parsed READMEs by item name (the fetched file, read once).
+    docs: HashMap<String, Rc<readme::Doc>>,
+    /// "Now" as the router's clock says (a fake clock in tests).
+    pub now: Instant,
+    /// The router keeps ticking until then (a header picture waiting out its rest).
+    pub wake_at: Option<Instant>,
+    /// The item the header shows and since when.
+    header_since: Option<(String, Instant)>,
+    /// The frame being drawn belongs to a view on its way out: it does not move the header.
+    pub leaving: bool,
 }
 
 /// `ESC ] 99` desktop notification: title, then body.
@@ -273,8 +323,13 @@ impl Store {
             fullscreen: false,
             notice: None,
             refreshing: false,
-            refresh_buf: String::new(),
             pending_star: None,
+            fetched: HashMap::new(),
+            docs: HashMap::new(),
+            now: Instant::now(),
+            wake_at: None,
+            header_since: None,
+            leaving: false,
         };
         if let Ok(t) = Task::spawn(&st.env.tlstore, &["update", "--check", "--tsv"], TaskKind::Refresh) {
             st.tasks.push(t);
@@ -382,22 +437,15 @@ impl Store {
         }
         let Some(i) = self.tasks.iter().position(|t| t.fd() == Some(fd)) else { return false };
         let out = self.tasks[i].read();
-        let buf = out.lines.join("\n");
-        let kind = self.tasks[i].kind.clone();
-        if out.exit.is_none() {
-            // Keep partial output of a refresh until it ends.
-            if kind == TaskKind::Refresh && !out.lines.is_empty() {
-                self.stash_refresh(&buf);
-            }
-            return false;
-        }
-        let code = out.exit.unwrap_or(-1);
-        self.tasks.remove(i);
-        match kind {
+        // Output is judged whole at exit; keep what came before it.
+        self.tasks[i].lines.extend(out.lines);
+        let Some(code) = out.exit else { return false };
+        let task = self.tasks.remove(i);
+        let lines = task.lines;
+        match task.kind {
             TaskKind::Refresh => {
                 self.refreshing = false;
-                self.stash_refresh(&buf);
-                let updates = std::mem::take(&mut self.refresh_buf);
+                let updates = lines.join("\n");
                 self.cat.reload(&self.env);
                 if code == 0 {
                     self.cat.updates = parse_updates(&updates);
@@ -421,16 +469,170 @@ impl Store {
                     self.notice = Some("GitHub could not be reached. Try again later.".into());
                 }
             }
+            TaskKind::Fetch(f) => {
+                let path = lines.first().map(|l| PathBuf::from(l.trim()));
+                let got = match path {
+                    Some(p) if code == 0 && p.is_file() => Got::Ready(p),
+                    _ => Got::Failed(code),
+                };
+                self.fetched.insert(f, got);
+            }
             TaskKind::Job | TaskKind::Detached => {}
         }
         reloaded
     }
 
-    fn stash_refresh(&mut self, s: &str) {
-        if !s.is_empty() {
-            self.refresh_buf.push_str(s);
-            self.refresh_buf.push('\n');
+    /// Asks the script for `f` (once) and says what it has answered so far.
+    pub fn fetch(&mut self, f: Fetch) -> Got {
+        if let Some(g) = self.fetched.get(&f) {
+            return g.clone();
         }
+        let got = match Task::spawn(&self.env.tlstore, &f.args(), TaskKind::Fetch(f.clone())) {
+            Ok(t) => {
+                self.tasks.push(t);
+                Got::Pending
+            }
+            Err(_) => Got::Failed(-1),
+        };
+        self.fetched.insert(f, got.clone());
+        got
+    }
+
+    /// The item's catalog picture, once fetched.
+    pub fn picture_path(&mut self, name: &str) -> Option<PathBuf> {
+        match self.fetch(Fetch::Picture(name.to_string())) {
+            Got::Ready(p) => Some(p),
+            _ => None,
+        }
+    }
+
+    /// The item's README, parsed under its `readme-skip` list, once fetched.
+    pub fn readme(&mut self, name: &str) -> Readme {
+        if let Some(d) = self.docs.get(name) {
+            return Readme::Doc(d.clone());
+        }
+        match self.fetch(Fetch::Readme(name.to_string())) {
+            Got::Pending => Readme::Loading,
+            Got::Failed(2) => Readme::NoUpstream,
+            Got::Failed(_) => Readme::Unavailable,
+            Got::Ready(p) => {
+                let text = std::fs::read_to_string(&p).unwrap_or_default();
+                let skip = self.cat.info(&self.env, name).readme_skip();
+                let doc = Rc::new(readme::parse(&text, &skip));
+                self.docs.insert(name.to_string(), doc.clone());
+                Readme::Doc(doc)
+            }
+        }
+    }
+
+    /// A README image, once fetched (asks the script the first time).
+    pub fn asset_path(&mut self, name: &str, src: &str) -> Got {
+        self.fetch(Fetch::Asset(name.to_string(), src.to_string()))
+    }
+
+    /// The header picture's file for `name`: the README's first image when it has arrived,
+    /// else the catalog picture. `None` while nothing has arrived or nothing exists; the
+    /// bool says whether something may still come.
+    pub fn header_picture_path(&mut self, name: &str, readme_first: bool) -> (Option<PathBuf>, bool) {
+        let mut pending = false;
+        if readme_first {
+            let first = match self.readme(name) {
+                Readme::Loading => {
+                    pending = true;
+                    None
+                }
+                Readme::Doc(d) => d.first_image.clone(),
+                _ => None,
+            };
+            if let Some(src) = first {
+                match self.asset_path(name, &src) {
+                    Got::Ready(p) => return (Some(p), false),
+                    Got::Pending => pending = true,
+                    Got::Failed(_) => {}
+                }
+            }
+        }
+        match self.fetch(Fetch::Picture(name.to_string())) {
+            Got::Ready(p) => (Some(p), pending),
+            Got::Pending => (None, true),
+            Got::Failed(_) => (None, pending),
+        }
+    }
+
+    /// Notes that the header shows `name` (from now, when it is a new one).
+    pub fn header_shown(&mut self, name: &str) -> Instant {
+        match &self.header_since {
+            Some((n, t)) if n == name => *t,
+            _ if self.leaving => self.now,
+            _ => {
+                self.header_since = Some((name.to_string(), self.now));
+                self.now
+            }
+        }
+    }
+
+    /// True once `name` has rested in the header for [`PICTURE_REST`] (at once when motion
+    /// is off), so its picture may be placed; otherwise asks the router to tick until then.
+    pub fn header_rested(&mut self, name: &str, motion: bool) -> bool {
+        let since = self.header_shown(name);
+        if !motion {
+            return true;
+        }
+        if self.leaving {
+            return self.header_since.as_ref().is_some_and(|(n, _)| n == name)
+                && self.now >= since + PICTURE_REST;
+        }
+        let due = since + PICTURE_REST;
+        if self.now >= due {
+            if self.wake_at.is_some_and(|w| w <= self.now) {
+                self.wake_at = None;
+            }
+            true
+        } else {
+            self.wake_at = Some(match self.wake_at {
+                Some(w) => w.min(due),
+                None => due,
+            });
+            false
+        }
+    }
+
+    /// True while a background task other than a job runs (a fetch, a gh call).
+    pub fn tasks_pending(&self) -> bool {
+        !self.tasks.is_empty()
+    }
+
+    /// The item the header shows.
+    pub fn header_item(&self) -> Option<&str> {
+        self.header_since.as_ref().map(|(n, _)| n.as_str())
+    }
+
+    /// The facts strip for `name`; `state` overrides the installed word (a running verb,
+    /// `failed`).
+    pub fn facts(&mut self, name: &str, state: Option<&str>) -> Facts {
+        let item = self.cat.item(name).cloned();
+        let upd = self.cat.update_for(name).cloned();
+        let info = self.cat.info(&self.env, name).clone();
+        let version = match (&upd, &item) {
+            (Some(u), _) => u.have.clone(),
+            (None, Some(i)) => i.installed.clone().unwrap_or_else(|| i.version.clone()),
+            _ => String::new(),
+        };
+        let state = state
+            .map(str::to_string)
+            .or_else(|| item.as_ref().and_then(|i| i.installed.as_ref()).map(|_| "installed".to_string()));
+        let mut more = Vec::new();
+        for k in ["Licence", "Author", "Size"] {
+            if let Some(v) = info.get(k) {
+                more.push(v.to_string());
+            }
+        }
+        if let Some(repo) = info.upstream() {
+            if self.gh == Gh::Ready && self.starred(repo) == Some(true) {
+                more.push("starred".into());
+            }
+        }
+        Facts { state, version, new: upd.map(|u| u.new), more }
     }
 
     /// Starts asking gh whether `repo` is starred (once per session).
@@ -461,16 +663,6 @@ impl Store {
         self.gh
     }
 
-    /// Checks gh again (after the person signed in elsewhere).
-    pub fn recheck_gh(&mut self) -> Gh {
-        self.gh = match self.env.run(&self.env.gh, &["auth", "status"]) {
-            Ok((0, _)) => Gh::Ready,
-            Ok(_) => Gh::SignedOut,
-            Err(_) => Gh::Missing,
-        };
-        self.gh
-    }
-
     /// Stars or unstars `repo` through gh (optimistically; reverted if gh fails). Only when
     /// gh is ready and the state is known.
     pub fn toggle_star(&mut self, repo: &str) {
@@ -491,19 +683,44 @@ impl Store {
         }
     }
 
-    /// Opens https://github.com/<repo> with the opener, or shows the address.
-    pub fn open_repo(&mut self, repo: &str) {
-        let url = format!("https://github.com/{repo}");
+    /// The `s` key on an item: star through gh, or say what gh needs on the notice row.
+    /// True when a star was asked for.
+    pub fn star(&mut self, name: &str) -> bool {
+        let Some(repo) = self.cat.info(&self.env, name).upstream().map(str::to_string) else { return false };
+        match self.gh_now() {
+            Gh::Ready => {
+                self.want_star(&repo);
+                if self.starred(&repo).is_some() {
+                    self.toggle_star(&repo);
+                } else {
+                    self.pending_star = Some(repo);
+                }
+                true
+            }
+            _ => {
+                self.notice = Some(GH_NOTICE.into());
+                false
+            }
+        }
+    }
+
+    /// Opens `url` with the opener, or shows the address.
+    pub fn open_url(&mut self, url: &str) {
         let started = self
             .env
             .opener
             .clone()
-            .and_then(|o| Task::spawn(&o, &[url.as_str()], TaskKind::Detached).ok())
+            .and_then(|o| Task::spawn(&o, &[url], TaskKind::Detached).ok())
             .map(|t| self.tasks.push(t))
             .is_some();
         if !started {
-            self.notice = Some(url);
+            self.notice = Some(url.to_string());
         }
+    }
+
+    /// Opens https://github.com/<repo>.
+    pub fn open_repo(&mut self, repo: &str) {
+        self.open_url(&format!("https://github.com/{repo}"));
     }
 
     /// `f`: asks the launcher to hold its keyboard down, or to bring it back.
@@ -517,15 +734,54 @@ impl Store {
             self.notice = Some("The keyboard could not be put away here.".into());
         }
     }
+}
 
-    /// Context item for "↑ N updates" (None when there are none).
-    pub fn updates_link(&self) -> Option<ContextItem> {
-        let n = self.cat.updates.len();
-        (n > 0).then(|| ContextItem {
-            text: format!("↑ {n} update{}", if n == 1 { "" } else { "s" }),
-            link: true,
-        })
+/// The header for `name` with its picture fitted: asks for the picture off the draw path,
+/// reserves its rows while it may still come (`reserve`), clamps them to the picture's own
+/// height once it is here, and only places it after the item has rested in the header.
+pub fn header_for(
+    p: &mut Paint,
+    st: &mut Store,
+    name: &str,
+    body_need: u16,
+    readme_first: bool,
+    reserve: bool,
+) -> (Header, Option<Picture>) {
+    let (cols, rows) = (p.f.cols(), p.f.rows());
+    let (cw, ch) = p.cell();
+    if name.is_empty() {
+        return (layout::header(cols, rows, body_need, None), None);
     }
+    st.header_shown(name);
+    if !p.f.ctx.caps.kitty_graphics {
+        return (layout::header(cols, rows, body_need, None), None);
+    }
+    let (path, pending) = st.header_picture_path(name, readme_first);
+    let rested = st.header_rested(name, p.f.ctx.motion);
+    let Some(path) = path else {
+        let pic_rows = (pending || reserve).then_some(u16::MAX);
+        return (layout::header(cols, rows, body_need, pic_rows), None);
+    };
+    let probe_hdr = layout::header(cols, rows, body_need, Some(u16::MAX));
+    let box_w = probe_hdr.content.w as u32 * cw as u32;
+    let probe = p.f.ctx.pics.header_picture(&path, box_w, PICTURE_MAX_ROWS as u32 * ch as u32).ok();
+    let Some(probe) = probe else {
+        let pic_rows = reserve.then_some(u16::MAX);
+        return (layout::header(cols, rows, body_need, pic_rows), None);
+    };
+    let own_rows = if reserve { u16::MAX } else { probe.height().div_ceil(ch as u32).max(1) as u16 };
+    let hdr = layout::header(cols, rows, body_need, Some(own_rows));
+    let Some(r) = hdr.picture else { return (hdr, None) };
+    if !rested {
+        return (hdr, None);
+    }
+    let (bw, bh) = (r.w as u32 * cw as u32, r.h as u32 * ch as u32);
+    let pic = if probe.width() <= bw && probe.height() <= bh {
+        Some(probe)
+    } else {
+        p.f.ctx.pics.header_picture(&path, bw, bh).ok()
+    };
+    (hdr, pic)
 }
 
 enum Leave {
@@ -544,7 +800,7 @@ pub struct Router {
     /// The current view's last drawn scene, and the leaving view's.
     pub scene: Scene,
     leave_scene: Scene,
-    hints: Vec<Hint>,
+    slots: Slots,
     motion_on: bool,
     /// Where "now" comes from (a fake clock in tests).
     clock: Box<dyn Fn() -> Instant>,
@@ -566,16 +822,16 @@ impl Router {
         self.clock = Box::new(clock);
     }
 
-    /// With a motion timeline (P5).
+    /// With a motion timeline.
     pub fn with_motion(env: Env, motion: Box<dyn Motion>) -> Router {
         Router {
             st: Store::new(env),
-            views: vec![Box::new(apps::Apps::new())],
+            views: vec![Box::new(front::Front::new())],
             leave: Leave::None,
             motion,
             scene: Scene::default(),
             leave_scene: Scene::default(),
-            hints: Vec::new(),
+            slots: Default::default(),
             motion_on: true,
             clock: Box::new(Instant::now),
         }
@@ -588,6 +844,11 @@ impl Router {
 
     pub fn depth(&self) -> usize {
         self.views.len()
+    }
+
+    /// The item the header shows (Front: the one under the cursor).
+    pub fn header_item(&self) -> Option<String> {
+        self.st.header_item().map(str::to_string)
     }
 
     /// The one place navigation happens.
@@ -644,48 +905,34 @@ impl Router {
         }
     }
 
-    fn chrome_for(&mut self, idx: usize) -> Chrome {
-        let st = &mut self.st;
-        let v = &mut self.views[idx];
-        let mut c = v.chrome(st);
-        if let Some(job) = st.job.as_ref().filter(|j| j.running()) {
-            if v.name() != "installing" {
-                c.context = Some(ContextItem {
-                    text: format!("{} {} of {}", job.verb.ing(), job.index(), job.names.len()),
-                    link: true,
-                });
-            }
-        }
-        c
-    }
-
     /// Draws view `which` (None: the owned leaving view). `leaving`: the frame belongs to the
     /// view being left, so its scene goes to `leave_scene` and the current scene stays as is.
     fn draw_view(&mut self, f: &mut Frame, which: Option<usize>, fx: &Fx, leaving: bool) {
-        let r = f.regions();
+        let hdr = layout::header(f.cols(), f.rows(), 0, None);
         let notice = self.st.notice.clone();
-        match which {
-            Some(idx) => {
-                let chrome = self.chrome_for(idx);
-                let mut scene = Scene::new(self.views[idx].name());
-                let mut p = Paint::new(f, fx, &mut scene);
-                self.hints = draw_chrome(&mut p, &r, &chrome, notice.as_deref());
-                self.views[idx].body(&mut p, &mut self.st, &r);
-                if leaving {
-                    self.leave_scene = scene;
-                } else {
-                    self.scene = scene;
-                }
-            }
-            None => {
-                let Leave::Owned(v) = &mut self.leave else { return };
-                let chrome = v.chrome(&mut self.st);
-                let mut scene = Scene::new(v.name());
-                let mut p = Paint::new(f, fx, &mut scene);
-                draw_chrome(&mut p, &r, &chrome, None);
-                v.body(&mut p, &mut self.st, &r);
-                self.leave_scene = scene;
-            }
+        let st = &mut self.st;
+        let view: &mut Box<dyn View> = match which {
+            Some(idx) => &mut self.views[idx],
+            None => match &mut self.leave {
+                Leave::Owned(v) => v,
+                _ => return,
+            },
+        };
+        let mut scene = Scene::new(view.name());
+        let mut p = Paint::new(f, fx, &mut scene);
+        st.leaving = leaving;
+        view.draw(&mut p, st);
+        st.leaving = false;
+        if let Some(n) = &notice {
+            draw_notice(&mut p, &hdr, n);
+        }
+        let slots = view.keys(st);
+        draw_keys(&mut p, &hdr, &slots);
+        if leaving {
+            self.leave_scene = scene;
+        } else {
+            self.scene = scene;
+            self.slots = slots;
         }
     }
 
@@ -719,6 +966,10 @@ impl Screen for Router {
     fn draw(&mut self, f: &mut Frame) {
         self.motion_on = f.ctx.motion;
         let now = (self.clock)();
+        self.st.now = now;
+        if self.st.wake_at.is_some_and(|w| now >= w) {
+            self.st.wake_at = None;
+        }
         self.draw_phase(f, now);
         if self.motion_on && self.motion.drawn(now, &self.scene) {
             f.clear();
@@ -728,16 +979,23 @@ impl Screen for Router {
 
     fn handle(&mut self, ev: &Event, ctx: &mut Ctx) -> Nav {
         self.motion_on = ctx.motion;
+        self.st.now = (self.clock)();
         match ev {
             Event::Readable(fd) => {
                 if self.st.on_readable(*fd) {
                     for v in &mut self.views {
                         v.refresh(&self.st);
                     }
-                    if self.top() != "installing" {
-                        if let Some(job) = self.st.job.as_ref().filter(|j| !j.running()) {
-                            self.st.notice = job.summary().first().cloned();
-                        }
+                    if let Some(job) = self.st.job.as_ref().filter(|j| !j.running()) {
+                        let lines = job.summary();
+                        self.st.notice = if self.top() == "installing" {
+                            lines
+                                .iter()
+                                .find(|l| l.starts_with("Could not") || l.starts_with("Stopped"))
+                                .cloned()
+                        } else {
+                            lines.first().cloned()
+                        };
                     }
                 }
                 return Nav::Stay;
@@ -747,20 +1005,10 @@ impl Screen for Router {
             _ => {}
         }
         let ev = match ev {
-            Event::Tap { action: A_HOME, .. } => return self.navigate(Go::Home),
-            Event::Tap { action: A_CONTEXT, .. } => {
-                let go = if self.st.job_running() && self.top() != "installing" {
-                    Go::Push(Box::new(installing::Installing::new()))
-                } else if !self.st.cat.updates.is_empty() && self.top() != "updates" {
-                    Go::Push(Box::new(updates::Updates::new()))
-                } else {
-                    Go::Stay
-                };
-                return self.navigate(go);
-            }
-            Event::Tap { action, .. } if (A_KEY0..A_KEY0 + 20).contains(action) => {
-                match self.hints.get((*action - A_KEY0) as usize) {
-                    Some(h) => Event::Key(h.key),
+            Event::Tap { action: A_HOME, .. } if self.top() != "front" => return self.navigate(Go::Home),
+            Event::Tap { action, .. } if (A_KEY0..A_KEY0 + 5).contains(action) => {
+                match self.slots.get((*action - A_KEY0) as usize).and_then(|s| s.as_ref()).filter(|s| s.on) {
+                    Some(s) => Event::Key(s.key),
                     None => return Nav::Stay,
                 }
             }
@@ -776,10 +1024,15 @@ impl Screen for Router {
     }
 
     fn animating(&self) -> bool {
-        self.motion.active()
+        self.motion.active() || self.st.wake_at.is_some()
     }
 
     fn tick(&mut self, _now: Instant, _ctx: &mut Ctx) -> bool {
+        let now = (self.clock)();
+        if self.st.wake_at.is_some_and(|w| now >= w) {
+            self.st.wake_at = None;
+            return true;
+        }
         self.motion.active()
     }
 

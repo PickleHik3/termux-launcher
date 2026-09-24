@@ -1,7 +1,6 @@
 #!/bin/sh
 # Stub tlstore for tlstore-ui tests: answers from the fixture files next to it and logs
-# every call to calls.log. Speaks the Revision 5 TSV contract and progress stream, plus
-# Revision 6's readme and readme-asset.
+# every call to calls.log. Speaks the Revision 5 TSV contract and progress stream.
 d=$(cd "$(dirname "$0")/.." && pwd)
 printf '%s\n' "$*" >> "$d/calls.log"
 TAB=$(printf '\t')
@@ -27,21 +26,21 @@ case "$cmd" in
         exit 0
         ;;
     readme)
-        # Revision 6: the path of the item's README. fish-shell is a setup with
-        # no upstream (exit 2); an item without a fixture README has nothing
-        # cached (exit 1); `noreadme` marks GitHub as unreachable for everyone.
+        # Exit 2: no upstream (a setup). Exit 1: nothing fetched and nothing cached.
+        [ -f "$d/info/$1.tsv" ] || exit 1
+        grep -q "^Setup	1" "$d/info/$1.tsv" && exit 2
         [ -f "$d/noreadme" ] && exit 1
-        [ "$1" = fish-shell ] && exit 2
         p="$d/readme/$1.md"
         [ -f "$p" ] || exit 1
         echo "$p"
         exit 0
         ;;
     readme-asset)
-        # Revision 6: a picture the README refers to; every one of them is
-        # answered with the item's own catalog picture.
-        [ -f "$d/nopics" ] && exit 2
-        [ -n "${2:-}" ] || exit 2
+        # Every asset is answered with the item's own picture; nothing is downloaded.
+        [ -f "$d/nopics" ] && exit 1
+        case "$2" in
+            *.gif|*.svg) exit 1 ;;
+        esac
         p="$d/pics/$1.jpg"
         [ -f "$p" ] || exit 1
         echo "$p"
@@ -61,7 +60,7 @@ for n in "$@"; do
         printf 'step\t%s\t60\tsignature checked\n' "$n"
         sleep 30
     fi
-    if [ "$n" = broken ]; then
+    if [ "$n" = broken ] || [ -f "$d/fail-$n" ]; then
         printf 'done\t%s\tfailed\tcould not %s %s\n' "$n" "$cmd" "$n"
         failed=1
         continue

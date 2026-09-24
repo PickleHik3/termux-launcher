@@ -1,62 +1,51 @@
+<h1 align="center">dawn</h1>
 <p align="center">
-  <img src="https://raw.githubusercontent.com/andrewmd5/dawn/HEAD/assets/hero.png" alt="dawn" width="600">
+  <img src="https://raw.githubusercontent.com/andrewmd5/dawn/main/assets/hero.png" width="600">
 </p>
 
-<h1 align="center">dawn</h1>
+[![build](https://img.shields.io/badge/build-passing-green.svg)](https://github.com/andrewmd5/dawn/actions)
 
-[![CI](https://img.shields.io/github/actions/workflow/status/andrewmd5/dawn/ci.yml?branch=main)](https://github.com/andrewmd5/dawn/actions)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-![Version](https://img.shields.io/github/v/release/andrewmd5/dawn)
+A quiet place to write. This paragraph sits before the first section and is dropped.
 
-A quiet place to write. This paragraph sits before the first heading and is dropped, badges and all.
+## What it does
 
-## What it is
+Dawn shows **headings**, *quotes* and `code` as you type, and keeps the file plain markdown on disk. Read more at <https://dawn.example.com/docs>.
 
-Dawn renders your **markdown** as you type — *headings*, quotes and `inline code` take shape in place. The file on disk stays plain text; see [the docs](https://github.com/andrewmd5/dawn/wiki) for the details.
-
-![Writing in dawn](docs/writing.png)
-
-### Why another editor
-
-Most terminal editors show you the source. Dawn shows you the page.
-
-> Write first, format never.
-> — the whole idea, in one line
+- Headings and quotes take shape as you type
+- [x] Pictures show in place
+- [ ] Tables are on the way
+  - one nesting level is kept
 
 ## Installation
 
 ```sh
-cargo install dawn
+curl -fsSL https://dawn.example.com/install.sh | sh
 ```
 
-This section is dropped with its content: the store installs it for you.
+## Portability
 
-## Using it
+Dawn runs on other terminals too, but this section is skipped by the catalog.
 
-- Open a file with `dawn notes.md`
-- Headings, lists and quotes render as you write
-  - Nested items are flattened to one level
-- [x] Save with `Ctrl-S`
-- [ ] Export to HTML (planned)
+## Usage
 
-1. Type
-2. Read
-3. Repeat
+> Open a file and start typing. Dawn saves as you go.
+
+```sh
+dawn notes.md
+dawn --theme paper notes.md
+```
 
 ### Keys
 
 | Key | Action |
-| --- | --- |
-| `Ctrl-S` | save |
-| `Ctrl-Q` | quit |
-| `Ctrl-F` | find |
+|-----|--------|
+| ⌃S | save |
+| ⌃Q | quit |
+
+![demo](https://raw.githubusercontent.com/andrewmd5/dawn/main/assets/demo.gif)
 
 ---
 
-## Portability
+## License
 
-Dawn builds on Linux, macOS and Windows. This section is named in the item's `readme-skip` and is dropped.
-
-## Licence
-
-MIT — dropped as a stock section.
+MIT
