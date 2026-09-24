@@ -26,6 +26,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -33,11 +36,21 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public final class MnnTaiRuntime implements TaiRuntime {
+    private static final int DEFAULT_KEEP_WARM_MINUTES = 30;
+
     private final Context appContext;
     /** Shared with the router's other runtimes; written wherever the session is set or released. */
     private final TaiResidency residency;
+    /** Runs the idle / keep-warm expiry, the same way LiteRT's "tai-runtime-idle" thread does. */
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "tai-mnn-idle");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private LlmSession session;
+    private ScheduledFuture<?> idleUnloadFuture;
+    private long idleUnloadAtMs;
     private String runtimeState = "unloaded";
     private String statusMessage = "MNN runtime is unloaded.";
     private String loadedModelId;
@@ -89,7 +102,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
             activeGenerationId,
             activeGenerationStartedAtMs,
             keepWarmUntilMs,
-            keepWarmUntilMs > 0L ? keepWarmUntilMs : 0L,
+            idleUnloadAtMs,
             loadedAtMs,
             lastUsedAtMs
         );
@@ -133,7 +146,22 @@ public final class MnnTaiRuntime implements TaiRuntime {
     @NonNull
     @Override
     public JSONObject keepWarm(@NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options, int minutes) throws JSONException {
-        return loadInternal(modelSpec, options, minutes);
+        int keepWarmMinutes = minutes > 0 ? minutes : DEFAULT_KEEP_WARM_MINUTES;
+        synchronized (this) {
+            // The model is already up: extend its warmth instead of paying a reload, as LiteRT does.
+            if (!generating && session != null && modelSpec.id.equals(loadedModelId)) {
+                keepWarmUntilMs = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(keepWarmMinutes);
+                statusMessage = "MNN model is warm.";
+                maybeRefreshStateLocked();
+                scheduleIdleUnloadLocked();
+                JSONObject data = stateEnvelopeLocked(true);
+                data.put("keepWarm", true);
+                data.put("keepWarmMinutes", keepWarmMinutes);
+                data.put("keepWarmUntilMs", keepWarmUntilMs);
+                return data;
+            }
+        }
+        return loadInternal(modelSpec, options, keepWarmMinutes);
     }
 
     @NonNull
@@ -274,6 +302,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
                 TaiModelSpec.BACKEND_MNN_LLM, backendName(options));
             runtimeState = "loaded";
             statusMessage = keepWarmUntilMs > 0L ? "MNN model loaded and warm." : "MNN model loaded.";
+            maybeRefreshStateLocked();
+            scheduleIdleUnloadLocked();
             JSONObject data = stateEnvelopeLocked(true);
             data.put("loadedModelId", loadedModelId);
             data.put("backend", backendName(options));
@@ -547,6 +577,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         lastUsedAtMs = now;
         runtimeState = "generating";
         statusMessage = "Generating.";
+        cancelIdleUnloadLocked();
         residency.setBusy(TaiResidency.Kind.CHAT, loadedModelId, true);
         return activeGenerationId;
     }
@@ -574,14 +605,79 @@ public final class MnnTaiRuntime implements TaiRuntime {
         runtimeState = "loaded";
         cancelRequested = false;
         maybeRefreshStateLocked();
+        scheduleIdleUnloadLocked();
     }
 
+    /** Mirrors LiteRT: a loaded, idle model reports {@code idle-warm} while its keep-warm runs, {@code loaded} after. */
     private void maybeRefreshStateLocked() {
-        if (loadedModelId == null || generating || keepWarmUntilMs <= 0L) return;
-        if (System.currentTimeMillis() > keepWarmUntilMs) keepWarmUntilMs = 0L;
+        if (loadedModelId == null || generating) return;
+        if (keepWarmUntilMs > 0L && System.currentTimeMillis() > keepWarmUntilMs) keepWarmUntilMs = 0L;
+        if ("loaded".equals(runtimeState) || "idle-warm".equals(runtimeState)) {
+            runtimeState = keepWarmUntilMs > System.currentTimeMillis() ? "idle-warm" : "loaded";
+        }
+    }
+
+    /**
+     * The same expiry LiteRT chat has: the session is released at the later of the keep-warm end
+     * and the idle-unload setting counted from last use; neither set means it stays until an
+     * unload. Before this the keep-warm merely stopped being reported and the session stayed.
+     */
+    private void scheduleIdleUnloadLocked() {
+        cancelIdleUnloadLocked();
+        if (session == null) {
+            idleUnloadAtMs = 0L;
+            return;
+        }
+        long target = calculateUnloadAtMsLocked();
+        idleUnloadAtMs = target;
+        if (target <= 0L) return;
+        long delayMs = Math.max(1000L, target - System.currentTimeMillis());
+        idleUnloadFuture = scheduler.schedule(this::maybeUnloadAfterIdle, delayMs, TimeUnit.MILLISECONDS);
+    }
+
+    private void maybeUnloadAfterIdle() {
+        synchronized (this) {
+            if (session == null) return;
+            if (generating) {
+                scheduleIdleUnloadLocked();
+                return;
+            }
+            long target = calculateUnloadAtMsLocked();
+            idleUnloadAtMs = target;
+            long now = System.currentTimeMillis();
+            if (target > now) {
+                idleUnloadFuture = scheduler.schedule(this::maybeUnloadAfterIdle, target - now, TimeUnit.MILLISECONDS);
+                return;
+            }
+            if (target > 0L) {
+                releaseSessionLocked();
+                runtimeState = "unloaded";
+                statusMessage = "MNN model unloaded after idle or keep-warm timeout.";
+            }
+        }
+    }
+
+    private long calculateUnloadAtMsLocked() {
+        long target = 0L;
+        long now = System.currentTimeMillis();
+        if (keepWarmUntilMs > now) target = keepWarmUntilMs;
+        int idleMinutes = loadedOptions != null && loadedOptions.idleUnloadMinutes != null ? loadedOptions.idleUnloadMinutes : 0;
+        if (idleMinutes > 0) {
+            long idleTarget = lastUsedAtMs + TimeUnit.MINUTES.toMillis(idleMinutes);
+            target = Math.max(target, idleTarget);
+        }
+        return target;
+    }
+
+    private void cancelIdleUnloadLocked() {
+        if (idleUnloadFuture != null) {
+            idleUnloadFuture.cancel(false);
+            idleUnloadFuture = null;
+        }
     }
 
     private void releaseSessionLocked() {
+        cancelIdleUnloadLocked();
         if (session != null) {
             try {
                 session.release();
@@ -589,8 +685,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
             }
         }
         session = null;
-        // Every release funnels through here: unload, the release before a replacing load, and
-        // the pending unload after a cancelled generation.
+        // Every release funnels through here: unload, the idle / keep-warm timer, the release
+        // before a replacing load, and the pending unload after a cancelled generation.
         if (loadedModelId != null) residency.deregister(TaiResidency.Kind.CHAT, loadedModelId);
         loadedModelId = null;
         loadedModelPath = null;
@@ -599,6 +695,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         loadedAtMs = 0L;
         lastUsedAtMs = 0L;
         keepWarmUntilMs = 0L;
+        idleUnloadAtMs = 0L;
     }
 
     @NonNull

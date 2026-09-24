@@ -191,8 +191,22 @@ public final class TaiResidency {
     }
 
     public boolean isResident(@NonNull Kind kind, @NonNull String modelId) {
+        return find(kind, modelId) != null;
+    }
+
+    /** The resident of {@code kind} with this id as it is right now, or {@code null} when there is none. */
+    @Nullable
+    public Entry find(@NonNull Kind kind, @NonNull String modelId) {
         for (Entry entry : entries) {
-            if (entry.matches(kind, modelId)) return true;
+            if (entry.matches(kind, modelId)) return entry;
+        }
+        return null;
+    }
+
+    /** Whether any model is resident; the RUNTIME baseline on its own does not count. */
+    public boolean hasModels() {
+        for (Entry entry : entries) {
+            if (entry.kind != Kind.RUNTIME) return true;
         }
         return false;
     }
