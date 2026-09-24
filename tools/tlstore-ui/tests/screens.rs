@@ -1252,7 +1252,8 @@ fn install_number_counts_up() {
     std::fs::remove_file(h.dir.join("hold")).unwrap();
 }
 
-/// The frame's output with picture uploads (`a=t` and their continuation chunks) left out.
+/// The frame's output with picture uploads (`a=t`, clip frames `a=f` and their continuation
+/// chunks) left out.
 fn split_output(out: &str) -> (usize, usize) {
     let b = out.as_bytes();
     let (mut i, mut upload) = (0, 0);
@@ -1274,7 +1275,9 @@ fn split_output(out: &str) -> (usize, usize) {
                     }
                     i += if b.get(i) == Some(&0x07) { 1 } else { 2 };
                     let body = &out[start + 2..i.min(out.len())];
-                    if b[start + 1] == b'_' && (body.starts_with("Ga=t") || body.starts_with("Gm=")) {
+                    let upload_chunk =
+                        body.starts_with("Ga=t") || body.starts_with("Ga=f") || body.starts_with("Gm=");
+                    if b[start + 1] == b'_' && upload_chunk {
                         upload += i - start;
                     }
                 }
@@ -1312,4 +1315,98 @@ fn frames_stay_small_during_a_transition() {
     // At rest nothing is written frame after frame.
     let late: Vec<_> = sizes.iter().filter(|s| s.0 >= 450).collect();
     assert!(late.iter().all(|s| s.1 == 0), "{late:?}");
+}
+
+// ---------------------------------------------------------------------------
+// The hero clip (an APNG header picture)
+// ---------------------------------------------------------------------------
+
+/// A `w`×`h` APNG of three solid frames (red, green, blue) at 12 fps.
+fn tiny_apng(w: u32, h: u32) -> Vec<u8> {
+    let mut out = Vec::new();
+    {
+        let mut e = png::Encoder::new(&mut out, w, h);
+        e.set_color(png::ColorType::Rgba);
+        e.set_depth(png::BitDepth::Eight);
+        e.set_animated(3, 0).unwrap();
+        e.set_frame_delay(1, 12).unwrap();
+        let mut wr = e.write_header().unwrap();
+        for c in [[255u8, 0, 0, 255], [0, 255, 0, 255], [0, 0, 255, 255]] {
+            let frame: Vec<u8> = (0..w * h).flat_map(|_| c).collect();
+            wr.write_image_data(&frame).unwrap();
+        }
+        wr.finish().unwrap();
+    }
+    out
+}
+
+/// Sends clip frames until the renderer has nothing left to stream; returns everything sent.
+fn stream_all(h: &mut H) -> String {
+    let mut streamed = String::new();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while h.renderer.pending() && Instant::now() < deadline {
+        let mut out = String::new();
+        h.renderer.stream(&mut out);
+        streamed.push_str(&out);
+        std::thread::sleep(Duration::from_millis(2));
+    }
+    assert!(!h.renderer.pending(), "the clip did not finish streaming");
+    streamed
+}
+
+fn header_picture_id(h: &mut H) -> u32 {
+    let placed = h.r().scene.get(El::Picture).and_then(|e| e.picture);
+    placed.unwrap_or_else(|| panic!("no header picture placed:\n{}", h.text)).0
+}
+
+#[test]
+fn hero_clip_plays_after_the_rest_and_is_freed_on_leave() {
+    let (mut h, clock) = animated(53, 26, true);
+    std::fs::write(h.dir.join("pics/dawn.png"), tiny_apng(60, 30)).unwrap();
+    h.key(Key::Down);
+    assert_eq!(h.header_item(), "dawn");
+    advance(&mut h, &clock, 200);
+    h.settle();
+    assert!(h.log("calls.log").contains("picture dawn"), "{}", h.log("calls.log"));
+    let pic_id = header_picture_id(&mut h);
+    assert!(h.out.contains(&format!(",i={pic_id},q=2,o=z")), "the still is uploaded first:\n{:?}", h.out);
+    assert!(!h.out.contains("\x1b_Ga=f"), "no frame rides with the still");
+    assert!(h.renderer.pending(), "frames to follow");
+    let streamed = stream_all(&mut h);
+    let head = format!("\x1b_Ga=f,i={pic_id},f=32,");
+    assert_eq!(streamed.matches(&head).count(), 2, "two frames after the still:\n{streamed:?}");
+    assert!(streamed.contains(",X=1,z=83,q=2,o=z,m="), "12 fps gaps, replaced in place:\n{streamed:?}");
+    let tail = format!("\x1b_Ga=a,i={pic_id},r=1,z=83,s=3,v=1,q=2\x1b\\");
+    assert!(streamed.ends_with(&tail), "then the loop:\n{streamed:?}");
+    // Nothing more at rest.
+    h.draw();
+    assert_eq!(h.out, "");
+    // The cursor moves on: the clip's image goes, frames and all.
+    h.key(Key::Down);
+    assert_ne!(h.header_item(), "dawn");
+    assert!(h.out.contains(&format!("\x1b_Ga=d,d=I,i={pic_id},q=2\x1b\\")), "{:?}", h.out);
+    assert!(!h.renderer.pending());
+}
+
+#[test]
+fn motion_off_keeps_the_hero_still() {
+    let mut h = H::new(
+        53,
+        26,
+        Opts { caps: true, motion: Some(Box::new(Timeline::new())), motion_off: true, ..Opts::default() },
+    );
+    std::fs::write(h.dir.join("pics/dawn.png"), tiny_apng(60, 30)).unwrap();
+    h.key(Key::Down);
+    h.settle();
+    let pic_id = header_picture_id(&mut h);
+    assert!(h.out.contains(&format!(",i={pic_id},q=2,o=z")), "the still is uploaded:\n{:?}", h.out);
+    assert!(!h.renderer.pending(), "no frames follow");
+    assert!(!h.out.contains("\x1b_Ga=f") && !h.out.contains("\x1b_Ga=a"));
+    let mut out = String::new();
+    h.renderer.stream(&mut out);
+    assert!(out.is_empty());
+    // Moving on keeps the still's data, as for any picture.
+    h.key(Key::Down);
+    assert!(h.out.contains(&format!("\x1b_Ga=d,d=i,i={pic_id},p=1,q=2\x1b\\")), "{:?}", h.out);
+    assert!(!h.out.contains("d=I"));
 }

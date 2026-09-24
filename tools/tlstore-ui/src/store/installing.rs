@@ -63,7 +63,8 @@ impl View for Installing {
         let info = st.cat.info(&st.env, &name).clone();
         let setup = info.setup();
         let repo = info.upstream().map(str::to_string);
-        let (hdr, pic) = header_for(p, st, &name, 7, !setup, false);
+        // The header picture stays a still here: nothing plays while the script works.
+        let (hdr, pic) = header_for(p, st, &name, 7, !setup, false, false);
         let state = if running {
             Some(verb.ing())
         } else if failed {

@@ -13,6 +13,9 @@ use crate::term::{self, Caps, Event, Key, MouseKind, Parser, Size, TermIo, Tty};
 
 /// Frame interval while animating (60 fps).
 pub const FRAME: Duration = Duration::from_micros(16_667);
+/// How often a frame of a header clip is sent while one is streaming (one per tick), so the
+/// upload never holds the loop for longer than one frame's write.
+pub const STREAM_PACE: Duration = FRAME;
 /// How long a lone ESC waits for the rest of a sequence before it counts as the Esc key.
 pub const ESC_TIMEOUT: Duration = Duration::from_millis(30);
 
@@ -232,16 +235,28 @@ pub fn run(first: Box<dyn Screen>, opts: Options) -> io::Result<()> {
             hits = new_hits;
             dirty = false;
         }
+        // A header clip's frames go out one per pass, between events.
+        if renderer.pending() {
+            out.clear();
+            renderer.stream(&mut out);
+            if !out.is_empty() {
+                tty.write_all(out.as_bytes())?;
+            }
+        }
 
-        // Wait for input, a signal, a watched fd, the ESC timeout or the next frame.
+        // Wait for input, a signal, a watched fd, the ESC timeout, the next frame or the next
+        // clip frame to send.
         let watched = top.watch();
-        let timeout = if parser.pending() {
+        let mut timeout = if parser.pending() {
             Some(ESC_TIMEOUT)
         } else if top.animating() {
             Some(FRAME.saturating_sub(last_tick.elapsed()))
         } else {
             None
         };
+        if renderer.pending() {
+            timeout = Some(timeout.map_or(STREAM_PACE, |t| t.min(STREAM_PACE)));
+        }
         let mut fds: Vec<(RawFd, libc::c_short)> = vec![(tty.fd(), libc::POLLIN), (sig_r, libc::POLLIN)];
         fds.extend(watched.iter().map(|&fd| (fd, libc::POLLIN)));
         let ready = term::poll_fds(&fds, timeout)?;
