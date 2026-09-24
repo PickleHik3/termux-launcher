@@ -200,7 +200,11 @@ and an "Unload all" action. `tai status` / `/v1/status` return the same table.
    is credited the resident chat model even when it is the same model, since the backend closes it
    before reloading. Device check pending: `tai --json runtime` residents with chat + embedding
    loaded, and that the MNN embedding package passes the preflight's `llm.mnn` sidecar checks.
-3. **Done 2026-09-24 (in dev), device check pending.** Measurement: `TaiLoadMeter` samples
+3. **Done 2026-09-24 (in dev), device-verified on pong:** E4B auto at 5.3 GB free planned GPU
+   4096 on the ratio estimate (3.53 GB + 0.88 GB margin; the old 1.8 GB reserve sent this to CPU),
+   measured 2.64 GB; the reload planned from the measurement (3.05 GB, no margin); EmbeddingGemma
+   loaded beside it (measured 126 MB vs 227 MB estimated) with nothing evicted. Follow-up fix
+   b77a96c5: only an STT load may evict idle chat, never an embedding load. Measurement: `TaiLoadMeter` samples
    `MemoryInfo.availMem` every 100 ms on a helper thread across native init only (LiteRT engine
    init, MNN session load, both embedding interpreters — the benchmark uses the same meter) and
    `before − minimum` lands on the resident's `measuredBytes` and in `TaiRuntimeHistory` under
