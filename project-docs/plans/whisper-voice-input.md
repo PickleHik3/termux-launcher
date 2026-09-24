@@ -279,8 +279,14 @@ voice input falls back to the Android recognizer. STT unloads after 2 minutes id
    8-token lookup), small.en "sudo apt update"; 22-token agent sentence correct on small.en.
    Timings base.en 10 s: mel 59–125 ms (was 1.7 s before cb1aa1b8 skipped silent frames), encode
    ~142 ms, decode ~78 ms/step — 2.5–3× the benchmark_model figures (57 ms, 30 ms/step); small.en
-   encode ~500 ms, ~240 ms/step. Open: the per-step copy of the full [128 × vocab] logits tensor
-   (26.5 MB) and whether litert 1.4.2's XNNPACK path matches the benchmark build. **Done** (2026-09-24): `WhisperMel`
+   encode ~500 ms, ~240 ms/step. Speed pass (37e44a13): the process sat in Nothing's
+   `nt_foreground` cpuset (CPUs 0-3, little cores); transcribe/sttWarm now run as foreground
+   operations → `top-app`, base.en encode 114 ms, decode ~62 ms/step (~0.3 s per short command),
+   small.en encode ~410 ms, ~192 ms/step. Measured and **not** faster, so dropped: reading the
+   logits row in place instead of copying [128 × vocab], and LiteRT 2.2.0 instead of 1.4.2. Still
+   ~2.3× behind `benchmark_model` on the same file re-run the same evening (50 ms / 27 ms), with the
+   same cgroup, thread priority and XNNPACK coverage (475/476, 292/292 nodes) — next step is
+   `simpleperf` on the debuggable build, not more guesses. **Done** (2026-09-24): `WhisperMel`
    (16 × 25 DFT, pinned to the reference fixture), `WhisperTokenizer` (decode + merge-rank BPE
    encode for the bias line), `WhisperDecoder` (prompt, suppressions, repetition guard),
    `WhisperSegmenter` (pause split, < 0.3 s voiced dropped, 300 ms padding), `WhisperAudio`
