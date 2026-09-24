@@ -271,6 +271,9 @@ public class TaiResidencyTest {
             dir.getAbsolutePath(), 0L, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)));
         assertEquals(1010L, TaiResidency.fileBytes(spec("cfg-embed", TaiModelSpec.BACKEND_MNN_LLM,
             new java.io.File(dir, "config.json").getAbsolutePath(), 0L, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)));
+        // A downloaded package's spec carries config.json's length as sizeBytes; the disk wins.
+        assertEquals(1010L, TaiResidency.fileBytes(spec("dl-embed", TaiModelSpec.BACKEND_MNN_LLM,
+            new java.io.File(dir, "config.json").getAbsolutePath(), 10L, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)));
     }
 
     private static TaiModelSpec chatSpec(String id, String backend, long sizeBytes) {

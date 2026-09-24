@@ -243,23 +243,25 @@ public final class TaiResidency {
     }
 
     /**
-     * The model's size on disk: the catalog's figure when it has one, else the file itself. An MNN
-     * package points at its config.json or at the package directory, so its weights are summed from
-     * the files in that directory.
+     * The model's size on disk. An MNN package points at its config.json or at the package
+     * directory, so its weights are summed from the files in that directory — measured first,
+     * because a downloaded package's spec records only config.json's length as its size. Otherwise
+     * the catalog's figure when it has one, else the file itself.
      */
     public static long fileBytes(@NonNull TaiModelSpec spec) {
-        if (spec.sizeBytes > 0L) return spec.sizeBytes;
-        if (spec.localPath == null || spec.localPath.trim().isEmpty()) return 0L;
-        File file = new File(spec.localPath);
-        File dir = file.isDirectory() ? file : "config.json".equals(file.getName()) ? file.getParentFile() : null;
-        if (dir == null) return file.length();
-        File[] children = dir.listFiles();
-        if (children == null) return file.isDirectory() ? 0L : file.length();
-        long total = 0L;
-        for (File child : children) {
-            if (child.isFile()) total += child.length();
+        File file = spec.localPath == null || spec.localPath.trim().isEmpty() ? null : new File(spec.localPath);
+        File dir = file == null ? null
+            : file.isDirectory() ? file : "config.json".equals(file.getName()) ? file.getParentFile() : null;
+        File[] children = dir == null ? null : dir.listFiles();
+        if (children != null) {
+            long total = 0L;
+            for (File child : children) {
+                if (child.isFile()) total += child.length();
+            }
+            if (total > 0L) return total;
         }
-        return total;
+        if (spec.sizeBytes > 0L) return spec.sizeBytes;
+        return file == null || file.isDirectory() ? 0L : file.length();
     }
 
     @NonNull

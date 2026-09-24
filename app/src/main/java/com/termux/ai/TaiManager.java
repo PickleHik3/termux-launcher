@@ -1324,8 +1324,7 @@ public final class TaiManager {
             if (accelerators.isEmpty()) accelerators = Collections.singletonList(preflight.effectiveAccelerator);
         }
         int cap = TaiContextWindowPolicy.effectiveEndpointContextWindow(spec, device.memoryBytes, options.contextWindow);
-        long fileBytes = spec.sizeBytes;
-        if (fileBytes <= 0L && spec.localPath != null) fileBytes = new File(spec.localPath).length();
+        long fileBytes = TaiResidency.fileBytes(spec);
         boolean encoders = spec.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
             || spec.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
         String crashedAccelerator = null;
@@ -1551,7 +1550,7 @@ public final class TaiManager {
         // this process advertises the window the load would actually be given.
         long available = device.availableMemoryBytes;
         if (available > 0L && presence.loaded) available += presence.residentChatBytes;
-        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, spec.sizeBytes,
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, TaiResidency.fileBytes(spec),
             false, device.physicalMemoryBytes, available,
             TaiLoadPreflight.autoAccelerators(appContext, spec, device, TaiModelProfile.forModel(spec)),
             spec.endpointContextWindow, null, 0));
