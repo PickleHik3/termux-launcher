@@ -3,6 +3,8 @@ package com.termux.ai;
 import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
 
 /**
  * On the JVM there is no {@code libtensorflowlite_jni.so} and no {@code libtai_xnnpack.so} to
@@ -10,6 +12,7 @@ import org.junit.Test;
  * throw. That is the only behavior of this class a unit test can exercise; the delegate itself
  * only runs on-device.
  */
+@RunWith(RobolectricTestRunner.class)
 public class TaiXnnpackDelegateTest {
     @Test
     public void createReturnsNullWithoutNativeLibrary() {
