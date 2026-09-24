@@ -68,7 +68,8 @@ final class WhisperAudio {
         if (channels <= 0 || rate <= 0) throw new IOException("WAV file declares no channels or sample rate.");
         float[] mono;
         if (format == WAVE_FORMAT_PCM && bitsPerSample == 16) {
-            mono = decodePcm16(bytes, dataOffset, dataLength, channels, rate);
+            // decodePcm16 resamples itself; pass 16 kHz so the shared resample below runs once.
+            mono = decodePcm16(bytes, dataOffset, dataLength, channels, SAMPLE_RATE);
         } else if (format == WAVE_FORMAT_IEEE_FLOAT && bitsPerSample == 32) {
             int frames = dataLength / (4 * channels);
             mono = new float[frames];

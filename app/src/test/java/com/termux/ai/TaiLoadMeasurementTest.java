@@ -126,8 +126,8 @@ public class TaiLoadMeasurementTest {
         // never chat, whose reload would cost far more than the embedding saves.
         assertEquals(Arrays.asList(mnnEmbedding, stt),
             TaiResidency.evictionCandidates(residents, TaiResidency.Kind.EMBEDDING, TaiModelSpec.BACKEND_LITERT_LM));
-        // An STT load may take everything idle.
-        assertEquals(Arrays.asList(mnnEmbedding, liteRtEmbedding, stt, chat),
+        // An STT load may take everything idle except the STT resident it replaces (credited).
+        assertEquals(Arrays.asList(mnnEmbedding, liteRtEmbedding, chat),
             TaiResidency.evictionCandidates(residents, TaiResidency.Kind.STT, null));
         for (TaiResidency.Entry entry : TaiResidency.evictionCandidates(residents, TaiResidency.Kind.STT, null)) {
             assertFalse(entry.busy);
