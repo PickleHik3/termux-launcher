@@ -84,6 +84,16 @@ counters are not readable by the app. The measure is therefore system-side:
 - `advertisedContextWindow` and `decideLoad` share one resident-credit function (today one assumes
   CPU, the other the real accelerator).
 
+### 3a. Android's own thresholds (pong, 2026-09-24)
+
+`dumpsys activity oom` on pong (12 GB class, 11.5 GB MemTotal): cached-app kill level
+(`CACHED_APP_MAX_ADJ`, which is what `MemoryInfo.threshold` reports) is **315 MB**; the
+foreground-app level is 72 MB. TAI's reserve is max(1.5 GiB, 15 % of the RAM class) = 1.8 GB on
+the same phone — ~6× Android's own "low" line. With YouTube in the foreground, MemAvailable was
+3.1 GB with 3.3 of 4 GB swap in use, i.e. a normal daily-driver state leaves E4B-on-GPU (≈3.5 GB)
+out of reach under any reserve; E2B-on-GPU (≈2.6 GB estimate) would fit a ~0.5 GB floor but not
+the 1.8 GB reserve.
+
 ### 3b. Runtime baseline
 
 After its first chat unload, `:tai_runtime` keeps ~330 MB of anonymous memory (15 MB before the
