@@ -285,8 +285,15 @@ voice input falls back to the Android recognizer. STT unloads after 2 minutes id
    small.en encode ~410 ms, ~192 ms/step. Measured and **not** faster, so dropped: reading the
    logits row in place instead of copying [128 × vocab], and LiteRT 2.2.0 instead of 1.4.2. Still
    ~2.3× behind `benchmark_model` on the same file re-run the same evening (50 ms / 27 ms), with the
-   same cgroup, thread priority and XNNPACK coverage (475/476, 292/292 nodes) — next step is
-   `simpleperf` on the debuggable build, not more guesses. **Done** (2026-09-24): `WhisperMel`
+   same cgroup, thread priority and XNNPACK coverage (475/476, 292/292 nodes). **simpleperf (run-as,
+   cpu-cycles) found the cause: inference is single-threaded** — 99.56 % of samples on the one
+   `tai-runtime-stt` tid, no XNNPACK worker threads exist, and the app's 113 ms / 61 ms equal
+   `benchmark_model --num_threads=1` (118 / 60) against 76 / 28 at 4 threads. litert 1.4.2's
+   NativeInterpreterWrapper does pass getNumThreads()/getUseXNNPACK() to createInterpreter, yet
+   neither dropping the explicit setUseXNNPACK(true) nor a hard-coded setNumThreads(4) produced a
+   worker thread (LiteRT 2.2.0 measured the same). Next: the setUseXNNPACK(false) control (is it
+   XNNPACK's pthreadpool or the interpreter's thread count that is lost?), then either the LiteRT
+   2.x CompiledModel API with explicit CPU thread options or a bundled benchmark-grade runtime. **Done** (2026-09-24): `WhisperMel`
    (16 × 25 DFT, pinned to the reference fixture), `WhisperTokenizer` (decode + merge-rank BPE
    encode for the bias line), `WhisperDecoder` (prompt, suppressions, repetition guard),
    `WhisperSegmenter` (pause split, < 0.3 s voiced dropped, 300 ms padding), `WhisperAudio`
