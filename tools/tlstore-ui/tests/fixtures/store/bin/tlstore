@@ -19,9 +19,15 @@ case "$cmd" in
         exit 0
         ;;
     picture)
-        # A .png (a test's APNG clip) wins over the .jpg still.
+        # `picture <name> demo` is the hero clip (a test's APNG, pics/<name>.png); the plain
+        # form is the still, the .jpg first.
         [ -f "$d/nopics" ] && exit 2
-        for p in "$d/pics/$1.png" "$d/pics/$1.jpg"; do
+        if [ "$2" = demo ]; then
+            [ -f "$d/pics/$1.png" ] || exit 1
+            echo "$d/pics/$1.png"
+            exit 0
+        fi
+        for p in "$d/pics/$1.jpg" "$d/pics/$1.png"; do
             [ -f "$p" ] || continue
             echo "$p"
             exit 0

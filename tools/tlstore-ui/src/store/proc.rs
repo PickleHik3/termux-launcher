@@ -104,6 +104,8 @@ impl Env {
 pub enum Fetch {
     /// `tlstore picture <name>`: the catalog picture.
     Picture(String),
+    /// `tlstore picture <name> demo`: the catalog hero clip (an APNG), when it has one.
+    Demo(String),
     /// `tlstore readme <name>`: the cached upstream README.
     Readme(String),
     /// `tlstore readme-asset <name> <src>`: an image the README refers to.
@@ -114,6 +116,7 @@ impl Fetch {
     pub fn args(&self) -> Vec<&str> {
         match self {
             Fetch::Picture(n) => vec!["picture", n],
+            Fetch::Demo(n) => vec!["picture", n, "demo"],
             Fetch::Readme(n) => vec!["readme", n],
             Fetch::Asset(n, src) => vec!["readme-asset", n, src],
         }

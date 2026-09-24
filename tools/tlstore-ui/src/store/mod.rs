@@ -533,7 +533,13 @@ impl Store {
     /// The header picture's file for `name`: the README's first image when it has arrived,
     /// else the catalog picture. `None` while nothing has arrived or nothing exists; the
     /// bool says whether something may still come.
-    pub fn header_picture_path(&mut self, name: &str, readme_first: bool) -> (Option<PathBuf>, bool) {
+    pub fn header_picture_path(&mut self, name: &str, readme_first: bool, animate: bool) -> (Option<PathBuf>, bool) {
+        // The hero clip wins once it is here; until then (or without one) the still shows.
+        if animate {
+            if let Got::Ready(p) = self.fetch(Fetch::Demo(name.to_string())) {
+                return (Some(p), false);
+            }
+        }
         let mut pending = false;
         if readme_first {
             let first = match self.readme(name) {
@@ -759,13 +765,13 @@ pub fn header_for(
     if !p.f.ctx.caps.kitty_graphics {
         return (layout::header(cols, rows, body_need, None), None);
     }
-    let (path, pending) = st.header_picture_path(name, readme_first);
+    let animate = animate && p.f.ctx.motion;
+    let (path, pending) = st.header_picture_path(name, readme_first, animate);
     let rested = st.header_rested(name, p.f.ctx.motion);
     let Some(path) = path else {
         let pic_rows = (pending || reserve).then_some(u16::MAX);
         return (layout::header(cols, rows, body_need, pic_rows), None);
     };
-    let animate = animate && p.f.ctx.motion;
     let probe_hdr = layout::header(cols, rows, body_need, Some(u16::MAX));
     let box_w = probe_hdr.content.w as u32 * cw as u32;
     let box_h = PICTURE_MAX_ROWS as u32 * ch as u32;
