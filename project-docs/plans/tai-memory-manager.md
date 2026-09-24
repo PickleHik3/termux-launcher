@@ -137,7 +137,7 @@ and an "Unload all" action. `tai status` / `/v1/status` return the same table.
    active backend is a volatile pointer, so status, cancel and the pressure watch reach the
    backend's own short monitor. A router-level state snapshot was deliberately not added — backends
    change state (generation, idle unload, keep-warm expiry) without passing through the router, so a
-   snapshot would go stale. Device check (load E4B, `tai cancel` mid-load → prompt 499) pending.
+   snapshot would go stale. Device-verified on pong 2026-09-24: `tai cancel` 0.3 s into an E4B load answered in 42 ms and the load returned `model_load_cancelled` at 735 ms; status during the load answered in ~50 ms.
    Also: the 2026-09-24 probe lost pong's network while a CPU 16k E4B generation ran; nothing was
    killed, but a re-run with logcat captured belongs in this phase's device check.
 2. Residency registry; chat and both embedding runtimes register; embeddings go through the budget.
