@@ -87,13 +87,15 @@ sha512_b64() {
 }
 
 # The Revision 5 columns (category upstream setup standfirst does1..3 try
-# notes author licence size picture picture-digest demo featured) and the
-# Revision 6 one (readme-skip), appended after summary. Every fixture row
-# carries one of these two so the catalog stays 27 columns wide; R5_HELLO gives
-# "hello" a category, makes it the featured item and names two README sections
-# to skip, so list/search/info --tsv have something real to read back.
-R5_NONE="-	-	0	-	-	-	-	-	-	-	-	-	-	-	-	0	-"
-R5_HELLO="Tools	-	0	a greeting from the item list	Shows a greeting	Keeps it plain text	Does nothing else	hello	one note|another note	Test Author	MIT	~1 KB	file://example/hello.jpg	deadbeef	-	1	Portability|Star history"
+# notes author licence size picture picture-digest demo featured), the
+# Revision 6 one (readme-skip) and the pinned-content addendum's three
+# (readme readme-digest demo-digest), appended after summary. Every fixture
+# row carries one of these two so the catalog stays 30 columns wide;
+# R5_HELLO gives "hello" a category, makes it the featured item and names two
+# README sections to skip, so list/search/info --tsv have something real to
+# read back.
+R5_NONE="-	-	0	-	-	-	-	-	-	-	-	-	-	-	-	0	-	-	-	-"
+R5_HELLO="Tools	-	0	a greeting from the item list	Shows a greeting	Keeps it plain text	Does nothing else	hello	one note|another note	Test Author	MIT	~1 KB	file://example/hello.jpg	deadbeef	-	1	Portability|Star history	-	-	-"
 
 # write_catalog <file> <serial> <version> <fakebin payload> — the version is the
 # one hello and fakebin carry, so a newer catalog moves a config item on too.
@@ -101,7 +103,7 @@ write_catalog() {
     local out="$1" serial="$2" fbver="$3" fbfile="$4"
     {
         printf '# tlstore catalog\tserial=%s\n' "$serial"
-        printf '# name\tkind\tversion\tprefixes\tsource\tdigest\ttarget\trequires\toptions\tsummary\tcategory\tupstream\tsetup\tstandfirst\tdoes1\tdoes2\tdoes3\ttry\tnotes\tauthor\tlicence\tsize\tpicture\tpicture-digest\tdemo\tfeatured\treadme-skip\n'
+        printf '# name\tkind\tversion\tprefixes\tsource\tdigest\ttarget\trequires\toptions\tsummary\tcategory\tupstream\tsetup\tstandfirst\tdoes1\tdoes2\tdoes3\ttry\tnotes\tauthor\tlicence\tsize\tpicture\tpicture-digest\tdemo\tfeatured\treadme-skip\treadme\treadme-digest\tdemo-digest\n'
         printf 'hello\tfile\t%s\t*\tfile://%s/hello.conf\t%s\t~/.config/hello.conf\t-\t-\tA greeting you can read.\t%s\n' "$fbver" "$FX" "$(sha "$FX/hello.conf")" "$R5_HELLO"
         printf 'mine\tfile-once\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/mine.conf\t-\t-\tYours to edit, installed once.\t%s\n' "$FX" "$(sha "$FX/mine.conf")" "$R5_NONE"
         printf 'fakebin\tbinary\t%s\t*\tfile://%s/%s\t%s\t-\t-\t-\tA small tool for the terminal.\t%s\n' "$fbver" "$FX" "$fbfile" "$(sha "$FX/$fbfile")" "$R5_NONE"
@@ -123,12 +125,18 @@ write_catalog() {
         # A real, fetchable picture and demo, so `tlstore picture` has
         # something genuine to verify and cache. Digests are computed here,
         # not folded into R5_HELLO/R5_NONE, since they depend on the fixture
-        # files this function's caller already made.
-        printf 'pictured\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/pictured.conf\t-\t-\tHas a real picture and demo, for the picture command tests.\tTools\t-\t0\tan item with a picture\tShows a picture\tKeeps it simple\tHas a demo too\tpictured\t-\tTest Author\tMIT\t~1 KB\tfile://%s/pictured.jpg\t%s\tfile://%s/pictured-demo.jpg\t0\t-\n' \
-            "$FX" "$(sha "$FX/hello.conf")" "$FX" "$(sha "$FX/pictured.jpg")" "$FX"
+        # files this function's caller already made. The demo's own digest is
+        # real too now (demo-digest), so `tlstore picture pictured demo` is
+        # digest-checked the same way the cover picture is.
+        printf 'pictured\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/pictured.conf\t-\t-\tHas a real picture and demo, for the picture command tests.\tTools\t-\t0\tan item with a picture\tShows a picture\tKeeps it simple\tHas a demo too\tpictured\t-\tTest Author\tMIT\t~1 KB\tfile://%s/pictured.jpg\t%s\tfile://%s/pictured-demo.jpg\t0\t-\t-\t-\t%s\n' \
+            "$FX" "$(sha "$FX/hello.conf")" "$FX" "$(sha "$FX/pictured.jpg")" "$FX" "$(sha "$FX/pictured-demo.jpg")"
         # Same picture file, but the catalog's own digest for it is wrong —
         # `tlstore picture` must refuse it the way any other digest mismatch is.
-        printf 'badpic\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/badpic.conf\t-\t-\tHas a picture whose digest never matches, on purpose.\tTools\t-\t0\t-\t-\t-\t-\t-\t-\tTest Author\tMIT\t-\tfile://%s/pictured.jpg\t0000000000000000000000000000000000000000000000000000000000000000\t-\t0\t-\n' \
+        printf 'badpic\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/badpic.conf\t-\t-\tHas a picture whose digest never matches, on purpose.\tTools\t-\t0\t-\t-\t-\t-\t-\t-\tTest Author\tMIT\t-\tfile://%s/pictured.jpg\t0000000000000000000000000000000000000000000000000000000000000000\t-\t0\t-\t-\t-\t-\n' \
+            "$FX" "$(sha "$FX/hello.conf")" "$FX"
+        # A demo whose digest never matches, on purpose — the demo-digest
+        # side of the same rule, kept separate from badpic's picture-digest.
+        printf 'baddemo\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/baddemo.conf\t-\t-\tHas a demo whose digest never matches, on purpose.\tTools\t-\t0\t-\t-\t-\t-\t-\t-\tTest Author\tMIT\t-\t-\t-\tfile://%s/pictured-demo.jpg\t0\t-\t-\t-\t0000000000000000000000000000000000000000000000000000000000000000\n' \
             "$FX" "$(sha "$FX/hello.conf")" "$FX"
         # A binary whose source is a FIFO: curl blocks reading it until this
         # test writes to the other end, so a --progress install can be
@@ -143,12 +151,27 @@ write_catalog() {
         printf 'untagged\tfile\t3.0.0\t*\tfile://%s/hello.conf\t%s\t~/.config/untagged.conf\t-\t-\tHas no v tag, so HEAD it is.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/untagged)"
         printf 'rolling\tfile\tlatest\t*\tfile://%s/hello.conf\t%s\t~/.config/rolling.conf\t-\t-\tNo version to speak of.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/rolling)"
         printf 'nowhere\tfile\t1.0.0\t*\tfile://%s/hello.conf\t%s\t~/.config/nowhere.conf\t-\t-\tIts upstream cannot be reached.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/nowhere)"
+        # Pinned content (Revision 6 addendum): an item whose readme column
+        # points at a pinned copy instead of an upstream one. "readmepinned"
+        # verifies against the real digest and must never touch GitHub at
+        # all (its upstream, demo/readmepinned, has no fixture tree under
+        # $GH); "readmepinnedbad" carries a digest that never matches, so the
+        # fetch must fail — no silent fall back to upstream.
+        printf 'readmepinned\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/readmepinned.conf\t-\t-\tRead from a pinned copy, not upstream.\t%s\n' \
+            "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream_pinned demo/readmepinned "file://$FX/pinned-hero.md" "$(sha "$FX/pinned-hero.md")")"
+        printf 'readmepinnedbad\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/readmepinnedbad.conf\t-\t-\tA pinned readme whose digest never matches, on purpose.\t%s\n' \
+            "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream_pinned demo/readmepinnedbad "file://$FX/pinned-hero.md" 0000000000000000000000000000000000000000000000000000000000000000)"
     } > "$out"
 }
 
 # The same shape with an upstream, for the readme tests: <version> and
 # <upstream> are the two things `tlstore readme` reads.
-r6_upstream() { printf 'Tools\t%s\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t0\t-' "$1"; }
+r6_upstream() { printf 'Tools\t%s\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t0\t-\t-\t-\t-' "$1"; }
+
+# r6_upstream_pinned <upstream> <readme url> <readme digest> — like
+# r6_upstream, but with a pinned readme (readme, readme-digest) instead of
+# "-", for the pinned-readme tests.
+r6_upstream_pinned() { printf 'Tools\t%s\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t0\t-\t%s\t%s\t-' "$1" "$2" "$3"; }
 
 build_fixture() {
     ROOT="$(mktemp -d)"
@@ -171,6 +194,7 @@ build_fixture() {
     printf 'not really a loader\n' > "$FX/loader.bin"
     printf 'a picture worth caching\n' > "$FX/pictured.jpg"
     printf 'a demo worth caching\n' > "$FX/pictured-demo.jpg"
+    printf '# pinned\n\nread from the pinned copy, never from upstream\n' > "$FX/pinned-hero.md"
     rm -f "$FX/slow.pipe"
     mkfifo "$FX/slow.pipe"
 
@@ -805,6 +829,13 @@ y
     expect_no_out "an item with no picture prints no Picture line" $'^Picture\t'
     expect_out "and featured still prints as 0" $'^Featured\t0$'
     expect_no_out "and nothing to skip prints no Readme-skip line" $'^Readme-skip\t'
+    expect_no_out "and no readme column prints no Readme line" $'^Readme\t'
+    tl info --tsv pictured
+    expect_out "info --tsv names the demo alongside its digest" $'^Demo\tfile://'
+    expect_out "and the demo digest alongside it" $'^Demo-digest\t'"$(sha "$FX/pictured-demo.jpg")"'$'
+    tl info --tsv readmepinned
+    expect_out "info --tsv names a pinned readme" $'^Readme\tfile://'
+    expect_out "and its digest alongside it" $'^Readme-digest\t'"$(sha "$FX/pinned-hero.md")"'$'
     tl info --tsv claude-code
     expect_out "info --tsv names the build tools" $'^Builds with\tdemo-build$'
     tl info --tsv
@@ -835,9 +866,18 @@ y
     expect_out "and returns the very same cached path" "^$PIC_CACHE\$"
     mv "$FX/pictured.jpg.moved" "$FX/pictured.jpg"
 
+    DEMO_DIGEST="$(sha "$FX/pictured-demo.jpg")"
+    DEMO_CACHE="$TESTHOME/.cache/tlstore/pictures/$DEMO_DIGEST.jpg"
     tl_stdout picture pictured demo
     expect_status "picture demo prints the demo's path" 0
+    expect_out "keyed by the demo's own digest, like the cover picture" "^$DEMO_CACHE\$"
     expect_content "and it really is the demo picture" "$OUT" "a demo worth caching"
+
+    tl_stdout picture baddemo demo
+    expect_status "a demo whose digest does not match fails" 1
+    expect_no_out "and prints nothing on stdout" "."
+    expect_no_file "and nothing was cached for it" \
+        "$TESTHOME/.cache/tlstore/pictures/0000000000000000000000000000000000000000000000000000000000000000.jpg"
 
     tl_stdout picture twin
     expect_status "an item with no picture fails" 1
@@ -859,6 +899,10 @@ y
         "$TESTHOME/.cache/tlstore/pictures/0000000000000000000000000000000000000000000000000000000000000000.jpg"
 
     # --- tlstore readme: the upstream README, cached a day, for the item page ---
+    # Every item below (pinned, tagged, untagged, rolling, nowhere) carries
+    # "-" in its readme column (r6_upstream), so these all exercise the
+    # upstream-fallback path — the same path a catalog from before the
+    # pinned-content columns takes for every item.
     RM_CACHE="$TESTHOME/.cache/tlstore/readme"
     rm -rf "$TESTHOME/.cache/tlstore"
 
@@ -878,6 +922,31 @@ y
     tl_stdout readme rolling
     expect_status "any other version reads HEAD" 0
     expect_content "and gets HEAD's README" "$OUT" $'# rolling\n\nread at HEAD'
+
+    # --- pinned content (Revision 6 addendum): readme, readme-digest ---
+    READMEPIN_DIGEST="$(sha "$FX/pinned-hero.md")"
+    READMEPIN_CACHE="$TESTHOME/.cache/tlstore/readme/pinned/$READMEPIN_DIGEST.md"
+
+    mv "$FX/gh" "$FX/gh.away"
+    tl_stdout readme readmepinned
+    expect_status "a pinned readme is served without touching GitHub" 0
+    expect_out "from a digest-keyed cache path, like a picture" "^$READMEPIN_CACHE\$"
+    expect_content "and it really is the pinned copy" "$OUT" "read from the pinned copy, never from upstream"
+    mv "$FX/gh.away" "$FX/gh"
+
+    tl_stdout readme readmepinnedbad
+    expect_status "a pinned readme whose digest does not match fails" 1
+    expect_no_out "and prints nothing on stdout" "."
+    expect_no_file "and nothing was cached for it" \
+        "$TESTHOME/.cache/tlstore/readme/pinned/0000000000000000000000000000000000000000000000000000000000000000.md"
+
+    # A second call for the same pinned readme is served from the same
+    # digest-keyed cache, offline, the same as a repeated `tlstore picture`.
+    mv "$FX/pinned-hero.md" "$FX/pinned-hero.md.moved"
+    tl_stdout readme readmepinned
+    expect_status "a second call is instant and offline" 0
+    expect_out "and returns the very same cached path" "^$READMEPIN_CACHE\$"
+    mv "$FX/pinned-hero.md.moved" "$FX/pinned-hero.md"
 
     # A second call within the day never looks upstream: take GitHub away.
     mv "$FX/gh" "$FX/gh.away"
@@ -1245,13 +1314,17 @@ cp "$repo/scripts/tlstore/build-catalog.sh" "$BC_ROOT/scripts/tlstore/build-cata
 printf 'a fake picture\n' > "$BC_ROOT/scripts/tlstore/pictures/demo.jpg"
 BC_PIC_DIGEST="$(sha "$BC_ROOT/scripts/tlstore/pictures/demo.jpg")"
 BC_SUMS="$BC_ROOT/SHA256SUMS"
+# One bare asset (looked up as "<asset>-aarch64", as always) and one path
+# asset (a pinned readme, looked up by its exact repo-relative path — the
+# pinned-content addendum's binaries: rule).
 printf '1111111111111111111111111111111111111111111111111111111111111111  demo-aarch64\n' > "$BC_SUMS"
+printf '3333333333333333333333333333333333333333333333333333333333333333  readme/demo.md\n' >> "$BC_SUMS"
 
 # bc_write_items <items.tsv path> <featured 0|1> <category>
 bc_write_items() {
-    printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\t%s\tdemo/demo\t0\ta demo item for testing\tShows a demo\tDoes another thing\tDoes one more thing\tdemo\t-\tDemo Author\tMIT\t-\tlauncher:scripts/tlstore/pictures/demo.jpg@abc123\t-\t%s\tPortability|Star history\n' \
+    printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\t%s\tdemo/demo\t0\ta demo item for testing\tShows a demo\tDoes another thing\tDoes one more thing\tdemo\t-\tDemo Author\tMIT\t-\tlauncher:scripts/tlstore/pictures/demo.jpg@abc123\t-\t%s\tPortability|Star history\tbinaries:readme/demo.md@1.0\n' \
         "$3" "$2" > "$1"
-    printf 'part\tpkg\t-\t*\tdemo-pkg\t-\t-\thidden=1\tA hidden part.\t-\t-\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t0\t-\n' >> "$1"
+    printf 'part\tpkg\t-\t*\tdemo-pkg\t-\t-\thidden=1\tA hidden part.\t-\t-\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t0\t-\t-\n' >> "$1"
 }
 
 bc_items="$BC_ROOT/scripts/tlstore/items.tsv"
@@ -1261,19 +1334,29 @@ bc_write_items "$bc_items" 1 Tools
 OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
 if [ "$ST" = 0 ]; then pass; else fail "build-catalog.sh runs against a Revision 6 items.tsv" "$OUT"; fi
 if [ -f "$bc_cat" ]; then pass; else fail "it writes the catalog"; fi
-if awk -F'\t' 'NR==3 { exit (NF == 27 && $27 == "readme-skip") ? 0 : 1 }' "$bc_cat"; then pass; else fail "the header row has 27 columns, readme-skip last"; fi
+if awk -F'\t' 'NR==3 { exit (NF == 30 && $27 == "readme-skip" && $28 == "readme" && $29 == "readme-digest" && $30 == "demo-digest") ? 0 : 1 }' "$bc_cat"; then pass; else fail "the header row has 30 columns, readme/readme-digest/demo-digest last"; fi
 if awk -F'\t' '$1=="demo" { exit ($27=="Portability|Star history") ? 0 : 1 }' "$bc_cat"; then
     pass
 else
-    fail "readme-skip rides through as the last column"
+    fail "readme-skip rides through unchanged"
 fi
-if awk -F'\t' '$1=="part" { exit (NF == 27 && $27=="-") ? 0 : 1 }' "$bc_cat"; then
+if awk -F'\t' -v want="3333333333333333333333333333333333333333333333333333333333333333" '$1=="demo" { exit ($28=="binaries:readme/demo.md@1.0" && $29==want) ? 0 : 1 }' "$bc_cat"; then
     pass
 else
-    fail "a part carries - for readme-skip"
+    fail "a path-style binaries: source resolves by its exact repo-relative path in SHA256SUMS"
+fi
+if awk -F'\t' '$1=="demo" { exit ($30=="-") ? 0 : 1 }' "$bc_cat"; then
+    pass
+else
+    fail "an item with no demo carries - for demo-digest"
+fi
+if awk -F'\t' '$1=="part" { exit (NF == 30 && $27=="-" && $28=="-" && $29=="-" && $30=="-") ? 0 : 1 }' "$bc_cat"; then
+    pass
+else
+    fail "a part carries - for readme-skip, readme, readme-digest and demo-digest"
 fi
 # The very catalog build-catalog.sh wrote, read back by this worktree's tlstore:
-# the last column comes out of info --tsv under its own key.
+# the last columns come out of info --tsv under their own keys.
 bc_prefix="$BC_ROOT/data/data/com.termux/files/usr"
 mkdir -p "$BC_ROOT/home" "$bc_prefix/libexec/termux-launcher/tlstore"
 cp "$bc_cat" "$bc_prefix/libexec/termux-launcher/tlstore/catalog.tsv"
@@ -1281,6 +1364,8 @@ OUT="$(env -i HOME="$BC_ROOT/home" PATH="/usr/bin:/bin" TLSTORE_PREFIX="$bc_pref
     TLSTORE_ARCH=aarch64 /bin/sh "$TLSTORE" info --tsv demo 2>&1)"; ST=$?
 if [ "$ST" = 0 ]; then pass; else fail "tlstore reads the catalog build-catalog.sh wrote" "$OUT"; fi
 if printf '%s' "$OUT" | grep -q $'^Readme-skip\tPortability|Star history$'; then pass; else fail "and info --tsv prints Readme-skip from it" "$OUT"; fi
+if printf '%s' "$OUT" | grep -q $'^Readme\tbinaries:readme/demo.md@1.0$'; then pass; else fail "and info --tsv prints the pinned readme source" "$OUT"; fi
+if printf '%s' "$OUT" | grep -q '^Readme-digest\t3333333333333333333333333333333333333333333333333333333333333333$'; then pass; else fail "and its digest alongside it" "$OUT"; fi
 if awk -F'\t' -v want="$BC_PIC_DIGEST" '$1=="demo" { exit ($24==want) ? 0 : 1 }' "$bc_cat"; then
     pass
 else
@@ -1299,6 +1384,10 @@ if [ "$ST" != 0 ]; then pass; else fail "a row missing the Revision 5 columns is
 printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\tTools\tdemo/demo\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t1\n' > "$bc_items"
 OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
 if [ "$ST" != 0 ]; then pass; else fail "a Revision 5 row, without readme-skip, is refused"; fi
+
+printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\tTools\tdemo/demo\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t1\t-\n' > "$bc_items"
+OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
+if [ "$ST" != 0 ]; then pass; else fail "a Revision 6 row, without the pinned-content readme column, is refused"; fi
 
 bc_write_items "$bc_items" 1 Nonsense
 OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
