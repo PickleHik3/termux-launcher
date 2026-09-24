@@ -213,7 +213,7 @@ pub fn thin(cels: Vec<Cel>, stride: usize) -> Vec<Cel> {
     let stride = stride.max(1);
     let mut out: Vec<Cel> = Vec::with_capacity(cels.len().div_ceil(stride));
     for (i, c) in cels.into_iter().enumerate() {
-        if i % stride == 0 {
+        if i.is_multiple_of(stride) {
             out.push(c);
         } else if let Some(last) = out.last_mut() {
             last.gap_ms += c.gap_ms;
@@ -248,7 +248,7 @@ pub fn stream(
     };
     let mut i = 0usize;
     while let Some(cel) = apng.next_frame()? {
-        if i % stride == 0 {
+        if i.is_multiple_of(stride) {
             if let Some(p) = pending.take() {
                 if !send(p, &mut sent) {
                     return Ok(());
