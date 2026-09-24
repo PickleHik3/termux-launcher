@@ -528,6 +528,54 @@ impl Store {
     }
 }
 
+/// Hooks for the preview renderer (`--shot`): a job at a given percentage without running
+/// the script, and a way onto the Installing view without a key press.
+#[cfg(feature = "shot")]
+impl Store {
+    /// Pretends `tlstore <verb> --progress <name>` is at `pct` percent (100 = finished, ok).
+    /// Replaces any job; nothing is spawned, and nothing is watched.
+    pub fn fake_job(&mut self, verb: Verb, name: &str, pct: u8) {
+        let pct = pct.min(100);
+        let step = match pct {
+            0..=9 => 0,
+            10..=59 => 1,
+            60..=89 => 2,
+            90..=99 => 3,
+            _ => STEPS.len(),
+        };
+        let finished = pct == 100;
+        let message = match verb {
+            Verb::Install => "installed",
+            Verb::Update => "updated",
+            Verb::Remove => "removed",
+        };
+        self.job = Some(Job {
+            verb,
+            names: vec![name.to_string()],
+            task: None,
+            current: Some(name.to_string()),
+            pct,
+            step,
+            done: if finished {
+                vec![Done { name: name.to_string(), ok: true, message: message.into() }]
+            } else {
+                vec![]
+            },
+            exit: finished.then_some(0),
+            cancelled: false,
+        });
+    }
+}
+
+#[cfg(feature = "shot")]
+impl Router {
+    /// Pushes the Installing view (the preview renderer's way in; a person gets there with
+    /// `i`, `u` or `r`).
+    pub fn show_installing(&mut self) {
+        self.navigate(Go::Push(Box::new(installing::Installing::new())));
+    }
+}
+
 enum Leave {
     None,
     /// The view under the top of the stack (after a Push).

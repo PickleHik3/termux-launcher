@@ -82,3 +82,18 @@ Motion off (ctx.motion false = TLSTORE_MOTION=0): no navigate/frame/drawn calls,
   The launcher's animations-off is not visible to shell programs (see the P5 report); nothing reads it yet.
 Measured (tests/screens.rs, 52×45 kitty, push to item): max 2.7 KB per frame, mean 0.46 KB, uploads apart;
   cover-only frames ≈81 B with no text.
+
+# tlstore-ui preview renderer (P0, Revision 6) — for review pages
+
+cargo feature `shot` (off by default; build-ui.sh never enables it, so the shipped binary carries no mono font).
+  tlstore-ui --shot <cols>x<rows> --screen <spec> --out <file.png> [--store <dir>]   |   tlstore-ui --shot-all --out <dir>
+  <spec>: front[:cursor] · front:selected=<a,b> · front:updates · item:<name>[:scroll] · installing:<name>:<pct>
+  --store defaults to tests/fixtures/store (copied to a temp dir, pictures from scripts/tlstore/pictures, gh signed in).
+Runs the real Router (Caps::all(), Ctx.motion=false, 12×26 px cells) and paints the resting frame: surface background,
+  cell backgrounds, kitty placements z<0, glyphs from bundled JetBrains Mono (assets/fonts/jetbrainsmono, OFL) with
+  bold/italic/dim/reverse, underline styles + SGR 58 colour, strikethrough (Style::strike, SGR 9), OSC 66 runs at their
+  scale/fraction/alignment, then placements z≥0. ★/☆ are drawn by hand (not in the face); other missing glyphs are boxes.
+Entry points: shot::{Spec::parse, render(cols,rows,&Spec,store)->Image, shoot(..,&Path), shoot_all(dir,store), cli(args)}.
+  installing:<name>:<pct> uses Store::fake_job + Router::show_installing (both cfg(feature="shot"); no script runs).
+--shot-all writes front, item:dawn, installing:dawn:64 at 53×26, 53×40, 40×24 as <slug>-<cols>x<rows>.png.
+Test: tests/shot.rs (`cargo test --features shot`) renders front 53×26 and checks the PNG has ink where the hero word is.
