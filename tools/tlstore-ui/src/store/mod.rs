@@ -10,6 +10,7 @@ pub mod motion;
 pub mod nogh;
 pub mod paint;
 pub mod proc;
+pub mod readme;
 pub mod scene;
 pub mod updates;
 
