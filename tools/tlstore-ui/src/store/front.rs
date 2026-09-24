@@ -182,7 +182,12 @@ impl View for Front {
         });
         let facts = if name.is_empty() { Default::default() } else { st.facts(&name, state) };
         let content = HeaderContent {
-            masthead: Masthead::Front { updates: st.cat.updates.len(), filter: self.filter },
+            masthead: Masthead::Front {
+                updates: st.cat.updates.len(),
+                filter: self.filter,
+                items: st.cat.items.len(),
+                installed: st.cat.items.iter().filter(|i| i.installed.is_some()).count(),
+            },
             picture: pic,
             name: &name,
             standfirst: info.standfirst(),

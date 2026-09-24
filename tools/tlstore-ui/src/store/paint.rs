@@ -248,8 +248,10 @@ impl<'p, 'a> Paint<'p, 'a> {
 /// The masthead's two shapes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Masthead {
-    /// Front: the mark (tap: home), and `↑ N updates` or `updates · all` right-aligned.
-    Front { updates: usize, filter: bool },
+    /// Front: the wordmark (tap: home) over the masthead row and the blank under it, `↑ N
+    /// updates` or `updates · all` right-aligned on the first, `N items · M installed` on the
+    /// second.
+    Front { updates: usize, filter: bool, items: usize, installed: usize },
     /// Item and Installing: `‹ apps` (tap: back) and the upstream link, or `our setup`.
     Page { repo: Option<String>, setup: bool },
 }
@@ -286,23 +288,32 @@ pub fn draw_header(p: &mut Paint, h: &Header, c: &HeaderContent) {
 
     // Masthead.
     match &c.masthead {
-        Masthead::Front { updates, filter } => {
-            let px = (ch as u32 / 10).max(1);
-            let mark =
-                (p.f.ctx.cell_known && p.f.ctx.caps.kitty_graphics).then(|| p.f.ctx.pics.mark(px, pal.ink));
-            let placed = mark.as_ref().is_some_and(|m| {
-                let off_y = (ch as u32).saturating_sub(m.height()) / 2;
-                p.picture(El::Mark, m, x0, y, (0, off_y), 1)
-            });
-            let mark_end = match (&mark, placed) {
-                (Some(m), true) => {
-                    let (mcols, _) = m.cells(cw, ch);
-                    p.note(El::Mark, Rect::new(x0, y, mcols, 1), Some((m.id(), 1)), None);
+        Masthead::Front { updates, filter, items, installed } => {
+            // The wordmark: `tlstore` in the script face over the masthead row and the blank
+            // under it (two rows of pixels) where the header has that blank; one row of pixels
+            // in Compact, where it does not. Text when the terminal cannot show pictures.
+            let mark_rows: u16 = if h.name.y >= y + 2 { 2 } else { 1 };
+            let word = (p.f.ctx.cell_known && p.f.ctx.caps.kitty_graphics)
+                .then(|| p.f.ctx.pics.script_word("tlstore", mark_rows as u32 * ch as u32, pal.ink))
+                .filter(|w| w.width() <= (h.content.w / 2) as u32 * cw as u32);
+            let placed = word.as_ref().is_some_and(|w| p.picture(El::Mark, w, x0, y, (0, 0), 1));
+            let mark_end = match (&word, placed) {
+                (Some(w), true) => {
+                    let (mcols, _) = w.cells(cw, ch);
+                    p.note(El::Mark, Rect::new(x0, y, mcols, mark_rows), Some((w.id(), 1)), None);
                     x0 + mcols
                 }
-                _ => p.text(El::Mark, x0, y, "TLSTORE", pal.ink_s().bold()),
+                _ => p.text(El::Mark, x0, y, "tlstore", pal.ink_s().bold()),
             };
-            p.hit(Rect::new(x0, y, mark_end - x0, 1), A_HOME);
+            p.hit(Rect::new(x0, y, mark_end - x0, mark_rows), A_HOME);
+            if mark_rows == 2 && *items > 0 {
+                let count =
+                    format!("{} item{} · {} installed", items, if *items == 1 { "" } else { "s" }, installed);
+                let room = right.saturating_sub(mark_end + 2);
+                if text_width(&count) as u16 <= room {
+                    p.right(El::Context, right, y + 1, &count, pal.dim_s());
+                }
+            }
             if *filter {
                 let all_x = p.right(El::Context, right, y, "all", pal.dim_s().underline(Underline::Single));
                 p.hit(Rect::new(all_x, y, right - all_x, 1), A_ALL);

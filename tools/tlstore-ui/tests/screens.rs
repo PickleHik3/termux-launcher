@@ -388,7 +388,7 @@ fn snapshots_kitty_terminal() {
 #[test]
 fn header_follows_the_cursor_and_shows_the_facts() {
     let mut h = H::new(53, 26, Opts::default());
-    assert!(h.row(0).starts_with("  TLSTORE"), "{}", h.text);
+    assert!(h.row(0).starts_with("  tlstore"), "{}", h.text);
     assert!(h.row(0).trim_end().ends_with("↑ 2 updates"));
     assert_eq!(h.header_item(), "claude-code");
     // No picture on a plain terminal: the name sits right under the masthead.
@@ -930,7 +930,7 @@ fn script_name_needs_a_known_cell_size() {
     h.draw();
     let n = h.r().scene.get(El::Name).cloned().unwrap();
     assert!(n.picture.is_none() && n.text.as_deref() == Some("claude-code"), "{n:?}");
-    assert!(h.has("TLSTORE"), "the pixel mark falls back to text too:\n{}", h.text);
+    assert!(h.has("tlstore"), "the wordmark falls back to text too:\n{}", h.text);
 }
 
 #[test]

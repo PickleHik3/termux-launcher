@@ -65,6 +65,7 @@ fn store() -> ExitCode {
 }
 
 fn main() -> ExitCode {
+    name_process();
     let arg = std::env::args().nth(1).unwrap_or_default();
     let result = match arg.as_str() {
         "" => return store(),
@@ -96,5 +97,15 @@ fn main() -> ExitCode {
             eprintln!("tlstore-ui: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+/// The launcher labels a pane or window chip with the foreground process's name (the `comm`
+/// field of `/proc/<pid>/stat`), which for this binary would read `tlstore-ui`. People know the
+/// store as `tlstore`, so the process calls itself that.
+fn name_process() {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    unsafe {
+        libc::prctl(libc::PR_SET_NAME, c"tlstore".as_ptr());
     }
 }

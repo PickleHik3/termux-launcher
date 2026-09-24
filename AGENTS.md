@@ -374,6 +374,11 @@ GitHub Issues on `PickleHik3/termux-launcher`; every `gh` call passes `-R`. See 
 
 The five default labels, unchanged. See `docs/agents/triage-labels.md`.
 
+### The tlstore catalog
+
+Adding, updating or removing a store item: items.tsv → build-catalog → test.sh → sign → rebuilt
+UI binaries when the crate changed. See `docs/agents/tlstore-catalog.md`.
+
 ### Domain docs
 
 Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
