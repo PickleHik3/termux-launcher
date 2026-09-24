@@ -158,7 +158,7 @@ everywhere else. Before calling a change done, walk this list and say which entr
   Unexpected-Keyboard kept in package `juloo.keyboard2` for upstream diffability. **Local deviations
   from upstream go in `inapp-keyboard/UPSTREAM.md`, always.**
 - `docs/` — contributor and workflow docs. `project-docs/` — durable plans, design docs, release
-  notes, verification baselines. `recipes/`, `ci/`, `site/`, `fastlane/`, `art/` — packaging,
+  notes, verification baselines. `ci/`, `site/`, `fastlane/`, `art/` — packaging,
   build support and store metadata.
 - Never commit generated `build/` or `.gradle/` content.
 

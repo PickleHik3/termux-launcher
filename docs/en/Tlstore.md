@@ -241,10 +241,10 @@ and is ignored where there is no launcher to compare against.
 
 `dawn`, `fastfetch`, `kitten`, `sigye`, and the musl runtime are built by the launcher's maintainer
 rather than coming from Termux's own packages or npm. The binaries themselves are published at
-[PickleHik3/termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries),
+[PickleHik3/tlstore](https://github.com/PickleHik3/tlstore),
 which is what `tlstore install` downloads and checks against a pinned digest. The recipes that
-build them from upstream source — with whatever patches are applied — live in this repository
-under [`recipes/cross`](../../recipes/cross) and [`recipes/termux`](../../recipes/termux); run one
+build them from upstream source — with whatever patches are applied — live in that same repository
+under `recipes/cross` and `recipes/termux`; run one
 yourself to reproduce a binary and compare it against what tlstore installed.
 
 Everything else in the store is unmodified: `claude-code` and `opencode` come straight from npm,
@@ -257,7 +257,7 @@ The catalog that `tlstore` reads (`app/src/main/assets/tlstore/catalog.tsv`) is 
 hand-edit it. To add or change an item:
 
 1. Edit `scripts/tlstore/items.tsv`, the hand-maintained item list.
-2. Run `scripts/tlstore/build-catalog.sh <path to termux-launcher-binaries/SHA256SUMS>` to compute
+2. Run `scripts/tlstore/build-catalog.sh <path to tlstore/SHA256SUMS>` to compute
    digests, bump the serial, and write `catalog.tsv`. A plain `http(s)` source is downloaded once
    to hash it, so that step needs the network; it must name a tag or a commit, never a branch.
 3. Run `scripts/tlstore/sign.sh` to sign it (it also signs the `tlstore` script itself).

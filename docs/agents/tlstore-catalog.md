@@ -14,7 +14,7 @@ contract and the progress stream).
 | Engine (POSIX sh) | `app/src/main/assets/tlstore/tlstore` + `.minisig` | edit, `test.sh`, `sign.sh` |
 | Store UI (Rust) | `tools/tlstore-ui/`; bundled binaries `app/src/main/assets/tlstore/tlstore-ui-<abi>` | `build-ui.sh --install` after any `src/` change |
 | Pictures | `scripts/tlstore/pictures/<name>.jpg` + `SOURCES.md` | you, with the conversion in `SOURCES.md` |
-| Binaries the catalog installs | GitHub `PickleHik3/termux-launcher-binaries`, per tag, `SHA256SUMS` | recipes under `recipes/cross` and `recipes/termux` |
+| Binaries the catalog installs | GitHub `PickleHik3/tlstore` (was termux-launcher-binaries), per tag, `SHA256SUMS` | its `recipes/cross` and `recipes/termux` build them |
 | Launcher-side install | `app/src/main/java/com/termux/app/store/TlstoreInstaller.java` | writes script, catalog, key and UI binary into `$PREFIX` on every start |
 
 The phone reads `catalog.tsv` by fixed column position and requires at least ten columns. New
@@ -41,7 +41,7 @@ in `setup`/`featured`.
      its licence.
 3. **Build the catalog.**
    ```sh
-   scripts/tlstore/build-catalog.sh /path/to/termux-launcher-binaries/SHA256SUMS
+   scripts/tlstore/build-catalog.sh /path/to/tlstore/SHA256SUMS
    ```
    It computes digests (network for plain URLs), bumps the serial (`YYYYMMDDNN`, only forward) and
    writes `catalog.tsv`. A source whose digest cannot be computed stops the build.
@@ -83,4 +83,4 @@ it installed keep it; `tlstore remove <name>` still works from the old catalog t
 
 The catalog ships in the APK, so every edition's release carries it. Nothing else is needed per
 edition: the catalog is edition-neutral except for `prefixes`, where a row can name one app
-package when a binary is built per prefix (see `recipes/cross/README.md`).
+package when a binary is built per prefix (see `recipes/cross/README.md` in the tlstore repository).

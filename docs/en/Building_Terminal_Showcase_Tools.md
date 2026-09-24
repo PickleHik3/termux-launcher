@@ -8,6 +8,10 @@ Android because its clipboard dependency has no Android backend.
 This repository contains pinned, auditable recipes for both applications. They install into
 `~/.local`, leaving files owned by APT untouched.
 
+> The recipes named on this page live in the [PickleHik3/tlstore](https://github.com/PickleHik3/tlstore)
+> repository under `recipes/`, beside the binaries they produce; paths below are relative to a
+> checkout of it.
+
 ## Before building
 
 Make sure `~/.local/bin` is before `$PREFIX/bin` in your shell's `PATH` so the locally built
@@ -42,7 +46,7 @@ Install the compiler and build:
 
 ```sh
 pkg install git rust
-./recipes/termux/sigye/build.sh
+./recipes/termux/sigye/build.sh   # from a checkout of github.com/PickleHik3/tlstore
 sigye
 ```
 
@@ -65,7 +69,7 @@ Install the native toolchain and image libraries, then run the recipe:
 
 ```sh
 pkg install git clang cmake ninja pkg-config linux-headers imagemagick chafa zlib
-./recipes/termux/fastfetch/build.sh
+./recipes/termux/fastfetch/build.sh   # same checkout
 hash -r
 fastfetch --version
 fastfetch --list-features
@@ -140,7 +144,7 @@ It must report the Termux home, not `/data/`.
 several file managers and Fastfetch's `kitty-icat` logo type invoke — and it is not in the Termux
 repositories. Unlike the two recipes above it cannot practically be built on the phone: kitty's
 generated Go sources are produced by a generator that needs a built kitty application, so the
-recipe for it is a host cross-build. See [`recipes/cross/README.md`](../../recipes/cross/README.md).
+recipe for it is a host cross-build. See `recipes/cross/README.md` in [PickleHik3/tlstore](https://github.com/PickleHik3/tlstore).
 
 Termux Launcher implements the in-band Kitty graphics protocol that `kitten icat` uses, so a
 `kitten` binary built this way displays images here. Two things it will not do:
