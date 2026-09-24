@@ -238,7 +238,12 @@ and an "Unload all" action. `tai status` / `/v1/status` return the same table.
    Device check pending: a `tai load` with an embedding resident short of memory shows `evicted`;
    two E4B GPU loads record a growing `bytes` under the `load|…|gpu|4096` key; a GPU failure with
    an 8k plan falls back to CPU 4k.
-4. **Done 2026-09-24 (in dev), device check pending.** The watch (`TaiRuntimeService`, 2 s) runs
+4. **Done 2026-09-24 (in dev), idle paths device-verified on pong:** E4B + EmbeddingGemma loaded
+   21:09; `idle: evicted embedding embeddinggemma-300m (95 MB, last used 301 s ago)` at 21:14:18;
+   chat idle-unloaded by its 10-min timer ~21:20 (MemAvailable 2.7 → 5.9 GB); `idle exit: …
+   asking the client to unbind` + `unbound, process exiting` at 21:30:20, `:tai_runtime` gone, no
+   crash reported. The pressure tiers are covered by unit tests only (not provoked on the daily
+   driver). The watch (`TaiRuntimeService`, 2 s) runs
    while anything is resident — chat loaded / loading / warm, or any EMBEDDING / STT entry — and
    decides from one `MemoryInfo` reading per tick (`TaiPressureWatch.tier`): `lowMemory` → tier 3,
    cancel in-flight work and unload everything (the old behaviour); else `availMem < threshold ×
