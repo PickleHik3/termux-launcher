@@ -3,7 +3,7 @@
 Phase W: window.open (launcherctl window open / POST /v1/windows). Owns app/src/main/java/**,
 app/src/test/**, docs/en/LauncherCtl_API.md.
 
-Status: implemented, unit-tested green, not yet committed/merged (WIP).
+Status: implemented, unit-tested green, committed at 0a15c3bb. Not merged (waiting on cue).
 
 Root cause found: TerminalSession forks its subprocess only on the first updateSize() call
 (TerminalSession.initializeEmulator, terminal-emulator module); a new window/pane's view isn't
