@@ -23,4 +23,4 @@
 22|
 23|
 24|
-25|  ⏎ open    i install   ␣ select  f keyboa… q quit
+25|  ⏎ open    i install   ␣ select  f keyboard q quit

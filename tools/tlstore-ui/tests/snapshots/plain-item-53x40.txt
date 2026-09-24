@@ -37,4 +37,4 @@
 36|
 37|
 38|
-39|  r remove  u update    s star    o repo    esc back
+39|  r remove  u update    s star    o repo     esc back

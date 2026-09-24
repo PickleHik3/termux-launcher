@@ -143,11 +143,12 @@ pub fn header(cols: u16, rows: u16, body_need: u16, pic_rows: Option<u16>) -> He
     }
 }
 
-/// The five key-row slots' columns. At 53 columns and up: 2, 12, 24, 34, 44; under 44
+/// The five key-row slots' columns. At 53 columns and up: 2, 12, 24, 34, 45 (`f keyboard`
+/// fills slot 4 with a gap to spare and `q quit` / `esc back` fit the last 8); under 44
 /// columns: 1, 8, 16, 24, 32; between, evenly inside the gutters.
 pub fn key_slots(cols: u16) -> [u16; 5] {
     if cols >= BASE_COLS {
-        [2, 12, 24, 34, 44]
+        [2, 12, 24, 34, 45]
     } else if narrow(cols) {
         [1, 8, 16, 24, 32]
     } else {
@@ -333,10 +334,12 @@ mod tests {
 
     #[test]
     fn key_slots_are_fixed() {
-        assert_eq!(key_slots(53), [2, 12, 24, 34, 44]);
-        assert_eq!(key_slots(60), [2, 12, 24, 34, 44]);
+        assert_eq!(key_slots(53), [2, 12, 24, 34, 45]);
+        assert_eq!(key_slots(60), [2, 12, 24, 34, 45]);
         assert_eq!(key_slots(40), [1, 8, 16, 24, 32]);
-        assert_eq!(key_rooms(53), [10, 12, 10, 10, 9]);
+        assert_eq!(key_rooms(53), [10, 12, 10, 11, 8]);
+        // `f keyboard` (10 columns) needs slot 4 to leave a gap before slot 5.
+        assert!(key_rooms(53)[3] > "f keyboard".len() as u16);
         assert_eq!(key_rooms(40), [7, 8, 8, 8, 8]);
         let mid = key_slots(48);
         assert!(mid.windows(2).all(|w| w[1] > w[0]) && mid[4] + key_rooms(48)[4] <= 48);

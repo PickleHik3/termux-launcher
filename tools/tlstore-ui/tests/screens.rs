@@ -420,8 +420,9 @@ fn rows_show_numbers_tags_and_statuses() {
     assert!(rows[6].starts_with("  07  sigye Tools"), "{:?}", rows[6]);
     // The key row: five fixed slots.
     let keys = h.row(hdr.keys as usize);
-    // `f keyboard` is one column too wide for its slot and is cut like any other hint.
-    for (col, word) in [(2, "⏎ open"), (12, "i install"), (24, "␣ select"), (34, "f keyboa…"), (44, "q quit")]
+    // Slot 4 has room for `f keyboard` whole, with a gap before `q quit` at 45.
+    for (col, word) in
+        [(2, "⏎ open"), (12, "i install"), (24, "␣ select"), (34, "f keyboard"), (45, "q quit")]
     {
         let at = keys.find(word).unwrap_or_else(|| panic!("{word} missing: {keys:?}"));
         assert_eq!(unicode_width_of(&keys[..at]), col, "{word} at {col}: {keys:?}");
@@ -602,13 +603,13 @@ fn key_slots_stay_in_place_and_taps_send_their_key() {
     let mut h = H::new(53, 26, Opts { launcherctl: false, ..Opts::default() });
     let keys = layout::header(53, 26, 7, None).keys;
     // The keyboard hint stays in place, dim, and does nothing.
-    assert!(h.row(keys as usize).contains("f keyboa…"), "{}", h.text);
+    assert!(h.row(keys as usize).contains("f keyboard"), "{}", h.text);
     assert_eq!(h.hits.at(34, keys), None);
     h.tap_at(12, keys);
     assert_eq!(h.r().top(), "installing", "slot 2 sends i");
     h.settle();
     h.key(Key::Esc);
-    h.tap_at(44, keys);
+    h.tap_at(45, keys);
     assert!(h.key(Key::Char('q')) || true);
     // Under 44 columns the slots are 1, 8, 16, 24, 32.
     let h = H::new(40, 24, Opts::default());
@@ -624,10 +625,10 @@ fn key_slots_stay_in_place_and_taps_send_their_key() {
 #[test]
 fn fullscreen_calls_launcherctl_and_restores_on_exit() {
     let mut h = H::new(53, 26, Opts::default());
-    assert!(h.has("f keyboa…"), "{}", h.text);
+    assert!(h.has("f keyboard"), "{}", h.text);
     h.key(Key::Char('f'));
     assert_eq!(h.log("launcherctl.log"), "keyboard hide --hold\n");
-    h.tap("f keyboa…");
+    h.tap("f keyboard");
     assert_eq!(h.log("launcherctl.log"), "keyboard hide --hold\nkeyboard show\n");
     h.key(Key::Char('f'));
     let dir = h.dir.clone();

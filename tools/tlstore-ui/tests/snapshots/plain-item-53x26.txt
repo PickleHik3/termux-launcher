@@ -23,4 +23,4 @@
 22|  connection, in both directions, resuming where it
 23|  left off when the connection drops and keeping
 24|
-25|  r remove  u update    s star    o repo    esc back
+25|  r remove  u update    s star    o repo     esc back

@@ -19,7 +19,7 @@ header(cols,rows,body_need,pic_rows:Option<u16>) -> Header { tier, narrow, gutte
   name:Rect(3 rows, 2 Compact), standfirst, facts, body:Rect, notice:rows-2, keys:rows-1 }
   Rows: masthead, blank, [picture P, blank], name, standfirst, facts, blank, body, notice, keys. P = rows − 11 − body_need, ≤12, ≤pic_rows
   (the picture's own rows; u16::MAX = reserve), 0 under 4 or when pic_rows is None; Compact never. 53×26 Front: P 8 over 7 rows; 53×40: P 9 over 20.
-key_slots(cols) = [2,12,24,34,44] (≥53) | [1,8,16,24,32] (<44) | spread between; key_rooms(cols) = columns per slot.
+key_slots(cols) = [2,12,24,34,45] (≥53) | [1,8,16,24,32] (<44) | spread between; key_rooms(cols) = columns per slot.
 wrap(s,w,max_lines)/fit_line(s,w): whole words, `…` when cut. centre_x(rect,w).
 
 use tlstore_ui::store::{Router, Store, Go, View, Verb, Job, Gh, Got, Readme, GH_NOTICE, header_for, paint::*, scene::*, readme, motion::Timeline};

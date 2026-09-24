@@ -23,4 +23,4 @@
 22|  06  opencode AI
 23|  07  sigye Tools
 24|
-25|  ⏎ open    i install   ␣ select  f keyboa… q quit
+25|  ⏎ open    i install   ␣ select  f keyboard q quit
