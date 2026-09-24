@@ -93,6 +93,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private boolean loading;
     private boolean loadCancellationRequested;
     private String loadingModelId;
+    /** MemAvailable drop of the last native init that returned; see {@link #createAndInitializeEngineWithCrashMarker}. */
+    private long lastLoadDropBytes = -1L;
 
     public LiteRtTaiRuntime(@NonNull Context context) {
         this(context, new TaiResidency());
@@ -612,6 +614,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         Engine initializedEngine = null;
         String initializedBackendName = "none";
         String initializedFallbackReason = "";
+        // The options the engine actually came up with: the caller's, unless the GPU->CPU fallback
+        // below had to shrink the window.
+        TaiRuntimeOptions effectiveOptions = options;
         try {
             if (requestedAccelerator == null) {
                 String selectedAccelerator = autoAccelerators.get(0);
@@ -631,10 +636,23 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                             TaiModelSpec.BACKEND_LITERT_LM, "gpu", gpuException.getMessage() == null ? "GPU initialization failed." : gpuException.getMessage());
                         if (!autoAccelerators.contains("cpu")) throw gpuException;
                         throwIfLoadCancellationRequested();
+                        // The budget's rule for a fallback accelerator: the floor window only, and
+                        // it still has to fit what the GPU attempt left free. The plan sized the
+                        // window for the GPU; the CPU is not given it.
+                        TaiRuntimeOptions cpuOptions = cpuFallbackOptions(options);
+                        TaiLoadBudget.Plan cpuPlan = cpuFallbackPlan(modelSpec, cpuOptions);
+                        if (!cpuPlan.fits) {
+                            throw new BudgetRefusal("GPU initialization failed (" + gpuException.getMessage()
+                                + ") and the CPU fallback does not fit the memory budget: needs "
+                                + cpuPlan.neededFreeBytes() / (1024L * 1024L) + " MB free, "
+                                + cpuPlan.availableBytes / (1024L * 1024L) + " MB available.", gpuException);
+                        }
                         Backend backend = new Backend.CPU();
                         initializedBackendName = backend.getName();
-                        initializedFallbackReason = "Auto GPU initialization failed; selected the model's CPU fallback. GPU error: " + gpuException.getMessage();
-                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), options,
+                        initializedFallbackReason = "Auto GPU initialization failed; selected the model's CPU fallback at a "
+                            + cpuOptions.contextWindow + "-token window. GPU error: " + gpuException.getMessage();
+                        effectiveOptions = cpuOptions;
+                        initializedEngine = createAndInitializeEngineWithCrashMarker(modelSpec, modelFile.getAbsolutePath(), cpuOptions,
                             profile, deviceCapabilities, backend, "cpu");
                     }
                 } else {
@@ -657,8 +675,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         } catch (Exception e) {
             TaiRuntimeCrashMarker.clear(appContext);
             // A cancelled load is not an accelerator or audio failure: recording it would lock the
-            // model out of the GPU (known_failed_accelerator) after a user's cancel.
-            if (!isCancellation(e) && !isLoadCancellationRequested()) {
+            // model out of the GPU (known_failed_accelerator) after a user's cancel. Nor is a
+            // budget refusal — free memory running short is a moment, not a verdict on the CPU.
+            boolean refused = e instanceof BudgetRefusal;
+            if (!isCancellation(e) && !isLoadCancellationRequested() && !refused) {
                 TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
                     TaiModelSpec.BACKEND_LITERT_LM, acceleratorFromBackendName(initializedBackendName, requestedAccelerator),
                     e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
@@ -673,6 +693,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 statusMessage = cancelled
                     ? "Model load cancelled."
                     : "LiteRT-LM load failed: " + e.getMessage();
+                if (refused) return error(409, "insufficient_memory", statusMessage);
                 return error(cancelled ? 499 : 500,
                     cancelled ? "model_load_cancelled" : "litert_lm_load_failed", statusMessage);
             }
@@ -685,20 +706,29 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 backendFallbackReason = initializedFallbackReason;
                 loadedModelId = modelSpec.id;
                 loadedModelPath = modelFile.getAbsolutePath();
-                loadedOptions = options;
+                loadedOptions = effectiveOptions;
                 loadedProfile = profile;
                 loadedDeviceCapabilities = deviceCapabilities;
                 loadedAtMs = System.currentTimeMillis();
                 lastUsedAtMs = loadedAtMs;
                 keepWarmUntilMs = keepWarmMinutes > 0 ? loadedAtMs + TimeUnit.MINUTES.toMillis(keepWarmMinutes) : 0L;
                 TaiRuntimeCrashMarker.clear(appContext);
-                // Registered with the accelerator the engine actually came up on, so a GPU->CPU
-                // fallback is accounted at the CPU footprint rather than the plan's GPU one.
-                residency.register(TaiResidency.Entry.chat(modelSpec, TaiModelSpec.BACKEND_LITERT_LM,
-                    acceleratorFromBackendName(backendName, requestedAccelerator),
-                    options.contextWindow != null ? options.contextWindow : TaiLoadBudget.FLOOR_CONTEXT));
+                // Registered with the accelerator and window the engine actually came up on, so a
+                // GPU->CPU fallback is accounted at the CPU footprint rather than the plan's GPU
+                // one — and with the MemAvailable drop this init measured, which history keeps as
+                // the worst case for the next plan. Only here: a cancelled or failed init never
+                // reaches this block.
+                String loadedAccelerator = acceleratorFromBackendName(backendName, requestedAccelerator);
+                int loadedContext = effectiveOptions.contextWindow != null ? effectiveOptions.contextWindow : TaiLoadBudget.FLOOR_CONTEXT;
+                long measured = lastLoadDropBytes;
+                if (measured >= 0L) {
+                    TaiRuntimeHistory.recordMeasuredLoad(appContext, modelSpec, deviceCapabilities,
+                        TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator, loadedContext, measured);
+                }
+                residency.register(TaiResidency.Entry.chat(modelSpec, TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator, loadedContext)
+                    .withMeasured(measured >= 0L ? measured : null));
                 TaiRuntimeHistory.recordSuccess(appContext, modelSpec, deviceCapabilities,
-                    TaiModelSpec.BACKEND_LITERT_LM, acceleratorFromBackendName(backendName, requestedAccelerator));
+                    TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator);
                 if (modelSpec.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) {
                     TaiRuntimeHistory.recordAudioInputOutcome(appContext, modelSpec.id, deviceCapabilities, true);
                 }
@@ -712,8 +742,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 data.put("backend", backendName);
                 data.put("backendFallbackReason", backendFallbackReason.isEmpty() ? JSONObject.NULL : backendFallbackReason);
                 data.put("modelPath", loadedModelPath);
-                data.put("options", options.toJson());
-                data.put("effectiveOptions", effectiveOptionsJson(options, profile));
+                data.put("options", effectiveOptions.toJson());
+                data.put("effectiveOptions", effectiveOptionsJson(effectiveOptions, profile));
+                if (measured >= 0L) data.put("measuredLoadBytes", measured);
                 data.put("modelProfile", profile.toJson());
                 data.put("device", deviceCapabilities.toJson());
                 JSONArray compatibilityWarnings = new JSONArray();
@@ -880,6 +911,11 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         }
     }
 
+    /**
+     * Initializes with the crash marker set and the load meter running: {@link #lastLoadDropBytes}
+     * holds the MemAvailable drop of the init that succeeded, {@code -1} when it could not be
+     * measured. Written and read on the loading thread only (loads are serialized by {@code loading}).
+     */
     private Engine createAndInitializeEngineWithCrashMarker(
         @NonNull TaiModelSpec modelSpec,
         @NonNull String modelPath,
@@ -890,7 +926,52 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         @NonNull String accelerator
     ) {
         TaiRuntimeCrashMarker.markLoad(appContext, modelSpec, options.withAccelerator(accelerator), TaiModelSpec.BACKEND_LITERT_LM);
-        return createAndInitializeEngine(modelSpec, modelPath, options, profile, deviceCapabilities, backend);
+        lastLoadDropBytes = -1L;
+        TaiLoadMeter meter = TaiLoadMeter.start(appContext);
+        try {
+            return createAndInitializeEngine(modelSpec, modelPath, options, profile, deviceCapabilities, backend);
+        } finally {
+            // Stopped on every exit so the sampler thread never outlives the init; a failed or
+            // cancelled init's figure is never read (the success block is not reached).
+            lastLoadDropBytes = meter.stop();
+        }
+    }
+
+    /** A GPU->CPU fallback the memory budget would not admit; never recorded as a CPU failure. */
+    static final class BudgetRefusal extends RuntimeException {
+        BudgetRefusal(@NonNull String message, @Nullable Throwable cause) {
+            super(message, cause);
+        }
+    }
+
+    /**
+     * The options a CPU fallback runs with: the caller's, held to the budget's floor window. The
+     * plan sized the window for the GPU; a larger CPU window was the one configuration the
+     * calibration could not survive (see {@link TaiLoadBudget}).
+     */
+    @NonNull
+    static TaiRuntimeOptions cpuFallbackOptions(@NonNull TaiRuntimeOptions options) {
+        int window = options.contextWindow == null
+            ? TaiLoadBudget.FLOOR_CONTEXT : Math.min(options.contextWindow, TaiLoadBudget.FLOOR_CONTEXT);
+        return options.withContextWindow(window).withAccelerator("cpu");
+    }
+
+    /** Re-checks the budget for the CPU fallback against what is free now, the failed GPU attempt released. */
+    @NonNull
+    private TaiLoadBudget.Plan cpuFallbackPlan(@NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions cpuOptions) {
+        TaiDeviceCapabilities now = TaiDeviceCapabilities.detect(appContext);
+        boolean encoders = modelSpec.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
+            || modelSpec.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
+        int window = cpuOptions.contextWindow != null ? cpuOptions.contextWindow : TaiLoadBudget.FLOOR_CONTEXT;
+        List<TaiResidency.Entry> residents = residency.snapshot();
+        // The previous chat model was closed before this load began; the credit is what is left.
+        long available = TaiResidency.creditedAvailable(now.availableMemoryBytes, residents,
+            TaiResidency.Kind.CHAT, TaiModelSpec.BACKEND_LITERT_LM);
+        TaiLoadBudget.History history = (accelerator, contextTokens) -> TaiRuntimeHistory.measuredLoadBytes(
+            appContext, modelSpec, now, TaiModelSpec.BACKEND_LITERT_LM, accelerator, contextTokens);
+        return TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, TaiResidency.fileBytes(modelSpec),
+            encoders, now.physicalMemoryBytes, available, Collections.singletonList("cpu"), window, null, 0,
+            true, now.memoryThresholdBytes, history, Collections.<TaiResidency.Entry>emptyList()));
     }
 
     @NonNull

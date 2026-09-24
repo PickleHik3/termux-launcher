@@ -8,6 +8,7 @@ import androidx.annotation.Nullable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
@@ -45,20 +46,21 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     }
 
     private MultiBackendTaiRuntime(@NonNull Context context, @NonNull TaiResidency residency) {
-        this(new LiteRtTaiRuntime(context, residency), new MnnTaiRuntime(context, residency), residency);
+        this(new LiteRtTaiRuntime(context, residency), new MnnTaiRuntime(context, residency), residency, context);
     }
 
-    /** Test seam: the backends stand in for the native runtimes. */
+    /** Test seam: the backends stand in for the native runtimes; embedding loads are not metered. */
     MultiBackendTaiRuntime(@NonNull TaiRuntime liteRt, @NonNull TaiRuntime mnn) {
-        this(liteRt, mnn, new TaiResidency());
+        this(liteRt, mnn, new TaiResidency(), null);
     }
 
-    private MultiBackendTaiRuntime(@NonNull TaiRuntime liteRt, @NonNull TaiRuntime mnn, @NonNull TaiResidency residency) {
+    private MultiBackendTaiRuntime(@NonNull TaiRuntime liteRt, @NonNull TaiRuntime mnn, @NonNull TaiResidency residency,
+                                   @Nullable Context context) {
         this.liteRt = liteRt;
         this.mnn = mnn;
         this.residency = residency;
-        embeddings = new LiteRtEmbeddingRuntime(residency);
-        mnnEmbeddings = new MnnEmbeddingRuntime(residency);
+        embeddings = new LiteRtEmbeddingRuntime(residency, context);
+        mnnEmbeddings = new MnnEmbeddingRuntime(residency, context);
         activeAssistant = liteRt;
     }
 
@@ -106,6 +108,49 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
             if (conflict != null) return conflict;
             return target.keepWarm(model, options, minutes);
         }
+    }
+
+    /**
+     * Closes the idle residents the budget chose to make room for a load, through the runtime that
+     * holds each — an embedding runtime's {@code close()}, a chat backend's {@code unload()} — so
+     * the registry deregisters them at the same points it always does. A resident that has become
+     * busy or has gone since the plan was made is skipped, never interrupted. Returns the ids
+     * actually evicted, for the load response's {@code evicted} list.
+     */
+    @NonNull
+    public List<String> evict(@NonNull List<TaiResidency.Entry> victims) throws JSONException {
+        ArrayList<String> evicted = new ArrayList<>();
+        synchronized (loadLock) {
+            for (TaiResidency.Entry victim : victims) {
+                if (!residency.isResident(victim.kind, victim.modelId)) continue;
+                switch (victim.kind) {
+                    case EMBEDDING:
+                        if (TaiModelSpec.BACKEND_MNN_LLM.equals(victim.backend)) mnnEmbeddings.close();
+                        else embeddings.close();
+                        break;
+                    case CHAT: {
+                        TaiRuntime holder = chatHolder(victim.modelId);
+                        if (holder == null || holder.getState().activeGeneration) continue;
+                        holder.unload();
+                        break;
+                    }
+                    default:
+                        continue;
+                }
+                if (!residency.isResident(victim.kind, victim.modelId)) evicted.add(victim.modelId);
+            }
+        }
+        return evicted;
+    }
+
+    /** The backend holding chat model {@code modelId}, or {@code null} when neither does. */
+    @Nullable
+    private TaiRuntime chatHolder(@NonNull String modelId) {
+        for (TaiRuntime candidate : new TaiRuntime[] {liteRt, mnn}) {
+            TaiRuntimeState state = candidate.getState();
+            if (state.loaded && modelId.equals(state.loadedModelId)) return candidate;
+        }
+        return null;
     }
 
     // Never waits on loadLock: a load-cancel is only worth anything while the load is still running.

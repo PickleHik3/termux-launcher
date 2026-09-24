@@ -48,9 +48,9 @@ public final class TaiResidency {
     public static final long RUNTIME_BASELINE_BYTES = 330L * MIB;
 
     /**
-     * Embedding footprint per model-file byte, until phase 3 measures it. A LiteRT {@code .tflite}
-     * interpreter maps the flatbuffer and adds its tensor arena (about 1.3× the file); MNN loads
-     * the package's weights about as they are on disk (1.0×).
+     * Embedding footprint per model-file byte, used until a measured load is on record. A LiteRT
+     * {@code .tflite} interpreter maps the flatbuffer and adds its tensor arena (about 1.3× the
+     * file); MNN loads the package's weights about as they are on disk (1.0×).
      */
     static final long LITERT_EMBEDDING_FACTOR_TENTHS = 13L;
     static final long MNN_EMBEDDING_FACTOR_TENTHS = 10L;
@@ -64,7 +64,7 @@ public final class TaiResidency {
         /** Context tokens for chat, sequence length for embeddings, audio seconds for STT; 0 when n/a. */
         public final int window;
         public final long estimatedBytes;
-        /** Set once a load has been measured (phase 3); {@code null} until then. */
+        /** The MemAvailable drop the load measured ({@link TaiLoadMeter}); {@code null} when it could not be. */
         @Nullable public final Long measuredBytes;
         public final long lastUsedMs;
         /** Generating, embedding or transcribing right now. */
@@ -105,6 +105,12 @@ public final class TaiResidency {
         @NonNull
         Entry withBusy(boolean nowBusy, long nowMs) {
             return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, nowMs, nowBusy);
+        }
+
+        /** The same resident with the MemAvailable drop its load measured; {@code null} leaves it unmeasured. */
+        @NonNull
+        public Entry withMeasured(@Nullable Long nowMeasuredBytes) {
+            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, nowMeasuredBytes, lastUsedMs, busy);
         }
 
         boolean matches(@NonNull Kind otherKind, @NonNull String otherModelId) {
@@ -226,6 +232,32 @@ public final class TaiResidency {
             default:
                 return availableBytes;
         }
+    }
+
+    /**
+     * The residents a load of {@code kind} on {@code backend} may close to make room, in the order
+     * the budget evicts them: embeddings, then STT, then idle chat; the least recently used first
+     * within a kind. Left out: anything busy, the RUNTIME baseline, and what {@link
+     * #creditedAvailable} already counts as replaced — every CHAT resident for a chat load (so a
+     * chat load never "evicts" chat; it replaces it), and this backend's EMBEDDING resident for an
+     * embedding load.
+     */
+    @NonNull
+    public static List<Entry> evictionCandidates(@NonNull List<Entry> residents, @NonNull Kind kind, @Nullable String backend) {
+        ArrayList<Entry> ordered = new ArrayList<>();
+        for (Kind victimKind : new Kind[] {Kind.EMBEDDING, Kind.STT, Kind.CHAT}) {
+            if (victimKind == Kind.CHAT && kind == Kind.CHAT) continue;
+            ArrayList<Entry> ofKind = new ArrayList<>();
+            for (Entry entry : residents) {
+                if (entry.kind != victimKind || entry.busy) continue;
+                if (kind == Kind.EMBEDDING && victimKind == Kind.EMBEDDING
+                        && backend != null && backend.equals(entry.backend)) continue;
+                ofKind.add(entry);
+            }
+            Collections.sort(ofKind, (a, b) -> Long.compare(a.lastUsedMs, b.lastUsedMs));
+            ordered.addAll(ofKind);
+        }
+        return Collections.unmodifiableList(ordered);
     }
 
     /** What a chat load of this spec costs, by the budget's model; the one formula the plan and the registry share. */

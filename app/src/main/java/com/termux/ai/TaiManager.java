@@ -1,6 +1,5 @@
 package com.termux.ai;
 
-import android.app.ActivityManager;
 import android.content.Context;
 import android.net.Uri;
 import android.os.Process;
@@ -479,7 +478,7 @@ public final class TaiManager {
         if (decision.refusal != null) return decision.refusal;
         JSONObject result = localRuntime().load(spec, decision.options);
         result.put("preflight", preflight.toJson());
-        result.put("memoryBudget", planJson(decision.plan));
+        decision.describe(result);
         recordRuntimeResult(spec, preflight, result);
         return result;
     }
@@ -505,13 +504,15 @@ public final class TaiManager {
         TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
         if (preflight.blocked) return preflight.blockingError(preflightStatusCode(preflight));
         TaiRuntimeOptions warmOptions = optionsForPreflight(spec, options, preflight);
+        LoadDecision decision = null;
         if (!localRuntime().isModelLoaded(spec.id)) {
-            LoadDecision decision = decideLoad(spec, options, preflight);
+            decision = decideLoad(spec, options, preflight);
             if (decision.refusal != null) return decision.refusal;
             warmOptions = decision.options;
         }
         JSONObject result = localRuntime().keepWarm(spec, warmOptions, minutes);
         result.put("preflight", preflight.toJson());
+        if (decision != null) decision.describe(result);
         recordRuntimeResult(spec, preflight, result);
         return result;
     }
@@ -525,6 +526,7 @@ public final class TaiManager {
     /** Runs can each spend tens of seconds; the whole {@code tai benchmark} call may take minutes. */
     private static final long BENCHMARK_TIMEOUT_MS = 20 * 60_000L;
     private static final String BENCHMARK_PROMPT = "How are you";
+    private static final long BYTES_PER_MB = 1024L * 1024L;
 
     /**
      * Runs LiteRT-LM's own {@code com.google.ai.edge.litertlm.benchmark()} in the runtime process, so
@@ -603,8 +605,7 @@ public final class TaiManager {
         ValueSeries decodeTpsSeries = new ValueSeries();
         Double firstInitMs = null;
         for (int i = 0; i < params.runs; i++) {
-            MemorySampler sampler = new MemorySampler(appContext);
-            sampler.start();
+            TaiLoadMeter sampler = TaiLoadMeter.start(appContext);
             BenchmarkInfo info;
             try {
                 info = BenchmarkKt.benchmark(modelFile.getAbsolutePath(), backend, params.prefillTokens,
@@ -635,8 +636,8 @@ public final class TaiManager {
             run.put("decodeTps", decodeTps);
             run.put("prefillTokenCount", info.getLastPrefillTokenCount());
             run.put("decodeTokenCount", info.getLastDecodeTokenCount());
-            run.put("availBeforeMb", sampler.beforeMb());
-            run.put("availMinMb", sampler.minMb());
+            run.put("availBeforeMb", sampler.beforeBytes() / BYTES_PER_MB);
+            run.put("availMinMb", sampler.minBytes() / BYTES_PER_MB);
             runsJson.put(run);
         }
         JSONObject data = new JSONObject();
@@ -701,73 +702,6 @@ public final class TaiManager {
             json.put("max", max());
             json.put("count", count);
             return json;
-        }
-    }
-
-    /**
-     * Samples MemAvailable every 100 ms while a benchmark run is in flight, the way {@link
-     * TaiRuntimeService#systemIsLowOnMemory} samples it for the idle watch — but here to report
-     * before/min per run rather than to act on it.
-     */
-    private static final class MemorySampler {
-        private static final long SAMPLE_INTERVAL_MS = 100L;
-        private static final long BYTES_PER_MB = 1024L * 1024L;
-
-        @Nullable private final ActivityManager activityManager;
-        private final long beforeAvailBytes;
-        private volatile long minAvailBytes;
-        private volatile boolean running;
-        @Nullable private Thread thread;
-
-        MemorySampler(@NonNull Context context) {
-            activityManager = context.getSystemService(ActivityManager.class);
-            beforeAvailBytes = sample();
-            minAvailBytes = beforeAvailBytes;
-        }
-
-        private long sample() {
-            if (activityManager == null) return 0L;
-            ActivityManager.MemoryInfo info = new ActivityManager.MemoryInfo();
-            activityManager.getMemoryInfo(info);
-            return info.availMem;
-        }
-
-        void start() {
-            running = true;
-            thread = new Thread(() -> {
-                while (running) {
-                    long avail = sample();
-                    if (avail > 0L && (minAvailBytes <= 0L || avail < minAvailBytes)) minAvailBytes = avail;
-                    try {
-                        Thread.sleep(SAMPLE_INTERVAL_MS);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        return;
-                    }
-                }
-            }, "tai-benchmark-mem-sample");
-            thread.setDaemon(true);
-            thread.start();
-        }
-
-        void stop() {
-            running = false;
-            Thread toJoin = thread;
-            if (toJoin == null) return;
-            toJoin.interrupt();
-            try {
-                toJoin.join(500L);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        }
-
-        long beforeMb() {
-            return beforeAvailBytes / BYTES_PER_MB;
-        }
-
-        long minMb() {
-            return minAvailBytes / BYTES_PER_MB;
         }
     }
 
@@ -1221,8 +1155,9 @@ public final class TaiManager {
             // Management can retain imported packages whose backend is not executable yet, but
             // generation discovery must publish only models with at least one runnable endpoint.
             if (stored.endpointCapabilities.isEmpty()) continue;
+            Integer userContext = settings.getRuntimeOptions(stored).contextWindow;
             TaiModelSpec spec = advertisedContextWindow(TaiContextWindowPolicy.apply(stored, device.memoryBytes,
-                settings.getRuntimeOptions(stored).contextWindow), device, presence);
+                userContext), device, presence, userContext != null);
             // Advertise multimodal LiteRT models as separate modality-scoped ids (chat / -vision /
             // -audio), matching Edge Gallery's per-task loading. See TaiModelVariants.
             for (TaiModelSpec variant : TaiModelVariants.expand(spec,
@@ -1547,7 +1482,7 @@ public final class TaiManager {
         if (decision.refusal != null) return decision.refusal;
         JSONObject load = localRuntime().load(spec, decision.options);
         load.put("preflight", preflight.toJson());
-        load.put("memoryBudget", planJson(decision.plan));
+        decision.describe(load);
         recordRuntimeResult(spec, preflight, load);
         if (!load.optBoolean("ok", false)) return load;
         return null;
@@ -1558,12 +1493,21 @@ public final class TaiManager {
         @Nullable final TaiRuntimeOptions options;
         @Nullable final JSONObject refusal;
         @NonNull final TaiLoadBudget.Plan plan;
+        /** Residents closed to make room, in order; empty when the load fit as is. */
+        @NonNull final List<String> evicted;
 
         LoadDecision(@Nullable TaiRuntimeOptions options, @Nullable JSONObject refusal,
-                     @NonNull TaiLoadBudget.Plan plan) {
+                     @NonNull TaiLoadBudget.Plan plan, @NonNull List<String> evicted) {
             this.options = options;
             this.refusal = refusal;
             this.plan = plan;
+            this.evicted = evicted;
+        }
+
+        /** Stamps the load result with the budget and what was evicted for it. */
+        void describe(@NonNull JSONObject result) throws JSONException {
+            result.put("memoryBudget", planJson(plan));
+            result.put("evicted", new JSONArray(evicted));
         }
     }
 
@@ -1598,25 +1542,30 @@ public final class TaiManager {
             crashedContext = marker.optInt("contextWindow", 0);
         }
         // The resident chat model is closed before this one initializes, so its bytes are this
-        // load's to spend; every other resident stays and is already missing from availMem.
-        long available = TaiResidency.creditedAvailable(device.availableMemoryBytes, residency().snapshot(),
+        // load's to spend; every other resident stays and is already missing from availMem — the
+        // idle ones among them are what the plan may evict when it does not fit as is.
+        List<TaiResidency.Entry> residents = residency().snapshot();
+        long available = TaiResidency.creditedAvailable(device.availableMemoryBytes, residents,
             TaiResidency.Kind.CHAT, spec.backend);
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, fileBytes, encoders,
             device.physicalMemoryBytes, available, accelerators, cap,
-            crashedAccelerator, crashedContext));
-        if (!plan.fits) return new LoadDecision(null, insufficientMemory(spec.displayName, plan), plan);
+            crashedAccelerator, crashedContext, options.contextWindow != null, device.memoryThresholdBytes,
+            measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend)));
+        if (!plan.fits) return new LoadDecision(null, insufficientMemory(spec.displayName, plan), plan, Collections.<String>emptyList());
+        List<String> evicted = evict(plan);
         TaiRuntimeOptions loadOptions = optionsForPreflight(spec, options, preflight);
         if (!TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && plan.accelerator != null
                 && !plan.accelerator.equals(preflight.effectiveAccelerator)) {
             loadOptions = loadOptions.withAccelerator(plan.accelerator);
         }
-        return new LoadDecision(loadOptions.withContextWindow(plan.contextWindow), null, plan);
+        return new LoadDecision(loadOptions.withContextWindow(plan.contextWindow), null, plan, evicted);
     }
 
     /**
      * The one budget for an embedding model that is not resident yet: the same preflight a chat
-     * load passes, then the file-size estimate against what is free. Checked only when the
-     * runtime does not already hold this model, never per batch. {@code null} means go ahead.
+     * load passes, then the measured or file-size estimate against what is free, idle residents
+     * evicted if that is what it takes. Checked only when the runtime does not already hold this
+     * model, never per batch. {@code null} means go ahead.
      */
     @Nullable
     private JSONObject decideEmbeddingLoad(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
@@ -1624,12 +1573,33 @@ public final class TaiManager {
         // embedding package, and the embedding runtimes report their own load errors.
         TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
         // This backend's embedding runtime replaces the model it holds; that one is credited back.
-        long available = TaiResidency.creditedAvailable(device.availableMemoryBytes, residency().snapshot(),
+        List<TaiResidency.Entry> residents = residency().snapshot();
+        long available = TaiResidency.creditedAvailable(device.availableMemoryBytes, residents,
             TaiResidency.Kind.EMBEDDING, spec.backend);
-        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(TaiResidency.embeddingEstimateBytes(spec), "cpu",
-            device.physicalMemoryBytes, available);
+        long worst = TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device, spec.backend, "cpu", 0);
+        TaiLoadBudget.Estimate estimate = worst > 0L ? TaiLoadBudget.Estimate.measured(worst)
+            : TaiLoadBudget.Estimate.ratio(TaiResidency.embeddingEstimateBytes(spec), 0L);
+        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
+            device.memoryThresholdBytes, TaiResidency.evictionCandidates(residents, TaiResidency.Kind.EMBEDDING, spec.backend));
         if (!plan.fits) return openAiError(insufficientMemory(spec.displayName, plan));
+        evict(plan);
         return null;
+    }
+
+    /** The measured load costs of this model on this device, as the budget asks for them. */
+    @NonNull
+    private TaiLoadBudget.History measuredHistory(@NonNull TaiModelSpec spec, @NonNull TaiDeviceCapabilities device) {
+        return (accelerator, contextTokens) -> TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device,
+            spec.backend, accelerator, contextTokens);
+    }
+
+    /** Carries out a plan's evictions through the router; the ids actually closed, in order. */
+    @NonNull
+    private List<String> evict(@NonNull TaiLoadBudget.Plan plan) throws JSONException {
+        if (plan.evicted.isEmpty()) return Collections.emptyList();
+        TaiRuntime local = localRuntime();
+        if (!(local instanceof MultiBackendTaiRuntime)) return Collections.emptyList();
+        return ((MultiBackendTaiRuntime) local).evict(plan.evicted);
     }
 
     /** The refusal every load path answers when the budget says no, chat and embedding alike. */
@@ -1664,10 +1634,16 @@ public final class TaiManager {
         json.put("accelerator", plan.accelerator == null ? JSONObject.NULL : plan.accelerator);
         json.put("contextWindow", plan.contextWindow);
         json.put("estimatedBytes", plan.estimatedBytes);
+        json.put("estimateSource", plan.estimateSource);
+        json.put("reclaimableBytes", plan.reclaimableBytes);
+        json.put("marginBytes", plan.marginBytes);
         json.put("availableBytes", plan.availableBytes);
         json.put("reserveBytes", plan.reserveBytes);
         json.put("neededFreeBytes", plan.neededFreeBytes());
         json.put("measured", plan.measured);
+        JSONArray evicted = new JSONArray();
+        for (TaiResidency.Entry entry : plan.evicted) evicted.put(entry.modelId);
+        json.put("evicted", evicted);
         return json;
     }
 
@@ -1804,19 +1780,22 @@ public final class TaiManager {
      */
     @NonNull
     private TaiModelSpec advertisedContextWindow(@NonNull TaiModelSpec spec, @NonNull TaiDeviceCapabilities device,
-                                                 @NonNull TaiRuntimePresence.Snapshot presence) {
+                                                 @NonNull TaiRuntimePresence.Snapshot presence, boolean explicitContext) {
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) return spec;
         if (presence.loaded && spec.id.equals(presence.modelId) && presence.contextWindow > 0) {
             return spec.withEndpointContextWindow(Math.min(spec.endpointContextWindow, presence.contextWindow));
         }
         // The same credit decideLoad takes from the registry, published by the runtime process so
-        // this process advertises the window the load would actually be given.
+        // this process advertises the window the load would actually be given — the same floor,
+        // measured history and GPU cap too. Evictions are not modelled here: they do not change
+        // the window, only whether the load goes ahead.
         long available = device.availableMemoryBytes;
         if (available > 0L && presence.loaded) available += presence.residentChatBytes;
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, TaiResidency.fileBytes(spec),
             false, device.physicalMemoryBytes, available,
             TaiLoadPreflight.autoAccelerators(appContext, spec, device, TaiModelProfile.forModel(spec)),
-            spec.endpointContextWindow, null, 0));
+            spec.endpointContextWindow, null, 0, explicitContext, device.memoryThresholdBytes,
+            measuredHistory(spec, device), Collections.<TaiResidency.Entry>emptyList()));
         return spec.withEndpointContextWindow(Math.min(spec.endpointContextWindow, plan.contextWindow));
     }
 

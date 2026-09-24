@@ -45,6 +45,12 @@ public final class TaiDeviceCapabilities {
     /** Android's advertisedMem, reported for diagnosis only; {@code 0} when unavailable. */
     public final long advertisedMemoryBytes;
     public final long availableMemoryBytes;
+    /**
+     * Android's own low-memory line, {@code MemoryInfo.threshold}: the free memory at which the
+     * system starts killing cached apps (315 MB on pong). The budget's floor is a multiple of it;
+     * {@code 0} when unavailable.
+     */
+    public final long memoryThresholdBytes;
     public final boolean lowMemory;
     public final String memorySource;
     public final boolean pixel10;
@@ -70,6 +76,7 @@ public final class TaiDeviceCapabilities {
         long physicalMemoryBytes,
         long advertisedMemoryBytes,
         long availableMemoryBytes,
+        long memoryThresholdBytes,
         boolean lowMemory,
         @NonNull String memorySource,
         boolean pixel10,
@@ -91,6 +98,7 @@ public final class TaiDeviceCapabilities {
         this.physicalMemoryBytes = physicalMemoryBytes;
         this.advertisedMemoryBytes = advertisedMemoryBytes;
         this.availableMemoryBytes = availableMemoryBytes;
+        this.memoryThresholdBytes = memoryThresholdBytes;
         this.lowMemory = lowMemory;
         this.memorySource = memorySource;
         this.pixel10 = pixel10;
@@ -109,6 +117,7 @@ public final class TaiDeviceCapabilities {
         long physicalMemoryBytes = 0L;
         long advertisedMemoryBytes = 0L;
         long availableMemoryBytes = 0L;
+        long memoryThresholdBytes = 0L;
         boolean lowMemory = false;
         String memorySource = "unavailable";
         ActivityManager activityManager = (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
@@ -117,6 +126,7 @@ public final class TaiDeviceCapabilities {
             activityManager.getMemoryInfo(memoryInfo);
             physicalMemoryBytes = memoryInfo.totalMem;
             availableMemoryBytes = memoryInfo.availMem;
+            memoryThresholdBytes = Math.max(0L, memoryInfo.threshold);
             lowMemory = memoryInfo.lowMemory;
             memorySource = "totalMem rounded to its RAM class";
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
@@ -144,6 +154,7 @@ public final class TaiDeviceCapabilities {
             physicalMemoryBytes,
             advertisedMemoryBytes,
             availableMemoryBytes,
+            memoryThresholdBytes,
             lowMemory,
             memorySource,
             model.toLowerCase(Locale.ROOT).contains("pixel 10"),
@@ -184,6 +195,7 @@ public final class TaiDeviceCapabilities {
             memoryBytes,
             0L,
             memoryBytes > 0L ? memoryBytes / 2L : 0L,
+            0L,
             false,
             memorySource,
             pixel10,
@@ -268,6 +280,7 @@ public final class TaiDeviceCapabilities {
         json.put("advertisedMemoryBytes", advertisedMemoryBytes);
         json.put("availableMemoryBytes", availableMemoryBytes);
         json.put("availableMemoryGiB", availableMemoryBytes > 0L ? availableMemoryBytes / (double) BYTES_PER_GIB : JSONObject.NULL);
+        json.put("memoryThresholdBytes", memoryThresholdBytes);
         json.put("lowMemory", lowMemory);
         json.put("memorySource", memorySource);
         json.put("pixel10", pixel10);

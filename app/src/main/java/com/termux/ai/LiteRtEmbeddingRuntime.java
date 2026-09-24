@@ -1,5 +1,7 @@
 package com.termux.ai;
 
+import android.content.Context;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -17,6 +19,8 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
     private static final int TOKEN_EOS = 1;
 
     private final TaiResidency residency;
+    /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
+    @Nullable private final Context appContext;
     @Nullable private Interpreter interpreter;
     @Nullable private SentencePieceBpeTokenizer tokenizer;
     @Nullable private String loadedModelId;
@@ -26,7 +30,12 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
     private int outputDimensions = 0;
 
     LiteRtEmbeddingRuntime(@NonNull TaiResidency residency) {
+        this(residency, null);
+    }
+
+    LiteRtEmbeddingRuntime(@NonNull TaiResidency residency, @Nullable Context context) {
         this.residency = residency;
+        this.appContext = context == null ? null : context.getApplicationContext();
     }
 
     @NonNull
@@ -99,7 +108,14 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
         tokenizer = SentencePieceBpeTokenizer.fromModelFile(tokenizerFile);
         Interpreter.Options options = new Interpreter.Options()
             .setNumThreads(Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors())));
-        interpreter = new Interpreter(modelFile, options);
+        // The same MemAvailable meter a chat load runs, across the interpreter's construction only.
+        TaiLoadMeter meter = TaiLoadMeter.start(appContext);
+        long measured;
+        try {
+            interpreter = new Interpreter(modelFile, options);
+        } finally {
+            measured = meter.stop();
+        }
         int[] inputShape = interpreter.getInputTensor(0).shape();
         int[] outputShape = interpreter.getOutputTensor(0).shape();
         sequenceLength = inputShape.length >= 2 ? inputShape[inputShape.length - 1] : 1024;
@@ -116,7 +132,12 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
         loadedModelId = spec.id;
         loadedModelPath = modelPath;
         loadedTokenizerPath = tokenizerPath;
-        residency.register(TaiResidency.Entry.embedding(spec, sequenceLength));
+        residency.register(TaiResidency.Entry.embedding(spec, sequenceLength).withMeasured(measured >= 0L ? measured : null));
+        if (measured >= 0L && appContext != null) {
+            // Keyed at window 0: an embedding load has no context window to bucket.
+            TaiRuntimeHistory.recordMeasuredLoad(appContext, spec, TaiDeviceCapabilities.detect(appContext),
+                TaiModelSpec.BACKEND_LITERT_LM, "cpu", 0, measured);
+        }
     }
 
     @NonNull
