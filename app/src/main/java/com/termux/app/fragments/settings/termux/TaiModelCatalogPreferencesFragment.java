@@ -170,8 +170,9 @@ public class TaiModelCatalogPreferencesFragment extends MaterialPreferenceFragme
         String activeModelId = new TaiSettings(context).getDefaultAssistantModel();
         TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
 
-        // Surface imported / URL-downloaded models that aren't curated catalog entries.
-        List<TaiModelCatalog.CatalogEntry> all = new ArrayList<>(TaiModelCatalog.entries().values());
+        // Surface imported / URL-downloaded models that aren't curated catalog entries. Speech-to-text
+        // models (Whisper) are excluded — they have their own section in the TAI preferences screen.
+        List<TaiModelCatalog.CatalogEntry> all = new ArrayList<>(TaiModelCatalog.chatEntries().values());
         for (TaiModelSpec spec : installed.values()) {
             if (!TaiModelCatalog.entries().containsKey(spec.id)) all.add(TaiModelCatalog.installedModelEntry(spec));
         }

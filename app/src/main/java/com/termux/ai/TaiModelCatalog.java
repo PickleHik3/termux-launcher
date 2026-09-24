@@ -3,10 +3,12 @@ package com.termux.ai;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -19,6 +21,31 @@ public final class TaiModelCatalog {
 
     @NonNull public static Map<String, CatalogEntry> entries() { return entries; }
     @Nullable public static CatalogEntry get(@Nullable String modelId) { return modelId == null ? null : entries.get(modelId); }
+
+    /** {@link #entries()} minus speech-to-text models — the chat catalog screen, the installed
+     *  chat-model list, and the default-assistant picker should never show a Whisper entry
+     *  alongside chat models. Speech models get their own "Speech-to-text" section instead. */
+    @NonNull
+    public static Map<String, CatalogEntry> chatEntries() {
+        LinkedHashMap<String, CatalogEntry> chat = new LinkedHashMap<>();
+        for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
+            if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
+            chat.put(entry.getKey(), entry.getValue());
+        }
+        return chat;
+    }
+
+    /** Speech-to-text catalog entries only (the TAI "Speech-to-text" settings section). */
+    @NonNull
+    public static Map<String, CatalogEntry> speechEntries() {
+        LinkedHashMap<String, CatalogEntry> speech = new LinkedHashMap<>();
+        for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
+            if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) {
+                speech.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return speech;
+    }
 
     /** Synthetic catalog entry for an installed model that isn't in the curated catalog (imported or
      *  added by Hugging Face URL), so the catalog screen lists and manages it alongside built-ins. */
@@ -188,6 +215,65 @@ public final class TaiModelCatalog {
             "qwen2.5-3b-instruct-mnn", "Qwen2.5 3B", "general_text", "balanced_general", false,
             "Balanced local multilingual assistant", "taobao-mnn/Qwen2.5-3B-Instruct-MNN", 2_369_484_250L,
             "2.4 GB", "6GB-8GB+", "qwen2.5", "int4", tags("Text", "Multilingual"), setOf("text_chat", "multilingual")));
+        // Whisper ACFT speech-to-text (litert-community/whisper-acft, phase 1: catalog + downloader
+        // only — MultiBackendTaiRuntime routing is phase 2). Each size/language id ships two window
+        // graphs (5s, 10s, chosen at download time); the default artifact here is the 10s graph and
+        // the 5s graph is offered as a CatalogEntry.WindowVariant swapped in by CatalogEntry#withWindow.
+        // The tokenizer.json sidecar comes from the matching openai/whisper-{size}{.en} repo.
+        final String whisperAcftRevision = "f8ab0a00ea95f6e0f2cee200b18671a599a0b0d6";
+        entries.put("whisper-acft-base", whisperAvailable(
+            "whisper-acft-base", "Whisper ACFT Base", "Speech-to-text (multilingual)",
+            "litert-community/whisper-acft", whisperAcftRevision,
+            "base/acft_whisper_base_10s_drq.tflite", 101_391_632L,
+            "61d7dba161c3c1b77a940e5c658eaa9012b6f7cbec1058f845276abeed2805b5",
+            "97 MB", "6GB+",
+            whisperTokenizerSidecar("whisper-base", "e37978b90ca9030d5170a5c07aadb050351a65bb",
+                "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566"),
+            whisperWindows(
+                "base/acft_whisper_base_5s_drq.tflite", 100_879_632L,
+                "7a9dcec5528c37577cfe5df0bd53720cebaeb63981549fffc70825bab689e225",
+                "base/acft_whisper_base_10s_drq.tflite", 101_391_632L,
+                "61d7dba161c3c1b77a940e5c658eaa9012b6f7cbec1058f845276abeed2805b5")));
+        entries.put("whisper-acft-base-en", whisperAvailable(
+            "whisper-acft-base-en", "Whisper ACFT Base (English)", "Speech-to-text (English only)",
+            "litert-community/whisper-acft", whisperAcftRevision,
+            "base.en/acft_whisper_base.en_10s_drq.tflite", 101_390_600L,
+            "d993bf12bb49bb7ddf94779613293cca2c277d5c0582e4f04b4d4f7d8d331102",
+            "97 MB", "6GB+",
+            whisperTokenizerSidecar("whisper-base.en", "911407f4214e0e1d82085af863093ec0b66f9cd6",
+                "5eb60cec1e77aeeb6869a2bb5a8e01a84c3fe5d072d75369343021fe6f5310d0"),
+            whisperWindows(
+                "base.en/acft_whisper_base.en_5s_drq.tflite", 100_878_600L,
+                "aacded4e706c559d7e840716c54d872167754f57467ad4a80ac4e4d05a8d6d2f",
+                "base.en/acft_whisper_base.en_10s_drq.tflite", 101_390_600L,
+                "d993bf12bb49bb7ddf94779613293cca2c277d5c0582e4f04b4d4f7d8d331102")));
+        entries.put("whisper-acft-small", whisperAvailable(
+            "whisper-acft-small", "Whisper ACFT Small", "Speech-to-text (multilingual)",
+            "litert-community/whisper-acft", whisperAcftRevision,
+            "small/acft_whisper_small_10s_drq.tflite", 286_277_672L,
+            "f74c4c464b96ee1f52afb3d876e5eb89a87212cf538404b2747febf61c00ba1b",
+            "273 MB", "8GB+",
+            whisperTokenizerSidecar("whisper-small", "973afd24965f72e36ca33b3055d56a652f456b4d",
+                "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566"),
+            whisperWindows(
+                "small/acft_whisper_small_5s_drq.tflite", 285_509_672L,
+                "4695243bffbe1b7c8799b06e058395dec02c798f8a0a3dcff093c0797d562fc7",
+                "small/acft_whisper_small_10s_drq.tflite", 286_277_672L,
+                "f74c4c464b96ee1f52afb3d876e5eb89a87212cf538404b2747febf61c00ba1b")));
+        entries.put("whisper-acft-small-en", whisperAvailable(
+            "whisper-acft-small-en", "Whisper ACFT Small (English)", "Speech-to-text (English only)",
+            "litert-community/whisper-acft", whisperAcftRevision,
+            "small.en/acft_whisper_small.en_10s_drq.tflite", 286_276_128L,
+            "58edc288e8aad1da2a3df0545edadf5f1c6119ff70682e37031119ad89130daf",
+            "273 MB", "8GB+",
+            whisperTokenizerSidecar("whisper-small.en", "e8727524f962ee844a7319d92be39ac1bd25655a",
+                "5eb60cec1e77aeeb6869a2bb5a8e01a84c3fe5d072d75369343021fe6f5310d0"),
+            whisperWindows(
+                "small.en/acft_whisper_small.en_5s_drq.tflite", 285_508_128L,
+                "7c71a5d8f9b59f93ab17e63b568ef674716420bc8bbabcc5da315ab0576b96ef",
+                "small.en/acft_whisper_small.en_10s_drq.tflite", 286_276_128L,
+                "58edc288e8aad1da2a3df0545edadf5f1c6119ff70682e37031119ad89130daf")));
+
         entries.put("deepseek-r1-1.5b-qwen-mnn", mnnAvailable(
             "deepseek-r1-1.5b-qwen-mnn", "DeepSeek-R1 1.5B Qwen", "reasoning", "lightweight_reasoning", false,
             "Small reasoning model", "taobao-mnn/DeepSeek-R1-1.5B-Qwen-MNN", 1_020_644_237L,
@@ -236,6 +322,39 @@ public final class TaiModelCatalog {
             recommended, true, "");
     }
 
+    /** A Whisper ACFT speech-to-text entry: {@code defaultArtifactPath/defaultSize/defaultSha256} is
+     *  the 10s window (the entry's resting state); {@code windows} carries both window variants so
+     *  {@link CatalogEntry#withWindow} can swap in the 5s graph at download time. */
+    private static CatalogEntry whisperAvailable(String id, String name, String role, String repo, String revision,
+                                                  String defaultArtifactPath, long defaultSize, String defaultSha256,
+                                                  String sizeEstimate, String ramTier,
+                                                  CatalogEntry.Sidecar tokenizerSidecar,
+                                                  Map<Integer, CatalogEntry.WindowVariant> windows) {
+        List<CatalogEntry.Sidecar> sidecars = Collections.singletonList(tokenizerSidecar);
+        LinkedHashSet<String> capabilities = setOf(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
+        return new CatalogEntry(id, name, role, repo, revision, defaultArtifactPath, "Apache-2.0", defaultSize,
+            false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, "whisper-acft", "int8_drq",
+            128, 128, 128, ramGb(ramTier), defaultSha256, capabilities, null, null,
+            "speech_to_text", "speech_to_text", tags("Speech"), sizeEstimate, ramTier, false, true, "",
+            sidecars, windows);
+    }
+
+    /** {@code url/localName/sha256} for the {@code tokenizer.json} sidecar of the matching
+     *  {@code openai/whisper-{size}{.en}} repo, at a pinned revision. */
+    private static CatalogEntry.Sidecar whisperTokenizerSidecar(String tokenizerRepo, String revision, String sha256) {
+        return new CatalogEntry.Sidecar(
+            "https://huggingface.co/openai/" + tokenizerRepo + "/resolve/" + revision + "/tokenizer.json",
+            "tokenizer.json", sha256);
+    }
+
+    private static Map<Integer, CatalogEntry.WindowVariant> whisperWindows(
+            String path5s, long size5s, String sha5s, String path10s, long size10s, String sha10s) {
+        LinkedHashMap<Integer, CatalogEntry.WindowVariant> windows = new LinkedHashMap<>();
+        windows.put(5, new CatalogEntry.WindowVariant(5, path5s, size5s, sha5s));
+        windows.put(10, new CatalogEntry.WindowVariant(10, path10s, size10s, sha10s));
+        return windows;
+    }
+
     private static CatalogEntry entry(String id, String name, String role, String repo, String revision, @Nullable String file,
                                       String license, long size, boolean gated, String backend, String format, String architecture,
                                       @Nullable String quantization, int contextWindow, int ramGb, @Nullable String sha256,
@@ -271,6 +390,7 @@ public final class TaiModelCatalog {
         LinkedHashSet<String> tags = new LinkedHashSet<>();
         if (capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) tags.add("Text");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) tags.add("Embeddings");
+        if (capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) tags.add("Speech");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)) tags.add("Vision");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) tags.add("Audio");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_CODE)) tags.add("Code");
@@ -320,6 +440,12 @@ public final class TaiModelCatalog {
         @Nullable public final String toolMode;
         public final LinkedHashSet<String> capabilities, endpointCapabilities, sourceCapabilities, displayCapabilityTags;
         public final String providerPageUrl, downloadUrl;
+        /** Extra files a download must also fetch (e.g. a Whisper {@code tokenizer.json} from the
+         *  matching {@code openai/whisper-*} repo), reusing the downloader's .part/resume/hash helpers. */
+        public final List<Sidecar> sidecars;
+        /** Whisper-only: the alternate window graphs (5s/10s) this entry's model id can be downloaded
+         *  as. Empty for every non-speech entry. {@link #withWindow} swaps the active artifact. */
+        public final Map<Integer, WindowVariant> speechWindows;
 
         private CatalogEntry(String modelId, String displayName, String roleHint, String repositoryId,
                              String revision, @Nullable String artifactPath, String license, long sizeBytes,
@@ -331,6 +457,25 @@ public final class TaiModelCatalog {
                              String jobGroup, String priority,
                              LinkedHashSet<String> displayCapabilityTags, String sizeEstimate, String ramTier,
                              boolean recommended, boolean downloadAvailable, String unavailableReason) {
+            this(modelId, displayName, roleHint, repositoryId, revision, artifactPath, license, sizeBytes, gated,
+                backend, format, architecture, quantization, endpointContextWindow, sourceContextWindow,
+                defaultMaxOutputTokens, recommendedRamGb, sha256, sourceCapabilities, endpointCapabilities,
+                toolMode, jobGroup, priority, displayCapabilityTags, sizeEstimate, ramTier, recommended,
+                downloadAvailable, unavailableReason, Collections.<Sidecar>emptyList(),
+                Collections.<Integer, WindowVariant>emptyMap());
+        }
+
+        private CatalogEntry(String modelId, String displayName, String roleHint, String repositoryId,
+                             String revision, @Nullable String artifactPath, String license, long sizeBytes,
+                             boolean gated, String backend, String format, String architecture,
+                             @Nullable String quantization, int endpointContextWindow, int sourceContextWindow,
+                             int defaultMaxOutputTokens, int recommendedRamGb, @Nullable String sha256,
+                             LinkedHashSet<String> sourceCapabilities,
+                             @Nullable LinkedHashSet<String> endpointCapabilities, @Nullable String toolMode,
+                             String jobGroup, String priority,
+                             LinkedHashSet<String> displayCapabilityTags, String sizeEstimate, String ramTier,
+                             boolean recommended, boolean downloadAvailable, String unavailableReason,
+                             @Nullable List<Sidecar> sidecars, @Nullable Map<Integer, WindowVariant> speechWindows) {
             this.modelId = modelId; this.displayName = displayName; this.roleHint = roleHint;
             this.repositoryId = repositoryId; this.revision = revision; this.artifactPath = artifactPath;
             this.license = license; this.sizeBytes = sizeBytes; this.gated = gated; this.backend = backend;
@@ -349,6 +494,48 @@ public final class TaiModelCatalog {
             this.recommended = recommended; this.downloadAvailable = downloadAvailable; this.unavailableReason = unavailableReason;
             this.providerPageUrl = "https://huggingface.co/" + repositoryId;
             this.downloadUrl = !downloadAvailable || artifactPath == null ? null : providerPageUrl + "/resolve/" + revision + "/" + artifactPath + "?download=true";
+            this.sidecars = sidecars == null || sidecars.isEmpty()
+                ? Collections.<Sidecar>emptyList() : Collections.unmodifiableList(new ArrayList<>(sidecars));
+            this.speechWindows = speechWindows == null || speechWindows.isEmpty()
+                ? Collections.<Integer, WindowVariant>emptyMap() : Collections.unmodifiableMap(new LinkedHashMap<>(speechWindows));
+        }
+
+        /** Returns this entry with the given window's graph as its active artifact (id/capabilities
+         *  unchanged) so a download can fetch the 5s graph instead of the 10s default, or vice versa.
+         *  Returns {@code this} unchanged for a window this entry doesn't have (or a non-speech entry). */
+        @NonNull
+        public CatalogEntry withWindow(int windowSeconds) {
+            WindowVariant variant = speechWindows.get(windowSeconds);
+            if (variant == null) return this;
+            return new CatalogEntry(modelId, displayName, roleHint, repositoryId, revision, variant.artifactPath,
+                license, variant.sizeBytes, gated, backend, format, architecture, quantization,
+                endpointContextWindow, sourceContextWindow, defaultMaxOutputTokens, recommendedRamGb,
+                variant.sha256, sourceCapabilities, endpointCapabilities, toolMode, jobGroup, priority,
+                displayCapabilityTags, sizeEstimate, ramTier, recommended, downloadAvailable, unavailableReason,
+                sidecars, speechWindows);
+        }
+
+        /** A required extra file (e.g. Whisper's {@code tokenizer.json} from the paired
+         *  {@code openai/whisper-*} repo) downloaded alongside the main artifact. */
+        public static final class Sidecar {
+            public final String url;
+            public final String localName;
+            @Nullable public final String sha256;
+            public Sidecar(@NonNull String url, @NonNull String localName, @Nullable String sha256) {
+                this.url = url; this.localName = localName; this.sha256 = sha256;
+            }
+        }
+
+        /** One window-length graph of a speech-to-text model (Whisper's 5s/10s ACFT exports). */
+        public static final class WindowVariant {
+            public final int windowSeconds;
+            public final String artifactPath;
+            public final long sizeBytes;
+            @Nullable public final String sha256;
+            public WindowVariant(int windowSeconds, @NonNull String artifactPath, long sizeBytes, @Nullable String sha256) {
+                this.windowSeconds = windowSeconds; this.artifactPath = artifactPath;
+                this.sizeBytes = sizeBytes; this.sha256 = sha256;
+            }
         }
     }
 }

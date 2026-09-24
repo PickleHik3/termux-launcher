@@ -46,6 +46,9 @@ public final class TaiModelDownloadService extends Service {
     public static final String EXTRA_SHA256 = "sha256";
     public static final String EXTRA_EXPECTED_SIZE_BYTES = "expected_size_bytes";
     public static final String EXTRA_RUNTIME_PROFILE = "runtime_profile";
+    // JSON array of {url, localName, sha256} — a catalog entry's declared sidecars (e.g. Whisper's
+    // tokenizer.json from the paired openai/whisper-* repo), downloaded alongside the main artifact.
+    public static final String EXTRA_SIDECARS = "sidecars_json";
 
     private static final String CHANNEL_ID = "termux_ai_model_downloads";
     private static final int NOTIFICATION_ID = 24100;
@@ -137,6 +140,7 @@ public final class TaiModelDownloadService extends Service {
                 intent.getLongExtra(EXTRA_EXPECTED_SIZE_BYTES, 0L),
                 intent.getStringExtra(EXTRA_AUTH_TOKEN),
                 runtimeProfile,
+                TaiModelDownloader.sidecarsFromJson(intent.getStringExtra(EXTRA_SIDECARS)),
                 this::updateProgressNotification
             );
         } finally {

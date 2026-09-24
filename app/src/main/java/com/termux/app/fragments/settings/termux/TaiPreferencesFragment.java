@@ -21,6 +21,8 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -57,6 +59,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -195,6 +198,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         configureOverrides(context);
         configureEndpointPreferences(context);
         configureModelManager(context);
+        configureSttSection(context);
         configureHuggingFaceToken();
         configureAdvancedSection(context);
         configureLanToggle(context);
@@ -293,6 +297,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         refreshOverrides();
         refreshEndpointPreferences(context);
         populateModelRows(context);
+        populateSttSection(context);
         refreshLanToggle(context);
     }
 
@@ -1043,11 +1048,15 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         store.pruneMissingUserModels();
         Map<String, TaiModelSpec> installedModels = store.getInstalledUserModels();
         Preference empty = findPreference("tai_models_empty");
-        if (empty != null) empty.setVisible(installedModels.isEmpty());
+        boolean anyChatModel = false;
         String activeModelId = new TaiSettings(context).getDefaultAssistantModel();
         String loadedId = loadedModelId();
 
         for (TaiModelSpec model : installedModels.values()) {
+            // Speech-to-text models (Whisper) live in the "Speech-to-text" section, not the chat
+            // model list or the default-assistant picker.
+            if (model.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
+            anyChatModel = true;
             TaiModelPreference row = new TaiModelPreference(context);
             row.setKey(MODEL_ROW_PREFIX + model.id);
             row.setTitle(model.displayName);
@@ -1073,6 +1082,235 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             });
             category.addPreference(row);
         }
+        if (empty != null) empty.setVisible(!anyChatModel);
+    }
+
+    // ---- Speech-to-text (voice input phase 1: downloader + catalog + this settings section only;
+    // WhisperSttRuntime and the keyboard voice engine land in later phases). ----
+
+    private void configureSttSection(Context context) {
+        Preference download = findPreference("tai_stt_download");
+        if (download != null) {
+            download.setOnPreferenceClickListener(preference -> {
+                showSttDownloadDialog(context);
+                return true;
+            });
+        }
+        SwitchPreferenceCompat fastWindow = findPreference("tai_stt_fast_window");
+        if (fastWindow != null) {
+            fastWindow.setOnPreferenceChangeListener((preference, newValue) -> {
+                handleSttWindowSwitch(context, Boolean.TRUE.equals(newValue));
+                return true;
+            });
+        }
+        Preference idleUnload = findPreference("tai_stt_idle_unload");
+        if (idleUnload != null) {
+            idleUnload.setOnPreferenceClickListener(preference -> {
+                showSttIdleUnloadDialog(context);
+                return true;
+            });
+        }
+    }
+
+    /** Refreshes the "Speech-to-text" section (installed row, window switch, idle-unload summary)
+     *  from stored state — called on every {@link #applyTaiPage} poll, same as the chat model rows,
+     *  so a download's progress and the eventual "installed" state show up without user action. */
+    private void populateSttSection(Context context) {
+        Preference installedRow = findPreference("tai_stt_installed");
+        if (installedRow == null) return;
+        SwitchPreferenceCompat fastWindow = findPreference("tai_stt_fast_window");
+        Preference idleUnload = findPreference("tai_stt_idle_unload");
+
+        TaiModelSpec installed = installedSpeechModel(context);
+        JSONObject activeDownload = installed == null ? findActiveSpeechDownload(new TaiModelStore(context).getDownloads()) : null;
+        if (installed != null) {
+            installedRow.setTitle(installed.displayName);
+            installedRow.setSummary(buildSttSummary(installed));
+            installedRow.setOnPreferenceClickListener(preference -> {
+                confirmDeleteSttModel(context, installed);
+                return true;
+            });
+        } else if (activeDownload != null) {
+            long bytesRead = activeDownload.optLong("bytesRead", 0L);
+            long totalBytes = activeDownload.optLong("totalBytes", 0L);
+            installedRow.setTitle(R.string.termux_ai_stt_download_title);
+            installedRow.setSummary(totalBytes > 0
+                ? formatPercent(bytesRead, totalBytes) + " - " + formatBytes(bytesRead) + " of " + formatBytes(totalBytes)
+                : formatBytes(bytesRead));
+            installedRow.setOnPreferenceClickListener(null);
+        } else {
+            installedRow.setTitle(R.string.termux_ai_stt_none_installed_title);
+            installedRow.setSummary(R.string.termux_ai_stt_none_installed_summary);
+            installedRow.setOnPreferenceClickListener(null);
+        }
+
+        if (fastWindow != null) fastWindow.setChecked(new TaiSettings(context).getSttWindowSeconds() == 5);
+        if (idleUnload != null) {
+            int minutes = new TaiSettings(context).getSttIdleUnloadMinutes();
+            idleUnload.setSummary(minutes <= 0 ? getString(R.string.termux_ai_disabled) : minutes + " min");
+        }
+    }
+
+    /** The one installed speech-to-text model, if any — same installed/downloaded union the chat
+     *  model list uses, filtered to {@code speech_to_text}. Only one is expected at a time in this
+     *  UI (downloading a different size/language installs over it under a different catalog id). */
+    @Nullable
+    private TaiModelSpec installedSpeechModel(Context context) {
+        TaiModelStore store = new TaiModelStore(context);
+        Map<String, TaiModelSpec> installed = new java.util.LinkedHashMap<>();
+        installed.putAll(store.getDownloadedReadableModels());
+        installed.putAll(store.getInstalledUserModels());
+        for (TaiModelSpec spec : installed.values()) {
+            if (spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) return spec;
+        }
+        return null;
+    }
+
+    @Nullable
+    private JSONObject findActiveSpeechDownload(JSONArray downloads) {
+        for (int i = 0; i < downloads.length(); i++) {
+            JSONObject item = downloads.optJSONObject(i);
+            if (item == null || !item.optString("modelId", "").startsWith("whisper-acft-")) continue;
+            String status = item.optString("status", "");
+            if (TaiModelStore.STATE_QUEUED.equals(status) || TaiModelStore.STATE_DOWNLOADING.equals(status)
+                || TaiModelStore.STATE_VERIFYING.equals(status)) return item;
+        }
+        return null;
+    }
+
+    private String buildSttSummary(TaiModelSpec spec) {
+        boolean englishOnly = spec.id.endsWith("-en");
+        String language = englishOnly ? getString(R.string.termux_ai_stt_download_language_english)
+            : getString(R.string.termux_ai_stt_download_language_multilingual);
+        // The window is part of the downloaded file name (…_5s_drq.tflite / …_10s_drq.tflite), so
+        // reading it back off disk always matches what's actually installed, even if the window
+        // switch's setting and a still-in-flight re-download briefly disagree.
+        String window = spec.localPath != null && spec.localPath.contains("_5s_") ? "5s" : "10s";
+        return formatBytes(spec.sizeBytes) + " · " + language + " · " + window + " window";
+    }
+
+    private void confirmDeleteSttModel(Context context, TaiModelSpec spec) {
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(getString(R.string.termux_ai_model_delete_title, spec.displayName))
+            .setMessage(R.string.termux_ai_model_delete_message)
+            .setPositiveButton(R.string.termux_ai_stt_delete_action, (dialog, which) -> {
+                TaiSettings settings = new TaiSettings(context);
+                boolean wasChosen = spec.id.equals(settings.getSttModelId());
+                deleteModel(context, spec.id);
+                if (wasChosen) settings.setSttModelId("");
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    /** Size/language/window dialog for a fresh install — mirrors the catalog download dialog's
+     *  style (a scrollable {@link MaterialAlertDialogBuilder} view) but asks three questions instead
+     *  of just confirming one entry, per the plan's Settings section. */
+    private void showSttDownloadDialog(Context context) {
+        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(context);
+        boolean offerSmall = device.memoryBytes >= 8L * 1024 * 1024 * 1024;
+        float density = context.getResources().getDisplayMetrics().density;
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int padH = Math.round(24 * density);
+        layout.setPadding(padH, Math.round(8 * density), padH, 0);
+
+        layout.addView(sttSectionLabel(context, R.string.termux_ai_stt_download_size_label));
+        RadioGroup sizeGroup = new RadioGroup(context);
+        sizeGroup.setOrientation(RadioGroup.VERTICAL);
+        RadioButton baseButton = new RadioButton(context);
+        baseButton.setText(offerSmall
+            ? getString(R.string.termux_ai_stt_download_size_base_plain, "97 MB")
+            : getString(R.string.termux_ai_stt_download_size_base, "97 MB"));
+        baseButton.setChecked(true);
+        sizeGroup.addView(baseButton);
+        RadioButton smallButton = null;
+        if (offerSmall) {
+            smallButton = new RadioButton(context);
+            smallButton.setText(getString(R.string.termux_ai_stt_download_size_small, "273 MB"));
+            sizeGroup.addView(smallButton);
+        }
+        layout.addView(sizeGroup);
+
+        layout.addView(sttSectionLabel(context, R.string.termux_ai_stt_download_language_label));
+        RadioGroup langGroup = new RadioGroup(context);
+        langGroup.setOrientation(RadioGroup.VERTICAL);
+        RadioButton englishButton = new RadioButton(context);
+        englishButton.setText(R.string.termux_ai_stt_download_language_english);
+        englishButton.setChecked(true);
+        RadioButton multilingualButton = new RadioButton(context);
+        multilingualButton.setText(R.string.termux_ai_stt_download_language_multilingual);
+        langGroup.addView(englishButton);
+        langGroup.addView(multilingualButton);
+        layout.addView(langGroup);
+
+        layout.addView(sttSectionLabel(context, R.string.termux_ai_stt_download_window_label));
+        RadioGroup windowGroup = new RadioGroup(context);
+        windowGroup.setOrientation(RadioGroup.VERTICAL);
+        RadioButton window10Button = new RadioButton(context);
+        window10Button.setText(R.string.termux_ai_stt_download_window_10s);
+        window10Button.setChecked(true);
+        RadioButton window5Button = new RadioButton(context);
+        window5Button.setText(R.string.termux_ai_stt_download_window_5s);
+        windowGroup.addView(window10Button);
+        windowGroup.addView(window5Button);
+        layout.addView(windowGroup);
+
+        RadioButton finalSmallButton = smallButton;
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.termux_ai_stt_download_dialog_title)
+            .setView(dialogScroll(context, layout))
+            .setPositiveButton(R.string.termux_ai_stt_download_start, (dialog, which) -> {
+                boolean small = finalSmallButton != null && finalSmallButton.isChecked();
+                boolean englishOnly = englishButton.isChecked();
+                int windowSeconds = window5Button.isChecked() ? 5 : 10;
+                String modelId = "whisper-acft-" + (small ? "small" : "base") + (englishOnly ? "-en" : "");
+                startSttDownload(context, modelId, windowSeconds);
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private TextView sttSectionLabel(Context context, int textRes) {
+        TextView label = new TextView(context);
+        label.setText(textRes);
+        label.setTypeface(Typeface.DEFAULT_BOLD);
+        float density = context.getResources().getDisplayMetrics().density;
+        label.setPadding(0, Math.round(12 * density), 0, Math.round(4 * density));
+        return label;
+    }
+
+    private void startSttDownload(Context context, String modelId, int windowSeconds) {
+        try {
+            TaiManager.getInstance(context).downloadSpeechModel(modelId, windowSeconds);
+            TaiSettings settings = new TaiSettings(context);
+            settings.setSttModelId(modelId);
+            settings.setSttWindowSeconds(windowSeconds);
+            AppNotice.show(context, R.string.termux_ai_stt_download_started, false);
+            handler.removeCallbacks(refreshRuntimeRunnable);
+            handler.postDelayed(refreshRuntimeRunnable, 1000L);
+        } catch (JSONException e) {
+            AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
+        }
+        refreshTaiPage(context);
+    }
+
+    /** Changing the window setting re-downloads that window's graph under the same model id and
+     *  deletes the old one, per the plan ("changing window = download the other graph and delete
+     *  the old one"). A no-op when no speech model is installed yet — the next download just uses
+     *  the newly chosen window. */
+    private void handleSttWindowSwitch(Context context, boolean fastWindow) {
+        int windowSeconds = fastWindow ? 5 : 10;
+        TaiSettings settings = new TaiSettings(context);
+        settings.setSttWindowSeconds(windowSeconds);
+        TaiModelSpec installed = installedSpeechModel(context);
+        if (installed == null) return;
+        if (installed.localPath != null) {
+            File oldFile = new File(installed.localPath);
+            if (oldFile.isFile()) oldFile.delete();
+        }
+        startSttDownload(context, installed.id, windowSeconds);
+        AppNotice.show(context, getString(R.string.termux_ai_stt_window_changed, windowSeconds + "s"), false);
     }
 
     private CharSequence buildInstalledMetaLine(Context context, TaiModelSpec model) {

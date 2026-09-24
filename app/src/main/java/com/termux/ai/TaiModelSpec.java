@@ -24,6 +24,9 @@ public final class TaiModelSpec {
     public static final String FORMAT_GGUF = "gguf";
     public static final String CAPABILITY_TEXT_CHAT = "text_chat";
     public static final String CAPABILITY_TEXT_EMBEDDINGS = "text_embeddings";
+    // Whisper ACFT .tflite graphs (speech-to-text, phase 1: catalog + downloader only, no runtime
+    // routing yet). Kept out of chat catalogs, installed-model lists and /v1/models chat listings.
+    public static final String CAPABILITY_SPEECH_TO_TEXT = "speech_to_text";
     public static final String CAPABILITY_IMAGE_INPUT = "image_input";
     public static final String CAPABILITY_AUDIO_INPUT = "audio_input";
     // Declared-only intent: no runtime processes video yet, so this rides on sourceCapabilities
@@ -341,9 +344,15 @@ public final class TaiModelSpec {
             return endpoint;
         }
 
-        // The only raw .tflite path in this app is the LiteRT embedding runtime. Chat packages
-        // must be .litertlm/.task containers even if user metadata incorrectly declares chat.
+        // A raw .tflite path in this app is either the LiteRT embedding runtime or a Whisper ACFT
+        // speech-to-text graph — branch on declared capability, not the extension, so a Whisper
+        // package never falls into the embedding/sentencepiece path. Chat packages must be
+        // .litertlm/.task containers even if user metadata incorrectly declares chat.
         if (localPath != null && localPath.toLowerCase(Locale.ROOT).endsWith(".tflite")) {
+            if (source.contains(CAPABILITY_SPEECH_TO_TEXT)) {
+                addIfPresent(endpoint, source, CAPABILITY_SPEECH_TO_TEXT, false);
+                return endpoint;
+            }
             addIfPresent(endpoint, source, CAPABILITY_TEXT_EMBEDDINGS, false);
             return endpoint;
         }

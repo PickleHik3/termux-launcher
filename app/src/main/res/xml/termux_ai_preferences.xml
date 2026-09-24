@@ -44,6 +44,31 @@
     </PreferenceCategory>
 
     <PreferenceCategory
+        app:key="tai_stt_category"
+        app:title="@string/termux_ai_zone_stt_title">
+        <Preference
+            app:key="tai_stt_installed"
+            app:title="@string/termux_ai_stt_none_installed_title"
+            app:summary="@string/termux_ai_stt_none_installed_summary"
+            app:persistent="false"/>
+        <Preference
+            app:key="tai_stt_download"
+            app:title="@string/termux_ai_stt_download_title"
+            app:summary="@string/termux_ai_stt_download_summary"
+            app:persistent="false"/>
+        <androidx.preference.SwitchPreferenceCompat
+            app:key="tai_stt_fast_window"
+            app:title="@string/termux_ai_stt_window_title"
+            app:summaryOff="@string/termux_ai_stt_window_summary_off"
+            app:summaryOn="@string/termux_ai_stt_window_summary_on"
+            app:defaultValue="false"/>
+        <Preference
+            app:key="tai_stt_idle_unload"
+            app:title="@string/termux_ai_stt_idle_unload_title"
+            app:persistent="false"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory
         app:key="tai_server_category"
         app:title="@string/termux_ai_zone_server_title">
         <Preference

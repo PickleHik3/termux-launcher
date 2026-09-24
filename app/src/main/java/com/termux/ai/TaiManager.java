@@ -404,6 +404,18 @@ public final class TaiManager {
         return modelDownloader.startCatalogDownload(entry, settings.getHuggingFaceToken());
     }
 
+    /** Downloads a speech-to-text catalog entry with the given window's graph (5 or 10 seconds).
+     *  An unknown window (or a non-speech/window-less entry) downloads the entry's default artifact. */
+    @NonNull
+    public JSONObject downloadSpeechModel(@NonNull String modelId, int windowSeconds) throws JSONException {
+        TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(modelId);
+        if (entry == null) return error(404, "model_not_found", "Unknown catalog model: " + modelId);
+        if (!entry.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) {
+            return error(400, "not_a_speech_model", "Model " + modelId + " is not a speech-to-text model.");
+        }
+        return modelDownloader.startCatalogDownload(entry.withWindow(windowSeconds), settings.getHuggingFaceToken());
+    }
+
     @NonNull
     public JSONObject deleteModel(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);
@@ -453,6 +465,13 @@ public final class TaiManager {
             return error(400, "embedding_model_not_loadable",
                 "Model " + modelId + " is an embedding model. It is served on demand via /v1/embeddings and "
                     + "/api/embed and does not need to be loaded into the generation runtime.");
+        }
+        if (spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) {
+            // Phase 1 is downloader + catalog + settings only; MultiBackendTaiRuntime doesn't route
+            // speech_to_text yet (that's WhisperSttRuntime, phase 2), so refuse the chat-load path
+            // instead of accepting a model this runtime can't actually run.
+            return error(400, "speech_model_not_loadable",
+                "Model " + modelId + " is a speech-to-text model. Voice input inference isn't available yet.");
         }
         String requestedBackend = request.optString("backend", "").trim();
         if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
@@ -1155,6 +1174,9 @@ public final class TaiManager {
             // Management can retain imported packages whose backend is not executable yet, but
             // generation discovery must publish only models with at least one runnable endpoint.
             if (stored.endpointCapabilities.isEmpty()) continue;
+            // Speech-to-text models aren't chat models: MultiBackendTaiRuntime doesn't route
+            // speech_to_text yet (phase 2), and they're never a valid /v1/chat/completions target.
+            if (stored.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
             Integer userContext = settings.getRuntimeOptions(stored).contextWindow;
             TaiModelSpec spec = advertisedContextWindow(TaiContextWindowPolicy.apply(stored, device.memoryBytes,
                 userContext), device, presence, userContext != null);
