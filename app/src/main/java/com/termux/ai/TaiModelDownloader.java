@@ -22,7 +22,10 @@ import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 
 public final class TaiModelDownloader {
@@ -98,7 +101,8 @@ public final class TaiModelDownloader {
                                            @Nullable String authToken) throws JSONException {
         return startDownload(entry.modelId, entry.downloadUrl, entry.displayName, entry.license,
             entry.sourceCapabilities, entry.backend, entry.format, entry.architecture, entry.quantization,
-            entry.endpointContextWindow, entry.recommendedRamGb, entry.sha256, entry.sizeBytes, authToken, null);
+            entry.endpointContextWindow, entry.recommendedRamGb, entry.sha256, entry.sizeBytes, authToken, null,
+            entry.sidecars);
     }
 
     @NonNull
@@ -109,6 +113,21 @@ public final class TaiModelDownloader {
         @Nullable String quantization, int contextWindow, int recommendedRamGb,
         @Nullable String expectedSha256, long expectedSizeBytes, @Nullable String authToken,
         @Nullable TaiModelProfile runtimeProfile
+    ) throws JSONException {
+        return startDownload(modelId, url, displayName, license, capabilities, backend, format, architecture,
+            quantization, contextWindow, recommendedRamGb, expectedSha256, expectedSizeBytes, authToken,
+            runtimeProfile, Collections.<TaiModelCatalog.CatalogEntry.Sidecar>emptyList());
+    }
+
+    @NonNull
+    private JSONObject startDownload(
+        @NonNull String modelId, @NonNull String url, @NonNull String displayName,
+        @NonNull String license, @NonNull LinkedHashSet<String> capabilities,
+        @NonNull String backend, @NonNull String format, @Nullable String architecture,
+        @Nullable String quantization, int contextWindow, int recommendedRamGb,
+        @Nullable String expectedSha256, long expectedSizeBytes, @Nullable String authToken,
+        @Nullable TaiModelProfile runtimeProfile,
+        @NonNull List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars
     ) throws JSONException {
         String safeModelId = sanitize(modelId);
         if (safeModelId.isEmpty()) return error(400, "bad_request", "Missing model id");
@@ -140,6 +159,9 @@ public final class TaiModelDownloader {
         }
         putRuntimeMetadata(intent, backend, format, architecture, quantization, contextWindow,
             recommendedRamGb, expectedSha256);
+        if (!sidecars.isEmpty()) {
+            intent.putExtra(TaiModelDownloadService.EXTRA_SIDECARS, sidecarsToJson(sidecars).toString());
+        }
         startService(intent);
 
         return started(transfer);
@@ -166,7 +188,7 @@ public final class TaiModelDownloader {
     ) {
         runDownload(transferId, modelId, url, output, displayName, license, capabilities, backend,
             format, architecture, quantization, contextWindow, recommendedRamGb, expectedSha256,
-            expectedSizeBytes, authToken, null, callback);
+            expectedSizeBytes, authToken, null, Collections.<TaiModelCatalog.CatalogEntry.Sidecar>emptyList(), callback);
     }
 
     public void runDownload(
@@ -187,6 +209,32 @@ public final class TaiModelDownloader {
         long expectedSizeBytes,
         @Nullable String authToken,
         @Nullable TaiModelProfile runtimeProfile,
+        @Nullable ProgressCallback callback
+    ) {
+        runDownload(transferId, modelId, url, output, displayName, license, capabilities, backend,
+            format, architecture, quantization, contextWindow, recommendedRamGb, expectedSha256,
+            expectedSizeBytes, authToken, runtimeProfile, Collections.<TaiModelCatalog.CatalogEntry.Sidecar>emptyList(), callback);
+    }
+
+    public void runDownload(
+        String transferId,
+        String modelId,
+        String url,
+        File output,
+        String displayName,
+        String license,
+        LinkedHashSet<String> capabilities,
+        String backend,
+        String format,
+        String architecture,
+        String quantization,
+        int contextWindow,
+        int recommendedRamGb,
+        String expectedSha256,
+        long expectedSizeBytes,
+        @Nullable String authToken,
+        @Nullable TaiModelProfile runtimeProfile,
+        @NonNull List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars,
         @Nullable ProgressCallback callback
     ) {
         long bytesRead = 0L;
@@ -364,6 +412,10 @@ public final class TaiModelDownloader {
             if (requiresLiteRtEmbeddingTokenizer(output, capabilities)) {
                 installedBytes += downloadLiteRtEmbeddingSidecars(transferId, modelId, url, output, authToken,
                     output.length(), expectedSizeBytes, callback);
+            }
+            if (!sidecars.isEmpty()) {
+                installedBytes += downloadCatalogSidecars(transferId, modelId, url, output, sidecars, authToken,
+                    installedBytes, expectedSizeBytes, callback);
             }
 
             TaiModelSpec spec = new TaiModelSpec(
@@ -548,10 +600,125 @@ public final class TaiModelDownloader {
     }
 
     private boolean requiresLiteRtEmbeddingTokenizer(@NonNull File output, @NonNull LinkedHashSet<String> capabilities) {
-        // A raw .tflite artifact is only ever a LiteRT embedding model in this app (chat packages are
-        // .litertlm/.task containers), so it always needs its SentencePiece tokenizer sidecar — no matter
-        // how capabilities were declared or whether the download URL carried a ?download= query.
-        return output.getName().toLowerCase(Locale.ROOT).endsWith(".tflite");
+        // A raw .tflite artifact in this app is either a LiteRT embedding model or a Whisper ACFT
+        // speech-to-text graph — branch on the declared capability, not the extension. Every .tflite
+        // used to take this path, which made a Whisper download fail hunting for a nonexistent
+        // sentencepiece.model; Whisper's tokenizer.json travels as an explicit catalog sidecar instead
+        // (see downloadCatalogSidecars).
+        return output.getName().toLowerCase(Locale.ROOT).endsWith(".tflite")
+            && capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+    }
+
+    /**
+     * Downloads a catalog entry's declared sidecars (e.g. Whisper's {@code tokenizer.json} from the
+     * paired {@code openai/whisper-*} repo) next to the main artifact, reusing the same .part/resume/
+     * Range/hash helpers as the main download. A sidecar already present with a matching hash (or no
+     * expected hash) is skipped; a sidecar that never returns a 2xx response fails the whole download
+     * cleanly rather than leaving a model installed with a missing tokenizer.
+     */
+    private long downloadCatalogSidecars(@NonNull String transferId, @NonNull String modelId,
+                                         @NonNull String primaryUrl, @NonNull File output,
+                                         @NonNull List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars,
+                                         @Nullable String authToken, long currentBytes, long expectedSizeBytes,
+                                         @Nullable ProgressCallback callback) throws Exception {
+        File modelDir = output.getParentFile();
+        if (modelDir == null) throw new IllegalStateException("Model directory is missing.");
+        long packageTotalBytes = expectedSizeBytes > 0L ? expectedSizeBytes : -1L;
+        long addedBytes = 0L;
+
+        for (TaiModelCatalog.CatalogEntry.Sidecar sidecar : sidecars) {
+            File sidecarOutput = new File(modelDir, sidecar.localName);
+            if (sidecarOutput.isFile() && sidecarOutput.length() > 0L
+                && (sidecar.sha256 == null || sidecar.sha256.equalsIgnoreCase(sha256(sidecarOutput)))) {
+                continue;
+            }
+            File sidecarPartial = new File(sidecarOutput.getAbsolutePath() + ".part");
+            long offset = resumeOffset(sidecarPartial, sidecar.url);
+            HttpURLConnection connection = open(sidecar.url, authToken, offset);
+            int status = connection.getResponseCode();
+            if (status == 416 && offset > 0) {
+                connection.disconnect();
+                connection = open(sidecar.url, authToken, 0);
+                status = connection.getResponseCode();
+                offset = 0;
+            }
+            boolean resume = offset > 0 && status == 206 && validContentRange(connection.getHeaderField("Content-Range"), offset);
+            if (status == 206 && !resume) {
+                connection.disconnect();
+                throw new IOException("Invalid partial response for sidecar " + sidecar.localName);
+            }
+            if (!resume) offset = 0;
+            if (status < 200 || status >= 300) {
+                connection.disconnect();
+                throw new IllegalStateException("Missing required sidecar: " + sidecar.localName);
+            }
+            currentBytes += offset;
+            addedBytes += offset;
+            persist(withCurrentFile(transfer(transferId, modelId, primaryUrl, output.getAbsolutePath(),
+                TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), sidecar.localName), callback);
+            try (InputStream input = new BufferedInputStream(connection.getInputStream());
+                 FileOutputStream out = new FileOutputStream(sidecarPartial, resume)) {
+                byte[] buffer = new byte[1024 * 64];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    if (TaiModelDownloadService.isCancelled(modelId)) throw new InterruptedException("Download cancelled.");
+                    out.write(buffer, 0, read);
+                    currentBytes += read;
+                    addedBytes += read;
+                    if (currentBytes % (1024L * 1024L) < read) {
+                        persist(withCurrentFile(transfer(transferId, modelId, primaryUrl, output.getAbsolutePath(),
+                            TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), sidecar.localName), callback);
+                    }
+                }
+            }
+            connection.disconnect();
+            if (sidecar.sha256 != null && !sidecar.sha256.equalsIgnoreCase(sha256(sidecarPartial))) {
+                throw new IllegalStateException("Sidecar failed SHA-256 verification: " + sidecar.localName);
+            }
+            if (sidecarOutput.exists() && !sidecarOutput.delete()) throw new IllegalStateException("Could not replace sidecar " + sidecar.localName);
+            if (!sidecarPartial.renameTo(sidecarOutput)) throw new IllegalStateException("Could not finalize sidecar download: " + sidecar.localName);
+            clearResumeMarker(sidecarPartial);
+        }
+        return addedBytes;
+    }
+
+    /** Serializes catalog sidecars into the {@code TaiModelDownloadService} intent extra so the
+     *  download service (running on its own process/executor) can re-download them via
+     *  {@link #runDownload}. Kept as a plain JSON array of {@code {url, localName, sha256}}. */
+    @NonNull
+    public static JSONArray sidecarsToJson(@NonNull List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars) {
+        JSONArray array = new JSONArray();
+        for (TaiModelCatalog.CatalogEntry.Sidecar sidecar : sidecars) {
+            try {
+                JSONObject json = new JSONObject();
+                json.put("url", sidecar.url);
+                json.put("localName", sidecar.localName);
+                json.put("sha256", sidecar.sha256 == null ? JSONObject.NULL : sidecar.sha256);
+                array.put(json);
+            } catch (JSONException ignored) {
+            }
+        }
+        return array;
+    }
+
+    @NonNull
+    public static List<TaiModelCatalog.CatalogEntry.Sidecar> sidecarsFromJson(@Nullable String json) {
+        List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars = new ArrayList<>();
+        if (json == null || json.trim().isEmpty()) return sidecars;
+        try {
+            JSONArray array = new JSONArray(json);
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject item = array.optJSONObject(i);
+                if (item == null) continue;
+                String url = item.optString("url", "");
+                String localName = item.optString("localName", "");
+                if (url.isEmpty() || localName.isEmpty()) continue;
+                String sha256 = item.isNull("sha256") ? null : item.optString("sha256", null);
+                sidecars.add(new TaiModelCatalog.CatalogEntry.Sidecar(url, localName, sha256));
+            }
+        } catch (JSONException ignored) {
+        }
+        return sidecars;
     }
 
     private long downloadLiteRtEmbeddingSidecars(@NonNull String transferId, @NonNull String modelId,

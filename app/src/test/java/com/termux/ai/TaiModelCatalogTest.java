@@ -9,6 +9,7 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -26,9 +27,9 @@ public class TaiModelCatalogTest {
             if (TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) mnnCount++;
         }
 
-        assertEquals(13, entries.size());
-        assertEquals(13, new HashSet<>(entries.keySet()).size());
-        assertEquals(6, liteRtCount);
+        assertEquals(17, entries.size());
+        assertEquals(17, new HashSet<>(entries.keySet()).size());
+        assertEquals(10, liteRtCount);
         assertEquals(7, mnnCount);
     }
 
@@ -140,6 +141,80 @@ public class TaiModelCatalogTest {
         assertEquals("litert-community/embeddinggemma-300m", entry.repositoryId);
         assertTrue(entry.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
         assertTrue(entry.displayCapabilityTags.contains("Embeddings"));
+    }
+
+    @Test
+    public void whisperAcft_catalogEntriesHaveIdsUrlsSizesSidecarsAndCapability() {
+        String[] ids = {"whisper-acft-base", "whisper-acft-base-en", "whisper-acft-small", "whisper-acft-small-en"};
+        for (String id : ids) {
+            TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(id);
+            assertNotNull("missing catalog entry: " + id, entry);
+            assertEquals(TaiModelSpec.BACKEND_LITERT_LM, entry.backend);
+            assertEquals(TaiModelSpec.FORMAT_LITERTLM, entry.format);
+            assertTrue(entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+            assertTrue(entry.displayCapabilityTags.contains("Speech"));
+            assertTrue(entry.downloadAvailable);
+            assertTrue(entry.sizeBytes > 0);
+            assertNotNull(entry.downloadUrl);
+            assertTrue(entry.downloadUrl.startsWith("https://huggingface.co/litert-community/whisper-acft/resolve/"));
+            assertNotNull(entry.sha256);
+
+            // Default artifact is the 10s window graph.
+            assertTrue(entry.artifactPath.endsWith("_10s_drq.tflite"));
+
+            // Tokenizer sidecar from the paired openai/whisper-{size}{.en} repo.
+            assertEquals(1, entry.sidecars.size());
+            TaiModelCatalog.CatalogEntry.Sidecar sidecar = entry.sidecars.get(0);
+            assertEquals("tokenizer.json", sidecar.localName);
+            assertTrue(sidecar.url.startsWith("https://huggingface.co/openai/whisper-"));
+            assertTrue(sidecar.url.endsWith("/tokenizer.json"));
+            assertNotNull(sidecar.sha256);
+
+            // Both window variants are known, and withWindow(5) swaps to the 5s graph while keeping
+            // the id, capability and sidecar untouched.
+            assertEquals(2, entry.speechWindows.size());
+            TaiModelCatalog.CatalogEntry fast = entry.withWindow(5);
+            assertEquals(entry.modelId, fast.modelId);
+            assertTrue(fast.artifactPath.endsWith("_5s_drq.tflite"));
+            assertNotEquals(entry.sizeBytes, fast.sizeBytes);
+            assertNotEquals(entry.sha256, fast.sha256);
+            assertEquals(entry.sidecars, fast.sidecars);
+            assertTrue(fast.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+        }
+
+        // English-only ids point at the matching .en tokenizer repo; multilingual ids don't.
+        assertTrue(TaiModelCatalog.get("whisper-acft-base-en").sidecars.get(0).url.contains("whisper-base.en/"));
+        assertTrue(TaiModelCatalog.get("whisper-acft-small-en").sidecars.get(0).url.contains("whisper-small.en/"));
+        assertFalse(TaiModelCatalog.get("whisper-acft-base").sidecars.get(0).url.contains(".en/"));
+        assertFalse(TaiModelCatalog.get("whisper-acft-small").sidecars.get(0).url.contains(".en/"));
+
+        // withWindow ignores an unknown window and returns the entry unchanged.
+        TaiModelCatalog.CatalogEntry base = TaiModelCatalog.get("whisper-acft-base");
+        assertEquals(base.artifactPath, base.withWindow(30).artifactPath);
+
+        // A non-speech entry has no window variants and withWindow is a no-op.
+        TaiModelCatalog.CatalogEntry chatEntry = TaiModelCatalog.get(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
+        assertTrue(chatEntry.speechWindows.isEmpty());
+        assertTrue(chatEntry.sidecars.isEmpty());
+        assertEquals(chatEntry.artifactPath, chatEntry.withWindow(5).artifactPath);
+    }
+
+    @Test
+    public void chatEntries_excludeSpeechToTextAndSpeechEntries_containOnlyThem() {
+        Map<String, TaiModelCatalog.CatalogEntry> chat = TaiModelCatalog.chatEntries();
+        Map<String, TaiModelCatalog.CatalogEntry> speech = TaiModelCatalog.speechEntries();
+
+        assertFalse(chat.containsKey("whisper-acft-base"));
+        assertFalse(chat.containsKey("whisper-acft-base-en"));
+        assertFalse(chat.containsKey("whisper-acft-small"));
+        assertFalse(chat.containsKey("whisper-acft-small-en"));
+        assertTrue(chat.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
+
+        assertEquals(4, speech.size());
+        for (TaiModelCatalog.CatalogEntry entry : speech.values()) {
+            assertTrue(entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+        }
+        assertEquals(TaiModelCatalog.entries().size() - speech.size(), chat.size());
     }
 
     @Test

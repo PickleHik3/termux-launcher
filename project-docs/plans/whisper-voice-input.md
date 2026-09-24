@@ -246,7 +246,14 @@ voice input falls back to the Android recognizer. STT unloads after 2 minutes id
 
 ## Phases
 
-1. Downloader sidecars, Whisper catalog entries, TAI speech-to-text section.
+1. Downloader sidecars, Whisper catalog entries, TAI speech-to-text section. **Done** (2026-09-24):
+   `litert-community/whisper-acft` pinned at `f8ab0a00ea95f6e0f2cee200b18671a599a0b0d6`; four catalog
+   ids (`whisper-acft-base{,-en}`, `whisper-acft-small{,-en}`), each with a `tokenizer.json` sidecar
+   from the matching `openai/whisper-*` repo (also pinned) and both window variants (5s/10s, 10s
+   default) via `CatalogEntry#withWindow`. `requiresLiteRtEmbeddingTokenizer` branches on
+   `text_embeddings` capability, not `.tflite` extension. Speech models excluded from chat catalogs,
+   installed-model lists, the default-assistant picker and `/v1/models`; `loadModel` refuses them.
+   No runtime routing yet (phase 2).
 2. `WhisperSttRuntime` (mel, tokenizer, signatures, greedy decode), `transcribe` op on its own
    executor, `/v1/audio/transcriptions`, `tai transcribe`.
 3. Capture + VAD + permission (request code 4717) + keyboard engine toggle + insertion + fallbacks.

@@ -254,6 +254,91 @@ public class TaiModelDownloaderStateTest {
     }
 
     @Test
+    public void speechToTextTflite_doesNotTakeTheSentencepieceEmbeddingPath() throws Exception {
+        // Before this change, requiresLiteRtEmbeddingTokenizer branched on the .tflite extension
+        // alone, so a Whisper download would hunt for sentencepiece.model/tokenizer.model/spiece.model
+        // next to the graph and fail (none of those exist in a Whisper repo). Serving only the model
+        // itself and no sentencepiece candidate must now succeed, with no tokenizer sidecar fetched.
+        byte[] model = modelBytes('w');
+        String url = serve(new FixedBytesHandler(model));
+        File output = output("whisper-branch-test", "acft_whisper_base.en_10s_drq.tflite");
+        LinkedHashSet<String> caps = new LinkedHashSet<>(Collections.singleton(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+        List<String> states = new ArrayList<>();
+
+        TaiModelDownloader downloader = new TaiModelDownloader(context, store);
+        downloader.runDownload("download-whisper-branch-test", "whisper-branch-test", url, output,
+            "Whisper Branch Test", "license", caps, TaiModelSpec.BACKEND_LITERT_LM,
+            TaiModelSpec.FORMAT_LITERTLM, "whisper-acft", "int8_drq", 128, 0, "", 0L, null,
+            transfer -> states.add(transfer.optString("status")));
+
+        assertEquals(TaiModelStore.STATE_INSTALLED, states.get(states.size() - 1));
+        assertTrue(output.isFile());
+        assertFalse("a speech_to_text .tflite must not fetch a SentencePiece sidecar",
+            new File(output.getParentFile(), "sentencepiece.model").isFile());
+        TaiModelSpec spec = store.getDownloadedReadableModels().get("whisper-branch-test");
+        assertNotNull(spec);
+        assertTrue(spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+        assertFalse(spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
+        store.deleteUserModel("whisper-branch-test");
+    }
+
+    @Test
+    public void catalogSidecar_downloadsTokenizerAlongsideTheModelAndVerifiesHash() throws Exception {
+        byte[] model = modelBytes('x');
+        byte[] tokenizer = "{\"tokenizer\":true}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String tokenizerSha256 = sha256Hex(tokenizer);
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/model.tflite", new FixedBytesHandler(model));
+        server.createContext("/tokenizer.json", new FixedBytesHandler(tokenizer));
+        server.start();
+        String modelUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/model.tflite";
+        String tokenizerUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/tokenizer.json";
+        File output = output("whisper-sidecar-test", "model.tflite");
+        List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars = Collections.singletonList(
+            new TaiModelCatalog.CatalogEntry.Sidecar(tokenizerUrl, "tokenizer.json", tokenizerSha256));
+        LinkedHashSet<String> caps = new LinkedHashSet<>(Collections.singleton(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+        List<String> states = new ArrayList<>();
+
+        TaiModelDownloader downloader = new TaiModelDownloader(context, store);
+        downloader.runDownload("download-whisper-sidecar-test", "whisper-sidecar-test", modelUrl, output,
+            "Whisper Sidecar Test", "license", caps, TaiModelSpec.BACKEND_LITERT_LM,
+            TaiModelSpec.FORMAT_LITERTLM, "whisper-acft", "int8_drq", 128, 0, "", 0L, null, null,
+            sidecars, transfer -> states.add(transfer.optString("status")));
+
+        assertEquals(TaiModelStore.STATE_INSTALLED, states.get(states.size() - 1));
+        File tokenizerFile = new File(output.getParentFile(), "tokenizer.json");
+        assertTrue("declared sidecar must be downloaded next to the model", tokenizerFile.isFile());
+        assertEquals(new String(tokenizer, java.nio.charset.StandardCharsets.UTF_8),
+            new String(java.nio.file.Files.readAllBytes(tokenizerFile.toPath()), java.nio.charset.StandardCharsets.UTF_8));
+        store.deleteUserModel("whisper-sidecar-test");
+    }
+
+    @Test
+    public void missingCatalogSidecar_failsTheDownloadCleanly() throws Exception {
+        byte[] model = modelBytes('y');
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/model.tflite", new FixedBytesHandler(model));
+        // No /tokenizer.json handler registered — the sidecar request 404s.
+        server.start();
+        String modelUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/model.tflite";
+        String tokenizerUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/tokenizer.json";
+        File output = output("whisper-missing-sidecar-test", "model.tflite");
+        List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars = Collections.singletonList(
+            new TaiModelCatalog.CatalogEntry.Sidecar(tokenizerUrl, "tokenizer.json", null));
+        LinkedHashSet<String> caps = new LinkedHashSet<>(Collections.singleton(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+        List<String> states = new ArrayList<>();
+
+        TaiModelDownloader downloader = new TaiModelDownloader(context, store);
+        downloader.runDownload("download-whisper-missing-sidecar-test", "whisper-missing-sidecar-test", modelUrl,
+            output, "Whisper Missing Sidecar Test", "license", caps, TaiModelSpec.BACKEND_LITERT_LM,
+            TaiModelSpec.FORMAT_LITERTLM, "whisper-acft", "int8_drq", 128, 0, "", 0L, null, null,
+            sidecars, transfer -> states.add(transfer.optString("status")));
+
+        assertEquals(TaiModelStore.STATE_FAILED, states.get(states.size() - 1));
+        store.deleteUserModel("whisper-missing-sidecar-test");
+    }
+
+    @Test
     public void staleInstalledE4bMetadata_isRebuiltFromCatalogFacts() throws Exception {
         File output = output(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT, "gemma-4-E4B-it.litertlm");
         assertTrue(output.getParentFile().mkdirs() || output.getParentFile().isDirectory());
@@ -347,6 +432,13 @@ public class TaiModelDownloaderStateTest {
 
     private static LinkedHashSet<String> capabilities() {
         return new LinkedHashSet<>(Collections.singleton(TaiModelSpec.CAPABILITY_TEXT_CHAT));
+    }
+
+    private static String sha256Hex(byte[] bytes) throws Exception {
+        java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+        StringBuilder builder = new StringBuilder();
+        for (byte value : digest.digest(bytes)) builder.append(String.format(java.util.Locale.US, "%02x", value));
+        return builder.toString();
     }
 
     private static byte[] modelBytes(char fill) {

@@ -44,6 +44,12 @@ public final class TaiSettings {
     public static final String KEY_API_AUTH_REQUIRED = "tai_api_auth_required";
     public static final String KEY_API_LAN_SESSION_STARTED_AT = "tai_api_lan_session_started_at";
     public static final String KEY_OPENAI_AUTO_LOAD = "tai_openai_auto_load";
+    // Speech-to-text (voice input phase 1: settings only, no runtime yet — see TaiManager#downloadSpeechModel).
+    public static final String KEY_STT_MODEL_ID = "tai_stt_model_id";
+    public static final String KEY_STT_WINDOW_SECONDS = "tai_stt_window_seconds";
+    public static final String KEY_STT_IDLE_UNLOAD_MINUTES = "tai_stt_idle_unload_minutes";
+    public static final int DEFAULT_STT_WINDOW_SECONDS = 10;
+    public static final int DEFAULT_STT_IDLE_UNLOAD_MINUTES = 2;
 
     public static final String BIND_MODE_LOCALHOST = "localhost";
     public static final String BIND_MODE_LAN = "lan";
@@ -226,6 +232,40 @@ public final class TaiSettings {
 
     public boolean isOpenAiAutoLoadEnabled() {
         return preferences.getBoolean(KEY_OPENAI_AUTO_LOAD, true);
+    }
+
+    /** The installed speech-to-text catalog model id (e.g. {@code whisper-acft-base-en}), or empty
+     *  when no speech model has been chosen yet. */
+    @NonNull
+    public String getSttModelId() {
+        return preferences.getString(KEY_STT_MODEL_ID, "");
+    }
+
+    public void setSttModelId(@Nullable String modelId) {
+        preferences.edit().putString(KEY_STT_MODEL_ID, modelId == null ? "" : modelId.trim()).apply();
+    }
+
+    /** The window (in seconds) of the Whisper graph to download/use: 10 (default) or 5. Falls back
+     *  to the default for any stored value the plan doesn't offer (only 5s/10s are ever downloaded;
+     *  30s hallucinates on short speech and isn't offered — see whisper-voice-input.md). */
+    public int getSttWindowSeconds() {
+        int value = preferences.getInt(KEY_STT_WINDOW_SECONDS, DEFAULT_STT_WINDOW_SECONDS);
+        return value == 5 ? 5 : DEFAULT_STT_WINDOW_SECONDS;
+    }
+
+    public void setSttWindowSeconds(int windowSeconds) {
+        preferences.edit().putInt(KEY_STT_WINDOW_SECONDS, windowSeconds == 5 ? 5 : DEFAULT_STT_WINDOW_SECONDS).apply();
+    }
+
+    /** Minutes of idle time before the speech model unloads (default 2 — much shorter than a chat
+     *  model's idle-unload, since STT is meant to be opened and closed within one voice-input turn). */
+    public int getSttIdleUnloadMinutes() {
+        int value = preferences.getInt(KEY_STT_IDLE_UNLOAD_MINUTES, DEFAULT_STT_IDLE_UNLOAD_MINUTES);
+        return Math.max(0, value);
+    }
+
+    public void setSttIdleUnloadMinutes(int minutes) {
+        preferences.edit().putInt(KEY_STT_IDLE_UNLOAD_MINUTES, Math.max(0, minutes)).apply();
     }
 
     @NonNull
