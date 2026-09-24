@@ -9,7 +9,7 @@ ext {
     // Bootstrap of a different variant must not be manually installed by the user after app installation
     // by replacing $PREFIX since app code is dependent on the variant used to build the APK.
     // Currently supported values are: ["apt-android-7", "apt-android-5"]
-    litertLmVersion = "0.14.0"
+    litertLmVersion = "0.17.1"
     packageVariant = System.getenv("TERMUX_PACKAGE_VARIANT") ?: "apt-android-7" // Default: "apt-android-7"
 }
 
