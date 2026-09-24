@@ -230,3 +230,14 @@ splits it into 2 × 128 instead. Its error string ("Chosen prefill work group si
 absent from TAI's 0.14.0 `liblitertlm_jni.so` and present in Gallery's bundled library and in the
 0.15.0, 0.16.1 and 0.17.1 AARs. Every prompt of roughly 129–700 tokens — most chat turns — pays
 up to ~2 s extra on TAI until LiteRT-LM is upgraded to ≥ 0.15.0.
+
+### After upgrading to LiteRT-LM 0.17.1 (b40d67c2)
+
+`tai benchmark`, same settings: TTFT **1.11 s** (Gallery 1.07 s), prefill **251 tok/s** (Gallery
+263), decode 10.5–11.1 tok/s, init 36.4 s first / 22 s later, MemAvailable drop ~3.2 GB. Prefill
+sweep: 128 → 0.63 s, **256 → 1.11 s** (was 2.65 s), 512 → 2.68 s (the cautious-greedy chunker
+upgrades a remainder ≥ half of 1024 to the 1024 graph by design), 1024 → 2.76 s.
+
+Chat path (streamed `/v1/chat/completions`, 309 prompt tokens, 256 out): TTFT 2.91 s at the
+auto-chosen 8192 context (was 3.7–4.0 s on 0.14), **2.75 s at 4096** with decode 10.5 tok/s vs 9.8
+and ~0.8 GB less memory — supporting the 4096 GPU cap recommended above.
