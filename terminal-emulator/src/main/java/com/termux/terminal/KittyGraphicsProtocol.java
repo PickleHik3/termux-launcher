@@ -846,6 +846,11 @@ final class KittyGraphicsProtocol {
             crop[2], crop[3], command.displayColumns, command.displayRows);
     }
 
+    /** The image store, for tests in this package that need an image without decoding one. */
+    KittyImageStore store() {
+        return store;
+    }
+
     /** Fill a reusable renderer result for a Unicode-placeholder cell. */
     boolean getPlaceholder(long imageId, long placementId, KittyImagePlaceholder out) {
         KittyImageStore.Entry entry = store.get(imageId);

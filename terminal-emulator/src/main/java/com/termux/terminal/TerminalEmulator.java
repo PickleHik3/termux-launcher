@@ -4862,6 +4862,11 @@ public final class TerminalEmulator {
         mScreen.collectVisibleKittyPlacements(topRow, rowCount, out);
     }
 
+    /** The kitty graphics protocol of this terminal, for tests in this package. */
+    KittyGraphicsProtocol kittyGraphics() {
+        return mKittyGraphics;
+    }
+
     /**
      * Supplies the first row on display, negative into the scrollback. The view owns scrolling, so
      * the position is pulled when it is needed rather than pushed from a dozen scroll sites where
