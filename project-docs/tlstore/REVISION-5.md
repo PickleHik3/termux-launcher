@@ -1,5 +1,7 @@
 # tlstore Revision 5 — tlstore-ui
 
+> Superseded in part by [REVISION-6.md](REVISION-6.md) (2026-09-24): screens, header, item page rules and motion are defined there. The engine, launcher hooks, TSV contract and progress stream below still apply.
+
 Status: agreed design (2026-09-23), build not started. Supersedes SPEC.md Revision 3's "fzf browser, not
 a compiled TUI". Design: https://claude.ai/artifact/NwnkCF8w2Dzmhw3cAxLjX2, page **Unified flow** (the
 system) and page **Broadsheet** (every screen, the smaller-terminal layouts, the item spread rules).
