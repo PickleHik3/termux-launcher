@@ -48,6 +48,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -634,6 +635,8 @@ public class LauncherCtlApiServer {
                 return jsonResponse(TaiManager.getInstance(context).openAiCompletions(request.body));
             } else if ("POST".equals(request.method) && "/v1/embeddings".equals(request.path)) {
                 return jsonResponse(TaiManager.getInstance(context).embeddings(request.body));
+            } else if ("POST".equals(request.method) && "/v1/audio/transcriptions".equals(request.path)) {
+                return audioTranscriptions(context, request);
             } else if ("POST".equals(request.method) && "/v1/audio/speech".equals(request.path)) {
                 return jsonResponse(TaiManager.getInstance(context).openAiAudioSpeech(request.body));
             }
@@ -677,6 +680,122 @@ public class LauncherCtlApiServer {
         }
         JSONObject error = jsonError("model_not_found", "Model '" + modelId + "' does not exist");
         error.put("_statusCode", 404);
+        return error;
+    }
+
+    /**
+     * OpenAI POST /v1/audio/transcriptions. Multipart ({@code file}, {@code model}, {@code language},
+     * {@code prompt}, {@code prompt_mode}, {@code response_format}) is the OpenAI shape and what
+     * {@code tai transcribe} sends; the upload is written under {@code cacheDir/tai-ipc} and handed
+     * to the runtime process as a path, since audio never crosses the Messenger inline. A JSON body
+     * with a {@code file} path is accepted too, for scripts on the phone. {@code response_format}
+     * {@code text} answers the transcript as text/plain; {@code json} (the default) {@code {"text": …}}.
+     */
+    private HttpResponse audioTranscriptions(Context context, HttpRequest request) throws JSONException {
+        JSONObject taiRequest;
+        File upload = null;
+        String contentType = request.headers.get("content-type");
+        if (MultipartFormData.isMultipart(contentType)) {
+            Map<String, MultipartFormData.Part> parts;
+            try {
+                parts = MultipartFormData.parse(request.bodyBytes, contentType);
+            } catch (IllegalArgumentException e) {
+                return jsonResponse(statusError(400, "bad_request", "Malformed multipart body: " + e.getMessage()));
+            }
+            MultipartFormData.Part file = parts.get("file");
+            if (file == null || file.data.length == 0) {
+                return jsonResponse(statusError(400, "stt_audio_missing", "Multipart field 'file' with the audio is required."));
+            }
+            taiRequest = new JSONObject();
+            for (String field : new String[] {"model", "language", "prompt", "prompt_mode", "response_format"}) {
+                MultipartFormData.Part part = parts.get(field);
+                if (part != null && part.filename == null) taiRequest.put(field, part.text());
+            }
+            try {
+                upload = writeSttUpload(context, file);
+            } catch (IOException e) {
+                return jsonResponse(statusError(500, "stt_upload_failed", "Could not store the upload: " + e.getMessage()));
+            }
+            taiRequest.put("file", upload.getAbsolutePath());
+        } else {
+            taiRequest = request.body == null || request.body.trim().isEmpty() ? new JSONObject() : new JSONObject(request.body);
+        }
+        String format = taiRequest.optString("response_format", "json").trim().toLowerCase(Locale.ROOT);
+        if (!format.isEmpty() && !"json".equals(format) && !"text".equals(format) && !"verbose_json".equals(format)) {
+            deleteQuietly(upload);
+            return jsonResponse(statusError(400, "unsupported_response_format",
+                "response_format must be json, verbose_json or text."));
+        }
+        JSONObject result;
+        try {
+            result = TaiManager.getInstance(context).transcribe(taiRequest.toString());
+        } finally {
+            // The runtime process deletes the upload once it has read it; this covers every early exit.
+            deleteQuietly(upload);
+        }
+        boolean failed = result.optInt("_statusCode", 200) >= 400 || result.has("error");
+        if (failed) {
+            JSONObject nested = result.optJSONObject("error");
+            if (nested != null && "text".equalsIgnoreCase(request.headers.get("x-tai-output"))) {
+                // The CLI formatter reads flat {error, message}; the runtime answers OpenAI's nested shape.
+                JSONObject flat = new JSONObject();
+                flat.put("ok", false);
+                flat.put("error", nested.optString("code", "tai_error"));
+                flat.put("message", nested.optString("message", ""));
+                flat.put("_statusCode", result.optInt("_statusCode", 500));
+                return maybeTextResponse(request, "transcribe", flat);
+            }
+            return maybeTextResponse(request, "transcribe", result);
+        }
+        String text = result.optString("text", "");
+        if ("text".equals(format) || "text".equalsIgnoreCase(request.headers.get("x-tai-output"))) {
+            return new HttpResponse(200, "text/plain; charset=utf-8", (text + "\n").getBytes(StandardCharsets.UTF_8), null);
+        }
+        JSONObject response = new JSONObject();
+        response.put("text", text);
+        if ("verbose_json".equals(format)) {
+            response.put("task", "transcribe");
+            response.put("language", result.optString("language", ""));
+            response.put("duration", result.optDouble("duration", 0.0));
+            response.put("segments", result.optJSONArray("segments") == null ? new JSONArray() : result.optJSONArray("segments"));
+        }
+        JSONObject tai = new JSONObject();
+        for (String key : new String[] {"model", "language", "duration", "windowSeconds", "biased", "timings", "_runtime"}) {
+            if (result.has(key)) tai.put(key, result.get(key));
+        }
+        response.put("tai", tai);
+        return jsonResponse(response);
+    }
+
+    /** Writes an uploaded audio part to {@code cacheDir/tai-ipc/stt-<id>.<ext>} for the runtime process to read. */
+    private File writeSttUpload(Context context, MultipartFormData.Part file) throws IOException {
+        File dir = new File(context.getCacheDir(), TaiManager.STT_IPC_DIR);
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot create " + dir);
+        String extension = "wav";
+        if (file.filename != null) {
+            int dot = file.filename.lastIndexOf('.');
+            String candidate = dot >= 0 ? file.filename.substring(dot + 1).toLowerCase(Locale.ROOT) : "";
+            if (candidate.matches("[a-z0-9]{1,5}")) extension = candidate;
+        }
+        File out = new File(dir, "stt-" + UUID.randomUUID() + "." + extension);
+        try (FileOutputStream stream = new FileOutputStream(out)) {
+            stream.write(file.data);
+        }
+        return out;
+    }
+
+    private static void deleteQuietly(@Nullable File file) {
+        if (file == null) return;
+        try {
+            //noinspection ResultOfMethodCallIgnored
+            file.delete();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private JSONObject statusError(int statusCode, String code, String message) throws JSONException {
+        JSONObject error = jsonError(code, message);
+        error.put("_statusCode", statusCode);
         return error;
     }
 
@@ -1201,6 +1320,7 @@ public class LauncherCtlApiServer {
             if (bodyBytes.length != contentLength) {
                 throw new HttpParseException(400, "bad_request", "Incomplete request body");
             }
+            request.bodyBytes = bodyBytes;
             request.body = new String(bodyBytes, StandardCharsets.UTF_8);
         } else {
             request.body = "";
@@ -1440,6 +1560,8 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/completions", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/embeddings", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/audio/speech", new SimpleRateLimiter(60, 60_000));
+        // Voice input sends one request per spoken phrase; a fast talker is a few per second.
+        rateLimiters.put("POST:/v1/audio/transcriptions", new SimpleRateLimiter(240, 60_000));
         rateLimiters.put("GET:/api/version", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/api/tags", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/api/show", new SimpleRateLimiter(120, 60_000));
@@ -1532,6 +1654,7 @@ public class LauncherCtlApiServer {
         supportedEndpoints.put("/v1/completions");
         supportedEndpoints.put("/v1/embeddings");
         supportedEndpoints.put("/v1/audio/speech");
+        supportedEndpoints.put("/v1/audio/transcriptions");
         supportedEndpoints.put("/v1/apps/launch");
         supportedEndpoints.put("/api/version");
         supportedEndpoints.put("/api/tags");
@@ -1544,6 +1667,7 @@ public class LauncherCtlApiServer {
         data.put("supportedEndpoints", supportedEndpoints);
         data.put("embeddingsNote", "Embeddings support is model-capability dependent; check /v1/models _capabilities for text_embeddings.");
         data.put("audioOutputNote", "Audio output returns an explicit unsupported_audio_output error until a local runner exposes generated audio.");
+        data.put("audioInputNote", "/v1/audio/transcriptions runs the installed Whisper ACFT speech model on the CPU; multipart file (WAV or raw PCM16 16 kHz mono), model, language, prompt, response_format json|text.");
         data.put("modelFormatNote", "TAI supports LiteRT-LM and MNN model packages only; GGUF/raw weights are not supported by this APK.");
         if (includeToken) {
             data.put("token", settings.getOrCreateApiToken());
@@ -1610,6 +1734,7 @@ public class LauncherCtlApiServer {
             "  tai keep-warm [model] [--minutes N] [--auto|--cpu|--gpu]\n" +
             "  tai cancel\n" +
             "  tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\n" +
+            "  tai transcribe <file.wav> [--model id] [--language xx] [--terminal]\n" +
             "  tai doctor\n" +
             "\n" +
             "TAI is authenticated through ~/.launcherctl and runs native AI in the isolated :tai_runtime process.\n" +
@@ -1623,11 +1748,17 @@ public class LauncherCtlApiServer {
             "tokens by default, 3 runs), the same call and defaults Google AI Edge Gallery's Benchmark screen\n" +
             "uses, so the two are comparable 1:1. It refuses while a chat model is loaded (unload first) and\n" +
             "checks the same memory budget as tai load unless --force skips it, since Gallery has none.\n" +
+            "tai transcribe runs the installed Whisper speech model (TAI settings > Speech-to-text) on a WAV\n" +
+            "file (16 kHz mono PCM16 preferred; other rates are resampled) or raw PCM16 16 kHz mono, on the\n" +
+            "CPU in :tai_runtime, never queued behind a chat generation. --terminal biases towards shell\n" +
+            "vocabulary (git, ls, cd, sudo, apt, pkg, tab, enter, escape, ctrl); --language forces an\n" +
+            "ISO 639-1 code on multilingual models (the -en models always decode English).\n" +
             "OpenAI-compatible endpoints (default bind mode is localhost):\n" +
             "  /v1/models\n" +
             "  /v1/chat/completions\n" +
             "  /v1/completions\n" +
             "  /v1/embeddings\n" +
+            "  /v1/audio/transcriptions\n" +
             "  /v1/audio/speech\n" +
             "Ollama-compatible endpoints: /api/tags /api/chat /api/generate /api/embed /api/embeddings /api/show /api/ps /api/version\n" +
             "\n" +
@@ -1827,6 +1958,33 @@ public class LauncherCtlApiServer {
             "    if [ -n \"$force\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"force\\\":true\"; sep=\",\"; fi\n" +
             "    [ \"$body\" = \"{}\" ] || body=\"$body}\"\n" +
             "    post_json_long /v1/ai/runtime/benchmark \"$body\"\n" +
+            "    ;;\n" +
+            "  transcribe)\n" +
+            "    file=\"\"\n" +
+            "    model=\"\"\n" +
+            "    language=\"\"\n" +
+            "    terminal=\"\"\n" +
+            "    usage_transcribe() { echo \"usage: tai transcribe <file.wav> [--model id] [--language xx] [--terminal]\" >&2; exit 2; }\n" +
+            "    while [ \"$#\" -gt 0 ]; do\n" +
+            "      case \"$1\" in\n" +
+            "        --model) shift; [ \"$#\" -gt 0 ] || usage_transcribe; model=\"$1\" ;;\n" +
+            "        --language) shift; [ \"$#\" -gt 0 ] || usage_transcribe; language=\"$1\" ;;\n" +
+            "        --terminal) terminal=terminal ;;\n" +
+            "        --*) usage_transcribe ;;\n" +
+            "        *) [ -z \"$file\" ] || usage_transcribe; file=\"$1\" ;;\n" +
+            "      esac\n" +
+            "      shift\n" +
+            "    done\n" +
+            "    [ -n \"$file\" ] || usage_transcribe\n" +
+            "    [ -r \"$file\" ] || { echo \"tai transcribe: cannot read $file\" >&2; exit 1; }\n" +
+            // The audio goes up as multipart/form-data, the OpenAI shape, so the same route serves
+            // curl, OpenAI clients and this script; text mode asks for the bare transcript.
+            "    set -- -F \"file=@$file\"\n" +
+            "    [ -z \"$model\" ] || set -- \"$@\" -F \"model=$model\"\n" +
+            "    [ -z \"$language\" ] || set -- \"$@\" -F \"language=$language\"\n" +
+            "    [ -z \"$terminal\" ] || set -- \"$@\" -F \"prompt_mode=terminal\"\n" +
+            "    if [ \"$OUTPUT_MODE\" = \"text\" ]; then set -- \"$@\" -F \"response_format=text\" -H \"X-TAI-Output: text\"; fi\n" +
+            "    curl $CURL_COMMON -X POST -H \"Authorization: Bearer $TOKEN\" \"$@\" \"$BASE/v1/audio/transcriptions\"\n" +
             "    ;;\n" +
             "  doctor)\n" +
             "    get_json /v1/ai/runtime\n" +
@@ -2447,6 +2605,8 @@ public class LauncherCtlApiServer {
         String query;
         Map<String, String> headers;
         String body;
+        /** The body as received; multipart uploads are read from here, never from the decoded string. */
+        byte[] bodyBytes = new byte[0];
     }
 
     static class HttpResponse {

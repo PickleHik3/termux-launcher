@@ -132,6 +132,20 @@ public class TaiPressureWatchTest {
         assertEquals(TaiPressureWatch.STT_IDLE_MS, TaiPressureWatch.idleLimitMs(TaiResidency.Kind.STT));
     }
 
+    /** The STT limit follows the settings value the runtime process was last sent; 0 turns the timer off. */
+    @Test
+    public void theSttIdleLimitComesFromSettings() {
+        TaiResidency.Entry sttAtThree = stt("three-minutes", NOW - 3L * 60_000L, false);
+        List<TaiResidency.Entry> residents = Arrays.asList(sttAtThree, runtime());
+
+        assertEquals(Collections.singletonList(sttAtThree), TaiPressureWatch.idleExpired(residents, NOW));
+        assertTrue(TaiPressureWatch.idleExpired(residents, NOW, 5L * 60_000L).isEmpty());
+        assertEquals(Collections.singletonList(sttAtThree), TaiPressureWatch.idleExpired(residents, NOW, 3L * 60_000L));
+        assertTrue("0 means never on idle", TaiPressureWatch.idleExpired(residents, NOW, 0L).isEmpty());
+        assertEquals(5L * 60_000L, TaiPressureWatch.idleLimitMs(TaiResidency.Kind.STT, 5L * 60_000L));
+        assertEquals(TaiPressureWatch.EMBEDDING_IDLE_MS, TaiPressureWatch.idleLimitMs(TaiResidency.Kind.EMBEDDING, 5L * 60_000L));
+    }
+
     @Test
     public void chatAndTheBaselineHaveNoWatchTimerAndBusyResidentsNeverExpire() {
         TaiResidency.Entry chat = chat("e4b", NOW - 24L * 3_600_000L, false);

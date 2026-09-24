@@ -312,6 +312,28 @@ public class TaiResidencyTest {
         assertFalse(TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, null).contains(chat));
     }
 
+    /** An STT load replaces the one resident Whisper graph (credited, never a victim) and may take idle chat. */
+    @Test
+    public void anSttLoadIsCreditedItsOwnResidentAndMayEvictIdleChat() {
+        TaiModelSpec whisper = spec("whisper-acft-base-en", TaiModelSpec.BACKEND_LITERT_LM,
+            "/models/whisper-acft-base-en/acft_whisper_base.en_10s_drq.tflite", 101_390_600L, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
+        assertEquals(101_390_600L * 19L / 10L, TaiResidency.sttEstimateBytes(whisper));
+        TaiResidency.Entry stt = TaiResidency.Entry.stt(whisper, 10);
+        assertEquals(TaiResidency.Kind.STT, stt.kind);
+        assertEquals("cpu", stt.accelerator);
+        assertEquals(10, stt.window);
+        assertEquals(TaiResidency.sttEstimateBytes(whisper), stt.bytes());
+
+        TaiResidency.Entry chat = new TaiResidency.Entry("e4b", TaiResidency.Kind.CHAT, "litert-lm", "gpu", 4096, 3_000_000_000L, null, 1L, false);
+        TaiResidency.Entry emb = new TaiResidency.Entry("emb", TaiResidency.Kind.EMBEDDING, "litert-lm", "cpu", 1024, 300_000_000L, null, 2L, false);
+        List<TaiResidency.Entry> residents = java.util.Arrays.asList(chat, stt, emb);
+        long available = 3_000_000_000L;
+        assertEquals(available + stt.bytes(), TaiResidency.creditedAvailable(available, residents, TaiResidency.Kind.STT, null));
+        assertEquals(java.util.Arrays.asList(emb, chat), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.STT, null));
+        // Other loads see the STT resident as an ordinary idle victim, embeddings before it.
+        assertEquals(java.util.Arrays.asList(emb, stt), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, null));
+    }
+
     private static TaiModelSpec chatSpec(String id, String backend, long sizeBytes) {
         String path = TaiModelSpec.BACKEND_MNN_LLM.equals(backend) ? "/models/" + id + "/config.json" : "/models/" + id + "/model.litertlm";
         return spec(id, backend, path, sizeBytes, TaiModelSpec.CAPABILITY_TEXT_CHAT);

@@ -121,11 +121,16 @@ final class TaiPressureWatch {
      * and keep-warm), and the RUNTIME baseline is the process itself.
      */
     static long idleLimitMs(@NonNull TaiResidency.Kind kind) {
+        return idleLimitMs(kind, STT_IDLE_MS);
+    }
+
+    /** {@link #idleLimitMs(TaiResidency.Kind)} with the STT limit the settings chose ({@code 0}: never on idle). */
+    static long idleLimitMs(@NonNull TaiResidency.Kind kind, long sttIdleLimitMs) {
         switch (kind) {
             case EMBEDDING:
                 return EMBEDDING_IDLE_MS;
             case STT:
-                return STT_IDLE_MS;
+                return sttIdleLimitMs;
             default:
                 return 0L;
         }
@@ -138,9 +143,15 @@ final class TaiPressureWatch {
      */
     @NonNull
     static List<TaiResidency.Entry> idleExpired(@NonNull List<TaiResidency.Entry> residents, long nowMs) {
+        return idleExpired(residents, nowMs, STT_IDLE_MS);
+    }
+
+    /** {@link #idleExpired(List, long)} with the STT idle limit from settings ({@code TaiSettings#getSttIdleUnloadMinutes}). */
+    @NonNull
+    static List<TaiResidency.Entry> idleExpired(@NonNull List<TaiResidency.Entry> residents, long nowMs, long sttIdleLimitMs) {
         ArrayList<TaiResidency.Entry> expired = new ArrayList<>();
         for (TaiResidency.Entry entry : idleInEvictionOrder(residents, false)) {
-            long limit = idleLimitMs(entry.kind);
+            long limit = idleLimitMs(entry.kind, sttIdleLimitMs);
             if (limit > 0L && nowMs - entry.lastUsedMs >= limit) expired.add(entry);
         }
         return Collections.unmodifiableList(expired);

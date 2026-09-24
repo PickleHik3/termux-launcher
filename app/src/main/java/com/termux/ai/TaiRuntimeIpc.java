@@ -30,6 +30,9 @@ final class TaiRuntimeIpc {
     static final String OP_EMBEDDINGS = "embeddings";
     static final String OP_PREFLIGHT = "preflight";
     static final String OP_BENCHMARK = "benchmark";
+    /** Speech-to-text; both run on the service's own STT lane, never behind a chat generation. */
+    static final String OP_TRANSCRIBE = "transcribe";
+    static final String OP_STT_WARM = "sttWarm";
 
     private TaiRuntimeIpc() {
     }

@@ -272,7 +272,22 @@ voice input falls back to the Android recognizer. STT unloads after 2 minutes id
    installed-model lists, the default-assistant picker and `/v1/models`; `loadModel` refuses them.
    No runtime routing yet (phase 2).
 2. `WhisperSttRuntime` (mel, tokenizer, signatures, greedy decode), `transcribe` op on its own
-   executor, `/v1/audio/transcriptions`, `tai transcribe`.
+   executor, `/v1/audio/transcriptions`, `tai transcribe`. **Done** (2026-09-24): `WhisperMel`
+   (16 × 25 DFT, pinned to the reference fixture), `WhisperTokenizer` (decode + merge-rank BPE
+   encode for the bias line), `WhisperDecoder` (prompt, suppressions, repetition guard),
+   `WhisperSegmenter` (pause split, < 0.3 s voiced dropped, 300 ms padding), `WhisperAudio`
+   (WAV/PCM16, linear resample). `Interpreter.runSignature("encode"/"decode")` with decode inputs
+   bound by dtype/rank, CPU/XNNPACK, `min(4, cores)` threads. `transcribe`/`sttWarm` run on the
+   service's `tai-runtime-stt` lane; audio crosses IPC as a path under `cacheDir/tai-ipc`.
+   `POST /v1/audio/transcriptions` (multipart `file`, `model`, `language`, `prompt`,
+   `prompt_mode: terminal`, `response_format` json|text) and `tai transcribe <file> [--model id]
+   [--language xx] [--terminal]`. Memory: `TaiResidency.Kind.STT` at file × 1.9 until measured,
+   `decideSttLoad` through `planFixed` (may evict idle chat), busy while transcribing, idle unload
+   from `TaiSettings.getSttIdleUnloadMinutes` carried to the runtime process with each request.
+   Prompt note: the `.en` tokenizer.json also carries `<|en|>`, so — as in the reference decoder
+   that produced the golden fixture — `.en` graphs are prompted `[sot, <|en|>, <|transcribe|>,
+   <|notimestamps|>]`; the 2-token `.en` prompt gives the same text on base.en and garbage on the
+   multilingual graph. Device check on pong pending (see phase 3's test list).
 3. Capture + VAD + permission (request code 4717) + keyboard engine toggle + insertion + fallbacks.
 4. Voice commands, terminal cleanup, language forcing.
 5. Memory-manager registration and eviction (after memory manager phase 2).
