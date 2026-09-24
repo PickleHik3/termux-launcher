@@ -17,6 +17,7 @@ android {
     namespace "com.termux"
 
     compileSdkVersion project.properties.compileSdkVersion.toInteger()
+    ndkVersion = System.getenv("JITPACK_NDK_VERSION") ?: project.properties.ndkVersion
     def appVersionName = System.getenv("TERMUX_APP_VERSION_NAME") ?: ""
     def apkVersionTag = System.getenv("TERMUX_APK_VERSION_TAG") ?: ""
     def splitAPKsForDebugBuilds = System.getenv("TERMUX_SPLIT_APKS_FOR_DEBUG_BUILDS") ?: "1"
@@ -37,6 +38,21 @@ android {
         minSdkVersion project.properties.minSdkVersion.toInteger()
         targetSdkVersion project.properties.targetSdkVersion.toInteger()
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+
+        // libtai_xnnpack.so (com.termux.ai.TaiXnnpackDelegate): a JNI shim that dlopens the
+        // already-loaded libtensorflowlite_jni.so and calls its exported XNNPACK delegate C API
+        // directly, so Whisper inference gets a real multi-threaded XNNPACK pthreadpool (see
+        // WhisperSttRuntime and project-docs/plans/whisper-voice-input.md).
+        externalNativeBuild {
+            ndkBuild {
+                cFlags "-std=c11", "-Wall", "-Wextra", "-Werror", "-Os"
+            }
+        }
+
+        ndk {
+            abiFilters 'x86', 'x86_64', 'armeabi-v7a', 'arm64-v8a'
+        }
+
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
         versionName "0.2.37"
 
@@ -130,6 +146,12 @@ android {
     testOptions {
         unitTests {
             includeAndroidResources = true
+        }
+    }
+
+    externalNativeBuild {
+        ndkBuild {
+            path "src/main/jni/Android.mk"
         }
     }
 
