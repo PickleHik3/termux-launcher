@@ -83,12 +83,13 @@ sha512_b64() {
 }
 
 # The Revision 5 columns (category upstream setup standfirst does1..3 try
-# notes author licence size picture picture-digest demo featured), appended
-# after summary. Every fixture row carries one of these two so the catalog
-# stays 26 columns wide; R5_HELLO gives "hello" a category and makes it the
-# featured item, so list/search/info --tsv have something real to read back.
-R5_NONE="-	-	0	-	-	-	-	-	-	-	-	-	-	-	-	0"
-R5_HELLO="Tools	-	0	a greeting from the item list	Shows a greeting	Keeps it plain text	Does nothing else	hello	one note|another note	Test Author	MIT	~1 KB	file://example/hello.jpg	deadbeef	-	1"
+# notes author licence size picture picture-digest demo featured) and the
+# Revision 6 one (readme-skip), appended after summary. Every fixture row
+# carries one of these two so the catalog stays 27 columns wide; R5_HELLO gives
+# "hello" a category, makes it the featured item and names two README sections
+# to skip, so list/search/info --tsv have something real to read back.
+R5_NONE="-	-	0	-	-	-	-	-	-	-	-	-	-	-	-	0	-"
+R5_HELLO="Tools	-	0	a greeting from the item list	Shows a greeting	Keeps it plain text	Does nothing else	hello	one note|another note	Test Author	MIT	~1 KB	file://example/hello.jpg	deadbeef	-	1	Portability|Star history"
 
 # write_catalog <file> <serial> <version> <fakebin payload> — the version is the
 # one hello and fakebin carry, so a newer catalog moves a config item on too.
@@ -96,7 +97,7 @@ write_catalog() {
     local out="$1" serial="$2" fbver="$3" fbfile="$4"
     {
         printf '# tlstore catalog\tserial=%s\n' "$serial"
-        printf '# name\tkind\tversion\tprefixes\tsource\tdigest\ttarget\trequires\toptions\tsummary\tcategory\tupstream\tsetup\tstandfirst\tdoes1\tdoes2\tdoes3\ttry\tnotes\tauthor\tlicence\tsize\tpicture\tpicture-digest\tdemo\tfeatured\n'
+        printf '# name\tkind\tversion\tprefixes\tsource\tdigest\ttarget\trequires\toptions\tsummary\tcategory\tupstream\tsetup\tstandfirst\tdoes1\tdoes2\tdoes3\ttry\tnotes\tauthor\tlicence\tsize\tpicture\tpicture-digest\tdemo\tfeatured\treadme-skip\n'
         printf 'hello\tfile\t%s\t*\tfile://%s/hello.conf\t%s\t~/.config/hello.conf\t-\t-\tA greeting you can read.\t%s\n' "$fbver" "$FX" "$(sha "$FX/hello.conf")" "$R5_HELLO"
         printf 'mine\tfile-once\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/mine.conf\t-\t-\tYours to edit, installed once.\t%s\n' "$FX" "$(sha "$FX/mine.conf")" "$R5_NONE"
         printf 'fakebin\tbinary\t%s\t*\tfile://%s/%s\t%s\t-\t-\t-\tA small tool for the terminal.\t%s\n' "$fbver" "$FX" "$fbfile" "$(sha "$FX/$fbfile")" "$R5_NONE"
@@ -119,11 +120,11 @@ write_catalog() {
         # something genuine to verify and cache. Digests are computed here,
         # not folded into R5_HELLO/R5_NONE, since they depend on the fixture
         # files this function's caller already made.
-        printf 'pictured\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/pictured.conf\t-\t-\tHas a real picture and demo, for the picture command tests.\tTools\t-\t0\tan item with a picture\tShows a picture\tKeeps it simple\tHas a demo too\tpictured\t-\tTest Author\tMIT\t~1 KB\tfile://%s/pictured.jpg\t%s\tfile://%s/pictured-demo.jpg\t0\n' \
+        printf 'pictured\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/pictured.conf\t-\t-\tHas a real picture and demo, for the picture command tests.\tTools\t-\t0\tan item with a picture\tShows a picture\tKeeps it simple\tHas a demo too\tpictured\t-\tTest Author\tMIT\t~1 KB\tfile://%s/pictured.jpg\t%s\tfile://%s/pictured-demo.jpg\t0\t-\n' \
             "$FX" "$(sha "$FX/hello.conf")" "$FX" "$(sha "$FX/pictured.jpg")" "$FX"
         # Same picture file, but the catalog's own digest for it is wrong —
         # `tlstore picture` must refuse it the way any other digest mismatch is.
-        printf 'badpic\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/badpic.conf\t-\t-\tHas a picture whose digest never matches, on purpose.\tTools\t-\t0\t-\t-\t-\t-\t-\t-\tTest Author\tMIT\t-\tfile://%s/pictured.jpg\t0000000000000000000000000000000000000000000000000000000000000000\t-\t0\n' \
+        printf 'badpic\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/badpic.conf\t-\t-\tHas a picture whose digest never matches, on purpose.\tTools\t-\t0\t-\t-\t-\t-\t-\t-\tTest Author\tMIT\t-\tfile://%s/pictured.jpg\t0000000000000000000000000000000000000000000000000000000000000000\t-\t0\t-\n' \
             "$FX" "$(sha "$FX/hello.conf")" "$FX"
         # A binary whose source is a FIFO: curl blocks reading it until this
         # test writes to the other end, so a --progress install can be
@@ -760,9 +761,11 @@ y
     expect_out "info --tsv names the picture" $'^Picture\tfile://example/hello.jpg$'
     expect_out "info --tsv names the picture digest alongside it" $'^Picture-digest\tdeadbeef$'
     expect_out "info --tsv always names featured, 0 being an answer" $'^Featured\t1$'
+    expect_out "info --tsv names the readme sections to skip, pipe-separated" $'^Readme-skip\tPortability|Star history$'
     tl info --tsv twin
     expect_no_out "an item with no picture prints no Picture line" $'^Picture\t'
     expect_out "and featured still prints as 0" $'^Featured\t0$'
+    expect_no_out "and nothing to skip prints no Readme-skip line" $'^Readme-skip\t'
     tl info --tsv claude-code
     expect_out "info --tsv names the build tools" $'^Builds with\tdemo-build$'
     tl info --tsv
@@ -1042,12 +1045,13 @@ done
 echo
 # ---------------------------------------------------------------------------
 # Backward compatibility: a phone's already-installed tlstore against the new
-# catalog. Revision 5 only ever appends columns (see the TSV contract in
-# project-docs/tlstore/REVISION-5.md), so the script already on dev, unchanged,
-# must still read this worktree's catalog shape.
+# catalog. New columns only ever land at the end (see the TSV contract in
+# project-docs/tlstore/REVISION-5.md; Revision 6 added readme-skip the same
+# way), so the script already on dev, unchanged, must still read this
+# worktree's catalog shape.
 # ---------------------------------------------------------------------------
 
-echo "== the dev-branch tlstore reads the Revision 5 catalog"
+echo "== the dev-branch tlstore reads the new catalog"
 OLD_TLSTORE="$(mktemp)"
 if git -C "$repo" show dev:app/src/main/assets/tlstore/tlstore > "$OLD_TLSTORE" 2>/dev/null; then
     SHELL_LABEL="dev-branch tlstore"
@@ -1068,7 +1072,7 @@ if git -C "$repo" show dev:app/src/main/assets/tlstore/tlstore > "$OLD_TLSTORE" 
         "A greeting you can read."
     mkdir -p "$TESTHOME/.config"
     OUT="$(old_env install hello -y)"; ST=$?
-    expect_status "it can still install an item from the Revision 5 catalog" 0
+    expect_status "it can still install an item from the new catalog" 0
     expect_file "the file landed" "$TESTHOME/.config/hello.conf"
     rm -rf "$ROOT"
 else
@@ -1089,9 +1093,9 @@ printf '1111111111111111111111111111111111111111111111111111111111111111  demo-a
 
 # bc_write_items <items.tsv path> <featured 0|1> <category>
 bc_write_items() {
-    printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\t%s\tdemo/demo\t0\ta demo item for testing\tShows a demo\tDoes another thing\tDoes one more thing\tdemo\t-\tDemo Author\tMIT\t-\tlauncher:scripts/tlstore/pictures/demo.jpg@abc123\t-\t%s\n' \
+    printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\t%s\tdemo/demo\t0\ta demo item for testing\tShows a demo\tDoes another thing\tDoes one more thing\tdemo\t-\tDemo Author\tMIT\t-\tlauncher:scripts/tlstore/pictures/demo.jpg@abc123\t-\t%s\tPortability|Star history\n' \
         "$3" "$2" > "$1"
-    printf 'part\tpkg\t-\t*\tdemo-pkg\t-\t-\thidden=1\tA hidden part.\t-\t-\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t0\n' >> "$1"
+    printf 'part\tpkg\t-\t*\tdemo-pkg\t-\t-\thidden=1\tA hidden part.\t-\t-\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t0\t-\n' >> "$1"
 }
 
 bc_items="$BC_ROOT/scripts/tlstore/items.tsv"
@@ -1099,9 +1103,28 @@ bc_cat="$BC_ROOT/app/src/main/assets/tlstore/catalog.tsv"
 
 bc_write_items "$bc_items" 1 Tools
 OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
-if [ "$ST" = 0 ]; then pass; else fail "build-catalog.sh runs against a Revision 5 items.tsv" "$OUT"; fi
+if [ "$ST" = 0 ]; then pass; else fail "build-catalog.sh runs against a Revision 6 items.tsv" "$OUT"; fi
 if [ -f "$bc_cat" ]; then pass; else fail "it writes the catalog"; fi
-if awk -F'\t' 'NR==3 { exit (NF == 26) ? 0 : 1 }' "$bc_cat"; then pass; else fail "the header row has 26 columns"; fi
+if awk -F'\t' 'NR==3 { exit (NF == 27 && $27 == "readme-skip") ? 0 : 1 }' "$bc_cat"; then pass; else fail "the header row has 27 columns, readme-skip last"; fi
+if awk -F'\t' '$1=="demo" { exit ($27=="Portability|Star history") ? 0 : 1 }' "$bc_cat"; then
+    pass
+else
+    fail "readme-skip rides through as the last column"
+fi
+if awk -F'\t' '$1=="part" { exit (NF == 27 && $27=="-") ? 0 : 1 }' "$bc_cat"; then
+    pass
+else
+    fail "a part carries - for readme-skip"
+fi
+# The very catalog build-catalog.sh wrote, read back by this worktree's tlstore:
+# the last column comes out of info --tsv under its own key.
+bc_prefix="$BC_ROOT/data/data/com.termux/files/usr"
+mkdir -p "$BC_ROOT/home" "$bc_prefix/libexec/termux-launcher/tlstore"
+cp "$bc_cat" "$bc_prefix/libexec/termux-launcher/tlstore/catalog.tsv"
+OUT="$(env -i HOME="$BC_ROOT/home" PATH="/usr/bin:/bin" TLSTORE_PREFIX="$bc_prefix" \
+    TLSTORE_ARCH=aarch64 /bin/sh "$TLSTORE" info --tsv demo 2>&1)"; ST=$?
+if [ "$ST" = 0 ]; then pass; else fail "tlstore reads the catalog build-catalog.sh wrote" "$OUT"; fi
+if printf '%s' "$OUT" | grep -q $'^Readme-skip\tPortability|Star history$'; then pass; else fail "and info --tsv prints Readme-skip from it" "$OUT"; fi
 if awk -F'\t' -v want="$BC_PIC_DIGEST" '$1=="demo" { exit ($24==want) ? 0 : 1 }' "$bc_cat"; then
     pass
 else
@@ -1116,6 +1139,10 @@ fi
 printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\tTools\n' > "$bc_items"
 OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
 if [ "$ST" != 0 ]; then pass; else fail "a row missing the Revision 5 columns is refused"; fi
+
+printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\tTools\tdemo/demo\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t1\n' > "$bc_items"
+OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
+if [ "$ST" != 0 ]; then pass; else fail "a Revision 5 row, without readme-skip, is refused"; fi
 
 bc_write_items "$bc_items" 1 Nonsense
 OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?

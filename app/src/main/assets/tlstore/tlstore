@@ -326,6 +326,11 @@ load_item() {
     it_picture_digest=$(field "$it_row" 24)
     it_demo=$(field "$it_row" 25)
     it_featured=$(field "$it_row" 26)
+    # Revision 6: the README sections tlstore-ui leaves out, |-separated. A
+    # catalog from before the column has no field 27 at all, which reads as
+    # "none" the same way "-" does.
+    it_readme_skip=$(field "$it_row" 27)
+    [ -n "$it_readme_skip" ] || it_readme_skip="-"
     return 0
 }
 
@@ -1406,6 +1411,7 @@ cmd_info() {
         fi
         [ "$it_demo" = - ] || printf '%s\t%s\n' Demo "$it_demo"
         printf '%s\t%s\n' Featured "$it_featured"
+        [ "$it_readme_skip" = - ] || printf '%s\t%s\n' Readme-skip "$it_readme_skip"
         return 0
     fi
     say "$it_name"
