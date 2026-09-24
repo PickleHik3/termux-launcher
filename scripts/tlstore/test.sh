@@ -194,7 +194,7 @@ build_fixture() {
     printf 'not really a loader\n' > "$FX/loader.bin"
     printf 'a picture worth caching\n' > "$FX/pictured.jpg"
     printf 'a demo worth caching\n' > "$FX/pictured-demo.jpg"
-    printf '# pinned\n\nread from the pinned copy, never from upstream\n' > "$FX/pinned-hero.md"
+    printf '<!-- tlstore: pinned from demo/pinnedsrc@abcdef1 -->\n# pinned\n\nread from the pinned copy, never from upstream\n' > "$FX/pinned-hero.md"
     rm -f "$FX/slow.pipe"
     mkfifo "$FX/slow.pipe"
 
@@ -216,6 +216,8 @@ build_fixture() {
     printf 'a user image\n' > "$GH/user-images.githubusercontent.com/123/abc.png"
     printf 'a pages picture\n' > "$GH/demo.github.io/pic.png"
     printf 'a github.com raw picture\n' > "$GH/github.com/demo/tagged/raw/HEAD/x.png"
+    mkdir -p "$RAWGH/demo/pinnedsrc/abcdef1/docs"
+    printf 'the pinned-commit shot\n' > "$RAWGH/demo/pinnedsrc/abcdef1/docs/shot.png"
 
     # Fake package managers: they record what they were asked for. Both names
     # are needed — tlstore prefers pacman, and a host may have a real one.
@@ -931,7 +933,7 @@ y
     tl_stdout readme readmepinned
     expect_status "a pinned readme is served without touching GitHub" 0
     expect_out "from a digest-keyed cache path, like a picture" "^$READMEPIN_CACHE\$"
-    expect_content "and it really is the pinned copy" "$OUT" "$(printf '# pinned\n\nread from the pinned copy, never from upstream')"
+    expect_content "and it really is the pinned copy" "$OUT" "$(printf '<!-- tlstore: pinned from demo/pinnedsrc@abcdef1 -->\n# pinned\n\nread from the pinned copy, never from upstream')"
     mv "$FX/gh.away" "$FX/gh"
 
     tl_stdout readme readmepinnedbad
@@ -989,6 +991,9 @@ y
     expect_status "a relative picture resolves against the README's revision" 0
     expect_out "into the item's own cache directory" "^$RM_CACHE/tagged/[0-9a-f]*\.png\$"
     expect_content "and is the tag's copy of it" "$OUT" "the tagged shot"
+    tl_stdout readme-asset readmepinned docs/shot.png
+    expect_status "a relative picture in a pinned readme resolves against the commit it names" 0
+    expect_content "and is that commit's copy, not upstream's" "$OUT" "the pinned-commit shot"
     tl_stdout readme-asset untagged ./docs/shot.png
     expect_status "a relative picture follows the fallback to HEAD" 0
     expect_content "and is HEAD's copy of it" "$OUT" "the untagged shot"

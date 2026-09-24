@@ -1728,16 +1728,27 @@ cmd_readme_asset() {
             return 1
             ;;
         *)
-            readme_resolve
-            ra_rc=$?
-            case "$ra_rc" in
-                0) ;;
-                2) err "$it_name has no readme: it does not come from a GitHub project"; return 2 ;;
-                *) err "could not fetch the readme for $it_name, so $ra_src has nothing to be relative to"; return 1 ;;
-            esac
             ra_rel="${ra_src#./}"
             ra_rel="${ra_rel#/}"
-            ra_url="$GITHUB_RAW/$it_upstream/$RD_REF/$ra_rel"
+            if [ "$it_readme" != "-" ]; then
+                # A pinned copy names the upstream commit it was taken from on
+                # its first line: <!-- tlstore: pinned from owner/repo@sha -->
+                readme_resolve_pinned || { err "could not fetch the readme for $it_name, so $ra_src has nothing to be relative to"; return 1; }
+                ra_pin=$(sed -n '1s/^<!-- tlstore: pinned from \([A-Za-z0-9._-]*\/[A-Za-z0-9._-]*\)@\([0-9a-f]*\) -->$/\1@\2/p' "$RD_PATH")
+                case "$ra_pin" in
+                    */*@?*) ra_url="$GITHUB_RAW/${ra_pin%@*}/${ra_pin##*@}/$ra_rel" ;;
+                    *) err "the pinned readme for $it_name does not say where it was taken from"; return 1 ;;
+                esac
+            else
+                readme_resolve
+                ra_rc=$?
+                case "$ra_rc" in
+                    0) ;;
+                    2) err "$it_name has no readme: it does not come from a GitHub project"; return 2 ;;
+                    *) err "could not fetch the readme for $it_name, so $ra_src has nothing to be relative to"; return 1 ;;
+                esac
+                ra_url="$GITHUB_RAW/$it_upstream/$RD_REF/$ra_rel"
+            fi
             ;;
     esac
     ra_file="${ra_url%%\?*}"
