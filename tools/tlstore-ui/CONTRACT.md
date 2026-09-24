@@ -13,7 +13,7 @@ Placement::new(&pic,col,row) /*z -1*/ .at_px(x,y,cw,ch) .pid(n) .z(i) .crop(Crop
   An animated picture whose placements all go is deleted outright (`a=d,d=I`, frames freed) and uploaded again if it returns.
 Picture::new(w,h,rgba) .id() .width() .height() .rgba() .cells(cw,ch); Picture::animated(w,h,rgba,first_gap_ms,Vec<Cel{gap_ms,rgba}>)
   .is_animated() .gap_ms() .cel_count() /*frames after the first, arrived so far*/ .with_cel(i,|c|..) .complete()
-ctx.pics: .script_word(text,px_h,Rgb) /*Pinyon*/ .mark(px,Rgb) .file(path,w,h,Fit) .header_picture(path,w,h,animate) /*contain + bottom 38% fade;
+ctx.pics: .script_word(text,px_h,Rgb) /*Pinyon*/ .mark(px,Rgb) .file(path,w,h,Fit) .header_picture(path,w,h,animate) /*Fit::Width (fills the width, crops what is too tall) + bottom 38% fade;
   animate + APNG = a clip: frame 1 now, the rest fitted+faded by a worker thread (picture::apng), thinned to ≤32 MB / ≤48 frames by dropping every
   other frame (gaps folded) until it fits; one clip cached at a time*/ .shape(key, ||(w,h,rgba)) /*cached drawn shape*/;
   picture::shapes::{fade_bottom, pill(w,h,r,Rgb,alpha), progress_line(w,h,line_h,pct,track,fill)}

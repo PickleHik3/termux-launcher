@@ -1,5 +1,5 @@
-00| tlstore                    ↑ 2 updates
-01|                  7 items · 3 installed
+00| ▀█▀ █  █▀▀ ▀█▀ █▀█ █▀█ █▀▀ ↑ 2 updates
+01|  █  █▄ ▄▄█  █  █▄█ █▀▄ ██▄
 02|
 03| dawn
 04| a quiet place to write, headings and…

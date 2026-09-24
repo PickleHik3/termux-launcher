@@ -10,6 +10,9 @@ pub enum Fit {
     Contain,
     /// Box filled exactly, aspect kept; the overflow is cropped evenly from both sides.
     Cover,
+    /// Box width filled, aspect kept; a picture taller than the box is cropped evenly top and
+    /// bottom, a wider one comes back shorter than the box.
+    Width,
 }
 
 /// Decodes a PNG or JPEG (by its first bytes) to (width, height, straight RGBA).
@@ -82,7 +85,11 @@ pub fn fit_into(sw: u32, sh: u32, src: &[u8], box_w: u32, box_h: u32, fit: Fit) 
             let dh = ((sh as f64 * s).round() as u32).clamp(1, bh);
             (dw, dh, resize(sw, sh, src, (0.0, 0.0, sw as f64, sh as f64), dw, dh))
         }
-        Fit::Cover => {
+        Fit::Width if (sh as f64 * bw as f64 / sw as f64).round() as u32 <= bh => {
+            let dh = ((sh as f64 * bw as f64 / sw as f64).round() as u32).max(1);
+            (bw, dh, resize(sw, sh, src, (0.0, 0.0, sw as f64, sh as f64), bw, dh))
+        }
+        Fit::Cover | Fit::Width => {
             let s = (bw as f64 / sw as f64).max(bh as f64 / sh as f64);
             let cw = bw as f64 / s;
             let ch = bh as f64 / s;
@@ -186,6 +193,16 @@ mod tests {
         let (w, h, px) = fit_into(400, 200, &src, 100, 100, Fit::Contain);
         assert_eq!((w, h), (100, 50));
         assert_eq!(&px[..4], &[200, 100, 50, 255]);
+    }
+
+    #[test]
+    fn width_fills_the_width_and_crops_only_what_is_too_tall() {
+        let src = solid(400, 100, [1, 2, 3, 255]);
+        let (w, h, _) = fit_into(400, 100, &src, 200, 100, Fit::Width);
+        assert_eq!((w, h), (200, 50), "a wide picture fills the width and comes back shorter");
+        let tall = solid(100, 400, [1, 2, 3, 255]);
+        let (w, h, _) = fit_into(100, 400, &tall, 200, 100, Fit::Width);
+        assert_eq!((w, h), (200, 100), "a tall one fills the width and is cropped to the box");
     }
 
     #[test]

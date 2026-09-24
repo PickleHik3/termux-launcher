@@ -245,12 +245,20 @@ impl<'p, 'a> Paint<'p, 'a> {
     }
 }
 
+/// `tlstore` in half-block letters, two rows, as dawn draws its own name.
+const BLOCK_MARK: [&str; 2] = ["▀█▀ █  █▀▀ ▀█▀ █▀█ █▀█ █▀▀", " █  █▄ ▄▄█  █  █▄█ █▀▄ ██▄"];
+const BLOCK_MARK_W: u16 = 26;
+
+fn count_line(items: usize, installed: usize) -> String {
+    format!("{} item{} · {} installed", items, if items == 1 { "" } else { "s" }, installed)
+}
+
 /// The masthead's two shapes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Masthead {
     /// Front: the wordmark (tap: home) over the masthead row and the blank under it, `↑ N
-    /// updates` or `updates · all` right-aligned on the first, `N items · M installed` on the
-    /// second.
+    /// updates` or `updates · all` right-aligned on the first and `N items · M installed` on
+    /// the second; with neither, the counts move up level with the wordmark's top row.
     Front { updates: usize, filter: bool, items: usize, installed: usize },
     /// Item and Installing: `‹ apps` (tap: back) and the upstream link, or `our setup`.
     Page { repo: Option<String>, setup: bool },
@@ -289,26 +297,29 @@ pub fn draw_header(p: &mut Paint, h: &Header, c: &HeaderContent) {
     // Masthead.
     match &c.masthead {
         Masthead::Front { updates, filter, items, installed } => {
-            // The wordmark: `tlstore` in the script face over the masthead row and the blank
-            // under it (two rows of pixels) where the header has that blank; one row of pixels
-            // in Compact, where it does not. Text when the terminal cannot show pictures.
-            let mark_rows: u16 = if h.name.y >= y + 2 { 2 } else { 1 };
-            let word = (p.f.ctx.cell_known && p.f.ctx.caps.kitty_graphics)
-                .then(|| p.f.ctx.pics.script_word("tlstore", mark_rows as u32 * ch as u32, pal.ink))
-                .filter(|w| w.width() <= (h.content.w / 2) as u32 * cw as u32);
-            let placed = word.as_ref().is_some_and(|w| p.picture(El::Mark, w, x0, y, (0, 0), 1));
-            let mark_end = match (&word, placed) {
-                (Some(w), true) => {
-                    let (mcols, _) = w.cells(cw, ch);
-                    p.note(El::Mark, Rect::new(x0, y, mcols, mark_rows), Some((w.id(), 1)), None);
-                    x0 + mcols
-                }
-                _ => p.text(El::Mark, x0, y, "tlstore", pal.ink_s().bold()),
+            // The wordmark: `tlstore` in half-block letters over the masthead row and the
+            // blank under it (as dawn draws its name), where the header has that blank and the
+            // room; plain bold text in one row otherwise.
+            let two = h.name.y >= y + 2 && x0 + BLOCK_MARK_W + 2 <= right;
+            let (mark_end, mark_rows) = if two {
+                let st = pal.ink_s().bold();
+                p.text(El::Mark, x0, y, BLOCK_MARK[0], st);
+                (p.text(El::Mark, x0, y + 1, BLOCK_MARK[1], st), 2)
+            } else {
+                (p.text(El::Mark, x0, y, "tlstore", pal.ink_s().bold()), 1)
             };
             p.hit(Rect::new(x0, y, mark_end - x0, mark_rows), A_HOME);
-            if mark_rows == 2 && *items > 0 {
-                let count =
-                    format!("{} item{} · {} installed", items, if *items == 1 { "" } else { "s" }, installed);
+            if *items > 0 && !*filter && *updates == 0 {
+                // Nothing else on the right: the counts sit level with the wordmark's top row,
+                // a row clear of the picture under the masthead. (Half-row centring is not
+                // possible in text: OSC 66 half-size glyphs still take a cell each at 2×.)
+                let count = count_line(*items, *installed);
+                let room = right.saturating_sub(mark_end + 2);
+                if text_width(&count) as u16 <= room {
+                    p.right(El::Context, right, y, &count, pal.dim_s());
+                }
+            } else if mark_rows == 2 && *items > 0 {
+                let count = count_line(*items, *installed);
                 let room = right.saturating_sub(mark_end + 2);
                 if text_width(&count) as u16 <= room {
                     p.right(El::Context, right, y + 1, &count, pal.dim_s());

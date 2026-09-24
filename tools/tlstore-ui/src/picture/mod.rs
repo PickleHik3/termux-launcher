@@ -224,7 +224,7 @@ impl Pictures {
         self.file_with(path, box_w, box_h, fit, false, false)
     }
 
-    /// A header picture: contain-fitted into the box, its bottom [`HEADER_FADE`] faded to
+    /// A header picture: fitted to the box's width (cropped top and bottom when taller), its bottom [`HEADER_FADE`] faded to
     /// transparent. With `animate`, an APNG file comes back as a clip: the first frame now,
     /// the frames after it fitted and faded the same way by a worker thread, thinned to
     /// [`apng::MAX_CLIP_BYTES`] / [`apng::MAX_CLIP_FRAMES`]. Cached by path, box and `animate`.
@@ -235,7 +235,7 @@ impl Pictures {
         box_h: u32,
         animate: bool,
     ) -> io::Result<Picture> {
-        self.file_with(path, box_w, box_h, Fit::Contain, true, animate)
+        self.file_with(path, box_w, box_h, Fit::Width, true, animate)
     }
 
     fn file_with(
