@@ -318,7 +318,27 @@ voice input falls back to the Android recognizer. STT unloads after 2 minutes id
    <|notimestamps|>]`; the 2-token `.en` prompt gives the same text on base.en and garbage on the
    multilingual graph. Device check on pong pending (see phase 3's test list).
 3. Capture + VAD + permission (request code 4717) + keyboard engine toggle + insertion + fallbacks.
-4. Voice commands, terminal cleanup, language forcing.
+   **Done** (2026-09-25, device check on pong pending): `VoiceInputSession` (UI process) reads
+   `AudioRecord` VOICE_RECOGNITION 16 kHz mono on a `voice-capture` thread, `VoiceActivityDetector`
+   (streaming twin of `WhisperSegmenter`: 9 dB over an adaptive floor, 300 ms pre-roll/tail,
+   `keyboard_voice_pause_ms` pause, < 0.3 s voiced dropped, window cut at the quietest frame of the
+   last second, 2.5 s silence ends the session) closes segments that are written to
+   `cacheDir/tai-ipc/stt-<uuid>.pcm` and sent through `TaiManager.transcribe` on one `voice-stt`
+   thread, `sttWarm` first; `VoiceResultSequencer` keeps insertion in spoken order. The voice key
+   (`requestVoiceTyping`) takes the engine from `keyboard_voice_engine`; a tap while listening
+   ends the session, long-press keeps the system chooser. Keyboard "Voice input" category
+   (engine, language, spoken keys, terminal cleanup, pause, "Speech model" link to the TAI
+   speech section; choosing On-device with no model opens that section). The voice key draws
+   pressed while listening (`Keyboard2View.setVoiceTypingActive`) and a "Listening…" pill with a
+   level meter floats above the keyboard, showing each transcript as it lands. Fallbacks to
+   `launchVoiceTyping`: no model, permission refused, microphone unavailable, and any runtime
+   refusal or error before the first transcript (after one, a notice only). Phase 4 landed with
+   it: `VoiceCommand` (whole-segment table, "control"→"ctrl"), `VoiceTerminalCleanup` (only when
+   `TermuxInAppKeyboard.hasKeyValueInterceptor()` is false), `VoiceLanguage` (setting → layout
+   id → system locale → `en` with a one-time notice; `.en` model + non-English setting notices
+   once). JVM tests cover the VAD on synthetic PCM, the command and cleanup tables, language
+   mapping, ordering and the settings store.
+4. Voice commands, terminal cleanup, language forcing. **Done** with phase 3 (above).
 5. Memory-manager registration and eviction (after memory manager phase 2).
 
 ## Tests

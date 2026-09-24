@@ -1255,6 +1255,87 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_TAP_CORRECTION, value, false);
     }
 
+    /** {@code system} or {@code on_device}; anything else stored reads as the default. */
+    public String getInAppKeyboardVoiceEngine() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_ENGINE,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_ENGINE, true);
+        return TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE.equals(value)
+            ? TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE
+            : TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_SYSTEM;
+    }
+
+    public void setInAppKeyboardVoiceEngine(String value) {
+        String engine = TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE.equals(value)
+            ? TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE
+            : TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_SYSTEM;
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_ENGINE, engine, false);
+    }
+
+    public boolean isInAppKeyboardVoiceOnDevice() {
+        return TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE.equals(getInAppKeyboardVoiceEngine());
+    }
+
+    /** {@code auto} or an ISO 639-1 code, lowercased. */
+    public String getInAppKeyboardVoiceLanguage() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_LANGUAGE,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_LANGUAGE, true);
+        return value == null ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_LANGUAGE
+            : value.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    public void setInAppKeyboardVoiceLanguage(String value) {
+        String language = value == null || value.trim().isEmpty()
+            ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_LANGUAGE
+            : value.trim().toLowerCase(java.util.Locale.ROOT);
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_LANGUAGE, language, false);
+    }
+
+    public boolean isInAppKeyboardVoiceCommandsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_COMMANDS,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_COMMANDS);
+    }
+
+    public void setInAppKeyboardVoiceCommandsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_COMMANDS, value, false);
+    }
+
+    public boolean isInAppKeyboardVoiceTerminalCleanupEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP);
+    }
+
+    public void setInAppKeyboardVoiceTerminalCleanupEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP, value, false);
+    }
+
+    /** One of {@link TERMUX_APP#IN_APP_KEYBOARD_VOICE_PAUSE_MS_CHOICES}; anything else stored reads as the default. */
+    public int getInAppKeyboardVoicePauseMs() {
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_PAUSE_MS,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_PAUSE_MS);
+        for (int choice : TERMUX_APP.IN_APP_KEYBOARD_VOICE_PAUSE_MS_CHOICES) {
+            if (choice == value) return value;
+        }
+        return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_PAUSE_MS;
+    }
+
+    public void setInAppKeyboardVoicePauseMs(int value) {
+        int pause = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_PAUSE_MS;
+        for (int choice : TERMUX_APP.IN_APP_KEYBOARD_VOICE_PAUSE_MS_CHOICES) {
+            if (choice == value) pause = value;
+        }
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_PAUSE_MS, pause, false);
+    }
+
     public boolean isInAppKeyboardKeySoundEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_SOUND_ENABLED,

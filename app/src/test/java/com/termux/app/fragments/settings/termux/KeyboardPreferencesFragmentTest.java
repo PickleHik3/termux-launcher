@@ -153,4 +153,44 @@ public class KeyboardPreferencesFragmentTest {
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
         assertEquals(after, Shadows.shadowOf(app).getBroadcastIntents().size());
     }
+
+    @Test
+    public void theVoiceRowsReadTheirDefaultsThroughTheStore() {
+        KeyboardPreferencesDataStore store = store();
+        assertEquals("system", store.getString("keyboard_voice_engine", null));
+        assertEquals("auto", store.getString("keyboard_voice_language", null));
+        assertTrue(store.getBoolean("keyboard_voice_commands", false));
+        assertTrue(store.getBoolean("keyboard_voice_terminal_cleanup", false));
+        assertEquals("600", store.getString("keyboard_voice_pause_ms", null));
+
+        KeyboardPreferencesFragment fragment = launch();
+        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_engine"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_model"));
+    }
+
+    @Test
+    public void theVoiceRowsWriteThroughToTheSharedPreferencesAndRejectStrays() {
+        KeyboardPreferencesDataStore store = store();
+        TermuxAppSharedPreferences prefs =
+            TermuxAppSharedPreferences.build(RuntimeEnvironment.getApplication(), true);
+
+        store.putString("keyboard_voice_engine", "on_device");
+        store.putString("keyboard_voice_language", "DE");
+        store.putBoolean("keyboard_voice_commands", false);
+        store.putBoolean("keyboard_voice_terminal_cleanup", false);
+        store.putString("keyboard_voice_pause_ms", "1200");
+
+        assertTrue(prefs.isInAppKeyboardVoiceOnDevice());
+        assertEquals("de", prefs.getInAppKeyboardVoiceLanguage());
+        assertTrue(!prefs.isInAppKeyboardVoiceCommandsEnabled());
+        assertTrue(!prefs.isInAppKeyboardVoiceTerminalCleanupEnabled());
+        assertEquals(1200, prefs.getInAppKeyboardVoicePauseMs());
+        assertEquals("1200", store.getString("keyboard_voice_pause_ms", null));
+
+        // A pause the list does not offer and an engine it does not know read as the defaults.
+        store.putString("keyboard_voice_pause_ms", "999");
+        assertEquals("600", store.getString("keyboard_voice_pause_ms", null));
+        store.putString("keyboard_voice_engine", "cloud");
+        assertEquals("system", store.getString("keyboard_voice_engine", null));
+    }
 }

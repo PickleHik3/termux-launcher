@@ -203,6 +203,11 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         configureAdvancedSection(context);
         configureLanToggle(context);
         configureAuthToggle(context);
+        // A deep link from another page (the keyboard's voice rows) lands on one category.
+        Bundle arguments = getArguments();
+        String scrollTo = arguments == null ? null
+            : arguments.getString(com.termux.app.activities.SettingsActivity.EXTRA_SCROLL_TO_KEY);
+        if (scrollTo != null) scrollToPreference(scrollTo);
     }
 
     @Override
@@ -1155,7 +1160,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
      *  model list uses, filtered to {@code speech_to_text}. Only one is expected at a time in this
      *  UI (downloading a different size/language installs over it under a different catalog id). */
     @Nullable
-    private TaiModelSpec installedSpeechModel(Context context) {
+    static TaiModelSpec installedSpeechModel(Context context) {
         TaiModelStore store = new TaiModelStore(context);
         Map<String, TaiModelSpec> installed = new java.util.LinkedHashMap<>();
         installed.putAll(store.getDownloadedReadableModels());

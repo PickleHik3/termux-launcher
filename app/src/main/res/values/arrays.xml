@@ -10,6 +10,73 @@
         <item>android</item>
         <item>none</item>
     </string-array>
+    <string-array name="settings_keyboard_voice_engine_entries">
+        <item>@string/settings_keyboard_voice_engine_system</item>
+        <item>@string/settings_keyboard_voice_engine_on_device</item>
+    </string-array>
+    <string-array name="settings_keyboard_voice_engine_values">
+        <item>system</item>
+        <item>on_device</item>
+    </string-array>
+    <!-- Whisper's language tokens; only a multilingual model honours the choice. -->
+    <string-array name="settings_keyboard_voice_language_entries">
+        <item>@string/settings_keyboard_voice_language_auto</item>
+        <item>English</item>
+        <item>Deutsch</item>
+        <item>Español</item>
+        <item>Français</item>
+        <item>Italiano</item>
+        <item>Português</item>
+        <item>Nederlands</item>
+        <item>Polski</item>
+        <item>Türkçe</item>
+        <item>Русский</item>
+        <item>Українська</item>
+        <item>العربية</item>
+        <item>فارسی</item>
+        <item>हिन्दी</item>
+        <item>中文</item>
+        <item>日本語</item>
+        <item>한국어</item>
+        <item>Bahasa Indonesia</item>
+        <item>Tiếng Việt</item>
+        <item>Svenska</item>
+    </string-array>
+    <string-array name="settings_keyboard_voice_language_values">
+        <item>auto</item>
+        <item>en</item>
+        <item>de</item>
+        <item>es</item>
+        <item>fr</item>
+        <item>it</item>
+        <item>pt</item>
+        <item>nl</item>
+        <item>pl</item>
+        <item>tr</item>
+        <item>ru</item>
+        <item>uk</item>
+        <item>ar</item>
+        <item>fa</item>
+        <item>hi</item>
+        <item>zh</item>
+        <item>ja</item>
+        <item>ko</item>
+        <item>id</item>
+        <item>vi</item>
+        <item>sv</item>
+    </string-array>
+    <string-array name="settings_keyboard_voice_pause_entries">
+        <item>400 ms</item>
+        <item>600 ms</item>
+        <item>800 ms</item>
+        <item>1.2 s</item>
+    </string-array>
+    <string-array name="settings_keyboard_voice_pause_values">
+        <item>400</item>
+        <item>600</item>
+        <item>800</item>
+        <item>1200</item>
+    </string-array>
     <string-array name="termux_theme_mode_entries">
         <item>@string/termux_theme_mode_system</item>
         <item>@string/termux_theme_mode_light</item>

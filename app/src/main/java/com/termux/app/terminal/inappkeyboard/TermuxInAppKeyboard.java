@@ -869,6 +869,35 @@ public final class TermuxInAppKeyboard {
         return interceptor != null && interceptor.interceptKeyValue(value, ctrl, alt, shift);
     }
 
+    /**
+     * Whether something other than the terminal — the Display place, an overlay — has claimed
+     * typing. Voice input cleans transcripts for a shell only when nothing has.
+     */
+    public boolean hasKeyValueInterceptor() {
+        return mKeyValueInterceptor != null;
+    }
+
+    /**
+     * Act on a value as though a key of the keyboard had produced it, under Ctrl when asked: the
+     * interceptor gets first refusal, then the terminal. Spoken "enter" and "control c" land where
+     * the keyboard's own keys would. False when the keyboard has never been shown, so there is no
+     * handler to route through.
+     */
+    public boolean dispatchKeyValue(@NonNull KeyValue value, boolean ctrl) {
+        TerminalKeyEventHandler handler = mKeyEventHandler;
+        if (handler == null)
+            return false;
+        handler.dispatchKeyValue(value, ctrl);
+        return true;
+    }
+
+    /** Draws the voice key as pressed while voice input is listening. */
+    public void setVoiceTypingActive(boolean active) {
+        Keyboard2View view = mKeyboardView;
+        if (view != null)
+            view.setVoiceTypingActive(active);
+    }
+
     /** On-screen bounds of the rendered space bar, or false when there is none to seed from. */
     public boolean getSpaceBarRectOnScreen(@NonNull Rect out) {
         return getKeyRectOnScreen("space", out);

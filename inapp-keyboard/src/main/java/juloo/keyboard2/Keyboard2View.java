@@ -36,6 +36,8 @@ public class Keyboard2View extends View
 
   /** Used to add fake pointers. */
   private KeyboardData.Key _compose_key;
+  /** The host is listening for voice input: the voice key draws as pressed. */
+  private boolean _voiceTypingActive;
 
   private Pointers _pointers;
 
@@ -1315,6 +1317,32 @@ public class Keyboard2View extends View
     set_fake_ptr_latched(_shift_key, KeyValue.SHIFT, locked, true);
   }
 
+  /**
+   * Draws whichever key carries the voice-typing event as pressed while the host is listening,
+   * without touching the pointer state: the key can sit in a corner slot of another key, and a
+   * latched pointer would count as a modifier.
+   */
+  public void setVoiceTypingActive(boolean active)
+  {
+    requireMainThread();
+    if (_voiceTypingActive == active)
+      return;
+    _voiceTypingActive = active;
+    invalidate();
+  }
+
+  private static boolean isVoiceTypingKey(KeyboardData.Key k)
+  {
+    for (KeyValue kv : k.keys)
+    {
+      if (kv != null && kv.getKind() == KeyValue.Kind.Event
+          && (kv.getEvent() == KeyValue.Event.SWITCH_VOICE_TYPING
+            || kv.getEvent() == KeyValue.Event.SWITCH_VOICE_TYPING_CHOOSER))
+        return true;
+    }
+    return false;
+  }
+
   void set_fake_ptr_latched(KeyboardData.Key key, KeyValue kv, boolean latched,
       boolean lock)
   {
@@ -1823,7 +1851,8 @@ public class Keyboard2View extends View
             hintOverride != null ? hintOverride : schemeOverride;
         x += k.shift * _keyWidth;
         float keyW = _keyWidth * k.width - _tc.horizontal_margin;
-        boolean isKeyDown = _pointers.isKeyDown(k);
+        boolean isKeyDown = _pointers.isKeyDown(k)
+            || (_voiceTypingActive && isVoiceTypingKey(k));
         TouchFx touchFx = findTouchFx(k);
         float fxStrength = touchFx == null ? 0f : touchFx.strength(now);
         float launchStrength = launchWaveStrength(x + keyW / 2f, y + keyH / 2f);

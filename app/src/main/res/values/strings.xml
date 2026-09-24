@@ -1761,6 +1761,33 @@
     <string name="sessions_panel_more">More actions for session %1$d</string>
     <string name="voice_typing_chooser_title">Choose speech recognizer</string>
     <string name="voice_typing_unavailable">Speech recognition unavailable</string>
+
+    <!-- On-device voice input from the in-app keyboard's voice key (Whisper in the TAI runtime) -->
+    <string name="settings_keyboard_voice_header">Voice input</string>
+    <string name="settings_keyboard_voice_engine_title">Speech engine</string>
+    <string name="settings_keyboard_voice_engine_system">Android system</string>
+    <string name="settings_keyboard_voice_engine_on_device">On-device (Whisper)</string>
+    <string name="settings_keyboard_voice_language_title">Voice language</string>
+    <string name="settings_keyboard_voice_language_auto">Auto</string>
+    <string name="settings_keyboard_voice_commands_title">Spoken keys</string>
+    <string name="settings_keyboard_voice_commands_summary">"Enter", "tab", "escape", "backspace", "space" or "control c" said on its own presses the key</string>
+    <string name="settings_keyboard_voice_terminal_cleanup_title">Terminal cleanup</string>
+    <string name="settings_keyboard_voice_terminal_cleanup_summary">Drop trailing punctuation and lowercase single words when typing into a shell</string>
+    <string name="settings_keyboard_voice_pause_title">Pause that ends a phrase</string>
+    <string name="settings_keyboard_voice_model_title">Speech model</string>
+    <string name="settings_keyboard_voice_model_summary">Download or change the on-device Whisper model</string>
+    <string name="voice_input_listening">Listening…</string>
+    <string name="voice_input_no_model">No speech model installed — using the Android recognizer</string>
+    <string name="voice_input_fallback">%1$s — using the Android recognizer</string>
+    <string name="voice_input_stopped">Voice input stopped: %1$s</string>
+    <string name="voice_input_mic_unavailable">Microphone unavailable</string>
+    <string name="voice_input_permission_denied">Microphone access denied</string>
+    <string name="voice_input_permission_title">Microphone for voice input</string>
+    <string name="voice_input_permission_message">On-device voice input listens through the microphone only while the keyboard's voice key is active. Nothing leaves the phone.</string>
+    <string name="voice_input_permission_allow">Allow</string>
+    <string name="voice_input_permission_dismiss">Not now</string>
+    <string name="voice_input_language_fallback">No speech language known for this keyboard layout — using English</string>
+    <string name="voice_input_english_only_model">The installed speech model is English-only; download the multilingual model to speak %1$s</string>
     <plurals name="background_process_hidden_count">
         <item quantity="one">%d more background process</item>
         <item quantity="other">%d more background processes</item>

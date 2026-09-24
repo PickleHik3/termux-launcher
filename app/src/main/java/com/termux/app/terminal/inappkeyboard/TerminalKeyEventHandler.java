@@ -120,6 +120,15 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     }
 
     /**
+     * {@link #dispatchKeyValue(KeyValue)} with Ctrl added to the held modifiers when {@code ctrl}:
+     * the "c" character key under Ctrl is exactly what the keyboard sends for Ctrl+C, so a spoken
+     * "control c" takes the same route through the interceptor and the terminal.
+     */
+    public void dispatchKeyValue(@NonNull KeyValue value, boolean ctrl) {
+        dispatch(value, ctrl ? mModifiers.withCtrl() : mModifiers);
+    }
+
+    /**
      * Offer a value to whatever is intercepting typing — the Display place, an overlay — and
      * say whether it was claimed. Nothing reaches the terminal from here: a caller with its own
      * terminal path (the extra-keys column, voice typing) keeps it for the unclaimed case.

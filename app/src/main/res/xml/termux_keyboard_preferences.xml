@@ -99,6 +99,45 @@
             app:title="@string/settings_keyboard_tap_correction_reset_title" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:key="keyboard_voice" app:title="@string/settings_keyboard_voice_header">
+        <ListPreference
+            app:key="keyboard_voice_engine"
+            app:title="@string/settings_keyboard_voice_engine_title"
+            app:entries="@array/settings_keyboard_voice_engine_entries"
+            app:entryValues="@array/settings_keyboard_voice_engine_values"
+            app:defaultValue="system"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="keyboard_voice_language"
+            app:title="@string/settings_keyboard_voice_language_title"
+            app:entries="@array/settings_keyboard_voice_language_entries"
+            app:entryValues="@array/settings_keyboard_voice_language_values"
+            app:defaultValue="auto"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:key="keyboard_voice_commands"
+            app:title="@string/settings_keyboard_voice_commands_title"
+            app:summary="@string/settings_keyboard_voice_commands_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="keyboard_voice_terminal_cleanup"
+            app:title="@string/settings_keyboard_voice_terminal_cleanup_title"
+            app:summary="@string/settings_keyboard_voice_terminal_cleanup_summary"
+            android:defaultValue="true" />
+        <ListPreference
+            app:key="keyboard_voice_pause_ms"
+            app:title="@string/settings_keyboard_voice_pause_title"
+            app:entries="@array/settings_keyboard_voice_pause_entries"
+            app:entryValues="@array/settings_keyboard_voice_pause_values"
+            app:defaultValue="600"
+            app:useSimpleSummaryProvider="true" />
+        <Preference
+            app:key="keyboard_voice_model"
+            app:persistent="false"
+            app:title="@string/settings_keyboard_voice_model_title"
+            app:summary="@string/settings_keyboard_voice_model_summary" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:key="keyboard_feedback" app:title="@string/settings_feedback_header">
         <SwitchPreferenceCompat
             app:key="in_app_keyboard_haptics_enabled"

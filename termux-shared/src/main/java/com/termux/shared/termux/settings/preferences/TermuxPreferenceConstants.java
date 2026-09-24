@@ -723,6 +723,44 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_IN_APP_KEYBOARD_TAP_CORRECTION = false;
 
         /**
+         * Which engine the in-app keyboard's voice key uses: {@code system} (the Android
+         * recognizer, an activity) or {@code on_device} (the installed Whisper speech model in the
+         * TAI runtime). The system engine stays the default: it needs no model download.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_ENGINE = "keyboard_voice_engine";
+
+        public static final String IN_APP_KEYBOARD_VOICE_ENGINE_SYSTEM = "system";
+
+        public static final String IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE = "on_device";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_ENGINE = IN_APP_KEYBOARD_VOICE_ENGINE_SYSTEM;
+
+        /**
+         * The language a multilingual speech model is forced to, as an ISO 639-1 code, or
+         * {@code auto} for the keyboard layout's language, then the system locale.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_LANGUAGE = "keyboard_voice_language";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_LANGUAGE = "auto";
+
+        /** Whether "enter", "tab", "escape", "backspace", "space" and "control c" said alone press the key. */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_COMMANDS = "keyboard_voice_commands";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_COMMANDS = true;
+
+        /** Whether transcripts typed into a terminal lose trailing punctuation and single words are lowercased. */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP = "keyboard_voice_terminal_cleanup";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP = true;
+
+        /** The pause, in milliseconds, that closes a spoken phrase and sends it for transcription. */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_PAUSE_MS = "keyboard_voice_pause_ms";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_VOICE_PAUSE_MS = 600;
+
+        public static final int[] IN_APP_KEYBOARD_VOICE_PAUSE_MS_CHOICES = {400, 600, 800, 1200};
+
+        /**
          * Defines the key for the absolute path of a user-imported label font file,
          * or an empty string for the system default typeface.
          */
