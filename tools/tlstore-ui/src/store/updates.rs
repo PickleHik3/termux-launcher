@@ -59,6 +59,7 @@ impl View for Updates {
             context: (n > 0).then(|| ContextItem { text: format!("{n} waiting"), link: false }),
             lead,
             word: "updates".into(),
+            script: true,
             keys,
         }
     }
@@ -98,14 +99,9 @@ impl View for Updates {
             }
             let info = st.cat.info(&st.env, &u.name).clone();
             if let Some(sf) = info.get("Standfirst") {
-                p.text_clip(
-                    el,
-                    b.x + if r.narrow { 2 } else { 6 },
-                    ly + 2,
-                    sf,
-                    pal.dim_s().italic(),
-                    b.right(),
-                );
+                let x = b.x + if r.narrow { 2 } else { 6 };
+                let line = crate::layout::fit_line(sf, b.right().saturating_sub(x));
+                p.text(el, x, ly + 2, &line, pal.dim_s().italic());
             }
             p.hit(Rect::new(b.x, y, b.w, ENTRY_H - 1), A_ENTRY + i as u32);
             y += ENTRY_H;

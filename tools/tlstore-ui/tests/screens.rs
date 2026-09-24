@@ -311,7 +311,7 @@ fn unicode_width_of(s: &str) -> usize {
     tlstore_ui::render::text_width(s)
 }
 
-const SIZES: [(u16, u16); 3] = [(52, 45), (52, 23), (40, 34)];
+const SIZES: [(u16, u16); 3] = [(53, 26), (53, 40), (40, 26)];
 
 fn open_item(h: &mut H, name: &str) {
     h.key(Key::Home);
@@ -597,8 +597,8 @@ fn star_with_gh_missing_and_no_opener_prints_the_address() {
 
 #[test]
 fn fullscreen_calls_launcherctl_and_restores_on_exit() {
-    let mut h = H::new(52, 23, Opts::default());
-    assert!(h.has("f fullscreen · hide the keyboard for more room"), "{}", h.text);
+    let mut h = H::new(53, 26, Opts::default());
+    assert!(h.has("f keyboard") && !h.has("fullscreen"), "{}", h.text);
     h.key(Key::Char('f'));
     assert_eq!(h.log("launcherctl.log"), "keyboard hide --hold\n");
     assert!(h.has("f keyboard"));
@@ -613,16 +613,16 @@ fn fullscreen_calls_launcherctl_and_restores_on_exit() {
 
 #[test]
 fn no_launcherctl_hides_the_hint() {
-    let mut h = H::new(52, 23, Opts { launcherctl: false, ..Opts::default() });
-    assert!(!h.has("fullscreen"), "{}", h.text);
+    let mut h = H::new(53, 26, Opts { launcherctl: false, ..Opts::default() });
+    assert!(!h.has("f keyboard"), "{}", h.text);
     h.key(Key::Char('f'));
     assert_eq!(h.r().top(), "apps");
 }
 
 #[test]
 fn paging_when_rows_do_not_fit() {
-    // 52×30 is the Strip tier with room for 4 rows: 7 items make two pages.
-    let mut h = H::new(52, 30, Opts::default());
+    // 53×26, the baseline, has room for six rows: 7 items make two pages.
+    let mut h = H::new(53, 26, Opts::default());
     assert!(h.has("‹ ● ○ ›"), "{}", h.text);
     assert!(!h.has("sigye"));
     h.key(Key::PageDown);
@@ -633,12 +633,16 @@ fn paging_when_rows_do_not_fit() {
 
 #[test]
 fn item_scrolls_by_keys_and_drag() {
-    let mut h = H::new(52, 23, Opts::default());
+    let mut h = H::new(53, 26, Opts::default());
     open_item(&mut h, "kitten");
     h.pump(|r| r.st.starred("kovidgoyal/kitty").is_some());
-    assert!(!h.has("good to know"), "{}", h.text);
+    assert!(!h.has("G O O D") && h.has("more below ↓"), "{}", h.text);
     h.key(Key::End);
-    assert!(h.has("good to know · works best"), "{}", h.text);
+    assert!(h.has("G O O D   T O   K N O W") && h.has("best in a kitty-compatible terminal"), "{}", h.text);
+    assert!(!h.has("more below"), "{}", h.text);
+    h.key(Key::Home);
+    h.tap("more below ↓");
+    assert!(!h.has("kovidgoyal/kitty"), "a tap on the cue pages down:\n{}", h.text);
     h.key(Key::Home);
     assert!(h.has("kovidgoyal/kitty"));
     let m = |kind, row| {
@@ -651,37 +655,76 @@ fn item_scrolls_by_keys_and_drag() {
 
 #[test]
 fn resize_relays_out() {
-    let mut h = H::new(52, 45, Opts::default());
-    assert!(h.has("A P P S"));
-    h.resize(52, 23);
-    assert!(!h.has("A P P S") && h.has("f fullscreen"), "{}", h.text);
-    h.resize(40, 34);
+    let mut h = H::new(53, 40, Opts::default());
+    assert!(h.has("sigye") && !h.has("‹ ● ○ ›"), "all seven rows fit:\n{}", h.text);
+    h.resize(53, 26);
+    assert!(!h.has("sigye") && h.has("‹ ● ○ ›"), "{}", h.text);
+    h.resize(40, 26);
     assert!(h.has(" Notes "));
 }
 
 #[test]
 fn kitty_terminal_gets_pictures_and_links() {
-    let mut h = H::new(52, 45, Opts { caps: true, ..Opts::default() });
+    let mut h = H::new(53, 26, Opts { caps: true, ..Opts::default() });
+    // The baseline has no room for a cover: the list comes first.
+    assert!(!h.log("calls.log").contains("picture dawn"), "{}", h.log("calls.log"));
+    assert!(h.r().scene.get(El::HeroWord).is_some_and(|e| e.picture.is_some()), "script word picture");
+    assert!(h.r().scene.get(El::Cover).is_none());
+    // A tall window has the room: the featured cover and, on an item, cover and demo.
+    let mut h = H::new(53, 60, Opts { caps: true, ..Opts::default() });
     assert!(h.log("calls.log").contains("picture dawn"));
+    assert!(h.r().scene.get(El::Cover).is_some_and(|e| e.picture.is_some()), "{}", h.text);
     open_item(&mut h, "kitten");
+    h.pump(|r| r.st.starred("kovidgoyal/kitty").is_some());
     let router = h.router.as_mut().unwrap();
     let mut f = Frame::new(&mut h.ctx);
     router.draw(&mut f);
-    assert!(f.places.len() >= 4, "mark, word, cover, demo: {}", f.places.len());
+    assert_eq!(f.places.len(), 3, "mark, cover, demo (the name is sized text)");
+    assert!(f.buf.runs().iter().any(|r| r.text == "kitten" && r.sizing.scale == 3));
     assert!(f.buf.links().iter().any(|(_, u)| u == "https://github.com/kovidgoyal/kitty"));
 }
 
 #[test]
-fn no_picture_command_falls_back_to_stand_ins() {
-    let mut h = H::new(52, 45, Opts { caps: true, ..Opts::default() });
+fn script_word_needs_a_known_cell_size() {
+    let mut h = H::new(53, 26, Opts { caps: true, ..Opts::default() });
+    h.ctx.cell_known = false;
+    h.draw();
+    let w = h.r().scene.get(El::HeroWord).cloned().unwrap();
+    assert!(w.picture.is_none() && w.text.as_deref() == Some("goodies"), "{w:?}");
+    assert!(h.has("TLSTORE / apps"), "the pixel mark falls back to text too:\n{}", h.text);
+}
+
+#[test]
+fn no_picture_means_no_cover_at_all() {
+    let mut h = H::new(53, 60, Opts { caps: true, ..Opts::default() });
     std::fs::write(h.dir.join("nopics"), "").unwrap();
     open_item(&mut h, "sigye");
     let router = h.router.as_mut().unwrap();
     let mut f = Frame::new(&mut h.ctx);
     router.draw(&mut f);
-    // Mark and hero word only; the cover is a text stand-in.
-    assert_eq!(f.places.len(), 2);
-    assert!(screen_text(&f).contains("S I G Y E"));
+    // The mark only: no cover, no stand-in box, the page starts right under the hero.
+    assert_eq!(f.places.len(), 1);
+    let text = screen_text(&f);
+    assert!(!text.contains("S I G Y E"), "{text}");
+    assert!(text.lines().skip(2).all(|l| !l.contains('░')), "{text}");
+    assert!(text.lines().nth(9).unwrap().contains("am2rican5/sigye"), "{text}");
+}
+
+#[test]
+fn nothing_runs_past_the_right_edge() {
+    // Every snapshot line fits its grid: nothing clipped by the edge.
+    for e in std::fs::read_dir(manifest().join("tests/snapshots")).unwrap() {
+        let p = e.unwrap().path();
+        let name = p.file_stem().unwrap().to_string_lossy().to_string();
+        let cols: usize = name.rsplit('-').next().unwrap().split('x').next().unwrap().parse().unwrap();
+        let gutter = if cols < 44 { 1 } else { 2 };
+        for l in std::fs::read_to_string(&p).unwrap().lines() {
+            let body = &l[3..];
+            let w = unicode_width_of(body);
+            let pictures = body.contains('░');
+            assert!(pictures || w <= cols - gutter, "{name}: {w} columns: {body:?}");
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -733,10 +776,10 @@ fn router_hands_navigation_and_frames_to_motion() {
     h.tap("sigye");
     // Leaving frame: the old view (apps) drawn, crumb hidden.
     assert!(h.r().animating());
-    assert!(h.has("A P P S") && !h.has("/ apps"), "{}", h.text);
+    assert!(h.has(" Note taking ") && !h.has("/ apps"), "{}", h.text);
     // Entering frame: the item, crumb half revealed.
     h.draw();
-    assert!(h.has("S I G Y E") && h.has("TLSTORE / apps ") && !h.has("/ apps / s"), "{}", h.text);
+    assert!(h.has("N O .   0 7") && h.has("TLSTORE / apps ") && !h.has("/ apps / s"), "{}", h.text);
     h.draw();
     assert!(h.has("/ apps / sigye") && !h.r().animating());
     h.key(Key::Esc);
@@ -832,11 +875,13 @@ fn timeline_plays_flow_for_a_push_to_item() {
     let (mut h, clock) = animated(52, 45, true);
     let from = h.r().scene.clone();
     assert_eq!(from.screen, "apps");
+    assert!(from.get(El::HeroWord).is_some_and(|e| e.picture.is_some()), "apps: script word picture");
     h.tap("sigye");
     advance(&mut h, &clock, 2000);
     let cur = h.r().scene.clone();
     assert_eq!(cur.screen, "item");
-    assert!(cur.get(El::HeroWord).is_some_and(|e| e.picture.is_some()), "hero word is a picture");
+    assert!(cur.get(El::HeroWord).is_some_and(|e| e.picture.is_none()), "item: the name is text");
+    assert!(cur.get(El::Cover).is_some_and(|e| e.picture.is_some()), "sigye has room for its cover");
     let crumb = cur.get(El::Crumb).and_then(|e| e.text.clone()).unwrap();
     assert_eq!(crumb, "/ apps / sigye");
 
@@ -846,19 +891,19 @@ fn timeline_plays_flow_for_a_push_to_item() {
     m.navigate(NavKind::Push, &from, "item", t0);
     assert!(m.active());
 
-    // t = 0: leaving, nothing moved yet.
+    // Leaving: text fades, pictures are simply gone (never moved), the masthead stays.
     let Phase::Leaving(fx) = m.frame(t(0), &cur) else { panic!("leaving at 0") };
-    assert!(fx.get(El::Row(0)).at_rest() && fx.get(El::HeroWord).at_rest() && fx.get(El::Crumb).at_rest());
-
-    // t = 100: the old content has faded; its pictures are hidden and lifting; the masthead stays.
+    assert!(fx.get(El::Row(0)).at_rest() && fx.get(El::Crumb).at_rest());
+    assert_eq!(fx.get(El::HeroWord).alpha, 0.0);
     let Phase::Leaving(fx) = m.frame(t(100), &cur) else { panic!("leaving at 100") };
     assert!(fx.get(El::Row(0)).alpha <= 0.07, "{:?}", fx.get(El::Row(0)));
     assert!(fx.get(El::Keys).alpha <= 0.07);
     let w = fx.get(El::HeroWord);
-    assert!(w.alpha < 0.5 && w.dy < 0, "{w:?}");
+    assert!(w.alpha == 0.0 && w.dy == 0 && w.dx == 0 && w.shown == 1.0, "{w:?}");
     assert!(fx.get(El::Crumb).at_rest() && fx.get(El::Mark).at_rest() && fx.get(El::Context).at_rest());
 
-    // t = 300 (140 ms into the entry): crumb decoding, rule drawing, word rising, blocks not yet.
+    // t = 300 (140 ms into the entry): crumb decoding, rule drawing, the name fading up,
+    // the cover hidden, blocks not yet.
     let Phase::Entering(fx) = m.frame(t(300), &cur) else { panic!("entering at 300") };
     let c = fx.get(El::Crumb).text.expect("crumb decoding");
     assert_eq!(c, tlstore_ui::store::motion::decode(&crumb, 4));
@@ -868,47 +913,29 @@ fn timeline_plays_flow_for_a_push_to_item() {
     let lead = fx.get(El::HeroLead).alpha;
     assert!(lead > 0.2 && lead < 1.0, "lead {lead}");
     let w = fx.get(El::HeroWord);
-    assert!(w.shown > 0.1 && w.shown < 0.9 && w.dy > 0, "word {w:?}");
-    if cur.get(El::Cover).is_some_and(|e| e.picture.is_some()) {
-        assert!(fx.get(El::Cover).shown < 0.05, "{:?}", fx.get(El::Cover));
-    }
+    assert!(w.alpha > 0.0 && w.alpha < 1.0 && w.dy == 0, "word {w:?}");
+    let cover = fx.get(El::Cover);
+    assert!(cover.alpha == 0.0 && cover.dy == 0 && cover.shown == 1.0, "{cover:?}");
     assert_eq!(fx.get(El::Block(0)).alpha, 0.0);
-    assert_eq!(fx.get(El::Block(1)).alpha, 0.0);
 
-    // t = 600 (440 ms in): crumb and rule done, the word has risen (on its spring), cover
-    // wiping, the first blocks in, the last still arriving.
+    // t = 600 (440 ms in): crumb and rule done, the first blocks in, the cover still hidden.
     let Phase::Entering(fx) = m.frame(t(600), &cur) else { panic!("entering at 600") };
     assert!(fx.get(El::Crumb).at_rest());
     assert!(fx.get(El::Rule).reveal > 0.99);
-    let w = fx.get(El::HeroWord);
-    assert!(w.shown == 1.0 && w.dy.abs() <= 1, "word {w:?}");
-    if cur.get(El::Cover).is_some_and(|e| e.picture.is_some()) {
-        let s = fx.get(El::Cover).shown;
-        assert!(s > 0.2 && s < 0.7, "cover {s}");
-    }
     assert!(fx.get(El::Block(0)).alpha >= 0.9);
-    let last = cur
-        .elements
-        .iter()
-        .filter_map(|e| if let El::Block(n) = e.el { Some(n) } else { None })
-        .max()
-        .unwrap();
-    assert!(last >= 3);
-    assert!(fx.get(El::Block(last)).alpha < 1.0 || !fx.get(El::Block(last)).at_rest());
+    assert_eq!(fx.get(El::Cover).alpha, 0.0);
 
-    // t = 900 (740 ms in): only the cover's wipe is left.
+    // t = 900 (740 ms in): all text has arrived; only pictures wait.
     let Phase::Entering(fx) = m.frame(t(900), &cur) else { panic!("entering at 900") };
     for e in &cur.elements {
-        if e.el != El::Cover {
+        if e.picture.is_some() && e.el != El::Mark {
+            assert_eq!(fx.get(e.el).alpha, 0.0, "{:?} shows early", e.el);
+        } else {
             assert!(fx.get(e.el).at_rest(), "{:?} still moving: {:?}", e.el, fx.get(e.el));
         }
     }
-    if cur.get(El::Cover).is_some_and(|e| e.picture.is_some()) {
-        let s = fx.get(El::Cover).shown;
-        assert!(s > 0.9 && s < 1.0, "cover {s}");
-    }
 
-    // Past ≈ 980 ms (160 leave + 820 entry): at rest, no more ticks.
+    // Past ≈ 980 ms (160 leave + 820 entry): at rest, pictures shown, no more ticks.
     assert!(matches!(m.frame(t(1000), &cur), Phase::Idle));
     assert!(!m.active());
 }
@@ -920,19 +947,19 @@ fn leaving_view_is_dropped_by_the_first_entering_frame() {
     h.tap("sigye");
     // Leaving: the apps view is still what is drawn.
     assert!(h.r().animating());
-    assert!(h.has("A P P S"), "{}", h.text);
+    assert!(h.has(" Note taking "), "{}", h.text);
     at(&mut h, &clock, t0, 80.0);
     assert!(h.has("/ apps") && !h.has("/ apps / s"), "masthead stays while leaving:\n{}", h.text);
     assert_eq!(h.r().scene.screen, "item", "the current scene is the new view's");
     // First entering frame: the item, everything still to arrive, crumb all glyphs.
     at(&mut h, &clock, t0, 170.0);
     assert_eq!(h.r().scene.screen, "item");
-    assert!(!h.has("A P P S") && !h.has("sigye"), "{}", h.text);
+    assert!(!h.has(" Note taking ") && !h.has("sigye"), "{}", h.text);
     assert!(h.row(1).chars().any(|c| GLYPHS.contains(&c)), "{}", h.row(1));
     // And it never comes back.
     for ms in (186..1200).step_by(17) {
         at(&mut h, &clock, t0, ms as f32);
-        assert!(!h.has("A P P S"), "at {ms}\n{}", h.text);
+        assert!(!h.has(" Note taking "), "at {ms}\n{}", h.text);
     }
     assert!(h.has("/ apps / sigye") && !h.r().animating());
 }
@@ -947,7 +974,7 @@ fn input_during_the_leave_goes_to_the_new_view() {
     h.key(Key::Esc);
     assert_eq!(h.r().top(), "apps");
     advance(&mut h, &clock, 2000);
-    assert!(h.has("A P P S") && !h.r().animating());
+    assert!(h.has(" Note taking ") && !h.r().animating());
 }
 
 #[test]
@@ -965,12 +992,12 @@ fn motion_off_means_no_ticks_and_the_final_state_at_once() {
         },
     );
     assert!(!h.r().animating(), "no startup entry");
-    assert!(h.has("A P P S") && h.has("sigye"));
+    assert!(h.has(" Note taking ") && h.has("sigye"));
     h.tap("sigye");
     assert!(!h.r().animating());
     assert!(h.has("/ apps / sigye") && h.has("N O"), "{}", h.text);
     h.key(Key::Esc);
-    assert!(!h.r().animating() && h.has("A P P S"));
+    assert!(!h.r().animating() && h.has(" Note taking "));
     h.tap_on("Note taking", "AI");
     assert!(!h.r().animating() && h.has("claude-code") && !h.has("sigye"));
     // Same frame as with no motion plugged in at all.
@@ -1041,14 +1068,16 @@ fn frames_stay_small_and_picture_only_frames_write_no_text() {
         eprintln!("  t={t:4} ms  {b:5} B  {n:4} printable");
     }
     assert!(max <= 8 * 1024, "a frame over 8 KB: {sizes:?}");
-    // From 560 ms into the entry on, only the cover still wipes: each frame re-places it and
-    // writes no text at all.
+    // Pictures never move: once the text has arrived, frames write nothing until the cover
+    // simply appears, placed once.
     assert!(h.r().scene.get(El::Cover).is_some_and(|e| e.picture.is_some()), "sigye has a cover picture");
     let late: Vec<_> = sizes.iter().filter(|s| (720..=960).contains(&s.0)).collect();
-    assert!(late.iter().filter(|s| s.1 > 0).count() >= 5, "the cover moves: {late:?}");
-    for (t, b, n) in late {
+    for (t, b, n) in &late {
         assert!(*n == 0 && *b < 512, "t={t}: {b} B with {n} printable characters");
     }
+    assert!(late.iter().filter(|s| s.1 > 0).count() <= 1, "nothing re-placed frame after frame: {late:?}");
+    let placed = h.r().scene.elements.iter().filter(|e| e.picture.is_some()).count();
+    assert!(placed >= 2, "mark and cover at rest");
 }
 
 #[test]

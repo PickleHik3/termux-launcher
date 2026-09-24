@@ -2,18 +2,19 @@
 //! taller than the screen.
 
 use crate::layout::{self, Regions, Tier};
-use crate::picture::Fit;
+use crate::picture::{Fit, Picture};
 use crate::render::{text_width, Rect, Style, Underline};
 use crate::term::{Event, Key, MouseKind};
 
 use super::data::Info;
 use super::nogh::NoGh;
-use super::paint::{stand_in, Chrome, ContextItem, Hint, Paint};
+use super::paint::{Chrome, ContextItem, Hint, Paint};
 use super::scene::El;
 use super::{installing::Installing, Gh, Go, Store, Verb, View};
 
 const A_REPO: u32 = 100;
 const A_STAR: u32 = 101;
+const A_MORE: u32 = 102;
 
 pub struct ItemView {
     pub name: String,
@@ -70,20 +71,21 @@ pub fn star_key(st: &mut Store, name: &str, repo: &str) -> Go {
     }
 }
 
-/// Cover rows on an item page: Flow's shorter picture (at most 7 rows).
-pub fn item_cover_rows(r: &Regions) -> u16 {
-    r.cover_rows.min(7)
+/// The item's cover picture at `c`, when it is really there. False (nothing drawn) when the
+/// terminal shows no pictures or the item has none: then there is no cover at all.
+pub fn cover_picture(p: &mut Paint, st: &mut Store, name: &str, c: Rect, demo: bool) -> Option<Picture> {
+    if !p.f.ctx.caps.kitty_graphics || c.w == 0 || c.h == 0 {
+        return None;
+    }
+    let (cw, ch) = (p.f.ctx.size.cell_w as u32, p.f.ctx.size.cell_h as u32);
+    let path = st.cat.picture(&st.env, name, demo)?;
+    let fit = if demo { Fit::Contain } else { Fit::Cover };
+    p.f.ctx.pics.file(&path, c.w as u32 * cw, c.h as u32 * ch, fit).ok()
 }
 
-/// The item's cover picture filling `c`, or a text stand-in.
-pub fn draw_cover(p: &mut Paint, st: &mut Store, name: &str, c: Rect) {
-    let (cw, ch) = (p.f.ctx.size.cell_w as u32, p.f.ctx.size.cell_h as u32);
-    let path = if p.f.ctx.caps.kitty_graphics { st.cat.picture(&st.env, name, false) } else { None };
-    let pic =
-        path.and_then(|path| p.f.ctx.pics.file(&path, c.w as u32 * cw, c.h as u32 * ch, Fit::Cover).ok());
-    if !pic.is_some_and(|pic| p.picture(El::Cover, &pic, c.x, c.y, (0, 0), 1)) {
-        stand_in(p, El::Cover, c, name);
-    }
+/// Whether the item has a picture the terminal can show (asks the script once per item).
+pub fn has_picture(p: &Paint, st: &mut Store, name: &str, demo: bool) -> bool {
+    p.f.ctx.caps.kitty_graphics && st.cat.picture(&st.env, name, demo).is_some()
 }
 
 /// The star rule: ten dashes, the mark, ten dashes.
@@ -130,7 +132,14 @@ impl View for ItemView {
             keys.push(Hint::new("o", "repo", Key::Char('o')));
         }
         keys.push(Hint::new("esc", "back", Key::Esc));
-        Chrome { crumb: format!("/ apps / {}", self.name), context, lead, word: self.name.clone(), keys }
+        Chrome {
+            crumb: format!("/ apps / {}", self.name),
+            context,
+            lead,
+            word: self.name.clone(),
+            script: false,
+            keys,
+        }
     }
 
     fn body(&mut self, p: &mut Paint, st: &mut Store, r: &Regions) {
@@ -139,70 +148,18 @@ impl View for ItemView {
         let b = r.body;
         let cols = p.f.cols();
         let (cw, ch) = (p.f.ctx.size.cell_w, p.f.ctx.size.cell_h);
-        let ind = if r.narrow { 0 } else { 2 };
         self.view_h = b.h;
-        p.clip = Some(b);
-        p.scroll = self.scroll;
-        let mut y = b.y;
-        let mut block = 0u16;
-        let next = |b: &mut u16| {
-            let e = El::Block(*b);
-            *b += 1;
-            e
-        };
-
-        // 1 Cover (Flow's shorter picture, so the page fits better under the hero).
-        let cover_rows = item_cover_rows(r);
-        if cover_rows > 0 {
-            draw_cover(p, st, &self.name, Rect::new(0, y, cols, cover_rows));
-            y += cover_rows;
-        }
-
-        // 3 Line: installed state left, upstream right.
-        let el = next(&mut block);
-        if let Some(it) = st.cat.item(&self.name) {
-            if let Some(v) = &it.installed {
-                p.text(el, b.x, y, &format!("installed {v}"), pal.dim_s());
-            }
-        }
         let repo = info.upstream().map(str::to_string);
-        match &repo {
-            Some(rp) => {
-                let st_ = pal.accent_s().underline(Underline::Curly).ul_color(pal.accent);
-                let x = p.right(el, b.right(), y, rp, st_);
-                let rect = Rect::new(x, y, b.right() - x, 1);
-                p.link(rect, &format!("https://github.com/{rp}"));
-                p.hit(rect, A_REPO);
-            }
-            None if info.setup() => {
-                p.right(el, b.right(), y, "our setup", pal.dim_s());
-            }
-            None => {}
-        }
-        y += 2;
 
-        // 4 Standfirst.
-        if let Some(sf) = info.get("Standfirst").or(info.get("Summary")) {
-            let el = next(&mut block);
-            p.centred(el, b, y, sf, pal.dim_s().italic());
-            y += 2;
-        }
-
-        // 5 Star rule, only once gh works; never for a setup.
-        if let (Some(rp), Gh::Ready) = (&repo, st.gh) {
-            st.want_star(rp);
-            let el = next(&mut block);
-            let (mark, mst) = match st.starred(rp) {
-                Some(true) => ("★", pal.accent_s()),
-                Some(false) => ("☆", pal.accent_s()),
-                None => ("☆", pal.rule_s()),
-            };
-            let rect = star_rule(p, el, b, y, mark, mst);
-            p.hit(rect, A_STAR);
-            y += 2;
-        }
-
-        // 6 Facts.
+        // Everything the page says, fitted to the column first, so the height is known before
+        // anything is drawn (a cover only goes on top when the rest fits under it).
+        let text_w = b.w.min(44);
+        let standfirst = info
+            .get("Standfirst")
+            .or(info.get("Summary"))
+            .map(|s| layout::wrap(s, text_w, 2))
+            .unwrap_or_default();
+        let star = repo.is_some() && st.gh == Gh::Ready;
         let upd = st.cat.update_for(&self.name).cloned();
         let item = st.cat.item(&self.name).cloned();
         let version = match (&upd, &item) {
@@ -222,13 +179,122 @@ impl View for ItemView {
                 facts.push((label, v.to_string(), None));
             }
         }
+        let does: Vec<String> =
+            info.does().iter().map(|d| layout::fit_line(d, b.w.saturating_sub(2))).collect();
+        let try_it = info.get("Try").map(str::to_string);
+        let notes: Vec<String> = info.notes().iter().take(2).flat_map(|n| layout::wrap(n, b.w, 2)).collect();
+
+        let mut need = 2; // the line and the blank under it
+        if !standfirst.is_empty() {
+            need += standfirst.len() as u16 + 1;
+        }
+        if star {
+            need += 2;
+        }
+        if !facts.is_empty() {
+            need += facts.len() as u16 + 3;
+        }
+        if !does.is_empty() {
+            need += does.len() as u16 + 2;
+        }
+        if try_it.is_some() {
+            need += 3;
+        }
+        if !notes.is_empty() {
+            need += notes.len() as u16 + 1;
+        }
+        let spare = b.h.saturating_sub(need);
+        // Pictures are asked for (the script may fetch them) only when there is room.
+        let cover_rows = layout::cover_rows(spare, 7);
+        let cover_rows = if cover_rows > 0 && has_picture(p, st, &self.name, false) { cover_rows } else { 0 };
+        let cover = (cover_rows > 0)
+            .then(|| cover_picture(p, st, &self.name, Rect::new(0, b.y, cols, cover_rows), false))
+            .flatten();
+        let spare = if cover.is_some() { spare - cover_rows - 1 } else { spare };
+        let demo_rows = if r.tier == Tier::Tall { 6 } else { 4 };
+        let demo = (info.get("Demo").is_some() && spare > demo_rows && has_picture(p, st, &self.name, true))
+            .then(|| {
+                let d = Rect::new(b.x, 0, b.w, demo_rows);
+                cover_picture(p, st, &self.name, d, true)
+            })
+            .flatten();
+
+        p.clip = Some(b);
+        p.scroll = self.scroll;
+        let mut y = b.y;
+        let mut block = 0u16;
+        let next = |b: &mut u16| {
+            let e = El::Block(*b);
+            *b += 1;
+            e
+        };
+
+        // 1 Cover.
+        if let Some(pic) = &cover {
+            p.picture(El::Cover, pic, 0, y, (0, 0), 1);
+            y += cover_rows + 1;
+        }
+
+        // 3 Line: installed state left, upstream right.
+        let el = next(&mut block);
+        let mut left_end = b.x;
+        if let Some(it) = &item {
+            if let Some(v) = &it.installed {
+                left_end = p.text(el, b.x, y, &format!("installed {v}"), pal.dim_s());
+            }
+        }
+        match &repo {
+            Some(rp) => {
+                let st_ = pal.accent_s().underline(Underline::Curly).ul_color(pal.accent);
+                let shown = if left_end + 2 + text_width(rp) as u16 > b.right() {
+                    layout::fit_line(rp, b.right().saturating_sub(left_end + 2))
+                } else {
+                    rp.clone()
+                };
+                let x = p.right(el, b.right(), y, &shown, st_);
+                let rect = Rect::new(x, y, b.right() - x, 1);
+                p.link(rect, &format!("https://github.com/{rp}"));
+                p.hit(rect, A_REPO);
+            }
+            None if info.setup() => {
+                p.right(el, b.right(), y, "our setup", pal.dim_s());
+            }
+            None => {}
+        }
+        y += 2;
+
+        // 4 Standfirst.
+        if !standfirst.is_empty() {
+            let el = next(&mut block);
+            for l in &standfirst {
+                p.centred(el, b, y, l, pal.dim_s().italic());
+                y += 1;
+            }
+            y += 1;
+        }
+
+        // 5 Star rule, only once gh works; never for a setup.
+        if let (true, Some(rp)) = (star, &repo) {
+            st.want_star(rp);
+            let el = next(&mut block);
+            let (mark, mst) = match st.starred(rp) {
+                Some(true) => ("★", pal.accent_s()),
+                Some(false) => ("☆", pal.accent_s()),
+                None => ("☆", pal.rule_s()),
+            };
+            let rect = star_rule(p, el, b, y, mark, mst);
+            p.hit(rect, A_STAR);
+            y += 2;
+        }
+
+        // 6 Facts.
         if !facts.is_empty() {
             let el = next(&mut block);
             let box_w = 38.min(b.w);
             let x = layout::centre_x(b, box_w);
-            let val_w = box_w.saturating_sub(16) as usize;
-            let top = format!("┌{}┬{}┐", "─".repeat(11), "─".repeat(val_w + 2));
-            let bot = format!("└{}┴{}┘", "─".repeat(11), "─".repeat(val_w + 2));
+            let val_w = box_w.saturating_sub(16);
+            let top = format!("┌{}┬{}┐", "─".repeat(11), "─".repeat(val_w as usize + 2));
+            let bot = format!("└{}┴{}┘", "─".repeat(11), "─".repeat(val_w as usize + 2));
             p.text(el, x, y, &top, pal.rule_s());
             for (i, (label, v, new)) in facts.iter().enumerate() {
                 let ry = y + 1 + i as u16;
@@ -236,11 +302,21 @@ impl View for ItemView {
                 cx = p.text(el, cx + 1, ry, &format!("{label:<9}"), pal.dim_s());
                 cx = p.text(el, cx + 1, ry, "│", pal.rule_s());
                 let vx = cx + 1;
-                let limit = vx + val_w as u16;
-                let mut e = p.text_clip(el, vx, ry, v, pal.ink_s(), limit);
-                if let Some(n) = new {
-                    e = p.text_clip(el, e, ry, " → ", pal.ink_s(), limit);
-                    p.text_clip(el, e, ry, n, pal.accent_s().bold(), limit);
+                let limit = vx + val_w;
+                match new {
+                    Some(n) => {
+                        let full = format!("{v} → {n}");
+                        if text_width(&full) as u16 <= val_w {
+                            let e = p.text(el, vx, ry, &format!("{v} → "), pal.ink_s());
+                            p.text(el, e, ry, n, pal.accent_s().bold());
+                        } else {
+                            // Only room for one: the new version is what matters.
+                            p.text(el, vx, ry, &layout::fit_line(n, val_w), pal.accent_s().bold());
+                        }
+                    }
+                    None => {
+                        p.text(el, vx, ry, &layout::fit_line(v, val_w), pal.ink_s());
+                    }
                 }
                 p.text(el, limit + 1, ry, "│", pal.rule_s());
             }
@@ -249,67 +325,48 @@ impl View for ItemView {
         }
 
         // 7 What it does.
-        let does = info.does();
         if !does.is_empty() {
             let el = next(&mut block);
-            p.text(el, b.x + ind, y, &layout::spaced_caps("what it does"), pal.ink_s().bold());
+            p.text(el, b.x, y, &layout::spaced_caps("what it does"), pal.ink_s().bold());
             y += 1;
-            for d in does {
-                let x = p.text(el, b.x + ind, y, "→", pal.accent_s());
-                p.text_clip(el, x + 1, y, d, pal.ink_s(), b.right());
+            for d in &does {
+                let x = p.text(el, b.x, y, "→", pal.accent_s());
+                p.text(el, x + 1, y, d, pal.ink_s());
                 y += 1;
             }
             y += 1;
         }
 
         // 8 Try it.
-        if let Some(t) = info.get("Try") {
+        if let Some(t) = &try_it {
             let el = next(&mut block);
-            p.text(el, b.x + ind, y, &layout::spaced_caps("try it"), pal.ink_s().bold());
+            p.text(el, b.x, y, &layout::spaced_caps("try it"), pal.ink_s().bold());
             y += 1;
-            let band = Rect::new(b.x + ind, y, b.w.saturating_sub(ind * 2), 1);
+            let band = Rect::new(b.x, y, b.w, 1);
             let tone = Style::new().bg(pal.tonal);
             p.fill(el, band, tone);
             let x = p.text(el, band.x + 1, y, "$", tone.fg(pal.dim));
-            p.text_clip(el, x + 1, y, t, tone.fg(pal.on_tonal), band.right().saturating_sub(1));
+            let room = band.right().saturating_sub(x + 2);
+            p.text(el, x + 1, y, &layout::fit_line(t, room), tone.fg(pal.on_tonal));
             y += 2;
         }
 
-        // 9 Demo (not with the keyboard open).
-        if info.get("Demo").is_some() && r.tier != Tier::Compact {
+        // 9 Demo: only a real picture, only with room to spare.
+        if let Some(pic) = &demo {
             let el = next(&mut block);
-            let rows = if r.tier == Tier::Full { 6 } else { 4 };
-            let d = Rect::new(b.x + ind, y, b.w.saturating_sub(ind * 2), rows);
-            let path =
-                if p.f.ctx.caps.kitty_graphics { st.cat.picture(&st.env, &self.name, true) } else { None };
-            let pic = path.and_then(|path| {
-                p.f.ctx.pics.file(&path, d.w as u32 * cw as u32, d.h as u32 * ch as u32, Fit::Contain).ok()
-            });
-            let placed = pic.is_some_and(|pic| {
-                // Contained: centre it in the slot.
-                let slack = (d.w as u32 * cw as u32).saturating_sub(pic.width()) / 2;
-                let x_px = d.x as u32 * cw as u32 + slack;
-                p.picture(el, &pic, (x_px / cw as u32) as u16, d.y, (x_px % cw as u32, 0), 2)
-            });
-            if !placed {
-                stand_in(p, el, d, "demo");
-            }
-            y += rows + 1;
+            let slack = (b.w as u32 * cw as u32).saturating_sub(pic.width()) / 2;
+            let x_px = b.x as u32 * cw as u32 + slack;
+            p.picture(el, pic, (x_px / cw as u32) as u16, y, (x_px % cw as u32, 0), 2);
+            y += pic.height().div_ceil(ch.max(1) as u32) as u16 + 1;
         }
 
         // 10 Good to know.
-        let notes = info.notes();
         if !notes.is_empty() {
             let el = next(&mut block);
-            for n in notes.iter().take(2) {
-                p.text_clip(
-                    el,
-                    b.x + ind,
-                    y,
-                    &format!("good to know · {n}"),
-                    pal.dim_s().italic(),
-                    b.right(),
-                );
+            p.text(el, b.x, y, &layout::spaced_caps("good to know"), pal.ink_s().bold());
+            y += 1;
+            for n in &notes {
+                p.text(el, b.x, y, n, pal.dim_s().italic());
                 y += 1;
             }
         }
@@ -317,6 +374,11 @@ impl View for ItemView {
         self.scroll = self.scroll.min(self.max_scroll());
         p.clip = None;
         p.scroll = 0;
+        // The page goes on below: say so on the notice line (unless a notice is showing).
+        if self.scroll < self.max_scroll() && st.notice.is_none() && b.bottom() < r.keys.y {
+            let x = p.right(El::Notice, b.right(), b.bottom(), "more below ↓", pal.dim_s());
+            p.hit(Rect::new(x, b.bottom(), b.right() - x, 1), A_MORE);
+        }
     }
 
     fn handle(&mut self, ev: &Event, st: &mut Store) -> Go {
@@ -350,6 +412,7 @@ impl View for ItemView {
                     st.open_repo(&rp);
                 }
             }
+            Event::Tap { action: A_MORE, .. } => self.scroll_by(page),
             Event::Tap { action: A_STAR, .. } => {
                 if let Some(rp) = repo {
                     return star_key(st, &self.name, &rp);
