@@ -94,8 +94,14 @@ public class KittyPlacementScrollAnchorTest {
             2, emulator.scrollEventCount() - scrollsBefore);
         assertEquals("2", emulator.getScreen().getSelectedText(0, 0, 0, 0));
         assertEquals("3", emulator.getScreen().getSelectedText(0, 1, 0, 1));
-        assertEquals(Character.valueOf('+'), emulator.getChar(0, 2));
-        assertEquals(Character.valueOf('+'), emulator.getChar(0, 3));
-        assertEquals(Character.valueOf('+'), emulator.getChar(0, 4));
+        // The picture is a layer over the cells: anchored on row 2, three rows tall, the text
+        // under it ("4") kept.
+        java.util.List<KittyPlacement> placements = new java.util.ArrayList<>();
+        emulator.collectKittyPlacements(0, 5, placements);
+        assertEquals(1, placements.size());
+        assertEquals(2, placements.get(0).getRow());
+        assertEquals(0, placements.get(0).getColumn());
+        assertEquals(3, placements.get(0).getRows());
+        assertEquals("4", emulator.getScreen().getSelectedText(0, 2, 0, 2));
     }
 }

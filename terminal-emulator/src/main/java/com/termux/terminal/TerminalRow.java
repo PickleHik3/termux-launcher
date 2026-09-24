@@ -353,6 +353,39 @@ public final class TerminalRow {
         mHyperlinkIds = null;
         mTextSizes = null;
         mShellIntegrationMark = MARK_NONE;
+        dropKittyPlacements();
+    }
+
+    /**
+     * The kitty placements whose top-left cell is on this row, or null while there are none. They
+     * live on the row, like the shell integration mark, so they follow it through the circular
+     * buffer and into the scrollback for free, and go when the row is erased.
+     */
+    java.util.ArrayList<KittyPlacement> mKittyPlacements;
+
+    public boolean hasKittyPlacements() {
+        return mKittyPlacements != null && !mKittyPlacements.isEmpty();
+    }
+
+    void addKittyPlacement(KittyPlacement placement) {
+        if (mKittyPlacements == null) mKittyPlacements = new java.util.ArrayList<>(2);
+        mKittyPlacements.add(placement);
+        placement.anchor = this;
+    }
+
+    void removeKittyPlacement(KittyPlacement placement) {
+        if (mKittyPlacements != null && mKittyPlacements.remove(placement)
+            && mKittyPlacements.isEmpty())
+            mKittyPlacements = null;
+        if (placement.anchor == this) placement.anchor = null;
+    }
+
+    /** Detach every placement anchored here; returns whether there were any. */
+    boolean dropKittyPlacements() {
+        if (mKittyPlacements == null) return false;
+        for (KittyPlacement placement : mKittyPlacements) placement.anchor = null;
+        mKittyPlacements = null;
+        return true;
     }
 
     public void setChar(int columnToSet, int codePoint, long style) {
@@ -555,6 +588,8 @@ public final class TerminalRow {
     }
 
     boolean isBlank() {
+        // A picture anchored here is content even over blank cells: a resize must not drop the row.
+        if (mKittyPlacements != null && !mKittyPlacements.isEmpty()) return false;
         for (int charIndex = 0, charLen = getSpaceUsed(); charIndex < charLen; charIndex++) if (mText[charIndex] != ' ')
             return false;
         return true;

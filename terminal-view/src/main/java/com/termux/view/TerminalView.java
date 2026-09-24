@@ -198,6 +198,27 @@ public final class TerminalView extends View {
      */
     private boolean mTouchMouseDragReported;
 
+    /** The axis a finger drag scrolls along, decided once it has travelled; reset at each down. */
+    private int mScrollAxis;
+    private static final int SCROLL_AXIS_UNDECIDED = 0;
+    private static final int SCROLL_AXIS_VERTICAL = 1;
+    private static final int SCROLL_AXIS_HORIZONTAL = 2;
+
+    /**
+     * The axis this drag scrolls along. A mouse's own scrolling is left alone; a finger's is locked
+     * to whichever way it had travelled further when it first moved past the touch slop.
+     */
+    private int scrollAxisFor(MotionEvent event) {
+        if (event.isFromSource(InputDevice.SOURCE_MOUSE)) return SCROLL_AXIS_UNDECIDED;
+        if (mScrollAxis == SCROLL_AXIS_UNDECIDED) {
+            float dx = Math.abs(event.getX() - mTouchDownX);
+            float dy = Math.abs(event.getY() - mTouchDownY);
+            if (dx * dx + dy * dy > (float) mTouchSlop * mTouchSlop)
+                mScrollAxis = dx > dy ? SCROLL_AXIS_HORIZONTAL : SCROLL_AXIS_VERTICAL;
+        }
+        return mScrollAxis;
+    }
+
     private int mTouchMouseDragLastCol, mTouchMouseDragLastRow;
 
     /**
@@ -402,6 +423,14 @@ public final class TerminalView extends View {
                     // which we do not do for touch input, only mouse in onTouchEvent().
                     sendMouseEventCode(e, TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, true);
                 } else {
+                    // A finger drag scrolls along one axis, the one it started out along. A thumb
+                    // never travels straight, and without this every few pixels of sideways drift
+                    // on a vertical drag went to a mouse-tracking program as a sideways wheel
+                    // notch between the vertical ones - which many programs read as the wheel
+                    // turning the other way, so the scroll stalled or jittered.
+                    int axis = scrollAxisFor(e);
+                    if (axis == SCROLL_AXIS_HORIZONTAL) distanceY = 0f;
+                    if (axis == SCROLL_AXIS_VERTICAL) distanceX = 0f;
                     if (isSmoothScrollAllowed()) {
                         abortSmoothScroll();
                         float before = getScrollPixelPosition();
@@ -447,6 +476,9 @@ public final class TerminalView extends View {
                     return true;
                 // Do not start scrolling until last fling has been taken care of:
                 if (!mScroller.isFinished())
+                    return true;
+                // A sideways swipe is not a vertical fling, however much it drifted.
+                if (mScrollAxis == SCROLL_AXIS_HORIZONTAL && !e2.isFromSource(InputDevice.SOURCE_MOUSE))
                     return true;
                 final boolean mouseTrackingAtStartOfFling = mEmulator.isMouseTrackingActive();
                 if (isSmoothScrollAllowed()) {
@@ -536,6 +568,12 @@ public final class TerminalView extends View {
      */
     public void setIsTerminalViewKeyLoggingEnabled(boolean value) {
         TERMINAL_VIEW_KEY_LOGGING_ENABLED = value;
+    }
+
+    /** Show an emulator without a session behind it, for tests that drive the view's input. */
+    @androidx.annotation.VisibleForTesting
+    void setEmulatorForTest(TerminalEmulator emulator) {
+        mEmulator = emulator;
     }
 
     /**
@@ -1920,6 +1958,7 @@ public final class TerminalView extends View {
             mScrollDelivery.reset();
             mTouchMouseDragActive = false;
             mTouchMouseDragReported = false;
+            mScrollAxis = SCROLL_AXIS_UNDECIDED;
         }
         handleHoldTouch(event);
         if (mTouchMouseMode && !event.isFromSource(InputDevice.SOURCE_MOUSE)) {

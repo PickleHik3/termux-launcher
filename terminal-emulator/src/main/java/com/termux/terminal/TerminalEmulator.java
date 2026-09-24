@@ -2318,6 +2318,10 @@ public final class TerminalEmulator {
                     TerminalBuffer newScreen = setting ? mAltBuffer : mMainBuffer;
                     if (newScreen != mScreen) {
                         mKittyGraphics.screenSwitched();
+                        // The alternate screen is blanked as it is entered and forgotten as it is
+                        // left, and its pictures with it: they are a layer over its cells, which
+                        // the blanking below does not reach.
+                        if (mAltBuffer.deleteKittyImages(-1, true) > 0) mKittyPlacementGeneration++;
                         clearExtraCursors();
                         boolean resized = !(newScreen.mColumns == mColumns && newScreen.mScreenRows == mRows);
                         if (setting)
@@ -4768,11 +4772,9 @@ public final class TerminalEmulator {
     }
 
     /**
-     * Bumped whenever an animation frame flip replaces the pixels of a placed kitty image in
-     * place. Placements are drawn from {@link TerminalBuffer#getSixelBitmap}, keyed by a cell
-     * style that does not move when the bitmap behind it is swapped, so this is the only thing a
-     * renderer can compare for a row holding bitmap cells. Sixel and iTerm images never move it:
-     * their pixels are written once, so a row showing one is recorded once.
+     * Bumped whenever a kitty placement is added, moved, re-cropped or deleted, or an animation
+     * frame flip points placements at new pixels. Placements are a layer over the cells, so no cell
+     * the renderer compares moves when they do; this is what tells it something did.
      */
     public long getKittyPlacementGeneration() {
         return mKittyPlacementGeneration;
@@ -4786,42 +4788,86 @@ public final class TerminalEmulator {
         return mKittyGraphics.hasVirtualPlacement(imageId, placementId);
     }
 
-    boolean placeKittyGraphics(Bitmap bitmap, KittyGraphicsProtocol.Command command, long imageId,
-                               int row, int col, int cellWidth, int cellHeight, int[] transform) {
+    /**
+     * Put a kitty placement on the current screen: anchor its top-left cell at ({@code row},
+     * {@code col}), and draw {@code bitmap}'s {@code source} rectangle {srcX, srcY, srcW, srcH} into
+     * {@code width} x {@code height} reported pixels, {@code offsetX}/{@code offsetY} into that cell.
+     *
+     * <p>A placement command with a placement id replaces its own (image, placement) pair, and it
+     * does so in place: the existing placement object is re-anchored and its fields updated, so a
+     * program that moves a picture a few pixels a frame costs a field write and one redraw, with
+     * nothing decoded, cropped or composited. A transmission that displays ({@code a=T}) replaces
+     * the image, so its old placements go.</p>
+     *
+     * @param ownsBitmap whether the placement owns {@code bitmap} (an unstored transmission) or
+     *     shares the image store's.
+     */
+    boolean placeKittyGraphics(Bitmap bitmap, boolean ownsBitmap, long ownedBytes,
+                               KittyGraphicsProtocol.Command command, long imageId, int row, int col,
+                               int[] source, int width, int height, int offsetX, int offsetY,
+                               int cellWidth, int cellHeight) {
+        // A picture taller than the screen may have pushed its own top row into the scrollback
+        // while the cursor moved past it; it is anchored there, as the text it came with is.
+        if (bitmap == null || row < -mScreen.getActiveTranscriptRows() || row >= mRows
+            || col < 0 || col >= mColumns)
+            return false;
         mPlacingKittyGraphics = true;
         try {
-            return placeKittyGraphicsLocked(bitmap, command, imageId, row, col, cellWidth, cellHeight,
-                transform);
+            KittyPlacement placement = null;
+            if (command.action == 'p') {
+                // Unidentified placements are additive, which is what makes several per image work.
+                if (command.placementId != 0) {
+                    placement = mScreen.findKittyPlacement(imageId, command.placementId);
+                    if (placement != null && placement.anchor != null)
+                        placement.anchor.removeKittyPlacement(placement);
+                }
+            } else if (imageId != 0) {
+                mMainBuffer.deleteKittyImages(imageId, true);
+                mAltBuffer.deleteKittyImages(imageId, true);
+            }
+            long previousBytes = placement == null ? 0 : placement.ownedBytes;
+            long addedBytes = ownsBitmap ? Math.max(0, ownedBytes) : 0;
+            if (addedBytes > 0
+                && getKittyGraphicsBytes() - previousBytes + addedBytes > KittyGraphicsProtocol.MAX_DECODED_BYTES) {
+                return false;
+            }
+            if (placement == null) placement = new KittyPlacement(imageId, command.placementId);
+            placement.bitmap = bitmap;
+            placement.ownsBitmap = ownsBitmap;
+            placement.ownedBytes = addedBytes;
+            placement.z = command.z;
+            placement.column = col;
+            placement.sourceX = source[0];
+            placement.sourceY = source[1];
+            placement.sourceWidth = source[2];
+            placement.sourceHeight = source[3];
+            placement.width = width;
+            placement.height = height;
+            placement.offsetX = offsetX;
+            placement.offsetY = offsetY;
+            placement.cellWidth = Math.max(1, cellWidth);
+            placement.cellHeight = Math.max(1, cellHeight);
+            placement.fitToColumns(mColumns);
+            placement.rows = Math.max(1, (height + offsetY + placement.cellHeight - 1) / placement.cellHeight);
+            mScreen.putKittyPlacement(placement, row);
+            mKittyPlacementGeneration++;
+            return true;
         } finally {
             mPlacingKittyGraphics = false;
         }
     }
 
-    private boolean placeKittyGraphicsLocked(Bitmap bitmap, KittyGraphicsProtocol.Command command,
-                                             long imageId, int row, int col, int cellWidth,
-                                             int cellHeight, int[] transform) {
-        if (command.action == 'p') {
-            // A placement command replaces only its own (image, placement) pair; unidentified
-            // placements are additive, which is what makes multiple placements per image work.
-            if (command.placementId != 0) {
-                mScreen.deleteKittyImages((existing, column, cellRow) ->
-                    existing.kittyImageId == imageId && existing.kittyPlacementId == command.placementId, true);
-            }
-        } else if (imageId != 0) {
-            // Retransmitting an image replaces it, so its previous placements go with it.
-            mMainBuffer.deleteKittyImages(imageId, true);
-            mAltBuffer.deleteKittyImages(imageId, true);
-        }
-        long availableWidth = Math.max(0L, (long) (mColumns - col) * cellWidth);
-        long roundedWidth = ((bitmap.getWidth() + cellWidth - 1L) / cellWidth) * cellWidth;
-        long placedWidth = Math.min(availableWidth, roundedWidth);
-        long placedHeight = ((bitmap.getHeight() + cellHeight - 1L) / cellHeight) * cellHeight;
-        long placedBytes = placedWidth * placedHeight * 4L;
-        if (placedBytes <= 0 || getKittyGraphicsBytes() + placedBytes > KittyGraphicsProtocol.MAX_DECODED_BYTES)
-            return false;
-        int[] delta = mScreen.addKittyImage(bitmap, imageId, command.placementId, command.z, row, col,
-            cellWidth, cellHeight, transform);
-        return delta[0] != 0 || delta[1] != 0;
+    /**
+     * The kitty placements that reach into the {@code rowCount} rows from external row
+     * {@code topRow} of the current screen, for the renderer to draw over the cells.
+     */
+    public void collectKittyPlacements(int topRow, int rowCount, java.util.List<KittyPlacement> out) {
+        mScreen.collectVisibleKittyPlacements(topRow, rowCount, out);
+    }
+
+    /** The kitty graphics protocol of this terminal, for tests in this package. */
+    KittyGraphicsProtocol kittyGraphics() {
+        return mKittyGraphics;
     }
 
     /**
@@ -4894,16 +4940,19 @@ public final class TerminalEmulator {
     }
 
     /** Live placements of one stored kitty image on both screens, for animation frame flips. */
-    java.util.List<TerminalBitmap> kittyPlacementsFor(long imageId) {
-        java.util.List<TerminalBitmap> result = new java.util.ArrayList<>();
+    java.util.List<KittyPlacement> kittyPlacementsFor(long imageId) {
+        java.util.List<KittyPlacement> result = new java.util.ArrayList<>();
         mMainBuffer.collectKittyPlacements(imageId, result);
         mAltBuffer.collectKittyPlacements(imageId, result);
         return result;
     }
 
-    /** Delete kitty placement cells the filter matches on the current screen. */
-    int deleteKittyPlacements(TerminalBuffer.KittyPlacementFilter filter, boolean includeScrollback) {
-        return mScreen.deleteKittyImages(filter, includeScrollback);
+    /** Delete the kitty placements the filter matches on the current screen, returning them. */
+    java.util.List<KittyPlacement> deleteKittyPlacements(TerminalBuffer.KittyPlacementFilter filter,
+                                                         boolean includeScrollback) {
+        java.util.List<KittyPlacement> deleted = mScreen.deleteKittyImages(filter, includeScrollback);
+        if (!deleted.isEmpty()) mKittyPlacementGeneration++;
+        return deleted;
     }
 
     void advanceKittyGraphicsCursor(KittyGraphicsProtocol.Command command, int imageWidth, int imageHeight,
@@ -4924,17 +4973,17 @@ public final class TerminalEmulator {
 
     /** Remove one image's placements from both screens, as a retransmission replacement requires. */
     void deleteKittyImageEverywhere(long imageId) {
-        mMainBuffer.deleteKittyImages(imageId, true);
-        mAltBuffer.deleteKittyImages(imageId, true);
+        if (mMainBuffer.deleteKittyImages(imageId, true) + mAltBuffer.deleteKittyImages(imageId, true) > 0)
+            mKittyPlacementGeneration++;
     }
 
     void deleteVisibleKittyGraphics() {
-        mScreen.deleteKittyImages(-1, false);
+        if (mScreen.deleteKittyImages(-1, false) > 0) mKittyPlacementGeneration++;
     }
 
     void deleteAllKittyGraphics() {
-        mMainBuffer.deleteKittyImages(-1, true);
-        mAltBuffer.deleteKittyImages(-1, true);
+        if (mMainBuffer.deleteKittyImages(-1, true) + mAltBuffer.deleteKittyImages(-1, true) > 0)
+            mKittyPlacementGeneration++;
     }
 
     public String getSelectedText(int x1, int y1, int x2, int y2) {
