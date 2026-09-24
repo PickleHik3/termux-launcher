@@ -272,7 +272,15 @@ voice input falls back to the Android recognizer. STT unloads after 2 minutes id
    installed-model lists, the default-assistant picker and `/v1/models`; `loadModel` refuses them.
    No runtime routing yet (phase 2).
 2. `WhisperSttRuntime` (mel, tokenizer, signatures, greedy decode), `transcribe` op on its own
-   executor, `/v1/audio/transcriptions`, `tai transcribe`. **Done** (2026-09-24): `WhisperMel`
+   executor, `/v1/audio/transcriptions`, `tai transcribe`. **Device-verified on pong 2026-09-24**
+   (`tai transcribe`, debug build): git status fixture → "Get status" / `--terminal` "git status" on
+   base.en and small.en (matches the reference); ls → "." / "ls"; GB "sudo apt update" → base.en
+   `--terminal` "update" (dropped words — the 12-token BPE bias line differs from the reference's
+   8-token lookup), small.en "sudo apt update"; 22-token agent sentence correct on small.en.
+   Timings base.en 10 s: mel 59–125 ms (was 1.7 s before cb1aa1b8 skipped silent frames), encode
+   ~142 ms, decode ~78 ms/step — 2.5–3× the benchmark_model figures (57 ms, 30 ms/step); small.en
+   encode ~500 ms, ~240 ms/step. Open: the per-step copy of the full [128 × vocab] logits tensor
+   (26.5 MB) and whether litert 1.4.2's XNNPACK path matches the benchmark build. **Done** (2026-09-24): `WhisperMel`
    (16 × 25 DFT, pinned to the reference fixture), `WhisperTokenizer` (decode + merge-rank BPE
    encode for the bias line), `WhisperDecoder` (prompt, suppressions, repetition guard),
    `WhisperSegmenter` (pause split, < 0.3 s voiced dropped, 300 ms padding), `WhisperAudio`
