@@ -203,3 +203,30 @@ Missing from every Android allowlist file (grep `embedding|qwen3`): **EmbeddingG
 - Whether cancelling a LiteRT-LM GPU `initialize()` releases GPU memory promptly. This is needed for recommendation 1.
 - Whether the config choice in Gallery persists across launches. No persistence code was found, so the negative is inferred from absence.
 - Whether TAI's vision fallback to CPU actually fails for Gemma 3n. Gallery's comment asserts GPU is required, but this is untested.
+
+## Benchmark on pong (2026-09-24)
+
+Same model file (`gemma-4-E4B-it.litertlm`, 3 659 530 240 bytes in both apps), GPU, LiteRT-LM's own
+`benchmark()` API with Gallery's defaults (256 prefill / 256 decode / 3 runs). TAI side via
+`tai benchmark` (1d40e074). Both processes were in the `top-app` cgroup; both used OpenCL.
+
+| | Gallery 1.0.19 | TAI (LiteRT-LM 0.14.0) |
+|---|---:|---:|
+| first / later init | 38.0 s / 21.7 s | 36.7 s / 21.5 s |
+| time to first token | 1.07 s | 2.65 s |
+| prefill | 263 tok/s | 100 tok/s |
+| decode | 10.6 tok/s | 11.2 tok/s |
+| peak MemAvailable drop | 2.96 GB | 3.3–3.5 GB |
+
+TAI's normal path (`tai load --gpu` + streamed chat, 308 prompt tokens) loads in 11.8 s (its GPU
+program cache persists; Gallery's benchmark uses a fresh cache dir per run) with TTFT 3.7–4.0 s and
+decode 9.8–10.0 tok/s.
+
+**Cause of the prefill gap: prompt padding in LiteRT-LM 0.14.** The E4B file has only `prefill_128`
+and `prefill_1024` graphs. TAI prefill by prompt length: 128 → 0.62 s (255 tok/s); **256 → 2.65 s
+(100 tok/s)**; 1000 → 2.76 s; 1024 → 3.04 s — a 256-token prompt costs a whole 1024 pass. HEAD's
+`GetOptimizedPrefillWorkGroups` ("cautious greedy", `runtime/executor/litert_compiled_model_executor_utils.cc:473`)
+splits it into 2 × 128 instead. Its error string ("Chosen prefill work group size exceeds …") is
+absent from TAI's 0.14.0 `liblitertlm_jni.so` and present in Gallery's bundled library and in the
+0.15.0, 0.16.1 and 0.17.1 AARs. Every prompt of roughly 129–700 tokens — most chat turns — pays
+up to ~2 s extra on TAI until LiteRT-LM is upgraded to ≥ 0.15.0.
