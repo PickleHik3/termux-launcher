@@ -1189,6 +1189,27 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         return formatBytes(spec.sizeBytes) + " · " + language + " · " + window + " window";
     }
 
+    /** Picks how long an idle speech model stays loaded; 0 keeps it until memory pressure evicts it. */
+    private void showSttIdleUnloadDialog(Context context) {
+        String[] labels = getResources().getStringArray(R.array.termux_ai_stt_idle_unload_entries);
+        String[] values = getResources().getStringArray(R.array.termux_ai_stt_idle_unload_values);
+        TaiSettings settings = new TaiSettings(context);
+        String current = String.valueOf(settings.getSttIdleUnloadMinutes());
+        int checked = 0;
+        for (int i = 0; i < values.length; i++) {
+            if (values[i].equals(current)) checked = i;
+        }
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.termux_ai_stt_idle_unload_title)
+            .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                settings.setSttIdleUnloadMinutes(Integer.parseInt(values[which]));
+                populateSttSection(context);
+                dialog.dismiss();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
     private void confirmDeleteSttModel(Context context, TaiModelSpec spec) {
         new MaterialAlertDialogBuilder(context)
             .setTitle(getString(R.string.termux_ai_model_delete_title, spec.displayName))

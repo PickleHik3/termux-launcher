@@ -348,11 +348,12 @@ public final class TaiModelSpec {
         // speech-to-text graph — branch on declared capability, not the extension, so a Whisper
         // package never falls into the embedding/sentencepiece path. Chat packages must be
         // .litertlm/.task containers even if user metadata incorrectly declares chat.
+        // A speech model is speech-only wherever it lives: catalog entries have no local path yet.
+        if (source.contains(CAPABILITY_SPEECH_TO_TEXT)) {
+            endpoint.add(CAPABILITY_SPEECH_TO_TEXT);
+            return endpoint;
+        }
         if (localPath != null && localPath.toLowerCase(Locale.ROOT).endsWith(".tflite")) {
-            if (source.contains(CAPABILITY_SPEECH_TO_TEXT)) {
-                addIfPresent(endpoint, source, CAPABILITY_SPEECH_TO_TEXT, false);
-                return endpoint;
-            }
             addIfPresent(endpoint, source, CAPABILITY_TEXT_EMBEDDINGS, false);
             return endpoint;
         }
