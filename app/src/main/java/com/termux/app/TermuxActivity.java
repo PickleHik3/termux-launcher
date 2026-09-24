@@ -150,6 +150,11 @@ import com.termux.app.terminal.inappkeyboard.FloatingKeyboardController;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardHost;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceCommand;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceInputSession;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceLanguage;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceListeningIndicator;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceTerminalCleanup;
 import com.termux.app.terminal.io.ExtraKeysDefaultOffer;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
 import com.termux.shared.activities.ReportActivity;
@@ -653,7 +658,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int REQUEST_CODE_WIDGET_BIND = 4714;
     private static final int REQUEST_CODE_WIDGET_CONFIGURE = 4715;
     private static final int REQUEST_CODE_WIDGET_RECONFIGURE = 4716;
+    private static final int REQUEST_CODE_VOICE_INPUT_MICROPHONE = 4717;
     @Nullable private TerminalSession mVoiceTypingTargetSession;
+    /** The on-device voice input in progress, from the voice key to its end; null between. */
+    @Nullable private VoiceInputSession mVoiceInput;
+    @Nullable private VoiceListeningIndicator mVoiceIndicator;
+    /** The shell the running voice session types into when nothing has claimed typing. */
+    @Nullable private TerminalSession mVoiceInputTargetSession;
+    /** Whether the last thing the running session inserted was text (the next text gets a space). */
+    private boolean mVoiceInputLastWasText;
+    /** The one-time language notices, once per process. */
+    private boolean mVoiceLanguageFallbackNoticed;
+    private boolean mVoiceEnglishOnlyNoticed;
+    private boolean mVoiceMicrophonePromptShowing;
     /** Visible sessions = service sessions minus secondary panes. Backs the window bar and browser. */
     private final java.util.List<com.termux.shared.termux.shell.command.runner.terminal.TermuxSession> mDrawerSessions = new java.util.ArrayList<>();
 
@@ -2329,6 +2346,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onPause() {
         dismissHelpOverlay();
+        // The microphone is only ever open while this activity is the one on screen.
+        endVoiceInput(VoiceInputSession.EndReason.PAUSED);
         // Nothing is typed into a display nobody is looking at.
         hideDisplaySystemKeyboard();
         // Rename owns the in-app-keyboard interceptor only while this activity is visible.
@@ -6813,6 +6832,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TerminalKeyInspector.close();
         mChrome.onDestroy();
         unregisterPreferredHomeChangeReceiver();
+        cancelVoiceInput();
         if (mIsInvalidState)
             return;
         if (mCommandPalette != null) {
@@ -8979,6 +8999,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // policy - the dock button, the keyboard's hide key, a tool, the wall paging, a
         // preference - is the user's doing to that policy, and reaches it from here alone.
         mInAppKeyboard.setVisibilityListener(shown -> {
+            // Voice input belongs to the keyboard that started it: down goes the keyboard, off
+            // goes the microphone. (Focus hides are caught by the session's own level tick.)
+            if (!shown) endVoiceInput(VoiceInputSession.EndReason.HIDDEN);
             // The keyboard mouse mode's touchpad stands in is the pad's frame, raised by the pad
             // itself: nobody asked for a keyboard there, so it must not pin the policy off.
             if (mRaisingDisplayFrameKeyboard) return;
@@ -9773,7 +9796,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void requestVoiceTyping(boolean chooser) {
-            launchVoiceTyping(chooser);
+            // Long-press keeps the system chooser; a tap takes the engine the settings name, and
+            // a tap while the on-device engine is listening is how a session is ended by hand.
+            if (chooser || !mPreferences.isInAppKeyboardVoiceOnDevice()) {
+                launchVoiceTyping(chooser);
+                return;
+            }
+            if (mVoiceInput != null) {
+                mVoiceInput.stop(VoiceInputSession.EndReason.USER);
+                return;
+            }
+            startOnDeviceVoiceInput();
         }
 
         @Override
@@ -13487,6 +13520,202 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    // ------------------------------------------------------------------ on-device voice input
+
+    /**
+     * The voice key with the on-device engine: opens the microphone for a {@link VoiceInputSession}
+     * that types each spoken phrase where the keyboard's own keys would. Every way it cannot —
+     * no speech model, no microphone permission, a runtime refusal — falls back to the Android
+     * recognizer ({@link #launchVoiceTyping}) with a one-line notice, so the key always does
+     * something.
+     */
+    private void startOnDeviceVoiceInput() {
+        if (mVoiceInput != null || mInAppKeyboard == null || !mInAppKeyboard.isVisible()) return;
+        TerminalSession target = getCurrentSession();
+        if (target == null) return;
+        com.termux.ai.TaiSettings tai = new com.termux.ai.TaiSettings(this);
+        String modelId = tai.getSttModelId();
+        if (modelId.isEmpty()) {
+            AppNotice.show(this, R.string.voice_input_no_model, false);
+            launchVoiceTyping(false);
+            return;
+        }
+        if (androidx.core.content.ContextCompat.checkSelfPermission(this,
+                android.Manifest.permission.RECORD_AUDIO)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestVoiceInputMicrophone();
+            return;
+        }
+        boolean terminalTarget = !mInAppKeyboard.hasKeyValueInterceptor();
+        String language = resolveVoiceLanguage(modelId);
+        VoiceInputSession.Config config = new VoiceInputSession.Config(modelId, language,
+            terminalTarget, mPreferences.getInAppKeyboardVoicePauseMs(), tai.getSttWindowSeconds());
+        VoiceInputSession session = new VoiceInputSession(this, config, mVoiceInputHost);
+        mVoiceInputTargetSession = target;
+        mVoiceInputLastWasText = false;
+        if (!session.start()) {
+            mVoiceInputTargetSession = null;
+            AppNotice.show(this, getString(R.string.voice_input_fallback,
+                getString(R.string.voice_input_mic_unavailable)), false);
+            launchVoiceTyping(false);
+            return;
+        }
+        mVoiceInput = session;
+    }
+
+    /**
+     * The language token for a multilingual graph, or null for an English-only one. Both one-time
+     * notices live here: a layout and locale Whisper does not know (English is used), and a
+     * non-English choice against an {@code .en} model (the choice is ignored).
+     */
+    @Nullable
+    private String resolveVoiceLanguage(@NonNull String modelId) {
+        String setting = mPreferences.getInAppKeyboardVoiceLanguage();
+        boolean englishOnly = modelId.endsWith("-en");
+        if (englishOnly) {
+            if (!VoiceLanguage.AUTO.equals(setting) && !VoiceLanguage.FALLBACK.equals(setting)
+                && !mVoiceEnglishOnlyNoticed) {
+                mVoiceEnglishOnlyNoticed = true;
+                AppNotice.show(this, getString(R.string.voice_input_english_only_model,
+                    new java.util.Locale(setting).getDisplayLanguage()), true);
+            }
+            return null;
+        }
+        String layoutId = mInAppKeyboard == null ? null : mInAppKeyboard.getActiveTextLayoutId();
+        java.util.Locale system = getResources().getConfiguration().getLocales().isEmpty()
+            ? java.util.Locale.getDefault() : getResources().getConfiguration().getLocales().get(0);
+        VoiceLanguage.Resolution resolution = VoiceLanguage.resolve(setting, layoutId, system);
+        if (resolution.fallback && !mVoiceLanguageFallbackNoticed) {
+            mVoiceLanguageFallbackNoticed = true;
+            AppNotice.show(this, R.string.voice_input_language_fallback, false);
+        }
+        return resolution.code;
+    }
+
+    private void requestVoiceInputMicrophone() {
+        if (mVoiceMicrophonePromptShowing) return;
+        if (!androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(this,
+                android.Manifest.permission.RECORD_AUDIO)) {
+            androidx.core.app.ActivityCompat.requestPermissions(this,
+                new String[] {android.Manifest.permission.RECORD_AUDIO},
+                REQUEST_CODE_VOICE_INPUT_MICROPHONE);
+            return;
+        }
+        mVoiceMicrophonePromptShowing = true;
+        new MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.voice_input_permission_title)
+            .setMessage(R.string.voice_input_permission_message)
+            .setPositiveButton(R.string.voice_input_permission_allow, (dialog, which) ->
+                androidx.core.app.ActivityCompat.requestPermissions(this,
+                    new String[] {android.Manifest.permission.RECORD_AUDIO},
+                    REQUEST_CODE_VOICE_INPUT_MICROPHONE))
+            .setNegativeButton(R.string.voice_input_permission_dismiss, (dialog, which) ->
+                launchVoiceTyping(false))
+            .setOnDismissListener(dialog -> mVoiceMicrophonePromptShowing = false)
+            .show();
+    }
+
+    /** Releases the microphone; phrases already captured still arrive. No-op without a session. */
+    private void endVoiceInput(@NonNull VoiceInputSession.EndReason reason) {
+        VoiceInputSession session = mVoiceInput;
+        if (session != null) session.stop(reason);
+    }
+
+    /** Releases the microphone and drops whatever is in flight: the activity is going away. */
+    private void cancelVoiceInput() {
+        VoiceInputSession session = mVoiceInput;
+        mVoiceInput = null;
+        if (session != null) session.cancel(VoiceInputSession.EndReason.DESTROYED);
+        hideVoiceIndicator();
+    }
+
+    private void showVoiceIndicator() {
+        View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
+        if (keyboardContainer == null) return;
+        if (mVoiceIndicator == null) mVoiceIndicator = new VoiceListeningIndicator(this, keyboardContainer);
+        mVoiceIndicator.show();
+    }
+
+    private void hideVoiceIndicator() {
+        if (mVoiceIndicator != null) mVoiceIndicator.hide();
+        if (mInAppKeyboard != null) mInAppKeyboard.setVoiceTypingActive(false);
+    }
+
+    /**
+     * One transcribed phrase: a spoken key when it is exactly a command word and the setting is
+     * on, text otherwise — cleaned for a shell when nothing has claimed typing — inserted where
+     * the keyboard's keys go: the interceptor first, the shell the session started from otherwise.
+     */
+    private void insertVoiceTranscript(@NonNull String transcript) {
+        if (mInAppKeyboard == null) return;
+        VoiceCommand command = mPreferences.isInAppKeyboardVoiceCommandsEnabled()
+            ? VoiceCommand.classify(transcript) : null;
+        if (command != null) {
+            juloo.keyboard2.KeyValue key = juloo.keyboard2.KeyValue.getKeyByName(command.keyName);
+            if (key != null && mInAppKeyboard.dispatchKeyValue(key, command.ctrl)) {
+                mVoiceInputLastWasText = false;
+                if (mVoiceIndicator != null) mVoiceIndicator.setTranscript(transcript.trim());
+                return;
+            }
+        }
+        String text = transcript.trim();
+        boolean terminalTarget = !mInAppKeyboard.hasKeyValueInterceptor();
+        if (terminalTarget && mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled()) {
+            text = VoiceTerminalCleanup.join(mVoiceInputLastWasText, VoiceTerminalCleanup.clean(text));
+        }
+        if (text.isEmpty()) return;
+        if (!offerToInAppKeyboardInterceptor(juloo.keyboard2.KeyValue.makeStringKey(text),
+                false, false, false)) {
+            TerminalSession target = mVoiceInputTargetSession;
+            if (target != null) target.write(text);
+        }
+        mVoiceInputLastWasText = true;
+        if (mVoiceIndicator != null) mVoiceIndicator.setTranscript(text.trim());
+    }
+
+    private final VoiceInputSession.Host mVoiceInputHost = new VoiceInputSession.Host() {
+        @Override
+        public void onListening() {
+            if (mInAppKeyboard != null) mInAppKeyboard.setVoiceTypingActive(true);
+            showVoiceIndicator();
+        }
+
+        @Override
+        public void onLevel(float rms, boolean voiced) {
+            // The keyboard can go down without telling the visibility listener (a focus hide);
+            // the level tick, some 30 times a second, is where that is noticed.
+            if (mInAppKeyboard == null || !mInAppKeyboard.isVisible()) {
+                endVoiceInput(VoiceInputSession.EndReason.HIDDEN);
+                return;
+            }
+            if (mVoiceIndicator != null) mVoiceIndicator.setLevel(rms, voiced);
+        }
+
+        @Override
+        public void onTranscript(@NonNull String text) {
+            insertVoiceTranscript(text);
+        }
+
+        @Override
+        public void onFailure(@NonNull String code, @NonNull String message, boolean anyTranscriptDelivered) {
+            String detail = message.isEmpty() ? code : message;
+            if (anyTranscriptDelivered || mInAppKeyboard == null || !mInAppKeyboard.isVisible()) {
+                // Text already went through, or there is nothing to fall back for: just say why.
+                AppNotice.show(TermuxActivity.this, getString(R.string.voice_input_stopped, detail), true);
+                return;
+            }
+            AppNotice.show(TermuxActivity.this, getString(R.string.voice_input_fallback, detail), true);
+            launchVoiceTyping(false);
+        }
+
+        @Override
+        public void onEnded(@NonNull VoiceInputSession.EndReason reason) {
+            mVoiceInput = null;
+            mVoiceInputTargetSession = null;
+            hideVoiceIndicator();
+        }
+    };
+
     static Intent createVoiceTypingIntent(@NonNull Context context, boolean chooser) {
         Intent recognition = new Intent(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         recognition.putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL,
@@ -13516,6 +13745,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.onWallpaperChanged();
             }
             refreshFirstRunPermissionsCard();
+        } else if (requestCode == REQUEST_CODE_VOICE_INPUT_MICROPHONE) {
+            if (grantResults.length > 0
+                && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                startOnDeviceVoiceInput();
+            } else {
+                // Refused: the system recognizer asks for the microphone itself.
+                AppNotice.show(this, getString(R.string.voice_input_fallback,
+                    getString(R.string.voice_input_permission_denied)), false);
+                launchVoiceTyping(false);
+            }
         }
     }
 

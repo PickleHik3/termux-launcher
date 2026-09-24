@@ -31,6 +31,7 @@ import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboardLayoutLoader;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import java.io.File;
@@ -62,6 +63,10 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_DOCS_LAYOUTS = "keyboard_docs_layouts";
     private static final String KEY_DOCS_KEYS = "keyboard_docs_keys";
     private static final String KEY_TAP_CORRECTION_RESET = "in_app_keyboard_tap_correction_reset";
+    private static final String KEY_VOICE_ENGINE = "keyboard_voice_engine";
+    private static final String KEY_VOICE_MODEL = "keyboard_voice_model";
+    /** The TAI page's speech-to-text category, which the voice rows deep-link to. */
+    private static final String TAI_STT_CATEGORY_KEY = "tai_stt_category";
 
     private static final String UPSTREAM_GITHUB_URL =
         "https://github.com/Julow/Unexpected-Keyboard";
@@ -129,7 +134,33 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             return true;
         });
 
+        ListPreference voiceEngine = findPreference(KEY_VOICE_ENGINE);
+        if (voiceEngine != null) {
+            voiceEngine.setOnPreferenceChangeListener((preference, newValue) -> {
+                // On-device needs a speech model; without one the choice would only ever fall
+                // back, so the page that downloads one opens instead and the row stays as it was.
+                if (TermuxPreferenceConstants.TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE.equals(newValue)
+                    && TaiPreferencesFragment.installedSpeechModel(context) == null) {
+                    openSpeechModelSettings(context);
+                    return false;
+                }
+                return true;
+            });
+        }
+        Preference voiceModel = findPreference(KEY_VOICE_MODEL);
+        if (voiceModel != null) voiceModel.setOnPreferenceClickListener(preference -> {
+            openSpeechModelSettings(context);
+            return true;
+        });
+
         SettingsLayoutUtils.applyScreenLayout(this);
+    }
+
+    /** The TAI page, scrolled to its speech-to-text category. */
+    private void openSpeechModelSettings(@NonNull Context context) {
+        startActivity(com.termux.app.activities.SettingsActivity.createFragmentIntent(context,
+            TaiPreferencesFragment.class, R.string.termux_ai_preferences_title, null,
+            TAI_STT_CATEGORY_KEY));
     }
 
     private void refreshTapCorrectionSummary(Preference preference) {
@@ -336,6 +367,12 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setInAppKeyboardTapCorrectionEnabled(value);
                 TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
                 break;
+            case "keyboard_voice_commands":
+                mPreferences.setInAppKeyboardVoiceCommandsEnabled(value);
+                break;
+            case "keyboard_voice_terminal_cleanup":
+                mPreferences.setInAppKeyboardVoiceTerminalCleanupEnabled(value);
+                break;
             case "extra_keys_text_all_caps":
                 // A property, not a preference: the row reads it from termux.properties, so this
                 // writes there and the styling reload picks it up like any hand edit would.
@@ -367,6 +404,10 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isInAppKeyboardKeyPopupEnabled();
             case "in_app_keyboard_tap_correction":
                 return mPreferences.isInAppKeyboardTapCorrectionEnabled();
+            case "keyboard_voice_commands":
+                return mPreferences.isInAppKeyboardVoiceCommandsEnabled();
+            case "keyboard_voice_terminal_cleanup":
+                return mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled();
             case "extra_keys_text_all_caps": {
                 String stored = termuxProperties()
                     .getProperty(TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS);
@@ -439,6 +480,22 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 break;
             case KeyboardPreferencesFragment.KEY_KEYBOARD_FORM:
                 putKeyboardForm(value);
+                break;
+            case "keyboard_voice_engine":
+                mPreferences.setInAppKeyboardVoiceEngine(value);
+                break;
+            case "keyboard_voice_language":
+                mPreferences.setInAppKeyboardVoiceLanguage(value);
+                break;
+            case "keyboard_voice_pause_ms":
+                // A list row: the value is the chosen entry's string, the store keeps an int.
+                int pauseMs;
+                try {
+                    pauseMs = Integer.parseInt(value == null ? "" : value.trim());
+                } catch (NumberFormatException e) {
+                    pauseMs = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_PAUSE_MS;
+                }
+                mPreferences.setInAppKeyboardVoicePauseMs(pauseMs);
                 break;
             default:
                 break;
@@ -514,6 +571,12 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getInAppKeyboardTheme();
             case KeyboardPreferencesFragment.KEY_KEYBOARD_FORM:
                 return keyboardForm();
+            case "keyboard_voice_engine":
+                return mPreferences.getInAppKeyboardVoiceEngine();
+            case "keyboard_voice_language":
+                return mPreferences.getInAppKeyboardVoiceLanguage();
+            case "keyboard_voice_pause_ms":
+                return String.valueOf(mPreferences.getInAppKeyboardVoicePauseMs());
             default:
                 return defValue;
         }
