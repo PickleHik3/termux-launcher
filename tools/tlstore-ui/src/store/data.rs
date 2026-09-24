@@ -1,17 +1,14 @@
-//! The catalog as the script reports it (TSV contract, Revision 5): `list --tsv`,
-//! `info --tsv <name>`, `update --check --tsv`, and the progress stream.
+//! The catalog as the script reports it (TSV contract, Revision 5, plus `Readme-skip`):
+//! `list --tsv`, `info --tsv <name>`, `update --check --tsv`, and the progress stream.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use super::proc::Env;
-
-pub const CATEGORIES: [&str; 3] = ["Note taking", "Tools", "AI"];
 
 /// One visible item, from `tlstore list --tsv`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Item {
-    /// Catalog order, 1-based (the "No. NN").
+    /// Catalog order, 1-based (the "NN").
     pub no: usize,
     pub name: String,
     pub version: String,
@@ -32,7 +29,7 @@ pub struct Update {
     pub note: String,
 }
 
-/// A row's status word on the Apps list.
+/// A row's status word on Front.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Status {
     /// The featured item, not installed yet.
@@ -130,12 +127,14 @@ impl Info {
             self.get("Upstream").filter(|u| u.contains('/'))
         }
     }
-    pub fn does(&self) -> Vec<&str> {
-        ["Does1", "Does2", "Does3"].iter().filter_map(|k| self.get(k)).collect()
+    /// The one-line standfirst (the summary when the catalog has none).
+    pub fn standfirst(&self) -> &str {
+        self.get("Standfirst").or(self.get("Summary")).unwrap_or("")
     }
-    pub fn notes(&self) -> Vec<&str> {
-        self.get("Notes")
-            .map(|n| n.split('|').map(str::trim).filter(|s| !s.is_empty()).collect())
+    /// README section titles the catalog asks to leave out (`Readme-skip`, `|`-separated).
+    pub fn readme_skip(&self) -> Vec<String> {
+        self.get("Readme-skip")
+            .map(|n| n.split('|').map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect())
             .unwrap_or_default()
     }
 }
@@ -146,7 +145,6 @@ pub struct Catalog {
     pub items: Vec<Item>,
     pub updates: Vec<Update>,
     infos: HashMap<String, Info>,
-    pics: HashMap<(String, bool), Option<PathBuf>>,
     /// Set when the last load failed (no catalog yet, script missing).
     pub error: Option<String>,
 }
@@ -195,38 +193,27 @@ impl Catalog {
         }
     }
 
-    pub fn featured(&self) -> Option<&Item> {
-        self.items.iter().find(|i| i.featured).or(self.items.first())
-    }
-
     /// `info --tsv <name>`, cached until the next reload.
     pub fn info(&mut self, env: &Env, name: &str) -> &Info {
         self.infos.entry(name.to_string()).or_insert_with(|| {
             env.script(&["info", "--tsv", name]).map(|o| Info::parse(&o)).unwrap_or_default()
         })
     }
-
-    /// A verified local copy of the item's cover (`demo` false) or demo picture, from
-    /// `tlstore picture <name> [demo]`. None when the script has no such command, the item has
-    /// no picture, or the file is missing. Cached for the session.
-    pub fn picture(&mut self, env: &Env, name: &str, demo: bool) -> Option<PathBuf> {
-        self.pics
-            .entry((name.to_string(), demo))
-            .or_insert_with(|| {
-                let mut args = vec!["picture", name];
-                if demo {
-                    args.push("demo");
-                }
-                let (code, out) = env.run(&env.tlstore, &args).ok()?;
-                let p = PathBuf::from(out.lines().next()?.trim());
-                (code == 0 && p.is_file()).then_some(p)
-            })
-            .clone()
-    }
 }
 
 /// The four step words every item goes through, in order.
 pub const STEPS: [&str; 4] = ["fetched", "signature checked", "putting files in place", "ready"];
+
+/// The word a Front row shows while its step is in progress (`step` indexes [`STEPS`];
+/// 4 = all done).
+pub fn step_word(step: usize) -> &'static str {
+    match step {
+        0 => "fetching…",
+        1 => "checking…",
+        2 => "placing…",
+        _ => "ready",
+    }
+}
 
 /// One line of the `--progress` stream.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -270,11 +257,14 @@ mod tests {
 
     #[test]
     fn info_and_updates_parse() {
-        let i = Info::parse("Kind\tbinary\nUpstream\tkovidgoyal/kitty\nSetup\t0\nNotes\ta|b\nDoes1\tShows\n");
+        let i = Info::parse(
+            "Kind\tbinary\nUpstream\tkovidgoyal/kitty\nSetup\t0\nSummary\tsum\nReadme-skip\tPortability | Faq\n",
+        );
         assert_eq!(i.upstream(), Some("kovidgoyal/kitty"));
-        assert_eq!(i.notes(), vec!["a", "b"]);
-        assert_eq!(i.does(), vec!["Shows"]);
+        assert_eq!(i.readme_skip(), vec!["Portability", "Faq"]);
+        assert_eq!(i.standfirst(), "sum");
         assert!(Info::parse("Setup\t1\nUpstream\tfish/fish\n").upstream().is_none());
+        assert!(Info::parse("Readme-skip\t-\n").readme_skip().is_empty());
         let u = parse_updates("kitten\t0.48.2\t0.49\t\nclaude-code\t1.0\tlatest\tlatest\n");
         assert_eq!(u[1].new, "latest");
     }
@@ -290,5 +280,8 @@ mod tests {
             Some(Progress::Done { name: "kitten".into(), ok: true, message: "kept your config.fish".into() })
         );
         assert_eq!(parse_progress("Installing: kitten"), None);
+        assert_eq!(step_word(0), "fetching…");
+        assert_eq!(step_word(2), "placing…");
+        assert_eq!(step_word(4), "ready");
     }
 }

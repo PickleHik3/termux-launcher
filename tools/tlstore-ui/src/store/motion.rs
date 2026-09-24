@@ -1,62 +1,22 @@
-//! The store's motion: one [`Timeline`] behind the router's [`Motion`] hook, with the timing
-//! and easing of the approved Flow design (project-docs/tlstore/design/Flow.dc.html).
+//! The store's motion (D7): one [`Timeline`] behind the router's [`Motion`] hook.
 //!
-//! A navigation plays in two parts. **Leave** (160 ms): the old view's content fades toward
-//! the page and its pictures lift a little; the masthead stays. **Enter** (≈820 ms, input
-//! already goes to the new view): the breadcrumb decodes from `░▒▓/_<>=+` left to right,
-//! the rule draws out, the hero lead fades up, and the rows (or text blocks) arrive 45 ms
-//! apart with their leaders drawing out behind them. Pictures never move: they are hidden
-//! for the leave and the entry, and simply appear when the screen has settled. Inside a screen: rows re-stagger quickly when the list
-//! changes (filter, category, page), and the install number counts up to each new value.
-//!
-//! Where the hero word is text (no pictures, or an item name), it fades up like the rest.
+//! A navigation plays in two parts. **Leave** (120 ms): the old view's body fades toward the
+//! page; its body pictures are gone at once. **Enter**: body element i fades up over 200 ms
+//! starting at min(30·i, 100) ms, so everything is at rest by 300 ms. The header, notice and
+//! keys never move; the header text swaps with its item, and the header picture is placed by
+//! the view once its item has rested under the cursor (`Store::header_rested`). Inside a
+//! screen, the install number counts up to each new value. Input is never dropped: the
+//! router hands every event to the current view the frame it arrives, during the leave too.
 
 use std::time::{Duration, Instant};
 
 use super::scene::{Effect, El, Fx, Motion, NavKind, Phase, Scene};
 
-/// Easing curves, each mapping 0–1 to 0–1 (the spring overshoots on the way).
+/// Easing curves, each mapping 0–1 to 0–1.
 pub mod ease {
-    /// Flow's `--spring`: CSS `linear()` stops, overshoot ≈ 9% at 26%, settled by ≈ 70%.
-    const SPRING: [(f32, f32); 16] = [
-        (0.0, 0.0),
-        (0.0105, 0.009),
-        (0.021, 0.035),
-        (0.044, 0.141),
-        (0.129, 0.723),
-        (0.167, 0.938),
-        (0.194, 1.017),
-        (0.225, 1.067),
-        (0.26, 1.089),
-        (0.303, 1.079),
-        (0.36, 1.049),
-        (0.426, 1.024),
-        (0.503, 1.011),
-        (0.592, 1.004),
-        (0.693, 1.001),
-        (1.0, 1.0),
-    ];
-
-    /// The spring (piecewise linear between Flow's stops, exactly as CSS draws it).
-    pub fn spring(t: f32) -> f32 {
-        let t = t.clamp(0.0, 1.0);
-        for w in SPRING.windows(2) {
-            let ((x0, y0), (x1, y1)) = (w[0], w[1]);
-            if t <= x1 {
-                return y0 + (y1 - y0) * (t - x0) / (x1 - x0);
-            }
-        }
-        1.0
-    }
-
-    /// Flow's `--out`, `cubic-bezier(.16,1,.3,1)`: a snappy deceleration.
+    /// `cubic-bezier(.16,1,.3,1)`: a snappy deceleration.
     pub fn out(t: f32) -> f32 {
         bezier(0.16, 1.0, 0.3, 1.0, t)
-    }
-
-    /// Flow's `--dram`, `cubic-bezier(.77,0,.175,1)`: a dramatic in-out.
-    pub fn dram(t: f32) -> f32 {
-        bezier(0.77, 0.0, 0.175, 1.0, t)
     }
 
     /// CSS `cubic-bezier(x1,y1,x2,y2)` at progress `t` (solve x(s) = t, return y(s)).
@@ -106,37 +66,17 @@ pub mod ease {
     }
 }
 
-/// Flow's timing, in milliseconds.
+/// D7's timing, in milliseconds.
 pub mod timing {
-    /// The old view fades out for this long before the new one starts.
-    pub const LEAVE: f32 = 160.0;
-    /// Breadcrumb decode: 12 steps of 32 ms.
-    pub const CRUMB_STEPS: u32 = 12;
-    pub const CRUMB_STEP: f32 = 32.0;
-    pub const RULE: f32 = 600.0;
-    pub const LEAD_AT: f32 = 60.0;
-    pub const LEAD: f32 = 500.0;
-    pub const WORD_AT: f32 = 100.0;
-    pub const WORD: f32 = 600.0;
-    pub const COVER_AT: f32 = 120.0;
-    pub const COVER: f32 = 700.0;
-    pub const CAPTION_AT: f32 = 180.0;
-    pub const HEADER_AT: f32 = 225.0;
-    /// Text arriving (caption, header, rows, blocks) fades up over this long.
-    pub const ARRIVE: f32 = 300.0;
-    pub const ROWS_AT: f32 = 260.0;
-    pub const ROW_GAP: f32 = 45.0;
-    /// The last row starts no later than this after `ROWS_AT` (long lists close up).
-    pub const ROWS_SPAN: f32 = 240.0;
-    pub const BLOCKS_AT: f32 = 180.0;
-    pub const BLOCKS_SPAN: f32 = 300.0;
-    /// A row's leaders start this long after the row and draw out over `LEADERS`.
-    pub const LEADERS_BEHIND: f32 = 60.0;
-    pub const LEADERS: f32 = 240.0;
-    /// Everything has arrived by then (the cover wipe ends last).
-    pub const ENTER: f32 = COVER_AT + COVER;
-    /// In-screen row re-stagger: all of it within this.
-    pub const RESTAGGER: f32 = 200.0;
+    /// The old view's body fades out for this long before the new one starts.
+    pub const LEAVE: f32 = 120.0;
+    /// Each body element fades up over this long…
+    pub const ARRIVE: f32 = 200.0;
+    /// …starting `STAGGER` ms after the one before, at most `STAGGER_MAX` after the first.
+    pub const STAGGER: f32 = 30.0;
+    pub const STAGGER_MAX: f32 = 100.0;
+    /// Everything is at rest by then.
+    pub const ENTER: f32 = STAGGER_MAX + ARRIVE;
     /// The count-up: this long plus a little per point, at most `COUNT_MAX`.
     pub const COUNT_MIN: f32 = 200.0;
     pub const COUNT_PER: f32 = 6.0;
@@ -144,29 +84,6 @@ pub mod timing {
 }
 
 use timing::*;
-
-/// The glyphs a breadcrumb decodes from.
-pub const GLYPHS: [char; 9] = ['░', '▒', '▓', '/', '_', '<', '>', '=', '+'];
-
-/// Breadcrumb `target` after `step` of [`timing::CRUMB_STEPS`] decode steps: the first
-/// `step·len/12` characters are real, the rest are glyphs (spaces stay spaces).
-pub fn decode(target: &str, step: u32) -> String {
-    let len = target.chars().count();
-    let k = step as usize * len / CRUMB_STEPS as usize;
-    target
-        .chars()
-        .enumerate()
-        .map(
-            |(i, ch)| {
-                if i < k || ch == ' ' {
-                    ch
-                } else {
-                    GLYPHS[(i * 7 + step as usize * 3) % GLYPHS.len()]
-                }
-            },
-        )
-        .collect()
-}
 
 /// Progress 0–1 of something that starts `at` ms and lasts `dur` ms, at `t` ms.
 fn prog(t: f32, at: f32, dur: f32) -> f32 {
@@ -180,14 +97,10 @@ fn ms(d: Duration) -> f32 {
     d.as_secs_f32() * 1000.0
 }
 
-/// Text fading in: alpha is stepped to sixteenths, so a slow fade does not rewrite every
-/// cell of the text on every frame.
+/// Text fading: alpha is stepped to sixteenths, so a fade does not rewrite every cell of the
+/// text on every frame.
 fn alpha_steps(a: f32) -> f32 {
     (a.clamp(0.0, 1.0) * 16.0).round() / 16.0
-}
-
-fn fade(a: f32) -> Effect {
-    Effect { alpha: alpha_steps(a), ..Effect::default() }
 }
 
 fn set(fx: &mut Fx, el: El, e: Effect) {
@@ -196,9 +109,8 @@ fn set(fx: &mut Fx, el: El, e: Effect) {
     }
 }
 
-/// Row and block elements a first, not-yet-drawn frame hides without knowing how many exist.
-const HIDE_ROWS: u16 = 64;
-const HIDE_BLOCKS: u16 = 16;
+/// Body elements a first, not-yet-drawn frame hides without knowing how many exist.
+const HIDE: u16 = 64;
 
 struct Transition {
     start: Instant,
@@ -208,11 +120,6 @@ struct Transition {
     from: Scene,
     /// The entering view has been drawn once (its layout is known).
     seen: bool,
-}
-
-struct Restagger {
-    start: Instant,
-    rows: u16,
 }
 
 struct Count {
@@ -226,13 +133,9 @@ struct Count {
 #[derive(Default)]
 pub struct Timeline {
     tr: Option<Transition>,
-    restagger: Option<Restagger>,
     count: Option<Count>,
     /// The install number as last shown (None off the installing screen).
     shown: Option<f32>,
-    /// The screen and row numbers last drawn (to notice a changed list).
-    last_screen: Option<&'static str>,
-    last_rows: Vec<String>,
     /// A view has been drawn or navigated to (the first one plays the entry once).
     started: bool,
 }
@@ -242,29 +145,17 @@ impl Timeline {
         Timeline::default()
     }
 
-    fn row_names(scene: &Scene) -> Vec<String> {
-        scene
-            .elements
-            .iter()
-            .filter(|e| matches!(e.el, El::Row(_)))
-            .map(|e| e.text.clone().unwrap_or_default())
-            .collect()
+    /// When body element `i` starts to arrive.
+    pub fn arrive_at(i: usize) -> f32 {
+        (STAGGER * i as f32).min(STAGGER_MAX)
     }
 
-    /// The leave: everything but the masthead fades; pictures also lift ~0.4 row.
+    /// The leave: the body fades; body pictures are simply gone.
     fn leave_fx(t: f32, from: &Scene) -> Fx {
         let mut fx = Fx::default();
-        let p = prog(t, 0.0, LEAVE);
-        for e in &from.elements {
-            if matches!(e.el, El::Mark | El::Crumb | El::Context) {
-                continue;
-            }
-            let eff = if e.picture.is_some() {
-                // Pictures do not move: they are simply gone for the leave.
-                Effect { alpha: 0.0, ..Effect::default() }
-            } else {
-                fade(1.0 - ease::out(p))
-            };
+        let a = alpha_steps(1.0 - ease::out(prog(t, 0.0, LEAVE)));
+        for e in from.body() {
+            let eff = if e.picture.is_some() { Effect::hidden() } else { Effect::alpha(a) };
             set(&mut fx, e.el, eff);
         }
         fx
@@ -274,104 +165,20 @@ impl Timeline {
     /// first frame: then everything that arrives is simply hidden).
     fn enter_fx(e: f32, cur: &Scene) -> Fx {
         let mut fx = Fx::default();
-        let blind = cur.elements.is_empty();
-        let is_pic = |el: El| cur.get(el).is_some_and(|x| x.picture.is_some());
-
-        // Breadcrumb.
-        let step = (e / CRUMB_STEP).floor() as u32;
-        if step < CRUMB_STEPS {
-            match cur.get(El::Crumb).and_then(|c| c.text.as_deref()) {
-                Some(t) => {
-                    set(&mut fx, El::Crumb, Effect { text: Some(decode(t, step)), ..Effect::default() })
-                }
-                None if blind => set(&mut fx, El::Crumb, Effect { alpha: 0.0, ..Effect::default() }),
-                None => {}
+        if cur.elements.is_empty() {
+            for i in 0..HIDE {
+                fx.set(El::Row(i), Effect::hidden());
+                fx.set(El::Block(i), Effect::hidden());
             }
+            fx.set(El::Pill, Effect::hidden());
+            fx.set(El::Pager, Effect::hidden());
+            return fx;
         }
-
-        // Rule and hero.
-        set(&mut fx, El::Rule, Effect { reveal: ease::out(prog(e, 0.0, RULE)), ..Effect::default() });
-        set(&mut fx, El::HeroLead, fade(ease::out(prog(e, LEAD_AT, LEAD))));
-        // Pictures do not move: the hero word, the cover and a demo stay hidden until the
-        // screen has settled, then simply appear. Text versions of them fade up.
-        if is_pic(El::HeroWord) {
-            set(&mut fx, El::HeroWord, Effect { alpha: 0.0, ..Effect::default() });
-        } else {
-            set(&mut fx, El::HeroWord, fade(ease::out(prog(e, WORD_AT, WORD))));
-        }
-        if is_pic(El::Cover) {
-            set(&mut fx, El::Cover, Effect { alpha: 0.0, ..Effect::default() });
-        } else {
-            set(&mut fx, El::Cover, fade(ease::out(prog(e, COVER_AT, ARRIVE))));
-        }
-        set(&mut fx, El::Caption, fade(ease::out(prog(e, CAPTION_AT, ARRIVE))));
-        set(&mut fx, El::Header, fade(ease::out(prog(e, HEADER_AT, ARRIVE))));
-        set(&mut fx, El::Chips, fade(ease::out(prog(e, HEADER_AT, ARRIVE))));
-
-        // Rows, then the pager after the last one.
-        let rows = if blind {
-            HIDE_ROWS
-        } else {
-            cur.elements
-                .iter()
-                .filter_map(|x| if let El::Row(n) = x.el { Some(n + 1) } else { None })
-                .max()
-                .unwrap_or(0)
-        };
-        let last = Self::stagger(&mut fx, e, rows, ROWS_AT, ROW_GAP, ROWS_SPAN, ARRIVE);
-        if rows > 0 || blind {
-            set(&mut fx, El::Pager, fade(ease::out(prog(e, last, ARRIVE))));
-        }
-
-        // Text blocks (item page, installing, the gh footnote).
-        let installing = cur.screen == "installing";
-        let blocks = if blind {
-            HIDE_BLOCKS
-        } else {
-            cur.elements
-                .iter()
-                .filter_map(|x| if let El::Block(n) = x.el { Some(n + 1) } else { None })
-                .max()
-                .unwrap_or(0)
-        };
-        let n = blocks.max(1) as f32;
-        let gap = ROW_GAP.min(BLOCKS_SPAN / (n - 1.0).max(1.0));
-        for b in 0..blocks {
-            // The install number counts up and its dot bar follows it; they do not fade.
-            if installing && b < 2 {
-                continue;
-            }
-            let at = BLOCKS_AT + gap * b as f32;
-            let eff = if is_pic(El::Block(b)) {
-                Effect { alpha: 0.0, ..Effect::default() }
-            } else {
-                Effect {
-                    alpha: alpha_steps(ease::out(prog(e, at, ARRIVE))),
-                    line: ease::out(prog(e, at + LEADERS_BEHIND, LEADERS)),
-                    ..Effect::default()
-                }
-            };
-            set(&mut fx, El::Block(b), eff);
+        for (i, el) in cur.body().enumerate() {
+            let a = alpha_steps(ease::out(prog(e, Self::arrive_at(i), ARRIVE)));
+            set(&mut fx, el.el, Effect::alpha(a));
         }
         fx
-    }
-
-    /// Rows 0..n arriving from `at`, `gap` apart (closed up to fit `span`), fading over
-    /// `dur` with leaders drawing out behind. Returns when the last row starts.
-    fn stagger(fx: &mut Fx, t: f32, n: u16, at: f32, gap: f32, span: f32, dur: f32) -> f32 {
-        let gap = if n > 1 { gap.min(span / (n - 1) as f32) } else { gap };
-        let behind = (dur / 5.0).min(LEADERS_BEHIND);
-        let lead = (dur - behind).min(LEADERS).max(dur * 0.8);
-        for i in 0..n {
-            let start = at + gap * i as f32;
-            let eff = Effect {
-                alpha: alpha_steps(ease::out(prog(t, start, dur))),
-                line: ease::out(prog(t, start + behind, lead)),
-                ..Effect::default()
-            };
-            set(fx, El::Row(i), eff);
-        }
-        at + gap * n.saturating_sub(1) as f32
     }
 
     fn count_value(c: &Count, now: Instant) -> f32 {
@@ -382,10 +189,9 @@ impl Timeline {
 
 impl Motion for Timeline {
     fn navigate(&mut self, _kind: NavKind, from: &Scene, _to: &'static str, now: Instant) {
-        // Every kind plays the same sequence (as in Flow). A navigation during a transition
-        // simply starts over from the view as it was last drawn.
+        // Every kind plays the same sequence. A navigation during a transition simply starts
+        // over from the view as it was last drawn.
         self.tr = Some(Transition { start: now, leave: true, from: from.clone(), seen: false });
-        self.restagger = None;
         self.count = None;
         self.shown = None;
         self.started = true;
@@ -407,21 +213,12 @@ impl Motion for Timeline {
                 entering = true;
             }
         }
-        if let Some(r) = &self.restagger {
-            let t = ms(now.saturating_duration_since(r.start));
-            if t >= RESTAGGER {
-                self.restagger = None;
-            } else {
-                // All rows within RESTAGGER: gaps close up so the last one ends in time.
-                let dur = RESTAGGER / 2.0;
-                Self::stagger(&mut fx, t, r.rows, 0.0, 20.0, RESTAGGER - dur, dur);
-                entering = true;
-            }
-        }
         if let Some(c) = &self.count {
             let v = Self::count_value(c, now);
             self.shown = Some(v);
-            fx.set(El::Block(0), Effect { value: Some(v), ..Effect::default() });
+            let mut eff = fx.get(El::Block(0));
+            eff.value = Some(v);
+            fx.set(El::Block(0), eff);
             entering = true;
             if ms(now.saturating_duration_since(c.start)) >= c.dur {
                 self.shown = Some(c.to);
@@ -436,7 +233,7 @@ impl Motion for Timeline {
     }
 
     fn active(&self) -> bool {
-        self.tr.is_some() || self.restagger.is_some() || self.count.is_some()
+        self.tr.is_some() || self.count.is_some()
     }
 
     fn drawn(&mut self, now: Instant, current: &Scene) -> bool {
@@ -457,20 +254,6 @@ impl Motion for Timeline {
             tr.seen = true;
             redraw = true;
         }
-
-        // Rows changed in place (filter, category, page): a quick re-stagger.
-        let rows = Self::row_names(current);
-        if self.tr.is_none()
-            && current.screen == "apps"
-            && self.last_screen == Some("apps")
-            && !self.last_rows.is_empty()
-            && rows != self.last_rows
-        {
-            self.restagger = Some(Restagger { start: now, rows: rows.len() as u16 });
-            redraw = true;
-        }
-        self.last_rows = rows;
-        self.last_screen = Some(current.screen);
 
         // The install number heads somewhere new: count to it from what is shown.
         if current.screen == "installing" {
@@ -506,63 +289,85 @@ mod tests {
     }
 
     #[test]
-    fn spring_overshoots_nine_percent_and_settles_by_seventy() {
-        assert_eq!(ease::spring(0.0), 0.0);
-        assert_eq!(ease::spring(1.0), 1.0);
-        let s = samples(ease::spring);
-        let (peak_i, peak) =
-            s.iter().enumerate().fold((0, 0.0f32), |a, (i, &v)| if v > a.1 { (i, v) } else { a });
-        assert!((peak - 1.089).abs() < 0.002, "peak {peak}");
-        assert!((0.24..=0.28).contains(&(peak_i as f32 / 200.0)), "peak at {}", peak_i as f32 / 200.0);
-        // Settled: within 0.2% of the end from 70% on.
-        for (i, v) in s.iter().enumerate().skip(140) {
-            assert!((v - 1.0).abs() <= 0.002, "t={} v={v}", i as f32 / 200.0);
-        }
-        // Rises monotonically up to the peak.
-        assert!(s[..=peak_i].windows(2).all(|w| w[1] >= w[0]));
-        assert!(ease::spring(0.129) > 0.72 && ease::spring(0.129) < 0.73);
-    }
-
-    #[test]
-    fn beziers_hit_their_ends_and_never_turn_back() {
-        for f in [ease::out as fn(f32) -> f32, ease::dram] {
-            assert_eq!(f(0.0), 0.0);
-            assert_eq!(f(1.0), 1.0);
-            assert_eq!(f(-1.0), 0.0);
-            assert_eq!(f(2.0), 1.0);
-            let s = samples(f);
-            assert!(s.windows(2).all(|w| w[1] >= w[0] - 1e-6), "monotonic");
-            assert!(s.iter().all(|v| (0.0..=1.0 + 1e-6).contains(v)));
-        }
-        // Snappy decel: most of the way there early.
+    fn out_easing_hits_its_ends_and_never_turns_back() {
+        assert_eq!(ease::out(0.0), 0.0);
+        assert_eq!(ease::out(1.0), 1.0);
+        assert_eq!(ease::out(-1.0), 0.0);
+        assert_eq!(ease::out(2.0), 1.0);
+        let s = samples(ease::out);
+        assert!(s.windows(2).all(|w| w[1] >= w[0] - 1e-6), "monotonic");
         assert!(ease::out(0.1) > 0.4 && ease::out(0.3) > 0.85, "{} {}", ease::out(0.1), ease::out(0.3));
-        // Dramatic in-out: slow start, fast middle, slow end.
-        assert!(ease::dram(0.2) < 0.06 && ease::dram(0.8) > 0.94);
-        // Cross-checked against an independent bisection of the same curve.
-        assert!((ease::dram(0.5) - 0.59597).abs() < 1e-4, "{}", ease::dram(0.5));
         assert!((ease::out(0.1) - 0.49439).abs() < 1e-4, "{}", ease::out(0.1));
-        // Linear control points give a straight line.
         assert!((ease::bezier(0.0, 0.0, 1.0, 1.0, 0.37) - 0.37).abs() < 1e-4);
     }
 
+    fn front(rows: u16) -> Scene {
+        let mut s = Scene::new("front");
+        s.cell = (8, 20);
+        s.push(El::Mark, Rect::new(2, 0, 7, 1), None, None);
+        s.push(El::Name, Rect::new(2, 11, 20, 3), None, Some("dawn"));
+        s.push(El::Pill, Rect::new(1, 17, 51, 1), Some((9, 1)), None);
+        for i in 0..rows {
+            s.push(El::Row(i), Rect::new(2, 17 + i, 49, 1), None, Some(&format!("{i:02}")));
+        }
+        s.push(El::Keys, Rect::new(2, 25, 49, 1), None, None);
+        s
+    }
+
     #[test]
-    fn breadcrumb_decodes_left_to_right_in_twelve_steps() {
-        let t = "/ apps / sigye";
-        let s0 = decode(t, 0);
-        assert_eq!(s0.chars().count(), t.chars().count());
-        assert!(s0.chars().zip(t.chars()).all(|(a, b)| (b == ' ') == (a == ' ')));
-        assert!(s0.chars().filter(|c| *c != ' ').all(|c| GLYPHS.contains(&c)));
-        let s6 = decode(t, 6);
-        assert!(s6.starts_with("/ apps"), "{s6}");
-        assert_ne!(s6, t);
-        assert_eq!(decode(t, 12), t);
+    fn leave_fades_the_body_only_and_hides_its_pictures() {
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let mut m = Timeline::new();
+        let from = front(5);
+        m.navigate(NavKind::Push, &from, "item", t0);
+        assert!(m.active());
+        let Phase::Leaving(fx) = m.frame(at(0), &Scene::new("item")) else { panic!("leaving") };
+        assert_eq!(fx.get(El::Pill).alpha, 0.0, "pictures are gone at once");
+        assert!(fx.get(El::Row(0)).alpha >= 0.9);
+        assert!(fx.get(El::Mark).at_rest() && fx.get(El::Name).at_rest() && fx.get(El::Keys).at_rest());
+        let Phase::Leaving(fx) = m.frame(at(30), &Scene::new("item")) else { panic!("leaving at 30") };
+        let a = fx.get(El::Row(3)).alpha;
+        assert!(a > 0.0 && a < 0.5, "{a}");
+        assert!(fx.get(El::Name).at_rest(), "the header never moves");
+        let Phase::Leaving(fx) = m.frame(at(119), &Scene::new("item")) else { panic!("leaving at 119") };
+        assert!(fx.get(El::Row(0)).alpha <= 0.07);
+    }
+
+    #[test]
+    fn enter_staggers_body_elements_thirty_ms_apart_and_rests_by_three_hundred() {
+        let t0 = Instant::now();
+        let at = |ms: u64| t0 + Duration::from_millis(ms);
+        let mut m = Timeline::new();
+        m.navigate(NavKind::Pop, &Scene::new("item"), "front", t0);
+        // First entering frame: nothing is known yet, so everything that could arrive is hidden.
+        let Phase::Entering(fx) = m.frame(at(120), &Scene::new("front")) else { panic!("entering") };
+        assert_eq!(fx.get(El::Row(0)).alpha, 0.0);
+        assert_eq!(fx.get(El::Pill).alpha, 0.0);
+        assert!(fx.get(El::Name).at_rest());
+        let cur = front(6);
+        // The pill is body element 0, rows 1..: element i starts at 30·i ms, capped at 100.
+        let Phase::Entering(fx) = m.frame(at(120 + 10), &cur) else { panic!("entering at 10") };
+        assert!(fx.get(El::Pill).alpha < 0.5, "pill still hidden early");
+        assert_eq!(fx.get(El::Row(0)).alpha, 0.0, "row 0 (element 1) starts at 30 ms");
+        let Phase::Entering(fx) = m.frame(at(120 + 45), &cur) else { panic!("entering at 45") };
+        assert!(fx.get(El::Row(0)).alpha > 0.0, "row 0 (element 1) has started");
+        assert_eq!(fx.get(El::Row(1)).alpha, 0.0, "row 1 (element 2) starts at 60 ms");
+        let Phase::Entering(fx) = m.frame(at(120 + 150), &cur) else { panic!("entering at 150") };
+        assert!(fx.get(El::Row(0)).alpha > fx.get(El::Row(2)).alpha);
+        assert!(fx.get(El::Row(2)).alpha > fx.get(El::Row(5)).alpha);
+        assert!(fx.get(El::Row(5)).alpha > 0.0, "element 6 starts at 100 ms, not 180");
+        assert_eq!(Timeline::arrive_at(5), 100.0);
+        let Phase::Entering(fx) = m.frame(at(120 + 290), &cur) else { panic!("entering at 290") };
+        assert!(fx.get(El::Row(5)).alpha >= 0.9);
+        assert!(matches!(m.frame(at(120 + 300), &cur), Phase::Idle));
+        assert!(!m.active());
     }
 
     fn scene(screen: &'static str, number: &str) -> Scene {
         let mut s = Scene::new(screen);
         s.cell = (8, 20);
-        s.push(El::Crumb, Rect::new(10, 1, 12, 1), None, Some("/ installing"));
-        s.push(El::Block(0), Rect::new(10, 9, 6, 3), None, Some(number));
+        s.push(El::Block(0), Rect::new(2, 17, 6, 3), None, Some(number));
         s
     }
 
@@ -591,31 +396,6 @@ mod tests {
         let end = value(&m.frame(at(2000), &scene("installing", "65")));
         assert_eq!(end, Some(65.0));
         assert!(matches!(m.frame(at(2100), &scene("installing", "65")), Phase::Idle));
-        assert!(!m.active());
-    }
-
-    #[test]
-    fn rows_restagger_within_200ms_when_the_list_changes() {
-        let t0 = Instant::now();
-        let at = |ms: u64| t0 + Duration::from_millis(ms);
-        let apps = |names: &[&str]| {
-            let mut s = Scene::new("apps");
-            for (i, n) in names.iter().enumerate() {
-                s.push(El::Row(i as u16), Rect::new(2, 20 + 2 * i as u16, 40, 1), None, Some(n));
-            }
-            s
-        };
-        let mut m = Timeline::new();
-        m.started = true;
-        assert!(!m.drawn(at(0), &apps(&["01", "02", "03"])));
-        assert!(!m.drawn(at(10), &apps(&["01", "02", "03"])), "unchanged: nothing moves");
-        assert!(m.drawn(at(20), &apps(&["02", "05"])));
-        let Phase::Entering(fx) = m.frame(at(20), &apps(&["02", "05"])) else { panic!("restagger") };
-        assert_eq!(fx.get(El::Row(0)).alpha, 0.0);
-        assert_eq!(fx.get(El::Row(1)).alpha, 0.0);
-        let Phase::Entering(fx) = m.frame(at(50), &apps(&["02", "05"])) else { panic!("restagger") };
-        assert!(fx.get(El::Row(0)).alpha > fx.get(El::Row(1)).alpha, "row 0 ahead of row 1");
-        assert!(matches!(m.frame(at(220), &apps(&["02", "05"])), Phase::Idle));
         assert!(!m.active());
     }
 }

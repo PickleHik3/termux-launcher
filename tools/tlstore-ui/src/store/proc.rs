@@ -98,6 +98,28 @@ impl Env {
     }
 }
 
+/// Something the script fetches for a screen, off the draw path: the answer is a file path
+/// on the task's first output line.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Fetch {
+    /// `tlstore picture <name>`: the catalog picture.
+    Picture(String),
+    /// `tlstore readme <name>`: the cached upstream README.
+    Readme(String),
+    /// `tlstore readme-asset <name> <src>`: an image the README refers to.
+    Asset(String, String),
+}
+
+impl Fetch {
+    pub fn args(&self) -> Vec<&str> {
+        match self {
+            Fetch::Picture(n) => vec!["picture", n],
+            Fetch::Readme(n) => vec!["readme", n],
+            Fetch::Asset(n, src) => vec!["readme-asset", n, src],
+        }
+    }
+}
+
 /// What a background task is for; the router routes its result by this.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TaskKind {
@@ -111,6 +133,8 @@ pub enum TaskKind {
     GhStarred(String),
     /// `gh api -X PUT|DELETE /user/starred/<repo>`; the bool is the new state.
     GhStar(String, bool),
+    /// A file the script fetches for a screen.
+    Fetch(Fetch),
     /// A program started and forgotten (the URL opener); only reaped.
     Detached,
 }
@@ -118,6 +142,8 @@ pub enum TaskKind {
 /// A child whose stdout is read without blocking, line by line.
 pub struct Task {
     pub kind: TaskKind,
+    /// Complete lines read so far, for tasks whose whole output is judged at exit.
+    pub lines: Vec<String>,
     child: Child,
     out: Option<ChildStdout>,
     buf: Vec<u8>,
@@ -151,7 +177,7 @@ impl Task {
                 libc::fcntl(fd, libc::F_SETFL, fl | libc::O_NONBLOCK);
             }
         }
-        Ok(Task { kind, child, out, buf: Vec::new(), status: None })
+        Ok(Task { kind, lines: Vec::new(), child, out, buf: Vec::new(), status: None })
     }
 
     /// The fd to watch (None once stdout hit EOF).

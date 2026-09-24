@@ -8,36 +8,36 @@ use std::time::Instant;
 
 use crate::render::Rect;
 
-/// A named part of a screen that motion can move, crop, fade or reveal.
+/// A named part of a screen that motion can fade.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum El {
-    /// Masthead: the pixel mark, the breadcrumb text, the right-hand context item.
+    /// Masthead: the pixel mark (or `‹ apps`), and the right-hand item (updates, repo link).
     Mark,
-    Crumb,
     Context,
-    /// The hairline rule under the masthead.
-    Rule,
-    /// Hero: the spaced lead line and the script word picture.
-    HeroLead,
-    HeroWord,
-    /// A screen's cover picture (Apps: the featured item; Item: the item's own).
-    Cover,
-    /// The caption over/under the cover.
-    Caption,
-    /// Apps: the APPS header, the category chips (or the search line), the pager, the
-    /// selection bar.
-    Header,
-    Chips,
-    Pager,
-    SelBar,
-    /// The n-th list row on screen (Apps rows, Updates entries), 0-based from the top.
+    /// The header: picture, name, standfirst, facts strip. Never moved by motion.
+    Picture,
+    Name,
+    Standfirst,
+    Facts,
+    /// Front: the cursor pill under the current row.
+    Pill,
+    /// The n-th list row on screen (Front), 0-based from the top.
     Row(u16),
-    /// The n-th block of a text page (Item: line, standfirst, star rule, facts, …; Installing:
-    /// number, bar, steps, notes), 0-based in drawing order.
+    /// The n-th block of a text page on screen (Item rows, Installing parts), 0-based in
+    /// drawing order.
     Block(u16),
-    /// The key-hint row and the one-line notice above it.
+    /// Front's pager.
+    Pager,
+    /// The key row and the one-line notice above it (a notice or the selection bar).
     Keys,
     Notice,
+}
+
+impl El {
+    /// Body elements leave and enter; everything else stays put.
+    pub fn is_body(self) -> bool {
+        matches!(self, El::Pill | El::Row(_) | El::Block(_) | El::Pager)
+    }
 }
 
 /// One drawn element: where it landed and, for pictures, which kitty placement it is.
@@ -47,17 +47,17 @@ pub struct Element {
     pub rect: Rect,
     /// `(picture id, placement id)` when the element is a picture on screen.
     pub picture: Option<(u32, u32)>,
-    /// The element's text at rest (breadcrumb, lead, row name, …), when it has one.
+    /// The element's text at rest (row name, the install number's target, …), when it has one.
     pub text: Option<String>,
 }
 
 /// What a view drew in its last frame, in drawing order.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Scene {
-    /// "apps", "item", "updates", "installing", "nogh".
+    /// "front", "item", "installing".
     pub screen: &'static str,
     pub elements: Vec<Element>,
-    /// Cell size in pixels when the frame was drawn (to turn rows into pixel offsets).
+    /// Cell size in pixels when the frame was drawn.
     pub cell: (u16, u16),
 }
 
@@ -71,42 +71,34 @@ impl Scene {
     pub fn get(&self, el: El) -> Option<&Element> {
         self.elements.iter().find(|e| e.el == el)
     }
+    /// The body elements in drawing order (what leaves and enters).
+    pub fn body(&self) -> impl Iterator<Item = &Element> {
+        self.elements.iter().filter(|e| e.el.is_body())
+    }
 }
 
 /// How one element is drawn this frame. The default is "at rest".
 #[derive(Clone, Debug, PartialEq)]
 pub struct Effect {
-    /// Offset in pixels (pictures move by pixels; text moves by whole cells, rounded).
-    pub dx: i32,
-    pub dy: i32,
-    /// Fraction of the element shown from its top edge, 0.0–1.0 (a mask rise or a wipe down:
-    /// pictures are cropped in pixels, text by whole rows).
-    pub shown: f32,
     /// 0.0 invisible – 1.0 opaque. Text colours mix toward the page; pictures are hidden
     /// below 0.5 (kitty has no per-placement alpha).
     pub alpha: f32,
-    /// Fraction of the text's characters drawn, 0.0–1.0 (typing). Leaders and hairlines
-    /// also draw out by it.
-    pub reveal: f32,
-    /// Fraction of the element's dot leaders and hairlines drawn out from the left, 0.0–1.0,
-    /// without touching its text (a row's leaders drawing out behind the row).
-    pub line: f32,
     /// An animated number the view shows instead of its own (the install count-up).
     pub value: Option<f32>,
-    /// Replacement text for this frame (the breadcrumb decoding from ░▒▓ glyphs). Same width
-    /// as the text at rest.
-    pub text: Option<String>,
 }
 
 impl Default for Effect {
     fn default() -> Effect {
-        Effect { dx: 0, dy: 0, shown: 1.0, alpha: 1.0, reveal: 1.0, line: 1.0, value: None, text: None }
+        Effect { alpha: 1.0, value: None }
     }
 }
 
 impl Effect {
     pub fn at_rest(&self) -> bool {
         *self == Effect::default()
+    }
+    pub fn alpha(a: f32) -> Effect {
+        Effect { alpha: a, value: None }
     }
 }
 
@@ -131,13 +123,13 @@ impl Fx {
 /// How the router moved between views.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NavKind {
-    /// Deeper: Apps → Item, Item → Installing, …
+    /// Deeper: Front → Item, Item → Installing, …
     Push,
     /// Back one level.
     Pop,
     /// Swapped in place.
     Replace,
-    /// Straight back to Apps (the mark).
+    /// Straight back to Front (the mark).
     Home,
 }
 
@@ -152,7 +144,7 @@ pub enum Phase {
     Entering(Fx),
 }
 
-/// The timeline P5 plugs into the router.
+/// The timeline the router drives.
 pub trait Motion {
     /// A navigation just happened. `from` is the leaving view's last drawn scene; `to` names
     /// the entering screen. Only called when motion is on (`Ctx::motion`).
@@ -165,8 +157,8 @@ pub trait Motion {
     /// Called after every drawn frame while motion is on, with the current view's scene as
     /// just drawn (empty while a leaving view was drawn). Returning true makes the router
     /// draw the frame again at once, through a fresh [`Motion::frame`]: for a change that
-    /// must animate from its very first frame (rows swapped by a filter, a new install
-    /// percentage, the first look at an entering view's layout).
+    /// must animate from its very first frame (a new install percentage, the first look at an
+    /// entering view's layout).
     fn drawn(&mut self, _now: Instant, _current: &Scene) -> bool {
         false
     }

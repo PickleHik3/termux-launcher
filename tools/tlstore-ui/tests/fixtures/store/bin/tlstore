@@ -25,6 +25,27 @@ case "$cmd" in
         echo "$p"
         exit 0
         ;;
+    readme)
+        # Exit 2: no upstream (a setup). Exit 1: nothing fetched and nothing cached.
+        [ -f "$d/info/$1.tsv" ] || exit 1
+        grep -q "^Setup	1" "$d/info/$1.tsv" && exit 2
+        [ -f "$d/noreadme" ] && exit 1
+        p="$d/readme/$1.md"
+        [ -f "$p" ] || exit 1
+        echo "$p"
+        exit 0
+        ;;
+    readme-asset)
+        # Every asset is answered with the item's own picture; nothing is downloaded.
+        [ -f "$d/nopics" ] && exit 1
+        case "$2" in
+            *.gif|*.svg) exit 1 ;;
+        esac
+        p="$d/pics/$1.jpg"
+        [ -f "$p" ] || exit 1
+        echo "$p"
+        exit 0
+        ;;
 esac
 case "$cmd" in
     install|update|remove) ;;
@@ -39,7 +60,7 @@ for n in "$@"; do
         printf 'step\t%s\t60\tsignature checked\n' "$n"
         sleep 30
     fi
-    if [ "$n" = broken ]; then
+    if [ "$n" = broken ] || [ -f "$d/fail-$n" ]; then
         printf 'done\t%s\tfailed\tcould not %s %s\n' "$n" "$cmd" "$n"
         failed=1
         continue
