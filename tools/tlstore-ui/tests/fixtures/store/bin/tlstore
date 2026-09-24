@@ -1,6 +1,7 @@
 #!/bin/sh
 # Stub tlstore for tlstore-ui tests: answers from the fixture files next to it and logs
-# every call to calls.log. Speaks the Revision 5 TSV contract and progress stream.
+# every call to calls.log. Speaks the Revision 5 TSV contract and progress stream, plus
+# Revision 6's readme and readme-asset.
 d=$(cd "$(dirname "$0")/.." && pwd)
 printf '%s\n' "$*" >> "$d/calls.log"
 TAB=$(printf '\t')
@@ -20,6 +21,27 @@ case "$cmd" in
         ;;
     picture)
         [ -f "$d/nopics" ] && exit 2
+        p="$d/pics/$1.jpg"
+        [ -f "$p" ] || exit 1
+        echo "$p"
+        exit 0
+        ;;
+    readme)
+        # Revision 6: the path of the item's README. fish-shell is a setup with
+        # no upstream (exit 2); an item without a fixture README has nothing
+        # cached (exit 1); `noreadme` marks GitHub as unreachable for everyone.
+        [ -f "$d/noreadme" ] && exit 1
+        [ "$1" = fish-shell ] && exit 2
+        p="$d/readme/$1.md"
+        [ -f "$p" ] || exit 1
+        echo "$p"
+        exit 0
+        ;;
+    readme-asset)
+        # Revision 6: a picture the README refers to; every one of them is
+        # answered with the item's own catalog picture.
+        [ -f "$d/nopics" ] && exit 2
+        [ -n "${2:-}" ] || exit 2
         p="$d/pics/$1.jpg"
         [ -f "$p" ] || exit 1
         echo "$p"
