@@ -61,6 +61,8 @@ by name.
 | `tlstore display` | set up graphics for Linux apps |
 | `tlstore doctor` | check that everything is in place |
 | `tlstore version` | show the tlstore and item-list versions |
+| `tlstore readme kitten` | print where a copy of the item's own README has been saved, fetching it when it is missing or a day old |
+| `tlstore readme-asset kitten docs/shot.png` | print where a picture that README refers to has been saved, fetching it the same way |
 | `--tsv` | on `list`, `search`, `info` and `update --check`: the same answer as tab-separated columns, for a program to read |
 
 `-y` says yes to everything except a config file of yours. `--configs` on `install` and `update`

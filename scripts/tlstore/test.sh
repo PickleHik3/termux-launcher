@@ -40,6 +40,10 @@
 #                            never actually execs one; it points this at a
 #                            fake executable to prove the routing decision, and
 #                            at a name that is not there for the fallback.
+#   TLSTORE_GITHUB         — where GitHub is: the suite points it at a file://
+#                            tree laid out <host>/<path>, so `tlstore readme`
+#                            and `readme-asset` fetch real files through real
+#                            curl and never reach the network.
 # The catalog signature tests need minisign. Without it they are skipped, and
 # the suite says so instead of passing quietly.
 
@@ -130,8 +134,21 @@ write_catalog() {
         # test writes to the other end, so a --progress install can be
         # cancelled reliably while it is still in flight.
         printf 'slow\tbinary\t1\t*\tfile://%s/slow.pipe\t-\t-\t-\t-\tA slow item, so a --progress cancel can land mid-download.\t%s\n' "$FX" "$R5_NONE"
+        # Items with an upstream, one per way `tlstore readme` picks the
+        # revision to read: a +<hash> version, an x.y.z version whose tag is
+        # there, one whose tag is not, a rolling version, and one whose
+        # upstream has nothing at all (the offline case).
+        printf 'pinned\tfile\t1.0.0+abc1234.5\t*\tfile://%s/hello.conf\t%s\t~/.config/pinned.conf\t-\t-\tRead at the commit in its version.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/pinned)"
+        printf 'tagged\tfile\t2.3.4\t*\tfile://%s/hello.conf\t%s\t~/.config/tagged.conf\t-\t-\tRead at its v tag.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/tagged)"
+        printf 'untagged\tfile\t3.0.0\t*\tfile://%s/hello.conf\t%s\t~/.config/untagged.conf\t-\t-\tHas no v tag, so HEAD it is.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/untagged)"
+        printf 'rolling\tfile\tlatest\t*\tfile://%s/hello.conf\t%s\t~/.config/rolling.conf\t-\t-\tNo version to speak of.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/rolling)"
+        printf 'nowhere\tfile\t1.0.0\t*\tfile://%s/hello.conf\t%s\t~/.config/nowhere.conf\t-\t-\tIts upstream cannot be reached.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/nowhere)"
     } > "$out"
 }
+
+# The same shape with an upstream, for the readme tests: <version> and
+# <upstream> are the two things `tlstore readme` reads.
+r6_upstream() { printf 'Tools\t%s\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t0\t-' "$1"; }
 
 build_fixture() {
     ROOT="$(mktemp -d)"
@@ -156,6 +173,25 @@ build_fixture() {
     printf 'a demo worth caching\n' > "$FX/pictured-demo.jpg"
     rm -f "$FX/slow.pipe"
     mkfifo "$FX/slow.pipe"
+
+    # GitHub, as a directory: <host>/<path> under $FX/gh, which TLSTORE_GITHUB
+    # points tlstore at. One README per revision the readme tests expect to be
+    # read, pictures beside two of them, and one picture over the 5 MB cap.
+    GH="$FX/gh"
+    RAWGH="$GH/raw.githubusercontent.com"
+    mkdir -p "$RAWGH/demo/pinned/abc1234" "$RAWGH/demo/tagged/v2.3.4/docs" \
+        "$RAWGH/demo/untagged/HEAD/docs" "$RAWGH/demo/rolling/HEAD" \
+        "$GH/user-images.githubusercontent.com/123" "$GH/demo.github.io" "$GH/github.com/demo/tagged/raw/HEAD"
+    printf '# pinned\n\nread at abc1234\n' > "$RAWGH/demo/pinned/abc1234/README.md"
+    printf '# tagged\n\nread at v2.3.4\n\n![shot](docs/shot.png)\n' > "$RAWGH/demo/tagged/v2.3.4/README.md"
+    printf '# untagged\n\nread at HEAD\n' > "$RAWGH/demo/untagged/HEAD/README.md"
+    printf '# rolling\n\nread at HEAD\n' > "$RAWGH/demo/rolling/HEAD/README.md"
+    printf 'the tagged shot\n' > "$RAWGH/demo/tagged/v2.3.4/docs/shot.png"
+    printf 'the untagged shot\n' > "$RAWGH/demo/untagged/HEAD/docs/shot.png"
+    truncate -s 5242881 "$RAWGH/demo/tagged/v2.3.4/big.png"
+    printf 'a user image\n' > "$GH/user-images.githubusercontent.com/123/abc.png"
+    printf 'a pages picture\n' > "$GH/demo.github.io/pic.png"
+    printf 'a github.com raw picture\n' > "$GH/github.com/demo/tagged/raw/HEAD/x.png"
 
     # Fake package managers: they record what they were asked for. Both names
     # are needed — tlstore prefers pacman, and a host may have a real one.
@@ -258,6 +294,7 @@ tl() {
             TLSTORE_HOST="${HOST_KNOB:-}" \
             TLSTORE_UI="${UI_KNOB:-}" \
             TLSTORE_RAW_BASE="${RAWBASE_KNOB:-}" \
+            TLSTORE_GITHUB="file://$FX/gh" \
             TERM_PROGRAM="${TP_KNOB:-}" \
             TERM_PROGRAM_VERSION="${TPV_KNOB:-}" \
             "${SHCMD[@]}" "$TLSTORE" "$@" 2>&1)"
@@ -273,6 +310,7 @@ tl() {
             TLSTORE_HOST="${HOST_KNOB:-}" \
             TLSTORE_UI="${UI_KNOB:-}" \
             TLSTORE_RAW_BASE="${RAWBASE_KNOB:-}" \
+            TLSTORE_GITHUB="file://$FX/gh" \
             TERM_PROGRAM="${TP_KNOB:-}" \
             TERM_PROGRAM_VERSION="${TPV_KNOB:-}" \
             "${SHCMD[@]}" "$TLSTORE" "$@" < /dev/null 2>&1)"
@@ -303,6 +341,7 @@ tl_stdout() {
         TLSTORE_HOST="${HOST_KNOB:-}" \
         TLSTORE_UI="${UI_KNOB:-}" \
         TLSTORE_RAW_BASE="${RAWBASE_KNOB:-}" \
+        TLSTORE_GITHUB="file://$FX/gh" \
         TERM_PROGRAM="${TP_KNOB:-}" \
         TERM_PROGRAM_VERSION="${TPV_KNOB:-}" \
         "${SHCMD[@]}" "$TLSTORE" "$@" < /dev/null 2>/dev/null)"
@@ -818,6 +857,123 @@ y
     expect_no_out "and prints nothing on stdout" "."
     expect_no_file "and nothing was cached for it either" \
         "$TESTHOME/.cache/tlstore/pictures/0000000000000000000000000000000000000000000000000000000000000000.jpg"
+
+    # --- tlstore readme: the upstream README, cached a day, for the item page ---
+    RM_CACHE="$TESTHOME/.cache/tlstore/readme"
+    rm -rf "$TESTHOME/.cache/tlstore"
+
+    tl_stdout readme pinned
+    expect_status "readme prints a path and exits 0" 0
+    expect_out "the cache path carries the name and version" "^$RM_CACHE/pinned-1.0.0+abc1234.5.md\$"
+    expect_content "a +<hash> version is read at that commit" "$OUT" $'# pinned\n\nread at abc1234'
+
+    tl_stdout readme tagged
+    expect_status "an x.y.z version reads its v tag" 0
+    expect_content "and gets the tag's README" "$OUT" $'# tagged\n\nread at v2.3.4\n\n![shot](docs/shot.png)'
+
+    tl_stdout readme untagged
+    expect_status "an x.y.z version whose tag is not there still succeeds" 0
+    expect_content "by falling back to HEAD" "$OUT" $'# untagged\n\nread at HEAD'
+
+    tl_stdout readme rolling
+    expect_status "any other version reads HEAD" 0
+    expect_content "and gets HEAD's README" "$OUT" $'# rolling\n\nread at HEAD'
+
+    # A second call within the day never looks upstream: take GitHub away.
+    mv "$FX/gh" "$FX/gh.away"
+    tl_stdout readme pinned
+    expect_status "a second call is served from the cache, offline" 0
+    expect_out "with the same path" "^$RM_CACHE/pinned-1.0.0+abc1234.5.md\$"
+    # A day-old copy is refreshed — and kept when the refresh cannot happen.
+    touch -t 200001010000 "$RM_CACHE/pinned-1.0.0+abc1234.5.md"
+    tl_stdout readme pinned
+    expect_status "a stale copy still answers when GitHub cannot be reached" 0
+    expect_content "with what it had" "$OUT" $'# pinned\n\nread at abc1234'
+    mv "$FX/gh.away" "$FX/gh"
+    printf '# pinned\n\nread again at abc1234\n' > "$RAWGH/demo/pinned/abc1234/README.md"
+    tl_stdout readme pinned
+    expect_status "a stale copy is fetched again once GitHub is back" 0
+    expect_content "and the new README replaces it" "$OUT" $'# pinned\n\nread again at abc1234'
+    if [ -z "$(find "$RM_CACHE/pinned-1.0.0+abc1234.5.md" -mtime +0)" ]; then pass; else fail "the refreshed copy counts as fresh again"; fi
+
+    tl readme kit
+    expect_status "an item with no upstream exits 2" 2
+    expect_out "and says so on stderr" "kit has no readme"
+    tl_stdout readme kit
+    expect_no_out "and prints nothing on stdout" "."
+
+    tl readme nowhere
+    expect_status "nothing fetched and nothing cached exits 1" 1
+    expect_out "with one line on stderr" "could not fetch the readme for nowhere"
+    if [ "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" = 1 ]; then pass; else fail "exactly one line" "$OUT"; fi
+    tl_stdout readme nowhere
+    expect_no_out "and prints nothing on stdout" "."
+    expect_no_file "and nothing was cached for it" "$RM_CACHE/nowhere-1.0.0.md"
+
+    tl readme
+    expect_status "readme needs a name" 2
+    tl readme no-such-item
+    expect_status "readme on an unknown item fails" 1
+
+    # --- tlstore readme-asset: a README's pictures, from GitHub only ---
+    tl_stdout readme-asset tagged docs/shot.png
+    expect_status "a relative picture resolves against the README's revision" 0
+    expect_out "into the item's own cache directory" "^$RM_CACHE/tagged/[0-9a-f]*\.png\$"
+    expect_content "and is the tag's copy of it" "$OUT" "the tagged shot"
+    tl_stdout readme-asset untagged ./docs/shot.png
+    expect_status "a relative picture follows the fallback to HEAD" 0
+    expect_content "and is HEAD's copy of it" "$OUT" "the untagged shot"
+
+    tl_stdout readme-asset tagged https://user-images.githubusercontent.com/123/abc.png
+    expect_status "an https picture on user-images.githubusercontent.com is fetched" 0
+    expect_content "and cached" "$OUT" "a user image"
+    tl_stdout readme-asset tagged https://demo.github.io/pic.png
+    expect_status "an https picture on github.io is fetched" 0
+    expect_content "and cached too" "$OUT" "a pages picture"
+    tl_stdout readme-asset tagged https://github.com/demo/tagged/raw/HEAD/x.png
+    expect_status "an https picture on github.com is fetched" 0
+    expect_content "and cached as well" "$OUT" "a github.com raw picture"
+    RA_ABS="$OUT"
+
+    tl readme-asset tagged https://example.com/x.png
+    expect_status "a picture anywhere else exits 1" 1
+    expect_out "and says it was left alone" "is not on GitHub"
+    tl readme-asset tagged http://raw.githubusercontent.com/demo/tagged/v2.3.4/docs/shot.png
+    expect_status "plain http exits 1, even on a GitHub host" 1
+    tl readme-asset tagged https://github.com.example.com/x.png
+    expect_status "a host that only starts like GitHub exits 1" 1
+    tl readme-asset tagged https://evil.example/github.com/x.png
+    expect_status "GitHub in the path is not GitHub as the host" 1
+    tl readme-asset tagged "data:image/png;base64,AAAA"
+    expect_status "a data address exits 1" 1
+    tl_stdout readme-asset tagged https://example.com/x.png
+    expect_no_out "and a refused picture prints nothing on stdout" "."
+
+    tl readme-asset tagged big.png
+    expect_status "a picture over 5 MB exits 1" 1
+    expect_out "and says it could not be fetched" "could not fetch big.png"
+    if ls "$RM_CACHE/tagged/".*.part "$RM_CACHE/tagged/".*.new >/dev/null 2>&1; then fail "no half-written picture is left behind"; else pass; fi
+
+    tl readme-asset tagged docs/missing.png
+    expect_status "a relative picture that is not there exits 1" 1
+    tl readme-asset kit docs/shot.png
+    expect_status "a relative picture for an item with no upstream exits 2" 2
+    tl readme-asset tagged
+    expect_status "readme-asset needs a name and an address" 2
+
+    # Cached pictures are served offline and refreshed when a day old.
+    mv "$FX/gh" "$FX/gh.away"
+    tl_stdout readme-asset tagged https://github.com/demo/tagged/raw/HEAD/x.png
+    expect_status "a cached picture is served offline" 0
+    expect_out "from the same path" "^$RA_ABS\$"
+    touch -t 200001010000 "$RA_ABS"
+    tl_stdout readme-asset tagged https://github.com/demo/tagged/raw/HEAD/x.png
+    expect_status "a stale picture still answers offline" 0
+    mv "$FX/gh.away" "$FX/gh"
+    printf 'a newer github.com raw picture\n' > "$GH/github.com/demo/tagged/raw/HEAD/x.png"
+    tl_stdout readme-asset tagged https://github.com/demo/tagged/raw/HEAD/x.png
+    expect_status "and is fetched again once GitHub is back" 0
+    expect_content "with the new picture in place" "$RA_ABS" "a newer github.com raw picture"
 
     # A newer list, put in place without a refresh, so there is something to
     # report as out of date.
