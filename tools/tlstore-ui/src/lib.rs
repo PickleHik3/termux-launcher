@@ -7,7 +7,6 @@
 //! [`palette`] are the shared pieces screens draw with.
 
 pub mod app;
-pub mod demo;
 pub mod launch;
 pub mod layout;
 pub mod palette;

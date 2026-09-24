@@ -1,6 +1,6 @@
 //! Dev-only PNG preview renderer (cargo feature `shot`; `tlstore-ui --shot`). Drives the real
 //! [`Router`] headlessly against a store fixture with every capability on and motion off,
-//! takes the resting frame and paints it: surface background, cell backgrounds, kitty
+//! waits for every task (refresh, gh, picture, README, assets) and paints the resting frame: surface background, cell backgrounds, kitty
 //! placements under the text, every glyph from the bundled JetBrains Mono (bold, italic, dim,
 //! reverse, underline styles and colours, strikethrough), OSC 66 sized runs at their scale
 //! and fraction, then the placements above the text. Cells are a fixed 12×26 px.
@@ -19,6 +19,7 @@ use fontdue::{Font, FontSettings};
 use crate::app::{Ctx, Screen};
 use crate::palette::Palette;
 use crate::render::{Buffer, Color, Frame, Placement, Rgb, SizedRun, Style, Sym, Underline};
+use crate::store::paint::A_CONTEXT;
 use crate::store::proc::Env;
 use crate::store::{Router, Verb};
 use crate::term::{self, Caps, Event, Key, Size};
@@ -49,8 +50,8 @@ tlstore-ui --shot-all --out <dir> [--store <dir>]
 /// One screen state, parsed from a `--screen` spec.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Spec {
-    /// The Apps view: the cursor on row `cursor`, `selected` names marked, the updates
-    /// view pushed when `updates`.
+    /// Front: the cursor on row `cursor` of the shown list, `selected` names marked with
+    /// `␣`, the updates filter on when `updates`.
     Front { cursor: usize, selected: Vec<String>, updates: bool },
     /// An item's page scrolled `scroll` rows.
     Item { name: String, scroll: u16 },
@@ -199,23 +200,30 @@ impl Stage {
         self.draw();
     }
 
-    /// Reads every watched fd until nothing is watched (the startup refresh, gh checks).
+    /// Delivers readable fds until nothing is watched, then draws; a frame may ask for more
+    /// (the README, then its first image, then the catalog picture), so this repeats until a
+    /// frame asks for nothing (as tests/screens.rs settles). A fake job has nothing to read.
     fn settle(&mut self) {
-        let deadline = std::time::Instant::now() + Duration::from_secs(10);
-        loop {
-            let fds = self.router.watch();
-            if fds.is_empty() || std::time::Instant::now() > deadline {
-                break;
-            }
-            let polled: Vec<_> = fds.iter().map(|&f| (f, libc::POLLIN)).collect();
-            let Ok(ready) = term::poll_fds(&polled, Some(Duration::from_millis(200))) else { break };
-            for (i, &fd) in fds.iter().enumerate() {
-                if ready[i] {
-                    self.router.handle(&Event::Readable(fd), &mut self.ctx);
+        for _ in 0..6 {
+            let deadline = std::time::Instant::now() + Duration::from_secs(10);
+            loop {
+                let fds = self.router.watch();
+                if fds.is_empty() || std::time::Instant::now() > deadline {
+                    break;
+                }
+                let polled: Vec<_> = fds.iter().map(|&f| (f, libc::POLLIN)).collect();
+                let Ok(ready) = term::poll_fds(&polled, Some(Duration::from_millis(200))) else { break };
+                for (i, &fd) in fds.iter().enumerate() {
+                    if ready[i] {
+                        self.router.handle(&Event::Readable(fd), &mut self.ctx);
+                    }
                 }
             }
+            self.draw();
+            if !self.router.st.tasks_pending() {
+                break;
+            }
         }
-        self.draw();
     }
 
     fn index_of(&self, name: &str) -> io::Result<usize> {
@@ -244,10 +252,11 @@ impl Stage {
                     self.cursor_to(i);
                     self.key(Key::Char(' '));
                 }
-                self.cursor_to(*cursor);
                 if *updates {
-                    self.key(Key::Char('u'));
+                    // The masthead's `↑ N updates` (`u` on a row with an update would update it).
+                    self.router.handle(&Event::Tap { action: A_CONTEXT, col: 0, row: 0 }, &mut self.ctx);
                 }
+                self.cursor_to(*cursor);
             }
             Spec::Item { name, scroll } => {
                 let i = self.index_of(name)?;

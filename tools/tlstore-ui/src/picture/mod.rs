@@ -1,10 +1,12 @@
 //! Pictures: RGBA bitmaps the renderer uploads to the terminal once and places by id.
-//! Three sources: script words set in the bundled Pinyon Script face, the pixel TLSTORE mark,
-//! and JPEG/PNG files from disk (catalog pictures).
+//! Four sources: script words set in the bundled Pinyon Script face, the pixel TLSTORE mark,
+//! JPEG/PNG files from disk (catalog and README pictures), and the shapes the store draws
+//! itself ([`shapes`]).
 
 pub mod file;
 pub mod mark;
 pub mod script;
+pub mod shapes;
 
 use std::collections::HashMap;
 use std::io;
@@ -15,6 +17,9 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use crate::render::Rgb;
 
 pub use file::Fit;
+
+/// How much of a header picture fades out along its bottom edge.
+pub const HEADER_FADE: f32 = 0.38;
 
 struct PicData {
     id: u32,
@@ -64,14 +69,15 @@ impl Picture {
     }
 }
 
-/// Caches every picture a run makes, so a word or file is rasterised/decoded once and keeps
-/// its kitty id (and so is uploaded once).
+/// Caches every picture a run makes, so a word, file or shape is made once and keeps its
+/// kitty id (and so is uploaded once).
 #[derive(Default)]
 pub struct Pictures {
     face: Option<fontdue::Font>,
     words: HashMap<(String, u32, Rgb), Picture>,
     marks: HashMap<(u32, Rgb), Picture>,
-    files: HashMap<(PathBuf, u32, u32, Fit), Picture>,
+    files: HashMap<(PathBuf, u32, u32, Fit, bool), Picture>,
+    shapes: HashMap<String, Picture>,
 }
 
 impl Pictures {
@@ -107,14 +113,46 @@ impl Pictures {
     /// A JPEG or PNG file scaled into a `box_w`×`box_h` pixel box (see [`Fit`]). Cached by
     /// path and box.
     pub fn file(&mut self, path: &Path, box_w: u32, box_h: u32, fit: Fit) -> io::Result<Picture> {
-        let key = (path.to_path_buf(), box_w, box_h, fit);
+        self.file_with(path, box_w, box_h, fit, false)
+    }
+
+    /// A header picture: contain-fitted into the box, its bottom [`HEADER_FADE`] faded to
+    /// transparent. Cached by path and box.
+    pub fn header_picture(&mut self, path: &Path, box_w: u32, box_h: u32) -> io::Result<Picture> {
+        self.file_with(path, box_w, box_h, Fit::Contain, true)
+    }
+
+    fn file_with(
+        &mut self,
+        path: &Path,
+        box_w: u32,
+        box_h: u32,
+        fit: Fit,
+        fade: bool,
+    ) -> io::Result<Picture> {
+        let key = (path.to_path_buf(), box_w, box_h, fit, fade);
         if let Some(p) = self.files.get(&key) {
             return Ok(p.clone());
         }
-        let (w, h, rgba) = file::load_scaled(path, box_w, box_h, fit)?;
+        let (w, h, mut rgba) = file::load_scaled(path, box_w, box_h, fit)?;
+        if fade {
+            shapes::fade_bottom(w, h, &mut rgba, HEADER_FADE);
+        }
         let p = Picture::new(w, h, rgba);
         self.files.insert(key, p.clone());
         Ok(p)
+    }
+
+    /// A drawn shape, made by `make` the first time `key` is asked for. Cached by key, so the
+    /// same shape keeps its id and is uploaded once.
+    pub fn shape(&mut self, key: String, make: impl FnOnce() -> (u32, u32, Vec<u8>)) -> Picture {
+        self.shapes
+            .entry(key)
+            .or_insert_with(|| {
+                let (w, h, rgba) = make();
+                Picture::new(w, h, rgba)
+            })
+            .clone()
     }
 
     /// Drops every cached picture (their terminal copies are freed by `Renderer::forget` or
@@ -123,5 +161,6 @@ impl Pictures {
         self.words.clear();
         self.marks.clear();
         self.files.clear();
+        self.shapes.clear();
     }
 }

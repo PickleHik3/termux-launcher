@@ -21,6 +21,7 @@ unicode-width = "0.2"
 png = "0.17"
 zune-jpeg = { version = "0.4", default-features = false, features = ["std"] }
 miniz_oxide = "0.8"
+pulldown-cmark = { version = "0.13", default-features = false }
 
 [profile.release]
 opt-level = "s"

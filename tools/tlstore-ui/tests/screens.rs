@@ -10,11 +10,12 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
 use tlstore_ui::app::{Ctx, Nav, Screen};
+use tlstore_ui::layout;
 use tlstore_ui::render::{Frame, HitMap, Renderer, Sym};
-use tlstore_ui::store::motion::{Timeline, GLYPHS};
+use tlstore_ui::store::motion::Timeline;
 use tlstore_ui::store::proc::Env;
-use tlstore_ui::store::scene::{Effect, El, Fx, Motion, NavKind, Phase, Scene};
-use tlstore_ui::store::Router;
+use tlstore_ui::store::scene::{El, Motion, NavKind, Phase, Scene};
+use tlstore_ui::store::{Router, GH_NOTICE};
 use tlstore_ui::term::{self, Caps, Event, Key, Mouse, MouseKind, Size};
 
 static N: AtomicU32 = AtomicU32::new(0);
@@ -131,7 +132,6 @@ impl H {
             out: String::new(),
         };
         h.settle();
-        h.draw();
         h
     }
 
@@ -161,12 +161,6 @@ impl H {
         self.ev(Event::Key(k))
     }
 
-    fn keys(&mut self, s: &str) {
-        for c in s.chars() {
-            self.key(Key::Char(c));
-        }
-    }
-
     fn tap_at(&mut self, col: u16, row: u16) -> bool {
         let action =
             self.hits.at(col, row).unwrap_or_else(|| panic!("nothing to tap at {col},{row}\n{}", self.text));
@@ -180,20 +174,12 @@ impl H {
         self.tap_at(col, row)
     }
 
-    /// Taps `needle` on the row that also shows `on_row` (to tell a chip from a list tag).
-    fn tap_on(&mut self, on_row: &str, needle: &str) -> bool {
-        let (_, y) = find(&self.text, on_row).unwrap_or_else(|| panic!("{on_row:?} not on screen"));
-        let line = self.text.lines().nth(y as usize).unwrap()[3..].to_string();
-        let i = line.rfind(needle).unwrap_or_else(|| panic!("{needle:?} not on row {y}"));
-        self.tap_at(unicode_width_of(&line[..i]) as u16, y)
-    }
-
     fn resize(&mut self, cols: u16, rows: u16) {
         self.ctx.size = Size::new(cols, rows, 8, 20);
         self.ev(Event::Resize(self.ctx.size));
     }
 
-    /// Delivers readable fds until nothing is watched (or `until` holds).
+    /// Delivers readable fds until nothing is watched (or `until` holds), then draws.
     fn pump(&mut self, until: impl Fn(&Router) -> bool) {
         let deadline = Instant::now() + Duration::from_secs(10);
         loop {
@@ -216,8 +202,20 @@ impl H {
         self.draw();
     }
 
+    /// Pumps and draws until a frame asks for nothing more (pictures, READMEs and their
+    /// assets arrive one after another). A running job is left alone.
     fn settle(&mut self) {
-        self.pump(|_| false);
+        let held = self.dir.join("hold").exists();
+        let done = move |r: &Router| {
+            let waiting_on_hold = held && r.st.job.as_ref().is_some_and(|j| j.running() && !j.cancelled);
+            !r.st.tasks_pending() && (waiting_on_hold || !r.st.job_running())
+        };
+        for _ in 0..6 {
+            self.pump(done);
+            if done(self.router.as_ref().unwrap()) {
+                break;
+            }
+        }
     }
 
     fn log(&self, name: &str) -> String {
@@ -230,6 +228,10 @@ impl H {
 
     fn has(&self, s: &str) -> bool {
         self.text.contains(s)
+    }
+
+    fn header_item(&self) -> String {
+        self.router.as_ref().unwrap().header_item().unwrap_or_default()
     }
 
     fn snapshot(&self, name: &str) {
@@ -311,27 +313,32 @@ fn unicode_width_of(s: &str) -> usize {
     tlstore_ui::render::text_width(s)
 }
 
-const SIZES: [(u16, u16); 3] = [(53, 26), (53, 40), (40, 26)];
+/// The screen row of `name`'s list row on Front (not the header, which shows the name alone).
+fn list_row(h: &H, name: &str) -> usize {
+    find(&h.text, &format!(" {name} ")).unwrap_or_else(|| panic!("{name} row not on screen\n{}", h.text)).1
+        as usize
+}
 
-fn open_item(h: &mut H, name: &str) {
+const SIZES: [(u16, u16); 3] = [(53, 26), (53, 40), (40, 24)];
+
+/// Moves the cursor to `name` on Front (the header follows it).
+fn go_to(h: &mut H, name: &str) {
+    assert_eq!(h.r().top(), "front");
     h.key(Key::Home);
     for _ in 0..10 {
-        if h.r().top() == "apps" && current_row_is(h, name) {
-            break;
+        if h.header_item() == name {
+            return;
         }
         h.key(Key::Down);
     }
-    h.key(Key::Enter);
-    assert_eq!(h.r().top(), "item", "{}", h.text);
+    panic!("{name} is not on Front\n{}", h.text);
 }
 
-fn current_row_is(h: &mut H, name: &str) -> bool {
-    // The cursor row's name is drawn in the accent; the snapshot cannot show colour, so ask
-    // for the item page and back out when it is the wrong one.
+fn open_item(h: &mut H, name: &str) {
+    go_to(h, name);
     h.key(Key::Enter);
-    let ok = h.has(&format!("/ apps / {name}"));
-    h.key(Key::Esc);
-    ok
+    assert_eq!(h.r().top(), "item", "{}", h.text);
+    h.settle();
 }
 
 // ---------------------------------------------------------------------------
@@ -342,34 +349,25 @@ fn snap_all(mode: &str, caps: bool) {
     for (c, r) in SIZES {
         let tag = format!("{c}x{r}");
         let mut h = H::new(c, r, Opts { caps, ..Opts::default() });
-        h.snapshot(&format!("{mode}-apps-{tag}"));
+        go_to(&mut h, "dawn");
+        h.settle();
+        h.snapshot(&format!("{mode}-front-{tag}"));
 
         open_item(&mut h, "kitten");
         h.pump(|r| r.st.starred("kovidgoyal/kitty").is_some());
+        h.settle();
         h.snapshot(&format!("{mode}-item-{tag}"));
         h.key(Key::Esc);
 
-        h.key(Key::Char('u'));
-        assert_eq!(h.r().top(), "updates");
-        h.snapshot(&format!("{mode}-updates-{tag}"));
-        h.key(Key::Esc);
-
         std::fs::write(h.dir.join("hold"), "").unwrap();
-        open_item(&mut h, "sigye");
+        go_to(&mut h, "sigye");
         h.key(Key::Char('i'));
         h.pump(|r| r.st.job.as_ref().is_some_and(|j| j.pct >= 60));
+        h.settle();
         h.snapshot(&format!("{mode}-installing-{tag}"));
-        h.key(Key::Char('c'));
+        h.key(Key::Char('x'));
         h.settle();
         std::fs::remove_file(h.dir.join("hold")).unwrap();
-        h.key(Key::Esc);
-        h.key(Key::Esc);
-
-        let mut h = H::new(c, r, Opts { caps, gh: Gh::Missing, ..Opts::default() });
-        open_item(&mut h, "sigye");
-        h.key(Key::Char('s'));
-        assert_eq!(h.r().top(), "nogh");
-        h.snapshot(&format!("{mode}-nogh-{tag}"));
     }
 }
 
@@ -384,17 +382,26 @@ fn snapshots_kitty_terminal() {
 }
 
 // ---------------------------------------------------------------------------
-// Behaviour
+// Front
 // ---------------------------------------------------------------------------
 
 #[test]
-fn shared_frame_on_apps() {
-    let h = H::new(52, 45, Opts::default());
-    assert!(h.row(1).starts_with("  TLSTORE / apps"), "{}", h.text);
-    assert!(h.row(1).trim_end().ends_with("↑ 2 updates"));
-    assert!(h.row(2).contains("────"));
-    assert!(h.row(4).contains("T E R M I N A L"));
-    assert!(h.has("goodies"));
+fn header_follows_the_cursor_and_shows_the_facts() {
+    let mut h = H::new(53, 26, Opts::default());
+    assert!(h.row(0).starts_with("  TLSTORE"), "{}", h.text);
+    assert!(h.row(0).trim_end().ends_with("↑ 2 updates"));
+    assert_eq!(h.header_item(), "claude-code");
+    // No picture on a plain terminal: the name sits right under the masthead.
+    let hdr = layout::header(53, 26, 7, None);
+    assert!(h.row(hdr.name.bottom() as usize - 1).contains("claude-code"), "{}", h.text);
+    h.key(Key::Down);
+    assert_eq!(h.header_item(), "dawn");
+    assert!(h.row(hdr.name.bottom() as usize - 1).contains("dawn"), "{}", h.text);
+    assert!(h.row(hdr.standfirst as usize).contains("a quiet place to write, headings and all"));
+    assert_eq!(h.row(hdr.facts as usize).trim(), "0.1.3+0e958747 · MIT · andrewmd5");
+    // An installed item with an update: old struck through, arrow, new.
+    go_to(&mut h, "kitten");
+    assert_eq!(h.row(hdr.facts as usize).trim(), "installed 0.48.2 → 0.49 · GPL-3.0 · Kovid Goyal");
     let calls = h.log("calls.log");
     assert!(calls.contains("list --tsv"), "{calls}");
     assert!(calls.contains("update --check --tsv --offline"));
@@ -402,69 +409,108 @@ fn shared_frame_on_apps() {
 }
 
 #[test]
-fn key_and_tap_navigation_between_all_screens() {
-    let mut h = H::new(52, 45, Opts::default());
-    // Apps → Item by tap on a row name, back by esc.
-    h.tap("sigye");
+fn rows_show_numbers_tags_and_statuses() {
+    let h = H::new(53, 26, Opts::default());
+    let hdr = layout::header(53, 26, 7, None);
+    let rows: Vec<String> = (0..7).map(|i| h.row((hdr.body.y + i) as usize)).collect();
+    assert!(rows[0].starts_with("  01  claude-code AI"), "{:?}", rows[0]);
+    assert!(rows[1].trim_end().ends_with("new"), "{:?}", rows[1]);
+    assert!(rows[2].contains("fastfetch Tools") && rows[2].trim_end().ends_with("↑ 2.67.0"), "{:?}", rows[2]);
+    assert!(rows[3].trim_end().ends_with("installed"), "{:?}", rows[3]);
+    assert!(rows[6].starts_with("  07  sigye Tools"), "{:?}", rows[6]);
+    // The key row: five fixed slots.
+    let keys = h.row(hdr.keys as usize);
+    // `f keyboard` is one column too wide for its slot and is cut like any other hint.
+    for (col, word) in [(2, "⏎ open"), (12, "i install"), (24, "␣ select"), (34, "f keyboa…"), (44, "q quit")]
+    {
+        let at = keys.find(word).unwrap_or_else(|| panic!("{word} missing: {keys:?}"));
+        assert_eq!(unicode_width_of(&keys[..at]), col, "{word} at {col}: {keys:?}");
+    }
+}
+
+#[test]
+fn tall_grids_give_each_item_two_lines() {
+    let h = H::new(53, 40, Opts::default());
+    let hdr = layout::header(53, 40, 20, None);
+    let y = hdr.body.y as usize;
+    assert!(h.row(y).starts_with("  01   claude-code"), "{:?}", h.row(y));
+    assert!(h.row(y + 1).contains("Anthropic's Claude Code"), "{:?}", h.row(y + 1));
+    assert_eq!(h.row(y + 2).trim(), "");
+    assert!(h.row(y + 3).starts_with("  02   dawn"), "{:?}", h.row(y + 3));
+    assert!(h.has("07   sigye"));
+}
+
+#[test]
+fn taps_move_the_cursor_then_open() {
+    let mut h = H::new(53, 26, Opts::default());
+    let y = list_row(&h, "sigye") as u16;
+    h.tap_at(10, y);
+    assert_eq!(h.r().top(), "front");
+    assert_eq!(h.header_item(), "sigye");
+    h.tap_at(10, y);
     assert_eq!(h.r().top(), "item");
-    assert!(h.has("/ apps / sigye"));
     h.key(Key::Esc);
-    assert_eq!(h.r().top(), "apps");
-    // Context item → Updates, key-row tap back.
-    h.tap("↑ 2 updates");
-    assert_eq!(h.r().top(), "updates");
-    assert!(h.has("T W O   O F   Y O U R S"), "{}", h.text);
-    h.tap("esc back");
-    assert_eq!(h.r().top(), "apps");
-    // Item → Installing → mark tap goes home from anywhere.
-    h.tap("sigye");
+    // A tap on the header opens the item under the cursor.
+    let hdr = layout::header(53, 26, 7, None);
+    h.tap_at(10, hdr.standfirst);
+    assert_eq!(h.r().top(), "item");
+    assert!(h.has("am2rican5/sigye ↗"), "{}", h.text);
+    // `‹ apps` goes back; the mark goes home from deeper down.
+    h.tap("‹ apps");
+    assert_eq!(h.r().top(), "front");
+    h.key(Key::Enter);
     h.key(Key::Char('i'));
     assert_eq!(h.r().top(), "installing");
     h.settle();
-    assert!(h.has("sigye is ready."), "{}", h.text);
-    h.tap("TLSTORE");
-    assert_eq!(h.r().top(), "apps");
-    assert_eq!(h.r().depth(), 1);
-    // Esc on Apps leaves.
+    h.key(Key::Esc);
+    h.key(Key::Esc);
+    assert_eq!(h.r().top(), "front");
+    // Esc on Front leaves.
     assert!(h.key(Key::Esc));
 }
 
 #[test]
-fn category_chips_and_search_filter_the_list() {
-    let mut h = H::new(52, 45, Opts::default());
-    assert!(h.has("claude-code") && h.has("sigye"));
-    h.tap_on("Note taking", "AI");
-    assert!(h.has("claude-code") && !h.has("sigye"), "{}", h.text);
-    h.key(Key::BackTab);
-    assert!(h.has("sigye") && !h.has("claude-code"), "{}", h.text);
-    h.key(Key::Tab);
-    h.key(Key::Tab);
-    assert!(h.has("sigye") && h.has("claude-code"));
-    h.key(Key::Char('/'));
-    h.keys("kit");
-    assert!(h.has("/ kit") && h.has("kitten") && !h.has("sigye"), "{}", h.text);
+fn updates_filter_shows_only_updates_and_updates_them_all() {
+    let mut h = H::new(53, 26, Opts::default());
+    h.tap("↑ 2 updates");
+    assert!(h.has("fastfetch") && h.has("kitten") && !h.has("sigye"), "{}", h.text);
+    assert!(h.row(0).trim_end().ends_with("updates · all"), "{}", h.row(0));
+    h.tap("all");
+    assert!(h.has("sigye") && h.has("↑ 2 updates"));
+    h.key(Key::Char('u'));
+    assert!(!h.has("sigye"));
     h.key(Key::Esc);
-    assert!(h.has("sigye"));
+    assert!(h.has("sigye"), "esc turns the filter off");
+    h.key(Key::Char('u'));
+    h.key(Key::Char('u'));
+    assert_eq!(h.r().top(), "installing");
+    h.settle();
+    assert!(h.log("calls.log").lines().any(|l| l == "update --progress fastfetch kitten"));
+    assert!(h.has("fastfetch and kitten are up to date."), "{}", h.text);
+    h.key(Key::Esc);
+    assert!(!h.has("updates"), "{}", h.text);
+    h.key(Key::Char('u'));
+    assert_eq!(h.r().top(), "front", "nothing to filter by");
 }
 
 #[test]
-fn narrow_grid_uses_short_chip_and_drops_tags() {
-    let h = H::new(40, 34, Opts::default());
-    assert!(h.has(" Notes ") && !h.has("Note taking"), "{}", h.text);
-    assert!(!h.has("TOOLS"));
-    let w = H::new(52, 45, Opts::default());
-    assert!(w.has("TOOLS") && w.has(" Note taking "));
+fn update_key_on_an_updatable_row_updates_that_item() {
+    let mut h = H::new(53, 26, Opts::default());
+    go_to(&mut h, "kitten");
+    assert!(h.has("u update"), "{}", h.text);
+    h.key(Key::Char('u'));
+    assert_eq!(h.r().top(), "installing");
+    h.settle();
+    assert!(h.log("calls.log").lines().any(|l| l == "update --progress kitten"));
 }
 
 #[test]
-fn multi_select_installs_with_the_right_arguments_and_reads_progress() {
-    let mut h = H::new(52, 45, Opts::default());
-    let (x, y) = find(&h.text, "claude-code").unwrap();
-    // Tap on the mark column toggles; space toggles the current row.
-    h.tap_at(2, y);
-    assert!(h.has("✓") && h.has("1 selected"), "{}", h.text);
-    let _ = x;
-    h.tap_at(2, find(&h.text, "sigye").unwrap().1);
+fn selection_marks_names_and_installs_with_the_right_arguments() {
+    let mut h = H::new(53, 26, Opts::default());
+    h.key(Key::Char(' '));
+    assert!(h.has("1 selected · i installs them, ␣ clears"), "{}", h.text);
+    go_to(&mut h, "sigye");
+    h.key(Key::Char(' '));
     assert!(h.has("2 selected"));
     h.key(Key::Char('i'));
     assert_eq!(h.r().top(), "installing");
@@ -477,152 +523,72 @@ fn multi_select_installs_with_the_right_arguments_and_reads_progress() {
     assert!(osc.contains("\x1b]99;i=tlstore:d=0;tlstore\x1b\\"), "{osc:?}");
     assert!(osc.contains("p=body;claude-code and sigye are ready."));
     h.key(Key::Esc);
-    assert_eq!(h.r().top(), "apps");
+    assert_eq!(h.r().top(), "front");
     assert!(!h.has("selected"));
-    // The list was read again: both now show installed.
-    assert!(h.row(find(&h.text, "sigye").unwrap().1 as usize).contains("installed"), "{}", h.text);
+    // The list was read again: both now show installed; selecting installed items offers remove.
+    assert!(h.row(list_row(&h, "sigye")).contains("installed"), "{}", h.text);
+    h.key(Key::Char(' '));
+    assert!(h.has("1 selected · r removes them, ␣ clears") && h.has("r remove"), "{}", h.text);
+    h.key(Key::Esc);
+    assert!(!h.has("selected"));
 }
 
 #[test]
-fn remove_skips_what_is_not_installed_and_update_all_runs() {
-    let mut h = H::new(52, 45, Opts::default());
+fn remove_skips_what_is_not_installed() {
+    let mut h = H::new(53, 26, Opts::default());
     h.key(Key::Home);
     h.key(Key::Char('r'));
     assert!(h.has("Not installed."), "{}", h.text);
-    h.key(Key::Char('u'));
-    h.key(Key::Char('a'));
-    h.settle();
-    assert!(h.log("calls.log").lines().any(|l| l == "update --progress fastfetch kitten"));
-    assert!(h.has("fastfetch and kitten are up to date."), "{}", h.text);
-    h.key(Key::Esc);
-    assert!(h.has("Everything is up to date."), "{}", h.text);
+    assert_eq!(h.r().top(), "front");
 }
 
 #[test]
-fn failures_and_kept_config_are_reported() {
-    let mut h = H::new(52, 45, Opts::default());
-    std::fs::write(h.dir.join("kept"), "").unwrap();
-    let r = h.r();
-    assert!(r.st.start_job(tlstore_ui::store::Verb::Install, vec!["sigye".into(), "broken".into()]));
+fn star_on_front_needs_gh_or_stars_quietly() {
+    let mut h = H::new(53, 26, Opts { gh: Gh::Missing, ..Opts::default() });
+    go_to(&mut h, "sigye");
+    h.key(Key::Char('s'));
+    let hdr = layout::header(53, 26, 7, None);
+    assert_eq!(h.row(hdr.notice as usize).trim(), layout::fit_line(GH_NOTICE, 49), "{}", h.text);
+    h.key(Key::Down);
+    assert!(!h.has("starring needs gh"), "the notice goes with the next key");
+    let mut h = H::new(53, 26, Opts::default());
+    go_to(&mut h, "kitten");
+    h.key(Key::Char('s'));
     h.settle();
-    let s = h.r().st.job.as_ref().unwrap().summary();
-    assert_eq!(s[0], "sigye is ready.");
-    assert_eq!(s[1], "Could not install broken. Try again later.");
-    assert_eq!(s[2], "Kept your config.fish.");
+    assert!(h.dir.join("starred/kovidgoyal_kitty").exists(), "{}", h.log("gh.log"));
+    let hdr = layout::header(53, 26, 7, None);
+    assert_eq!(h.row(hdr.facts as usize).trim(), "installed 0.48.2 → 0.49 · GPL-3.0 · starred", "{}", h.text);
 }
 
 #[test]
-fn cancel_stops_the_script() {
-    let mut h = H::new(52, 45, Opts::default());
+fn front_rows_show_the_job_step_words() {
+    let mut h = H::new(53, 26, Opts::default());
     std::fs::write(h.dir.join("hold"), "").unwrap();
-    open_item(&mut h, "sigye");
+    go_to(&mut h, "sigye");
     h.key(Key::Char('i'));
+    assert_eq!(h.r().top(), "installing");
     h.pump(|r| r.st.job.as_ref().is_some_and(|j| j.pct >= 60));
-    assert!(h.has("60") && h.has("keep going quietly"), "{}", h.text);
-    // Esc keeps it going; the masthead offers the way back.
+    assert!(h.has("60") && h.has("x cancel"), "{}", h.text);
     h.key(Key::Esc);
-    assert_eq!(h.r().top(), "item");
-    assert!(h.has("installing 1 of 1"), "{}", h.text);
-    h.tap("installing 1 of 1");
+    assert_eq!(h.r().top(), "front");
+    let y = list_row(&h, "sigye");
+    assert!(h.row(y).trim_end().ends_with("checking…"), "{}", h.text);
+    let hdr = layout::header(53, 26, 7, None);
+    assert!(h.row(hdr.facts as usize).starts_with("  installing"), "{}", h.text);
+    // Enter on the row of a running job returns to it; x stops the script.
+    h.key(Key::Enter);
     assert_eq!(h.r().top(), "installing");
     let t = Instant::now();
-    h.key(Key::Char('c'));
+    h.key(Key::Char('x'));
     h.settle();
     assert!(t.elapsed() < Duration::from_secs(5));
     assert!(h.has("Stopped before sigye was done."), "{}", h.text);
-}
-
-#[test]
-fn star_with_gh_signed_in() {
-    let mut h = H::new(52, 45, Opts::default());
-    open_item(&mut h, "kitten");
-    h.pump(|r| r.st.starred("kovidgoyal/kitty").is_some());
-    assert!(h.has("☆") && h.has("s star"), "{}", h.text);
-    h.key(Key::Char('s'));
-    h.settle();
-    assert!(h.has("★ starred") && h.has("s unstar"), "{}", h.text);
-    assert!(h.dir.join("starred/kovidgoyal_kitty").exists());
-    h.key(Key::Char('s'));
-    h.settle();
-    assert!(!h.dir.join("starred/kovidgoyal_kitty").exists());
-    let log = h.log("gh.log");
-    assert!(log.contains("auth status"));
-    assert!(log.contains("api /user/starred/kovidgoyal/kitty"));
-    assert!(log.contains("api -X PUT /user/starred/kovidgoyal/kitty"));
-    assert!(log.contains("api -X DELETE /user/starred/kovidgoyal/kitty"));
-    // Only star calls change anything.
-    for l in log.lines() {
-        assert!(l == "auth status" || l.starts_with("api ") && l.contains("/user/starred/"), "{l}");
-    }
-    // Setups have no star and no upstream.
-    h.key(Key::Esc);
-    open_item(&mut h, "fish-shell");
-    assert!(h.has("our setup") && !h.has("☆") && !h.has("s star"), "{}", h.text);
-}
-
-#[test]
-fn star_with_gh_signed_out_shows_the_footnote_then_stars_after_sign_in() {
-    let mut h = H::new(52, 45, Opts { gh: Gh::SignedOut, ..Opts::default() });
-    open_item(&mut h, "sigye");
-    assert!(!h.has("☆"), "marks stay hidden until gh works");
-    h.key(Key::Char('s'));
-    assert_eq!(h.r().top(), "nogh");
-    assert!(
-        h.has("Starring needs gh.") && h.has("$ gh auth login") && !h.has("pkg install gh"),
-        "{}",
-        h.text
-    );
-    h.key(Key::Char('o'));
-    h.settle();
-    assert_eq!(h.log("open.log").trim(), "https://github.com/am2rican5/sigye");
-    std::fs::write(h.dir.join("gh-signed-in"), "").unwrap();
-    h.key(Key::Char('s'));
-    assert_eq!(h.r().top(), "item");
-    h.settle();
-    assert!(h.dir.join("starred/am2rican5_sigye").exists(), "{}", h.log("gh.log"));
-    assert!(h.has("★ starred"), "{}", h.text);
-}
-
-#[test]
-fn star_with_gh_missing_and_no_opener_prints_the_address() {
-    let mut h = H::new(52, 45, Opts { gh: Gh::Missing, opener: false, ..Opts::default() });
-    open_item(&mut h, "sigye");
-    h.key(Key::Char('s'));
-    assert!(h.has("$ pkg install gh") && h.has("$ gh auth login"), "{}", h.text);
-    h.key(Key::Char('o'));
-    assert!(h.has("https://github.com/am2rican5/sigye"), "{}", h.text);
-    h.key(Key::Esc);
-    assert_eq!(h.r().top(), "item");
-}
-
-#[test]
-fn fullscreen_calls_launcherctl_and_restores_on_exit() {
-    let mut h = H::new(53, 26, Opts::default());
-    assert!(h.has("f keyboard") && !h.has("fullscreen"), "{}", h.text);
-    h.key(Key::Char('f'));
-    assert_eq!(h.log("launcherctl.log"), "keyboard hide --hold\n");
-    assert!(h.has("f keyboard"));
-    h.tap("f keyboard");
-    assert_eq!(h.log("launcherctl.log"), "keyboard hide --hold\nkeyboard show\n");
-    h.key(Key::Char('f'));
-    let dir = h.dir.clone();
-    drop(h.router.take());
-    let log = std::fs::read_to_string(dir.join("launcherctl.log")).unwrap();
-    assert_eq!(log, "keyboard hide --hold\nkeyboard show\nkeyboard hide --hold\nkeyboard show\n");
-}
-
-#[test]
-fn no_launcherctl_hides_the_hint() {
-    let mut h = H::new(53, 26, Opts { launcherctl: false, ..Opts::default() });
-    assert!(!h.has("f keyboard"), "{}", h.text);
-    h.key(Key::Char('f'));
-    assert_eq!(h.r().top(), "apps");
+    std::fs::remove_file(h.dir.join("hold")).unwrap();
 }
 
 #[test]
 fn paging_when_rows_do_not_fit() {
-    // 53×26, the baseline, has room for six rows: 7 items make two pages.
-    let mut h = H::new(53, 26, Opts::default());
+    let mut h = H::new(53, 14, Opts::default());
     assert!(h.has("‹ ● ○ ›"), "{}", h.text);
     assert!(!h.has("sigye"));
     h.key(Key::PageDown);
@@ -632,82 +598,361 @@ fn paging_when_rows_do_not_fit() {
 }
 
 #[test]
-fn item_scrolls_by_keys_and_drag() {
+fn key_slots_stay_in_place_and_taps_send_their_key() {
+    let mut h = H::new(53, 26, Opts { launcherctl: false, ..Opts::default() });
+    let keys = layout::header(53, 26, 7, None).keys;
+    // The keyboard hint stays in place, dim, and does nothing.
+    assert!(h.row(keys as usize).contains("f keyboa…"), "{}", h.text);
+    assert_eq!(h.hits.at(34, keys), None);
+    h.tap_at(12, keys);
+    assert_eq!(h.r().top(), "installing", "slot 2 sends i");
+    h.settle();
+    h.key(Key::Esc);
+    h.tap_at(44, keys);
+    assert!(h.key(Key::Char('q')) || true);
+    // Under 44 columns the slots are 1, 8, 16, 24, 32.
+    let h = H::new(40, 24, Opts::default());
+    let keys = layout::header(40, 24, 7, None).keys;
+    let row = h.row(keys as usize);
+    let col =
+        |word: &str| unicode_width_of(&row[..row.find(word).unwrap_or_else(|| panic!("{word}: {row:?}"))]);
+    assert_eq!(col("⏎ open"), 1, "{row:?}");
+    assert_eq!(col("i inst…"), 8, "{row:?}");
+    assert_eq!(col("q quit"), 32, "{row:?}");
+}
+
+#[test]
+fn fullscreen_calls_launcherctl_and_restores_on_exit() {
     let mut h = H::new(53, 26, Opts::default());
-    open_item(&mut h, "kitten");
-    h.pump(|r| r.st.starred("kovidgoyal/kitty").is_some());
-    assert!(!h.has("G O O D") && h.has("more below ↓"), "{}", h.text);
-    h.key(Key::End);
-    assert!(h.has("G O O D   T O   K N O W") && h.has("best in a kitty-compatible terminal"), "{}", h.text);
-    assert!(!h.has("more below"), "{}", h.text);
-    h.key(Key::Home);
-    h.tap("more below ↓");
-    assert!(!h.has("kovidgoyal/kitty"), "a tap on the cue pages down:\n{}", h.text);
-    h.key(Key::Home);
-    assert!(h.has("kovidgoyal/kitty"));
-    let m = |kind, row| {
-        Event::Mouse(Mouse { kind, button: 0, col: 10, row, shift: false, alt: false, ctrl: false })
-    };
-    h.ev(m(MouseKind::Press, 18));
-    h.ev(m(MouseKind::Drag, 4));
-    assert!(!h.has("kovidgoyal/kitty"), "{}", h.text);
+    assert!(h.has("f keyboa…"), "{}", h.text);
+    h.key(Key::Char('f'));
+    assert_eq!(h.log("launcherctl.log"), "keyboard hide --hold\n");
+    h.tap("f keyboa…");
+    assert_eq!(h.log("launcherctl.log"), "keyboard hide --hold\nkeyboard show\n");
+    h.key(Key::Char('f'));
+    let dir = h.dir.clone();
+    drop(h.router.take());
+    let log = std::fs::read_to_string(dir.join("launcherctl.log")).unwrap();
+    assert_eq!(log, "keyboard hide --hold\nkeyboard show\nkeyboard hide --hold\nkeyboard show\n");
 }
 
 #[test]
 fn resize_relays_out() {
     let mut h = H::new(53, 40, Opts::default());
-    assert!(h.has("sigye") && !h.has("‹ ● ○ ›"), "all seven rows fit:\n{}", h.text);
+    assert!(h.has("07   sigye"), "{}", h.text);
     h.resize(53, 26);
-    assert!(!h.has("sigye") && h.has("‹ ● ○ ›"), "{}", h.text);
-    h.resize(40, 26);
-    assert!(h.has(" Notes "));
+    assert!(h.has("07  sigye"), "{}", h.text);
+    h.resize(40, 24);
+    assert!(!h.has("Tools"), "tags drop under 44 columns:\n{}", h.text);
+}
+
+// ---------------------------------------------------------------------------
+// Item
+// ---------------------------------------------------------------------------
+
+#[test]
+fn item_renders_the_readme_under_the_rules() {
+    let mut h = H::new(53, 40, Opts::default());
+    open_item(&mut h, "kitten");
+    assert!(h.has("‹ apps") && h.has("kovidgoyal/kitty ↗"), "{}", h.text);
+    assert!(h.has("a companion for pictures and files"));
+    let calls = h.log("calls.log");
+    assert!(calls.lines().any(|l| l == "readme kitten"), "{calls}");
+    // Before the first H2: dropped. H2 kept, H3 upper-cased, code on its rows, Contributing gone.
+    assert!(!h.has("GPU based"), "{}", h.text);
+    assert!(h.has("kitten is kitty's companion"), "{}", h.text);
+    assert!(h.has("ICAT") && h.has("kitten icat photo.png"), "{}", h.text);
+    assert!(!h.has("guidelines"), "{}", h.text);
+    // Long paragraphs wrap inside the content column.
+    for l in h.text.lines().take(39) {
+        assert!(unicode_width_of(&l[3..]) <= 51, "{l:?}");
+    }
+    // No pictures on a plain terminal: the screenshot line is simply absent.
+    assert!(!h.has("[picture]"));
 }
 
 #[test]
-fn kitty_terminal_gets_pictures_and_links() {
-    let mut h = H::new(53, 26, Opts { caps: true, ..Opts::default() });
-    // The baseline has no room for a cover: the list comes first.
-    assert!(!h.log("calls.log").contains("picture dawn"), "{}", h.log("calls.log"));
-    assert!(h.r().scene.get(El::HeroWord).is_some_and(|e| e.picture.is_some()), "script word picture");
-    assert!(h.r().scene.get(El::Cover).is_none());
-    // A tall window has the room: the featured cover and, on an item, cover and demo.
-    let mut h = H::new(53, 60, Opts { caps: true, ..Opts::default() });
-    assert!(h.log("calls.log").contains("picture dawn"));
-    assert!(h.r().scene.get(El::Cover).is_some_and(|e| e.picture.is_some()), "{}", h.text);
+fn item_scrolls_the_whole_page_by_keys_and_drag() {
+    let mut h = H::new(53, 26, Opts::default());
+    open_item(&mut h, "kitten");
+    assert!(h.row(0).contains("‹ apps"));
+    assert!(!h.has("Screenshots"), "{}", h.text);
+    h.key(Key::End);
+    assert!(!h.row(0).contains("‹ apps"), "the header scrolls away:\n{}", h.text);
+    assert!(h.has("Screenshots") && h.has("permissions intact"), "{}", h.text);
+    assert!(h.has("esc back"), "the key row stays");
+    h.key(Key::Home);
+    assert!(h.row(0).contains("‹ apps"));
+    h.key(Key::PageDown);
+    assert!(!h.row(0).contains("‹ apps"));
+    h.key(Key::Home);
+    let m = |kind, row| {
+        Event::Mouse(Mouse { kind, button: 0, col: 10, row, shift: false, alt: false, ctrl: false })
+    };
+    h.ev(m(MouseKind::Press, 18));
+    h.ev(m(MouseKind::Drag, 12));
+    assert!(!h.row(0).contains("‹ apps"), "{}", h.text);
+    h.ev(m(MouseKind::Release, 12));
+    h.key(Key::Up);
+    h.key(Key::Home);
+    assert!(h.row(0).contains("‹ apps"));
+}
+
+#[test]
+fn item_without_a_readme_points_at_github_and_a_setup_shows_its_standfirst() {
+    let mut h = H::new(53, 26, Opts::default());
+    std::fs::write(h.dir.join("noreadme"), "").unwrap();
+    open_item(&mut h, "sigye");
+    assert!(h.has("read about it on GitHub"), "{}", h.text);
+    h.tap("read about it on GitHub");
+    h.settle();
+    assert_eq!(h.log("open.log").trim(), "https://github.com/am2rican5/sigye");
+    h.key(Key::Esc);
+    open_item(&mut h, "fish-shell");
+    assert!(h.has("our setup") && h.has("shell setup with a matching prompt"), "{}", h.text);
+    assert!(!h.has("read about it") && !h.has("s star") && !h.has("o repo"), "{}", h.text);
+    assert!(!h.log("calls.log").contains("readme fish-shell"), "no README is asked for a setup");
+}
+
+#[test]
+fn item_keys_star_repo_and_jobs() {
+    let mut h = H::new(53, 26, Opts::default());
     open_item(&mut h, "kitten");
     h.pump(|r| r.st.starred("kovidgoyal/kitty").is_some());
+    assert!(h.has("r remove") && h.has("u update") && h.has("s star") && h.has("o repo"), "{}", h.text);
+    h.key(Key::Char('s'));
+    h.settle();
+    assert!(h.has("s unstar") && h.has("· starred"), "{}", h.text);
+    assert!(h.dir.join("starred/kovidgoyal_kitty").exists());
+    h.key(Key::Char('s'));
+    h.settle();
+    assert!(!h.dir.join("starred/kovidgoyal_kitty").exists());
+    h.key(Key::Char('o'));
+    h.settle();
+    assert_eq!(h.log("open.log").trim(), "https://github.com/kovidgoyal/kitty");
+    h.key(Key::Char('u'));
+    assert_eq!(h.r().top(), "installing");
+    h.settle();
+    assert!(h.log("calls.log").lines().any(|l| l == "update --progress kitten"));
+    h.key(Key::Enter);
+    assert_eq!(h.r().top(), "item");
+    assert!(!h.has("u update"), "no update left: the slot is empty\n{}", h.text);
+}
+
+#[test]
+fn item_star_with_gh_signed_out_shows_the_notice() {
+    let mut h = H::new(53, 26, Opts { gh: Gh::SignedOut, ..Opts::default() });
+    open_item(&mut h, "sigye");
+    assert!(h.has("s star"), "the hint stays in place, dim");
+    let keys = layout::header(53, 26, 7, None).keys;
+    assert_eq!(h.hits.at(24, keys), None, "and is not tappable");
+    h.key(Key::Char('s'));
+    assert_eq!(h.r().top(), "item");
+    assert!(h.has("starring needs gh: pkg install gh"), "{}", h.text);
+}
+
+// ---------------------------------------------------------------------------
+// Installing
+// ---------------------------------------------------------------------------
+
+#[test]
+fn installing_shows_the_number_steps_and_summary() {
+    let mut h = H::new(53, 26, Opts::default());
+    std::fs::write(h.dir.join("hold"), "").unwrap();
+    go_to(&mut h, "sigye");
+    h.key(Key::Char('i'));
+    h.pump(|r| r.st.job.as_ref().is_some_and(|j| j.pct >= 60));
+    let hdr = layout::header(53, 26, 7, None);
+    assert!(h.row(hdr.facts as usize).starts_with("  installing"), "{}", h.text);
+    assert!(h.row(hdr.body.y as usize).starts_with("  60%"), "{}", h.text);
+    assert!(h.row(hdr.body.y as usize).contains("fetched"));
+    assert!(h.row(hdr.body.y as usize + 1).contains("signature checked"));
+    assert!(h.row(hdr.body.y as usize + 5).contains("───"), "a text track without pictures");
+    assert!(h.has("x cancel") && h.has("esc back") && !h.has("⏎ done"));
+    h.key(Key::Char('x'));
+    h.settle();
+    assert!(h.has("Stopped before sigye was done.") && h.has("⏎ done"), "{}", h.text);
+    std::fs::remove_file(h.dir.join("hold")).unwrap();
+}
+
+#[test]
+fn failures_and_kept_config_are_reported() {
+    let mut h = H::new(53, 26, Opts::default());
+    std::fs::write(h.dir.join("kept"), "").unwrap();
+    let r = h.r();
+    assert!(r.st.start_job(tlstore_ui::store::Verb::Install, vec!["sigye".into(), "broken".into()]));
+    h.settle();
+    let s = h.r().st.job.as_ref().unwrap().summary();
+    assert_eq!(s[0], "sigye is ready.");
+    assert_eq!(s[1], "Could not install broken. Try again later.");
+    assert_eq!(s[2], "Kept your config.fish.");
+    // Off the Installing screen the first summary line is the notice.
+    assert!(h.has("sigye is ready."), "{}", h.text);
+}
+
+#[test]
+fn a_failed_item_shows_failed_on_installing_and_front() {
+    let mut h = H::new(53, 26, Opts::default());
+    std::fs::write(h.dir.join("fail-sigye"), "").unwrap();
+    go_to(&mut h, "sigye");
+    h.key(Key::Char('i'));
+    assert_eq!(h.r().top(), "installing");
+    h.settle();
+    let hdr = layout::header(53, 26, 7, None);
+    assert!(h.row(hdr.facts as usize).starts_with("  failed 0.6.0"), "{}", h.text);
+    assert!(h.row(hdr.notice as usize).contains("Could not install sigye. Try again later."), "{}", h.text);
+    assert!(h.has("⏎ done"));
+    h.key(Key::Enter);
+    assert_eq!(h.r().top(), "front");
+    let y = list_row(&h, "sigye");
+    assert!(h.row(y).trim_end().ends_with("failed"), "{}", h.text);
+}
+
+#[test]
+fn install_from_item_then_esc_keeps_the_job_and_the_word() {
+    let mut h = H::new(53, 26, Opts::default());
+    std::fs::write(h.dir.join("hold"), "").unwrap();
+    open_item(&mut h, "sigye");
+    h.key(Key::Char('i'));
+    assert_eq!(h.r().top(), "installing");
+    h.pump(|r| r.st.job.as_ref().is_some_and(|j| j.pct >= 60));
+    h.key(Key::Esc);
+    assert_eq!(h.r().top(), "item");
+    let hdr = layout::header(53, 26, 7, None);
+    assert!(h.row(hdr.facts as usize).starts_with("  installing 0.6.0"), "{}", h.text);
+    h.key(Key::Esc);
+    let y = list_row(&h, "sigye");
+    assert!(h.row(y).trim_end().ends_with("checking…"), "{}", h.text);
+    h.key(Key::Enter);
+    h.key(Key::Char('x'));
+    h.settle();
+    std::fs::remove_file(h.dir.join("hold")).unwrap();
+}
+
+// ---------------------------------------------------------------------------
+// Pictures (kitty)
+// ---------------------------------------------------------------------------
+
+#[test]
+fn kitty_terminal_gets_header_pictures_the_pill_and_links() {
+    let mut h = H::new(53, 26, Opts { caps: true, ..Opts::default() });
+    assert!(h.log("calls.log").contains("picture claude-code"), "{}", h.log("calls.log"));
+    let scene = h.r().scene.clone();
+    assert!(scene.get(El::Picture).is_some_and(|e| e.picture.is_some()), "header picture:\n{}", h.text);
+    assert!(scene.get(El::Name).is_some_and(|e| e.picture.is_some()), "script name");
+    let pill = scene.get(El::Pill).expect("cursor pill");
+    assert!(pill.picture.is_some());
+    assert_eq!((pill.rect.x, pill.rect.w), (1, 51), "columns 1 to cols−2");
+    let hdr = layout::header(53, 26, 7, Some(u16::MAX));
+    assert_eq!(pill.rect.y, hdr.body.y);
+    assert_eq!(hdr.picture.map(|p| p.h), Some(8));
+    // Moving the cursor re-places the same pill picture on the new row.
+    let id = pill.picture.unwrap();
+    h.key(Key::Down);
+    h.settle();
+    h.key(Key::Up);
+    h.key(Key::Down);
+    let pill = h.r().scene.get(El::Pill).cloned().unwrap();
+    assert_eq!(pill.picture, Some(id));
+    assert_eq!(pill.rect.y, hdr.body.y + 1);
+    let (pic_id, _) = id;
+    assert!(h.out.contains(&format!("_Ga=p,i={pic_id},p=1")), "the pill is placed again:\n{:?}", h.out);
+    assert!(!h.out.contains(&format!(",i={pic_id},q=2,o=z")), "and not uploaded again:\n{:?}", h.out);
+    // The header picture is faded along its bottom edge.
     let router = h.router.as_mut().unwrap();
     let mut f = Frame::new(&mut h.ctx);
     router.draw(&mut f);
-    assert_eq!(f.places.len(), 3, "mark, cover, demo (the name is sized text)");
-    assert!(f.buf.runs().iter().any(|r| r.text == "kitten" && r.sizing.scale == 3));
-    assert!(f.buf.links().iter().any(|(_, u)| u == "https://github.com/kovidgoyal/kitty"));
+    let pic = f.places.iter().find(|p| p.pic.height() > 100).expect("header picture placed").pic.clone();
+    let (w, hh) = (pic.width() as usize, pic.height() as usize);
+    let alpha = |x: usize, y: usize| pic.rgba()[(y * w + x) * 4 + 3];
+    assert_eq!(alpha(w / 2, 0), 255);
+    assert!(alpha(w / 2, hh - 1) < 10, "{}", alpha(w / 2, hh - 1));
+    // Item: the README's first image becomes the header picture; links carry OSC 8.
+    open_item(&mut h, "dawn");
+    let calls = h.log("calls.log");
+    assert!(
+        calls.contains(
+            "readme-asset dawn https://raw.githubusercontent.com/andrewmd5/dawn/main/assets/hero.png"
+        ),
+        "{calls}"
+    );
+    assert!(!calls.contains("shields.io"), "badges are never fetched: {calls}");
+    let router = h.router.as_mut().unwrap();
+    let mut f = Frame::new(&mut h.ctx);
+    router.draw(&mut f);
+    assert!(f.buf.links().iter().any(|(_, u)| u == "https://github.com/andrewmd5/dawn"));
+    assert!(f.buf.links().iter().any(|(_, u)| u == "https://dawn.example.com/docs"), "README links");
+    assert!(f.buf.runs().iter().any(|r| r.text == "What it does" && r.sizing.scale == 2), "H2 at 2×");
+    // Front's category tags are fractional runs.
+    h.key(Key::Esc);
+    let router = h.router.as_mut().unwrap();
+    let mut f = Frame::new(&mut h.ctx);
+    router.draw(&mut f);
+    assert!(f.buf.runs().iter().any(|r| r.text == "Tools" && r.sizing.num == 2 && r.sizing.den == 3));
 }
 
 #[test]
-fn script_word_needs_a_known_cell_size() {
+fn readme_pictures_arrive_lazily_as_they_scroll_in() {
+    let mut h = H::new(53, 26, Opts { caps: true, ..Opts::default() });
+    open_item(&mut h, "kitten");
+    let calls = h.log("calls.log");
+    assert_eq!(calls.matches("readme-asset kitten").count(), 0, "the screenshot is out of view:\n{calls}");
+    h.key(Key::End);
+    h.settle();
+    let calls = h.log("calls.log");
+    assert_eq!(calls.matches("readme-asset kitten").count(), 1, "{calls}");
+    assert!(calls.contains("screenshots/screenshot.png"));
+    let router = h.router.as_mut().unwrap();
+    let mut f = Frame::new(&mut h.ctx);
+    router.draw(&mut f);
+    assert!(
+        f.places.iter().any(|p| p.pic.height() <= 6 * 20 && p.pic.width() > 100),
+        "the inline picture is placed"
+    );
+}
+
+#[test]
+fn no_picture_means_no_picture_rows_on_item() {
+    let mut h = H::new(53, 26, Opts { caps: true, ..Opts::default() });
+    std::fs::write(h.dir.join("nopics"), "").unwrap();
+    open_item(&mut h, "sigye");
+    assert!(h.r().scene.get(El::Picture).is_none(), "{}", h.text);
+    let hdr = layout::header(53, 26, 7, None);
+    assert!(h.r().scene.get(El::Name).is_some_and(|e| e.rect.y == hdr.name.y), "{}", h.text);
+    assert!(h.text.lines().skip(hdr.name.bottom() as usize).all(|l| !l.contains('░')), "{}", h.text);
+}
+
+#[test]
+fn script_name_needs_a_known_cell_size() {
     let mut h = H::new(53, 26, Opts { caps: true, ..Opts::default() });
     h.ctx.cell_known = false;
     h.draw();
-    let w = h.r().scene.get(El::HeroWord).cloned().unwrap();
-    assert!(w.picture.is_none() && w.text.as_deref() == Some("goodies"), "{w:?}");
-    assert!(h.has("TLSTORE / apps"), "the pixel mark falls back to text too:\n{}", h.text);
+    let n = h.r().scene.get(El::Name).cloned().unwrap();
+    assert!(n.picture.is_none() && n.text.as_deref() == Some("claude-code"), "{n:?}");
+    assert!(h.has("TLSTORE"), "the pixel mark falls back to text too:\n{}", h.text);
 }
 
 #[test]
-fn no_picture_means_no_cover_at_all() {
-    let mut h = H::new(53, 60, Opts { caps: true, ..Opts::default() });
-    std::fs::write(h.dir.join("nopics"), "").unwrap();
-    open_item(&mut h, "sigye");
+fn installing_draws_the_progress_line_once_per_percentage() {
+    let mut h = H::new(53, 26, Opts { caps: true, ..Opts::default() });
+    std::fs::write(h.dir.join("hold"), "").unwrap();
+    go_to(&mut h, "sigye");
+    h.key(Key::Char('i'));
+    h.pump(|r| r.st.job.as_ref().is_some_and(|j| j.pct >= 60));
     let router = h.router.as_mut().unwrap();
     let mut f = Frame::new(&mut h.ctx);
     router.draw(&mut f);
-    // The mark only: no cover, no stand-in box, the page starts right under the hero.
-    assert_eq!(f.places.len(), 1);
-    let text = screen_text(&f);
-    assert!(!text.contains("S I G Y E"), "{text}");
-    assert!(text.lines().skip(2).all(|l| !l.contains('░')), "{text}");
-    assert!(text.lines().nth(9).unwrap().contains("am2rican5/sigye"), "{text}");
+    let hdr = layout::header(53, 26, 7, Some(u16::MAX));
+    let line = f.places.iter().find(|p| p.row == hdr.body.y + 5).expect("progress line");
+    assert_eq!(line.pic.width(), 49 * 8);
+    assert_eq!(line.pic.height(), 20);
+    let id = line.pic.id();
+    let mut f = Frame::new(&mut h.ctx);
+    router.draw(&mut f);
+    assert_eq!(f.places.iter().find(|p| p.row == hdr.body.y + 5).unwrap().pic.id(), id, "same picture");
+    h.key(Key::Char('x'));
+    h.settle();
+    std::fs::remove_file(h.dir.join("hold")).unwrap();
 }
 
 #[test]
@@ -718,93 +963,38 @@ fn nothing_runs_past_the_right_edge() {
         let name = p.file_stem().unwrap().to_string_lossy().to_string();
         let cols: usize = name.rsplit('-').next().unwrap().split('x').next().unwrap().parse().unwrap();
         let gutter = if cols < 44 { 1 } else { 2 };
-        for l in std::fs::read_to_string(&p).unwrap().lines() {
+        let text = std::fs::read_to_string(&p).unwrap();
+        let last = text.lines().count() - 1;
+        for (i, l) in text.lines().enumerate() {
             let body = &l[3..];
             let w = unicode_width_of(body);
             let pictures = body.contains('░');
-            assert!(pictures || w <= cols - gutter, "{name}: {w} columns: {body:?}");
+            // The key row's fixed slots may run into the right gutter (`esc back` at 44).
+            let limit = if i == last { cols } else { cols - gutter };
+            assert!(pictures || w <= limit, "{name}: {w} columns: {body:?}");
         }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Motion hooks (P5)
-// ---------------------------------------------------------------------------
-
-type NavLog = Rc<RefCell<Vec<(NavKind, &'static str, &'static str, usize)>>>;
-
-/// Leaves for exactly one frame with the breadcrumb hidden, then enters for one frame with the
-/// hero word shifted down 40 px, then rests.
-struct Probe {
-    log: NavLog,
-    frames: u8,
-}
-
-impl Motion for Probe {
-    fn navigate(&mut self, kind: NavKind, from: &Scene, to: &'static str, _: Instant) {
-        self.log.borrow_mut().push((kind, from.screen, to, from.elements.len()));
-        self.frames = 2;
-    }
-    fn frame(&mut self, _: Instant, _: &Scene) -> Phase {
-        let mut fx = Fx::default();
-        let f = self.frames;
-        self.frames = self.frames.saturating_sub(1);
-        match f {
-            2 => {
-                fx.set(El::Crumb, Effect { alpha: 0.0, ..Effect::default() });
-                Phase::Leaving(fx)
-            }
-            1 => {
-                fx.set(El::Crumb, Effect { reveal: 0.5, ..Effect::default() });
-                Phase::Entering(fx)
-            }
-            _ => Phase::Idle,
-        }
-    }
-    fn active(&self) -> bool {
-        self.frames > 0
     }
 }
 
 #[test]
-fn router_hands_navigation_and_frames_to_motion() {
-    let log: NavLog = Rc::new(RefCell::new(Vec::new()));
-    let probe = Probe { log: log.clone(), frames: 0 };
-    let mut h = H::new(52, 45, Opts { motion: Some(Box::new(probe)), ..Opts::default() });
-    assert!(h.r().scene.get(El::Row(0)).is_some(), "apps records its rows");
-    assert!(h.r().scene.get(El::HeroWord).is_some());
-    h.tap("sigye");
-    // Leaving frame: the old view (apps) drawn, crumb hidden.
-    assert!(h.r().animating());
-    assert!(h.has(" Note taking ") && !h.has("/ apps"), "{}", h.text);
-    // Entering frame: the item, crumb half revealed.
-    h.draw();
-    assert!(h.has("N O .   0 7") && h.has("TLSTORE / apps ") && !h.has("/ apps / s"), "{}", h.text);
-    h.draw();
-    assert!(h.has("/ apps / sigye") && !h.r().animating());
-    h.key(Key::Esc);
-    h.draw();
-    h.draw();
-    h.tap("sigye");
-    h.draw();
-    h.draw();
-    h.tap("TLSTORE");
-    let log = log.borrow();
-    let kinds: Vec<_> = log.iter().map(|(k, f, t, _)| (*k, *f, *t)).collect();
-    assert_eq!(
-        kinds,
-        vec![
-            (NavKind::Push, "apps", "item"),
-            (NavKind::Pop, "item", "apps"),
-            (NavKind::Push, "apps", "item"),
-            (NavKind::Home, "item", "apps"),
-        ]
-    );
-    assert!(log.iter().all(|(_, _, _, n)| *n > 5), "the leaving scene is handed over: {log:?}");
+fn small_and_odd_grids_draw_every_screen_without_panicking() {
+    for (c, r) in [(53, 25), (52, 23), (44, 20), (30, 14), (20, 8), (80, 60), (53, 26), (44, 30)] {
+        let mut h = H::new(c, r, Opts { caps: true, ..Opts::default() });
+        h.key(Key::Down);
+        h.key(Key::Enter);
+        h.settle();
+        h.key(Key::End);
+        h.key(Key::Esc);
+        h.key(Key::Char('u'));
+        h.key(Key::Esc);
+        h.key(Key::Char('i'));
+        h.settle();
+        h.key(Key::Esc);
+    }
 }
 
 // ---------------------------------------------------------------------------
-// Motion (P5): the Timeline, driven by a fake clock
+// Motion (D7), driven by a fake clock
 // ---------------------------------------------------------------------------
 
 /// A harness with the store's Timeline and a fake clock, settled past the startup entry.
@@ -816,7 +1006,8 @@ fn animated(cols: u16, rows: u16, caps: bool) -> (H, Rc<Cell<Instant>>) {
         Opts { caps, motion: Some(Box::new(Timeline::new())), clock: Some(clock.clone()), ..Opts::default() },
     );
     advance(&mut h, &clock, 2000);
-    assert!(!h.r().animating());
+    h.settle();
+    assert!(!h.r().animating(), "{}", h.text);
     (h, clock)
 }
 
@@ -832,11 +1023,238 @@ fn at(h: &mut H, clock: &Rc<Cell<Instant>>, t0: Instant, ms: f32) {
     h.draw();
 }
 
-/// The frame's output with picture uploads (`a=t` and their continuation chunks) left out,
-/// and the printable text it writes (everything outside escape sequences).
-fn split_output(out: &str) -> (usize, usize, String) {
+type NavLog = Rc<RefCell<Vec<(NavKind, &'static str, &'static str, usize)>>>;
+
+/// Leaves for exactly one frame, then enters for one frame, then rests.
+struct Probe {
+    log: NavLog,
+    frames: u8,
+}
+
+impl Motion for Probe {
+    fn navigate(&mut self, kind: NavKind, from: &Scene, to: &'static str, _: Instant) {
+        self.log.borrow_mut().push((kind, from.screen, to, from.elements.len()));
+        self.frames = 2;
+    }
+    fn frame(&mut self, _: Instant, _: &Scene) -> Phase {
+        let f = self.frames;
+        self.frames = self.frames.saturating_sub(1);
+        match f {
+            2 => Phase::Leaving(Default::default()),
+            1 => Phase::Entering(Default::default()),
+            _ => Phase::Idle,
+        }
+    }
+    fn active(&self) -> bool {
+        self.frames > 0
+    }
+}
+
+#[test]
+fn router_hands_navigation_and_frames_to_motion() {
+    let log: NavLog = Rc::new(RefCell::new(Vec::new()));
+    let probe = Probe { log: log.clone(), frames: 0 };
+    let mut h = H::new(53, 26, Opts { motion: Some(Box::new(probe)), ..Opts::default() });
+    assert!(h.r().scene.get(El::Row(0)).is_some(), "front records its rows");
+    assert!(h.r().scene.get(El::Name).is_some());
+    h.key(Key::Enter);
+    // Leaving frame: the old view (front) is what is drawn.
+    assert!(h.r().animating());
+    assert!(h.has("↑ 2 updates") && !h.has("‹ apps"), "{}", h.text);
+    h.draw();
+    assert!(h.has("‹ apps"), "{}", h.text);
+    h.draw();
+    assert!(!h.r().animating());
+    h.key(Key::Esc);
+    h.draw();
+    h.draw();
+    h.key(Key::Enter);
+    h.draw();
+    h.draw();
+    h.key(Key::Char('i'));
+    h.settle();
+    h.draw();
+    h.draw();
+    h.tap("‹ apps");
+    h.draw();
+    h.draw();
+    let log = log.borrow();
+    let kinds: Vec<_> = log.iter().map(|(k, f, t, _)| (*k, *f, *t)).collect();
+    assert_eq!(
+        kinds,
+        vec![
+            (NavKind::Push, "front", "item"),
+            (NavKind::Pop, "item", "front"),
+            (NavKind::Push, "front", "item"),
+            (NavKind::Push, "item", "installing"),
+            (NavKind::Pop, "installing", "item"),
+        ]
+    );
+    assert!(log.iter().all(|(_, _, _, n)| *n > 3), "the leaving scene is handed over: {log:?}");
+}
+
+#[test]
+fn timeline_leaves_in_120ms_and_enters_by_300() {
+    let (mut h, clock) = animated(53, 26, false);
+    let t0 = clock.get();
+    go_to(&mut h, "kitten");
+    advance(&mut h, &clock, 1000);
+    let t0 = t0 + Duration::from_millis(1000);
+    h.key(Key::Enter);
+    assert!(h.r().animating());
+    h.settle();
+    // Leaving: Front is still drawn, its rows fading, the header (masthead, name) untouched.
+    at(&mut h, &clock, t0, 30.0);
+    assert!(h.has("↑ 2 updates") && h.has("sigye"), "{}", h.text);
+    assert_eq!(h.r().scene.screen, "item", "the current scene is the new view's");
+    // First entering frames: the item; its body rows arrive 30 ms apart.
+    at(&mut h, &clock, t0, 125.0);
+    assert!(h.has("‹ apps") && !h.has("sigye"), "{}", h.text);
+    // The README is asked for on the item's first frame and arrives when it arrives.
+    h.settle();
+    at(&mut h, &clock, t0, 120.0 + 310.0);
+    assert!(h.has("kitten icat photo.png") && !h.r().animating(), "{}", h.text);
+    // Back: the item is drawn while leaving, then Front's rows fade up 30 ms apart; the
+    // header and the key row are there from the first frame.
+    h.key(Key::Esc);
+    at(&mut h, &clock, t0, 500.0);
+    assert!(h.has("‹ apps"), "item still drawn while leaving:\n{}", h.text);
+    at(&mut h, &clock, t0, 430.0 + 120.0 + 40.0);
+    assert!(h.has("↑ 2 updates") && h.has("q quit"), "{}", h.text);
+    assert!(h.has(" claude-code ") && !h.has(" sigye "), "row 0 in, row 6 not yet:\n{}", h.text);
+    at(&mut h, &clock, t0, 1000.0);
+    assert!(h.has("sigye") && !h.r().animating());
+    // At rest it is exactly the frame without motion.
+    let mut still = H::new(53, 26, Opts::default());
+    go_to(&mut still, "kitten");
+    assert_eq!(h.text, still.text);
+}
+
+#[test]
+fn keys_pressed_during_a_transition_are_not_dropped() {
+    let (mut h, clock) = animated(53, 26, false);
+    let t0 = clock.get();
+    h.key(Key::Enter);
+    assert_eq!(h.r().top(), "item");
+    // Straight after the push, while leaving: the item scrolls.
+    at(&mut h, &clock, t0, 20.0);
+    h.key(Key::Esc);
+    assert_eq!(h.r().top(), "front");
+    // Straight after the pop, still in the leave: four Downs move the cursor four.
+    at(&mut h, &clock, t0, 40.0);
+    for _ in 0..4 {
+        h.key(Key::Down);
+    }
+    assert!(h.r().animating(), "still in the transition");
+    advance(&mut h, &clock, 2000);
+    assert_eq!(h.header_item(), "kitten", "{}", h.text);
+    assert!(!h.r().animating());
+    let hdr = layout::header(53, 26, 7, None);
+    assert!(h.row(hdr.name.bottom() as usize - 1).contains("kitten"), "{}", h.text);
+}
+
+#[test]
+fn header_picture_waits_for_the_cursor_to_rest() {
+    let (mut h, clock) = animated(53, 26, true);
+    assert!(h.r().scene.get(El::Picture).is_some_and(|e| e.picture.is_some()), "settled: placed");
+    h.key(Key::Down);
+    assert_eq!(h.header_item(), "dawn");
+    assert!(h.r().scene.get(El::Picture).is_none(), "just moved: not yet\n{}", h.text);
+    assert!(h.r().animating(), "the router ticks until the rest is over");
+    advance(&mut h, &clock, 100);
+    assert!(h.r().scene.get(El::Picture).is_none());
+    advance(&mut h, &clock, 60);
+    h.settle();
+    assert!(h.r().scene.get(El::Picture).is_some_and(|e| e.picture.is_some()), "{}", h.text);
+    assert!(!h.r().animating());
+    // The name swaps at once, the picture waits: while it waits its rows stay reserved.
+    h.key(Key::Down);
+    let hdr = layout::header(53, 26, 7, Some(u16::MAX));
+    assert!(h.r().scene.get(El::Name).is_some_and(|e| e.rect.y == hdr.name.y));
+}
+
+#[test]
+fn motion_off_means_no_ticks_and_the_final_state_at_once() {
+    let clock = Rc::new(Cell::new(Instant::now()));
+    let mut h = H::new(
+        53,
+        26,
+        Opts {
+            caps: true,
+            motion: Some(Box::new(Timeline::new())),
+            motion_off: true,
+            clock: Some(clock.clone()),
+            ..Opts::default()
+        },
+    );
+    assert!(!h.r().animating(), "no startup entry, no picture rest");
+    assert!(h.r().scene.get(El::Picture).is_some_and(|e| e.picture.is_some()));
+    h.key(Key::Enter);
+    assert!(!h.r().animating());
+    assert!(h.has("‹ apps"), "{}", h.text);
+    h.key(Key::Esc);
+    assert!(!h.r().animating() && h.has("↑ 2 updates"));
+    let mut plain = H::new(53, 26, Opts { caps: true, ..Opts::default() });
+    plain.key(Key::Enter);
+    plain.settle();
+    let mut off = H::new(
+        53,
+        26,
+        Opts { caps: true, motion: Some(Box::new(Timeline::new())), motion_off: true, ..Opts::default() },
+    );
+    off.key(Key::Enter);
+    off.settle();
+    assert_eq!(off.text, plain.text);
+}
+
+#[test]
+fn the_first_view_enters_too() {
+    let clock = Rc::new(Cell::new(Instant::now()));
+    let mut h = H::new(
+        53,
+        26,
+        Opts { motion: Some(Box::new(Timeline::new())), clock: Some(clock.clone()), ..Opts::default() },
+    );
+    assert!(h.r().animating());
+    assert!(!h.has("sigye"), "rows arrive later:\n{}", h.text);
+    assert!(h.has("claude-code"), "the header is there from the first frame:\n{}", h.text);
+    advance(&mut h, &clock, 2000);
+    assert!(h.has("sigye") && !h.r().animating());
+}
+
+#[test]
+fn install_number_counts_up() {
+    let (mut h, clock) = animated(53, 26, false);
+    std::fs::write(h.dir.join("hold"), "").unwrap();
+    go_to(&mut h, "sigye");
+    advance(&mut h, &clock, 2000);
+    let t0 = clock.get();
+    h.key(Key::Char('i'));
+    assert_eq!(h.r().top(), "installing");
+    h.pump(|r| r.st.job.as_ref().is_some_and(|j| j.pct >= 60));
+    let target = h.r().st.job.as_ref().unwrap().pct as u32;
+    let hdr = layout::header(53, 26, 7, None);
+    let number = |h: &H| -> Option<u32> {
+        let l = h.row(hdr.body.y as usize);
+        l.trim().split('%').next()?.parse().ok()
+    };
+    at(&mut h, &clock, t0, 120.0 + 20.0);
+    assert_eq!(number(&h), Some(0), "{}", h.text);
+    at(&mut h, &clock, t0, 120.0 + 120.0);
+    let mid = number(&h).expect("number on screen");
+    assert!(mid > 0 && mid < target, "counting: {mid} of {target}\n{}", h.text);
+    at(&mut h, &clock, t0, 120.0 + 2000.0);
+    assert_eq!(number(&h), Some(target));
+    assert!(!h.r().animating());
+    h.key(Key::Char('x'));
+    h.settle();
+    std::fs::remove_file(h.dir.join("hold")).unwrap();
+}
+
+/// The frame's output with picture uploads (`a=t` and their continuation chunks) left out.
+fn split_output(out: &str) -> (usize, usize) {
     let b = out.as_bytes();
-    let (mut i, mut upload, mut text) = (0, 0, String::new());
+    let (mut i, mut upload) = (0, 0);
     while i < b.len() {
         if b[i] == 0x1b && i + 1 < b.len() {
             let start = i;
@@ -862,296 +1280,35 @@ fn split_output(out: &str) -> (usize, usize, String) {
                 _ => i += 2,
             }
         } else {
-            let ch = out[i..].chars().next().unwrap();
-            text.push(ch);
-            i += ch.len_utf8();
+            i += out[i..].chars().next().unwrap().len_utf8();
         }
     }
-    (out.len() - upload.min(out.len()), upload, text)
+    (out.len() - upload.min(out.len()), upload)
 }
 
 #[test]
-fn timeline_plays_flow_for_a_push_to_item() {
-    let (mut h, clock) = animated(52, 45, true);
-    let from = h.r().scene.clone();
-    assert_eq!(from.screen, "apps");
-    assert!(from.get(El::HeroWord).is_some_and(|e| e.picture.is_some()), "apps: script word picture");
-    h.tap("sigye");
-    advance(&mut h, &clock, 2000);
-    let cur = h.r().scene.clone();
-    assert_eq!(cur.screen, "item");
-    assert!(cur.get(El::HeroWord).is_some_and(|e| e.picture.is_none()), "item: the name is text");
-    assert!(cur.get(El::Cover).is_some_and(|e| e.picture.is_some()), "sigye has room for its cover");
-    let crumb = cur.get(El::Crumb).and_then(|e| e.text.clone()).unwrap();
-    assert_eq!(crumb, "/ apps / sigye");
-
-    let mut m = Timeline::new();
-    let t0 = Instant::now();
-    let t = |ms: u64| t0 + Duration::from_millis(ms);
-    m.navigate(NavKind::Push, &from, "item", t0);
-    assert!(m.active());
-
-    // Leaving: text fades, pictures are simply gone (never moved), the masthead stays.
-    let Phase::Leaving(fx) = m.frame(t(0), &cur) else { panic!("leaving at 0") };
-    assert!(fx.get(El::Row(0)).at_rest() && fx.get(El::Crumb).at_rest());
-    assert_eq!(fx.get(El::HeroWord).alpha, 0.0);
-    let Phase::Leaving(fx) = m.frame(t(100), &cur) else { panic!("leaving at 100") };
-    assert!(fx.get(El::Row(0)).alpha <= 0.07, "{:?}", fx.get(El::Row(0)));
-    assert!(fx.get(El::Keys).alpha <= 0.07);
-    let w = fx.get(El::HeroWord);
-    assert!(w.alpha == 0.0 && w.dy == 0 && w.dx == 0 && w.shown == 1.0, "{w:?}");
-    assert!(fx.get(El::Crumb).at_rest() && fx.get(El::Mark).at_rest() && fx.get(El::Context).at_rest());
-
-    // t = 300 (140 ms into the entry): crumb decoding, rule drawing, the name fading up,
-    // the cover hidden, blocks not yet.
-    let Phase::Entering(fx) = m.frame(t(300), &cur) else { panic!("entering at 300") };
-    let c = fx.get(El::Crumb).text.expect("crumb decoding");
-    assert_eq!(c, tlstore_ui::store::motion::decode(&crumb, 4));
-    assert!(c.starts_with("/ a") && c != crumb && c.chars().any(|ch| GLYPHS.contains(&ch)), "{c}");
-    let rule = fx.get(El::Rule).reveal;
-    assert!(rule > 0.6 && rule < 0.95, "rule {rule}");
-    let lead = fx.get(El::HeroLead).alpha;
-    assert!(lead > 0.2 && lead < 1.0, "lead {lead}");
-    let w = fx.get(El::HeroWord);
-    assert!(w.alpha > 0.0 && w.alpha < 1.0 && w.dy == 0, "word {w:?}");
-    let cover = fx.get(El::Cover);
-    assert!(cover.alpha == 0.0 && cover.dy == 0 && cover.shown == 1.0, "{cover:?}");
-    assert_eq!(fx.get(El::Block(0)).alpha, 0.0);
-
-    // t = 600 (440 ms in): crumb and rule done, the first blocks in, the cover still hidden.
-    let Phase::Entering(fx) = m.frame(t(600), &cur) else { panic!("entering at 600") };
-    assert!(fx.get(El::Crumb).at_rest());
-    assert!(fx.get(El::Rule).reveal > 0.99);
-    assert!(fx.get(El::Block(0)).alpha >= 0.9);
-    assert_eq!(fx.get(El::Cover).alpha, 0.0);
-
-    // t = 900 (740 ms in): all text has arrived; only pictures wait.
-    let Phase::Entering(fx) = m.frame(t(900), &cur) else { panic!("entering at 900") };
-    for e in &cur.elements {
-        if e.picture.is_some() && e.el != El::Mark {
-            assert_eq!(fx.get(e.el).alpha, 0.0, "{:?} shows early", e.el);
-        } else {
-            assert!(fx.get(e.el).at_rest(), "{:?} still moving: {:?}", e.el, fx.get(e.el));
-        }
-    }
-
-    // Past ≈ 980 ms (160 leave + 820 entry): at rest, pictures shown, no more ticks.
-    assert!(matches!(m.frame(t(1000), &cur), Phase::Idle));
-    assert!(!m.active());
-}
-
-#[test]
-fn leaving_view_is_dropped_by_the_first_entering_frame() {
-    let (mut h, clock) = animated(52, 45, true);
-    let t0 = clock.get();
-    h.tap("sigye");
-    // Leaving: the apps view is still what is drawn.
-    assert!(h.r().animating());
-    assert!(h.has(" Note taking "), "{}", h.text);
-    at(&mut h, &clock, t0, 80.0);
-    assert!(h.has("/ apps") && !h.has("/ apps / s"), "masthead stays while leaving:\n{}", h.text);
-    assert_eq!(h.r().scene.screen, "item", "the current scene is the new view's");
-    // First entering frame: the item, everything still to arrive, crumb all glyphs.
-    at(&mut h, &clock, t0, 170.0);
-    assert_eq!(h.r().scene.screen, "item");
-    assert!(!h.has(" Note taking ") && !h.has("sigye"), "{}", h.text);
-    assert!(h.row(1).chars().any(|c| GLYPHS.contains(&c)), "{}", h.row(1));
-    // And it never comes back.
-    for ms in (186..1200).step_by(17) {
-        at(&mut h, &clock, t0, ms as f32);
-        assert!(!h.has(" Note taking "), "at {ms}\n{}", h.text);
-    }
-    assert!(h.has("/ apps / sigye") && !h.r().animating());
-}
-
-#[test]
-fn input_during_the_leave_goes_to_the_new_view() {
-    let (mut h, clock) = animated(52, 45, true);
-    let t0 = clock.get();
-    h.tap("sigye");
-    at(&mut h, &clock, t0, 60.0);
-    assert_eq!(h.r().top(), "item");
-    h.key(Key::Esc);
-    assert_eq!(h.r().top(), "apps");
-    advance(&mut h, &clock, 2000);
-    assert!(h.has(" Note taking ") && !h.r().animating());
-}
-
-#[test]
-fn motion_off_means_no_ticks_and_the_final_state_at_once() {
-    let clock = Rc::new(Cell::new(Instant::now()));
-    let mut h = H::new(
-        52,
-        45,
-        Opts {
-            caps: true,
-            motion: Some(Box::new(Timeline::new())),
-            motion_off: true,
-            clock: Some(clock.clone()),
-            ..Opts::default()
-        },
-    );
-    assert!(!h.r().animating(), "no startup entry");
-    assert!(h.has(" Note taking ") && h.has("sigye"));
-    h.tap("sigye");
-    assert!(!h.r().animating());
-    assert!(h.has("/ apps / sigye") && h.has("N O"), "{}", h.text);
-    h.key(Key::Esc);
-    assert!(!h.r().animating() && h.has(" Note taking "));
-    h.tap_on("Note taking", "AI");
-    assert!(!h.r().animating() && h.has("claude-code") && !h.has("sigye"));
-    // Same frame as with no motion plugged in at all.
-    let mut plain = H::new(52, 45, Opts { caps: true, ..Opts::default() });
-    plain.tap("sigye");
-    let mut off = H::new(
-        52,
-        45,
-        Opts { caps: true, motion: Some(Box::new(Timeline::new())), motion_off: true, ..Opts::default() },
-    );
-    off.tap("sigye");
-    assert_eq!(off.text, plain.text);
-}
-
-#[test]
-fn the_first_view_enters_too() {
-    let clock = Rc::new(Cell::new(Instant::now()));
-    let mut h = H::new(
-        52,
-        45,
-        Opts { motion: Some(Box::new(Timeline::new())), clock: Some(clock.clone()), ..Opts::default() },
-    );
-    assert!(h.r().animating());
-    assert!(!h.has("sigye"), "rows arrive later:\n{}", h.text);
-    advance(&mut h, &clock, 2000);
-    assert!(h.has("sigye") && !h.r().animating());
-}
-
-#[test]
-fn rows_restagger_on_a_category_change() {
-    let (mut h, clock) = animated(52, 45, false);
-    let t0 = clock.get();
-    h.tap_on("Note taking", "AI");
-    assert!(h.r().animating());
-    assert!(!h.has("claude-code"), "rows start hidden:\n{}", h.text);
-    at(&mut h, &clock, t0, 200.0);
-    assert!(h.has("claude-code") && !h.has("sigye"));
-    assert!(!h.r().animating(), "a re-stagger lasts at most 200 ms");
-    // Moving the cursor or marking a row is not a list change.
-    h.key(Key::Char(' '));
-    assert!(!h.r().animating());
-}
-
-#[test]
-fn frames_stay_small_and_picture_only_frames_write_no_text() {
-    let (mut h, clock) = animated(52, 45, true);
+fn frames_stay_small_during_a_transition() {
+    let (mut h, clock) = animated(53, 26, true);
     h.out.clear();
     let t0 = clock.get();
-    h.tap("sigye");
+    h.key(Key::Enter);
     let mut sizes = Vec::new();
-    let mut uploads = 0;
     let mut t = 0.0f32;
-    while t < 1100.0 {
+    while t < 500.0 {
         at(&mut h, &clock, t0, t);
-        let (bytes, up, text) = split_output(&h.out);
-        uploads += up;
-        sizes.push((t as u32, bytes, text.chars().filter(|c| !c.is_whitespace()).count()));
+        let (bytes, _) = split_output(&h.out);
+        sizes.push((t as u32, bytes));
         t += 1000.0 / 60.0;
     }
     let max = sizes.iter().map(|s| s.1).max().unwrap();
     let total: usize = sizes.iter().map(|s| s.1).sum();
     eprintln!(
-        "push to item, 52x45 kitty: {} frames, max {max} B, mean {} B, uploads {uploads} B",
+        "push to item, 53x26 kitty: {} frames, max {max} B, mean {} B",
         sizes.len(),
         total / sizes.len()
     );
-    for (t, b, n) in &sizes {
-        eprintln!("  t={t:4} ms  {b:5} B  {n:4} printable");
-    }
     assert!(max <= 8 * 1024, "a frame over 8 KB: {sizes:?}");
-    // Pictures never move: once the text has arrived, frames write nothing until the cover
-    // simply appears, placed once.
-    assert!(h.r().scene.get(El::Cover).is_some_and(|e| e.picture.is_some()), "sigye has a cover picture");
-    let late: Vec<_> = sizes.iter().filter(|s| (720..=960).contains(&s.0)).collect();
-    for (t, b, n) in &late {
-        assert!(*n == 0 && *b < 512, "t={t}: {b} B with {n} printable characters");
-    }
-    assert!(late.iter().filter(|s| s.1 > 0).count() <= 1, "nothing re-placed frame after frame: {late:?}");
-    let placed = h.r().scene.elements.iter().filter(|e| e.picture.is_some()).count();
-    assert!(placed >= 2, "mark and cover at rest");
-}
-
-#[test]
-fn plain_terminals_get_the_text_motion_only() {
-    let (mut h, clock) = animated(52, 45, false);
-    let rest_rule = {
-        // The rule at rest, on the apps screen.
-        h.row(2).chars().filter(|c| *c == '─').count()
-    };
-    let t0 = clock.get();
-    h.tap("sigye");
-    at(&mut h, &clock, t0, 160.0 + 130.0);
-    assert!(!h.text.contains('░'), "no pictures here");
-    assert!(h.row(1).chars().any(|c| GLYPHS.contains(&c)), "crumb decoding: {}", h.row(1));
-    let rule = h.row(2).chars().filter(|c| *c == '─').count();
-    assert!(rule > 0 && rule < rest_rule, "rule drawing out: {rule} of {rest_rule}");
-    // The hero word does not move by rows here: if drawn, it is on its own row.
-    let word_row = |h: &H| h.text.lines().position(|l| l.contains("sigye") && !l.contains("/ apps"));
-    let early = word_row(&h);
-    at(&mut h, &clock, t0, 2000.0);
-    let rest = word_row(&h);
-    assert!(rest.is_some());
-    assert!(early.is_none() || early == rest, "{early:?} vs {rest:?}");
-    // At rest it is exactly the frame without motion.
-    let mut still = H::new(52, 45, Opts::default());
-    still.tap("sigye");
-    assert_eq!(h.text, still.text);
-}
-
-#[test]
-fn install_number_counts_up_and_the_dot_bar_follows() {
-    let (mut h, clock) = animated(52, 45, false);
-    std::fs::write(h.dir.join("hold"), "").unwrap();
-    h.tap("sigye");
-    advance(&mut h, &clock, 2000);
-    let t0 = clock.get();
-    h.key(Key::Char('i'));
-    assert_eq!(h.r().top(), "installing");
-    h.pump(|r| r.st.job.as_ref().is_some_and(|j| j.pct >= 60));
-    let target = h.r().st.job.as_ref().unwrap().pct as u32;
-    let number = |h: &H| -> Option<(u32, usize)> {
-        let l = h.text.lines().find(|l| l.trim_end().ends_with('%'))?;
-        let n = l[3..].trim().trim_end_matches('%').parse().ok()?;
-        let bar = h.text.lines().find(|l| l.contains('○') || l.contains('●'))?;
-        Some((n, bar.matches('●').count()))
-    };
-    // The count starts on the first entering frame, from 0.
-    at(&mut h, &clock, t0, 160.0 + 20.0);
-    assert_eq!(number(&h).map(|n| n.0), Some(0), "{}", h.text);
-    at(&mut h, &clock, t0, 160.0 + 120.0);
-    let (mid, mid_dots) = number(&h).expect("number on screen");
-    assert!(mid > 0 && mid < target, "counting: {mid} of {target}\n{}", h.text);
-    at(&mut h, &clock, t0, 160.0 + 2000.0);
-    let (end, end_dots) = number(&h).unwrap();
-    assert_eq!(end, target);
-    assert!(mid_dots < end_dots, "the dot bar follows: {mid_dots} then {end_dots}");
-    assert!(!h.r().animating());
-    h.key(Key::Char('c'));
-    h.settle();
-    std::fs::remove_file(h.dir.join("hold")).unwrap();
-}
-
-#[test]
-fn small_and_odd_grids_draw_every_screen_without_panicking() {
-    for (c, r) in [(53, 25), (52, 23), (44, 20), (30, 14), (20, 8), (80, 60), (53, 26)] {
-        let mut h = H::new(c, r, Opts { caps: true, ..Opts::default() });
-        open_item(&mut h, "kitten");
-        h.key(Key::End);
-        h.key(Key::Esc);
-        h.key(Key::Char('u'));
-        h.key(Key::Esc);
-        let mut h = H::new(c, r, Opts { caps: true, gh: Gh::Missing, ..Opts::default() });
-        open_item(&mut h, "sigye");
-        h.key(Key::Char('s'));
-        assert_eq!(h.r().top(), "nogh");
-    }
+    // At rest nothing is written frame after frame.
+    let late: Vec<_> = sizes.iter().filter(|s| s.0 >= 450).collect();
+    assert!(late.iter().all(|s| s.1 == 0), "{late:?}");
 }

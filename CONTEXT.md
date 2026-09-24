@@ -80,8 +80,27 @@ else's program. A setup has no upstream and is never starred, nor are the progra
 _Avoid_: dotfiles, config, bundle (the catalog kind that happens to hold it)
 
 **Featured item**:
-The one item the home screen shows large, chosen by hand in the catalog.
+The one item, chosen by hand in the catalog, that the Front page starts on and marks `new` until
+it is installed.
 _Avoid_: hero, spotlight
+
+**Front**:
+The store's first screen: the header of the item under the cursor over the list of every item.
+_Avoid_: home, apps page, cover
+
+**Header**:
+The top of every store screen, at the same rows on each: the item's picture, its name in the
+script face, its standfirst and its facts strip. On Front it follows the cursor; opening an item
+keeps it still.
+_Avoid_: hero, masthead (the single top row with the mark and the repo link)
+
+**Standfirst**:
+The one line we write about an item: what it is for, in plain words, under its name.
+_Avoid_: tagline, summary (the catalog's `summary` column is the old one-line description)
+
+**Facts strip**:
+The dim line under the standfirst: state and version, licence, author, size, `starred`.
+_Avoid_: metadata, facts table
 
 
 ### Local AI

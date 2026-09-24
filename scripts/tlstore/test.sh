@@ -40,6 +40,10 @@
 #                            never actually execs one; it points this at a
 #                            fake executable to prove the routing decision, and
 #                            at a name that is not there for the fallback.
+#   TLSTORE_GITHUB         — where GitHub is: the suite points it at a file://
+#                            tree laid out <host>/<path>, so `tlstore readme`
+#                            and `readme-asset` fetch real files through real
+#                            curl and never reach the network.
 # The catalog signature tests need minisign. Without it they are skipped, and
 # the suite says so instead of passing quietly.
 
@@ -83,12 +87,13 @@ sha512_b64() {
 }
 
 # The Revision 5 columns (category upstream setup standfirst does1..3 try
-# notes author licence size picture picture-digest demo featured), appended
-# after summary. Every fixture row carries one of these two so the catalog
-# stays 26 columns wide; R5_HELLO gives "hello" a category and makes it the
-# featured item, so list/search/info --tsv have something real to read back.
-R5_NONE="-	-	0	-	-	-	-	-	-	-	-	-	-	-	-	0"
-R5_HELLO="Tools	-	0	a greeting from the item list	Shows a greeting	Keeps it plain text	Does nothing else	hello	one note|another note	Test Author	MIT	~1 KB	file://example/hello.jpg	deadbeef	-	1"
+# notes author licence size picture picture-digest demo featured) and the
+# Revision 6 one (readme-skip), appended after summary. Every fixture row
+# carries one of these two so the catalog stays 27 columns wide; R5_HELLO gives
+# "hello" a category, makes it the featured item and names two README sections
+# to skip, so list/search/info --tsv have something real to read back.
+R5_NONE="-	-	0	-	-	-	-	-	-	-	-	-	-	-	-	0	-"
+R5_HELLO="Tools	-	0	a greeting from the item list	Shows a greeting	Keeps it plain text	Does nothing else	hello	one note|another note	Test Author	MIT	~1 KB	file://example/hello.jpg	deadbeef	-	1	Portability|Star history"
 
 # write_catalog <file> <serial> <version> <fakebin payload> — the version is the
 # one hello and fakebin carry, so a newer catalog moves a config item on too.
@@ -96,7 +101,7 @@ write_catalog() {
     local out="$1" serial="$2" fbver="$3" fbfile="$4"
     {
         printf '# tlstore catalog\tserial=%s\n' "$serial"
-        printf '# name\tkind\tversion\tprefixes\tsource\tdigest\ttarget\trequires\toptions\tsummary\tcategory\tupstream\tsetup\tstandfirst\tdoes1\tdoes2\tdoes3\ttry\tnotes\tauthor\tlicence\tsize\tpicture\tpicture-digest\tdemo\tfeatured\n'
+        printf '# name\tkind\tversion\tprefixes\tsource\tdigest\ttarget\trequires\toptions\tsummary\tcategory\tupstream\tsetup\tstandfirst\tdoes1\tdoes2\tdoes3\ttry\tnotes\tauthor\tlicence\tsize\tpicture\tpicture-digest\tdemo\tfeatured\treadme-skip\n'
         printf 'hello\tfile\t%s\t*\tfile://%s/hello.conf\t%s\t~/.config/hello.conf\t-\t-\tA greeting you can read.\t%s\n' "$fbver" "$FX" "$(sha "$FX/hello.conf")" "$R5_HELLO"
         printf 'mine\tfile-once\t1\t*\tfile://%s/mine.conf\t%s\t~/.config/mine.conf\t-\t-\tYours to edit, installed once.\t%s\n' "$FX" "$(sha "$FX/mine.conf")" "$R5_NONE"
         printf 'fakebin\tbinary\t%s\t*\tfile://%s/%s\t%s\t-\t-\t-\tA small tool for the terminal.\t%s\n' "$fbver" "$FX" "$fbfile" "$(sha "$FX/$fbfile")" "$R5_NONE"
@@ -119,18 +124,31 @@ write_catalog() {
         # something genuine to verify and cache. Digests are computed here,
         # not folded into R5_HELLO/R5_NONE, since they depend on the fixture
         # files this function's caller already made.
-        printf 'pictured\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/pictured.conf\t-\t-\tHas a real picture and demo, for the picture command tests.\tTools\t-\t0\tan item with a picture\tShows a picture\tKeeps it simple\tHas a demo too\tpictured\t-\tTest Author\tMIT\t~1 KB\tfile://%s/pictured.jpg\t%s\tfile://%s/pictured-demo.jpg\t0\n' \
+        printf 'pictured\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/pictured.conf\t-\t-\tHas a real picture and demo, for the picture command tests.\tTools\t-\t0\tan item with a picture\tShows a picture\tKeeps it simple\tHas a demo too\tpictured\t-\tTest Author\tMIT\t~1 KB\tfile://%s/pictured.jpg\t%s\tfile://%s/pictured-demo.jpg\t0\t-\n' \
             "$FX" "$(sha "$FX/hello.conf")" "$FX" "$(sha "$FX/pictured.jpg")" "$FX"
         # Same picture file, but the catalog's own digest for it is wrong —
         # `tlstore picture` must refuse it the way any other digest mismatch is.
-        printf 'badpic\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/badpic.conf\t-\t-\tHas a picture whose digest never matches, on purpose.\tTools\t-\t0\t-\t-\t-\t-\t-\t-\tTest Author\tMIT\t-\tfile://%s/pictured.jpg\t0000000000000000000000000000000000000000000000000000000000000000\t-\t0\n' \
+        printf 'badpic\tfile\t1\t*\tfile://%s/hello.conf\t%s\t~/.config/badpic.conf\t-\t-\tHas a picture whose digest never matches, on purpose.\tTools\t-\t0\t-\t-\t-\t-\t-\t-\tTest Author\tMIT\t-\tfile://%s/pictured.jpg\t0000000000000000000000000000000000000000000000000000000000000000\t-\t0\t-\n' \
             "$FX" "$(sha "$FX/hello.conf")" "$FX"
         # A binary whose source is a FIFO: curl blocks reading it until this
         # test writes to the other end, so a --progress install can be
         # cancelled reliably while it is still in flight.
         printf 'slow\tbinary\t1\t*\tfile://%s/slow.pipe\t-\t-\t-\t-\tA slow item, so a --progress cancel can land mid-download.\t%s\n' "$FX" "$R5_NONE"
+        # Items with an upstream, one per way `tlstore readme` picks the
+        # revision to read: a +<hash> version, an x.y.z version whose tag is
+        # there, one whose tag is not, a rolling version, and one whose
+        # upstream has nothing at all (the offline case).
+        printf 'pinned\tfile\t1.0.0+abc1234.5\t*\tfile://%s/hello.conf\t%s\t~/.config/pinned.conf\t-\t-\tRead at the commit in its version.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/pinned)"
+        printf 'tagged\tfile\t2.3.4\t*\tfile://%s/hello.conf\t%s\t~/.config/tagged.conf\t-\t-\tRead at its v tag.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/tagged)"
+        printf 'untagged\tfile\t3.0.0\t*\tfile://%s/hello.conf\t%s\t~/.config/untagged.conf\t-\t-\tHas no v tag, so HEAD it is.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/untagged)"
+        printf 'rolling\tfile\tlatest\t*\tfile://%s/hello.conf\t%s\t~/.config/rolling.conf\t-\t-\tNo version to speak of.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/rolling)"
+        printf 'nowhere\tfile\t1.0.0\t*\tfile://%s/hello.conf\t%s\t~/.config/nowhere.conf\t-\t-\tIts upstream cannot be reached.\t%s\n' "$FX" "$(sha "$FX/hello.conf")" "$(r6_upstream demo/nowhere)"
     } > "$out"
 }
+
+# The same shape with an upstream, for the readme tests: <version> and
+# <upstream> are the two things `tlstore readme` reads.
+r6_upstream() { printf 'Tools\t%s\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t0\t-' "$1"; }
 
 build_fixture() {
     ROOT="$(mktemp -d)"
@@ -155,6 +173,25 @@ build_fixture() {
     printf 'a demo worth caching\n' > "$FX/pictured-demo.jpg"
     rm -f "$FX/slow.pipe"
     mkfifo "$FX/slow.pipe"
+
+    # GitHub, as a directory: <host>/<path> under $FX/gh, which TLSTORE_GITHUB
+    # points tlstore at. One README per revision the readme tests expect to be
+    # read, pictures beside two of them, and one picture over the 5 MB cap.
+    GH="$FX/gh"
+    RAWGH="$GH/raw.githubusercontent.com"
+    mkdir -p "$RAWGH/demo/pinned/abc1234" "$RAWGH/demo/tagged/v2.3.4/docs" \
+        "$RAWGH/demo/untagged/HEAD/docs" "$RAWGH/demo/rolling/HEAD" \
+        "$GH/user-images.githubusercontent.com/123" "$GH/demo.github.io" "$GH/github.com/demo/tagged/raw/HEAD"
+    printf '# pinned\n\nread at abc1234\n' > "$RAWGH/demo/pinned/abc1234/README.md"
+    printf '# tagged\n\nread at v2.3.4\n\n![shot](docs/shot.png)\n' > "$RAWGH/demo/tagged/v2.3.4/README.md"
+    printf '# untagged\n\nread at HEAD\n' > "$RAWGH/demo/untagged/HEAD/README.md"
+    printf '# rolling\n\nread at HEAD\n' > "$RAWGH/demo/rolling/HEAD/README.md"
+    printf 'the tagged shot\n' > "$RAWGH/demo/tagged/v2.3.4/docs/shot.png"
+    printf 'the untagged shot\n' > "$RAWGH/demo/untagged/HEAD/docs/shot.png"
+    truncate -s 5242881 "$RAWGH/demo/tagged/v2.3.4/big.png"
+    printf 'a user image\n' > "$GH/user-images.githubusercontent.com/123/abc.png"
+    printf 'a pages picture\n' > "$GH/demo.github.io/pic.png"
+    printf 'a github.com raw picture\n' > "$GH/github.com/demo/tagged/raw/HEAD/x.png"
 
     # Fake package managers: they record what they were asked for. Both names
     # are needed — tlstore prefers pacman, and a host may have a real one.
@@ -257,6 +294,7 @@ tl() {
             TLSTORE_HOST="${HOST_KNOB:-}" \
             TLSTORE_UI="${UI_KNOB:-}" \
             TLSTORE_RAW_BASE="${RAWBASE_KNOB:-}" \
+            TLSTORE_GITHUB="file://$FX/gh" \
             TERM_PROGRAM="${TP_KNOB:-}" \
             TERM_PROGRAM_VERSION="${TPV_KNOB:-}" \
             "${SHCMD[@]}" "$TLSTORE" "$@" 2>&1)"
@@ -272,6 +310,7 @@ tl() {
             TLSTORE_HOST="${HOST_KNOB:-}" \
             TLSTORE_UI="${UI_KNOB:-}" \
             TLSTORE_RAW_BASE="${RAWBASE_KNOB:-}" \
+            TLSTORE_GITHUB="file://$FX/gh" \
             TERM_PROGRAM="${TP_KNOB:-}" \
             TERM_PROGRAM_VERSION="${TPV_KNOB:-}" \
             "${SHCMD[@]}" "$TLSTORE" "$@" < /dev/null 2>&1)"
@@ -302,6 +341,7 @@ tl_stdout() {
         TLSTORE_HOST="${HOST_KNOB:-}" \
         TLSTORE_UI="${UI_KNOB:-}" \
         TLSTORE_RAW_BASE="${RAWBASE_KNOB:-}" \
+        TLSTORE_GITHUB="file://$FX/gh" \
         TERM_PROGRAM="${TP_KNOB:-}" \
         TERM_PROGRAM_VERSION="${TPV_KNOB:-}" \
         "${SHCMD[@]}" "$TLSTORE" "$@" < /dev/null 2>/dev/null)"
@@ -760,9 +800,11 @@ y
     expect_out "info --tsv names the picture" $'^Picture\tfile://example/hello.jpg$'
     expect_out "info --tsv names the picture digest alongside it" $'^Picture-digest\tdeadbeef$'
     expect_out "info --tsv always names featured, 0 being an answer" $'^Featured\t1$'
+    expect_out "info --tsv names the readme sections to skip, pipe-separated" $'^Readme-skip\tPortability|Star history$'
     tl info --tsv twin
     expect_no_out "an item with no picture prints no Picture line" $'^Picture\t'
     expect_out "and featured still prints as 0" $'^Featured\t0$'
+    expect_no_out "and nothing to skip prints no Readme-skip line" $'^Readme-skip\t'
     tl info --tsv claude-code
     expect_out "info --tsv names the build tools" $'^Builds with\tdemo-build$'
     tl info --tsv
@@ -815,6 +857,123 @@ y
     expect_no_out "and prints nothing on stdout" "."
     expect_no_file "and nothing was cached for it either" \
         "$TESTHOME/.cache/tlstore/pictures/0000000000000000000000000000000000000000000000000000000000000000.jpg"
+
+    # --- tlstore readme: the upstream README, cached a day, for the item page ---
+    RM_CACHE="$TESTHOME/.cache/tlstore/readme"
+    rm -rf "$TESTHOME/.cache/tlstore"
+
+    tl_stdout readme pinned
+    expect_status "readme prints a path and exits 0" 0
+    expect_out "the cache path carries the name and version" "^$RM_CACHE/pinned-1.0.0+abc1234.5.md\$"
+    expect_content "a +<hash> version is read at that commit" "$OUT" $'# pinned\n\nread at abc1234'
+
+    tl_stdout readme tagged
+    expect_status "an x.y.z version reads its v tag" 0
+    expect_content "and gets the tag's README" "$OUT" $'# tagged\n\nread at v2.3.4\n\n![shot](docs/shot.png)'
+
+    tl_stdout readme untagged
+    expect_status "an x.y.z version whose tag is not there still succeeds" 0
+    expect_content "by falling back to HEAD" "$OUT" $'# untagged\n\nread at HEAD'
+
+    tl_stdout readme rolling
+    expect_status "any other version reads HEAD" 0
+    expect_content "and gets HEAD's README" "$OUT" $'# rolling\n\nread at HEAD'
+
+    # A second call within the day never looks upstream: take GitHub away.
+    mv "$FX/gh" "$FX/gh.away"
+    tl_stdout readme pinned
+    expect_status "a second call is served from the cache, offline" 0
+    expect_out "with the same path" "^$RM_CACHE/pinned-1.0.0+abc1234.5.md\$"
+    # A day-old copy is refreshed — and kept when the refresh cannot happen.
+    touch -t 200001010000 "$RM_CACHE/pinned-1.0.0+abc1234.5.md"
+    tl_stdout readme pinned
+    expect_status "a stale copy still answers when GitHub cannot be reached" 0
+    expect_content "with what it had" "$OUT" $'# pinned\n\nread at abc1234'
+    mv "$FX/gh.away" "$FX/gh"
+    printf '# pinned\n\nread again at abc1234\n' > "$RAWGH/demo/pinned/abc1234/README.md"
+    tl_stdout readme pinned
+    expect_status "a stale copy is fetched again once GitHub is back" 0
+    expect_content "and the new README replaces it" "$OUT" $'# pinned\n\nread again at abc1234'
+    if [ -z "$(find "$RM_CACHE/pinned-1.0.0+abc1234.5.md" -mtime +0)" ]; then pass; else fail "the refreshed copy counts as fresh again"; fi
+
+    tl readme kit
+    expect_status "an item with no upstream exits 2" 2
+    expect_out "and says so on stderr" "kit has no readme"
+    tl_stdout readme kit
+    expect_no_out "and prints nothing on stdout" "."
+
+    tl readme nowhere
+    expect_status "nothing fetched and nothing cached exits 1" 1
+    expect_out "with one line on stderr" "could not fetch the readme for nowhere"
+    if [ "$(printf '%s\n' "$OUT" | wc -l | tr -d ' ')" = 1 ]; then pass; else fail "exactly one line" "$OUT"; fi
+    tl_stdout readme nowhere
+    expect_no_out "and prints nothing on stdout" "."
+    expect_no_file "and nothing was cached for it" "$RM_CACHE/nowhere-1.0.0.md"
+
+    tl readme
+    expect_status "readme needs a name" 2
+    tl readme no-such-item
+    expect_status "readme on an unknown item fails" 1
+
+    # --- tlstore readme-asset: a README's pictures, from GitHub only ---
+    tl_stdout readme-asset tagged docs/shot.png
+    expect_status "a relative picture resolves against the README's revision" 0
+    expect_out "into the item's own cache directory" "^$RM_CACHE/tagged/[0-9a-f]*\.png\$"
+    expect_content "and is the tag's copy of it" "$OUT" "the tagged shot"
+    tl_stdout readme-asset untagged ./docs/shot.png
+    expect_status "a relative picture follows the fallback to HEAD" 0
+    expect_content "and is HEAD's copy of it" "$OUT" "the untagged shot"
+
+    tl_stdout readme-asset tagged https://user-images.githubusercontent.com/123/abc.png
+    expect_status "an https picture on user-images.githubusercontent.com is fetched" 0
+    expect_content "and cached" "$OUT" "a user image"
+    tl_stdout readme-asset tagged https://demo.github.io/pic.png
+    expect_status "an https picture on github.io is fetched" 0
+    expect_content "and cached too" "$OUT" "a pages picture"
+    tl_stdout readme-asset tagged https://github.com/demo/tagged/raw/HEAD/x.png
+    expect_status "an https picture on github.com is fetched" 0
+    expect_content "and cached as well" "$OUT" "a github.com raw picture"
+    RA_ABS="$OUT"
+
+    tl readme-asset tagged https://example.com/x.png
+    expect_status "a picture anywhere else exits 1" 1
+    expect_out "and says it was left alone" "is not on GitHub"
+    tl readme-asset tagged http://raw.githubusercontent.com/demo/tagged/v2.3.4/docs/shot.png
+    expect_status "plain http exits 1, even on a GitHub host" 1
+    tl readme-asset tagged https://github.com.example.com/x.png
+    expect_status "a host that only starts like GitHub exits 1" 1
+    tl readme-asset tagged https://evil.example/github.com/x.png
+    expect_status "GitHub in the path is not GitHub as the host" 1
+    tl readme-asset tagged "data:image/png;base64,AAAA"
+    expect_status "a data address exits 1" 1
+    tl_stdout readme-asset tagged https://example.com/x.png
+    expect_no_out "and a refused picture prints nothing on stdout" "."
+
+    tl readme-asset tagged big.png
+    expect_status "a picture over 5 MB exits 1" 1
+    expect_out "and says it could not be fetched" "could not fetch big.png"
+    if ls "$RM_CACHE/tagged/".*.part "$RM_CACHE/tagged/".*.new >/dev/null 2>&1; then fail "no half-written picture is left behind"; else pass; fi
+
+    tl readme-asset tagged docs/missing.png
+    expect_status "a relative picture that is not there exits 1" 1
+    tl readme-asset kit docs/shot.png
+    expect_status "a relative picture for an item with no upstream exits 2" 2
+    tl readme-asset tagged
+    expect_status "readme-asset needs a name and an address" 2
+
+    # Cached pictures are served offline and refreshed when a day old.
+    mv "$FX/gh" "$FX/gh.away"
+    tl_stdout readme-asset tagged https://github.com/demo/tagged/raw/HEAD/x.png
+    expect_status "a cached picture is served offline" 0
+    expect_out "from the same path" "^$RA_ABS\$"
+    touch -t 200001010000 "$RA_ABS"
+    tl_stdout readme-asset tagged https://github.com/demo/tagged/raw/HEAD/x.png
+    expect_status "a stale picture still answers offline" 0
+    mv "$FX/gh.away" "$FX/gh"
+    printf 'a newer github.com raw picture\n' > "$GH/github.com/demo/tagged/raw/HEAD/x.png"
+    tl_stdout readme-asset tagged https://github.com/demo/tagged/raw/HEAD/x.png
+    expect_status "and is fetched again once GitHub is back" 0
+    expect_content "with the new picture in place" "$RA_ABS" "a newer github.com raw picture"
 
     # A newer list, put in place without a refresh, so there is something to
     # report as out of date.
@@ -1042,12 +1201,13 @@ done
 echo
 # ---------------------------------------------------------------------------
 # Backward compatibility: a phone's already-installed tlstore against the new
-# catalog. Revision 5 only ever appends columns (see the TSV contract in
-# project-docs/tlstore/REVISION-5.md), so the script already on dev, unchanged,
-# must still read this worktree's catalog shape.
+# catalog. New columns only ever land at the end (see the TSV contract in
+# project-docs/tlstore/REVISION-5.md; Revision 6 added readme-skip the same
+# way), so the script already on dev, unchanged, must still read this
+# worktree's catalog shape.
 # ---------------------------------------------------------------------------
 
-echo "== the dev-branch tlstore reads the Revision 5 catalog"
+echo "== the dev-branch tlstore reads the new catalog"
 OLD_TLSTORE="$(mktemp)"
 if git -C "$repo" show dev:app/src/main/assets/tlstore/tlstore > "$OLD_TLSTORE" 2>/dev/null; then
     SHELL_LABEL="dev-branch tlstore"
@@ -1068,7 +1228,7 @@ if git -C "$repo" show dev:app/src/main/assets/tlstore/tlstore > "$OLD_TLSTORE" 
         "A greeting you can read."
     mkdir -p "$TESTHOME/.config"
     OUT="$(old_env install hello -y)"; ST=$?
-    expect_status "it can still install an item from the Revision 5 catalog" 0
+    expect_status "it can still install an item from the new catalog" 0
     expect_file "the file landed" "$TESTHOME/.config/hello.conf"
     rm -rf "$ROOT"
 else
@@ -1089,9 +1249,9 @@ printf '1111111111111111111111111111111111111111111111111111111111111111  demo-a
 
 # bc_write_items <items.tsv path> <featured 0|1> <category>
 bc_write_items() {
-    printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\t%s\tdemo/demo\t0\ta demo item for testing\tShows a demo\tDoes another thing\tDoes one more thing\tdemo\t-\tDemo Author\tMIT\t-\tlauncher:scripts/tlstore/pictures/demo.jpg@abc123\t-\t%s\n' \
+    printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\t%s\tdemo/demo\t0\ta demo item for testing\tShows a demo\tDoes another thing\tDoes one more thing\tdemo\t-\tDemo Author\tMIT\t-\tlauncher:scripts/tlstore/pictures/demo.jpg@abc123\t-\t%s\tPortability|Star history\n' \
         "$3" "$2" > "$1"
-    printf 'part\tpkg\t-\t*\tdemo-pkg\t-\t-\thidden=1\tA hidden part.\t-\t-\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t0\n' >> "$1"
+    printf 'part\tpkg\t-\t*\tdemo-pkg\t-\t-\thidden=1\tA hidden part.\t-\t-\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t0\t-\n' >> "$1"
 }
 
 bc_items="$BC_ROOT/scripts/tlstore/items.tsv"
@@ -1099,9 +1259,28 @@ bc_cat="$BC_ROOT/app/src/main/assets/tlstore/catalog.tsv"
 
 bc_write_items "$bc_items" 1 Tools
 OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
-if [ "$ST" = 0 ]; then pass; else fail "build-catalog.sh runs against a Revision 5 items.tsv" "$OUT"; fi
+if [ "$ST" = 0 ]; then pass; else fail "build-catalog.sh runs against a Revision 6 items.tsv" "$OUT"; fi
 if [ -f "$bc_cat" ]; then pass; else fail "it writes the catalog"; fi
-if awk -F'\t' 'NR==3 { exit (NF == 26) ? 0 : 1 }' "$bc_cat"; then pass; else fail "the header row has 26 columns"; fi
+if awk -F'\t' 'NR==3 { exit (NF == 27 && $27 == "readme-skip") ? 0 : 1 }' "$bc_cat"; then pass; else fail "the header row has 27 columns, readme-skip last"; fi
+if awk -F'\t' '$1=="demo" { exit ($27=="Portability|Star history") ? 0 : 1 }' "$bc_cat"; then
+    pass
+else
+    fail "readme-skip rides through as the last column"
+fi
+if awk -F'\t' '$1=="part" { exit (NF == 27 && $27=="-") ? 0 : 1 }' "$bc_cat"; then
+    pass
+else
+    fail "a part carries - for readme-skip"
+fi
+# The very catalog build-catalog.sh wrote, read back by this worktree's tlstore:
+# the last column comes out of info --tsv under its own key.
+bc_prefix="$BC_ROOT/data/data/com.termux/files/usr"
+mkdir -p "$BC_ROOT/home" "$bc_prefix/libexec/termux-launcher/tlstore"
+cp "$bc_cat" "$bc_prefix/libexec/termux-launcher/tlstore/catalog.tsv"
+OUT="$(env -i HOME="$BC_ROOT/home" PATH="/usr/bin:/bin" TLSTORE_PREFIX="$bc_prefix" \
+    TLSTORE_ARCH=aarch64 /bin/sh "$TLSTORE" info --tsv demo 2>&1)"; ST=$?
+if [ "$ST" = 0 ]; then pass; else fail "tlstore reads the catalog build-catalog.sh wrote" "$OUT"; fi
+if printf '%s' "$OUT" | grep -q $'^Readme-skip\tPortability|Star history$'; then pass; else fail "and info --tsv prints Readme-skip from it" "$OUT"; fi
 if awk -F'\t' -v want="$BC_PIC_DIGEST" '$1=="demo" { exit ($24==want) ? 0 : 1 }' "$bc_cat"; then
     pass
 else
@@ -1116,6 +1295,10 @@ fi
 printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\tTools\n' > "$bc_items"
 OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
 if [ "$ST" != 0 ]; then pass; else fail "a row missing the Revision 5 columns is refused"; fi
+
+printf 'demo\tbinary\t1\t*\tbinaries:demo@1.0\t-\t-\t-\tA demo item.\tTools\tdemo/demo\t0\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t-\t1\n' > "$bc_items"
+OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?
+if [ "$ST" != 0 ]; then pass; else fail "a Revision 5 row, without readme-skip, is refused"; fi
 
 bc_write_items "$bc_items" 1 Nonsense
 OUT="$(cd "$BC_ROOT" && bash scripts/tlstore/build-catalog.sh "$BC_SUMS" 2>&1)"; ST=$?

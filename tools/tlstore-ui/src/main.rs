@@ -1,7 +1,6 @@
 use std::process::ExitCode;
 
 use tlstore_ui::app::{self, Options};
-use tlstore_ui::demo::Demo;
 use tlstore_ui::launch;
 use tlstore_ui::store::{proc::Env, Router};
 use tlstore_ui::term::{self, Parser, Tty};
@@ -9,7 +8,6 @@ use tlstore_ui::term::{self, Parser, Tty};
 const USAGE: &str = "tlstore-ui opens the store; run tlstore to start it.
 
   tlstore-ui           open the store
-  tlstore-ui --demo    show the layout with sample rows
   tlstore-ui --probe   list what this terminal can draw
 ";
 
@@ -75,7 +73,6 @@ fn main() -> ExitCode {
             let args: Vec<String> = std::env::args().skip(1).collect();
             tlstore_ui::shot::cli(&args)
         }
-        "--demo" => app::run(Box::new(Demo::new()), Options::default()),
         "--probe" => probe(),
         "--version" => {
             // The second line is one compile-time literal (`concat!`, not two prints that just

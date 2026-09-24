@@ -61,6 +61,8 @@ by name.
 | `tlstore display` | set up graphics for Linux apps |
 | `tlstore doctor` | check that everything is in place |
 | `tlstore version` | show the tlstore and item-list versions |
+| `tlstore readme kitten` | print where a copy of the item's own README has been saved, fetching it when it is missing or a day old |
+| `tlstore readme-asset kitten docs/shot.png` | print where a picture that README refers to has been saved, fetching it the same way |
 | `--tsv` | on `list`, `search`, `info` and `update --check`: the same answer as tab-separated columns, for a program to read |
 
 `-y` says yes to everything except a config file of yours. `--configs` on `install` and `update`
@@ -203,9 +205,19 @@ it already provides tlstore.
 
 ## Plain `tlstore`
 
-Inside the launcher, running `tlstore` with nothing after it opens a full-screen store. Anywhere
-else — plain Termux, ssh, tmux — it just prints the list, the same as `tlstore list`, with one line
-on how to install something.
+Inside the launcher, running `tlstore` with nothing after it opens the store in a window of its
+own. Anywhere else — plain Termux, ssh, tmux — it just prints the list, the same as `tlstore list`,
+with one line on how to install something.
+
+The store is one list. The item under the cursor fills the top of the screen: its picture, its
+name, one line on what it is for, and its version, licence and author. Move with the arrow keys or
+tap a row to look at it; press `⏎`, or tap it again, to open it. An open item shows its own README
+from GitHub, laid out for the screen, and scrolls with a finger or the arrow keys. `i` installs,
+`r` removes, `u` updates (or, on the list, shows only what has an update; `u` again updates them
+all), `␣` picks several items at once, `s` stars the project on GitHub when `gh` is signed in,
+`o` opens its page, `f` puts the launcher's keyboard away while you browse, `esc` goes back and `q`
+quits. While something installs you can leave the screen; the row keeps showing where it got to,
+and the phone gets a notice when it is done. Set `TLSTORE_MOTION=0` to turn the transitions off.
 
 ## Which app you are in
 

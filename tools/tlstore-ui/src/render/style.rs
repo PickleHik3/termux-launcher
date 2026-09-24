@@ -68,7 +68,7 @@ pub struct Style {
     pub italic: bool,
     pub dim: bool,
     pub reverse: bool,
-    /// Strikethrough (SGR 9).
+    /// Strikethrough (SGR 9): the old version in the facts strip when an update exists.
     pub strike: bool,
 }
 
@@ -190,13 +190,6 @@ mod tests {
     }
 
     #[test]
-    fn strike_is_sgr_9() {
-        let mut s = String::new();
-        Style::new().strike().dim().write_sgr(&mut s);
-        assert_eq!(s, "\x1b[0;2;9m");
-    }
-
-    #[test]
     fn underline_shapes() {
         for (u, code) in [(Underline::Double, "4:2"), (Underline::Dotted, "4:4"), (Underline::Dashed, "4:5")]
         {
@@ -204,6 +197,13 @@ mod tests {
             Style::new().underline(u).write_sgr(&mut s);
             assert_eq!(s, format!("\x1b[0;{code}m"));
         }
+    }
+
+    #[test]
+    fn strikethrough_is_sgr_9() {
+        let mut s = String::new();
+        Style::new().strike().dim().write_sgr(&mut s);
+        assert_eq!(s, "\x1b[0;2;9m");
     }
 
     #[test]

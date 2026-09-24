@@ -1,26 +1,26 @@
-00|
-01|  TLSTORE / installing
-02|  ─────────────────────────────────────────────────
-03|                 I N S T A L L I N G
-04|                        sigye
-05|
-06|
-07|                         60%
-08|
-09|      ●●●●●●●●●●●●●●●●●●●●●●●●○○○○○○○○○○○○○○○○
-10|
-11|              ✓  fetched
-12|              ·  signature checked
-13|                 putting files in place
-14|                 ready
+00|  ‹ apps                          am2rican5/sigye ↗
+01|
+02|
+03|
+04|  sigye
+05|  a clock built for the terminal
+06|  installing 0.6.0 · MIT · am2rican5
+07|
+08|  60%         fetched
+09|              signature checked
+10|              putting files in place
+11|              ready
+12|
+13|  ─────────────────────────────────────────────────
+14|
 15|
-16|              Switch away if you like.
-17|         You’ll get a notice when it’s done.
+16|
+17|
 18|
 19|
 20|
 21|
 22|
 23|
-24|  esc keep going quietly  c cancel
-25|
+24|
+25|  x cancel                                  esc back

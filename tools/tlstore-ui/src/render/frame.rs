@@ -2,7 +2,7 @@
 
 use super::{text_width, Buffer, Placement, Rect, SizedRun, Sizing, Style};
 use crate::app::Ctx;
-use crate::layout::{self, Regions, Tier};
+use crate::layout::{self, Header, Tier};
 use crate::palette::Palette;
 
 /// What a tap on a region means; screens pick their own numbering.
@@ -83,8 +83,10 @@ impl<'a> Frame<'a> {
     pub fn narrow(&self) -> bool {
         layout::narrow(self.buf.w)
     }
-    pub fn regions(&self) -> Regions {
-        layout::regions(self.buf.w, self.buf.h)
+    /// The shared header for this grid with `body_need` body rows and `pic_rows` (see
+    /// [`layout::header`]).
+    pub fn header(&self, body_need: u16, pic_rows: Option<u16>) -> Header {
+        layout::header(self.buf.w, self.buf.h, body_need, pic_rows)
     }
 
     /// Writes `s` at (x, y); returns the column after it. Clipped at the right edge.
