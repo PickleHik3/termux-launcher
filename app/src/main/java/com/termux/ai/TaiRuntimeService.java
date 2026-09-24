@@ -178,6 +178,8 @@ public final class TaiRuntimeService extends Service {
                 return manager.embeddings(body);
             case TaiRuntimeIpc.OP_PREFLIGHT:
                 return manager.preflight(body);
+            case TaiRuntimeIpc.OP_BENCHMARK:
+                return manager.benchmark(body);
             default:
                 return error(400, "bad_runtime_operation", "Unknown TAI runtime operation: " + operation);
         }
@@ -214,7 +216,8 @@ public final class TaiRuntimeService extends Service {
             || TaiRuntimeIpc.OP_OPENAI_CHAT.equals(operation)
             || TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
             || TaiRuntimeIpc.OP_OPENAI_COMPLETION.equals(operation)
-            || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation);
+            || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)
+            || TaiRuntimeIpc.OP_BENCHMARK.equals(operation);
     }
 
     private void updateForegroundAfterOperation() {
