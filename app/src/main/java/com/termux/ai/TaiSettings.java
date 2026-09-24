@@ -91,10 +91,15 @@ public final class TaiSettings {
             preferences.edit().putString(KEY_ROLE_DEFAULT_ASSISTANT, migratedModelId).apply();
             modelId = migratedModelId;
         }
-        if (new TaiModelRegistry().getModel(modelId) != null || new TaiModelStore(appContext).getInstalledUserModels().containsKey(modelId)) {
+        if (new TaiModelRegistry().getModel(modelId) != null) return modelId;
+        TaiModelStore store = new TaiModelStore(appContext);
+        if (store.getInstalledUserModels().containsKey(modelId)
+            || store.getDownloadedReadableModels().containsKey(modelId)
+            || store.onDiskModelSpec(modelId) != null) {
             return modelId;
         }
-        preferences.edit().putString(KEY_ROLE_DEFAULT_ASSISTANT, TaiModelRegistry.MODEL_GEMMA_4_E2B_IT).apply();
+        // Fall back without persisting: a model that is briefly unreadable (mid re-download, or
+        // failing a stricter package check after an update) must not lose the user's choice.
         return TaiModelRegistry.MODEL_GEMMA_4_E2B_IT;
     }
 

@@ -222,7 +222,9 @@ public final class TaiModelStore {
         JSONArray array = new JSONArray();
         int removed = 0;
         for (TaiModelSpec model : models.values()) {
-            if (!isModelReadable(model)) {
+            // Only drop records whose files are gone; a package that exists but fails validation
+            // (e.g. a stricter check after an update) keeps its record so it can be repaired.
+            if (!modelPathPresent(model)) {
                 removed++;
                 continue;
             }
@@ -340,6 +342,10 @@ public final class TaiModelStore {
         } catch (JSONException e) {
             return new JSONArray();
         }
+    }
+
+    private boolean modelPathPresent(@NonNull TaiModelSpec spec) {
+        return spec.localPath != null && !spec.localPath.trim().isEmpty() && new File(spec.localPath).exists();
     }
 
     private boolean isModelReadable(@NonNull TaiModelSpec spec) {
