@@ -56,15 +56,35 @@ final class WhisperMel {
         double[] frame = new double[N_FFT];
         double[] power = new double[N_FREQS];
         Dft400 dft = new Dft400();
+        int[] bandStart = new int[N_MELS];
+        int[] bandEnd = new int[N_MELS];
+        for (int m = 0; m < N_MELS; m++) {
+            // Each Slaney filter is non-zero on a narrow band; multiplying only that band is exact.
+            int start = 0;
+            while (start < N_FREQS && filterbank[m][start] == 0f) start++;
+            int end = N_FREQS;
+            while (end > start && filterbank[m][end - 1] == 0f) end--;
+            bandStart[m] = start;
+            bandEnd[m] = end;
+        }
+        // A frame whose samples all lie in the zero padding has zero power: its value is the log
+        // floor exactly, so a short command skips most of the window instead of transforming it.
+        int voicedSamples = Math.min(audio.length, samples);
+        double silentValue = Math.log10(LOG_FLOOR);
         double max = Double.NEGATIVE_INFINITY;
         for (int t = 0; t < frames; t++) {
             int offset = t * HOP;
+            if (offset >= half + voicedSamples && samples > voicedSamples) {
+                for (int m = 0; m < N_MELS; m++) logMel[m][t] = silentValue;
+                if (silentValue > max) max = silentValue;
+                continue;
+            }
             for (int k = 0; k < N_FFT; k++) frame[k] = padded[offset + k] * window[k];
             dft.powerSpectrum(frame, power);
             for (int m = 0; m < N_MELS; m++) {
                 float[] row = filterbank[m];
                 double sum = 0.0;
-                for (int f = 0; f < N_FREQS; f++) sum += row[f] * power[f];
+                for (int f = bandStart[m], end = bandEnd[m]; f < end; f++) sum += row[f] * power[f];
                 double value = Math.log10(Math.max(sum, LOG_FLOOR));
                 logMel[m][t] = value;
                 if (value > max) max = value;
