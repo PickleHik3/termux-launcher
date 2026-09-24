@@ -174,6 +174,22 @@ public final class TaiLoadBudget {
         return new Plan(false, first, floor, smallest, r.availableBytes, reserve, true);
     }
 
+    /**
+     * The plan for a load with no window to shrink and no accelerator ladder — an embedding
+     * interpreter, later an STT model: it fits when its whole estimate leaves the reserve free,
+     * and is refused otherwise. Unknown free memory gives the same unmeasured go-ahead as
+     * {@link #plan}.
+     */
+    @NonNull
+    public static Plan planFixed(long needBytes, @NonNull String accelerator, long physicalBytes, long availableBytes) {
+        long reserve = reserveBytes(physicalBytes);
+        if (availableBytes <= 0L || physicalBytes <= 0L) {
+            return new Plan(true, accelerator, 0, needBytes, availableBytes, reserve, false);
+        }
+        boolean fits = needBytes <= availableBytes - reserve;
+        return new Plan(fits, accelerator, 0, needBytes, availableBytes, reserve, true);
+    }
+
     /** The accelerator whose floor load costs least, for telling the user how much would be needed. */
     @NonNull
     private static String cheapest(@NonNull Request r) {

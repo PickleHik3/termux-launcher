@@ -22,9 +22,15 @@ import java.util.List;
  * {@code mnn_embeddings_unavailable} error instead of crashing the runtime process.
  */
 final class MnnEmbeddingRuntime implements AutoCloseable {
+    private final TaiResidency residency;
     @Nullable private MnnEmbeddingSession session;
+    @Nullable private String loadedModelId;
     @Nullable private String loadedConfigPath;
     private int outputDimensions = 0;
+
+    MnnEmbeddingRuntime(@NonNull TaiResidency residency) {
+        this.residency = residency;
+    }
 
     @NonNull
     synchronized JSONObject embed(@NonNull TaiModelSpec spec, @NonNull List<String> inputs, int dimensions) throws JSONException {
@@ -39,7 +45,7 @@ final class MnnEmbeddingRuntime implements AutoCloseable {
             return error(404, "model_file_not_readable", "MNN embedding models must point to a readable config.json file.");
         }
         try {
-            ensureLoaded(config);
+            ensureLoaded(spec, config);
         } catch (UnsatisfiedLinkError e) {
             return error(501, "mnn_embeddings_unavailable",
                 "This build's MNN native library does not expose embeddings. Update to a build with MNN embedding support.");
@@ -53,16 +59,21 @@ final class MnnEmbeddingRuntime implements AutoCloseable {
         }
         try {
             JSONArray data = new JSONArray();
-            for (int i = 0; i < inputs.size(); i++) {
-                float[] vector = session.embed(inputs.get(i));
-                float[] shaped = shapeVector(vector, dimensions);
-                JSONObject item = new JSONObject();
-                item.put("object", "embedding");
-                item.put("index", i);
-                JSONArray json = new JSONArray();
-                for (float value : shaped) json.put((double) value);
-                item.put("embedding", json);
-                data.put(item);
+            residency.setBusy(TaiResidency.Kind.EMBEDDING, spec.id, true);
+            try {
+                for (int i = 0; i < inputs.size(); i++) {
+                    float[] vector = session.embed(inputs.get(i));
+                    float[] shaped = shapeVector(vector, dimensions);
+                    JSONObject item = new JSONObject();
+                    item.put("object", "embedding");
+                    item.put("index", i);
+                    JSONArray json = new JSONArray();
+                    for (float value : shaped) json.put((double) value);
+                    item.put("embedding", json);
+                    data.put(item);
+                }
+            } finally {
+                residency.setBusy(TaiResidency.Kind.EMBEDDING, spec.id, false);
             }
             JSONObject usage = new JSONObject();
             usage.put("prompt_tokens", 0);
@@ -81,15 +92,17 @@ final class MnnEmbeddingRuntime implements AutoCloseable {
         }
     }
 
-    private void ensureLoaded(@NonNull File config) {
+    private void ensureLoaded(@NonNull TaiModelSpec spec, @NonNull File config) {
         String configPath = config.getAbsolutePath();
         if (session != null && configPath.equals(loadedConfigPath) && session.isLoaded()) return;
         close();
         MnnEmbeddingSession created = new MnnEmbeddingSession();
         created.load(configPath);
         session = created;
+        loadedModelId = spec.id;
         loadedConfigPath = configPath;
         outputDimensions = created.dim();
+        residency.register(TaiResidency.Entry.embedding(spec, 0));
     }
 
     /**
@@ -130,6 +143,8 @@ final class MnnEmbeddingRuntime implements AutoCloseable {
             try { session.release(); } catch (Throwable ignored) { }
             session = null;
         }
+        if (loadedModelId != null) residency.deregister(TaiResidency.Kind.EMBEDDING, loadedModelId);
+        loadedModelId = null;
         loadedConfigPath = null;
         outputDimensions = 0;
     }

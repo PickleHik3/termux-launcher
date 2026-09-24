@@ -23,28 +23,49 @@ import java.util.Locale;
  * load. Each backend keeps its monitor off its native load and generation paths, and each embedding
  * runtime serializes embed/close on its own monitor, so nothing here is held for the duration of
  * native work.
+ *
+ * <p>Residency. The router owns the one {@link TaiResidency} table and hands it to all four
+ * runtimes, which register and deregister at their own load and close points — the backends close
+ * engines on idle timers and after cancelled generations without passing through here, so the
+ * router itself never writes the table. {@link #residency()} is read without any lock.
  */
 public class MultiBackendTaiRuntime implements TaiRuntime {
     private final TaiRuntime liteRt;
     private final TaiRuntime mnn;
     private final LiteRtEmbeddingRuntime embeddings;
     private final MnnEmbeddingRuntime mnnEmbeddings;
+    private final TaiResidency residency;
     /** Held across load, keep-warm and unload; never by a read, a cancel or a generation. */
     private final Object loadLock = new Object();
     /** The backend that owns the loaded model. Written under {@link #loadLock}, read without it. */
     private volatile TaiRuntime activeAssistant;
 
     public MultiBackendTaiRuntime(@NonNull Context context) {
-        this(new LiteRtTaiRuntime(context), new MnnTaiRuntime(context));
+        this(context, new TaiResidency());
+    }
+
+    private MultiBackendTaiRuntime(@NonNull Context context, @NonNull TaiResidency residency) {
+        this(new LiteRtTaiRuntime(context, residency), new MnnTaiRuntime(context, residency), residency);
     }
 
     /** Test seam: the backends stand in for the native runtimes. */
     MultiBackendTaiRuntime(@NonNull TaiRuntime liteRt, @NonNull TaiRuntime mnn) {
+        this(liteRt, mnn, new TaiResidency());
+    }
+
+    private MultiBackendTaiRuntime(@NonNull TaiRuntime liteRt, @NonNull TaiRuntime mnn, @NonNull TaiResidency residency) {
         this.liteRt = liteRt;
         this.mnn = mnn;
-        embeddings = new LiteRtEmbeddingRuntime();
-        mnnEmbeddings = new MnnEmbeddingRuntime();
+        this.residency = residency;
+        embeddings = new LiteRtEmbeddingRuntime(residency);
+        mnnEmbeddings = new MnnEmbeddingRuntime(residency);
         activeAssistant = liteRt;
+    }
+
+    /** Every resident model in this process. Lock-free; see {@link TaiResidency}. */
+    @NonNull
+    public TaiResidency residency() {
+        return residency;
     }
 
     @NonNull @Override public TaiRuntimeState getState() {

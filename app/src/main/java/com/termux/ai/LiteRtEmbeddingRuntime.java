@@ -16,12 +16,18 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
     private static final int TOKEN_BOS = 2;
     private static final int TOKEN_EOS = 1;
 
+    private final TaiResidency residency;
     @Nullable private Interpreter interpreter;
     @Nullable private SentencePieceBpeTokenizer tokenizer;
+    @Nullable private String loadedModelId;
     @Nullable private String loadedModelPath;
     @Nullable private String loadedTokenizerPath;
     private int sequenceLength = 0;
     private int outputDimensions = 0;
+
+    LiteRtEmbeddingRuntime(@NonNull TaiResidency residency) {
+        this.residency = residency;
+    }
 
     @NonNull
     synchronized JSONObject embed(@NonNull TaiModelSpec spec, @NonNull List<String> inputs, int dimensions) throws JSONException {
@@ -41,7 +47,7 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
                 "EmbeddingGemma requires sentencepiece.model next to the .tflite model file.");
         }
         try {
-            ensureLoaded(modelFile, tokenizerFile);
+            ensureLoaded(spec, modelFile, tokenizerFile);
             int effectiveDimensions = dimensions > 0 ? dimensions : outputDimensions;
             if (effectiveDimensions <= 0 || effectiveDimensions > outputDimensions) {
                 return error(400, "invalid_dimensions",
@@ -49,16 +55,21 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
             }
             JSONArray data = new JSONArray();
             int promptTokens = 0;
-            for (int i = 0; i < inputs.size(); i++) {
-                Embedding embedding = embedOne(inputs.get(i), effectiveDimensions);
-                promptTokens += embedding.tokens;
-                JSONObject item = new JSONObject();
-                item.put("object", "embedding");
-                item.put("index", i);
-                JSONArray vector = new JSONArray();
-                for (float value : embedding.vector) vector.put((double) value);
-                item.put("embedding", vector);
-                data.put(item);
+            residency.setBusy(TaiResidency.Kind.EMBEDDING, spec.id, true);
+            try {
+                for (int i = 0; i < inputs.size(); i++) {
+                    Embedding embedding = embedOne(inputs.get(i), effectiveDimensions);
+                    promptTokens += embedding.tokens;
+                    JSONObject item = new JSONObject();
+                    item.put("object", "embedding");
+                    item.put("index", i);
+                    JSONArray vector = new JSONArray();
+                    for (float value : embedding.vector) vector.put((double) value);
+                    item.put("embedding", vector);
+                    data.put(item);
+                }
+            } finally {
+                residency.setBusy(TaiResidency.Kind.EMBEDDING, spec.id, false);
             }
             JSONObject usage = new JSONObject();
             usage.put("prompt_tokens", promptTokens);
@@ -77,7 +88,7 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
         }
     }
 
-    private void ensureLoaded(@NonNull File modelFile, @NonNull File tokenizerFile) throws Exception {
+    private void ensureLoaded(@NonNull TaiModelSpec spec, @NonNull File modelFile, @NonNull File tokenizerFile) throws Exception {
         String modelPath = modelFile.getAbsolutePath();
         String tokenizerPath = tokenizerFile.getAbsolutePath();
         if (interpreter != null && tokenizer != null
@@ -102,8 +113,10 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
             close();
             throw new IllegalStateException("Embedding model reports an unusable output dimension: " + outputDimensions);
         }
+        loadedModelId = spec.id;
         loadedModelPath = modelPath;
         loadedTokenizerPath = tokenizerPath;
+        residency.register(TaiResidency.Entry.embedding(spec, sequenceLength));
     }
 
     @NonNull
@@ -164,6 +177,8 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
             interpreter = null;
         }
         tokenizer = null;
+        if (loadedModelId != null) residency.deregister(TaiResidency.Kind.EMBEDDING, loadedModelId);
+        loadedModelId = null;
         loadedModelPath = null;
         loadedTokenizerPath = null;
         sequenceLength = 0;

@@ -34,6 +34,8 @@ import java.util.regex.Pattern;
 
 public final class MnnTaiRuntime implements TaiRuntime {
     private final Context appContext;
+    /** Shared with the router's other runtimes; written wherever the session is set or released. */
+    private final TaiResidency residency;
 
     private LlmSession session;
     private String runtimeState = "unloaded";
@@ -53,7 +55,12 @@ public final class MnnTaiRuntime implements TaiRuntime {
     private boolean unloadAfterGeneration;
 
     public MnnTaiRuntime(@NonNull Context context) {
+        this(context, new TaiResidency());
+    }
+
+    public MnnTaiRuntime(@NonNull Context context, @NonNull TaiResidency residency) {
         appContext = context.getApplicationContext();
+        this.residency = residency;
     }
 
     public static boolean isNativeRuntimeAvailable() {
@@ -246,6 +253,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
             lastUsedAtMs = loadedAtMs;
             keepWarmUntilMs = keepWarmMinutes > 0 ? loadedAtMs + TimeUnit.MINUTES.toMillis(keepWarmMinutes) : 0L;
             TaiRuntimeCrashMarker.clear(appContext);
+            String accelerator = TaiLoadPreflight.normalizeAccelerator(backendName(options));
+            residency.register(TaiResidency.Entry.chat(modelSpec, TaiModelSpec.BACKEND_MNN_LLM,
+                accelerator == null ? "cpu" : accelerator,
+                options.contextWindow != null ? options.contextWindow : TaiLoadBudget.FLOOR_CONTEXT));
             TaiRuntimeHistory.recordSuccess(appContext, modelSpec, deviceCapabilities,
                 TaiModelSpec.BACKEND_MNN_LLM, backendName(options));
             runtimeState = "loaded";
@@ -522,6 +533,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         lastUsedAtMs = now;
         runtimeState = "generating";
         statusMessage = "Generating.";
+        residency.setBusy(TaiResidency.Kind.CHAT, loadedModelId, true);
         return activeGenerationId;
     }
 
@@ -530,6 +542,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         activeGenerationId = null;
         activeGenerationStartedAtMs = 0L;
         lastUsedAtMs = System.currentTimeMillis();
+        residency.setBusy(TaiResidency.Kind.CHAT, loadedModelId, false);
         if (unloadAfterGeneration) {
             releaseSessionLocked();
             runtimeState = "unloaded";
@@ -562,6 +575,9 @@ public final class MnnTaiRuntime implements TaiRuntime {
             }
         }
         session = null;
+        // Every release funnels through here: unload, the release before a replacing load, and
+        // the pending unload after a cancelled generation.
+        if (loadedModelId != null) residency.deregister(TaiResidency.Kind.CHAT, loadedModelId);
         loadedModelId = null;
         loadedModelPath = null;
         loadedTemplateSupportsTools = false;

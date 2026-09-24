@@ -119,6 +119,29 @@ public class TaiLoadBudgetTest {
         assertEquals(4096, plan.contextWindow);
     }
 
+    /** An embedding interpreter has no window to shrink: it fits whole or it is refused. */
+    @Test
+    public void aFixedLoadFitsWhenItLeavesTheReserveFree() {
+        long reserve = TaiLoadBudget.reserveBytes(PONG_TOTAL);
+        TaiLoadBudget.Plan fits = TaiLoadBudget.planFixed(240_000_000L, "cpu", PONG_TOTAL, reserve + 240_000_000L);
+        assertTrue(fits.fits);
+        assertTrue(fits.measured);
+        assertEquals("cpu", fits.accelerator);
+        assertEquals(0, fits.contextWindow);
+        assertEquals(240_000_000L, fits.estimatedBytes);
+
+        TaiLoadBudget.Plan refused = TaiLoadBudget.planFixed(240_000_000L, "cpu", PONG_TOTAL, reserve + 239_999_999L);
+        assertFalse(refused.fits);
+        assertTrue(refused.neededFreeBytes() > refused.availableBytes);
+    }
+
+    @Test
+    public void aFixedLoadWithUnknownFreeMemoryGoesAheadUnmeasured() {
+        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(240_000_000L, "cpu", PONG_TOTAL, 0L);
+        assertTrue(plan.fits);
+        assertFalse(plan.measured);
+    }
+
     @Test
     public void theReserveIsTheLargerOfOneAndAHalfGigabytesAndFifteenPercent() {
         assertEquals(1536L * 1024L * 1024L, TaiLoadBudget.reserveBytes(6L * GIB));

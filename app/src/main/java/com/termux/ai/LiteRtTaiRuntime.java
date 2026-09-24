@@ -53,6 +53,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         "Auto selected CPU because the model's Edge Gallery compatibility profile requires CPU.";
 
     private final Context appContext;
+    /** Shared with the router's other runtimes; written wherever the engine is set or closed. */
+    private final TaiResidency residency;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable, "tai-runtime-idle");
         thread.setDaemon(true);
@@ -93,7 +95,12 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private String loadingModelId;
 
     public LiteRtTaiRuntime(@NonNull Context context) {
+        this(context, new TaiResidency());
+    }
+
+    public LiteRtTaiRuntime(@NonNull Context context, @NonNull TaiResidency residency) {
         appContext = context.getApplicationContext();
+        this.residency = residency;
     }
 
     @NonNull
@@ -679,6 +686,11 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 lastUsedAtMs = loadedAtMs;
                 keepWarmUntilMs = keepWarmMinutes > 0 ? loadedAtMs + TimeUnit.MINUTES.toMillis(keepWarmMinutes) : 0L;
                 TaiRuntimeCrashMarker.clear(appContext);
+                // Registered with the accelerator the engine actually came up on, so a GPU->CPU
+                // fallback is accounted at the CPU footprint rather than the plan's GPU one.
+                residency.register(TaiResidency.Entry.chat(modelSpec, TaiModelSpec.BACKEND_LITERT_LM,
+                    acceleratorFromBackendName(backendName, requestedAccelerator),
+                    options.contextWindow != null ? options.contextWindow : TaiLoadBudget.FLOOR_CONTEXT));
                 TaiRuntimeHistory.recordSuccess(appContext, modelSpec, deviceCapabilities,
                     TaiModelSpec.BACKEND_LITERT_LM, acceleratorFromBackendName(backendName, requestedAccelerator));
                 if (modelSpec.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) {
@@ -782,6 +794,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         runtimeState = "generating";
         statusMessage = "Generating.";
         cancelIdleUnloadLocked();
+        residency.setBusy(TaiResidency.Kind.CHAT, loadedModelId, true);
         return activeGenerationId;
     }
 
@@ -790,6 +803,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         activeGenerationId = null;
         activeGenerationStartedAtMs = 0L;
         lastUsedAtMs = System.currentTimeMillis();
+        residency.setBusy(TaiResidency.Kind.CHAT, loadedModelId, false);
         if (unloadAfterGeneration) {
             unloadAfterGeneration = false;
             closeEngineLocked("LiteRT-LM runtime is unloaded.", "unloaded");
@@ -1093,6 +1107,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private void closeEngineLocked(@NonNull String nextStatus, @NonNull String nextState) {
         cancelIdleUnloadLocked();
         closeEngineResourcesLocked();
+        // Every close funnels through here — unload, idle timer, keep-warm expiry, the close
+        // before a replacing load, and the pending unload after a cancelled generation.
+        if (loadedModelId != null) residency.deregister(TaiResidency.Kind.CHAT, loadedModelId);
         loadedModelId = null;
         loadedModelPath = null;
         loadedOptions = null;
