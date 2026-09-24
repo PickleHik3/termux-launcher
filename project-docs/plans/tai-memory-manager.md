@@ -94,6 +94,28 @@ the same phone — ~6× Android's own "low" line. With YouTube in the foreground
 out of reach under any reserve; E2B-on-GPU (≈2.6 GB estimate) would fit a ~0.5 GB floor but not
 the 1.8 GB reserve.
 
+### 3c. A GPU load cannot be braked mid-way (pong, 2026-09-24)
+
+Measured with E4B `--gpu`, MemAvailable sampled every 100 ms:
+
+- **Cancel does not interrupt native GPU initialization.** Cancel at 0.5 s: init still ran to
+  11.6 s and peaked at 3.1 GB; cancel at 3 s: peak 3.5 GB, returned at 8.5 s. The memory came back
+  the moment init returned (+3.1 GB within 100 ms). LiteRT-LM only lets TAI discard the engine
+  after `initialize()` returns.
+- **SIGKILL of `:tai_runtime` is not a prompt brake either.** Killed at 3 s with 2.3 GB taken:
+  MemAvailable stayed flat for ≥ 4 s after the kill (ActivityManager logged the death at once), so
+  the GPU driver frees a dead process's buffers late. ActivityManager restarted the service 1.5 s
+  later (it is bound) and the load call then reported a GPU load — what re-issued it is not
+  identified yet and must be before any kill-based brake is designed.
+- A cancelled load used to be recorded as a GPU failure, locking the model out of the GPU for good
+  (only a success overwrote the record and the preflight blocked every attempt); fixed in 6a08f0fe.
+
+Consequence for the design: the "try GPU, watch, cancel" safety net in
+`gallery-gpu-loading-comparison.md` does not work on this stack. Prevention is the only safety for
+a GPU load, so the GPU budget must stay a real admission check — it can drop the fixed 1.8 GB
+reserve for a floor tied to Android's own threshold (§3a) only once the GPU estimate is the
+**measured worst case** per model/window (§3), not the ratio estimate.
+
 ### 3b. Runtime baseline
 
 After its first chat unload, `:tai_runtime` keeps ~330 MB of anonymous memory (15 MB before the
