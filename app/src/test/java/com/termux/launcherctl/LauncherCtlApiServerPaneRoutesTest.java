@@ -2,10 +2,13 @@ package com.termux.launcherctl;
 
 import org.junit.Test;
 
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 public class LauncherCtlApiServerPaneRoutesTest {
 
@@ -44,6 +47,21 @@ public class LauncherCtlApiServerPaneRoutesTest {
         assertEquals("POST:/v1/panes/*/agent", LauncherCtlApiServer.rateLimitKey("POST", "/v1/panes/abc/agent"));
         assertEquals("GET:/v1/panes", LauncherCtlApiServer.rateLimitKey("GET", "/v1/panes"));
         assertEquals("POST:/v1/apps/launch", LauncherCtlApiServer.rateLimitKey("POST", "/v1/apps/launch"));
+        assertEquals("POST:/v1/windows", LauncherCtlApiServer.rateLimitKey("POST", "/v1/windows"));
+    }
+
+    /** {@code POST /v1/windows} shares the rate-limiter machinery every other protected route does. */
+    @Test
+    public void windowsRoute_hasItsOwnRateLimiterRegistered() throws Exception {
+        LauncherCtlApiServer server = LauncherCtlApiServer.getInstance();
+        Method init = LauncherCtlApiServer.class.getDeclaredMethod("initializeRateLimiters");
+        init.setAccessible(true);
+        init.invoke(server);
+        Field field = LauncherCtlApiServer.class.getDeclaredField("rateLimiters");
+        field.setAccessible(true);
+        Map<?, ?> limiters = (Map<?, ?>) field.get(server);
+        assertTrue(limiters.containsKey("POST:/v1/windows"));
+        assertTrue(limiters.containsKey("POST:/v1/panes"));
     }
 
     @Test

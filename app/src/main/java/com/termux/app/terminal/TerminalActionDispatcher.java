@@ -98,6 +98,14 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_PANE_CLOSE = "pane.close";
     public static final String TOOL_PANE_WRITE = "pane.write";
     public static final String TOOL_PANE_READ = "pane.read";
+    /**
+     * A whole new window (not a split) opened and driven through the local API, the same way
+     * {@link #TOOL_PANE_OPEN} opens a pane; ownership is the same {@link AgentPaneRegistry}. Not
+     * to be confused with {@link #TOOL_WINDOW_NEW}, the window strip's own + (Ctrl+Alt+C): that
+     * one starts a plain shell for the person in front of the screen and needs the Activity
+     * visible; this one runs a given command for a script and works with another app in front.
+     */
+    public static final String TOOL_WINDOW_OPEN = "window.open";
     public static final String TOOL_AGENT_STATUS = "agent.status";
     /** Most transcript lines one pane.read returns; enough to see a screen and its recent past. */
     static final int PANE_READ_MAX_LINES = 500;
@@ -236,6 +244,7 @@ public final class TerminalActionDispatcher {
             case TOOL_PANE_CLOSE:
             case TOOL_PANE_WRITE:
             case TOOL_PANE_READ:
+            case TOOL_WINDOW_OPEN:
                 return true;
             default:
                 return false;
@@ -278,6 +287,7 @@ public final class TerminalActionDispatcher {
             case TOOL_PANE_CLOSE:
             case TOOL_PANE_WRITE:
             case TOOL_PANE_READ:
+            case TOOL_WINDOW_OPEN:
             case TOOL_AGENT_STATUS:
             case TOOL_WINDOW_NEW:
             case TOOL_WINDOW_CLOSE:
@@ -634,6 +644,52 @@ public final class TerminalActionDispatcher {
                     AgentPaneRegistry.getInstance().register(opened.mHandle,
                         arguments.optString("tag", "").trim(), command);
                     return ok().put("pane", paneRecord(host, opened));
+                }
+                case TOOL_WINDOW_OPEN: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    List<String> command = new java.util.ArrayList<>();
+                    Object rawCommand = arguments.opt("command");
+                    if (rawCommand instanceof JSONArray) {
+                        JSONArray array = (JSONArray) rawCommand;
+                        for (int i = 0; i < array.length(); i++) {
+                            if (!(array.get(i) instanceof String)) {
+                                return error(400, "bad_request", "'command' must be an array of strings");
+                            }
+                            command.add(array.getString(i));
+                        }
+                    } else if (rawCommand instanceof String) {
+                        // A command line rather than argv: hand it to sh so quoting and pipes work.
+                        String line = ((String) rawCommand).trim();
+                        if (!line.isEmpty()) {
+                            command.add("sh");
+                            command.add("-c");
+                            command.add(line);
+                        }
+                    } else if (rawCommand != null && rawCommand != JSONObject.NULL) {
+                        return error(400, "bad_request", "'command' must be a string or an array of strings");
+                    }
+                    // Unlike pane.open, a window with nothing to run is not a useful primitive: a
+                    // plain new window already exists as window.new (Ctrl+Alt+C / the strip's +).
+                    if (command.isEmpty()) return error(400, "bad_request", "Missing 'command'");
+                    String title = arguments.optString("title", "").trim();
+                    boolean focus = arguments.optBoolean("focus", true);
+                    TerminalSession opened = host.openCommandWindow(command, null,
+                        title.isEmpty() ? null : title, focus);
+                    if (opened == null) {
+                        return error(409, "window_open_failed",
+                            "No window could be opened: there is no active terminal session, the"
+                                + " terminal limit is reached, or the window could never be given a size");
+                    }
+                    AgentPaneRegistry.getInstance().register(opened.mHandle, "", command);
+                    int columns = 0, rows = 0;
+                    if (opened.getEmulator() != null) {
+                        columns = opened.getEmulator().mColumns;
+                        rows = opened.getEmulator().mRows;
+                    }
+                    return ok().put("id", opened.mHandle)
+                        .put("window", windowIndexOf(host, opened))
+                        .put("columns", columns)
+                        .put("rows", rows);
                 }
                 case TOOL_PANE_LIST: {
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
@@ -1474,6 +1530,19 @@ public final class TerminalActionDispatcher {
             record.put("agent", agent);
         }
         return record;
+    }
+
+    /**
+     * The index of the window holding {@code session} among {@link TerminalHost#currentSessionWindows()}
+     * — the same numbering {@code pane.list} reports windows under — or -1 when there is no pane
+     * controller or the window cannot be found there (e.g. a different session's tab).
+     */
+    private static int windowIndexOf(@NonNull TerminalHost host, @NonNull TerminalSession session) {
+        TerminalPaneController controller = host.paneController();
+        if (controller == null) return -1;
+        TerminalPaneController.Window window = controller.windowOf(session);
+        if (window == null) return -1;
+        return host.currentSessionWindows().indexOf(window);
     }
 
     /** The last {@code count} lines of {@code text}, with trailing blank lines dropped. */
