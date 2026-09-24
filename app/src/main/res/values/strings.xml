@@ -1783,7 +1783,7 @@
     <string name="voice_input_mic_unavailable">Microphone unavailable</string>
     <string name="voice_input_permission_denied">Microphone access denied</string>
     <string name="voice_input_permission_title">Microphone for voice input</string>
-    <string name="voice_input_permission_message">On-device voice input listens through the microphone only while the keyboard's voice key is active. Nothing leaves the phone.</string>
+    <string name="voice_input_permission_message">On-device voice input listens through the microphone only while the keyboard\'s voice key is active. Nothing leaves the phone.</string>
     <string name="voice_input_permission_allow">Allow</string>
     <string name="voice_input_permission_dismiss">Not now</string>
     <string name="voice_input_language_fallback">No speech language known for this keyboard layout — using English</string>
