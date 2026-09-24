@@ -553,7 +553,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         TaiModelProfile profile = TaiModelProfile.forModel(modelSpec);
         TaiDeviceCapabilities deviceCapabilities = TaiDeviceCapabilities.detect(appContext);
         if (!deviceCapabilities.liteRtLmAbiSupported) {
-            return error(501, "litert_lm_unsupported_abi", "LiteRT-LM 0.14.0 ships native libraries for arm64-v8a and x86_64 only.");
+            return error(501, "litert_lm_unsupported_abi", "LiteRT-LM 0.17.1 ships native libraries for arm64-v8a and x86_64 only.");
         }
         if (!deviceCapabilities.liteRtLmNativeLibrariesAvailable) {
             return error(501, "litert_lm_native_unavailable", "LiteRT-LM native libraries are not available in this APK.");
@@ -853,7 +853,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             modelPath,
             backend,
             imageInput ? visionBackend(modelSpec, options, profile, deviceCapabilities) : null,
-            // LiteRT-LM 0.14 also supports GPU/NPU audio acceleration; keep CPU as the default.
+            // LiteRT-LM 0.17.1 also supports GPU/NPU audio acceleration; keep CPU as the default.
             audioInput ? new Backend.CPU() : null,
             engineMaxTokens,
             imageInput ? 8 : null,
