@@ -7,5 +7,5 @@
 6. UI: pictures never move in the timeline (hidden until the screen settles).
 7. UI: launch.rs moves the store into its own window below 53×26 (TLSTORE_NO_WINDOW=1).
 8. Snapshots: 53x26, 53x40, 40x26 for plain and kitty.
-9. Next: build-ui.sh --install, checkTlstoreUiFresh, final report.
+9. Done: binaries rebuilt (6d8f6a7c), checkTlstoreUiFresh passes; catalog + tlstore unsigned.
 10. Never push/merge; no devices.
