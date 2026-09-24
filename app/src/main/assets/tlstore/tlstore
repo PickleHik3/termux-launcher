@@ -96,7 +96,7 @@ PATCHELF="${TLSTORE_PATCHELF:-patchelf}"
 TLSTORE_UI_BIN="${TLSTORE_UI:-$STORE_DIR/tlstore-ui}"
 
 LAUNCHER_RAW="https://raw.githubusercontent.com/PickleHik3/termux-launcher"
-BINARIES_RAW="https://raw.githubusercontent.com/PickleHik3/termux-launcher-binaries"
+BINARIES_RAW="https://raw.githubusercontent.com/PickleHik3/tlstore"
 
 # Where an item's own README and its pictures are read from (see cmd_readme).
 GITHUB_RAW="https://raw.githubusercontent.com"

@@ -2,7 +2,7 @@
 
 `tlstore` (aliases `tl`, `tls`) is a small package-manager-style CLI shipped inside the launcher
 APK. It installs, lists, updates and removes the tools and configs the launcher shows off but does
-not ship: the showcase binaries from `PickleHik3/termux-launcher-binaries`, the opinionated shell
+not ship: the showcase binaries from `PickleHik3/tlstore`, the opinionated shell
 configs from `docs/en/examples`, apt/pacman packages, and Claude Code. It replaces the interactive
 `setup-launcher` script (which stays, but points here).
 
@@ -43,7 +43,7 @@ Columns:
 | `kind` | `pkg` \| `binary` \| `file` \| `file-once` \| `script` \| `npm-musl` \| `bundle` |
 | `version` | `-` for pkg/bundle; upstream version for binary/file/script; `latest` or pinned for npm-musl |
 | `prefixes` | `*` or comma list of app packages (`com.termux`, `io.vaj.tl`, `com.termux.launcher.nix`) |
-| `source` | `pkg`: space-separated package names. `binary`/`file`/`file-once`/`script`: a URL, or `binaries:<asset>@<tag>` (→ `https://raw.githubusercontent.com/PickleHik3/termux-launcher-binaries/<tag>/bin/<asset>`) or `launcher:<path>@<tag>` (→ `https://raw.githubusercontent.com/PickleHik3/termux-launcher/<tag>/<path>`). `npm-musl`: `npm:<package>#<executable inside package/>`. `bundle`: `-` |
+| `source` | `pkg`: space-separated package names. `binary`/`file`/`file-once`/`script`: a URL, or `binaries:<asset>@<tag>` (→ `https://raw.githubusercontent.com/PickleHik3/tlstore/<tag>/bin/<asset>`) or `launcher:<path>@<tag>` (→ `https://raw.githubusercontent.com/PickleHik3/termux-launcher/<tag>/<path>`). `npm-musl`: `npm:<package>#<executable inside package/>`. `bundle`: `-` |
 | `digest` | sha256 hex of the downloaded file; `-` for pkg, bundle, npm-musl (npm's registry sha512 is the check) |
 | `target` | install path with `~`; `-` = default (`~/.local/bin/<name>` for binary, `~/.local/lib/<name>` for npm-musl, none for others) |
 | `requires` | comma list of catalog names installed first; bundle members live here |
@@ -55,7 +55,7 @@ digest (fastfetch, musl-loader). tlstore uses the first row whose `prefixes` mat
 kind needs aarch64 (`binary`, `npm-musl`) are hidden on other CPUs.
 
 Generated, never hand-edited: `scripts/tlstore/build-catalog.sh` reads `docs/en/examples/*`
-(digests), the checked-out `termux-launcher-binaries` `SHA256SUMS` (path argument), the item
+(digests), the checked-out binaries repo (`PickleHik3/tlstore`) `SHA256SUMS` (path argument), the item
 definitions in `scripts/tlstore/items.tsv` (hand-maintained: everything but digests), and writes
 `app/src/main/assets/tlstore/catalog.tsv` with `serial=YYYYMMDDNN`.
 
@@ -315,7 +315,7 @@ Tests point `TLSTORE_RAW_BASE` at a `file://` tree.
 Merge order: core, then installer; the orchestrator wires the installer test into `test.sh`, runs
 the suite on the merged state, regenerates and signs the catalog. Gate: `scripts/tlstore/test.sh`
 all shells green and shellcheck clean; `browse` smoke on Waydroid (pkg items only, x86_64).
-Later rounds: CI in `termux-launcher-binaries` (tag → build → SHA256SUMS) and catalog signing on
+Later rounds: CI in `PickleHik3/tlstore` (tag → build → SHA256SUMS) and catalog signing on
 push; the catalog itself grows item by item.
 
 ## Revision 4 — more of musl than its libc (tlstore 0.3)
@@ -337,5 +337,5 @@ prompted this keeps its binary at `package/bin/opencode`, and the wrapper is `~/
 not `~/.local/bin/bin/opencode`.
 
 The two libraries are GCC's, redistributed unchanged from Alpine's aarch64 packages by
-`recipes/fetch-musl-runtime.sh` in `termux-launcher-binaries`, under the GPL with the GCC Runtime
+`recipes/fetch-musl-runtime.sh` in `PickleHik3/tlstore`, under the GPL with the GCC Runtime
 Library Exception.

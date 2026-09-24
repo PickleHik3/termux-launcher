@@ -14,7 +14,7 @@ contract and the progress stream).
 | Engine (POSIX sh) | `app/src/main/assets/tlstore/tlstore` + `.minisig` | edit, `test.sh`, `sign.sh` |
 | Store UI (Rust) | `tools/tlstore-ui/`; bundled binaries `app/src/main/assets/tlstore/tlstore-ui-<abi>` | `build-ui.sh --install` after any `src/` change |
 | Pictures | `scripts/tlstore/pictures/<name>.jpg` + `SOURCES.md` | you, with the conversion in `SOURCES.md` |
-| Binaries the catalog installs | GitHub `PickleHik3/tlstore` (was termux-launcher-binaries), per tag, `SHA256SUMS` | its `recipes/cross` and `recipes/termux` build them |
+| Binaries the catalog installs | GitHub `PickleHik3/tlstore` (renamed from termux-launcher-binaries 2026-09-24; the local checkout keeps the old directory name), per tag, `SHA256SUMS` | its `recipes/cross` and `recipes/termux` build them |
 | Launcher-side install | `app/src/main/java/com/termux/app/store/TlstoreInstaller.java` | writes script, catalog, key and UI binary into `$PREFIX` on every start |
 
 The phone reads `catalog.tsv` by fixed column position and requires at least ten columns. New

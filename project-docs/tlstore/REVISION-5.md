@@ -69,7 +69,7 @@ motion off (`TLSTORE_MOTION=0`, or the launcher's animations-off).
 
 `category` (one of Note taking, Tools, AI), `upstream` (owner/repo, empty for setups), `setup` (bool),
 `standfirst`, `does1..3`, `try`, `notes` (0–2, `|`-separated), `author`, `licence`, `size`, `picture`
-(signed digest + path in termux-launcher-binaries), `demo` (optional), `featured` (bool, one item).
+(signed digest + path in the binaries repo PickleHik3/tlstore), `demo` (optional), `featured` (bool, one item).
 Rules for each: `item-spread-rules.md`.
 
 ## Build plan

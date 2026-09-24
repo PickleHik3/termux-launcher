@@ -89,7 +89,7 @@ sources on the machine that runs a recipe.
 
 Prebuilt `aarch64` binaries of three of them — `kitten`, the patched Fastfetch, and Sigye — are
 published separately at
-[PickleHik3/termux-launcher-binaries](https://github.com/PickleHik3/termux-launcher-binaries),
+[PickleHik3/tlstore](https://github.com/PickleHik3/tlstore),
 which `tlstore`'s catalog can install. That repository carries the upstream licence texts, the
 patches, the build recipes, and the corresponding-source pointers for the GPL-3.0-only `kitten`.
 The notices below apply to those builds.
