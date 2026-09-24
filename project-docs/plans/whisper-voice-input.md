@@ -26,12 +26,47 @@ Facts that shape the design (from the model card):
   dominates latency (base 5 s: encode 0.04 s, decode 0.3–0.6 s for a short sentence on desktop CPU;
   0.5–0.8 s end to end on a Snapdragon 865).
 - Decode signature input order is `(mask, audio, tokens)` — bind by name/shape, not position.
+  Measured: `args_0` audio `[1, frames/2, 512]`, `args_1` tokens `[1, 128]` int32, `args_2` mask
+  `[1, 1, 128, 128]` float, additive causal (0 on and below the diagonal, −1e9 above). The token
+  sequence is **fixed at 128**, prompt included; logits come back as `[1, 128, vocab]` and the next
+  token is read at the last filled position.
 - Multilingual prompt: `[50258 <|startoftranscript|>, <|lang|>, 50359 <|transcribe|>,
   50363 <|notimestamps|>]`. English-only prompt: `[50257, 50362]`, no language/task tokens,
   EOT = 50256.
 - Tokenizer is `tokenizer.json` from the matching `openai/whisper-{size}{.en}` repo — a second HF
   repo.
 - Language forcing is recommended for short clips; base is the recommended minimum for non-English.
+
+## Measured (2026-09-24)
+
+Desktop reference decoder (numpy mel + tokenizer + greedy decode against the LiteRT graphs, in the
+session scratchpad; it becomes the golden fixture) over 26 synthesised clips — 13 phrases × two
+Piper voices (US, GB): single command words, short shell commands, two agent-style sentences.
+
+- **Short clips need silence around them.** Tightly cut words make the `.en` models emit `.`,
+  `[Music]` or `%`. With 300 ms of lead-in and tail (what a VAD pre-roll gives), base.en 10 s gets
+  most commands.
+- **The 30 s window fails on short speech** (`[Music]`, `www.mooji.org`, `[BLANK_AUDIO]`) and
+  **tiny fails on single words** (`[Music]`, `"I'm a child"` for `ls`).
+- **A shell-vocabulary prompt fixes the rest.** `<|startofprev|>` + `git ls cd sudo apt pkg tab
+  enter escape ctrl` before the task prompt took base.en 10 s and small.en 10 s to **26/26
+  correct**, lowercased (`git status`, `ls`, `sudo apt update`, `tab`, `send`, `ctrl c`); without it
+  `git` was always `Get`. Long sentences stay correct under the prompt.
+- Synthetic voices are an optimistic proxy; first device test with a real voice decides the
+  defaults below.
+
+pong (Snapdragon 8+ Gen 1), TFLite `benchmark_model`, per signature:
+
+| model | encode | decode step | peak memory |
+|---|---:|---:|---:|
+| tiny.en 10 s | 26 ms | 16 ms | 122 MB |
+| base.en 5 s | 21 ms | 24 ms | 190 MB |
+| **base.en 10 s** | **57 ms** | **30 ms** | **193 MB** |
+| small.en 10 s | 175 ms | 81 ms | 538 MB |
+
+A command (2–4 decode steps) is ~150 ms on base.en 10 s; a 20-token sentence ~0.7 s (small.en
+~2 s). 4 threads = 6 threads; 2 threads is 1.6× slower. **GPU delegate: 0 GPU kernels created**
+(unsupported ops), so the graph runs entirely on CPU anyway.
 
 ## Decisions
 
@@ -44,16 +79,18 @@ utterance. Memory selects the model *size*; the window is chosen for latency:
 - Default **10 s**. Voice input is segmented at pauses (below), so a 10 s window covers commands and
   dictation phrase by phrase; a segment that reaches 10 s is cut at the quietest point of its last
   second and continues in the next segment.
-- 5 s offered as "Commands (fastest)", 30 s as "Long phrases". Changing it downloads that graph and
-  deletes the old one (only one window per size is kept on disk).
+- 5 s offered as "Commands (fastest)" — it saves only ~35 ms encode + ~6 ms per step on pong.
+  **30 s is not offered**: it hallucinates on short speech, and segmentation already covers long
+  dictation. Changing the window downloads that graph and deletes the old one.
 
 ### Model size by RAM class (default suggestion in the download dialog)
 
 | RAM class | suggested | also offered |
 |---|---|---|
-| ≤ 4 GB | tiny | base |
-| 6–8 GB | base | tiny, small |
-| ≥ 12 GB | base | small, tiny |
+| ≤ 6 GB | base (~195 MB resident) | — |
+| ≥ 8 GB | base | small (~540 MB, ~3× slower, more accurate on hard audio) |
+
+tiny is not offered: it fails on single command words, and base already fits a 4 GB phone.
 
 English-only vs multilingual is asked once, at download. The choice is part of the model id
 (`whisper-acft-base-en`, `whisper-acft-base`).
@@ -70,7 +107,8 @@ delegate:
 - The chat LLM normally owns the GPU. Keeping STT on CPU means talking to an agent never contends
   with that agent's own generation for the GPU, and never forces a chat reload.
 
-Revisit only if KV-cached decoder graphs appear; an experimental "GPU" option is not planned.
+Confirmed on pong: the GPU delegate creates 0 kernels for these graphs. Revisit only if
+KV-cached decoder graphs appear; an experimental "GPU" option is not planned.
 
 ### Where it runs
 
@@ -97,14 +135,21 @@ in the UI process:
   Whisper's `log_mel_spectrogram` exactly. A golden fixture (Python-generated mel of a short wav)
   pins it in a unit test.
 - Tokenizer: parse `tokenizer.json` vocab + added tokens; decode only (id → byte-level BPE → UTF-8).
-- Greedy decode, stop at EOT, max tokens 64 / 128 / 224 for 5 / 10 / 30 s, repetition guard
-  (abort a segment that repeats the same n-gram 3×).
+- Greedy decode, stop at EOT; the token budget is 128 − prompt length (the decoder's fixed
+  sequence), repetition guard (abort a segment that repeats the same 4-gram 3×). Suppress
+  timestamp tokens, `<|startof…|>` / task tokens, and EOT on the first step.
+- **Prompt biasing (core, not later):** `<|startofprev|>` + a vocabulary line before the task
+  prompt. Terminal target: shell words (`git ls cd sudo apt pkg tab enter escape ctrl` plus a
+  user-editable list); other targets: no prompt. Needs a byte-level BPE *encoder* for the
+  vocabulary line (the multilingual vocab splits most shell words into several tokens); keep it
+  under ~24 tokens so the decode budget stays ≥ 100.
 
 ### Segmentation (what makes "ls … enter" work)
 
 Energy VAD on 30 ms frames with an adaptive noise floor:
 
-- speech starts when a frame is ≥ 9 dB over the floor;
+- speech starts when a frame is ≥ 9 dB over the floor; the segment keeps **300 ms of audio before
+  onset and 300 ms after the last voiced frame** (measured: without it single words hallucinate);
 - a **pause of 600 ms** (setting: 400–1200 ms) closes the segment and sends it to transcription
   immediately;
 - 2.5 s of silence, a tap on the voice key, or leaving the keyboard ends the session.
@@ -139,8 +184,8 @@ When typing goes to a terminal session (no key-value interceptor; add
 - lowercase a single-word segment (`"LS."` → `ls`), leave multi-word prose as spoken;
 - join consecutive segments with one space.
 
-Later, not in this plan: spoken symbols ("dash", "slash", "pipe") and prompt-biasing the decoder
-with shell vocabulary via `<|startofprev|>`.
+The vocabulary prompt already yields lowercase, unpunctuated shell text; cleanup is the safety
+net. Later, not in this plan: spoken symbols ("dash", "slash", "pipe").
 
 ### Language forcing
 
@@ -176,8 +221,9 @@ Choosing On-device with no model installed opens the TAI speech section.
 **TAI settings** (`termux_ai_preferences.xml`, new "Speech-to-text" category):
 
 - Installed speech model row (size, language kind, window, measured memory) with delete.
-- Download: dialog asks size (with the RAM-class suggestion), English-only vs multilingual, and
-  window (default 10 s).
+- Download: dialog asks size (base / small, with the RAM-class suggestion), English-only vs
+  multilingual, and window (10 s default, 5 s).
+- Terminal vocabulary: extra words added to the biasing prompt (project names, commands).
 - Window switch (re-downloads that graph), idle unload (default 2 min).
 
 Speech models are kept out of the chat model list and the chat catalog.
@@ -193,8 +239,8 @@ Speech models are kept out of the chat model list and the chat catalog.
 
 ## Memory
 
-STT is a registry kind (`STT`) in the memory manager. The estimate is file size × 1.3 until the
-first measured load (expected roughly 80 MB tiny, 140 MB base, 380 MB small). An STT load evicts
+STT is a registry kind (`STT`) in the memory manager. Estimates from the pong benchmark: base
+~195 MB, small ~540 MB (file size × ~1.9) until the first measured load. An STT load evicts
 idle embeddings first; it never evicts a chat model that is generating. If it still does not fit,
 voice input falls back to the Android recognizer. STT unloads after 2 minutes idle.
 

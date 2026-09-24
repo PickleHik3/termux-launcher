@@ -63,13 +63,34 @@ Embeddings route through the same `decideLoad` + preflight path as chat.
 
 ### 3. Measurement instead of ratios alone
 
-- Around each load, read the runtime process's PSS (`Debug.getMemoryInfo` in-process: total PSS
-  plus native heap) before and after; store `measuredBytes` in the registry and in
-  `TaiRuntimeHistory` keyed by model + accelerator + window bucket.
-- The next plan for that key uses the measured figure (with a 10 % margin), falling back to the
-  ratio estimate. This self-calibrates across devices without new tuning tables.
+Measured on pong 2026-09-24 (gemma-4-e4b, `/proc/<pid>/smaps_rollup` of `:tai_runtime` vs
+`MemAvailable`):
+
+| load | MemAvailable drop | PSS growth |
+|---|---:|---:|
+| GPU, 4k | 2.4–4.2 GB (4 runs) | 0.76–0.93 GB |
+| CPU, 16k | 0.45 GB | 0.63 GB |
+
+**PSS cannot be the measure**: GPU buffers are not in the process's PSS, and the kgsl per-process
+counters are not readable by the app. The measure is therefore system-side:
+
+- Sample `MemAvailable` every 100 ms across the load (loads are already serialized) and record
+  `before − minimum` as `measuredBytes`. It is noisy (±0.9 GB across identical GPU loads, because
+  the kernel reclaims cache while the load runs) but it measures what actually matters: how close
+  the phone came to the floor.
+- Store it in `TaiRuntimeHistory` keyed by model + accelerator + window bucket; the next plan for
+  that key uses the **largest** recorded value (+10 %), falling back to the ratio estimate. PSS is
+  still recorded for CPU loads and for the STT/embedding interpreters, where it is accurate.
 - `advertisedContextWindow` and `decideLoad` share one resident-credit function (today one assumes
   CPU, the other the real accelerator).
+
+### 3b. Runtime baseline
+
+After its first chat unload, `:tai_runtime` keeps ~330 MB of anonymous memory (15 MB before the
+first load); three load/unload cycles held it flat at 329–336 MB, so it is not a leak but memory
+the LiteRT-LM / driver allocators keep. The registry counts it as a `RUNTIME` resident once a chat
+model has been loaded, and when nothing has been resident for the idle timeout the service stops
+itself and the process exits, returning it. Keep-warm and an active API client keep the process.
 
 ### 4. Pressure handling
 
@@ -113,6 +134,8 @@ and an "Unload all" action. `tai status` / `/v1/status` return the same table.
 ## Phases
 
 1. Lock split + state snapshot (fixes cancel/ANR on its own; no behaviour change otherwise).
+   Also: the 2026-09-24 probe lost pong's network while a CPU 16k E4B generation ran; nothing was
+   killed, but a re-run with logcat captured belongs in this phase's device check.
 2. Residency registry; chat and both embedding runtimes register; embeddings go through the budget.
 3. Eviction planning in `TaiLoadBudget` + PSS measurement and history correction.
 4. Tiered pressure watch, `onTrimMemory`, idle timers.
