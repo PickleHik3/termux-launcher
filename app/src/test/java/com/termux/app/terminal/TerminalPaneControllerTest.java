@@ -41,6 +41,22 @@ import static org.junit.Assert.assertTrue;
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class TerminalPaneControllerTest {
 
+    // --- A window opened for one command carries its title ---
+
+    @Test
+    public void windowOpenedWithATitleCarriesItOnItsChip() {
+        TerminalPaneController controller = newController();
+        TerminalSession shell = terminal();
+        shell.mSessionName = "tlstore";
+        TerminalPaneController.Window named = controller.newWindow(shell, "tlstore");
+        assertEquals("tlstore", controller.windowName(named));
+        // The chip is built from the window's name; a name held only by the shell never reaches it.
+        assertTrue(TerminalWindowBar.itemForNamed(controller.windowName(named), null)
+            .label.endsWith(" tlstore"));
+        assertNull(controller.windowName(controller.newWindow(terminal(), "   ")));
+        assertNull(controller.windowName(controller.newWindow(terminal())));
+    }
+
     @Test
     public void hostResizeLeaseIsNestedGlobalAndInheritedByWindowSwitch() {
         TerminalPaneController controller = newController();

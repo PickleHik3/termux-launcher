@@ -358,6 +358,18 @@ public class TerminalPaneController {
         return w;
     }
 
+    /**
+     * {@link #newWindow(TerminalSession)} with the tab already named, for a window that arrives
+     * with a title (the local API's {@code window.open --title}). The chip reads the window's name,
+     * never the shell's session name, so a title given only to the shell would leave the tab
+     * deriving its label from the idle shell's directory. Blank clears, as with a rename.
+     */
+    public Window newWindow(TerminalSession shell, @Nullable CharSequence name) {
+        Window w = newWindow(shell);
+        w.name = TerminalNamePolicy.normalizeWindow(name);
+        return w;
+    }
+
     // --- Behaviour preferences ---
 
     /** Retained layout every new window starts under, or null for manual management. */

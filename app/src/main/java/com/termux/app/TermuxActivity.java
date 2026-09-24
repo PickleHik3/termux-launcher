@@ -18255,7 +18255,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * A new top-level window (not a split) running {@code command} through the login shell, for
      * the local API's {@code window.open} — the same full-size window {@link #createNewWindow()}
      * makes for the window strip's +, but seeded with a command and a title and reachable while
-     * the launcher is merely running with another app in front. Null exactly when
+     * the launcher is merely running with another app in front. {@code title} names the window
+     * itself — the chip reads the window's name, not the shell's. Null exactly when
      * {@link #createCommandShell} is (no session yet to attach a window to, the service is not
      * ready, or the terminal limit is reached), or when the new shell could not be given a
      * starting size and nothing is on screen to eventually give it one (see
@@ -18277,7 +18278,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mTermuxService != null) mTermuxService.killTermuxSession(shell);
             return null;
         }
-        com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
+        com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell, title);
         mCurrentWSession.windows.add(w);
         if (focus) {
             mCurrentWSession.current = mCurrentWSession.windows.size() - 1;

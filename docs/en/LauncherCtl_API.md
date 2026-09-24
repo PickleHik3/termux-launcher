@@ -235,7 +235,7 @@ launcher only needs to be running, not in the foreground.
   interactive UI (Ctrl+Alt+C / the strip's `+`), not this API's. The command runs through the
   user's login shell and the shell stays behind when it exits, exactly like a pane opened through
   `POST /v1/panes`.
-- `title` — the session name shown on the window's chip.
+- `title` — the name shown on the window's chip.
 - `focus` — default `true`, switches the window strip to it; `false` leaves whichever window is on
   screen alone while the new one keeps running behind it.
 
