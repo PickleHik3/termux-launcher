@@ -553,6 +553,14 @@ public class LauncherCtlApiServer {
                     return jsonResponse(error);
                 }
                 return jsonResponse(runPaneRequest(request));
+            } else if ("POST".equals(request.method) && "/v1/windows".equals(request.path)) {
+                if (!TermuxAppSharedPreferences.build(context).isAgentPanesEnabled()) {
+                    JSONObject error = jsonError("panes_api_disabled",
+                        "Pane access for scripts is switched off in Settings > Terminal & Status > Sessions and panes");
+                    error.put("_statusCode", 403);
+                    return jsonResponse(error);
+                }
+                return jsonResponse(runWindowOpenRequest(request));
             } else if (request.path.startsWith("/v1/keyboard/")) {
                 return jsonResponse(runKeyboardRequest(request));
             } else if ("GET".equals(request.method) && "/v1/x11/gpu".equals(request.path)) {
@@ -742,6 +750,39 @@ public class LauncherCtlApiServer {
             return error;
         }
         return dispatcher.execute(toolName, arguments);
+    }
+
+    /**
+     * {@code POST /v1/windows}: a whole new window (not a split), for the same shell-driven
+     * callers as the pane routes above — {@code launcherctl window open}, or an agent that wants a
+     * full-size window of its own rather than a pane sharing the current one. Runs through
+     * {@link com.termux.app.terminal.TerminalActionDispatcher#TOOL_WINDOW_OPEN}, which is in the
+     * same background-safe allowlist as {@code pane.open}, and registers the opened pane with the
+     * same ownership the pane routes use, so {@code /v1/panes/{id}/write|read|close} reach it too.
+     */
+    private JSONObject runWindowOpenRequest(HttpRequest request) throws JSONException {
+        JSONObject arguments;
+        if (request.body == null || request.body.trim().isEmpty()) {
+            arguments = new JSONObject();
+        } else {
+            try {
+                arguments = new JSONObject(request.body);
+            } catch (JSONException e) {
+                JSONObject error = jsonError("bad_request", "Request body must be a JSON object");
+                error.put("_statusCode", 400);
+                return error;
+            }
+        }
+        com.termux.app.terminal.TerminalActionDispatcher dispatcher =
+            com.termux.app.terminal.TerminalActionDispatcher.getInstance();
+        if (!dispatcher.isAttached()) {
+            JSONObject error = jsonError("activity_not_running",
+                "The launcher is not running right now, so a window cannot be opened");
+            error.put("_statusCode", 409);
+            return error;
+        }
+        return dispatcher.execute(
+            com.termux.app.terminal.TerminalActionDispatcher.TOOL_WINDOW_OPEN, arguments);
     }
 
     /**
@@ -1360,6 +1401,7 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/auth/rotate", new SimpleRateLimiter(5, 60_000));
         rateLimiters.put("GET:/v1/panes", new SimpleRateLimiter(240, 60_000));
         rateLimiters.put("POST:/v1/panes", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/windows", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/panes/*/focus", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/panes/*/close", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/panes/*/write", new SimpleRateLimiter(240, 60_000));
@@ -1762,6 +1804,7 @@ public class LauncherCtlApiServer {
             "  launcherctl pane write <id> [--enter] <text> | launcherctl pane write <id> [--enter] < file\n" +
             "  launcherctl pane read <id> [--lines N]\n" +
             "  launcherctl pane close <id>\n" +
+            "  launcherctl window open [--title NAME] [--no-focus] [--] CMD ARGS...\n" +
             "  launcherctl agent working|blocked|idle|clear [--agent NAME] [--pane ID]\n" +
             "  launcherctl agent install-hooks\n" +
             "  launcherctl keyboard show|hide [--source manual|focus] [--hold]\n" +
@@ -1772,11 +1815,15 @@ public class LauncherCtlApiServer {
             "  id=$(launcherctl pane open --title preview --no-focus -- kitten icat out.png | sed -n 's/.*\"id\":\"\\([^\"]*\\)\".*/\\1/p')\n" +
             "  launcherctl pane write \"$id\" --enter 'make test'\n" +
             "  launcherctl pane read \"$id\" --lines 40\n" +
+            "  id=$(launcherctl window open --title tlstore --no-focus -- tlstore | sed -n 's/.*\"id\":\"\\([^\"]*\\)\".*/\\1/p')\n" +
             "  launcherctl keyboard show --source focus   # a text field took focus\n" +
             "  launcherctl keyboard hide --hold            # keep it down until this asks again\n" +
             "\n" +
-            "A pane opened here belongs to the opener: write, read and close only work on panes\n" +
-            "opened through this command; list and focus work on every pane. Output is JSON.\n" +
+            "A pane or window opened here belongs to the opener: write, read and close only work\n" +
+            "on ones opened through this command; list and focus work on every pane. Output is\n" +
+            "JSON. A window is a whole new full-size window with its own chip, not a pane sharing\n" +
+            "the one on screen; --no-focus leaves the current window up front while the new one\n" +
+            "runs behind it.\n" +
             "\n" +
             "launcherctl agent tells the window chips and the sessions browser what the AI coding\n" +
             "agent in this pane is doing, so a pane that needs an answer is visible from anywhere;\n" +
@@ -1906,6 +1953,38 @@ public class LauncherCtlApiServer {
             "      ;;\n" +
             "  esac\n" +
             "}\n" +
+            "window_cmd() {\n" +
+            "  sub=\"${1:-}\"\n" +
+            "  usage='usage: launcherctl window open [--title NAME] [--no-focus] [--] CMD ARGS...'\n" +
+            "  [ -n \"$sub\" ] && shift || { echo \"$usage\" >&2; exit 2; }\n" +
+            "  case \"$sub\" in\n" +
+            "    open)\n" +
+            "      title= focus=true\n" +
+            "      while [ \"$#\" -gt 0 ]; do\n" +
+            "        case \"$1\" in\n" +
+            "          --title) title=\"$2\"; shift 2 ;;\n" +
+            "          --no-focus) focus=false; shift ;;\n" +
+            "          --) shift; break ;;\n" +
+            "          -*) echo \"launcherctl window open: unknown option $1\" >&2; exit 2 ;;\n" +
+            "          *) break ;;\n" +
+            "        esac\n" +
+            "      done\n" +
+            "      [ \"$#\" -gt 0 ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "      argv=\n" +
+            "      for a in \"$@\"; do\n" +
+            "        argv=\"$argv${argv:+,}$(printf '%s' \"$a\" | json_str)\"\n" +
+            "      done\n" +
+            "      body=\"{\\\"focus\\\":$focus,\\\"command\\\":[$argv]\"\n" +
+            "      [ -n \"$title\" ] && body=\"$body,\\\"title\\\":$(printf '%s' \"$title\" | json_str)\"\n" +
+            "      api POST /v1/windows \"$body}\"\n" +
+            "      ;;\n" +
+            "    *)\n" +
+            "      echo \"launcherctl window: unknown command: $sub\" >&2\n" +
+            "      print_help >&2\n" +
+            "      exit 2\n" +
+            "      ;;\n" +
+            "  esac\n" +
+            "}\n" +
             "cmd=\"${1:-help}\"\n" +
             "case \"$cmd\" in\n" +
             "  -h|--help|help)\n" +
@@ -1923,6 +2002,10 @@ public class LauncherCtlApiServer {
             "  pane)\n" +
             "    shift || true\n" +
             "    pane_cmd \"$@\"\n" +
+            "    ;;\n" +
+            "  window)\n" +
+            "    shift || true\n" +
+            "    window_cmd \"$@\"\n" +
             "    ;;\n" +
             "  agent)\n" +
             "    shift || true\n" +

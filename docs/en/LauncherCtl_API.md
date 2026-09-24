@@ -212,6 +212,57 @@ launcherctl pane close "$id"
 Every `pane` command prints the server's JSON body and exits 1 on an HTTP error, so the error code
 (`not_owned`, `pane_not_found`, …) is always visible to the caller.
 
+### Windows
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/windows` | Open a NEW full-size window (not a split) |
+
+A pane shares the screen with whatever else is in the current window; a window is the same kind of
+full-size, own-chip surface `+` in the window strip creates. This route is for a script that wants
+one of those for itself instead of a pane squeezed in beside the user's — tlstore-ui's own
+full-screen UI is the motivating case. It is background-safe exactly like the pane routes: the
+launcher only needs to be running, not in the foreground.
+
+`POST /v1/windows` takes:
+
+```json
+{"command": ["tlstore"], "title": "tlstore", "focus": true}
+```
+
+- `command` — an argv array, or a string that is run through `sh -c`. Unlike `POST /v1/panes`, this
+  is required: a window with nothing to run is just `launcherctl window open`'s job in the
+  interactive UI (Ctrl+Alt+C / the strip's `+`), not this API's. The command runs through the
+  user's login shell and the shell stays behind when it exits, exactly like a pane opened through
+  `POST /v1/panes`.
+- `title` — the session name shown on the window's chip.
+- `focus` — default `true`, switches the window strip to it; `false` leaves whichever window is on
+  screen alone while the new one keeps running behind it.
+
+The response is flat, not a pane record:
+
+```json
+{"ok": true, "id": "6d3f…", "window": 2, "columns": 80, "rows": 24}
+```
+
+`window` is the new window's index, in the same order `GET /v1/panes` lists windows under.
+`columns`/`rows` are `0` when the window has not been laid out yet (an unfocused window nobody has
+looked at). The opened pane is owned exactly like one opened through `POST /v1/panes`, so
+`/v1/panes/{id}/write|read|close` reach it the same way — `GET /v1/panes` and `/focus` too. A
+window that could not be opened (no session, terminal limit reached, compatibility mode on, or the
+window could never be given a starting size) is HTTP 409 `window_open_failed`; a missing `command`
+is HTTP 400 `bad_request`.
+
+Rate limit: 30 a minute.
+
+```sh
+id=$(launcherctl window open --title tlstore --no-focus -- tlstore \
+     | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+launcherctl pane read "$id" --lines 40
+launcherctl pane focus "$id"
+launcherctl pane close "$id"
+```
+
 ### The on-screen keyboard
 
 | Method | Path | Purpose |

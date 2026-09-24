@@ -292,6 +292,20 @@ public interface TerminalHost extends SoftKeyboardPolicy {
         return null;
     }
 
+    /**
+     * Open a NEW full-size window (not a split) running {@code command} through the user's login
+     * shell, the way tapping the window strip's + does — or null when none can be opened (no
+     * session, terminal limit reached, service not ready, split panes disabled by compatibility
+     * mode, or the window could never actually start; see the implementation's own doc). The
+     * shell stays behind once the command exits. {@code focus} switches the window strip to it;
+     * false leaves whichever window is on screen alone, with the new one still running behind it.
+     */
+    @Nullable default TerminalSession openCommandWindow(@NonNull List<String> command,
+                                                         @Nullable String cwd, @Nullable String title,
+                                                         boolean focus) {
+        return null;
+    }
+
     /** The windows of the current session, in tab order. */
     @NonNull default List<TerminalPaneController.Window> currentSessionWindows() {
         return java.util.Collections.emptyList();

@@ -18251,6 +18251,76 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return created == null ? null : created.getTerminalSession();
     }
 
+    /**
+     * A new top-level window (not a split) running {@code command} through the login shell, for
+     * the local API's {@code window.open} — the same full-size window {@link #createNewWindow()}
+     * makes for the window strip's +, but seeded with a command and a title and reachable while
+     * the launcher is merely running with another app in front. Null exactly when
+     * {@link #createCommandShell} is (no session yet to attach a window to, the service is not
+     * ready, or the terminal limit is reached), or when the new shell could not be given a
+     * starting size and nothing is on screen to eventually give it one (see
+     * {@link #seedWindowSize}) — handing back a pane that can never actually run would be worse
+     * than refusing it.
+     */
+    @Nullable TerminalSession openCommandWindow(@NonNull java.util.List<String> command,
+                                                @Nullable String cwd, @Nullable String title,
+                                                boolean focus) {
+        if (!isSplitPanesEnabled() || mPaneController == null || mCurrentWSession == null) return null;
+        TerminalSession shell = createCommandShell(command, cwd, title);
+        if (shell == null) return null;
+        boolean seeded = seedWindowSize(shell);
+        if (!seeded && !isVisible()) {
+            // No pane to borrow a size from, and nobody looking to trigger a fresh layout pass
+            // either -- see seedWindowSize's doc. Left alone, this shell would sit at 0x0
+            // forever: per TerminalSession's own class doc, emulation and the subprocess itself
+            // only begin once updateSize() runs.
+            if (mTermuxService != null) mTermuxService.killTermuxSession(shell);
+            return null;
+        }
+        com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
+        mCurrentWSession.windows.add(w);
+        if (focus) {
+            mCurrentWSession.current = mCurrentWSession.windows.size() - 1;
+            if (isVisible()) {
+                runWithoutNotices(() -> {
+                    captureTerminalDeparture();
+                    mPaneController.showWindow(w);
+                    animateTerminalWindowLifecycleArrival(1);
+                });
+            } else {
+                // No on-screen chrome to animate or capture with nobody looking; still render it
+                // so its view is attached and ready to reflow once something does look.
+                mPaneController.showWindow(w);
+            }
+        }
+        // Not shown at all when focus is false: like a window nobody has switched to yet, it
+        // stays in the session's window list (so pane.list and the window strip see it) without
+        // taking over the screen. Its shell is already running either way (seedWindowSize above).
+        rebuildDrawerSessions();
+        return shell;
+    }
+
+    /**
+     * Gives a brand-new, not-yet-shown window's shell a starting size right away, borrowed from
+     * whichever pane is already on screen, so its subprocess forks even though nothing will lay
+     * its own (still unattached) view out yet — see {@link #openCommandWindow}. {@link TerminalPaneController#newWindow}
+     * does not render its window until {@link TerminalPaneController#showWindow}, and a window
+     * that is never shown (an unfocused {@code window.open}) or an Activity that is currently
+     * stopped (Android runs no layout passes while stopped, per the drift {@link
+     * TerminalPaneController#refreshPaneSizes} corrects on return) would otherwise leave
+     * {@link TerminalView#updateSize} refusing to size a still-zero view forever. Returns false
+     * when there is no pane to borrow a size from, in which case the shell is left to size itself
+     * normally once something finally shows it.
+     */
+    private boolean seedWindowSize(@NonNull TerminalSession shell) {
+        TerminalSession reference = getCurrentSession();
+        TerminalEmulator referenceEmulator = reference == null ? null : reference.getEmulator();
+        if (referenceEmulator == null) return false;
+        shell.updateSize(referenceEmulator.mColumns, referenceEmulator.mRows,
+            referenceEmulator.getCellWidthPixels(), referenceEmulator.getCellHeightPixels());
+        return true;
+    }
+
     @Nullable TerminalSession createShellForCwd(@Nullable String cwd, @Nullable String sessionName) {
         if (mTermuxService == null) return null;
         if (mTermuxService.getTermuxSessionsSize()
@@ -18906,6 +18976,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 || mPaneController.getActiveSession() == null) return null;
             TerminalSession shell = createCommandShell(command, cwd, title);
             if (shell == null) return null;
+            // A split only gets its real size from the layout pass addPane's render() triggers,
+            // and Android runs none of those while this Activity is stopped -- seed a size first
+            // so the shell forks regardless (see openCommandWindow/seedWindowSize's doc, the same
+            // gap for a whole window). Refuse rather than hand back a pane that can never run when
+            // there is nothing to borrow from and nobody visible to lay it out naturally either.
+            boolean seeded = seedWindowSize(shell);
+            if (!seeded && !isVisible()) {
+                mTermuxService.killTermuxSession(shell);
+                return null;
+            }
             boolean[] added = {false};
             runWithoutNotices(() -> added[0] = mPaneController.addPane(shell, focus));
             if (!added[0]) {
@@ -18913,6 +18993,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return null;
             }
             return shell;
+        }
+
+        @Override @Nullable public TerminalSession openCommandWindow(
+                @NonNull java.util.List<String> command, @Nullable String cwd,
+                @Nullable String title, boolean focus) {
+            return TermuxActivity.this.openCommandWindow(command, cwd, title, focus);
         }
 
         @Override @NonNull public java.util.List<com.termux.app.terminal.TerminalPaneController.Window>
