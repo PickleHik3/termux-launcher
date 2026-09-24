@@ -25,9 +25,12 @@ Placement::new(&pic,col,row) /*z -1*/ .at_px(x_px,y_px,cell_w,cell_h) .pid(n) .z
   Same (pic.id,pid) next frame = moved/re-cropped in place; omitted = deleted; upload once per picture.
 Picture: Rc clone; .id() .width() .height() .rgba() .cells(cw,ch); Picture::new(w,h,rgba)
 ctx.pics: .script_word(text, px_h, Rgb) /*Pinyon, px_h tall*/  .mark(px, Rgb) /*27px×5px*/  .file(&Path, w_px, h_px, Fit::{Contain,Cover})
-layout: tier(cols,rows)->Tier::{Full ≥40, Strip 28–39, Compact <28}; narrow(cols)=cols<44; centre_x(rect,w); spaced_caps(s)
-Regions { tier, narrow, gutter, masthead, rule, hero, hero_lead, hero_word, body, cover_rows /*Full ≤12, Strip ≤5, Compact 0*/, keys }
-  52×45: masthead y1, rule y2, lead y4, word y5–7, body y9–41, keys y43.  52×23: masthead y0, rule y1, hero y2, body y4–20, keys y22.
+layout: BASE_COLS×BASE_ROWS = 53×26 (keyboard up) is the design; tier(cols,rows)->Tier::{Tall ≥40, Base 26–39, Compact <26}
+  narrow(cols)=cols<44; centre_x(rect,w); spaced_caps(s); cover_rows(spare,max) (0 under 8 spare rows)
+  wrap(s,w,max_lines)/fit_line(s,w): whole words, `…` when cut. Ctx.cell_known: pixel-exact pictures only then.
+Regions { tier, narrow, gutter, masthead, rule, hero, hero_lead, hero_word, body, keys }
+  53×26: masthead y1, rule y2, lead y3, word y4–5, body y7–22, keys y24.  53×40: lead y4, word y5–7, body y9–36, keys y38.
+launch::start(cols,rows,no_window,launcherctl,exe) -> Start::{Here(hint), Moved}  // under 53×26: launcherctl window open
 Palette { dark, accent, on_accent, tonal, on_tonal, surface, ink, dim, rule } + ink_s() dim_s() accent_s() rule_s() tonal_s() accent_fill_s()
   from ~/.termux/material-colors-{dark|light}.properties; dark = OSC 11 background, else exported mode, else dark
 Reference screen: src/demo.rs. Binary: tlstore-ui --demo | --probe | --version.
@@ -66,10 +69,10 @@ Effect gains line:f32 (leaders/hlines drawn out, text untouched; they use min(re
   value:Option<f32> (Installing draws Block(0)'s number and its dot bar from it; the scene keeps the target).
 Scene gains cell:(w,h) px. Pictures hidden or moved by an effect are still recorded, at their rest rect.
 Row text in the scene = the first text drawn for it (Apps: the item number, drawn before the ✓ mark).
-Timeline (ms): leave 160 — all but Mark/Crumb/Context fade (alpha in 1/16 steps); pictures alpha 1-p, lift
-  0.4 row. Enter ≈820 after it: Crumb decode 12×32 · Rule reveal 600 out · HeroLead fade 500 @60 ·
-  HeroWord picture: spring 600 @100 as dy=h(1−s), shown=min(s,1); text: fade · Cover picture: shown dram
-  700 @120; stand-in: fade · Caption @180, Header/Chips @225 fade 300 · Row(i) @260+min(45, 240/(n−1))·i,
+Timeline (ms): leave 160 — all but Mark/Crumb/Context fade (alpha in 1/16 steps); pictures hidden at once.
+  Enter ≈820 after it: Crumb decode 12×32 · Rule reveal 600 out · HeroLead fade 500 @60 ·
+  pictures (word, cover, demo) never move: hidden until the entry ends, then placed once · text word: fade
+  500 @100 · Caption @180, Header/Chips @225 fade 300 · Row(i) @260+min(45, 240/(n−1))·i,
   fade 300, leaders 60 behind over 240 · Pager after the last row · Block(b) @180+min(45,300/(n−1))·b
   (Installing Block 0/1: count-up instead) · Keys, SelBar, Notice, Mark, Context at rest.
   Every NavKind plays the same; a navigation mid-transition restarts from the view as last drawn.

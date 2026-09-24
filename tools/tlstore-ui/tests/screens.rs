@@ -1139,3 +1139,19 @@ fn install_number_counts_up_and_the_dot_bar_follows() {
     h.settle();
     std::fs::remove_file(h.dir.join("hold")).unwrap();
 }
+
+#[test]
+fn small_and_odd_grids_draw_every_screen_without_panicking() {
+    for (c, r) in [(53, 25), (52, 23), (44, 20), (30, 14), (20, 8), (80, 60), (53, 26)] {
+        let mut h = H::new(c, r, Opts { caps: true, ..Opts::default() });
+        open_item(&mut h, "kitten");
+        h.key(Key::End);
+        h.key(Key::Esc);
+        h.key(Key::Char('u'));
+        h.key(Key::Esc);
+        let mut h = H::new(c, r, Opts { caps: true, gh: Gh::Missing, ..Opts::default() });
+        open_item(&mut h, "sigye");
+        h.key(Key::Char('s'));
+        assert_eq!(h.r().top(), "nogh");
+    }
+}

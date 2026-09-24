@@ -35,12 +35,17 @@ works. Setups (fish-shell) are never starred, nor the programs they bring. No `t
 Colour: Material tones taken from the wallpaper palette the launcher already exports; colour stays sparse
 (cursor, selection, new versions, key letters). Light and dark follow the terminal.
 
-Layout follows the live grid on every resize: 40+ rows full cover; 28–39 a picture strip; under 28 (keyboard
-open) no cover, one-line hero, `f fullscreen` hint; under 44 columns category tags drop. `f` asks the
+Layout follows the live grid on every resize. The design baseline is 53 columns × 26 rows (the launcher's
+terminal with its keyboard up): masthead, rule, two-row hero, chips, six rows with paging, key row. More rows
+add to that design — a gap and a three-row hero from 40 rows, a cover only when eight rows are spare, more rows
+per page — and never a picture placeholder (no picture, no cover). Under 26 rows the hero shares one row; under
+44 columns category tags drop. Started in a pane smaller than 53×26, the store opens in a launcher window of its
+own (`launcherctl window open`) and the pane prints one line; where that fails it stays, with a hint. (Polish
+round, 2026-09-24.) `f` asks the
 launcher to put its in-app keyboard away while tlstore is open; it returns on `esc` or a tap on the terminal.
 
 Motion (design page note has the table): 160 ms leave, breadcrumb decodes from ░▒▓ glyphs, rule draws,
-hero script rises out of a mask on a spring, picture wipes down, rows arrive 45 ms apart with leaders
+pictures stay still and appear once the screen settles (polish round), rows arrive 45 ms apart with leaders
 drawing out, install number counts up. Every frame is one synchronized update (mode 2026). A setting turns
 motion off (`TLSTORE_MOTION=0`, or the launcher's animations-off).
 
