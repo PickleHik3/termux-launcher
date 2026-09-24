@@ -90,8 +90,10 @@ impl View for Installing {
         };
         let digits = pct.to_string();
         if p.f.ctx.caps.text_sizing {
-            p.sized(El::Block(0), g, b.y, &digits, Sizing::scale(3), pal.accent_s().bold());
-            p.sized(El::Block(0), g + 6, b.y + 1, "%", Sizing::scale(2), pal.dim_s());
+            // The sign sits right after the digits, so a third digit (100) pushes it along
+            // instead of landing on top of the number.
+            let r = p.sized(El::Block(0), g, b.y, &digits, Sizing::scale(3), pal.accent_s().bold());
+            p.sized(El::Block(0), r.right(), b.y + 1, "%", Sizing::scale(2), pal.dim_s());
         } else {
             let e = p.text(El::Block(0), g, b.y, &digits, pal.accent_s().bold());
             p.text(El::Block(0), e, b.y, "%", pal.dim_s());

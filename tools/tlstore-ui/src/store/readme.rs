@@ -703,6 +703,9 @@ pub fn wrap_spans(spans: &[Span], width: u16) -> Vec<Vec<Span>> {
             let mut first = true;
             for word in seg.split_whitespace() {
                 let space = !first || leading || prev_space;
+                // A space between two spans is nobody's: it must not carry the next span's
+                // code background or link underline. Inside one span it keeps the style.
+                let gap = if first { Span::plain("") } else { span.clone() };
                 first = false;
                 let ww = text_width(word);
                 if cur_w == 0 {
@@ -724,7 +727,7 @@ pub fn wrap_spans(spans: &[Span], width: u16) -> Vec<Vec<Span>> {
                     push(&mut cur, &mut cur_w, span, rest);
                 } else if space {
                     if cur_w + 1 + ww <= w {
-                        push(&mut cur, &mut cur_w, span, " ");
+                        push(&mut cur, &mut cur_w, &gap, " ");
                         push(&mut cur, &mut cur_w, span, word);
                     } else {
                         lines.push(std::mem::take(&mut cur));
@@ -1106,6 +1109,25 @@ mod tests {
         assert_eq!(
             rows.last(),
             Some(&Row::Link { text: "read the rest on GitHub".into(), url: REPO.into() })
+        );
+    }
+
+    #[test]
+    fn wrap_spans_keeps_the_gap_before_a_span_plain() {
+        let code = Span { text: "code".into(), code: true, ..Span::default() };
+        let link = Span { text: "a site".into(), link: Some("https://x".into()), ..Span::default() };
+        let lines = wrap_spans(&[Span::plain("see "), code, Span::plain(" and "), link], 60);
+        let l = &lines[0];
+        let styled: Vec<(&str, bool, bool)> =
+            l.iter().map(|s| (s.text.as_str(), s.code, s.link.is_some())).collect();
+        assert_eq!(
+            styled,
+            vec![
+                ("see ", false, false),
+                ("code", true, false),
+                (" and ", false, false),
+                ("a site", false, true)
+            ]
         );
     }
 
