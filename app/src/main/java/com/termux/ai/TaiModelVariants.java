@@ -105,8 +105,12 @@ final class TaiModelVariants {
     }
 
     /**
-     * The canonical id of a multimodal model loads text-only (Gallery's chat task); every other
-     * model (text-only, embeddings, MNN, imported) is returned unchanged.
+     * The canonical id of a multimodal model loads text-only. This is cheaper than, not a copy
+     * of, Gallery's chat task: Gallery's AI Chat task passes {@code supportImage}/{@code
+     * supportAudio} from the model, so its chat loads both encoders for Gemma 4
+     * (Gallery {@code LlmChatTaskModule}, {@code supportImage = model.supportImage, supportAudio =
+     * model.supportAudio}). Every other model (text-only, embeddings, MNN, imported) is returned
+     * unchanged.
      */
     @Nullable
     static TaiModelSpec chatScopedOrSelf(@Nullable TaiModelSpec spec) {

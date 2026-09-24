@@ -12,9 +12,14 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public final class TaiModelProfile {
-    public static final String SOURCE_EDGE_GALLERY_1_0_15 = "google-ai-edge-gallery-1.0.15";
+    // Value is Gallery's model_allowlist 1_0_19 (the constant name is kept for source
+    // compatibility with existing profile source strings). The allowlist values are unchanged
+    // from 1_0_15 through 1_0_19 (checked by parsing each file); only the label was stale.
+    public static final String SOURCE_EDGE_GALLERY_1_0_15 = "google-ai-edge-gallery-1.0.19";
     public static final String SOURCE_LITERT_COMMUNITY = "litert-community-model-card";
     public static final String THINKING_NONE = "none";
     public static final String THINKING_TOGGLEABLE = "toggleable";
@@ -101,34 +106,99 @@ public final class TaiModelProfile {
             return new TaiModelProfile(Collections.singletonList("cpu"), 1024, 40, 0.90d, 0.80d,
                 modelSpec.recommendedRamGb > 0 ? modelSpec.recommendedRamGb : null, "tai-mnn-config-default");
         }
+        // Gallery's maxTokens (AL:19,65) is EngineConfig.maxNumTokens, the total KV-cache budget
+        // (doc: "Gallery sizes GPU and CPU loads with the same context"). Gallery also gives
+        // Gemma 4 a maxContextLength slider up to 32000 (AL:18-19,64-65), so that value, not
+        // 4000, is the real ceiling on the window; 4000 stays a sensible default output cap
+        // (doc: "the effect is harmless" for Gemma 4 today).
         if ("gemma4e2bit".equals(id) || "gemma4e2bitlitertlm".equals(id) || path.contains("gemma-4-e2b-it.litertlm")) {
-            return edgeGalleryThinkingProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 8);
+            return edgeGalleryThinkingProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 8, 32000);
         }
         if ("gemma4e4bit".equals(id) || "gemma4e4bitlitertlm".equals(id) || path.contains("gemma-4-e4b-it.litertlm")) {
-            return edgeGalleryThinkingProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 12);
+            return edgeGalleryThinkingProfile(Arrays.asList("gpu", "cpu"), 4000, 1.0d, 12, 32000);
         }
         if (normalizedIdentity(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M).equals(id)
             || path.contains("mobile_actions_q8_ekv1024")) {
             return edgeGalleryProfile(Collections.singletonList("cpu"), 1024, 0.0d, 6);
         }
+        // Gallery gives DeepSeek/Qwen no separate maxContextLength (AL:169-185): the allowlist's
+        // 4096 is both the total window and the value Gallery would otherwise use as an output
+        // cap. TAI keeps 4096 as the context window but trims the output cap so a full prompt
+        // still fits (doc recommendation 2: "an output cap of 4096 inside a 4096 window leaves
+        // no room for the prompt").
         if ("deepseekr1distillqwen15blitertlm".equals(id)
             || path.contains("deepseek-r1-distill-qwen-1.5b_multi-prefill-seq_q8_ekv4096.litertlm")) {
-            return edgeGalleryProfile(Arrays.asList("gpu", "cpu"), 4096, 1.0d, 6);
+            return edgeGalleryProfile(Arrays.asList("gpu", "cpu"), sensibleOutputCap(4096), 1.0d, 6, 4096);
         }
         if ("qwen2515binstructlitertlm".equals(id)
             || path.contains("qwen2.5-1.5b-instruct_multi-prefill-seq_q8_ekv4096.litertlm")) {
-            return new TaiModelProfile(Arrays.asList("gpu", "cpu"), 4096, 20, 0.80d, 0.70d, 6,
-                SOURCE_EDGE_GALLERY_1_0_15);
+            return new TaiModelProfile(Arrays.asList("gpu", "cpu"), sensibleOutputCap(4096), 20, 0.80d, 0.70d, 6,
+                SOURCE_EDGE_GALLERY_1_0_15, THINKING_NONE, null, null, 4096);
         }
         if ("tinygarden270m".equals(id) || path.contains("tiny_garden_q8_ekv1024")) {
             return edgeGalleryProfile(Collections.singletonList("cpu"), 1024, 0.0d, 6);
         }
+        // Gemma 3n: Gallery defaults it CPU-first, unlike Gemma 4's GPU-first order
+        // (AL:110,130 vs AL:20,66), with vision GPU regardless of the main backend ("must be
+        // GPU for Gemma 3n", G:ui/llmchat/LlmChatModelHelper.kt:136). No separate
+        // maxContextLength is given, so 4096 is both the window and (trimmed) the output cap.
+        if (id.contains("gemma3ne2bit") || path.contains("gemma-3n-e2b-it")) {
+            return edgeGalleryProfile(Arrays.asList("cpu", "gpu"), sensibleOutputCap(4096), 1.0d, 8, 4096);
+        }
+        if (id.contains("gemma3ne4bit") || path.contains("gemma-3n-e4b-it")) {
+            return edgeGalleryProfile(Arrays.asList("cpu", "gpu"), sensibleOutputCap(4096), 1.0d, 12, 4096);
+        }
+        // Gemma3-1B-IT (AL:134-151): GPU-first, no vision/audio, fixed 1024 with no
+        // maxContextLength slider — the same "no separate ceiling" shape as MobileActions/
+        // TinyGarden above, so context and output cap both stay 1024.
+        if (id.contains("gemma31bit") || path.contains("gemma3-1b-it")) {
+            return edgeGalleryProfile(Arrays.asList("gpu", "cpu"), 1024, 1.0d, 6);
+        }
 
+        // litert-community files that carry an `_ekvNNNN` token (e.g. `..._ekv4096.litertlm`)
+        // use that number as Gallery's own maxTokens for every allowlisted file that has it
+        // (AL: `_ekv4096` -> 4096, `_ekv1024` -> 1024). Treat it as a default context window for
+        // an otherwise-unmatched import, not a hard limit: the user's own runtimeProfile (checked
+        // above) still overrides it (doc recommendation 3).
+        Integer ekvContext = extractEkvContext(path);
+        if (ekvContext != null) {
+            List<String> ekvAccelerators = modelSpec.builtInCatalogEntry
+                ? Arrays.asList("gpu", "cpu")
+                : Collections.singletonList("cpu");
+            return new TaiModelProfile(ekvAccelerators, sensibleOutputCap(ekvContext), 64, 0.95d, 1.0d, null,
+                modelSpec.builtInCatalogEntry ? "tai-catalog-default" : "edge-gallery-import-default",
+                THINKING_NONE, null, null, ekvContext);
+        }
+
+        // No filename match and no `ekv` token: Gallery's own import default is exactly this,
+        // CPU-only with a 1024-token window (G:ui/modelmanager/ModelImportDialog.kt:97-103,
+        // G:data/Consts.kt:43-46).
         List<String> accelerators = modelSpec.builtInCatalogEntry
             ? Arrays.asList("gpu", "cpu")
             : Collections.singletonList("cpu");
         return new TaiModelProfile(accelerators, 1024, 64, 0.95d, 1.0d, null,
             modelSpec.builtInCatalogEntry ? "tai-catalog-default" : "edge-gallery-import-default");
+    }
+
+    /** {@code min(1024, context/4)}: a default output cap that always leaves room for a prompt. */
+    private static int sensibleOutputCap(int contextTokens) {
+        return Math.max(1, Math.min(1024, contextTokens / 4));
+    }
+
+    private static final Pattern EKV_TOKEN = Pattern.compile("ekv(\\d+)");
+
+    /** The `ekvNNNN` token from a litert-community file name, or {@code null} when absent. */
+    @Nullable
+    static Integer extractEkvContext(@Nullable String path) {
+        if (path == null) return null;
+        Matcher matcher = EKV_TOKEN.matcher(path);
+        if (!matcher.find()) return null;
+        try {
+            int value = Integer.parseInt(matcher.group(1));
+            return value > 0 ? value : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     @NonNull
@@ -202,9 +272,23 @@ public final class TaiModelProfile {
     }
 
     @NonNull
+    private static TaiModelProfile edgeGalleryProfile(List<String> accelerators, int maxTokens, double temperature,
+            int minMemoryGb, int maxContextTokens) {
+        return new TaiModelProfile(accelerators, maxTokens, 64, 0.95d, temperature, minMemoryGb,
+            SOURCE_EDGE_GALLERY_1_0_15, THINKING_NONE, null, null, maxContextTokens);
+    }
+
+    @NonNull
     private static TaiModelProfile edgeGalleryThinkingProfile(List<String> accelerators, int maxTokens, double temperature, int minMemoryGb) {
         return new TaiModelProfile(accelerators, maxTokens, 64, 0.95d, temperature, minMemoryGb,
             SOURCE_EDGE_GALLERY_1_0_15, THINKING_TOGGLEABLE, null, null);
+    }
+
+    @NonNull
+    private static TaiModelProfile edgeGalleryThinkingProfile(List<String> accelerators, int maxTokens, double temperature,
+            int minMemoryGb, int maxContextTokens) {
+        return new TaiModelProfile(accelerators, maxTokens, 64, 0.95d, temperature, minMemoryGb,
+            SOURCE_EDGE_GALLERY_1_0_15, THINKING_TOGGLEABLE, null, null, maxContextTokens);
     }
 
     @NonNull
