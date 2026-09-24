@@ -29,8 +29,8 @@ in `setup`/`featured`.
    tag in the binaries repository, and take its digest from that tag's `SHA256SUMS`.
 2. **Edit `items.tsv`.** The header comment defines every column and its rule (length limits,
    allowed values). Revision 6 reads: `category`, `upstream`, `setup`, `standfirst`, `author`,
-   `licence`, `size`, `picture`, `featured`, `readme-skip`. `does1..3`, `try` and `notes` are no
-   longer shown; fill them with `-` for a new item.
+   `licence`, `size`, `picture`, `featured`, `readme-skip`, `readme` (the pinned-content addendum).
+   `does1..3`, `try` and `notes` are no longer shown; fill them with `-` for a new item.
    - `standfirst`: one line, at most 42 characters, lower case, no brand name, no full stop. It is
      the only sentence we write about the item.
    - `readme-skip`: `|`-separated headings of the upstream README to leave out (developer-facing
@@ -39,6 +39,13 @@ in `setup`/`featured`.
    - `picture`: a `launcher:` source pointing at `scripts/tlstore/pictures/<name>.jpg`. Convert the
      upstream hero image as `pictures/SOURCES.md` says and add a row there with the source and
      its licence.
+   - `readme`: a `launcher:`/`binaries:` source for a pinned copy of the item's README, read
+     instead of the upstream one; `-` to keep fetching upstream (most items). Pin one when the
+     upstream README does not render well as-is (heavy badges, a build matrix table, prose that
+     assumes a desktop) — write a trimmed copy instead of relying on `readme-skip` alone.
+   - `demo`: unchanged (a `launcher:`/`binaries:` source for a short clip of `try` working), but
+     now digest-checked like `picture` — `build-catalog.sh` computes its `demo-digest` the same
+     way it already computes `picture-digest`.
 3. **Build the catalog.**
    ```sh
    scripts/tlstore/build-catalog.sh /path/to/tlstore/SHA256SUMS
@@ -60,6 +67,32 @@ in `setup`/`featured`.
    It renders from `tests/fixtures/store`, so a new item needs a row in the fixture `list.tsv`,
    an `info/<name>` file and a `readme/<name>.md` to appear there.
 7. **Commit** `items.tsv`, `catalog.tsv`, both `.minisig` files and any picture in one commit.
+
+## Pinning a readme or a hero picture
+
+Most items just fetch the upstream README (`readme` stays `-`). Pin one when the upstream page
+does not render well as-is — heavy badges, a build matrix, prose written for a browser — and a
+`readme-skip` heading list alone is not enough.
+
+1. **Write the trimmed readme.** A plain markdown file, following the item page's rendering rules
+   (`project-docs/tlstore/REVISION-6.md`, "Item").
+2. **Make the hero, if the item wants an animated one.** From a short screen recording or gif of
+   the item running:
+   ```sh
+   scripts/tlstore/make-hero.sh clip.mp4 hero.png
+   ```
+   4 seconds, 12 fps, 600 px wide, looping APNG, full frames (needs `ffmpeg`).
+3. **Commit both into the binaries repository** (`PickleHik3/tlstore`, née
+   termux-launcher-binaries — see the pieces table above), under `readme/<name>.md` and
+   `hero/<name>.png`, add their lines to that tag's `SHA256SUMS`, and push a tag the way any other
+   binary asset does.
+4. **Point `items.tsv` at them.** `readme` (and, for a hero picture pinned the same way, `picture`
+   or `demo`) takes `binaries:<path>@<tag>` — a path with a slash resolves to that exact file in
+   the tag, not the per-processor `bin/<asset>-aarch64` a bare asset name resolves to. Leave
+   `readme-digest`/`demo-digest` alone: `build-catalog.sh` computes them from the same
+   `SHA256SUMS`, by that repo-relative path, the way it already computes `picture-digest`.
+5. **Build, test, sign** as above. A pinned readme that fails its digest check on a phone is a
+   hard error (the `tlstore picture` convention: no silent fall back to the upstream copy).
 
 ## Changing the engine or the UI
 

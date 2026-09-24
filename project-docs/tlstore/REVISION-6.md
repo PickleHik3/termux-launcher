@@ -193,6 +193,37 @@ and the `Renderer` may need read access to cells and placements, nothing more.
 - `tests/fixtures/store` in the crate gets stub `readme` and `readme-asset` behaviour and a
   fixture README per item (short, exercising every rule row above).
 
+## Pinned content (addendum, engine side)
+
+`items.tsv`/`catalog.tsv` gain three more columns at the end, after `readme-skip`: `readme`,
+`readme-digest`, `demo-digest`. `-` in `readme` (every item today) keeps `tlstore readme`'s
+Revision 5 behaviour — fetch the upstream README, cache it a day, fall back to `HEAD` when the
+version's tag is not there. A `launcher:`/`binaries:` source in `readme` instead makes `tlstore
+readme` fetch, digest-verify against `readme-digest` and cache that pinned copy — the exact
+convention `tlstore picture` already uses for `picture`/`picture-digest` — and upstream is never
+consulted for that item again. A digest mismatch is a hard failure, not a silent fall back to
+upstream, the same as a picture whose digest does not match is never silently served from
+somewhere else. `demo-digest` closes the one gap Revision 5 left: `tlstore picture <name> demo`
+now verifies the demo the same way the cover picture always was.
+
+A `binaries:` source may now name a path instead of a bare asset —
+`binaries:<path-with-slash>@<tag>` resolves to `$BINARIES_RAW/<tag>/<path>` (a file at that exact
+place in the binaries repository, e.g. a pinned `readme/dawn.md` or a hero `hero/sigye.png`) —
+while a bare `binaries:<asset>@<tag>` keeps resolving to the per-processor
+`$BINARIES_RAW/<tag>/bin/<asset>-aarch64` it always did. `build-catalog.sh` looks a path asset up
+in the binaries repository's `SHA256SUMS` by that exact repo-relative path; a bare asset keeps
+being looked up as `<asset>-aarch64`.
+
+`scripts/tlstore/make-hero.sh <video|gif> <out.png>` turns a short clip into the looping APNG a
+pinned hero picture is: 4 seconds, 12 fps, 600 px wide, full frames (ffmpeg's apng encoder has no
+delta/blend-region option to begin with, so nothing here relies on the partial-frame blend ops
+some APNG decoders do not support).
+
+See `docs/agents/tlstore-catalog.md`, "Pinning a readme or a hero picture", for the workflow:
+write the trimmed readme, make the hero, commit both to the binaries repository under
+`readme/<name>.md` / `hero/<name>.png` with a `SHA256SUMS` line each, point `items.tsv` at them,
+rebuild, test, sign.
+
 ## Launcher (P3)
 
 - G2: `launcherctl window open --title <t>` must show `<t>` on the window's chip; today it shows
