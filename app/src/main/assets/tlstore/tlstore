@@ -943,6 +943,14 @@ json_field() {
     tr -d '\n' | sed -n "s/.*\"$1\":\"\([^\"]*\)\".*/\1/p" | head -1
 }
 
+# npm_latest_version <npm:package#exe> — the version the registry's latest
+# dist-tag points at now, or nothing when it cannot be reached.
+npm_latest_version() {
+    nl_package="${1#npm:}"
+    nl_package="${nl_package%#*}"
+    curl -fsSL "$NPM_REGISTRY/$nl_package/latest" 2>/dev/null | json_field version
+}
+
 do_npm_musl() {
     np_package="${ii_source#npm:}"
     np_exe="${np_package##*#}"
@@ -1653,6 +1661,7 @@ update_items() {
     cu_out=""
     cu_pkgs=""
     cu_latest=""
+    cu_resolved=""
     for cu_n in $cu_names; do
         if ! is_installed "$cu_n"; then
             [ "$cu_tsv" = 1 ] || say "$cu_n is not installed"
@@ -1670,10 +1679,18 @@ update_items() {
             pkg) cu_pkgs="$cu_pkgs $(field "$cu_row" 5)" ;;
             bundle|fisher) ;;
             npm-musl)
-                # An item pinned to latest is whatever its source says today,
-                # so only the install itself can tell; --check does not guess.
+                # An item pinned to latest is whatever its source says today.
+                # --check asks the registry which version that is and names the
+                # item only when it differs from what is here; offline, or when
+                # the registry cannot be reached, it says nothing about it.
                 if [ "$cu_new" = latest ]; then
                     cu_latest="$cu_latest $cu_n"
+                    if [ "$cu_check" = 1 ] && [ "$cu_offline" = 0 ]; then
+                        cu_now=$(npm_latest_version "$(field "$cu_row" 5)")
+                        if [ -n "$cu_now" ] && [ "$cu_now" != "$cu_have" ]; then
+                            cu_resolved="$cu_resolved $cu_n=$cu_now"
+                        fi
+                    fi
                 elif [ "$cu_new" != "$cu_have" ]; then
                     cu_out="$cu_out $cu_n"
                 fi
@@ -1692,14 +1709,17 @@ update_items() {
             printf '%s\t%s\t%s\t%s\n' "$cu_n" \
                 "$(installed_version "$cu_n")" "$(field "$cu_row" 3)" "$cu_note"
         done
-        for cu_n in $cu_latest; do
-            printf '%s\t%s\t%s\t%s\n' "$cu_n" "$(installed_version "$cu_n")" latest latest
+        for cu_nv in $cu_resolved; do
+            printf '%s\t%s\t%s\t%s\n' "${cu_nv%%=*}" "$(installed_version "${cu_nv%%=*}")" "${cu_nv#*=}" latest
         done
         return 0
     fi
 
     if [ "$cu_check" = 1 ]; then
-        if [ -z "$(printf '%s' "$cu_out" | tr -d ' ')" ]; then
+        for cu_nv in $cu_resolved; do
+            say "${cu_nv%%=*} ${cu_nv#*=} is available; you have $(installed_version "${cu_nv%%=*}")"
+        done
+        if [ -z "$(printf '%s%s' "$cu_out" "$cu_resolved" | tr -d ' ')" ]; then
             say "Everything is up to date."
         else
             for cu_n in $cu_out; do
@@ -1712,9 +1732,11 @@ update_items() {
             done
         fi
         [ -z "$(printf '%s' "$cu_pkgs" | tr -d ' ')" ] || say "Packages are checked by the package manager when you update."
-        for cu_n in $cu_latest; do
-            say "$cu_n is checked against its source when you update."
-        done
+        if [ "$cu_offline" = 1 ]; then
+            for cu_n in $cu_latest; do
+                say "$cu_n is checked against its source when you update."
+            done
+        fi
         return 0
     fi
 

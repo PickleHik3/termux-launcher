@@ -823,13 +823,31 @@ y
     expect_status "update --check --tsv" 0
     expect_out "it names the item, what you have and what there is" $'^fakebin\t2\t3\t$'
     expect_out "a config item is marked as one that asks" $'^hello\t2\t3\tconfig-asks$'
-    expect_out "an item pinned to the newest there is says so" $'^claude-code\t1.0.0\tlatest\tlatest$'
+    expect_no_out "offline, an item pinned to the newest is not called out of date" $'^claude-code\t'
     expect_no_out "and nothing a person would read" "up to date"
     expect_no_out "and no packages line" "package manager"
     write_catalog "$TESTHOME/.local/share/tlstore/catalog.tsv" 2026090603 2 fakebin-2
     tl update --check --tsv --offline
     expect_no_out "with nothing out of date the row is gone" $'^fakebin\t'
-    expect_out "and only the item pinned to the newest is left" $'^claude-code\t1.0.0\tlatest\tlatest$'
+    expect_no_out "and the item pinned to the newest is not listed either" $'^claude-code\t'
+
+    # Online, an item pinned to latest is asked about at the registry: the same
+    # version is not an update, a newer one is, with its real number.
+    tl update --check --tsv
+    expect_status "update --check --tsv online" 0
+    expect_no_out "latest at the registry is what is installed: no row" $'^claude-code\t'
+    cp "$FX/registry/demo-cli/latest" "$FX/registry-demo-cli-latest.bak"
+    sed 's/"version":"1.0.0"/"version":"1.1.0"/' "$FX/registry-demo-cli-latest.bak" > "$FX/registry/demo-cli/latest"
+    tl update --check --tsv
+    expect_out "a newer version at the registry is named with its number" $'^claude-code\t1.0.0\t1.1.0\tlatest$'
+    tl update --check
+    expect_out "and said in words without --tsv" "claude-code 1.1.0 is available; you have 1.0.0"
+    mv "$FX/registry-demo-cli-latest.bak" "$FX/registry/demo-cli/latest"
+    rm -rf "$FX/registry-gone"
+    mv "$FX/registry" "$FX/registry-gone"
+    tl update --check --tsv
+    expect_no_out "an unreachable registry names nothing" $'^claude-code\t'
+    mv "$FX/registry-gone" "$FX/registry"
 
     # --- keeping tlstore itself current, when it was installed by hand ---
     if [ "$HAVE_MINISIGN" = 1 ]; then
