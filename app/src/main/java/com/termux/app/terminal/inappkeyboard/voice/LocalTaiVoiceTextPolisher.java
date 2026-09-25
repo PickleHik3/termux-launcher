@@ -159,10 +159,14 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
 
     @NonNull
     static JSONObject request(@NonNull String model, @NonNull String text) throws JSONException {
+        JSONObject system = new JSONObject();
+        system.put("role", "system");
+        system.put("content", VoicePolishRules.INSTRUCTIONS);
         JSONObject message = new JSONObject();
         message.put("role", "user");
         message.put("content", VoicePolishRules.prompt(text));
         JSONArray messages = new JSONArray();
+        messages.put(system);
         messages.put(message);
         JSONObject request = new JSONObject();
         request.put("model", model);
