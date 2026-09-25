@@ -136,10 +136,20 @@ public abstract class MaterialPreferenceFragment extends PreferenceFragmentCompa
         Bundle arguments = getArguments();
         String scrollToKey = arguments == null ? null
             : arguments.getString(SettingsActivity.EXTRA_SCROLL_TO_KEY);
-        if (scrollToKey != null) {
-            clearSectionFilter();
-            scrollToPreference(scrollToKey);
-        }
+        if (scrollToKey != null) scrollToPreference(scrollToKey);
+    }
+
+    /** Scrolling to a row always means the whole page, or a section filter could hide it. */
+    @Override
+    public void scrollToPreference(@NonNull String key) {
+        clearSectionFilter();
+        super.scrollToPreference(key);
+    }
+
+    @Override
+    public void scrollToPreference(@NonNull Preference preference) {
+        clearSectionFilter();
+        super.scrollToPreference(preference);
     }
 
     @Override

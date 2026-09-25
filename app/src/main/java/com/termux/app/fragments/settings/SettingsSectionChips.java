@@ -134,7 +134,8 @@ public final class SettingsSectionChips {
      * wrapped adapter unchanged, but only exposes the positions {@link #isVisibleUnderFilter} keeps
      * for the current filter. Never calls {@link Preference#setVisible} itself.
      */
-    public static final class FilteringAdapter extends RecyclerView.Adapter<PreferenceViewHolder> {
+    public static final class FilteringAdapter extends RecyclerView.Adapter<PreferenceViewHolder>
+        implements PreferenceGroup.PreferencePositionCallback {
 
         private final PreferenceGroupAdapter inner;
         private final PreferenceGroup screen;
@@ -193,6 +194,23 @@ public final class SettingsSectionChips {
 
         private int innerPosition(int position) {
             return shownPositions.get(position);
+        }
+
+        /** PreferenceFragmentCompat.scrollToPreference refuses an adapter without these. */
+        @Override
+        public int getPreferenceAdapterPosition(@NonNull String key) {
+            return filteredPosition(inner.getPreferenceAdapterPosition(key));
+        }
+
+        @Override
+        public int getPreferenceAdapterPosition(@NonNull Preference preference) {
+            return filteredPosition(inner.getPreferenceAdapterPosition(preference));
+        }
+
+        private int filteredPosition(int innerPosition) {
+            if (innerPosition == RecyclerView.NO_POSITION) return RecyclerView.NO_POSITION;
+            int position = shownPositions.indexOf(innerPosition);
+            return position < 0 ? RecyclerView.NO_POSITION : position;
         }
 
         /** The preference shown at this filtered position — a test's way to check a filter's result
