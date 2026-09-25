@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Strings for the pinned section-chip row a multi-section settings page shows above its list
+  (SettingsSectionChips). Kept in their own file: strings.xml is out of scope for this change.
+-->
+<resources>
+    <!-- The chip that clears any section filter and shows the whole page again. -->
+    <string name="settings_section_chip_all">All</string>
+</resources>
