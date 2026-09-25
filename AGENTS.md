@@ -71,7 +71,8 @@ Use this language; it is what the code and the developer use.
   their daily driver and is often testing your change on their own phone while you work.
 - **edition** — one shipped applicationId: `com.termux` (main), `com.termux.launcher.nix` (Nix),
   `io.vaj.tl` (VAJ, the demo edition).
-- **pong** — the developer's Nothing Phone 2 (A065, Android 16), the real device of record.
+- **the device** — the maintainer's own phone, the real device of record; yours is whatever
+  physical phone you test on.
 - **the lane** — the privileged lane: runs allowlisted tlstore tools as the shell uid through
   Shizuku. See "The privileged lane" below.
 - **surface** — one themable chrome region: Dock, Keyboard, Status, Canvas. Modelled as
@@ -103,11 +104,10 @@ Use this language; it is what the code and the developer use.
 3. **Committing bootstrap zips.** `*.zip` is gitignored for a reason: bootstraps are downloaded and
    checksum-verified at build time (`downloadBootstraps`) or on first run. One got committed once
    and cost a force-push and a history rewrite.
-4. **Touching pong without being asked.** It is the developer's daily driver, reachable over
-   Tailscale (`adb connect <device-ip>:5555`, with `ANDROID_ADB_SERVER_PORT=5038` — that server
-   holds the trusted key; the address is configured locally, not in the repo). Pass
-   `-s <serial>` to every adb command: bare `adb` goes to whichever device is attached, and that is
-   often the phone. Ask before installing, force-stopping, or injecting input. A stray
+4. **Touching a real phone without being asked.** The device of record is someone's daily
+   driver, often reached over the network (`adb connect <device-ip>:5555`); how to reach it is
+   configured on the host, not in the repo. Pass `-s <serial>` to every adb command: bare `adb`
+   goes to whichever device is attached, and that is often the phone. Ask before installing, force-stopping, or injecting input. A stray
    `adb input tap` once landed on the editor's edge-drag pill and silently zeroed the developer's
    side gap on every surface.
 5. **Merging `dev` into an edition branch.** A dev merge once clobbered the VAJ identity in
@@ -226,14 +226,13 @@ before you hand work over. CI owns the rest.
   test *name lists* against a clean worktree**, never counts.
   `TerminalIOPreferencesDataStoreLazyModeTest` is a known order-dependent flake (static singleton
   in `TerminalIOPreferencesFragment`) — it passes alone.
-- **Emulator first, for anything visual.** Use the `android-emulator` skill
-  (`~/.claude/skills/android-emulator/SKILL.md` and its `scripts/emu` driver) rather than
-  re-deriving the setup. Non-negotiables it encodes: AVD `tl_test`, `-gpu angle_indirect` (the
-  default swiftshader segfaults on this app's blur), stop the Gradle daemon first (7 GB host RAM),
+- **Emulator first, for anything visual.** If your host has an emulator skill or driver, use it
+  rather than re-deriving the setup. The non-negotiables: an AVD such as `tl_test`, `-gpu angle_indirect` (the
+  default swiftshader segfaults on this app's blur), stop the Gradle daemon first on a small host,
   install the **x86_64** split, and always pass `-s emulator-5554` — if qemu dies, adb silently
   falls back to the phone.
 - **What the emulator cannot tell you.** Jank: `gfxinfo` on ANGLE/lavapipe reports everything as
-  100% janky — judge motion on pong. Dialogs: `emu bounds` does not see dialog windows, so
+  100% janky — judge motion on a real phone. Dialogs: a UI-bounds dump does not see dialog windows, so
   screenshot and tap fresh coordinates. Simulate other phones with `wm size` / `wm density` /
   `font_scale`, and **force-stop the app after a density or font change** or the layout keeps the
   old dp scale.
