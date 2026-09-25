@@ -912,7 +912,6 @@
                 <string name="termux_in_app_keyboard_theme_dark">Dark</string>
                 <string name="termux_in_app_keyboard_theme_imported">Imported · %1$s</string>
                 <string name="termux_keyboard_color_scheme_title">Keyboard colors</string>
-                <string name="termux_keyboard_color_scheme_colors">Colors</string>
                 <string name="termux_keyboard_color_scheme_edit_colors">Edit colors</string>
                 <string name="termux_keyboard_color_scheme_save_colors">Save colors</string>
                 <string name="termux_keyboard_color_scheme_follow_theme">Reset to theme</string>
@@ -929,7 +928,8 @@
                 <string name="termux_keyboard_color_scheme_slot_description">%1$s, %2$s, %3$s</string>
                 <string name="termux_keyboard_color_scheme_slot_unpin">Follow theme again</string>
                 <string name="termux_keyboard_color_scheme_slot_unpinned">%1$s follows the system theme again</string>
-                <string name="termux_keyboard_color_scheme_instructions">• Pick a color, then what it paints below.\n• Tap a key, or drag across several. Background paints the whole keyboard.\n• Tap the pencil, then a color, to set its exact value. A dot marks a color you set.\n• Changes save as you go. Reset returns to your theme.</string>
+                <string name="termux_keyboard_color_scheme_instructions">• Pick a color, then tap a key or drag across several keys to paint them.\n• Tap ^1 to set an exact color.\n• Changes save automatically. Tap ^2 to go back to the defaults.</string>
+                <string name="termux_keyboard_color_scheme_editing">Editing %1$s</string>
                 <string name="termux_keyboard_color_scheme_key_bg">Key fill</string>
                 <string name="termux_keyboard_color_scheme_key_border">Border</string>
                 <string name="termux_keyboard_color_scheme_primary">Label</string>

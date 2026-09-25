@@ -23,8 +23,6 @@ import androidx.fragment.app.Fragment;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.card.MaterialCardView;
-import com.google.android.material.chip.Chip;
-import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.color.MaterialColors;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.place.PlaceLayoutStore;
@@ -36,10 +34,8 @@ import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 import juloo.keyboard2.Config;
 import juloo.keyboard2.Keyboard2View;
@@ -61,7 +57,10 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private final List<View> mSwatchViews = new ArrayList<>();
     private final List<View> mSwatchBadges = new ArrayList<>();
     private final List<View> mSwatchItems = new ArrayList<>();
-    private final Map<Integer, InAppKeyboardColorScheme.Role> mRoleByChipId = new HashMap<>();
+    /** The six role glyphs, in order; the one at {@link #mSelectedRoleIndex} is lit. */
+    private final List<View> mRoleCells = new ArrayList<>();
+    private int mSelectedRoleIndex;
+    private TextView mEditingTitle;
     private int mSelectedSwatch;
     private InAppKeyboardColorScheme.Role mSelectedRole =
         InAppKeyboardColorScheme.Role.KEY_BACKGROUND;
@@ -108,11 +107,16 @@ public class KeyboardColorSchemeFragment extends Fragment {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView instructions = new TextView(context);
-        instructions.setText(R.string.termux_keyboard_color_scheme_instructions);
         instructions.setTextAppearance(
             com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
-        instructions.setTextColor(MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY));
+        int instructionColor = MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY);
+        instructions.setTextColor(instructionColor);
+        // The pencil and reset glyphs sit in the sentences, the same marks as the buttons.
+        instructions.setText(android.text.TextUtils.expandTemplate(
+            getText(R.string.termux_keyboard_color_scheme_instructions),
+            inlineGlyph(context, R.drawable.ic_symbol_edit, instructionColor, instructions),
+            inlineGlyph(context, R.drawable.ic_symbol_restart, instructionColor, instructions)));
         LinearLayout.LayoutParams instructionParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         instructionParams.topMargin = dp(6);
@@ -220,15 +224,17 @@ public class KeyboardColorSchemeFragment extends Fragment {
 
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(12), dp(16), dp(12));
+        content.setPadding(dp(16), dp(2), dp(8), dp(6));
 
         LinearLayout heading = new LinearLayout(context);
         heading.setGravity(Gravity.CENTER_VERTICAL);
-        TextView colorsTitle = new TextView(context);
-        colorsTitle.setText(R.string.termux_keyboard_color_scheme_colors);
-        colorsTitle.setTextAppearance(
+        // Names the role being painted, so the glyphs below need no text of their own.
+        mEditingTitle = new TextView(context);
+        mEditingTitle.setTextAppearance(
             com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
-        heading.addView(colorsTitle, new LinearLayout.LayoutParams(0,
+        mEditingTitle.setSingleLine(true);
+        mEditingTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        heading.addView(mEditingTitle, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         // Reset and edit sit on the heading's own line as icons, so the card's height goes to the
         // role filters instead.
@@ -252,49 +258,27 @@ public class KeyboardColorSchemeFragment extends Fragment {
         heading.addView(edit);
         content.addView(heading);
 
-        ChipGroup roles = new ChipGroup(context);
-        roles.setSingleLine(false);
-        roles.setChipSpacingVertical(0);
-        roles.setChipSpacingHorizontal(dp(6));
-        roles.setSingleSelection(true);
-        roles.setSelectionRequired(true);
-        mRoleByChipId.clear();
+        LinearLayout roles = new LinearLayout(context);
+        roles.setOrientation(LinearLayout.HORIZONTAL);
+        mRoleCells.clear();
         addRole(context, roles, R.string.termux_keyboard_color_scheme_key_bg,
-            R.drawable.ic_keyboard_color_role_key_bg,
-            InAppKeyboardColorScheme.Role.KEY_BACKGROUND, true);
+            R.drawable.ic_keyboard_color_role_key_bg);
         addRole(context, roles, R.string.termux_keyboard_color_scheme_key_border,
-            R.drawable.ic_keyboard_color_role_key_border,
-            InAppKeyboardColorScheme.Role.KEY_BORDER, false);
+            R.drawable.ic_keyboard_color_role_key_border);
         addRole(context, roles, R.string.termux_keyboard_color_scheme_primary,
-            R.drawable.ic_keyboard_color_role_primary,
-            InAppKeyboardColorScheme.Role.PRIMARY, false);
+            R.drawable.ic_keyboard_color_role_primary);
         addRole(context, roles, R.string.termux_keyboard_color_scheme_secondary,
-            R.drawable.ic_keyboard_color_role_secondary,
-            InAppKeyboardColorScheme.Role.SECONDARY, false);
+            R.drawable.ic_keyboard_color_role_secondary);
         addRole(context, roles, R.string.termux_keyboard_color_scheme_secondary_bottom,
-            R.drawable.ic_keyboard_color_role_secondary_bottom,
-            InAppKeyboardColorScheme.Role.SECONDARY_BOTTOM, false);
-        // Not a per-key role: while checked, a swatch tap immediately becomes the whole
+            R.drawable.ic_keyboard_color_role_secondary_bottom);
+        // Not a per-key role: while selected, a swatch tap immediately becomes the whole
         // keyboard's background, and re-tapping the assigned swatch clears it again.
-        Chip backgroundChip = addRole(context, roles,
-            R.string.termux_keyboard_color_scheme_background,
-            R.drawable.ic_keyboard_color_role_background, null, false);
-        roles.setOnCheckedStateChangeListener((group, checkedIds) -> {
-            if (checkedIds.isEmpty())
-                return;
-            int checkedId = checkedIds.get(0);
-            mPaintingBackground = checkedId == backgroundChip.getId();
-            for (int i = 0; i < group.getChildCount(); i++) {
-                View child = group.getChildAt(i);
-                if (child instanceof Chip) showRoleLabel((Chip) child, child.getId() == checkedId);
-            }
-            InAppKeyboardColorScheme.Role role = mRoleByChipId.get(checkedId);
-            if (role != null)
-                mSelectedRole = role;
-        });
+        addRole(context, roles, R.string.termux_keyboard_color_scheme_background,
+            R.drawable.ic_keyboard_color_role_background);
+        selectRole(0);
         LinearLayout.LayoutParams roleParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        roleParams.topMargin = dp(2);
+        roleParams.setMarginEnd(dp(8));
         content.addView(roles, roleParams);
 
         card.addView(content);
@@ -411,13 +395,6 @@ public class KeyboardColorSchemeFragment extends Fragment {
             pinnedSwatchCount(scheme), scheme.swatchCount());
     }
 
-    private void showRoleLabel(@NonNull Chip chip, boolean shown) {
-        chip.setText(shown ? (CharSequence) chip.getTag() : "");
-        chip.setTextStartPadding(shown ? dpFloat(4) : 0f);
-        chip.setTextEndPadding(shown ? dpFloat(6) : 0f);
-        chip.setChipEndPadding(shown ? dpFloat(4) : dpFloat(2));
-    }
-
     /** A borderless icon button for the Colors heading, named for talkback by {@code label}. */
     @NonNull
     private MaterialButton headingIconButton(@NonNull android.content.Context context, int icon,
@@ -430,34 +407,93 @@ public class KeyboardColorSchemeFragment extends Fragment {
         return button;
     }
 
-    /**
-     * One role filter: a keycap glyph with the part it paints lit. Only the chosen role spells out
-     * its name, so the six fit the card in a line or two; the others say it to talkback and on a
-     * long press.
-     */
+    /** One icon as a run of text, sized to the line it sits in. */
     @NonNull
-    private Chip addRole(@NonNull android.content.Context context, @NonNull ChipGroup group,
-                         int label, int icon, @Nullable InAppKeyboardColorScheme.Role role,
-                         boolean checked) {
-        Chip chip = new Chip(context);
-        chip.setId(View.generateViewId());
-        chip.setTag(getString(label));
-        chip.setContentDescription(getString(label));
-        androidx.appcompat.widget.TooltipCompat.setTooltipText(chip, getString(label));
-        chip.setChipIconResource(icon);
-        // The glyph is two-tone from the theme; a chip tint would flatten it to one colour.
-        chip.setChipIconTint(null);
-        chip.setChipIconSize(dpFloat(22));
-        chip.setChipIconVisible(true);
-        chip.setCheckedIconVisible(false);
-        chip.setCheckable(true);
-        chip.setChecked(checked);
-        showRoleLabel(chip, checked);
-        if (role != null)
-            mRoleByChipId.put(chip.getId(), role);
-        group.addView(chip, new ChipGroup.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        return chip;
+    private static CharSequence inlineGlyph(@NonNull android.content.Context context, int icon,
+                                            int color, @NonNull TextView line) {
+        android.graphics.drawable.Drawable drawable =
+            androidx.core.content.ContextCompat.getDrawable(context, icon);
+        if (drawable == null) return "";
+        drawable = drawable.mutate();
+        drawable.setTint(color);
+        int size = Math.round(line.getTextSize() * 1.2f);
+        drawable.setBounds(0, 0, size, size);
+        android.text.SpannableString glyph = new android.text.SpannableString("\uFFFC");
+        glyph.setSpan(new android.text.style.ImageSpan(drawable,
+                android.os.Build.VERSION.SDK_INT >= 29
+                    ? android.text.style.DynamicDrawableSpan.ALIGN_CENTER
+                    : android.text.style.DynamicDrawableSpan.ALIGN_BOTTOM),
+            0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return glyph;
+    }
+
+    /** What each glyph cell paints, in {@link #mRoleCells} order; null is the Background. */
+    private static final InAppKeyboardColorScheme.Role[] ROLE_ORDER = {
+        InAppKeyboardColorScheme.Role.KEY_BACKGROUND, InAppKeyboardColorScheme.Role.KEY_BORDER,
+        InAppKeyboardColorScheme.Role.PRIMARY, InAppKeyboardColorScheme.Role.SECONDARY,
+        InAppKeyboardColorScheme.Role.SECONDARY_BOTTOM, null
+    };
+
+    /**
+     * One role filter: a bare keycap glyph with the part it paints lit, sharing the row equally
+     * with the other five. Its name is in the heading while it is selected, and otherwise in its
+     * content description and long-press tooltip.
+     */
+    private void addRole(@NonNull android.content.Context context, @NonNull LinearLayout row,
+                         int label, int icon) {
+        int index = mRoleCells.size();
+        LinearLayout cell = new LinearLayout(context);
+        cell.setOrientation(LinearLayout.VERTICAL);
+        cell.setGravity(Gravity.CENTER_HORIZONTAL);
+        cell.setPadding(0, dp(4), 0, dp(4));
+        cell.setTag(getString(label));
+        cell.setContentDescription(getString(label));
+        cell.setClickable(true);
+        cell.setFocusable(true);
+        android.util.TypedValue ripple = new android.util.TypedValue();
+        context.getTheme().resolveAttribute(
+            android.R.attr.selectableItemBackgroundBorderless, ripple, true);
+        cell.setBackgroundResource(ripple.resourceId);
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(cell, getString(label));
+        cell.setOnClickListener(view -> selectRole(index));
+
+        android.widget.ImageView glyph = new android.widget.ImageView(context);
+        glyph.setImageResource(icon);
+        glyph.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        cell.addView(glyph, new LinearLayout.LayoutParams(dp(36), dp(36)));
+
+        View indicator = new View(context);
+        GradientDrawable bar = new GradientDrawable();
+        bar.setCornerRadius(dpFloat(2));
+        bar.setColor(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorPrimary, Color.WHITE));
+        indicator.setBackground(bar);
+        LinearLayout.LayoutParams indicatorParams = new LinearLayout.LayoutParams(dp(16), dp(3));
+        indicatorParams.topMargin = dp(3);
+        cell.addView(indicator, indicatorParams);
+
+        mRoleCells.add(cell);
+        row.addView(cell, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+    }
+
+    /** Light one glyph, dim the rest, and name the choice in the heading. */
+    private void selectRole(int index) {
+        mSelectedRoleIndex = index;
+        InAppKeyboardColorScheme.Role role = ROLE_ORDER[index];
+        mPaintingBackground = role == null;
+        if (role != null) mSelectedRole = role;
+        for (int i = 0; i < mRoleCells.size(); i++) {
+            ViewGroup cell = (ViewGroup) mRoleCells.get(i);
+            boolean selected = i == index;
+            cell.setSelected(selected);
+            cell.getChildAt(0).setAlpha(selected ? 1f : 0.45f);
+            cell.getChildAt(1).setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
+        }
+        if (mEditingTitle != null) {
+            mEditingTitle.setText(getString(R.string.termux_keyboard_color_scheme_editing,
+                (CharSequence) mRoleCells.get(index).getTag()));
+        }
     }
 
     /**
