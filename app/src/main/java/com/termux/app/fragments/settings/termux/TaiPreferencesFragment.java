@@ -18,11 +18,9 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
-import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.annotation.Keep;
@@ -58,7 +56,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -66,10 +63,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Keep
-public class TaiPreferencesFragment extends MaterialPreferenceFragment {
+public class TaiPreferencesFragment extends MaterialPreferenceFragment implements TaiImportFlow.Host {
     private static final String MODEL_ROW_PREFIX = "tai_model_row_";
-    private static final String IMPORT_BACKEND_LITERT = TaiModelSpec.BACKEND_LITERT_LM;
-    private static final String IMPORT_BACKEND_MNN = TaiModelSpec.BACKEND_MNN_LLM;
 
     private static final class OverrideSpec {
         final String key;
@@ -84,26 +79,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             this.entriesRes = entriesRes;
             this.valuesRes = valuesRes;
             this.defaultValue = defaultValue;
-        }
-    }
-
-    private static final class ImportDraft {
-        String backend = IMPORT_BACKEND_LITERT;
-        String hfUrl = "";
-        String hfToken = "";
-        String modelId = "";
-        Uri documentUri;
-        TaiModelImporter.DocumentMetadata documentMetadata;
-        // Modalities the user ticked at import time; survives the file-picker round-trip.
-        final java.util.LinkedHashSet<String> capabilities = new java.util.LinkedHashSet<>();
-        // Ordered like Gallery model configs: the first compatible accelerator is the default.
-        final java.util.LinkedHashSet<String> compatibleAccelerators = new java.util.LinkedHashSet<>();
-        TaiModelProfile customProfile;
-        String defaultAccelerator = "cpu";
-        boolean acceleratorSelectionExplicit;
-
-        ImportDraft() {
-            compatibleAccelerators.add("cpu");
         }
     }
 
@@ -126,38 +101,19 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
             R.array.termux_ai_idle_unload_entries, R.array.termux_ai_idle_unload_values, "10"),
     };
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ActivityResultLauncher<String[]> modelPicker = registerForActivityResult(
-        new ActivityResultContracts.OpenDocument(),
-        this::onModelDocumentSelected);
     @Nullable private volatile JSONObject lastRuntimeStatus;
     private final ExecutorService runtimeActionExecutor = Executors.newFixedThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "tai-settings-runtime");
         thread.setDaemon(true);
         return thread;
     });
-    private ImportDraft pendingImportDraft;
+    // Adding a model is TaiImportFlow's job; this screen only launches it, owns the two system
+    // pickers it needs (they must be registered on a fragment) and redraws when it says so.
+    private final TaiImportFlow importFlow = new TaiImportFlow(this);
+    private final ActivityResultLauncher<String[]> modelPicker = registerForActivityResult(
+        new ActivityResultContracts.OpenDocument(), importFlow::onFileSelected);
     private final ActivityResultLauncher<Uri> modelFolderPicker = registerForActivityResult(
-        new ActivityResultContracts.OpenDocumentTree(), uri -> {
-            ImportDraft draft = pendingImportDraft;
-            pendingImportDraft = null;
-            Context context = getContext();
-            if (uri == null || draft == null || context == null) return;
-            runtimeActionExecutor.execute(() -> {
-                String error = null;
-                try {
-                    JSONObject result = new TaiModelImporter(context, new TaiModelStore(context))
-                        .importMnnDirectory(uri, draft.modelId, draft.capabilities);
-                    if (!result.optBoolean("ok")) error = result.optString("message");
-                } catch (Exception e) { error = e.getMessage(); }
-                String message = error;
-                handler.post(() -> {
-                    if (getContext() == null) return;
-                    if (message == null) AppNotice.show(context, R.string.termux_ai_model_imported, false);
-                    else AppNotice.show(context, message, true);
-                    refreshTaiPage(context);
-                });
-            });
-        });
+        new ActivityResultContracts.OpenDocumentTree(), importFlow::onFolderSelected);
     private final Runnable refreshRuntimeRunnable = new Runnable() {
         @Override
         public void run() {
@@ -581,8 +537,8 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
 
     /**
      * Wraps dialog content so the button bar stays reachable. AlertDialog scrolls its message text
-     * but never a custom view, so a tall layout — the import flow stacks seventeen rows — pushes
-     * the buttons off the bottom of the screen. Content that already fits is unaffected.
+     * but never a custom view, so a tall layout (the token dialog on a small phone) pushes the
+     * buttons off the bottom of the screen. Content that already fits is unaffected.
      */
     private ScrollView dialogScroll(Context context, View content) {
         ScrollView scroll = new ScrollView(context);
@@ -909,7 +865,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         if (importModel != null) {
             importModel.setSummary(R.string.termux_ai_model_import_summary);
             importModel.setOnPreferenceClickListener(preference -> {
-                showImportFlowDialog(context, new ImportDraft());
+                importFlow.start();
                 return true;
             });
         }
@@ -1468,543 +1424,56 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment {
         }
     }
 
-    private void onModelDocumentSelected(Uri uri) {
-        if (uri == null) return;
+    // ---- TaiImportFlow.Host ----
+
+    @Override
+    @Nullable
+    public Context context() {
+        return isAdded() ? getContext() : null;
+    }
+
+    @Override
+    @NonNull
+    public ExecutorService executor() {
+        return runtimeActionExecutor;
+    }
+
+    @Override
+    @NonNull
+    public Handler handler() {
+        return handler;
+    }
+
+    @Override
+    public void pickFile() {
+        modelPicker.launch(TaiImportFlow.pickerMimeTypes());
+    }
+
+    @Override
+    public void pickFolder() {
+        modelFolderPicker.launch(null);
+    }
+
+    @Override
+    public void openUrl(@NonNull String url) {
+        Context context = getContext();
+        if (context != null) openUrl(context, url);
+    }
+
+    @Override
+    public void setDefaultModel(@NonNull String modelId) {
+        Context context = getContext();
+        if (context != null) setActiveModel(context, modelId);
+    }
+
+    @Override
+    public void modelsChanged() {
         Context context = getContext();
         if (context == null) return;
-        ImportDraft draft = pendingImportDraft == null ? new ImportDraft() : pendingImportDraft;
-        TaiModelImporter.DocumentMetadata metadata =
-            TaiManager.getInstance(context).modelDocumentMetadata(uri);
-        TaiModelImporter.ValidationResult validation =
-            TaiModelImporter.validateImportFileNameForBackend(draft.backend, metadata.displayName);
-        if (!validation.supported) {
-            AppNotice.show(context, validation.message, true);
-            return;
-        }
-        draft.documentUri = uri;
-        draft.documentMetadata = metadata;
-        if (draft.modelId == null || draft.modelId.trim().isEmpty()) {
-            draft.modelId = TaiModelImporter.sanitizeModelId(
-                TaiModelImporter.stripModelExtension(metadata.displayName));
-        }
-        fillGuessedImportCapabilities(draft.capabilities, metadata.displayName);
-        if (!draft.acceleratorSelectionExplicit) {
-            fillGuessedImportAccelerators(draft, metadata.displayName);
-        }
-        pendingImportDraft = draft;
-        showImportFlowDialog(context, draft);
-    }
-
-    private void showImportFlowDialog(Context context, ImportDraft draft) {
-        LinearLayout layout = new LinearLayout(context);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        int padding = (int) (20 * context.getResources().getDisplayMetrics().density);
-        layout.setPadding(padding, 0, padding, 0);
-
-        // The dialog's own message, carried inside the scrolled view rather than passed to
-        // setMessage(). AlertDialogLayout only gives one panel the height left over from the
-        // buttons, and a dialog holding both a message and a custom view has two, so it falls back
-        // to plain LinearLayout measurement — which let this flow's seventeen rows push Import and
-        // Cancel off the bottom of the screen. One panel, and the buttons stay put.
-        TextView dialogMessage = new TextView(context);
-        dialogMessage.setText(R.string.termux_ai_model_import_dialog_message);
-        dialogMessage.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
-        dialogMessage.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
-        dialogMessage.setPadding(0, 0, 0, Math.round(
-            12 * context.getResources().getDisplayMetrics().density));
-        layout.addView(dialogMessage);
-
-        // Backend is auto-detected: a Hugging Face URL resolves to LiteRT or MNN from the repo's
-        // files; a local file is always a LiteRT package. No manual toggle.
-        layout.addView(importDialogLabel(context, R.string.termux_ai_import_source_label, 0));
-        EditText hfUrlInput = new EditText(context);
-        hfUrlInput.setSingleLine(true);
-        hfUrlInput.setHint(R.string.termux_ai_model_import_hf_url_field_hint);
-        hfUrlInput.setInputType(InputType.TYPE_TEXT_VARIATION_URI);
-        hfUrlInput.setText(draft.hfUrl == null ? "" : draft.hfUrl);
-        layout.addView(hfUrlInput);
-
-        if (draft.capabilities.isEmpty()) {
-            fillGuessedImportCapabilities(draft.capabilities,
-                draft.hfUrl == null || draft.hfUrl.trim().isEmpty()
-                    ? (draft.documentMetadata == null ? "" : draft.documentMetadata.displayName)
-                    : draft.hfUrl);
-        }
-
-        TextView modalityLabel = new TextView(context);
-        modalityLabel.setText(R.string.termux_ai_model_import_modalities_label);
-        modalityLabel.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorPrimary));
-        modalityLabel.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        modalityLabel.setPadding(0, padding / 2, 0, 0);
-        layout.addView(modalityLabel);
-
-        CheckBox chat = new CheckBox(context);
-        chat.setText(R.string.termux_ai_import_cap_chat);
-        chat.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
-        CheckBox embeddings = new CheckBox(context);
-        embeddings.setText(R.string.termux_ai_import_cap_embeddings);
-        embeddings.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
-        CheckBox image = new CheckBox(context);
-        image.setText(R.string.termux_ai_import_cap_image);
-        image.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT));
-        CheckBox audio = new CheckBox(context);
-        audio.setText(R.string.termux_ai_import_cap_audio);
-        audio.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
-        CheckBox tools = new CheckBox(context);
-        tools.setText(R.string.termux_ai_import_cap_tools);
-        tools.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE));
-        CheckBox code = new CheckBox(context);
-        code.setText(R.string.termux_ai_import_cap_code);
-        code.setChecked(draft.capabilities.contains(TaiModelSpec.CAPABILITY_CODE));
-        CheckBox reasoning = new CheckBox(context);
-        reasoning.setText(R.string.termux_ai_import_cap_reasoning);
-        reasoning.setChecked(draft.capabilities.contains("reasoning"));
-        CheckBox multilingual = new CheckBox(context);
-        multilingual.setText(R.string.termux_ai_import_cap_multilingual);
-        multilingual.setChecked(draft.capabilities.contains("multilingual"));
-        layout.addView(chat);
-        layout.addView(embeddings);
-        layout.addView(image);
-        layout.addView(audio);
-        layout.addView(tools);
-        layout.addView(code);
-        layout.addView(reasoning);
-        layout.addView(multilingual);
-
-        layout.addView(importDialogLabel(context, R.string.termux_ai_import_accelerators_label, 8));
-        CheckBox gpuCompatible = new CheckBox(context);
-        gpuCompatible.setText(R.string.termux_ai_import_gpu_compatible);
-        gpuCompatible.setChecked(draft.compatibleAccelerators.contains("gpu"));
-        layout.addView(gpuCompatible);
-        Spinner defaultAccelerator = new Spinner(context);
-        android.widget.ArrayAdapter<CharSequence> acceleratorAdapter = new android.widget.ArrayAdapter<>(
-            context, android.R.layout.simple_spinner_item,
-            new CharSequence[]{getString(R.string.termux_ai_import_default_cpu),
-                getString(R.string.termux_ai_import_default_gpu)});
-        acceleratorAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        defaultAccelerator.setAdapter(acceleratorAdapter);
-        defaultAccelerator.setSelection("gpu".equals(draft.defaultAccelerator) ? 1 : 0);
-        layout.addView(defaultAccelerator);
-        gpuCompatible.setOnTouchListener((view, event) -> {
-            draft.acceleratorSelectionExplicit = true;
-            return false;
-        });
-        defaultAccelerator.setOnTouchListener((view, event) -> {
-            draft.acceleratorSelectionExplicit = true;
-            return false;
-        });
-        gpuCompatible.setOnCheckedChangeListener((button, checked) -> {
-            if (!checked && defaultAccelerator.getSelectedItemPosition() == 1) {
-                defaultAccelerator.setSelection(0);
-            }
-        });
-        defaultAccelerator.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
-            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view,
-                                                  int position, long id) {
-                if (position == 1) gpuCompatible.setChecked(true);
-            }
-            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) {}
-        });
-
-        boolean rawTflite = draft.documentMetadata != null
-            && draft.documentMetadata.displayName.toLowerCase(Locale.ROOT).endsWith(".tflite");
-        if (rawTflite) {
-            chat.setChecked(false);
-            chat.setEnabled(false);
-            embeddings.setChecked(true);
-            image.setChecked(false); image.setEnabled(false);
-            audio.setChecked(false); audio.setEnabled(false);
-            tools.setChecked(false); tools.setEnabled(false);
-            code.setChecked(false); code.setEnabled(false);
-            reasoning.setChecked(false); reasoning.setEnabled(false);
-            multilingual.setChecked(false); multilingual.setEnabled(false);
-        }
-
-        hfUrlInput.addTextChangedListener(new android.text.TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence s, int start, int before, int count) {
-                LinkedHashSet<String> guessed = new LinkedHashSet<>();
-                fillGuessedImportCapabilities(guessed, s == null ? "" : s.toString());
-                chat.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
-                embeddings.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
-                image.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT));
-                audio.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
-                tools.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_TOOL_USE));
-                code.setChecked(guessed.contains(TaiModelSpec.CAPABILITY_CODE));
-                reasoning.setChecked(guessed.contains("reasoning"));
-                multilingual.setChecked(guessed.contains("multilingual"));
-                if (!draft.acceleratorSelectionExplicit) {
-                    fillGuessedImportAccelerators(draft, s == null ? "" : s.toString());
-                    gpuCompatible.setChecked(draft.compatibleAccelerators.contains("gpu"));
-                    defaultAccelerator.setSelection("gpu".equals(draft.defaultAccelerator) ? 1 : 0);
-                }
-            }
-            @Override public void afterTextChanged(android.text.Editable s) {}
-        });
-
-        Button profileButton = new Button(context);
-        profileButton.setText(R.string.termux_ai_import_profile);
-        profileButton.setOnClickListener(v -> TaiImportProfileDialog.show(context, importRuntimeProfile(draft),
-            profile -> draft.customProfile = profile));
-        layout.addView(profileButton);
-
-        EditText modelIdInput = new EditText(context);
-        modelIdInput.setSingleLine(true);
-        modelIdInput.setHint(R.string.termux_ai_model_import_id_hint);
-        modelIdInput.setInputType(InputType.TYPE_CLASS_TEXT);
-        modelIdInput.setText(draft.modelId == null ? "" : draft.modelId);
-        modelIdInput.setSelectAllOnFocus(true);
-        layout.addView(modelIdInput);
-
-        // Tap-to-set Hugging Face token (needed for gated/private repos).
-        TextView tokenLine = new TextView(context);
-        tokenLine.setPadding(0, padding / 2, 0, padding / 2);
-        tokenLine.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorPrimary));
-        Runnable refreshTokenLine = () -> tokenLine.setText(
-            new TaiSettings(context).getHuggingFaceToken().trim().isEmpty()
-                ? context.getString(R.string.termux_ai_model_import_token_unset)
-                : context.getString(R.string.termux_ai_model_import_token_set));
-        refreshTokenLine.run();
-        tokenLine.setOnClickListener(v -> promptHuggingFaceToken(context, refreshTokenLine));
-        layout.addView(tokenLine);
-
-        TextView selectedFile = new TextView(context);
-        selectedFile.setText(importSelectionText(context, draft));
-        selectedFile.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        selectedFile.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
-        selectedFile.setPadding(0, padding / 2, 0, 0);
-        layout.addView(selectedFile);
-
-        Runnable captureModalities = () -> {
-            draft.capabilities.clear();
-            if (chat.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
-            if (embeddings.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
-            if (image.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_IMAGE_INPUT);
-            if (audio.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
-            if (tools.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_TOOL_USE);
-            if (code.isChecked()) draft.capabilities.add(TaiModelSpec.CAPABILITY_CODE);
-            if (reasoning.isChecked()) draft.capabilities.add("reasoning");
-            if (multilingual.isChecked()) draft.capabilities.add("multilingual");
-            if (isQwenThinkingImport(draft)) {
-                draft.capabilities.add("reasoning");
-                draft.capabilities.add(TaiModelSpec.CAPABILITY_LLM_THINKING);
-            }
-            draft.compatibleAccelerators.clear();
-            draft.defaultAccelerator = defaultAccelerator.getSelectedItemPosition() == 1 ? "gpu" : "cpu";
-            draft.compatibleAccelerators.add(draft.defaultAccelerator);
-            if (gpuCompatible.isChecked()) draft.compatibleAccelerators.add("gpu");
-            draft.compatibleAccelerators.add("cpu");
-        };
-
-        Button folder = new Button(context);
-        folder.setText(R.string.termux_ai_import_folder);
-        layout.addView(folder);
-        androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_ai_model_import_dialog_title)
-            .setView(dialogScroll(context, layout))
-            .setPositiveButton(R.string.termux_ai_model_import_verify_action, null)
-            .setNeutralButton(R.string.termux_ai_model_import_choose_file, null)
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-        folder.setOnClickListener(v -> {
-            draft.modelId = modelIdInput.getText().toString().trim();
-            captureModalities.run();
-            pendingImportDraft = draft;
-            modelFolderPicker.launch(null);
-            dialog.dismiss();
-        });
-        Button positive = dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE);
-        positive.setOnClickListener(view -> {
-            draft.backend = IMPORT_BACKEND_LITERT; // local files are LiteRT; URLs auto-detect downstream
-            String hfUrl = hfUrlInput.getText().toString().trim();
-            draft.hfUrl = hfUrl;
-            draft.hfToken = hfUrl.isEmpty() ? "" : new TaiSettings(context).getHuggingFaceToken();
-            draft.modelId = modelIdInput.getText().toString().trim();
-            captureModalities.run();
-            if (draft.capabilities.isEmpty()) {
-                AppNotice.show(context, R.string.termux_ai_import_no_capability, true);
-                return;
-            }
-            if (startImportDraft(context, draft)) dialog.dismiss();
-        });
-        Button neutral = dialog.getButton(android.content.DialogInterface.BUTTON_NEUTRAL);
-        neutral.setOnClickListener(view -> {
-            draft.backend = IMPORT_BACKEND_LITERT;
-            draft.hfUrl = "";
-            draft.hfToken = "";
-            draft.modelId = modelIdInput.getText().toString().trim();
-            captureModalities.run();
-            if (draft.capabilities.isEmpty()) {
-                AppNotice.show(context, R.string.termux_ai_import_no_capability, true);
-                return;
-            }
-            pendingImportDraft = draft;
-            modelPicker.launch(new String[]{"application/octet-stream", "application/json", "*/*"});
-            dialog.dismiss();
-        });
-    }
-
-    private TextView importDialogLabel(Context context, int textRes, int topPaddingDp) {
-        TextView label = new TextView(context);
-        label.setText(textRes);
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        label.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorPrimary));
-        label.setTypeface(Typeface.DEFAULT_BOLD);
-        int top = Math.round(topPaddingDp * context.getResources().getDisplayMetrics().density);
-        label.setPadding(0, top, 0, 0);
-        return label;
-    }
-
-    private void fillGuessedImportCapabilities(@NonNull LinkedHashSet<String> capabilities, @Nullable String source) {
-        capabilities.clear();
-        String value = source == null ? "" : source.toLowerCase(Locale.ROOT);
-        boolean embedding = value.contains("embeddinggemma-300m")
-            || value.contains("qwen3-embedding-0.6b-mnn")
-            || value.contains("qwen3-embedding-4b-mnn")
-            || value.contains("qwen3-embedding-8b-mnn")
-            || value.contains("bge-")
-            || value.contains("e5-")
-            || value.contains("gte-")
-            || value.contains("jina-embedding")
-            || value.contains("embed");
-        if (embedding) capabilities.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
-        else capabilities.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
-        boolean gemma4 = value.contains("gemma-4-e2b") || value.contains("gemma-4-e4b");
-        if (value.contains("-vl") || value.contains("_vl") || value.contains("vision")
-            || value.contains("image") || value.contains("multimodal") || gemma4) {
-            capabilities.add(TaiModelSpec.CAPABILITY_IMAGE_INPUT);
-        }
-        if (value.contains("audio") || value.contains("speech") || gemma4) {
-            capabilities.add(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
-        }
-        if (value.contains("functiongemma") || value.contains("function-calling")
-            || value.contains("tool-use") || value.contains("tool_use")) {
-            capabilities.add(TaiModelSpec.CAPABILITY_TOOL_USE);
-        }
-        if (value.contains("coder") || value.contains("code-")) capabilities.add(TaiModelSpec.CAPABILITY_CODE);
-        if (value.contains("deepseek-r1") || value.contains("reasoning")) capabilities.add("reasoning");
-        if (value.contains("qwen3") && value.contains("thinking")) {
-            capabilities.add("reasoning");
-            capabilities.add(TaiModelSpec.CAPABILITY_LLM_THINKING);
-        }
-        if (value.contains("qwen") || value.contains("multilingual")) capabilities.add("multilingual");
-    }
-
-    private void fillGuessedImportAccelerators(@NonNull ImportDraft draft, @Nullable String source) {
-        String value = source == null ? "" : source.toLowerCase(Locale.ROOT);
-        boolean mnn = value.contains("-mnn") || value.contains("_mnn") || value.endsWith("config.json");
-        boolean knownGpu = !mnn && ((value.contains("qwen3") && value.contains("thinking"))
-            || value.contains("gemma-4-e2b") || value.contains("gemma-4-e4b")
-            || value.contains("deepseek-r1-distill-qwen-1.5b")
-            || value.contains("qwen2.5-1.5b-instruct"));
-        draft.compatibleAccelerators.clear();
-        draft.defaultAccelerator = knownGpu ? "gpu" : "cpu";
-        draft.compatibleAccelerators.add(draft.defaultAccelerator);
-        if (knownGpu) draft.compatibleAccelerators.add("cpu");
-    }
-
-    private boolean isQwenThinkingImport(@NonNull ImportDraft draft) {
-        String identity = (draft.modelId + " " + draft.hfUrl + " "
-            + (draft.documentMetadata == null ? "" : draft.documentMetadata.displayName))
-            .toLowerCase(Locale.ROOT);
-        return identity.contains("qwen3") && identity.contains("thinking");
-    }
-
-    @NonNull
-    private TaiModelProfile importRuntimeProfile(@NonNull ImportDraft draft) {
-        ArrayList<String> accelerators = new ArrayList<>(draft.compatibleAccelerators);
-        TaiModelProfile defaults = new TaiModelProfile(java.util.Collections.singletonList("cpu"),
-            1024, 64, 0.95d, 1.0d, null, "edge-gallery-import-default");
-        if (isQwenThinkingImport(draft)) {
-            defaults = new TaiModelProfile(java.util.Arrays.asList("gpu", "cpu"), 2048, 64,
-                0.95d, 1.0d, 3, TaiModelProfile.SOURCE_LITERT_COMMUNITY,
-                TaiModelProfile.THINKING_ALWAYS, "<think>", "</think>");
-        }
-        if (draft.customProfile != null) defaults = draft.customProfile;
-        return new TaiModelProfile(accelerators, defaults.defaultMaxTokens, defaults.defaultTopK,
-            defaults.defaultTopP, defaults.defaultTemperature, defaults.minDeviceMemoryInGb,
-            draft.customProfile == null ? "import-dialog-selection" : "user-artifact-profile",
-            defaults.thinkingMode, defaults.thinkingChannelStart, defaults.thinkingChannelEnd, defaults.maxContextTokens);
-    }
-
-    private CharSequence importSelectionText(Context context, ImportDraft draft) {
-        if (draft.documentMetadata == null) {
-            return context.getString(R.string.termux_ai_model_import_no_file_selected);
-        }
-        TaiModelImporter.DocumentMetadata metadata = draft.documentMetadata;
-        return context.getString(R.string.termux_ai_model_import_selected,
-            metadata.displayName, metadata.sizeBytes > 0L ? formatBytes(metadata.sizeBytes) : "unknown size");
-    }
-
-    /** Prompt for and persist a Hugging Face token (for gated/private repos); runs onSaved after. */
-    private void promptHuggingFaceToken(Context context, @Nullable Runnable onSaved) {
-        EditText input = new EditText(context);
-        input.setSingleLine(true);
-        input.setHint(R.string.termux_ai_huggingface_token_title);
-        input.setText(new TaiSettings(context).getHuggingFaceToken());
-        input.setSelectAllOnFocus(true);
-        LinearLayout layout = wrapDialogView(context,
-            context.getString(R.string.termux_ai_huggingface_token_dialog_message), input);
-        layout.addView(buildTokenHintView(context, R.string.termux_ai_huggingface_token_permissions_hint));
-        layout.addView(buildTokenHintView(context, R.string.termux_ai_huggingface_token_gated_hint));
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_ai_huggingface_token_title)
-            .setView(dialogScroll(context, layout))
-            .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) -> {
-                new TaiSettings(context).setHuggingFaceToken(input.getText().toString().trim());
-                if (onSaved != null) onSaved.run();
-            })
-            .setNeutralButton(R.string.termux_ai_huggingface_token_get_action,
-                (dialog, which) -> openUrl(context, "https://huggingface.co/settings/tokens"))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
-    private boolean startImportDraft(Context context, ImportDraft draft) {
-        boolean hasUrl = draft.hfUrl != null && !draft.hfUrl.trim().isEmpty();
-        boolean hasFile = draft.documentUri != null && draft.documentMetadata != null;
-        if (hasUrl == hasFile) {
-            AppNotice.show(context, R.string.termux_ai_model_import_choose_one_source, true);
-            return false;
-        }
-        if (hasUrl) {
-            TaiModelImporter.ValidationResult validation =
-                TaiModelImporter.validateHuggingFaceImportUrl(draft.hfUrl);
-            if (!validation.supported) {
-                AppNotice.show(context, validation.message, true);
-                return false;
-            }
-            startHuggingFaceImport(context, draft);
-            return true;
-        }
-        // Local file: only LiteRT packages can be imported from storage (MNN comes from a URL).
-        TaiModelImporter.ValidationResult validation = TaiModelImporter.validateImportFileNameForBackend(
-            IMPORT_BACKEND_LITERT, draft.documentMetadata.displayName);
-        if (!validation.supported) {
-            AppNotice.show(context, validation.message, true);
-            return false;
-        }
-        importModelDocument(context, draft.documentUri, draft.modelId, IMPORT_BACKEND_LITERT,
-            draft.capabilities, importRuntimeProfile(draft));
-        pendingImportDraft = null;
-        return true;
-    }
-
-    private void startHuggingFaceImport(Context context, ImportDraft draft) {
-        startHuggingFaceImport(context, draft, false);
-    }
-
-    private void startHuggingFaceImport(Context context, ImportDraft draft, boolean selected) {
-        String modelId = TaiModelImporter.sanitizeModelId(draft.modelId == null || draft.modelId.trim().isEmpty()
-            ? deriveModelIdFromUrl(draft.hfUrl) : draft.modelId);
-        if (modelId.isEmpty()) {
-            AppNotice.show(context, R.string.termux_ai_model_import_invalid_model_id, true);
-            return;
-        }
-        runtimeActionExecutor.execute(() -> {
-            JSONObject result = null;
-            try {
-                JSONObject request = new JSONObject();
-                request.put("modelId", modelId);
-                request.put("displayName", modelId);
-                request.put("url", draft.hfUrl);
-                request.put("previewOnly", !selected);
-                request.put("acceptedTerms", true);
-                // Backend/format are auto-detected by downloadModel from the resolved file.
-                JSONArray capabilities = new JSONArray();
-                for (String capability : draft.capabilities) capabilities.put(capability);
-                request.put("capabilities", capabilities);
-                request.put("runtimeProfile", importRuntimeProfile(draft).toJson());
-                if (draft.hfToken != null && !draft.hfToken.trim().isEmpty()) {
-                    request.put("huggingFaceToken", draft.hfToken.trim());
-                }
-                result = TaiManager.getInstance(context.getApplicationContext()).downloadModel(request.toString());
-            } catch (JSONException | RuntimeException ignored) {
-            }
-            JSONObject finalResult = result;
-            handler.post(() -> {
-                Context currentContext = getContext();
-                if (currentContext == null) return;
-                if (finalResult != null && finalResult.optBoolean("ok", false)) {
-                    AppNotice.show(currentContext, R.string.termux_ai_model_download_started, false);
-                    handler.removeCallbacks(refreshRuntimeRunnable);
-                    handler.postDelayed(refreshRuntimeRunnable, 1000L);
-                } else if (finalResult != null && "artifact_selection_required".equals(finalResult.optString("error"))) {
-                    JSONArray choices = finalResult.optJSONArray("candidates");
-                    if (choices == null || choices.length() == 0) return;
-                    String[] labels = new String[choices.length()];
-                    for (int i = 0; i < choices.length(); i++) {
-                        JSONObject choice = choices.optJSONObject(i);
-                        labels[i] = choice.optString("file") + "\n" + formatBytes(choice.optLong("sizeBytes", 0));
-                    }
-                    new MaterialAlertDialogBuilder(currentContext)
-                        .setTitle(R.string.termux_ai_import_choose_variant)
-                        .setItems(labels, (dialog, which) -> {
-                            JSONObject choice = choices.optJSONObject(which);
-                            draft.hfUrl = choice.optString("url");
-                            startHuggingFaceImport(currentContext, draft, true);
-                        })
-                        .setNegativeButton(android.R.string.cancel, null).show();
-                } else if (finalResult != null && "gated_model_requires_auth".equals(finalResult.optString("error"))) {
-                    // Gated/private repo: prompt for a token, then retry the same import.
-                    new MaterialAlertDialogBuilder(currentContext)
-                        .setTitle(R.string.termux_ai_huggingface_token_title)
-                        .setMessage(finalResult.optString("message", currentContext.getString(R.string.termux_ai_model_import_gated_message)))
-                        .setPositiveButton(R.string.termux_ai_huggingface_token_title,
-                            (d, w) -> promptHuggingFaceToken(currentContext, () -> {
-                                draft.hfToken = new TaiSettings(currentContext).getHuggingFaceToken();
-                                startHuggingFaceImport(currentContext, draft);
-                            }))
-                        .setNegativeButton(android.R.string.cancel, null)
-                        .show();
-                } else {
-                    String message = finalResult == null
-                        ? currentContext.getString(R.string.termux_ai_model_action_failed)
-                        : finalResult.optString("message", currentContext.getString(R.string.termux_ai_model_action_failed));
-                    AppNotice.show(currentContext, message, true);
-                }
-                pendingImportDraft = null;
-                refreshTaiPage(currentContext);
-            });
-        });
-    }
-
-    private void importModelDocument(Context context, Uri uri, String modelId, String backend,
-                                     java.util.Set<String> capabilities,
-                                     TaiModelProfile runtimeProfile) {
-        Context appContext = context.getApplicationContext();
-        Preference importPreference = findPreference("tai_model_import");
-        if (importPreference != null) {
-            importPreference.setEnabled(false);
-            importPreference.setSummary(R.string.termux_ai_model_import_copying);
-        }
-        runtimeActionExecutor.execute(() -> {
-            JSONObject result = null;
-            try {
-                result = new TaiModelImporter(appContext, new TaiModelStore(appContext))
-                    .importDocument(uri, modelId, backend, capabilities, runtimeProfile);
-            } catch (JSONException | RuntimeException ignored) {
-            }
-            JSONObject finalResult = result;
-            handler.post(() -> {
-                Context currentContext = getContext();
-                if (currentContext == null) return;
-                Preference currentImportPreference = findPreference("tai_model_import");
-                if (currentImportPreference != null) {
-                    currentImportPreference.setEnabled(true);
-                    currentImportPreference.setSummary(R.string.termux_ai_model_import_summary);
-                }
-                if (finalResult != null && finalResult.optBoolean("ok", false)) {
-                    AppNotice.show(currentContext, R.string.termux_ai_model_imported, false);
-                } else {
-                    String message = finalResult == null
-                        ? currentContext.getString(R.string.termux_ai_model_action_failed)
-                        : finalResult.optString("message", currentContext.getString(R.string.termux_ai_model_action_failed));
-                    AppNotice.show(currentContext, message, true);
-                }
-                refreshTaiPage(currentContext);
-            });
-        });
+        refreshTaiPage(context);
+        // A download the service runs shows its progress on the model row; keep polling for it.
+        handler.removeCallbacks(refreshRuntimeRunnable);
+        handler.postDelayed(refreshRuntimeRunnable, 1000L);
     }
 
     private void loadModel(Context context, String modelId) {
