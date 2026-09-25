@@ -51,11 +51,16 @@ structural fixes (derive the position, own the outline) over tuning durations.
 frames.** Read UI complaints as aesthetic first and ask before optimising a frame budget nobody
 complained about.
 
-### 4. Two editions, one branch
+### 4. Three editions, one development branch
 
-Features live on `dev` and reach editions only by merging. Edition branches carry nothing but their
-identity differences (applicationId, manifest placeholders, ABI/split rules, bootstrap handling, CI
-matrix). Never develop on an edition branch.
+Features live on `dev` and reach the three release branches (`main`, `nix-edition`,
+`io-vaj-package`) only by merging. A release branch carries nothing but its identity: applicationId,
+`TERMUX_PACKAGE_NAME` (in `app/build.gradle` and `TermuxConstants`), `versionName`, manifest
+placeholders, ABI/split rules, bootstrap handling, CI matrix. Develop on `dev`, always.
+
+Every edition has its own package and so its own prefix, `/data/data/<pkg>/files/usr`. Name the
+package through `context.getPackageName()` or `TermuxConstants`; a literal `com.termux` in code is
+correct on one edition and a bug on the other two.
 
 ## A small glossary
 
@@ -67,6 +72,8 @@ Use this language; it is what the code and the developer use.
 - **edition** — one shipped applicationId: `com.termux` (main), `com.termux.launcher.nix` (Nix),
   `io.vaj.tl` (VAJ, the demo edition).
 - **pong** — the developer's Nothing Phone 2 (A065, Android 16), the real device of record.
+- **the lane** — the privileged lane: runs allowlisted tlstore tools as the shell uid through
+  Shizuku. See "The privileged lane" below.
 - **surface** — one themable chrome region: Dock, Keyboard, Status, Canvas. Modelled as
   `SurfaceSlot` × `SurfaceProperty` (blur, opacity, grain, corner radius, side gap).
 - **Base** — the shared surface values every slot inherits until a property is *detached*.
@@ -98,15 +105,18 @@ Use this language; it is what the code and the developer use.
    and cost a force-push and a history rewrite.
 4. **Touching pong without being asked.** It is the developer's daily driver, reachable over
    Tailscale (`adb connect <device-ip>:5555`, with `ANDROID_ADB_SERVER_PORT=5038` — that server
-   holds the trusted key; the address is configured locally, not in the repo). Ask before
-   installing, force-stopping, or injecting input. A stray
+   holds the trusted key; the address is configured locally, not in the repo). Pass
+   `-s <serial>` to every adb command: bare `adb` goes to whichever device is attached, and that is
+   often the phone. Ask before installing, force-stopping, or injecting input. A stray
    `adb input tap` once landed on the editor's edge-drag pill and silently zeroed the developer's
    side gap on every surface.
 5. **Merging `dev` into an edition branch.** A dev merge once clobbered the VAJ identity in
    `app/build.gradle` (the v0.2.31 hotfix): applicationId, manifest placeholders and ABI rules are
    the only thing an edition branch owns, and a merge that takes `dev`'s side of that file silently
-   ships the wrong app. Diff `app/build.gradle` against the previous edition tag before tagging;
-   the workflow's manifest guard is the backstop, not the check.
+   ships the wrong app. Expect conflicts in `app/build.gradle` and `app/src/main/res/values/strings.xml`
+   on every cut; resolve identity and `versionName` to the edition's side. Diff `app/build.gradle`
+   against the previous edition tag before tagging; the workflow's manifest guard is the backstop,
+   not the check.
 
 ## Hit every surface
 
@@ -161,6 +171,27 @@ everywhere else. Before calling a change done, walk this list and say which entr
   build support and store metadata.
 - Never commit generated `build/` or `.gradle/` content.
 
+## The privileged lane
+
+`app/src/main/java/com/termux/privileged/lane/` lets a terminal program run as the shell uid (2000).
+`PrivilegedLaneService` is a Shizuku UserService running as shell; `PrivilegedLaneServer` listens
+on the abstract socket `@<packageName>.priv` and accepts only the app's own uid; the client is
+`tl-priv` in the tlstore repo (`recipes/cross/tl-priv/tl-priv.c`).
+
+- **The wire protocol `tlpriv1` (`LaneRequest`) is a contract with `tl-priv`.** Change both sides in
+  step, or neither.
+- `LaneAllowlist` runs only catalog `binary` rows marked `priv=shizuku` whose sha256 matches the
+  active tlstore catalog. It guards against accidents, not against code already running as this
+  uid; do not describe it as a security boundary.
+- Binaries are staged under `/data/local/tmp/tl`. The service runs with umask 0, so every directory
+  there must be chmodded 0700 explicitly (`PrivilegedLaneService`), or the tree is world-writable.
+- `LocalSocket` re-attaches queued fds to every later write. After handing over the pty master,
+  call `setFileDescriptorsForSend(null)`, or the next write fails with EBADF and the client hangs.
+- `getFilesDir()` answers `/data/user/0/<pkg>/files` while Termux paths say `/data/data/<pkg>/files`.
+  They are one directory, not a symlink, so canonical paths never agree: compare by inode.
+- The window chip shows `tl-priv run <path>` as the tool's name
+  (`WindowForegroundResolver.unwrapLane`); a new way of launching through the lane needs it too.
+
 ## Build and run
 
 Run from the repository root with the checked-in wrapper. Builds need an Android SDK and a JDK
@@ -172,8 +203,15 @@ compatible with AGP 8.13.2; the code targets Java 11.
 - `./gradlew :app:connectedDebugAndroidTest` — instrumentation on a connected emulator or device.
 - `./gradlew lintDebug` — Android lint.
 - `./gradlew :app:verifyReleaseHardening` — release build safety settings.
-- `scripts/dev-install.sh` — smaller upgrade-only APK; needs an existing Termux install and a
-  configured ADB target.
+- `scripts/dev-install.sh` — strips the bootstraps from the arm64 debug APK and installs it as an
+  upgrade over an existing install (a fresh install from it has no bootstrap). Target the device
+  with `DEVICE=<serial>`.
+- `adb -s <serial> shell run-as <pkg> …` reads and edits the app's files on a debug build.
+
+**When the machine is busy, let CI build.** A push to `dev` runs "Build nightly"
+(`.github/workflows/debug_build.yml`: `testDebugUnitTest`, then `assembleDebug`). Read it with
+`gh run list --repo PickleHik3/termux-launcher --branch dev` and
+`gh run view <id> --repo PickleHik3/termux-launcher --log-failed`.
 
 ## Verifying
 
@@ -301,8 +339,13 @@ names a package. Their `targetSdk` must stay at the launcher's 28, per the share
 goes to `nix-edition` and `io-vaj-package` in the same pass, each with its own tag, notes and APK
 run. Do not ask which editions to release; releasing one is the thing that needs a reason.
 
-Per edition: bump `versionName` (it **must** equal the tag minus `v` or CI aborts, so it carries the
-`-nix` / `-vaj` suffix too), merge `dev`, push, tag, `gh release create --notes-file …`, then
+**Each release branch owns its `versionName`; `dev`'s is not authoritative** (it can sit a release
+or more behind). The last shipped version is the one on `main`, `nix-edition` and
+`io-vaj-package`, or the latest tag — read it there, never from `dev`'s `app/build.gradle`.
+
+Per edition, as in `Release v0.2.39-vaj (merge dev into io-vaj-package)` followed by
+`release: v0.2.39-vaj`: merge `dev`, then set `versionName` in a `release:` commit (it **must**
+equal the tag minus `v` or CI aborts, so it carries the `-nix` / `-vaj` suffix too), push, tag, `gh release create --notes-file …`, then
 dispatch `attach_debug_apks_to_release.yml` with the tag. `versionCode` stays **1020** for upstream
 parity — never change it.
 
@@ -382,7 +425,17 @@ changes there; see that repo's `docs/maintainer/catalog.md` and `AGENTS.md`.
 This launcher only pins the release it ships: `app/tlstore.lock` names a tlstore release tag and
 the sha256 of each `dist/` file, and Gradle's `fetchTlstore` task downloads them into the APK's
 assets, verifying every hash. Bump the lock with the block tlstore's `scripts/release.sh` prints
-after cutting a release there. To build against a local tlstore checkout instead of a published
+after cutting a release there, and bump it whole: the engine and `tlstore-ui` are a pair and must
+come from the same release.
+
+On a new APK, `TlstoreInstaller` writes the bundled engine and `tlstore-ui`, but never over a
+tlstore the user has self-updated to something newer (it compares `TLSTORE_VERSION`) — it keeps
+that pair. Testing a bundled tlstore on a device that has self-updated therefore shows the newer one.
+
+A store item that needs a launcher feature gates on `min-launcher=X.Y.Z` in the tlstore catalog,
+naming the **release** the feature first ships in (btop needs the lane, which first ships after
+v0.2.39). The engine compares it with the running app's `versionName`, so a `dev` build reports
+`dev`'s stale version and can hide an item the next release will show. To build against a local tlstore checkout instead of a published
 release — while developing tlstore itself — pass `-Ptlstore.local=<dir>` (or set `TLSTORE_LOCAL`)
 pointing at that checkout's `dist/` folder; this skips the lock check entirely and prints a warning.
 
