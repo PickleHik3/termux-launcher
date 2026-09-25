@@ -297,10 +297,10 @@ public final class SettingsSectionChips {
         chip.setCheckable(true);
         chip.setChecked(checked);
         chip.setFocusable(true);
-        ChipGroup.LayoutParams params = new ChipGroup.LayoutParams(
-            ChipGroup.LayoutParams.WRAP_CONTENT, ChipGroup.LayoutParams.WRAP_CONTENT);
-        params.setMarginEnd(dp(context, 8));
-        chip.setLayoutParams(params);
+        // Compact, so a page's sections usually fit in two lines; the touch target stays 48dp.
+        chip.setChipMinHeight(dp(context, 30));
+        chip.setLayoutParams(new ChipGroup.LayoutParams(
+            ChipGroup.LayoutParams.WRAP_CONTENT, ChipGroup.LayoutParams.WRAP_CONTENT));
         chip.setOnClickListener(view -> onClick.run());
         return chip;
     }

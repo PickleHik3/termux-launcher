@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Pinned row of section-jump chips: "All" plus one chip per visible PreferenceCategory with
-  content. Sits above the preference RecyclerView (added by MaterialPreferenceFragment, not by
+  Pinned block of section-jump chips: "All" plus one chip per visible PreferenceCategory with
+  content, wrapping onto further lines so every section is in view without a sideways scroll. Sits above the preference RecyclerView (added by MaterialPreferenceFragment, not by
   any .xml preference page) and does not scroll with the list. Hidden entirely (GONE) on a page
   with fewer than three qualifying sections; SettingsSectionChips.bind() controls that.
 -->
@@ -14,25 +14,18 @@
     android:orientation="vertical"
     android:visibility="gone">
 
-    <HorizontalScrollView
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/settings_section_chips_group"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:clipToPadding="false"
-        android:fillViewport="false"
-        android:overScrollMode="never"
-        android:scrollbars="none">
-
-        <com.google.android.material.chip.ChipGroup
-            android:id="@+id/settings_section_chips_group"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingStart="20dp"
-            android:paddingTop="10dp"
-            android:paddingEnd="20dp"
-            android:paddingBottom="10dp"
-            app:singleLine="true"
-            app:singleSelection="true" />
-    </HorizontalScrollView>
+        android:paddingStart="20dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="6dp"
+        app:chipSpacingHorizontal="6dp"
+        app:chipSpacingVertical="0dp"
+        app:singleLine="false"
+        app:singleSelection="true" />
 
     <View
         android:layout_width="match_parent"
