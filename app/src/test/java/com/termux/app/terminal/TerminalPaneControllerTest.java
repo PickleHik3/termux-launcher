@@ -842,6 +842,25 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void toggleAutoTiling_retilesTheActiveWindowAndTurnsBackToHandLayout() {
+        TerminalPaneController controller = newSplittingController();
+        PaneFixture shaped = fourPaneFixture(controller);
+        controller.showWindow(shaped.window);
+        assertFalse(controller.isAutoTilingActive());
+
+        assertTrue(controller.toggleAutoTiling());
+        assertTrue(controller.isAutoTilingActive());
+        assertEquals(TerminalPaneController.LAYOUT_DWINDLE, shaped.window.layoutPolicy);
+        assertEquals("new windows tile too", TerminalPaneController.LAYOUT_DWINDLE,
+            controller.newWindow(terminal()).layoutPolicy);
+
+        assertFalse(controller.toggleAutoTiling());
+        assertFalse(controller.isAutoTilingActive());
+        assertEquals(null, shaped.window.layoutPolicy);
+        assertEquals(null, controller.newWindow(terminal()).layoutPolicy);
+    }
+
+    @Test
     public void defaultLayoutPolicy_appliesToNewWindowsAndLoneUnmanagedOnes() {
         TerminalPaneController controller = newSplittingController();
         TerminalPaneController.Window lone = controller.newWindow(terminal());

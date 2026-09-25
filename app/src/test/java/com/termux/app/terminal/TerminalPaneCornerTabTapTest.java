@@ -66,19 +66,22 @@ public class TerminalPaneCornerTabTapTest {
         @Override public void openSurfaceEditor() { log.add("appearance"); }
         @Override public void openLayoutEditor() { log.add("layout"); }
         @Override public void openSettings() { log.add("settings"); }
+        @Override public void onAutoTilingChanged(boolean enabled) {
+            log.add(enabled ? "tiling on" : "tiling off");
+        }
     }
 
     // ---------------------------------------------------------------- the four actions
 
     /**
      * A pane on its own has nothing to move, maximise or close: it offers the two editor doors —
-     * Appearance and Layout — and help.
+     * Appearance and Layout — the tiling switch, settings and help.
      */
     @Test
     public void aLonePanesTabOffersBothEditorsAndHelp() {
         Fixture fixture = fixture();
         fixture.showTab();
-        assertEquals("four buttons on a lone pane", 4, fixture.slots().length);
+        assertEquals("five buttons on a lone pane", 5, fixture.slots().length);
 
         fixture.tapSlot(0);
         assertEquals(Arrays.asList("appearance"), fixture.host.log);
@@ -87,13 +90,21 @@ public class TerminalPaneCornerTabTapTest {
         fixture.tapSlot(1);
         assertEquals(Arrays.asList("appearance", "layout"), fixture.host.log);
 
+        // The tiling button flips the setting and leaves the tab up for a second tap.
         fixture.showTab();
         fixture.tapSlot(2);
-        assertEquals(Arrays.asList("appearance", "layout", "settings"), fixture.host.log);
+        fixture.tapSlot(2);
+        assertEquals(Arrays.asList("appearance", "layout", "tiling on", "tiling off"),
+            fixture.host.log);
 
+        fixture.host.log.clear();
         fixture.showTab();
         fixture.tapSlot(3);
-        assertEquals(Arrays.asList("appearance", "layout", "settings", "help"), fixture.host.log);
+        assertEquals(Arrays.asList("settings"), fixture.host.log);
+
+        fixture.showTab();
+        fixture.tapSlot(4);
+        assertEquals(Arrays.asList("settings", "help"), fixture.host.log);
     }
 
     /**
@@ -107,8 +118,8 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         fixture.showTab();
 
-        assertEquals("five buttons in a split", 5, fixture.slots().length);
-        assertEquals(Arrays.asList(0, 1, 2, 6, 4), fixture.idsAtEverySlot());
+        assertEquals("six buttons in a split", 6, fixture.slots().length);
+        assertEquals(Arrays.asList(0, 1, 2, 7, 6, 4), fixture.idsAtEverySlot());
     }
 
     /** Maximised there is no neighbour to move onto, so that slot goes and the rest shuffle up. */
@@ -124,8 +135,8 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         assertNotNull("the pane is maximized",
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
-        assertEquals("four buttons maximized", 4, fixture.slots().length);
-        assertEquals(Arrays.asList(1, 2, 6, 4), fixture.idsAtEverySlot());
+        assertEquals("five buttons maximized", 5, fixture.slots().length);
+        assertEquals(Arrays.asList(1, 2, 7, 6, 4), fixture.idsAtEverySlot());
     }
 
     // ---------------------------------------------------------------- a fifth button

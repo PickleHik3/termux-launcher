@@ -189,6 +189,8 @@ public class TerminalPaneController {
         default void openLayoutEditor() {}
         /** The launcher's settings, asked for from the pane corner's tab. */
         default void openSettings() {}
+        /** The corner tab turned automatic tiling on or off; the host keeps the setting. */
+        default void onAutoTilingChanged(boolean enabled) {}
         /** Default working directory when a cwd can't be derived. */
         String defaultCwd();
         /** Spawn a new shell carrying a session name; defaults to an unnamed shell. */
@@ -403,6 +405,32 @@ public class TerminalPaneController {
                 w.layoutPolicy = mDefaultLayoutPolicy;
             }
         }
+    }
+
+    /** Whether the active window is tiling itself: what the corner tab's tiling button shows. */
+    public boolean isAutoTilingActive() {
+        return isDwindleManaged(mActiveWindow);
+    }
+
+    /**
+     * The corner tab's tiling button. On, the active window is re-tiled now and every new window
+     * tiles itself; off, the active window keeps the shape it has and later splits are manual.
+     * Either way it is the Automatic tiling setting that changes, so the two never disagree.
+     */
+    public boolean toggleAutoTiling() {
+        if (mActiveWindow == null || mActiveWindow.active == null) return false;
+        boolean enable = !isDwindleManaged(mActiveWindow);
+        if (enable) {
+            setDefaultLayoutPolicy(LAYOUT_DWINDLE);
+            applyLayout(LAYOUT_DWINDLE);
+        } else {
+            mDefaultLayoutPolicy = null;
+            clearLayoutPolicy(mActiveWindow);
+            mInteractionOverlay.applyControlActions();
+            mHost.onTreesChanged();
+        }
+        mHost.onAutoTilingChanged(enable);
+        return enable;
     }
 
     /** Turn focus growth on (the focused pane grows now) or off (every divider goes back to 1:1). */
@@ -3242,6 +3270,8 @@ public class TerminalPaneController {
         /** Open the Layout editor on this place. */
         private static final int ACTION_LAYOUT_EDITOR = 5;
         private static final int ACTION_SETTINGS = 6;
+        /** Turn automatic tiling on or off. */
+        private static final int ACTION_AUTO_TILING = 7;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
@@ -3354,6 +3384,7 @@ public class TerminalPaneController {
                 actions.add(PaneControlsView.Action.drawn(ACTION_CLOSE, this::drawCloseMark,
                     PaneControlsView.TINT_ERROR));
             }
+            actions.add(PaneControlsView.Action.drawn(ACTION_AUTO_TILING, this::drawAutoTilingMark));
             // The launcher's settings, one tap from the tab on every place, as the display's tab
             // already offers them.
             actions.add(PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS));
@@ -3361,6 +3392,29 @@ public class TerminalPaneController {
                 CornerTabGlyphs.help(getContext())));
             mControls.setActions(actions);
         }
+
+        /** The tiling icon, crossed out while the window is laid out by hand, in the tab's tint. */
+        private void drawAutoTilingMark(@NonNull Canvas canvas, @NonNull RectF button,
+                                        @NonNull Paint paint, float density) {
+            boolean on = isAutoTilingActive();
+            Drawable icon = on ? mAutoTilingOnIcon : mAutoTilingOffIcon;
+            if (icon == null) {
+                icon = ContextCompat.getDrawable(getContext(),
+                    on ? R.drawable.ic_pane_auto_tiling_on : R.drawable.ic_pane_auto_tiling_off);
+                if (icon == null) return;
+                icon = icon.mutate();
+                if (on) mAutoTilingOnIcon = icon;
+                else mAutoTilingOffIcon = icon;
+            }
+            int half = Math.round(dp(8));
+            int cx = Math.round(button.centerX());
+            int cy = Math.round(button.centerY());
+            icon.setBounds(cx - half, cy - half, cx + half, cy + half);
+            icon.setTint(paint.getColor());
+            icon.draw(canvas);
+        }
+        @Nullable private Drawable mAutoTilingOnIcon;
+        @Nullable private Drawable mAutoTilingOffIcon;
 
         /** The grip: two rules, the handle a pane is dragged onto another by. */
         private void drawMoveMark(@NonNull Canvas canvas, @NonNull RectF button,
@@ -3606,6 +3660,9 @@ public class TerminalPaneController {
             } else if (action == ACTION_CLOSE) {
                 dismissControls();
                 leaf.session.finishIfRunning();
+            } else if (action == ACTION_AUTO_TILING) {
+                // The tab stays up, so the icon flipping is the answer, and a second tap undoes it.
+                toggleAutoTiling();
             } else if (action == ACTION_SETTINGS) {
                 dismissControls();
                 mHost.openSettings();
