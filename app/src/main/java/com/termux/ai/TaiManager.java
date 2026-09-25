@@ -1568,21 +1568,29 @@ public final class TaiManager {
         return "terminal".equalsIgnoreCase(mode) ? WhisperDecoder.TERMINAL_VOCABULARY : null;
     }
 
-    /** The speech model a request names, or the settings' installed one; {@code null} when neither resolves. */
+    /** The speech model a request names, or the one voice input uses; {@code null} when neither resolves. */
     @Nullable
     private TaiModelSpec resolveSpeechModel(@NonNull JSONObject request) {
-        String modelId = requestedModelId(request, settings.getSttModelId());
+        String modelId = speechModelIdFor(request);
         if (modelId.isEmpty()) return null;
         TaiModelSpec spec = resolveModel(request, modelId);
         return spec != null && spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT) ? spec : null;
     }
 
+    /** The request's model, else the installed speech model the settings choose — a stored id whose
+     *  files are gone counts as unset and another installed speech model stands in for it. */
+    @NonNull
+    private String speechModelIdFor(@NonNull JSONObject request) {
+        String requested = requestedModelId(request, "");
+        return requested.isEmpty() ? TaiSpeechModels.activeModelId(settings, modelStore) : requested;
+    }
+
     @NonNull
     private JSONObject speechModelError(@NonNull JSONObject request) throws JSONException {
-        String modelId = requestedModelId(request, settings.getSttModelId());
+        String modelId = speechModelIdFor(request);
         if (modelId.isEmpty()) {
             return openAiRequestError(400, "stt_model_not_configured",
-                "No speech-to-text model is installed. Download one under TAI settings > Speech-to-text.", "model");
+                "No speech-to-text model is installed. Download one under Keyboard settings > Voice input > Speech model.", "model");
         }
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) return openAiRequestError(404, "model_not_found", "Unknown TAI model: " + modelId, "model");

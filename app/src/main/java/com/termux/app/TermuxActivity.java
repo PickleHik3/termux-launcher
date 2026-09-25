@@ -13542,12 +13542,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TerminalSession target = getCurrentSession();
         if (target == null) return;
         com.termux.ai.TaiSettings tai = new com.termux.ai.TaiSettings(this);
-        String modelId = tai.getSttModelId();
-        if (modelId.isEmpty()) {
+        // The settings' choice, or another installed speech model when that one's files are gone.
+        com.termux.ai.TaiModelSpec model = com.termux.ai.TaiSpeechModels.resolveActive(this);
+        if (model == null) {
             AppNotice.show(this, R.string.voice_input_no_model, false);
             launchVoiceTyping(false);
             return;
         }
+        String modelId = model.id;
+        // Each installed graph carries its own window in its file name; the setting is only the
+        // preference for the next download.
+        int windowSeconds = com.termux.ai.TaiSpeechModels.windowSeconds(model);
+        if (windowSeconds <= 0) windowSeconds = tai.getSttWindowSeconds();
         if (androidx.core.content.ContextCompat.checkSelfPermission(this,
                 android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -13555,9 +13561,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         boolean terminalTarget = !mInAppKeyboard.hasKeyValueInterceptor();
-        String language = resolveVoiceLanguage(modelId);
+        String language = resolveVoiceLanguage(model);
         VoiceInputSession.Config config = new VoiceInputSession.Config(modelId, language,
-            terminalTarget, mPreferences.getInAppKeyboardVoicePauseMs(), tai.getSttWindowSeconds(),
+            terminalTarget, mPreferences.getInAppKeyboardVoicePauseMs(), windowSeconds,
             mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs(),
             mPreferences.isInAppKeyboardVoiceCommandsEnabled(),
             mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled(),
@@ -13587,9 +13593,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * non-English choice against an {@code .en} model (the choice is ignored).
      */
     @Nullable
-    private String resolveVoiceLanguage(@NonNull String modelId) {
+    private String resolveVoiceLanguage(@NonNull com.termux.ai.TaiModelSpec model) {
         String setting = mPreferences.getInAppKeyboardVoiceLanguage();
-        boolean englishOnly = modelId.endsWith("-en");
+        boolean englishOnly = com.termux.ai.TaiSpeechModels.isEnglishOnly(model);
         if (englishOnly) {
             if (!VoiceLanguage.AUTO.equals(setting) && !VoiceLanguage.FALLBACK.equals(setting)
                 && !mVoiceEnglishOnlyNoticed) {
