@@ -90,3 +90,4 @@ WhatsApp Video*
 .artifacts/
 .gradle-codex-*/
 !app/src/main/assets/help-guide/*.mp4
+__pycache__/

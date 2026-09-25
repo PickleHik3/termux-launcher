@@ -455,6 +455,10 @@ tasks.withType(Test).configureEach {
         def value = System.getProperty(key) ?: project.findProperty(key)
         if (value != null) systemProperty key, value
     }
+    // The test JVM runs in this module's directory, so a relative default would land in app/app/.
+    if (System.getProperty('voice.replay.out') == null && project.findProperty('voice.replay.out') == null) {
+        systemProperty 'voice.replay.out', new File(buildDir, 'voice-replay').absolutePath
+    }
 }
 
 if (findProject(":x11-server:loader") != null) {
