@@ -74,7 +74,7 @@ public final class LaneAllowlist {
     public Resolved resolve(@NonNull String requestedPath) throws LaneRequest.Refused, IOException {
         File canonical = new File(requestedPath).getCanonicalFile();
         String root = filesDir.getCanonicalPath();
-        if (!isUnder(canonical.getPath(), root)) {
+        if (!isUnder(canonical.getPath(), root) && !hasAncestor(canonical, filesDir)) {
             throw new LaneRequest.Refused("only a file under " + root + " may run as shell (got " + canonical + ")");
         }
         // The canonical path has no symlinks left in it; NOFOLLOW is a belt for a race, not a policy.
@@ -88,6 +88,24 @@ public final class LaneAllowlist {
                 + " is not a catalog binary marked priv=shizuku (sha256 " + digest.substring(0, 12) + "…)");
         }
         return new Resolved(canonical, digest, row.name);
+    }
+
+    /**
+     * True when one of {@code file}'s parents is the same directory as {@code dir}, by device and
+     * inode. {@code getFilesDir()} answers {@code /data/user/0/<pkg>/files} while Termux paths say
+     * {@code /data/data/<pkg>/files}; the two are bind mounts of one directory, not symlinks, so
+     * canonical paths never agree and only the inode does.
+     */
+    @VisibleForTesting
+    static boolean hasAncestor(@NonNull File file, @NonNull File dir) {
+        for (File parent = file.getParentFile(); parent != null; parent = parent.getParentFile()) {
+            try {
+                if (Files.isSameFile(parent.toPath(), dir.toPath())) return true;
+            } catch (IOException ignored) {
+                // An unreadable ancestor is simply not the files directory.
+            }
+        }
+        return false;
     }
 
     /**

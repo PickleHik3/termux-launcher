@@ -56,6 +56,15 @@ public class LaneAllowlistTest {
     }
 
     @Test
+    public void hasAncestorMatchesTheFilesDirByInodeNotByPath() throws IOException {
+        File binary = writeBinary("btop", "x");
+        // A spelling of the files dir that is not its canonical path, as /data/user/0 is to /data/data.
+        File otherSpelling = new File(filesDir, "home/..");
+        assertTrue(LaneAllowlist.hasAncestor(binary, otherSpelling));
+        assertFalse(LaneAllowlist.hasAncestor(binary, folder.newFolder("elsewhere")));
+    }
+
+    @Test
     public void isUnderIsAComponentWisePrefixTest() {
         assertTrue(LaneAllowlist.isUnder("/data/data/com.termux/files/home/.local/bin/btop", "/data/data/com.termux/files"));
         assertTrue(LaneAllowlist.isUnder("/data/data/com.termux/files", "/data/data/com.termux/files"));
