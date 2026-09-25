@@ -348,3 +348,47 @@ Measure, in this order (all on pong, 4 threads, same XNNPACK delegate):
 | (3) shows clearly lower WER than small.en on the noisy and far-field sets, and the dictation latency ≤ small.en | Ship it as the recommended model on ≥8 GB devices. |
 | Accuracy wins but commands are slow | Keep it for dictation and route single-phrase commands to base.en, or evaluate **parakeet-tdt_ctc-110m** (sherpa-onnx int8, 126 MB, or our own TFLite conversion of its CTC branch) as the fast tier. |
 | Load fails and a LiteRT bump is blocked | Reconsider sherpa-onnx (+24 MB) only if (3) on a desktop NeMo run already shows a decisive accuracy win on our clips. |
+
+## Replay-rig results (2026-09-25)
+
+Measured on this repo's host replay rig (`VoiceReplayRig`, see the Replay rig section of
+`plans/whisper-voice-input.md`): the app's own VAD, gain, command classifier and terminal cleanup
+in Java; Whisper through `scripts/whisper_replay_server.py` (with the terminal bias line) and
+Parakeet through `scripts/parakeet_replay_server.py` (no biasing possible). Test set from
+`scripts/voice_eval_make.py`: 16 phrases (5 spoken keys, 5 typed commands, 6 dictation sentences)
+× 4 Piper voices × 4 conditions at pong's measured levels = 256 clips. Synthetic voices are cleaner
+than a person; read this as a comparison of models on identical audio.
+
+| All conditions | keys (80) | typed commands (80) | dictation WER | ms / clip (desktop CPU) |
+|---|---|---|---|---|
+| Whisper base.en | 41 | 29 | 24.5 % | 503 |
+| Whisper small.en | 55 → **59** with the `c key` alias | 37 | 17.5 % | 1542 |
+| Parakeet TDT v3 | 29 | 13 | **14.8 %** | 513 |
+
+By condition, dictation WER (base / small / Parakeet): near 5.5 / 5.5 / **3.8**, far 10.3 / **7.9** /
+11.0, fan 44.5 / 28.1 / **24.7**, TV 37.7 / 28.4 / **19.9** %.
+
+What the numbers mean:
+- **Parakeet is the best dictation engine here and as fast as base.en** on the host, especially
+  in noise (fan, TV).
+- **Parakeet is poor at terminal input**: "Get status", "Pseudo apt update", "L S", "Tank key".
+  It has no prompt, so the terminal bias line that teaches Whisper "git / sudo / ls" cannot be
+  applied. A post-ASR replacement dictionary (the Freestyle idea) could fix the common ones.
+- **small.en is the best command engine**; its one systematic miss ("control c key" → "c key")
+  is now handled by the classifier (commit 697d8cea).
+- Swapping `ctrl` for `control` in the bias line helped Ctrl+C but cost Tab/Backspace: no net
+  gain, reverted.
+- Short far words ("ls", "clear") are dropped by the 300 ms voiced minimum for every model.
+
+Two integration facts found on the way:
+- **Pad the audio, not the features.** Zero-padding the log-mel features of a short phrase (the
+  Android sample's way) reads as "average sound" after per-bin normalisation; the graph has no
+  length input, and on 1–1.5 s phrases the model repeated itself ("Enter key. Enter key",
+  "Clear clear clear…"). Padding the waveform with near-silence to 5 s fixed it.
+- The graph loads in desktop `ai-edge-litert` (2.x) with the expected `encode` / `decode` /
+  `decode_1` signatures. Whether it loads in the app's LiteRT 1.4.2 is measured on pong with
+  `SpeechGraphProbe` (debug build) — see below.
+
+Recommendation after measuring: keep Whisper (small.en on phones with room for it) as the
+default for the terminal; offer Parakeet later as an optional **dictation** engine (prompts to
+agents, notes), not as the command engine, unless a replacement dictionary closes the command gap.
