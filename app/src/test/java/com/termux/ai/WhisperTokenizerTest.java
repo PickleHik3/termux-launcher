@@ -54,12 +54,13 @@ public class WhisperTokenizerTest {
     }
 
     @Test
-    public void encodesTheTerminalBiasLineLikeTheReferenceBpe() {
-        int[] ids = tokenizer.encode(" " + WhisperDecoder.TERMINAL_VOCABULARY);
+    public void encodesAShellBiasLineLikeTheReferenceBpe() {
+        String line = "git ls cd sudo apt pkg tab enter escape ctrl key";
+        int[] ids = tokenizer.encode(" " + line);
         // " git ls cd sudo apt", " tab enter escape" and " key" are single tokens (the fixture's bias ids);
         // "pkg" and "ctrl" are not in the vocab and split into Ġp+kg and Ġc+trl.
         assertArrayEquals(new int[] {17606, 43979, 22927, 21061, 15409, 279, 10025, 7400, 3802, 6654, 269, 14859, 1994}, ids);
-        assertEquals(" " + WhisperDecoder.TERMINAL_VOCABULARY, tokenizer.decode(ids));
+        assertEquals(" " + line, tokenizer.decode(ids));
     }
 
     @Test
