@@ -253,8 +253,21 @@ public final class TlstoreInstaller {
             if (!libexecDir.isDirectory() && !libexecDir.mkdirs()) {
                 throw new IOException("Failed to create " + libexecDir);
             }
+            byte[] bundled;
             try (InputStream in = assets.open(TLSTORE_ASSET)) {
-                writeAtomically(tlstoreScript(), in, true, true);
+                bundled = readAll(in);
+            }
+            // tlstore updates itself from its own releases, independently of this APK. A copy
+            // already newer than the one bundled here is kept, and tlstore-ui with it, since the
+            // two are updated as a pair; putting the older script back under a newer UI is what
+            // broke the store once.
+            String installedVersion = tlstoreVersion(readHead(tlstoreScript(), 4096));
+            String bundledVersion = tlstoreVersion(new String(bundled, 0, Math.min(bundled.length, 4096), StandardCharsets.UTF_8));
+            boolean keepInstalled = isNewerVersion(installedVersion, bundledVersion);
+            if (keepInstalled) {
+                Logger.logInfo(LOG_TAG, "Keeping tlstore " + installedVersion + ", newer than the bundled " + bundledVersion);
+            } else {
+                writeAtomically(tlstoreScript(), new java.io.ByteArrayInputStream(bundled), true, true);
             }
             writeSymlinkAtomically(tlAlias(), TLSTORE_NAME);
             writeSymlinkAtomically(tlsAlias(), TLSTORE_NAME);
@@ -268,7 +281,7 @@ public final class TlstoreInstaller {
                 Logger.logInfo(LOG_TAG, "No trusted.pub asset yet; installing tlstore without it");
             }
             installMotd();
-            installTlstoreUi();
+            if (!keepInstalled) installTlstoreUi();
             writeAtomically(markerFile(), bytes(marker), true, false);
             return Result.INSTALLED;
         } catch (Exception e) {
@@ -502,6 +515,37 @@ public final class TlstoreInstaller {
     @NonNull
     private static InputStream bytes(@NonNull String content) {
         return new java.io.ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** The {@code TLSTORE_VERSION=} a script declares in its opening lines, or null. */
+    @Nullable
+    @VisibleForTesting
+    static String tlstoreVersion(@Nullable String head) {
+        if (head == null) return null;
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?m)^TLSTORE_VERSION=([0-9][0-9.]*)$").matcher(head);
+        return m.find() ? m.group(1) : null;
+    }
+
+    /** True when dotted version {@code a} is newer than {@code b}; false when either is unknown. */
+    @VisibleForTesting
+    static boolean isNewerVersion(@Nullable String a, @Nullable String b) {
+        if (a == null || b == null) return false;
+        String[] x = a.split("\\."), y = b.split("\\.");
+        for (int i = 0; i < Math.max(x.length, y.length); i++) {
+            long p = i < x.length && !x[i].isEmpty() ? Long.parseLong(x[i]) : 0;
+            long q = i < y.length && !y[i].isEmpty() ? Long.parseLong(y[i]) : 0;
+            if (p != q) return p > q;
+        }
+        return false;
+    }
+
+    @NonNull
+    private static byte[] readAll(@NonNull InputStream in) throws IOException {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = in.read(buffer)) > 0) out.write(buffer, 0, read);
+        return out.toByteArray();
     }
 
     /** The first {@code limit} bytes as text: the marker sits in a script's opening lines. */

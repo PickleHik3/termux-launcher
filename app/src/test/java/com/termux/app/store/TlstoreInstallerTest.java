@@ -143,6 +143,38 @@ public class TlstoreInstallerTest {
         assertTrue(text(installer.markerFile()).contains(" v" + TlstoreInstaller.VERSION + " "));
     }
 
+    @Test public void aSelfUpdatedNewerTlstoreIsNotDowngraded() throws IOException {
+        installer.install();
+        // tlstore updated itself (script and UI) past what this APK bundles.
+        byte[] selfUpdated = ("#!/usr/bin/env sh\n" + TlstoreInstaller.MARKER_PREAMBLE
+            + "\nTLSTORE_VERSION=0.9\necho self-updated\n").getBytes(StandardCharsets.UTF_8);
+        Files.write(installer.tlstoreScript().toPath(), selfUpdated);
+        byte[] selfUpdatedUi = "ELF-self-updated".getBytes(StandardCharsets.UTF_8);
+        Files.write(installer.tlstoreUiFile().toPath(), selfUpdatedUi);
+        // A new APK (new marker) bundling an older tlstore.
+        Files.write(installer.markerFile().toPath(),
+            (TlstoreInstaller.MARKER_PREAMBLE + " v0 com.termux.test\n").getBytes(StandardCharsets.UTF_8));
+        byte[] bundledOlder = ("#!/usr/bin/env sh\n" + TlstoreInstaller.MARKER_PREAMBLE
+            + "\nTLSTORE_VERSION=0.5\necho bundled\n").getBytes(StandardCharsets.UTF_8);
+        installer = new TlstoreInstaller(bin, libexec, dataHome, "com.termux.test", "0.0-test",
+            assets(bundledOlder, true));
+
+        assertEquals(TlstoreInstaller.Result.INSTALLED, installer.install());
+
+        assertArrayEquals(selfUpdated, Files.readAllBytes(installer.tlstoreScript().toPath()));
+        assertArrayEquals(selfUpdatedUi, Files.readAllBytes(installer.tlstoreUiFile().toPath()));
+    }
+
+    @Test public void versionsCompareNumerically() {
+        assertEquals("0.5", TlstoreInstaller.tlstoreVersion("#!/bin/sh\nTLSTORE_VERSION=0.5\n"));
+        assertEquals(null, TlstoreInstaller.tlstoreVersion("#!/bin/sh\necho\n"));
+        assertTrue(TlstoreInstaller.isNewerVersion("0.10", "0.9"));
+        assertTrue(TlstoreInstaller.isNewerVersion("1.0", "0.9.9"));
+        assertFalse(TlstoreInstaller.isNewerVersion("0.5", "0.5"));
+        assertFalse(TlstoreInstaller.isNewerVersion("0.4", "0.5"));
+        assertFalse(TlstoreInstaller.isNewerVersion(null, "0.5"));
+    }
+
     @Test public void aForeignTlIsLeftAloneAndNothingIsOverwritten() throws IOException {
         File foreignTl = installer.tlAlias();
         Files.write(foreignTl.toPath(), "#!/bin/sh\necho mine\n".getBytes(StandardCharsets.UTF_8));
