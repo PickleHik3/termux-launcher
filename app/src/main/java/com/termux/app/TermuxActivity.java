@@ -13651,7 +13651,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
         if (keyboardContainer == null) return;
         if (mVoiceIndicator == null) mVoiceIndicator = new VoiceListeningIndicator(this, keyboardContainer);
-        mVoiceIndicator.show();
+        mVoiceIndicator.show(this::closeVoiceInputFromPill);
+    }
+
+    /**
+     * The pill's own close button: the same as a second tap on the voice key while a segment is
+     * still draining, regardless of whether the session is actually in that state — discard
+     * whatever has not been delivered and end at once. {@link #cancelVoiceInput} is not this: that
+     * one is for the activity going away, and skips the voice key's un-press since the keyboard is
+     * going with it.
+     */
+    private void closeVoiceInputFromPill() {
+        VoiceInputSession session = mVoiceInput;
+        if (session != null) session.cancel(VoiceInputSession.EndReason.USER);
     }
 
     private void hideVoiceIndicator() {
@@ -13673,7 +13685,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             juloo.keyboard2.KeyValue key = juloo.keyboard2.KeyValue.getKeyByName(command.keyName);
             if (key != null && mInAppKeyboard.dispatchKeyValue(key, command.ctrl)) {
                 mVoiceInputLastWasText = false;
-                if (mVoiceIndicator != null) mVoiceIndicator.setTranscript(transcript.trim());
+                if (mVoiceIndicator != null) mVoiceIndicator.showCommand(command.chipLabel());
+                if (mVoiceInput != null) mVoiceInput.commandFeedback();
                 return;
             }
         }
@@ -13697,6 +13710,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public void onListening() {
             if (mInAppKeyboard != null) mInAppKeyboard.setVoiceTypingActive(true);
             showVoiceIndicator();
+        }
+
+        @Override
+        public void onSegmentCaptured() {
+            if (mVoiceIndicator != null) mVoiceIndicator.setPending();
         }
 
         @Override

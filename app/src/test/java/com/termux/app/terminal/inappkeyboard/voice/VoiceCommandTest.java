@@ -88,4 +88,14 @@ public class VoiceCommandTest {
         assertEquals("ctrl x", VoiceCommand.normalize("control x"));
         assertEquals("controller", VoiceCommand.normalize("controller"));
     }
+
+    @Test
+    public void chipLabelsMatchTheKeySent() {
+        assertEquals("⏎ Enter", VoiceCommand.ENTER.chipLabel());
+        assertEquals("⇥ Tab", VoiceCommand.TAB.chipLabel());
+        assertEquals("Esc", VoiceCommand.ESC.chipLabel());
+        assertEquals("⌫", VoiceCommand.BACKSPACE.chipLabel());
+        assertEquals("Space", VoiceCommand.SPACE.chipLabel());
+        assertEquals("Ctrl+C", VoiceCommand.CTRL_C.chipLabel());
+    }
 }

@@ -1,9 +1,11 @@
 package com.termux.app.terminal.inappkeyboard.voice;
 
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
 import android.graphics.RectF;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -11,6 +13,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -26,16 +29,27 @@ import com.termux.R;
  * re-read from the keyboard container's position on every level update, which is cheap and keeps
  * it above a keyboard that moves. After a segment transcribes, the pill shows that text until the
  * next one.
+ *
+ * <p>A close button sits at the pill's end for the whole session; {@link #setPending} marks a
+ * segment the VAD has just closed but has not transcribed yet, so the tap that ended a phrase is
+ * acknowledged well before the transcript (or the command it turns into) can arrive, and
+ * {@link #showCommand} briefly swaps the text for a chip when a spoken command's key is sent.
  */
 public final class VoiceListeningIndicator {
 
     private static final int BARS = 5;
+    /** How long a command chip ("⏎ Enter") stays up before the ordinary text underneath shows again. */
+    private static final long COMMAND_CHIP_MS = 1_000L;
 
     private final Activity activity;
     private final View keyboardContainer;
     @Nullable private LinearLayout pill;
     @Nullable private TextView label;
+    @Nullable private TextView chip;
+    @Nullable private TextView pendingMark;
     @Nullable private LevelMeterView meter;
+    @Nullable private ValueAnimator pendingAnimator;
+    @Nullable private Runnable chipHideRunnable;
     private int lastBottomMargin = -1;
 
     public VoiceListeningIndicator(@NonNull Activity activity, @NonNull View keyboardContainer) {
@@ -43,36 +57,77 @@ public final class VoiceListeningIndicator {
         this.keyboardContainer = keyboardContainer;
     }
 
-    public void show() {
+    /** @param onClose called on a tap of the pill's close button; discards the session at once. */
+    public void show(@NonNull Runnable onClose) {
         if (pill != null) return;
         ViewGroup content = activity.findViewById(android.R.id.content);
         if (content == null) return;
         Context context = activity;
+        int onSurface = themeColor(context, com.termux.shared.R.attr.termuxColorOnSurface);
+        int accent = themeColor(context, com.termux.shared.R.attr.termuxColorPrimary);
         LinearLayout view = new LinearLayout(context);
         view.setOrientation(LinearLayout.HORIZONTAL);
         view.setGravity(Gravity.CENTER_VERTICAL);
         view.setBackgroundResource(R.drawable.settings_pill_background);
         view.setElevation(dp(4));
         int padH = dp(14), padV = dp(8);
-        view.setPadding(padH, padV, padH, padV);
+        view.setPadding(padH, padV, dp(6), padV);
         view.setClickable(false);
         view.setFocusable(false);
 
-        LevelMeterView levels = new LevelMeterView(context, themeColor(context, com.termux.shared.R.attr.termuxColorPrimary),
-            themeColor(context, com.termux.shared.R.attr.termuxColorOnSurface));
+        LevelMeterView levels = new LevelMeterView(context, accent, onSurface);
         LinearLayout.LayoutParams meterParams = new LinearLayout.LayoutParams(dp(28), dp(16));
         meterParams.setMarginEnd(dp(10));
         view.addView(levels, meterParams);
 
         TextView text = new TextView(context);
-        text.setTextColor(themeColor(context, com.termux.shared.R.attr.termuxColorOnSurface));
+        text.setTextColor(onSurface);
         text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         text.setSingleLine();
         text.setEllipsize(TextUtils.TruncateAt.START);
-        text.setMaxWidth(dp(240));
+        text.setMaxWidth(dp(200));
         text.setText(R.string.voice_input_listening);
-        view.addView(text, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+
+        TextView chipText = new TextView(context);
+        chipText.setTextColor(accent);
+        chipText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        chipText.setTypeface(chipText.getTypeface(), android.graphics.Typeface.BOLD);
+        chipText.setSingleLine();
+        chipText.setVisibility(View.GONE);
+
+        FrameLayout textStack = new FrameLayout(context);
+        textStack.addView(text, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
+        textStack.addView(chipText, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        view.addView(textStack, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView pending = new TextView(context);
+        pending.setTextColor(onSurface);
+        pending.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        pending.setText(R.string.voice_input_pending_mark);
+        pending.setVisibility(View.GONE);
+        LinearLayout.LayoutParams pendingParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        pendingParams.setMarginStart(dp(2));
+        view.addView(pending, pendingParams);
+
+        // A 44dp touch target around an 18dp glyph: the pill barely grows, the tap target does not.
+        ImageView close = new ImageView(context);
+        close.setImageResource(R.drawable.ic_symbol_close);
+        close.setColorFilter(onSurface, PorterDuff.Mode.SRC_IN);
+        close.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        close.setContentDescription(context.getString(R.string.voice_input_close));
+        close.setPadding(dp(13), dp(13), dp(13), dp(13));
+        TypedValue ripple = new TypedValue();
+        if (context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true)) {
+            close.setBackgroundResource(ripple.resourceId);
+        }
+        close.setOnClickListener(v -> onClose.run());
+        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dp(44), dp(44));
+        closeParams.setMarginStart(dp(4));
+        view.addView(close, closeParams);
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -82,6 +137,8 @@ public final class VoiceListeningIndicator {
         content.addView(view, params);
         pill = view;
         label = text;
+        chip = chipText;
+        pendingMark = pending;
         meter = levels;
     }
 
@@ -89,8 +146,13 @@ public final class VoiceListeningIndicator {
         LinearLayout view = pill;
         pill = null;
         label = null;
+        chip = null;
+        pendingMark = null;
         meter = null;
         lastBottomMargin = -1;
+        stopPendingAnimator();
+        if (view != null && chipHideRunnable != null) view.removeCallbacks(chipHideRunnable);
+        chipHideRunnable = null;
         if (view == null) return;
         ViewGroup parent = (ViewGroup) view.getParent();
         if (parent != null) parent.removeView(view);
@@ -121,12 +183,81 @@ public final class VoiceListeningIndicator {
     public void setTranscript(@NonNull CharSequence text) {
         TextView view = label;
         if (view != null) view.setText(text);
+        clearPending();
+        hideChip();
     }
 
     /** The mic has closed but a captured segment is still transcribing: "Listening…" no longer fits. */
     public void setTranscribing() {
         TextView view = label;
         if (view != null) view.setText(R.string.voice_input_transcribing);
+    }
+
+    /**
+     * A phrase was recognized as a command and its key was sent: the pill shows {@code chipLabel}
+     * (e.g. "⏎ Enter") in the accent colour in place of the text for {@link #COMMAND_CHIP_MS},
+     * then reverts to whatever the label underneath already says.
+     */
+    public void showCommand(@NonNull String chipLabel) {
+        TextView view = chip;
+        LinearLayout view2 = pill;
+        if (view == null || view2 == null) return;
+        clearPending();
+        view.setText(chipLabel);
+        view.setVisibility(View.VISIBLE);
+        if (chipHideRunnable != null) view2.removeCallbacks(chipHideRunnable);
+        chipHideRunnable = this::hideChip;
+        view2.postDelayed(chipHideRunnable, COMMAND_CHIP_MS);
+    }
+
+    private void hideChip() {
+        TextView view = chip;
+        if (view != null) view.setVisibility(View.GONE);
+        LinearLayout view2 = pill;
+        if (view2 != null && chipHideRunnable != null) view2.removeCallbacks(chipHideRunnable);
+        chipHideRunnable = null;
+    }
+
+    /**
+     * The VAD has just closed a segment that has not transcribed yet: a small mark next to the
+     * text so a spoken phrase is acknowledged well inside the latency it takes to come back as a
+     * transcript or a command chip. Pulses unless the system has animations turned off.
+     */
+    public void setPending() {
+        TextView view = pendingMark;
+        if (view == null) return;
+        view.setVisibility(View.VISIBLE);
+        if (pendingAnimator != null) return;
+        if (!ValueAnimator.areAnimatorsEnabled()) {
+            view.setAlpha(1f);
+            return;
+        }
+        ValueAnimator animator = ValueAnimator.ofFloat(1f, 0.25f);
+        animator.setDuration(500L);
+        animator.setRepeatCount(ValueAnimator.INFINITE);
+        animator.setRepeatMode(ValueAnimator.REVERSE);
+        animator.addUpdateListener(a -> {
+            TextView target = pendingMark;
+            if (target != null) target.setAlpha((float) a.getAnimatedValue());
+        });
+        animator.start();
+        pendingAnimator = animator;
+    }
+
+    /** The pending segment delivered (as a transcript or a command) or the session moved on. */
+    public void clearPending() {
+        TextView view = pendingMark;
+        if (view != null) view.setVisibility(View.GONE);
+        stopPendingAnimator();
+    }
+
+    private void stopPendingAnimator() {
+        if (pendingAnimator != null) {
+            pendingAnimator.cancel();
+            pendingAnimator = null;
+        }
+        TextView view = pendingMark;
+        if (view != null) view.setAlpha(1f);
     }
 
     /** The room under the pill: from the content frame's bottom up to the keyboard's top, plus a gap. */

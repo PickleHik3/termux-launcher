@@ -106,6 +106,14 @@ public final class VoiceInputSession {
         void onListening();
 
         /**
+         * The VAD has just closed a segment (silence after speech, or the pause/window limit) and
+         * handed it to the STT thread — well before its transcript (or the command it turns into)
+         * can come back, so the pill can acknowledge the phrase at once instead of only once it
+         * transcribes.
+         */
+        void onSegmentCaptured();
+
+        /**
          * A level sample, roughly every 30 ms while listening, with the VAD's noise floor at that
          * moment (the level meter measures from it, not an absolute dBFS scale).
          */
@@ -269,6 +277,11 @@ public final class VoiceInputSession {
         return stopRequested.get();
     }
 
+    /** A phrase from this session was just classified as a command and its key sent: the haptic. */
+    public void commandFeedback() {
+        feedback.onCommand();
+    }
+
     // ------------------------------------------------------------------ capture thread
 
     private void capture(@NonNull AudioRecord recorder) {
@@ -299,6 +312,9 @@ public final class VoiceInputSession {
 
             @Override
             public void onSegment(@NonNull short[] pcm, int voicedFrames) {
+                mainHandler.post(() -> {
+                    if (!ended) host.onSegmentCaptured();
+                });
                 submitSegment(nextSequence++, pcm, voicedFrames);
             }
 
