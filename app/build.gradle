@@ -54,7 +54,7 @@ android {
         }
 
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
-        versionName "0.2.37"
+        versionName "0.2.38"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
