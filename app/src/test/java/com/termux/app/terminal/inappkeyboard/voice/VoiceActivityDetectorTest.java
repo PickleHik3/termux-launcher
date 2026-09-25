@@ -22,14 +22,21 @@ public class VoiceActivityDetectorTest {
     private final List<short[]> segments = new ArrayList<>();
     private int silenceTimeouts;
 
+    /** The 2.5 s the pre-setting behaviour used; kept so existing tests time out where they always did. */
+    private static final int DEFAULT_TEST_SILENCE_MS = 2_500;
+
     private VoiceActivityDetector detector(int pauseMs, int windowSeconds) {
+        return detector(pauseMs, windowSeconds, DEFAULT_TEST_SILENCE_MS);
+    }
+
+    private VoiceActivityDetector detector(int pauseMs, int windowSeconds, int silenceMs) {
         return new VoiceActivityDetector(new VoiceActivityDetector.Listener() {
             @Override
-            public void onLevel(float rms, boolean voiced) {
+            public void onLevel(float rms, boolean voiced, float noiseFloor) {
             }
 
             @Override
-            public void onSegment(@NonNull short[] pcm) {
+            public void onSegment(@NonNull short[] pcm, int voicedFrames) {
                 segments.add(pcm);
             }
 
@@ -37,7 +44,7 @@ public class VoiceActivityDetectorTest {
             public void onSilenceTimeout() {
                 silenceTimeouts++;
             }
-        }, pauseMs, windowSeconds);
+        }, pauseMs, windowSeconds, silenceMs);
     }
 
     /** {@code frames} frames of a 440 Hz tone at about −12 dBFS. */
@@ -138,6 +145,23 @@ public class VoiceActivityDetectorTest {
         vad.feed(tone(15), 15 * FRAME);
         vad.feed(quiet(84), 84 * FRAME);       // counted from the last voiced frame
         assertEquals(2, silenceTimeouts);
+    }
+
+    @Test
+    public void theSilenceSettingIsHonoured() {
+        VoiceActivityDetector vad = detector(600, 10, VoiceSilenceTimeout.DEFAULT_MS);
+        int frames = VoiceSilenceTimeout.DEFAULT_MS / VoiceActivityDetector.FRAME_MS;
+        vad.feed(quiet(frames - 1), (frames - 1) * FRAME);
+        assertEquals(0, silenceTimeouts);
+        vad.feed(quiet(1), FRAME);
+        assertEquals(1, silenceTimeouts);
+    }
+
+    @Test
+    public void untilTapNeverTimesOut() {
+        VoiceActivityDetector vad = detector(600, 10, VoiceSilenceTimeout.UNTIL_TAP);
+        vad.feed(quiet(2_000), 2_000 * FRAME);  // 60 s of silence
+        assertEquals(0, silenceTimeouts);
     }
 
     @Test

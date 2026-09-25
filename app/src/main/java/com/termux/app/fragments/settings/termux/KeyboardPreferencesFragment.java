@@ -370,6 +370,9 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "keyboard_voice_commands":
                 mPreferences.setInAppKeyboardVoiceCommandsEnabled(value);
                 break;
+            case "keyboard_voice_bare_command_words":
+                mPreferences.setInAppKeyboardVoiceBareCommandWordsEnabled(value);
+                break;
             case "keyboard_voice_terminal_cleanup":
                 mPreferences.setInAppKeyboardVoiceTerminalCleanupEnabled(value);
                 break;
@@ -406,6 +409,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isInAppKeyboardTapCorrectionEnabled();
             case "keyboard_voice_commands":
                 return mPreferences.isInAppKeyboardVoiceCommandsEnabled();
+            case "keyboard_voice_bare_command_words":
+                return mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled();
             case "keyboard_voice_terminal_cleanup":
                 return mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled();
             case "extra_keys_text_all_caps": {
@@ -497,6 +502,15 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 }
                 mPreferences.setInAppKeyboardVoicePauseMs(pauseMs);
                 break;
+            case "keyboard_voice_silence_timeout_ms":
+                int silenceMs;
+                try {
+                    silenceMs = Integer.parseInt(value == null ? "" : value.trim());
+                } catch (NumberFormatException e) {
+                    silenceMs = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS;
+                }
+                mPreferences.setInAppKeyboardVoiceSilenceTimeoutMs(silenceMs);
+                break;
             default:
                 break;
         }
@@ -577,6 +591,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getInAppKeyboardVoiceLanguage();
             case "keyboard_voice_pause_ms":
                 return String.valueOf(mPreferences.getInAppKeyboardVoicePauseMs());
+            case "keyboard_voice_silence_timeout_ms":
+                return String.valueOf(mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs());
             default:
                 return defValue;
         }

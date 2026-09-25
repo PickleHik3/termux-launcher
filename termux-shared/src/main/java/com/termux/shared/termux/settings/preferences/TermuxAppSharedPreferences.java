@@ -1305,6 +1305,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_COMMANDS, value, false);
     }
 
+    public boolean isInAppKeyboardVoiceBareCommandWordsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS);
+    }
+
+    public void setInAppKeyboardVoiceBareCommandWordsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS, value, false);
+    }
+
     public boolean isInAppKeyboardVoiceTerminalCleanupEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP,
@@ -1334,6 +1345,26 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         }
         SharedPreferenceUtils.setInt(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_PAUSE_MS, pause, false);
+    }
+
+    /** One of {@link TERMUX_APP#IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS_CHOICES}; anything else stored reads as the default. */
+    public int getInAppKeyboardVoiceSilenceTimeoutMs() {
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS);
+        for (int choice : TERMUX_APP.IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS_CHOICES) {
+            if (choice == value) return value;
+        }
+        return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS;
+    }
+
+    public void setInAppKeyboardVoiceSilenceTimeoutMs(int value) {
+        int timeout = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS;
+        for (int choice : TERMUX_APP.IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS_CHOICES) {
+            if (choice == value) timeout = value;
+        }
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS, timeout, false);
     }
 
     public boolean isInAppKeyboardKeySoundEnabled() {

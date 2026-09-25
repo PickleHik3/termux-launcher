@@ -77,6 +77,18 @@
         <item>800</item>
         <item>1200</item>
     </string-array>
+    <string-array name="settings_keyboard_voice_silence_timeout_entries">
+        <item>5 s</item>
+        <item>10 s</item>
+        <item>30 s</item>
+        <item>@string/settings_keyboard_voice_silence_timeout_until_tap</item>
+    </string-array>
+    <string-array name="settings_keyboard_voice_silence_timeout_values">
+        <item>5000</item>
+        <item>10000</item>
+        <item>30000</item>
+        <item>0</item>
+    </string-array>
     <string-array name="termux_theme_mode_entries">
         <item>@string/termux_theme_mode_system</item>
         <item>@string/termux_theme_mode_light</item>

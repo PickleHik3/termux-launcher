@@ -33,6 +33,26 @@ public class VoiceTerminalCleanupTest {
     }
 
     @Test
+    public void controlCharactersBecomeASpaceAndRunsCollapse() {
+        assertEquals("ls rm -rf", VoiceTerminalCleanup.clean("ls\n\nrm -rf"));
+        assertEquals("git status", VoiceTerminalCleanup.clean("git\rstatus"));
+        assertEquals("a b", VoiceTerminalCleanup.clean("a\u0000\u0001\u0007b"));
+    }
+
+    @Test
+    public void nonSpeechCaptionsAndPunctuationOnlySegmentsAreDropped() {
+        assertEquals("", VoiceTerminalCleanup.clean("[Music]"));
+        assertEquals("", VoiceTerminalCleanup.clean("[BLANK_AUDIO]"));
+        assertEquals("", VoiceTerminalCleanup.clean("(B)"));
+        assertEquals("", VoiceTerminalCleanup.clean("*"));
+        assertEquals("", VoiceTerminalCleanup.clean("¶¶"));
+        assertEquals("", VoiceTerminalCleanup.clean("."));
+        // A segment is dropped only when nothing but such spans and punctuation is left;
+        // real speech that happens to carry one still comes through untouched.
+        assertEquals("ls [pause]", VoiceTerminalCleanup.clean("ls [pause]"));
+    }
+
+    @Test
     public void consecutiveTextSegmentsAreJoinedWithOneSpace() {
         assertEquals("ls", VoiceTerminalCleanup.join(false, "ls"));
         assertEquals(" -la", VoiceTerminalCleanup.join(true, "-la"));

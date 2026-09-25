@@ -341,6 +341,31 @@ voice input falls back to the Android recognizer. STT unloads after 2 minutes id
 4. Voice commands, terminal cleanup, language forcing. **Done** with phase 3 (above).
 5. Memory-manager registration and eviction (after memory manager phase 2).
 
+### Refinement pass (2026-09-25)
+
+Six changes agreed after the developer's first pong retest and the Freestyle comparison
+(`project-docs/freestyle-voice-comparison.md`), implemented on `dev`, device check on pong pending:
+
+- **Level meter**: `VoiceLevelCurve` maps dB above the VAD's adaptive noise floor through a
+  saturating curve (0 dB at the floor, ~25 dB ≈ 90% of the bar) instead of a fixed −50…−10 dBFS
+  window; the meter bar gets a peak-hold before its 0.78/frame decay.
+- **Spoken commands need "key"** by default ("enter key", "tab key", "control c key", …); a new
+  "Bare command words" keyboard setting (off by default) restores bare-word matching. "key" was
+  added to the terminal bias vocabulary.
+- **Silence auto-stop** is now a keyboard setting (5 s / 10 s / 30 s / "Until tap", default 10 s,
+  `VoiceSilenceTimeout`) instead of the fixed 2.5 s.
+- **Terminal-safety sanitiser**: `VoiceTerminalCleanup` maps C0 control characters (`\r`, `\n`
+  included) to a space before anything else runs, and drops a segment outright when no letter or
+  digit survives once `[...]` / `(...)` / `*...*` spans and punctuation are removed (`[Music]`,
+  `[BLANK_AUDIO]`, `(B)`, `*`, `¶¶`, `.`).
+- **Per-phrase info logs** (tag `VoiceInputSession`): segment duration, voiced ms, transcribe ms,
+  the runtime's mel/encode/decode timings when present, text length, and outcome (command / text /
+  dropped / failed) — the transcript itself is never logged.
+- **Per-segment deadline and cancel-on-tap**: each STT request now gets `5 s + 3×` its own audio
+  length instead of the IPC client's flat 120 s; a tap while segments are still draining calls
+  `cancel()` (discard, end at once) instead of the no-op `stop()`, and the pill shows
+  "Transcribing…" once the mic has closed but a segment is still in flight.
+
 ## Tests
 
 - Mel fixture test against Whisper's reference output; tokenizer decode test (multilingual and

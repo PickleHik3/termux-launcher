@@ -118,6 +118,9 @@ public final class TaiManager {
     /** Status queries should return quickly; cap them so a busy/hung runtime can't stall callers. */
     private static final long RUNTIME_STATUS_TIMEOUT_MS = 8_000L;
 
+    /** {@link TaiRuntimeServiceClient}'s own flat default, kept here for callers that don't pass one. */
+    static final long DEFAULT_TRANSCRIBE_TIMEOUT_MS = 120_000L;
+
     @NonNull
     private JSONObject runtimeRequest(@NonNull String operation, @Nullable String body) throws JSONException {
         if (runtimeClient == null) return error(500, "runtime_client_unavailable", "TAI runtime service client is unavailable.");
@@ -1463,6 +1466,16 @@ public final class TaiManager {
      */
     @NonNull
     public JSONObject transcribe(@NonNull String body) throws JSONException {
+        return transcribe(body, DEFAULT_TRANSCRIBE_TIMEOUT_MS);
+    }
+
+    /**
+     * As {@link #transcribe(String)}, with the IPC deadline the caller wants instead of the flat
+     * default — a voice-input segment gives itself a much shorter one, so a hung runtime fails
+     * that one segment instead of stalling for the full timeout.
+     */
+    @NonNull
+    public JSONObject transcribe(@NonNull String body, long timeoutMs) throws JSONException {
         JSONObject request = parseBody(body);
         TaiModelSpec spec = resolveSpeechModel(request);
         if (spec == null) return speechModelError(request);
@@ -1480,7 +1493,7 @@ public final class TaiManager {
             }
             if (!new File(path).isFile()) return openAiRequestError(400, "stt_audio_missing", "Audio file not found: " + path, "file");
             request.put("file", path);
-            return runtimeRequest(TaiRuntimeIpc.OP_TRANSCRIBE, delegatedSpeechBody(request, spec));
+            return runtimeRequest(TaiRuntimeIpc.OP_TRANSCRIBE, delegatedSpeechBody(request, spec), timeoutMs);
         }
         rememberSttIdleLimit(request);
         File audio = new File(path);

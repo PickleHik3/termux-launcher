@@ -21,8 +21,12 @@ import java.util.Arrays;
  * repeats three times, the reference decoder's guard against runaway output.
  */
 final class WhisperDecoder {
-    /** The shell words the terminal bias prompt carries by default; measured to turn "Get status" into "git status". */
-    static final String TERMINAL_VOCABULARY = "git ls cd sudo apt pkg tab enter escape ctrl";
+    /**
+     * The shell words the terminal bias prompt carries by default; measured to turn "Get status"
+     * into "git status". "key" biases the decoder towards the spoken-command phrasing
+     * ({@code VoiceCommand}'s default "enter key", "tab key", …).
+     */
+    static final String TERMINAL_VOCABULARY = "git ls cd sudo apt pkg tab enter escape ctrl key";
     /** The most tokens a bias line may take, {@code <|startofprev|>} excluded. */
     static final int MAX_BIAS_TOKENS = 24;
     static final int REPETITION_NGRAM = 4;

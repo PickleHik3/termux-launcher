@@ -743,10 +743,23 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_LANGUAGE = "auto";
 
-        /** Whether "enter", "tab", "escape", "backspace", "space" and "control c" said alone press the key. */
+        /**
+         * Whether "enter key", "tab key", "escape key", "backspace key", "space key" and
+         * "control c key" said alone press the key.
+         */
         public static final String KEY_IN_APP_KEYBOARD_VOICE_COMMANDS = "keyboard_voice_commands";
 
         public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_COMMANDS = true;
+
+        /**
+         * Whether a command word alone, with no trailing "key" ("enter" instead of "enter key"),
+         * still presses the key. Off by default: plain dictation says these words on their own far
+         * more often than a terminal command does.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS =
+            "keyboard_voice_bare_command_words";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS = false;
 
         /** Whether transcripts typed into a terminal lose trailing punctuation and single words are lowercased. */
         public static final String KEY_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP = "keyboard_voice_terminal_cleanup";
@@ -759,6 +772,19 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_IN_APP_KEYBOARD_VOICE_PAUSE_MS = 600;
 
         public static final int[] IN_APP_KEYBOARD_VOICE_PAUSE_MS_CHOICES = {400, 600, 800, 1200};
+
+        /**
+         * How long without speech ends a voice-input session: 5 s, 10 s (default), 30 s, or 0 for
+         * "Until tap" (no timeout; only a tap, hiding the keyboard, or a failure ends it).
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS =
+            "keyboard_voice_silence_timeout_ms";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS = 10_000;
+
+        /** 0 is "Until tap": no timeout. */
+        public static final int[] IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS_CHOICES =
+            {5_000, 10_000, 30_000, 0};
 
         /**
          * Defines the key for the absolute path of a user-imported label font file,

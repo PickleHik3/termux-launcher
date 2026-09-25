@@ -17,7 +17,8 @@ import java.util.ArrayList;
  *       a 0.1 s remainder produced invented text on both models;</li>
  *   <li>a segment that reaches the graph's window is cut at the quietest frame of its last second
  *       and the rest carries on as the next segment;</li>
- *   <li>{@link #SESSION_SILENCE_MS} without speech tells the listener the session should end.</li>
+ *   <li>{@code sessionSilenceMs} without speech tells the listener the session should end — the
+ *       keyboard's "Silence auto-stop" setting, or never, for "Until tap".</li>
  * </ul>
  * The noise floor drops to any quieter non-voiced frame at once and rises slowly towards louder
  * ones, capped at {@link #NOISE_FLOOR_CAP} so continuous speech is never taken for noise. Everything
@@ -30,7 +31,6 @@ public final class VoiceActivityDetector {
     public static final int FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS / 1000;
     public static final int PAD_MS = 300;
     public static final int MIN_VOICED_MS = 300;
-    public static final int SESSION_SILENCE_MS = 2500;
     /** 9 dB over the floor, as a linear RMS ratio. */
     static final float VOICE_OVER_FLOOR = 2.8f;
     /** About −54 dBFS: nothing below this is ever voiced. */
@@ -43,13 +43,19 @@ public final class VoiceActivityDetector {
     private static final int CUT_SEARCH_FRAMES = 1000 / FRAME_MS;
 
     public interface Listener {
-        /** Every frame: its RMS in [0, 1] and whether it counted as speech. */
-        void onLevel(float rms, boolean voiced);
+        /**
+         * Every frame: its RMS in [0, 1], whether it counted as speech, and the adaptive noise
+         * floor at that moment (for a level meter measured from the floor, not an absolute scale).
+         */
+        void onLevel(float rms, boolean voiced, float noiseFloor);
 
-        /** A closed segment, padding included, at least {@link #MIN_VOICED_MS} of it voiced. */
-        void onSegment(@NonNull short[] pcm);
+        /**
+         * A closed segment, padding included, at least {@link #MIN_VOICED_MS} of it voiced;
+         * {@code voicedFrames} is how many of its frames counted as speech, for the per-phrase log.
+         */
+        void onSegment(@NonNull short[] pcm, int voicedFrames);
 
-        /** {@link #SESSION_SILENCE_MS} have passed since the last voiced frame (or since the start). */
+        /** {@code sessionSilenceMs} have passed since the last voiced frame (or since the start). */
         void onSilenceTimeout();
     }
 
@@ -57,8 +63,8 @@ public final class VoiceActivityDetector {
     private final int pauseFrames;
     private final int padFrames = PAD_MS / FRAME_MS;
     private final int minVoicedFrames = MIN_VOICED_MS / FRAME_MS;
-    /** Rounded up: the timeout is never early. */
-    private final int silenceTimeoutFrames = (SESSION_SILENCE_MS + FRAME_MS - 1) / FRAME_MS;
+    /** Rounded up so the timeout is never early; {@link Integer#MAX_VALUE} disables it ("Until tap"). */
+    private final int silenceTimeoutFrames;
     private final int maxSegmentFrames;
 
     /** Frames not yet emitted: the pre-roll ring while idle, the whole segment while in speech. */
@@ -77,15 +83,21 @@ public final class VoiceActivityDetector {
     private float noiseFloor = NOISE_FLOOR_CAP;
 
     /**
-     * @param pauseMs       silence that closes a segment (400–1200 ms from settings)
-     * @param windowSeconds the graph's window; segments are cut {@code 2 × PAD_MS} short of it so
-     *                      the runtime's own padding never pushes speech past the window
+     * @param pauseMs         silence that closes a segment (400–1200 ms from settings)
+     * @param windowSeconds   the graph's window; segments are cut {@code 2 × PAD_MS} short of it so
+     *                        the runtime's own padding never pushes speech past the window
+     * @param sessionSilenceMs how long without speech ends the session ("Silence auto-stop" from
+     *                        settings); {@link VoiceSilenceTimeout#UNTIL_TAP} (0) or lower disables
+     *                        the timeout — the session then only ends on a tap or another cause
      */
-    public VoiceActivityDetector(@NonNull Listener listener, int pauseMs, int windowSeconds) {
+    public VoiceActivityDetector(@NonNull Listener listener, int pauseMs, int windowSeconds,
+                                 int sessionSilenceMs) {
         this.listener = listener;
         this.pauseFrames = Math.max(1, pauseMs / FRAME_MS);
         int windowFrames = Math.max(2, windowSeconds) * 1000 / FRAME_MS;
         this.maxSegmentFrames = Math.max(CUT_SEARCH_FRAMES + 1, windowFrames - 2 * padFrames);
+        this.silenceTimeoutFrames = sessionSilenceMs <= VoiceSilenceTimeout.UNTIL_TAP
+            ? Integer.MAX_VALUE : (sessionSilenceMs + FRAME_MS - 1) / FRAME_MS;
     }
 
     /** Feeds {@code count} samples of {@code pcm}; whole 30 ms frames are processed as they complete. */
@@ -120,7 +132,7 @@ public final class VoiceActivityDetector {
             if (rms < noiseFloor) noiseFloor = rms;
             else noiseFloor = Math.min(NOISE_FLOOR_CAP, noiseFloor + (rms - noiseFloor) * FLOOR_RISE);
         }
-        listener.onLevel(rms, voiced);
+        listener.onLevel(rms, voiced, noiseFloor);
         frames.add(frame);
         voicedFlags.add(voiced);
         frameLevels.add(rms);
@@ -158,7 +170,7 @@ public final class VoiceActivityDetector {
     /** Emits the segment up to {@link #PAD_MS} after its last voiced frame and goes back to idle. */
     private void closeSegment() {
         int end = Math.min(frames.size(), lastVoicedIndex + 1 + padFrames);
-        if (voicedFrames >= minVoicedFrames) listener.onSegment(concat(0, end));
+        if (voicedFrames >= minVoicedFrames) listener.onSegment(concat(0, end), voicedFrames);
         dropFrames(end);
         inSpeech = false;
         voicedFrames = 0;
@@ -185,7 +197,7 @@ public final class VoiceActivityDetector {
         for (int i = 0; i < cut; i++) {
             if (voicedFlags.get(i)) voicedBefore++;
         }
-        if (voicedBefore >= minVoicedFrames) listener.onSegment(concat(0, cut));
+        if (voicedBefore >= minVoicedFrames) listener.onSegment(concat(0, cut), voicedBefore);
         dropFrames(cut);
         voicedFrames = 0;
         lastVoicedIndex = -1;

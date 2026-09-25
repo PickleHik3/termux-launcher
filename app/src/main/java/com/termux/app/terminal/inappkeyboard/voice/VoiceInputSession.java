@@ -36,7 +36,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * the {@link Host} on the main thread. {@code sttWarm} goes out as the microphone opens so the
  * model loads while the user speaks.
  *
- * <p>The session ends on 2.5 s of silence, a second tap, the keyboard going down, the activity
+ * <p>The session ends on the configured silence timeout ({@link VoiceSilenceTimeout}, or never for
+ * "Until tap"), a second tap, the keyboard going down, the activity
  * pausing, or the first failure; {@link #stop} releases the microphone at once and lets segments
  * already captured finish, {@link #cancel} drops them too. The activity never blocks on it: the
  * only main-thread work is the callbacks.
@@ -44,6 +45,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class VoiceInputSession {
 
     private static final String LOG_TAG = "VoiceInputSession";
+    /** Per-segment STT deadline: {@code base + multiplier × the segment's own audio length}. */
+    private static final long SEGMENT_TIMEOUT_BASE_MS = 5_000L;
+    private static final long SEGMENT_TIMEOUT_AUDIO_MULTIPLIER = 3L;
 
     /** Why the microphone was released. */
     public enum EndReason { SILENCE, USER, HIDDEN, PAUSED, DESTROYED, FAILED }
@@ -58,14 +62,29 @@ public final class VoiceInputSession {
         public final boolean terminalPrompt;
         public final int pauseMs;
         public final int windowSeconds;
+        /** {@link VoiceSilenceTimeout#UNTIL_TAP} disables the timeout ("Until tap"). */
+        public final int silenceTimeoutMs;
+        /**
+         * These three mirror the keyboard settings the activity applies to the same transcript
+         * (commands, "Bare command words", terminal cleanup); they are carried here only so the
+         * per-phrase log's "outcome" (command / text / dropped) matches what actually happens to it.
+         */
+        public final boolean commandsEnabled;
+        public final boolean bareCommandWordsAllowed;
+        public final boolean terminalCleanupEnabled;
 
         public Config(@NonNull String modelId, @Nullable String language, boolean terminalPrompt,
-                      int pauseMs, int windowSeconds) {
+                      int pauseMs, int windowSeconds, int silenceTimeoutMs, boolean commandsEnabled,
+                      boolean bareCommandWordsAllowed, boolean terminalCleanupEnabled) {
             this.modelId = modelId;
             this.language = language;
             this.terminalPrompt = terminalPrompt;
             this.pauseMs = pauseMs;
             this.windowSeconds = windowSeconds;
+            this.silenceTimeoutMs = silenceTimeoutMs;
+            this.commandsEnabled = commandsEnabled;
+            this.bareCommandWordsAllowed = bareCommandWordsAllowed;
+            this.terminalCleanupEnabled = terminalCleanupEnabled;
         }
     }
 
@@ -74,11 +93,20 @@ public final class VoiceInputSession {
         /** The microphone is open and being read. */
         void onListening();
 
-        /** A level sample, roughly every 30 ms while listening. */
-        void onLevel(float rms, boolean voiced);
+        /**
+         * A level sample, roughly every 30 ms while listening, with the VAD's noise floor at that
+         * moment (the level meter measures from it, not an absolute dBFS scale).
+         */
+        void onLevel(float rms, boolean voiced, float noiseFloor);
 
         /** A non-empty transcript, in the order its segment was spoken. */
         void onTranscript(@NonNull String text);
+
+        /**
+         * The microphone has closed but at least one captured segment is still transcribing —
+         * shown as a "Transcribing…" pill, since {@link #onListening}'s "Listening…" no longer fits.
+         */
+        void onDraining();
 
         /**
          * The runtime refused or failed ({@code stt_model_not_configured}, {@code insufficient_memory},
@@ -182,10 +210,20 @@ public final class VoiceInputSession {
         }
     }
 
-    /** Releases the microphone and drops every result still in flight. */
+    /**
+     * Releases the microphone and drops every result still in flight — the undelivered segments
+     * finish transcribing (or time out) on their own but are never typed. Ends the session at once
+     * even when {@link #stop} has already been called and is only waiting on those segments, which
+     * is exactly the tap {@link #isStopRequested} is for: a hung or slow drain no longer leaves the
+     * pill and the pressed key up until the last segment comes back.
+     */
     public void cancel(@NonNull EndReason reason) {
         cancelled = true;
-        mainHandler.post(() -> discardResults = true);
+        mainHandler.post(() -> {
+            discardResults = true;
+            if (endReason == null) endReason = reason;
+            maybeEnd();
+        });
         stop(reason);
     }
 
@@ -198,22 +236,22 @@ public final class VoiceInputSession {
     private void capture(@NonNull AudioRecord recorder) {
         VoiceActivityDetector detector = new VoiceActivityDetector(new VoiceActivityDetector.Listener() {
             @Override
-            public void onLevel(float rms, boolean voiced) {
+            public void onLevel(float rms, boolean voiced, float noiseFloor) {
                 mainHandler.post(() -> {
-                    if (!ended) host.onLevel(rms, voiced);
+                    if (!ended) host.onLevel(rms, voiced, noiseFloor);
                 });
             }
 
             @Override
-            public void onSegment(@NonNull short[] pcm) {
-                submitSegment(nextSequence++, pcm);
+            public void onSegment(@NonNull short[] pcm, int voicedFrames) {
+                submitSegment(nextSequence++, pcm, voicedFrames);
             }
 
             @Override
             public void onSilenceTimeout() {
                 stop(EndReason.SILENCE);
             }
-        }, config.pauseMs, config.windowSeconds);
+        }, config.pauseMs, config.windowSeconds, config.silenceTimeoutMs);
         short[] buffer = new short[VoiceActivityDetector.FRAME_SAMPLES];
         try {
             while (!stopRequested.get()) {
@@ -236,14 +274,17 @@ public final class VoiceInputSession {
             stopRequested.set(true);
             mainHandler.post(() -> {
                 if (endReason == null) endReason = EndReason.FAILED;
+                // The mic has just closed; a segment already sent for transcription still has to
+                // come back (or time out) before the session actually ends.
+                if (!ended && !discardResults && submitted.get() > delivered) host.onDraining();
                 maybeEnd();
             });
         }
     }
 
-    private void submitSegment(int sequence, @NonNull short[] pcm) {
+    private void submitSegment(int sequence, @NonNull short[] pcm, int voicedFrames) {
         submitted.incrementAndGet();
-        sttExecutor.execute(() -> transcribe(sequence, pcm));
+        sttExecutor.execute(() -> transcribe(sequence, pcm, voicedFrames));
     }
 
     // ------------------------------------------------------------------ STT thread
@@ -261,11 +302,15 @@ public final class VoiceInputSession {
         }
     }
 
-    private void transcribe(int sequence, @NonNull short[] pcm) {
+    private void transcribe(int sequence, @NonNull short[] pcm, int voicedFrames) {
+        long segmentMs = pcm.length * 1000L / VoiceActivityDetector.SAMPLE_RATE;
+        long voicedMs = voicedFrames * (long) VoiceActivityDetector.FRAME_MS;
         if (failed.get() || cancelled) {
+            logPhrase(segmentMs, voicedMs, 0, null, 0, "dropped");
             deliver(sequence, "");
             return;
         }
+        long start = System.nanoTime();
         File audio = null;
         try {
             audio = writePcm(pcm);
@@ -274,15 +319,25 @@ public final class VoiceInputSession {
             if (!config.modelId.isEmpty()) request.put("model", config.modelId);
             if (config.language != null) request.put("language", config.language);
             if (config.terminalPrompt) request.put("prompt_mode", "terminal");
-            JSONObject result = TaiManager.getInstance(appContext).transcribe(request.toString());
+            // A deadline per segment, not the IPC client's flat 120 s: a hung runtime would
+            // otherwise leave the pill and the pressed key up for minutes with nothing to show for
+            // it. base.en does a short phrase in well under a second, so this has plenty of room.
+            long timeoutMs = SEGMENT_TIMEOUT_BASE_MS + SEGMENT_TIMEOUT_AUDIO_MULTIPLIER * segmentMs;
+            JSONObject result = TaiManager.getInstance(appContext).transcribe(request.toString(), timeoutMs);
+            long transcribeMs = (System.nanoTime() - start) / 1_000_000L;
             Failure failure = Failure.of(result);
             if (failure != null) {
+                logPhrase(segmentMs, voicedMs, transcribeMs, result, 0, "failed");
                 fail(failure);
                 deliver(sequence, "");
                 return;
             }
-            deliver(sequence, result.optString("text", ""));
+            String text = result.optString("text", "");
+            logPhrase(segmentMs, voicedMs, transcribeMs, result, text.length(), outcomeFor(text));
+            deliver(sequence, text);
         } catch (IOException | JSONException | RuntimeException e) {
+            long transcribeMs = (System.nanoTime() - start) / 1_000_000L;
+            logPhrase(segmentMs, voicedMs, transcribeMs, null, 0, "failed");
             fail(new Failure("stt_failed", String.valueOf(e.getMessage())));
             deliver(sequence, "");
         } finally {
@@ -292,6 +347,43 @@ public final class VoiceInputSession {
                 audio.delete();
             }
         }
+    }
+
+    /**
+     * The same classification the activity is about to apply to {@code text} — a spoken key, a
+     * terminal-dropped non-speech segment, or ordinary text — purely so the log's "outcome" field
+     * matches what actually happens to it.
+     */
+    @NonNull
+    private String outcomeFor(@NonNull String text) {
+        if (config.commandsEnabled && VoiceCommand.classify(text, config.bareCommandWordsAllowed) != null) {
+            return "command";
+        }
+        String effective = text;
+        if (config.terminalPrompt && config.terminalCleanupEnabled) {
+            effective = VoiceTerminalCleanup.clean(text);
+        }
+        return effective.trim().isEmpty() ? "dropped" : "text";
+    }
+
+    /**
+     * One line per phrase: durations and the runtime's own timing breakdown when it sent one, the
+     * transcript's length and what became of it — never the transcript itself.
+     */
+    private static void logPhrase(long segmentMs, long voicedMs, long transcribeMs,
+                                  @Nullable JSONObject result, int textLength, @NonNull String outcome) {
+        StringBuilder message = new StringBuilder("phrase: segmentMs=").append(segmentMs)
+            .append(" voicedMs=").append(voicedMs)
+            .append(" transcribeMs=").append(transcribeMs);
+        JSONObject timings = result == null ? null : result.optJSONObject("timings");
+        if (timings != null) {
+            message.append(" melMs=").append(timings.optLong("melMs"))
+                .append(" encodeMs=").append(timings.optLong("encodeMs"))
+                .append(" decodeMs=").append(timings.optLong("decodeMs"))
+                .append(" decodeSteps=").append(timings.optLong("decodeSteps"));
+        }
+        message.append(" textLength=").append(textLength).append(" outcome=").append(outcome);
+        Logger.logInfo(LOG_TAG, message.toString());
     }
 
     /** Little-endian PCM16 at 16 kHz mono under {@code cacheDir/tai-ipc}, the form the runtime reads raw. */

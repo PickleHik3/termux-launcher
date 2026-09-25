@@ -120,6 +120,12 @@
             app:summary="@string/settings_keyboard_voice_commands_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
+            app:key="keyboard_voice_bare_command_words"
+            app:title="@string/settings_keyboard_voice_bare_command_words_title"
+            app:summary="@string/settings_keyboard_voice_bare_command_words_summary"
+            app:dependency="keyboard_voice_commands"
+            android:defaultValue="false" />
+        <SwitchPreferenceCompat
             app:key="keyboard_voice_terminal_cleanup"
             app:title="@string/settings_keyboard_voice_terminal_cleanup_title"
             app:summary="@string/settings_keyboard_voice_terminal_cleanup_summary"
@@ -130,6 +136,13 @@
             app:entries="@array/settings_keyboard_voice_pause_entries"
             app:entryValues="@array/settings_keyboard_voice_pause_values"
             app:defaultValue="600"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="keyboard_voice_silence_timeout_ms"
+            app:title="@string/settings_keyboard_voice_silence_timeout_title"
+            app:entries="@array/settings_keyboard_voice_silence_timeout_entries"
+            app:entryValues="@array/settings_keyboard_voice_silence_timeout_values"
+            app:defaultValue="10000"
             app:useSimpleSummaryProvider="true" />
         <Preference
             app:key="keyboard_voice_model"

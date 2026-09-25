@@ -9797,13 +9797,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override
         public void requestVoiceTyping(boolean chooser) {
             // Long-press keeps the system chooser; a tap takes the engine the settings name, and
-            // a tap while the on-device engine is listening is how a session is ended by hand.
+            // a tap while the on-device engine is listening is how a session is ended by hand. A
+            // tap once the mic has already closed and captured segments are still transcribing
+            // means "stop trying": discard them instead of waiting for a hung or slow drain.
             if (chooser || !mPreferences.isInAppKeyboardVoiceOnDevice()) {
                 launchVoiceTyping(chooser);
                 return;
             }
             if (mVoiceInput != null) {
-                mVoiceInput.stop(VoiceInputSession.EndReason.USER);
+                if (mVoiceInput.isStopRequested()) {
+                    mVoiceInput.cancel(VoiceInputSession.EndReason.USER);
+                } else {
+                    mVoiceInput.stop(VoiceInputSession.EndReason.USER);
+                }
                 return;
             }
             startOnDeviceVoiceInput();
@@ -13549,7 +13555,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean terminalTarget = !mInAppKeyboard.hasKeyValueInterceptor();
         String language = resolveVoiceLanguage(modelId);
         VoiceInputSession.Config config = new VoiceInputSession.Config(modelId, language,
-            terminalTarget, mPreferences.getInAppKeyboardVoicePauseMs(), tai.getSttWindowSeconds());
+            terminalTarget, mPreferences.getInAppKeyboardVoicePauseMs(), tai.getSttWindowSeconds(),
+            mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs(),
+            mPreferences.isInAppKeyboardVoiceCommandsEnabled(),
+            mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled(),
+            mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled());
         VoiceInputSession session = new VoiceInputSession(this, config, mVoiceInputHost);
         mVoiceInputTargetSession = target;
         mVoiceInputLastWasText = false;
@@ -13649,7 +13659,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void insertVoiceTranscript(@NonNull String transcript) {
         if (mInAppKeyboard == null) return;
         VoiceCommand command = mPreferences.isInAppKeyboardVoiceCommandsEnabled()
-            ? VoiceCommand.classify(transcript) : null;
+            ? VoiceCommand.classify(transcript, mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled())
+            : null;
         if (command != null) {
             juloo.keyboard2.KeyValue key = juloo.keyboard2.KeyValue.getKeyByName(command.keyName);
             if (key != null && mInAppKeyboard.dispatchKeyValue(key, command.ctrl)) {
@@ -13681,19 +13692,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public void onLevel(float rms, boolean voiced) {
+        public void onLevel(float rms, boolean voiced, float noiseFloor) {
             // The keyboard can go down without telling the visibility listener (a focus hide);
             // the level tick, some 30 times a second, is where that is noticed.
             if (mInAppKeyboard == null || !mInAppKeyboard.isVisible()) {
                 endVoiceInput(VoiceInputSession.EndReason.HIDDEN);
                 return;
             }
-            if (mVoiceIndicator != null) mVoiceIndicator.setLevel(rms, voiced);
+            if (mVoiceIndicator != null) mVoiceIndicator.setLevel(rms, voiced, noiseFloor);
         }
 
         @Override
         public void onTranscript(@NonNull String text) {
             insertVoiceTranscript(text);
+        }
+
+        @Override
+        public void onDraining() {
+            if (mVoiceIndicator != null) mVoiceIndicator.setTranscribing();
         }
 
         @Override
