@@ -12,11 +12,13 @@ import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiRuntimePresence;
 import com.termux.shared.logger.Logger;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -25,9 +27,11 @@ import java.util.Map;
  * tight budgets {@link VoicePolishRules} computes. Chat requests run on the runtime's serial chat
  * lane and STT on its own, so a rewrite never holds up the next transcription.
  *
- * <p><b>Model.</b> Gemma 4 E4B when it is installed and the phone meets its RAM recommendation
- * (or E2B is not there to fall back on), else E2B — the same rule the app-drawer category sort
- * uses ({@code CategorySortDialogs.resolveModel}); with neither installed every segment is typed
+ * <p><b>Model.</b> The "Cleanup model" keyboard setting names an installed chat model to use, or
+ * is empty for Automatic: Gemma 4 E4B when it is installed and the phone meets its RAM
+ * recommendation (or E2B is not there to fall back on), else E2B — the same rule the app-drawer
+ * category sort uses ({@code CategorySortDialogs.resolveModel}). A named model that is no longer
+ * installed falls back to Automatic the same way; with nothing installed every segment is typed
  * as heard and the log says {@code fallback:no_model}. Resolution happens in {@link #warm}, off
  * the main thread, because the model store reads files.
  *
@@ -55,19 +59,62 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
     }
 
     /**
-     * The installed Gemma this feature would use — E4B when the phone meets its RAM
-     * recommendation (or E2B is not there to fall back on), else E2B — or {@code null} when neither
-     * is installed. Reads the model store: not for the main thread.
+     * The model this feature would use: the "Cleanup model" setting's choice when it names an
+     * installed chat model, else the automatic Gemma rule. Reads the model store and settings:
+     * not for the main thread.
      */
     @Nullable
-    static String resolveModelId(@NonNull Context context) {
+    public static String resolveModelId(@NonNull Context context) {
+        String preferredId = TermuxAppSharedPreferences.build(context, true)
+            .getInAppKeyboardVoicePolishModelId();
         Map<String, TaiModelSpec> installed = new TaiModelStore(context).getDownloadedReadableModels();
         TaiModelSpec e4b = installed.get(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT);
         TaiModelSpec e2b = installed.get(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
-        if (e4b != null && (e2b == null
-                || TaiDeviceCapabilities.detect(context).checkModelCapability(e4b).warning == null)) return e4b.id;
+        boolean e4bMeetsRam = e4b != null
+            && TaiDeviceCapabilities.detect(context).checkModelCapability(e4b).warning == null;
+        return resolveModelId(preferredId, installedChatModels(context), e4b, e2b, e4bMeetsRam);
+    }
+
+    /**
+     * The pure half of {@link #resolveModelId(Context)}: {@code preferredId} when it names a
+     * model in {@code installedChatModels}, else the automatic Gemma rule (E4B when the phone
+     * meets its RAM recommendation, or E2B is not there to fall back on; else E2B), or
+     * {@code null} when nothing is installed.
+     */
+    @Nullable
+    public static String resolveModelId(@Nullable String preferredId, @NonNull Map<String, TaiModelSpec> installedChatModels,
+                                 @Nullable TaiModelSpec e4b, @Nullable TaiModelSpec e2b, boolean e4bMeetsRam) {
+        if (preferredId != null && !preferredId.isEmpty()) {
+            TaiModelSpec preferred = installedChatModels.get(preferredId);
+            if (preferred != null) return preferred.id;
+        }
+        if (e4b != null && (e2b == null || e4bMeetsRam)) return e4b.id;
         if (e2b != null) return e2b.id;
         return e4b != null ? e4b.id : null;
+    }
+
+    /**
+     * Every installed model this feature could be pointed at: readable downloads plus imported
+     * user models, filtered to a runnable text-chat endpoint that is not speech-to-text — the same
+     * filter {@code TaiManager.openAiModels} applies (MNN skipped when the device cannot run it).
+     * Reads the model store: not for the main thread.
+     */
+    @NonNull
+    public static Map<String, TaiModelSpec> installedChatModels(@NonNull Context context) {
+        TaiModelStore store = new TaiModelStore(context);
+        Map<String, TaiModelSpec> all = new LinkedHashMap<>();
+        all.putAll(store.getDownloadedReadableModels());
+        all.putAll(store.getInstalledUserModels());
+        boolean mnnSupported = TaiDeviceCapabilities.detect(context).mnnSupported;
+        Map<String, TaiModelSpec> chatModels = new LinkedHashMap<>();
+        for (Map.Entry<String, TaiModelSpec> entry : all.entrySet()) {
+            TaiModelSpec spec = entry.getValue();
+            if (TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && !mnnSupported) continue;
+            if (!spec.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) continue;
+            if (spec.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
+            chatModels.put(entry.getKey(), spec);
+        }
+        return chatModels;
     }
 
     @Override

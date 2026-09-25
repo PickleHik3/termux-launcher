@@ -32,24 +32,19 @@ import com.termux.R;
  *
  * <p>A close button sits at the pill's end for the whole session; {@link #setPending} marks a
  * segment the VAD has just closed but has not transcribed yet, so the tap that ended a phrase is
- * acknowledged well before the transcript (or the command it turns into) can arrive, and
- * {@link #showCommand} briefly swaps the text for a chip when a spoken command's key is sent.
+ * acknowledged well before the transcript can arrive.
  */
 public final class VoiceListeningIndicator {
 
     private static final int BARS = 5;
-    /** How long a command chip ("⏎ Enter") stays up before the ordinary text underneath shows again. */
-    private static final long COMMAND_CHIP_MS = 1_000L;
 
     private final Activity activity;
     private final View keyboardContainer;
     @Nullable private LinearLayout pill;
     @Nullable private TextView label;
-    @Nullable private TextView chip;
     @Nullable private TextView pendingMark;
     @Nullable private LevelMeterView meter;
     @Nullable private ValueAnimator pendingAnimator;
-    @Nullable private Runnable chipHideRunnable;
     private int lastBottomMargin = -1;
 
     public VoiceListeningIndicator(@NonNull Activity activity, @NonNull View keyboardContainer) {
@@ -87,20 +82,7 @@ public final class VoiceListeningIndicator {
         text.setEllipsize(TextUtils.TruncateAt.START);
         text.setMaxWidth(dp(200));
         text.setText(R.string.voice_input_listening);
-
-        TextView chipText = new TextView(context);
-        chipText.setTextColor(accent);
-        chipText.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        chipText.setTypeface(chipText.getTypeface(), android.graphics.Typeface.BOLD);
-        chipText.setSingleLine();
-        chipText.setVisibility(View.GONE);
-
-        FrameLayout textStack = new FrameLayout(context);
-        textStack.addView(text, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
-        textStack.addView(chipText, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
-        view.addView(textStack, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+        view.addView(text, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView pending = new TextView(context);
@@ -137,7 +119,6 @@ public final class VoiceListeningIndicator {
         content.addView(view, params);
         pill = view;
         label = text;
-        chip = chipText;
         pendingMark = pending;
         meter = levels;
     }
@@ -146,13 +127,10 @@ public final class VoiceListeningIndicator {
         LinearLayout view = pill;
         pill = null;
         label = null;
-        chip = null;
         pendingMark = null;
         meter = null;
         lastBottomMargin = -1;
         stopPendingAnimator();
-        if (view != null && chipHideRunnable != null) view.removeCallbacks(chipHideRunnable);
-        chipHideRunnable = null;
         if (view == null) return;
         ViewGroup parent = (ViewGroup) view.getParent();
         if (parent != null) parent.removeView(view);
@@ -184,7 +162,6 @@ public final class VoiceListeningIndicator {
         TextView view = label;
         if (view != null) view.setText(text);
         clearPending();
-        hideChip();
     }
 
     /** The mic has closed but a captured segment is still transcribing: "Listening…" no longer fits. */
@@ -194,34 +171,9 @@ public final class VoiceListeningIndicator {
     }
 
     /**
-     * A phrase was recognized as a command and its key was sent: the pill shows {@code chipLabel}
-     * (e.g. "⏎ Enter") in the accent colour in place of the text for {@link #COMMAND_CHIP_MS},
-     * then reverts to whatever the label underneath already says.
-     */
-    public void showCommand(@NonNull String chipLabel) {
-        TextView view = chip;
-        LinearLayout view2 = pill;
-        if (view == null || view2 == null) return;
-        clearPending();
-        view.setText(chipLabel);
-        view.setVisibility(View.VISIBLE);
-        if (chipHideRunnable != null) view2.removeCallbacks(chipHideRunnable);
-        chipHideRunnable = this::hideChip;
-        view2.postDelayed(chipHideRunnable, COMMAND_CHIP_MS);
-    }
-
-    private void hideChip() {
-        TextView view = chip;
-        if (view != null) view.setVisibility(View.GONE);
-        LinearLayout view2 = pill;
-        if (view2 != null && chipHideRunnable != null) view2.removeCallbacks(chipHideRunnable);
-        chipHideRunnable = null;
-    }
-
-    /**
      * The VAD has just closed a segment that has not transcribed yet: a small mark next to the
      * text so a spoken phrase is acknowledged well inside the latency it takes to come back as a
-     * transcript or a command chip. Pulses unless the system has animations turned off.
+     * transcript. Pulses unless the system has animations turned off.
      */
     public void setPending() {
         TextView view = pendingMark;
@@ -244,7 +196,7 @@ public final class VoiceListeningIndicator {
         pendingAnimator = animator;
     }
 
-    /** The pending segment delivered (as a transcript or a command) or the session moved on. */
+    /** The pending segment delivered as a transcript, or the session moved on. */
     public void clearPending() {
         TextView view = pendingMark;
         if (view != null) view.setVisibility(View.GONE);

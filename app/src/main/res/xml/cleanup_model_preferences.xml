@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        app:key="cleanup_model_installed"
+        app:title="@string/cleanup_model_installed_header">
+        <Preference
+            app:key="cleanup_model_automatic"
+            app:title="@string/cleanup_model_automatic_title"
+            app:persistent="false"/>
+        <Preference
+            app:key="cleanup_model_empty"
+            app:title="@string/cleanup_model_empty_title"
+            app:summary="@string/cleanup_model_empty_summary"
+            app:persistent="false"
+            app:selectable="false"/>
+        <Preference
+            app:key="cleanup_model_open_tai_settings"
+            app:title="@string/cleanup_model_open_tai_settings"
+            app:persistent="false"/>
+    </PreferenceCategory>
+</PreferenceScreen>

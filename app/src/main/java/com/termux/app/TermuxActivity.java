@@ -151,12 +151,11 @@ import com.termux.app.terminal.inappkeyboard.InAppKeyboardHost;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher;
-import com.termux.app.terminal.inappkeyboard.voice.VoiceCommand;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceInputSession;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceLanguage;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceListeningIndicator;
-import com.termux.app.terminal.inappkeyboard.voice.VoiceTerminalCleanup;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceTextPolisher;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceTextSanitizer;
 import com.termux.app.terminal.io.ExtraKeysDefaultOffer;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
 import com.termux.shared.activities.ReportActivity;
@@ -13560,14 +13559,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             requestVoiceInputMicrophone();
             return;
         }
-        boolean terminalTarget = !mInAppKeyboard.hasKeyValueInterceptor();
         String language = resolveVoiceLanguage(model);
         VoiceInputSession.Config config = new VoiceInputSession.Config(modelId, language,
-            terminalTarget, mPreferences.getInAppKeyboardVoicePauseMs(), windowSeconds,
+            mPreferences.getInAppKeyboardVoicePauseMs(), windowSeconds,
             mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs(),
-            mPreferences.isInAppKeyboardVoiceCommandsEnabled(),
-            mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled(),
-            mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled(),
             mPreferences.isInAppKeyboardVoiceSoundsEnabled(),
             mPreferences.isInAppKeyboardHapticsEnabled());
         // The polisher resolves its model and loads it on its own thread once the mic is open;
@@ -13678,29 +13673,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * One transcribed phrase: a spoken key when it is exactly a command word and the setting is
-     * on, text otherwise — cleaned for a shell when nothing has claimed typing — inserted where
-     * the keyboard's keys go: the interceptor first, the shell the session started from otherwise.
+     * One transcribed phrase, sanitised and inserted where the keyboard's keys go: the
+     * interceptor first, the shell the session started from otherwise.
      */
     private void insertVoiceTranscript(@NonNull String transcript) {
         if (mInAppKeyboard == null) return;
-        VoiceCommand command = mPreferences.isInAppKeyboardVoiceCommandsEnabled()
-            ? VoiceCommand.classify(transcript, mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled())
-            : null;
-        if (command != null) {
-            juloo.keyboard2.KeyValue key = juloo.keyboard2.KeyValue.getKeyByName(command.keyName);
-            if (key != null && mInAppKeyboard.dispatchKeyValue(key, command.ctrl)) {
-                mVoiceInputLastWasText = false;
-                if (mVoiceIndicator != null) mVoiceIndicator.showCommand(command.chipLabel());
-                if (mVoiceInput != null) mVoiceInput.commandFeedback();
-                return;
-            }
-        }
-        String text = transcript.trim();
-        boolean terminalTarget = !mInAppKeyboard.hasKeyValueInterceptor();
-        if (terminalTarget && mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled()) {
-            text = VoiceTerminalCleanup.join(mVoiceInputLastWasText, VoiceTerminalCleanup.clean(text));
-        }
+        String text = VoiceTextSanitizer.join(mVoiceInputLastWasText, VoiceTextSanitizer.clean(transcript.trim()));
         if (text.isEmpty()) return;
         if (!offerToInAppKeyboardInterceptor(juloo.keyboard2.KeyValue.makeStringKey(text),
                 false, false, false)) {

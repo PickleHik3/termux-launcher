@@ -173,36 +173,27 @@ Energy VAD on 30 ms frames with an adaptive noise floor:
 
 Each segment is transcribed and inserted as soon as it is ready, so text appears phrase by phrase.
 
-### Voice commands
+### Voice commands (removed 2026-09-25)
 
-A segment whose **entire** normalized transcript (lowercase, punctuation stripped) is a command
-word becomes a key instead of text:
+Spoken command words ("enter key" pressing Enter, etc.) were removed: voice input is now plain
+text dictation only, everywhere it targets. The idea may return in a later, separate design (see
+`project-docs/plans/TODO-voice-command-words.md`, a local note, never committed); this plan no
+longer implements it.
 
-| said | key |
-|---|---|
-| enter, return, send, submit | Enter |
-| tab | Tab |
-| escape | Esc |
-| backspace, delete | Backspace |
-| space | Space |
-| control c, cancel | Ctrl+C |
+### Sanitising (renamed from "Terminal cleanup" 2026-09-25)
 
-Whole-segment matching is the safety rule: "enter the directory" said in one breath stays text;
-only "enter" said on its own, after a pause, presses Enter. Keys go through
-`TerminalKeyEventHandler.dispatchKeyValue(KeyValue.getKeyByName("enter"))`, so they reach whatever
-has typing (terminal, command palette, drawer search) the same way a keyboard key does.
+Every transcript, whatever it targets (terminal, palette, drawer search, display), is sanitised
+before insertion by `VoiceTextSanitizer` — a safety net, not a style pass:
 
-### Terminal cleanup
+- C0 control characters (`\r`, `\n` included) become a space, runs collapsed;
+- a segment with no letter or digit left once `[...]`, `(...)`, `*...*` spans and punctuation are
+  removed is dropped entirely (non-speech captions: `[Music]`, `[BLANK_AUDIO]`, `(B)`, `*`, `¶¶`);
+- consecutive text segments are joined with one space.
 
-When typing goes to a terminal session (no key-value interceptor; add
-`TermuxInAppKeyboard.hasKeyValueInterceptor()`), transcripts are cleaned before insertion:
-
-- strip trailing `. ? !`;
-- lowercase a single-word segment (`"LS."` → `ls`), leave multi-word prose as spoken;
-- join consecutive segments with one space.
-
-The vocabulary prompt already yields lowercase, unpunctuated shell text; cleanup is the safety
-net. Later, not in this plan: spoken symbols ("dash", "slash", "pipe").
+Casing and trailing punctuation are left as spoken; the earlier "Terminal cleanup" setting (lower­
+casing a single word, stripping `. ? !`, terminal-only) is gone along with the setting itself —
+sanitising always runs, for every target. Later, not in this plan: spoken symbols ("dash",
+"slash", "pipe").
 
 ### Language forcing
 
@@ -228,12 +219,24 @@ stored through `KeyboardPreferencesDataStore` → `TermuxAppSharedPreferences`):
 |---|---|---|
 | `keyboard_voice_engine` | list: Android system / On-device (Whisper) | **Android system** |
 | `keyboard_voice_language` | list: Auto / languages (multilingual model only) | Auto |
-| `keyboard_voice_commands` | switch: spoken "enter", "tab", … press keys | on |
-| `keyboard_voice_terminal_cleanup` | switch | on |
+| `keyboard_voice_polish` | switch: rewrite dictated text with a local chat model | off |
+| `keyboard_voice_polish_model` | opens the Cleanup model screen (only while polish is on) | — |
 | `keyboard_voice_pause_ms` | list: 400 / 600 / 800 / 1200 | 600 |
 | "Speech model" | opens the Speech model screen | — |
 
 Choosing On-device with no model installed opens the Speech model screen.
+
+**Cleanup model screen** (`CleanupModelPreferencesFragment`, `cleanup_model_preferences.xml`,
+reached from Keyboard → Voice input → Cleanup model, dependent on "Polish dictation with local
+model"). "Automatic" (the default, an empty stored id — `keyboard_voice_polish_model`) picks Gemma
+4 E4B when the phone meets its RAM recommendation or E2B is not installed, else E2B, the same rule
+`LocalTaiVoiceTextPolisher` falls back to when a chosen model is no longer installed; its summary
+names which model that is right now, or says none is installed. Every other row is one installed
+chat model (readable downloads plus imported user models, filtered to a runnable text-chat
+endpoint, MNN skipped on a device that cannot run it, speech-to-text models excluded — the same
+filter `TaiManager.openAiModels` applies), with an "In use" pill on the selected one and a RAM
+warning in its summary when `TaiDeviceCapabilities.checkModelCapability` has one. No download
+dialog here — an empty state points at the TAI settings page instead.
 
 **Speech model screen** (`SpeechModelPreferencesFragment`, `speech_model_preferences.xml`, reached
 from Keyboard → Voice input → Speech model; the TAI page keeps one "Speech models moved" row that
@@ -401,26 +404,27 @@ Two more from the Freestyle comparison (recommendation 3 and §4 "LLM cleanup"),
   speaker, and at −16 dBFS the blip is well over the VAD's 9 dB threshold, so the capture loop
   drops the first 180 ms (`VoiceLeadInDiscard`: 125 ms tone + output latency, six 30 ms frames)
   *before* the detector, so the 300 ms pre-roll cannot hold it either.
-- **Polish** (`keyboard_voice_polish`, default off): each dictated text segment is rewritten by
-  Gemma 4 through the TAI runtime — punctuation, casing, obvious mis-hearings, filler words, same
-  wording — before it is typed. `VoiceTextPolisher` is the seam; `LocalTaiVoiceTextPolisher` is
-  the only implementation (a bring-your-own-key provider is a later addition behind the same
-  interface). Model: E4B when installed and the phone meets its RAM recommendation (or E2B is
-  absent), else E2B, the same rule as the app-drawer category sort; with neither, every phrase is
-  typed as heard (`fallback:no_model`). Gating (`VoicePolishRules`, pure): never a spoken key
-  (classified with `VoiceCommand` under the same two settings the activity uses), never under
-  4 words (that is where the shell commands live), never a segment the terminal sanitiser would
-  drop, never after a cancel. The prompt is one short user turn (kept under E4B's 128-token
-  prefill graph with a 10 s phrase) that wraps the transcript in `<transcript>` tags and declares
-  it data; angle brackets in the transcript are bent so it cannot close its own tags. Output:
-  temperature 0, thinking off, `max_tokens` ≈ 2 per input word (8–192), deadline
-  2 s + 150 ms × budget capped at 10 s (`TaiManager.openAiChatCompletions(body, timeoutMs)`).
+- **Polish** (`keyboard_voice_polish`, default off): each dictated text segment is rewritten by a
+  local chat model through the TAI runtime — punctuation, casing, obvious mis-hearings, filler
+  words, same wording — before it is typed. `VoiceTextPolisher` is the seam; `LocalTaiVoiceTextPolisher`
+  is the only implementation (a bring-your-own-key provider is a later addition behind the same
+  interface). Model: the **Cleanup model** setting (`keyboard_voice_polish_model`, a
+  `CleanupModelPreferencesFragment` picker — see "Settings" above), empty for Automatic — E4B when
+  installed and the phone meets its RAM recommendation (or E2B is absent), else E2B, the same rule
+  as the app-drawer category sort; a named model no longer installed falls back to Automatic the
+  same way; with nothing installed, every phrase is typed as heard (`fallback:no_model`). Gating
+  (`VoicePolishRules`, pure): never under 4 words (that is where the shell commands live), never a
+  segment `VoiceTextSanitizer` would drop, never after a cancel. The prompt is one short user turn
+  (kept under E4B's 128-token prefill graph with a 10 s phrase) that wraps the transcript in
+  `<transcript>` tags and declares it data; angle brackets in the transcript are bent so it cannot
+  close its own tags. Output: temperature 0, thinking off, `max_tokens` ≈ 2 per input word (8–192),
+  deadline 2 s + 150 ms × budget capped at 10 s (`TaiManager.openAiChatCompletions(body, timeoutMs)`).
   Accepted only when non-empty, containing a letter or digit, and at most 2× the input's length,
   with wrapping quotes, code fences and echoed tags stripped and every whitespace run collapsed
-  to one space — a rewrite can never put a newline into a shell, and the terminal target's
-  `VoiceTerminalCleanup` still runs on it afterwards. Rewrites run on a `voice-polish` thread
-  and call the same `deliver()` STT does, so the sequencer keeps spoken order and the session
-  still ends when every segment is delivered. Residency: the model is loaded as the mic opens
+  to one space — a rewrite can never put a newline into a shell, and `VoiceTextSanitizer` still
+  runs on it afterwards, for every target. Rewrites run on a `voice-polish` thread and call the
+  same `deliver()` STT does, so the sequencer keeps spoken order and the session still ends when
+  every segment is delivered. Residency: the model is loaded as the mic opens
   (`TaiRuntimePresence` first; a runtime loading or generating with another model is not
   evicted, the first request autoloads or falls back); `insufficient_memory`, a 409
   `model_not_loaded`, or a timeout disables polish for the rest of the session rather than paying
@@ -450,7 +454,7 @@ Voice changes can be tested on this Linux machine from a recording instead of on
 session, 16 kHz mono PCM16 — through the real `VoiceActivityDetector` in 30 ms reads, exactly as
 `VoiceInputSession.capture` does (silence auto-stop has no equivalent here, so it is always
 disabled); each segment goes through `VoiceGain` and then a Python Whisper server for the
-transcript, and the result through the real `VoiceCommand`/`VoiceTerminalCleanup` classification.
+transcript, and the result through the real `VoiceTextSanitizer` classification.
 `VoiceReplayRig` (`app/src/test/.../voice/VoiceReplayRig.java`) is the JUnit entry point — it stays
 skipped (`Assume`) unless `-Dvoice.replay.in` is set, so an ordinary test run never touches it.
 
@@ -478,26 +482,22 @@ line, `text ls` / `key ENTER` / `dropped` — turns its clip into a pass/fail):
 ./gradlew :app:testDebugUnitTest --tests VoiceReplayRig \
   -Dvoice.replay.in=$HOME/.cache/termux-launcher/voice-clips \
   -Dvoice.replay.model=base \
-  -Dvoice.replay.terminal=true \
   -Dvoice.replay.out=app/build/voice-replay
 ```
 
 Properties (all optional but `voice.replay.in`, which also gates the whole test):
 `voice.replay.in` (a WAV or a directory), `voice.replay.model` (`base` default, or `small`),
-`voice.replay.terminal` (the shell-vocabulary bias prompt and terminal cleanup; default `true`),
-`voice.replay.bare` ("Bare command words"; default `false`), `voice.replay.pause` (VAD pause ms,
-default 600, `VoiceInputSession`'s own default), `voice.replay.out` (default
-`app/build/voice-replay`), `voice.replay.python` (default
+`voice.replay.pause` (VAD pause ms, default 600, `VoiceInputSession`'s own default),
+`voice.replay.out` (default `app/build/voice-replay`), `voice.replay.python` (default
 `~/.cache/termux-launcher/venv/bin/python`). The event log and pass/fail land both on stdout and
 in `<out>/report.txt`; per-segment WAVs sent to the Python server are written under
 `<out>/segments/` and deleted as they are consumed.
 
-**How the bias prompt stays exact.** `WhisperDecoder`/`WhisperTokenizer` are package-private to
+**How the prompt stays exact.** `WhisperDecoder`/`WhisperTokenizer` are package-private to
 `com.termux.ai`; rather than re-implementing their BPE encode in Python (a second place for it to
-drift out of sync), `VoiceReplayRig` reads the real classes by reflection at startup — the
-terminal vocabulary, the built prompt token ids (with and without the bias line) and the
-suppression ids — and hands them to `scripts/whisper_replay_server.py` as its startup arguments.
-The server (a persistent process, one JSON line in, one out, reusing
+drift out of sync), `VoiceReplayRig` reads the real classes by reflection at startup — the built
+prompt token ids and the suppression ids — and hands them to `scripts/whisper_replay_server.py` as
+its startup arguments. The server (a persistent process, one JSON line in, one out, reusing
 `whisper_reference_decoder`'s mel front end and tokenizer decode) then only needs to run the
 greedy loop against ids it was given, plus a Python mirror of `WhisperSegmenter`'s own behaviour
 (drop a piece with under 0.3 s voiced; pad speech to 0.3 s from the edges) that the runtime applies

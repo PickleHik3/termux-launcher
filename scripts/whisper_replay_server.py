@@ -1,19 +1,19 @@
 """Host-side Whisper server for VoiceReplayRig (app/src/test/.../voice/VoiceReplayRig.java).
 
 Started once per rig run over a plain process, JSON lines on stdin/stdout:
-  in:  {"wav": "<path to a 16 kHz mono PCM16 WAV>", "terminal": true|false}
+  in:  {"wav": "<path to a 16 kHz mono PCM16 WAV>"}
   out: {"text": "...", "encode_ms": 210, "decode_ms": 340, "steps": 6}
     or {"error": "..."} on a decode failure
 
 Reuses whisper_reference_decoder's mel front end, tokenizer decode and interpreter setup; the
-prompt (bias line + task tokens) and the suppression ids are *not* rebuilt here. They come in once,
-at startup, as argv from VoiceReplayRig, which reads them straight out of the real
-com.termux.ai.WhisperDecoder/WhisperTokenizer by reflection — so the bias prompt this server runs
-is exactly the one the app's tokenizer.json BPE would produce, with no second implementation of it
+prompt (task tokens) and the suppression ids are *not* rebuilt here. They come in once, at
+startup, as argv from VoiceReplayRig, which reads them straight out of the real
+com.termux.ai.WhisperDecoder/WhisperTokenizer by reflection — so the prompt this server runs is
+exactly the one the app's tokenizer.json BPE would produce, with no second implementation of it
 to drift out of step.
 
-argv: model_path tokenizer_path prompt_terminal prompt_bare eot timestamp_begin always
-  prompt_terminal / prompt_bare / always: comma-separated token ids, or "-" for none.
+argv: model_path tokenizer_path prompt eot timestamp_begin always
+  prompt / always: comma-separated token ids, or "-" for none.
 """
 import json
 import sys
@@ -88,16 +88,15 @@ def pad_piece(piece):
 
 
 class ReplayServer:
-    def __init__(self, model_path, tokenizer_path, prompt_terminal, prompt_bare, eot, timestamp_begin, always):
+    def __init__(self, model_path, tokenizer_path, prompt, eot, timestamp_begin, always):
         self.model = Whisper(model_path, tokenizer_path)
         self.tok = self.model.tok
-        self.prompt_terminal = prompt_terminal
-        self.prompt_bare = prompt_bare
+        self.prompt = prompt
         self.eot = eot
         self.timestamp_begin = timestamp_begin
         self.always = set(always)
 
-    def transcribe_one(self, wav_path, terminal):
+    def transcribe_one(self, wav_path):
         audio = load_wav(wav_path)
         if not has_voice(audio):
             return {"text": "", "encode_ms": 0, "decode_ms": 0, "steps": 0}
@@ -108,7 +107,7 @@ class ReplayServer:
         enc = self.model.enc(args_0=feats)["output_0"]
         t1 = time.perf_counter()
 
-        toks = list(self.prompt_terminal if terminal else self.prompt_bare)
+        toks = list(self.prompt)
         n0 = len(toks)
         mask = self.model.mask()
         seq = self.model.seq
@@ -143,20 +142,19 @@ class ReplayServer:
 
 def main():
     model_path, tokenizer_path = sys.argv[1], sys.argv[2]
-    prompt_terminal = parse_ids(sys.argv[3])
-    prompt_bare = parse_ids(sys.argv[4])
-    eot = int(sys.argv[5])
-    timestamp_begin = int(sys.argv[6])
-    always = parse_ids(sys.argv[7])
+    prompt = parse_ids(sys.argv[3])
+    eot = int(sys.argv[4])
+    timestamp_begin = int(sys.argv[5])
+    always = parse_ids(sys.argv[6])
 
-    server = ReplayServer(model_path, tokenizer_path, prompt_terminal, prompt_bare, eot, timestamp_begin, always)
+    server = ReplayServer(model_path, tokenizer_path, prompt, eot, timestamp_begin, always)
     for line in sys.stdin:
         line = line.strip()
         if not line:
             continue
         try:
             request = json.loads(line)
-            result = server.transcribe_one(request["wav"], bool(request.get("terminal", False)))
+            result = server.transcribe_one(request["wav"])
         except Exception as e:  # noqa: BLE001 - one bad clip must not kill the server for the rest
             result = {"error": str(e)}
         sys.stdout.write(json.dumps(result) + "\n")

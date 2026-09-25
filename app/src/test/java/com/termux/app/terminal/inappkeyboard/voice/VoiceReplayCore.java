@@ -18,8 +18,8 @@ import java.util.Locale;
  * The pure orchestration behind {@code VoiceReplayRig}, kept free of JUnit and of the Python
  * subprocess so it can be driven with a fake {@link Transcriber} in a plain unit test: reads a WAV,
  * feeds it through the real {@link VoiceActivityDetector} exactly as {@code VoiceInputSession.capture}
- * does, classifies each segment the way {@code VoiceInputSession} and the activity would (a spoken
- * key, terminal-cleaned text, or dropped), and formats the event log and expectation match.
+ * does, classifies each segment the way {@code VoiceInputSession} and the activity would (sanitised
+ * text, or dropped), and formats the event log and expectation match.
  *
  * <p>Deliberate difference from the live capture path: {@link VoiceLeadInDiscard} is not applied
  * here. It exists only to drop the 125 ms start tone the microphone hears from the phone's own
@@ -35,7 +35,7 @@ final class VoiceReplayCore {
     /** What one segment is sent to for a transcript; the seam a unit test fakes. */
     interface Transcriber {
         @NonNull
-        TranscriptResult transcribe(@NonNull short[] pcm, boolean terminalPrompt) throws IOException;
+        TranscriptResult transcribe(@NonNull short[] pcm) throws IOException;
     }
 
     /** One answer from the transcriber: the text and the runtime's own timing breakdown. */
@@ -57,14 +57,10 @@ final class VoiceReplayCore {
     static final class ReplayConfig {
         final int pauseMs;
         final int windowSeconds;
-        final boolean terminalPrompt;
-        final boolean bareCommandWordsAllowed;
 
-        ReplayConfig(int pauseMs, int windowSeconds, boolean terminalPrompt, boolean bareCommandWordsAllowed) {
+        ReplayConfig(int pauseMs, int windowSeconds) {
             this.pauseMs = pauseMs;
             this.windowSeconds = windowSeconds;
-            this.terminalPrompt = terminalPrompt;
-            this.bareCommandWordsAllowed = bareCommandWordsAllowed;
         }
     }
 
@@ -73,9 +69,9 @@ final class VoiceReplayCore {
         final double startSeconds;
         final double endSeconds;
         final double voicedSeconds;
-        /** {@code "text"}, {@code "key"}, {@code "dropped"} or {@code "failed"}. */
+        /** {@code "text"}, {@code "dropped"} or {@code "failed"}. */
         @NonNull final String outcome;
-        /** The typed text, the {@link VoiceCommand} name, the heard-but-dropped text, or a failure message. */
+        /** The typed text, the heard-but-dropped text, or a failure message. */
         @NonNull final String content;
         final long encodeMs;
         final long decodeMs;
@@ -98,9 +94,6 @@ final class VoiceReplayCore {
         String toLogLine() {
             String description;
             switch (outcome) {
-                case "key":
-                    description = "KEY " + prettyKeyName(content);
-                    break;
                 case "text":
                     description = "text \"" + content + "\"";
                     break;
@@ -113,16 +106,6 @@ final class VoiceReplayCore {
             return String.format(Locale.ROOT,
                 "  [%.2f-%.2fs voiced %.2fs] %s  (encode %dms, decode %dms, steps %d)",
                 startSeconds, endSeconds, voicedSeconds, description, encodeMs, decodeMs, steps);
-        }
-
-        @NonNull
-        private static String prettyKeyName(@NonNull String enumName) {
-            switch (enumName) {
-                case "CTRL_C": return "Ctrl+C";
-                default:
-                    return enumName.isEmpty() ? enumName
-                        : enumName.charAt(0) + enumName.substring(1).toLowerCase(Locale.ROOT);
-            }
         }
     }
 
@@ -212,11 +195,10 @@ final class VoiceReplayCore {
     }
 
     /**
-     * The classification {@code VoiceInputSession.outcomeFor}/{@code route} apply, with commands
-     * always enabled (replay has no "Voice commands" setting to turn them off): {@link VoiceGain}
-     * levels the segment first, exactly as the live segment does before it is sent for
-     * transcription; a transcriber failure becomes a {@code "failed"} event rather than aborting
-     * the clip.
+     * The classification {@code VoiceInputSession.outcomeFor}/{@code insertVoiceTranscript} apply:
+     * {@link VoiceGain} levels the segment first, exactly as the live segment does before it is
+     * sent for transcription; a transcriber failure becomes a {@code "failed"} event rather than
+     * aborting the clip.
      */
     @NonNull
     private static SegmentEvent classify(double startSeconds, double endSeconds, double voicedSeconds,
@@ -225,20 +207,14 @@ final class VoiceReplayCore {
         VoiceGain.apply(segmentPcm);
         TranscriptResult result;
         try {
-            result = transcriber.transcribe(segmentPcm, config.terminalPrompt);
+            result = transcriber.transcribe(segmentPcm);
         } catch (IOException e) {
             return new SegmentEvent(startSeconds, endSeconds, voicedSeconds, "failed",
                 String.valueOf(e.getMessage()), 0, 0, 0);
         }
-        String text = result.text;
-        VoiceCommand command = VoiceCommand.classify(text, config.bareCommandWordsAllowed);
-        if (command != null) {
-            return new SegmentEvent(startSeconds, endSeconds, voicedSeconds, "key", command.name(),
-                result.encodeMs, result.decodeMs, result.steps);
-        }
-        String effective = config.terminalPrompt ? VoiceTerminalCleanup.clean(text) : text;
+        String effective = VoiceTextSanitizer.clean(result.text);
         if (effective.trim().isEmpty()) {
-            return new SegmentEvent(startSeconds, endSeconds, voicedSeconds, "dropped", text,
+            return new SegmentEvent(startSeconds, endSeconds, voicedSeconds, "dropped", result.text,
                 result.encodeMs, result.decodeMs, result.steps);
         }
         return new SegmentEvent(startSeconds, endSeconds, voicedSeconds, "text", effective,
@@ -247,7 +223,7 @@ final class VoiceReplayCore {
 
     // ------------------------------------------------------------------ expectations
 
-    /** {@code <clip>.expect}: one event per line ({@code "text ls"}, {@code "key ENTER"}, {@code "dropped"}); blank lines and {@code #} comments ignored. */
+    /** {@code <clip>.expect}: one event per line ({@code "text ls"}, {@code "dropped"}); blank lines and {@code #} comments ignored. */
     @NonNull
     static List<String> parseExpectations(@NonNull File expectFile) throws IOException {
         List<String> lines = new ArrayList<>();
@@ -264,8 +240,7 @@ final class VoiceReplayCore {
 
     /**
      * {@code events} against {@code expectedLines} in order: {@code "text <words>"} compares after
-     * {@link VoiceCommand#normalize}, {@code "key <NAME>"} against the classified command's name,
-     * {@code "dropped"} against a dropped or failed event.
+     * {@link #normalize}, {@code "dropped"} against a dropped or failed event.
      */
     @NonNull
     static ExpectationResult matchExpectations(@NonNull List<SegmentEvent> events, @NonNull List<String> expectedLines) {
@@ -296,18 +271,8 @@ final class VoiceReplayCore {
                 if (!"text".equals(event.outcome)) {
                     return "segment " + index + ": expected text \"" + wantText + "\" but got " + event.outcome + " \"" + event.content + "\"";
                 }
-                if (!VoiceCommand.normalize(wantText).equals(VoiceCommand.normalize(event.content))) {
+                if (!normalize(wantText).equals(normalize(event.content))) {
                     return "segment " + index + ": expected text \"" + wantText + "\" but heard \"" + event.content + "\"";
-                }
-                return null;
-            }
-            case "key": {
-                String wantKey = parts.length > 1 ? parts[1].trim().toUpperCase(Locale.ROOT) : "";
-                if (!"key".equals(event.outcome)) {
-                    return "segment " + index + ": expected key " + wantKey + " but got " + event.outcome + " \"" + event.content + "\"";
-                }
-                if (!wantKey.equals(event.content)) {
-                    return "segment " + index + ": expected key " + wantKey + " but got key " + event.content;
                 }
                 return null;
             }
@@ -319,6 +284,15 @@ final class VoiceReplayCore {
             default:
                 return "segment " + index + ": unrecognised expectation \"" + expected + "\"";
         }
+    }
+
+    /** Lowercased, punctuation turned into spaces, whitespace collapsed, so two transcripts of the same words compare equal. */
+    @NonNull
+    private static String normalize(@NonNull String text) {
+        return text.toLowerCase(Locale.ROOT)
+            .replaceAll("[^\\p{L}\\p{Nd}]+", " ")
+            .trim()
+            .replaceAll("\\s+", " ");
     }
 
     // ------------------------------------------------------------------ WAV reading
