@@ -3,13 +3,12 @@
      geometry from the plane's width now, and the category cards size their previews to fill. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
-    <ListPreference
+    <com.termux.app.fragments.settings.SegmentedPillPreference
         app:key="app_launcher_drawer_view_type"
         app:title="@string/settings_app_drawer_view_type_title"
         android:defaultValue="vertical"
         app:entries="@array/app_launcher_drawer_view_type_entries"
-        app:entryValues="@array/app_launcher_drawer_view_type_values"
-        app:useSimpleSummaryProvider="true" />
+        app:entryValues="@array/app_launcher_drawer_view_type_values" />
 
     <SwitchPreferenceCompat
         app:key="app_launcher_drawer_search_on_open"

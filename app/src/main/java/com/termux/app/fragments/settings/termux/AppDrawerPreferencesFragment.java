@@ -14,7 +14,6 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
-import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
 
@@ -110,7 +109,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
     }
 
     private void configureCategoryPreferences(@NonNull Context context) {
-        ListPreference viewType = findPreference(KEY_VIEW_TYPE);
+        com.termux.app.fragments.settings.SegmentedPillPreference viewType = findPreference(KEY_VIEW_TYPE);
         if (viewType != null) {
             applyCategoryVisibility(storedViewType());
             viewType.setOnPreferenceChangeListener((preference, newValue) -> {
@@ -143,7 +142,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
         androidx.preference.PreferenceDataStore store =
             getPreferenceManager().getPreferenceDataStore();
         if (store == null) {
-            ListPreference viewType = findPreference(KEY_VIEW_TYPE);
+            com.termux.app.fragments.settings.SegmentedPillPreference viewType = findPreference(KEY_VIEW_TYPE);
             return viewType == null ? null : viewType.getValue();
         }
         return store.getString(KEY_VIEW_TYPE, null);

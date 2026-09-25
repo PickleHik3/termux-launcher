@@ -12,13 +12,12 @@
         android:defaultValue="false" />
 
     <PreferenceCategory app:title="@string/settings_x11_category_display">
-        <ListPreference
+        <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="touchMode"
             app:title="@string/settings_x11_touch_mode_title"
             android:defaultValue="1"
             app:entries="@array/x11_touch_mode_entries"
-            app:entryValues="@array/x11_touch_mode_values"
-            app:useSimpleSummaryProvider="true" />
+            app:entryValues="@array/x11_touch_mode_values" />
         <SwitchPreferenceCompat
             app:key="x11_android_keyboard"
             app:title="@string/settings_x11_android_keyboard_title"
@@ -44,13 +43,12 @@
             android:max="300"
             app:seekBarIncrement="10"
             app:showSeekBarValue="true" />
-        <ListPreference
+        <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="displayFilteringMode"
             app:title="@string/settings_x11_filtering_title"
             android:defaultValue="bilinear"
             app:entries="@array/x11_filtering_entries"
-            app:entryValues="@array/x11_filtering_values"
-            app:useSimpleSummaryProvider="true" />
+            app:entryValues="@array/x11_filtering_values" />
         <ListPreference
             app:key="displayResolutionExact"
             app:title="@string/settings_x11_resolution_exact_title"

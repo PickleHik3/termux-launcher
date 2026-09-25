@@ -17,13 +17,12 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_input_method_header">
-        <ListPreference
+        <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="keyboard_input_method"
             app:title="@string/settings_on_screen_keyboard_title"
             app:entries="@array/settings_keyboard_input_method_entries"
             app:entryValues="@array/settings_keyboard_input_method_values"
-            app:defaultValue="built_in"
-            app:useSimpleSummaryProvider="true" />
+            app:defaultValue="built_in" />
         <SwitchPreferenceCompat
             app:key="in_app_keyboard_hide_on_hardware"
             app:title="@string/settings_hide_keyboard_hardware_title"
@@ -100,13 +99,12 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:key="keyboard_voice" app:title="@string/settings_keyboard_voice_header">
-        <ListPreference
+        <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="keyboard_voice_engine"
             app:title="@string/settings_keyboard_voice_engine_title"
             app:entries="@array/settings_keyboard_voice_engine_entries"
             app:entryValues="@array/settings_keyboard_voice_engine_values"
-            app:defaultValue="system"
-            app:useSimpleSummaryProvider="true" />
+            app:defaultValue="system" />
         <ListPreference
             app:key="keyboard_voice_language"
             app:title="@string/settings_keyboard_voice_language_title"

@@ -18,7 +18,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import androidx.preference.ListPreference;
 import androidx.preference.MultiSelectListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
@@ -176,7 +175,8 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
 
     private void refreshThemeEntries() {
         Context context = getContext();
-        ListPreference preference = findPreference("in_app_keyboard_theme");
+        com.termux.app.fragments.settings.SegmentedPillPreference preference =
+            findPreference("in_app_keyboard_theme");
         if (context == null || preference == null) return;
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, true);
         if (preferences == null) return;
@@ -184,20 +184,23 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             preferences.getInAppKeyboardColorScheme());
         String importedId = scheme.getImportedThemeId();
         if (importedId.isEmpty()) {
-            preference.setEntries(R.array.termux_in_app_keyboard_theme_entries);
-            preference.setEntryValues(R.array.termux_in_app_keyboard_theme_values);
+            preference.setSegments(
+                new String[]{"system", "light", "dark"},
+                getResources().getTextArray(R.array.termux_in_app_keyboard_theme_entries));
             if ("custom".equals(preferences.getInAppKeyboardTheme()))
                 preferences.setInAppKeyboardTheme("system");
         } else {
-            preference.setEntries(new CharSequence[] {
-                getString(R.string.termux_in_app_keyboard_theme_system),
-                getString(R.string.termux_in_app_keyboard_theme_light),
-                getString(R.string.termux_in_app_keyboard_theme_dark),
-                getString(R.string.termux_in_app_keyboard_theme_imported, importedId)
-            });
-            preference.setEntryValues(new CharSequence[] {"system", "light", "dark", "custom"});
+            // A fourth, short "Imported: X" segment for the theme the user brought in — the label
+            // stays short since it shares its width with three others in the pill.
+            preference.setSegments(
+                new String[]{"system", "light", "dark", "custom"},
+                new CharSequence[] {
+                    getString(R.string.termux_in_app_keyboard_theme_system),
+                    getString(R.string.termux_in_app_keyboard_theme_light),
+                    getString(R.string.termux_in_app_keyboard_theme_dark),
+                    getString(R.string.termux_in_app_keyboard_theme_imported_short, importedId)
+                });
         }
-        preference.setValue(preferences.getInAppKeyboardTheme());
     }
 
     private void onFontPreferenceClicked() {
@@ -323,7 +326,8 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
     }
 
     private void configureTerminalContrastPreference() {
-        androidx.preference.ListPreference contrast = findPreference("terminal_contrast_level");
+        com.termux.app.fragments.settings.SegmentedPillPreference contrast =
+            findPreference("terminal_contrast_level");
         androidx.preference.SwitchPreferenceCompat dynamic =
             findPreference("terminal_dynamic_colors_enabled");
         if (contrast == null || dynamic == null) return;
@@ -331,7 +335,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         contrast.setEnabled(enabled);
         updateTerminalContrastSummary(contrast, enabled);
         contrast.setOnPreferenceChangeListener((preference, value) -> {
-            contrast.setValue(String.valueOf(value));
             updateTerminalContrastSummary(contrast, true);
             return true;
         });
@@ -478,14 +481,15 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
             names.get(names.size() - 1)));
     }
 
-    private void updateTerminalContrastSummary(@NonNull androidx.preference.ListPreference contrast,
-                                               boolean enabled) {
-        if (!enabled) {
-            contrast.setSummary(R.string.settings_terminal_contrast_disabled);
-            return;
-        }
-        String label = contrast.getEntry() == null ? "Default" : contrast.getEntry().toString();
-        contrast.setSummary(getString(R.string.settings_terminal_contrast_summary, label));
+    /**
+     * The pill itself now shows the chosen level, so the summary only has one thing left to say:
+     * that the row is inert while dynamic colours are off.
+     */
+    private void updateTerminalContrastSummary(
+            @NonNull com.termux.app.fragments.settings.SegmentedPillPreference contrast,
+            boolean enabled) {
+        if (enabled) contrast.setSummary(null);
+        else contrast.setSummary(getString(R.string.settings_terminal_contrast_disabled));
     }
 
 }

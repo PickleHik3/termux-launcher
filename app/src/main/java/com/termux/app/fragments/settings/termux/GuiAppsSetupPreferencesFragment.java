@@ -12,7 +12,7 @@ import android.os.Looper;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.preference.ListPreference;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
 import androidx.preference.TwoStatePreference;
@@ -96,7 +96,7 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
 
         TourEdition edition = TourEdition.of(context.getPackageName());
         List<GuiAppsSetup.Route> routes = GuiAppsSetup.routesFor(edition);
-        ListPreference route = findPreference(KEY_ROUTE);
+        SegmentedPillPreference route = findPreference(KEY_ROUTE);
         if (routes.isEmpty()) {
             // Nix: graphical apps are a nixpkgs and home.nix matter, not a command this screen
             // builds. Nothing here to pick or copy, so every row but the hint and the docs link
@@ -142,10 +142,10 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
             });
         }
         // The Linux to install changes which browser the command fetches, so the hints follow it.
-        ListPreference distro = findPreference(KEY_DISTRO);
+        SegmentedPillPreference distro = findPreference(KEY_DISTRO);
         if (distro != null) {
             distro.setOnPreferenceChangeListener((preference, value) -> {
-                ListPreference current = findPreference(KEY_ROUTE);
+                SegmentedPillPreference current = findPreference(KEY_ROUTE);
                 applyStarterHints(current == null ? null : current.getValue(),
                     String.valueOf(value));
                 return true;
@@ -191,7 +191,7 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
     private void applyRouteRows(@Nullable String route, @NonNull TourEdition edition) {
         applyDistroRow(route);
         applyBrowserRowVisibility(route, edition);
-        ListPreference distro = findPreference(KEY_DISTRO);
+        SegmentedPillPreference distro = findPreference(KEY_DISTRO);
         applyStarterHints(route, distro == null ? null : distro.getValue());
     }
 
@@ -317,11 +317,11 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
     String command() {
         Context context = getContext();
         TourEdition edition = TourEdition.of(context == null ? null : context.getPackageName());
-        ListPreference route = findPreference(KEY_ROUTE);
+        SegmentedPillPreference route = findPreference(KEY_ROUTE);
         GuiAppsSetup.Route resolvedRoute = routeFromKey(route == null ? null : route.getValue());
         if (resolvedRoute == null) resolvedRoute = GuiAppsSetup.defaultRoute(edition);
         if (resolvedRoute == null) return null;
-        ListPreference distro = findPreference(KEY_DISTRO);
+        SegmentedPillPreference distro = findPreference(KEY_DISTRO);
         return GuiAppsSetup.command(resolvedRoute,
             GuiAppsSetup.Distro.of(distro == null ? null : distro.getValue()),
             starters(), edition);

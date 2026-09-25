@@ -13,7 +13,6 @@ import android.widget.TextView;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceManager;
@@ -264,19 +263,18 @@ public class TaiParameterPreferencesFragment extends MaterialPreferenceFragment 
         caps.addPreference(tools);
 
         if (!liteRt) return; // MNN has no modality variants; exposure choice is LiteRT-only
-        ListPreference exposure = new ListPreference(context);
+        com.termux.app.fragments.settings.SegmentedPillPreference exposure =
+            new com.termux.app.fragments.settings.SegmentedPillPreference(context);
         exposure.setKey("tai_caps_exposure_" + modelId);
         exposure.setPersistent(false);
         exposure.setTitle(R.string.termux_ai_caps_exposure_title);
-        exposure.setDialogTitle(R.string.termux_ai_caps_exposure_title);
-        exposure.setEntries(new CharSequence[]{
-            getString(R.string.termux_ai_exposure_split),
-            getString(R.string.termux_ai_exposure_combined),
-            getString(R.string.termux_ai_exposure_both)});
-        exposure.setEntryValues(new CharSequence[]{
-            TaiModelStore.EXPOSURE_SPLIT, TaiModelStore.EXPOSURE_COMBINED, TaiModelStore.EXPOSURE_BOTH});
+        exposure.setSegments(
+            new String[]{TaiModelStore.EXPOSURE_SPLIT, TaiModelStore.EXPOSURE_COMBINED, TaiModelStore.EXPOSURE_BOTH},
+            new CharSequence[]{
+                getString(R.string.termux_ai_exposure_split),
+                getString(R.string.termux_ai_exposure_combined),
+                getString(R.string.termux_ai_exposure_both)});
         exposure.setValue(new TaiModelStore(context).getExposure(modelId));
-        exposure.setSummaryProvider(ListPreference.SimpleSummaryProvider.getInstance());
         exposure.setOnPreferenceChangeListener((preference, newValue) -> {
             new TaiModelStore(context).setExposure(modelId, String.valueOf(newValue));
             return true;

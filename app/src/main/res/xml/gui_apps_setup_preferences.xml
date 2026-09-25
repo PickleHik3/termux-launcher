@@ -13,23 +13,21 @@
         app:selectable="false"
         app:persistent="false" />
 
-    <ListPreference
+    <com.termux.app.fragments.settings.SegmentedPillPreference
         app:key="gui_apps_route"
         app:title="@string/settings_gui_apps_route_title"
-        app:dialogMessage="@string/settings_gui_apps_route_summary"
+        app:summary="@string/settings_gui_apps_route_summary"
         android:defaultValue="x11"
         app:entries="@array/gui_apps_route_entries"
-        app:entryValues="@array/gui_apps_route_values"
-        app:useSimpleSummaryProvider="true" />
+        app:entryValues="@array/gui_apps_route_values" />
 
-    <ListPreference
+    <com.termux.app.fragments.settings.SegmentedPillPreference
         app:key="gui_apps_distro"
         app:title="@string/settings_gui_apps_distro_title"
-        app:dialogMessage="@string/settings_gui_apps_distro_summary"
+        app:summary="@string/settings_gui_apps_distro_summary"
         android:defaultValue="debian"
         app:entries="@array/gui_apps_distro_entries"
-        app:entryValues="@array/gui_apps_distro_values"
-        app:useSimpleSummaryProvider="true" />
+        app:entryValues="@array/gui_apps_distro_values" />
 
     <!-- Only the two apps that are worth a choice. A text editor and a terminal were dropped
          (user, 2026-09-22): the phone already has the terminal this command is pasted into, and

@@ -13,12 +13,11 @@
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_theme_header">
-        <ListPreference
+        <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="theme_mode"
             app:title="@string/settings_color_mode_title"
             app:entries="@array/termux_theme_mode_entries"
-            app:entryValues="@array/termux_theme_mode_values"
-            app:useSimpleSummaryProvider="true" />
+            app:entryValues="@array/termux_theme_mode_values" />
         <SwitchPreferenceCompat
             app:key="terminal_dynamic_colors_enabled"
             app:title="@string/settings_wallpaper_colors_title"
@@ -30,7 +29,7 @@
             app:persistent="false"
             app:selectable="false"
             app:iconSpaceReserved="false" />
-        <ListPreference
+        <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="terminal_contrast_level"
             app:title="@string/settings_terminal_contrast_title"
             app:entries="@array/terminal_contrast_entries"
@@ -80,11 +79,8 @@
             app:persistent="false"
             app:title="@string/settings_customize_keyboard_title"
             app:summary="@string/settings_customize_keyboard_summary" />
-        <ListPreference
+        <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="in_app_keyboard_theme"
-            app:entries="@array/termux_in_app_keyboard_theme_entries"
-            app:entryValues="@array/termux_in_app_keyboard_theme_values"
-            app:useSimpleSummaryProvider="true"
             app:title="@string/termux_in_app_keyboard_theme_title" />
         <Preference
             app:key="in_app_keyboard_color_scheme_editor"

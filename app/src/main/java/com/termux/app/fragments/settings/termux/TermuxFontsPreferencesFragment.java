@@ -106,11 +106,22 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
 
     // ------------------------------------------------------------------ wiring
 
+    private static final String[] LIGATURE_VALUES = {FontInstaller.LIGATURES_NEVER,
+        FontInstaller.LIGATURES_CURSOR, FontInstaller.LIGATURES_ALWAYS};
+
     private void configureStaticRows(@NonNull Context context) {
-        Preference ligatures = findPreference("fonts_ligatures");
+        com.termux.app.fragments.settings.SegmentedPillPreference ligatures = findPreference("fonts_ligatures");
         if (ligatures != null) {
-            ligatures.setOnPreferenceClickListener(preference -> {
-                showLigatureDialog(context);
+            CharSequence[] labels = new CharSequence[LIGATURE_VALUES.length];
+            for (int i = 0; i < LIGATURE_VALUES.length; i++) labels[i] = ligatureLabel(LIGATURE_VALUES[i]);
+            ligatures.setSegments(LIGATURE_VALUES, labels);
+            // Not preference-store-backed (app:persistent="false"): the value lives on the active
+            // font family's own options, so the listener applies it there instead of relying on
+            // the pill's own persistString, which is a no-op for a non-persistent preference.
+            ligatures.setOnPreferenceChangeListener((preference, value) -> {
+                FontCatalog.Family active = activeFamily(context);
+                if (active == null) return false;
+                reapply(context, active, options(context, active).withLigatures(String.valueOf(value)));
                 return true;
             });
         }
@@ -178,12 +189,13 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
 
         FontInstaller.Options options = active == null
             ? null : new FontSettings(context).getOptions(active);
-        Preference ligatures = findPreference("fonts_ligatures");
+        com.termux.app.fragments.settings.SegmentedPillPreference ligatures = findPreference("fonts_ligatures");
         if (ligatures != null) {
             ligatures.setEnabled(tunable);
+            ligatures.setValue(options == null ? FontInstaller.LIGATURES_NEVER : options.ligatures);
             ligatures.setSummary(options == null
                 ? getString(R.string.termux_fonts_ligatures_none_summary)
-                : ligatureLabel(options.ligatures));
+                : null);
         }
         Preference weight = findPreference("fonts_weight");
         if (weight != null) {
@@ -421,28 +433,6 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
                 (dialog, which) -> openUrl(context, family.homepageUrl));
         }
         builder.show();
-    }
-
-    private void showLigatureDialog(@NonNull Context context) {
-        FontCatalog.Family active = activeFamily(context);
-        if (active == null) return;
-        String[] values = {FontInstaller.LIGATURES_NEVER, FontInstaller.LIGATURES_CURSOR,
-            FontInstaller.LIGATURES_ALWAYS};
-        CharSequence[] labels = new CharSequence[values.length];
-        FontInstaller.Options options = options(context, active);
-        int checked = 0;
-        for (int i = 0; i < values.length; i++) {
-            labels[i] = ligatureLabel(values[i]);
-            if (values[i].equals(options.ligatures)) checked = i;
-        }
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_fonts_ligatures_title)
-            .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                reapply(context, active, options(context, active).withLigatures(values[which]));
-                dialog.dismiss();
-            })
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
     }
 
     private void showWeightDialog(@NonNull Context context) {
