@@ -44,10 +44,13 @@ public final class TaiSettings {
     public static final String KEY_API_AUTH_REQUIRED = "tai_api_auth_required";
     public static final String KEY_API_LAN_SESSION_STARTED_AT = "tai_api_lan_session_started_at";
     public static final String KEY_OPENAI_AUTO_LOAD = "tai_openai_auto_load";
-    // Speech-to-text (voice input phase 1: settings only, no runtime yet — see TaiManager#downloadSpeechModel).
+    // Speech-to-text: the model voice input uses, the preferred window for new downloads, how long
+    // an idle speech model stays loaded, and the download that becomes the model in use once it
+    // succeeds (see TaiSpeechModels).
     public static final String KEY_STT_MODEL_ID = "tai_stt_model_id";
     public static final String KEY_STT_WINDOW_SECONDS = "tai_stt_window_seconds";
     public static final String KEY_STT_IDLE_UNLOAD_MINUTES = "tai_stt_idle_unload_minutes";
+    public static final String KEY_STT_PENDING_DOWNLOAD = "tai_stt_pending_download";
     public static final int DEFAULT_STT_WINDOW_SECONDS = 10;
     public static final int DEFAULT_STT_IDLE_UNLOAD_MINUTES = 2;
 
@@ -234,8 +237,9 @@ public final class TaiSettings {
         return preferences.getBoolean(KEY_OPENAI_AUTO_LOAD, true);
     }
 
-    /** The installed speech-to-text catalog model id (e.g. {@code whisper-acft-base-en}), or empty
-     *  when no speech model has been chosen yet. */
+    /** The speech-to-text model voice input uses (e.g. {@code whisper-acft-base-en}), or empty when
+     *  none has been chosen. Read it through {@link TaiSpeechModels#resolveActive}, which treats an
+     *  id whose files are gone as unset and falls back to another installed speech model. */
     @NonNull
     public String getSttModelId() {
         return preferences.getString(KEY_STT_MODEL_ID, "");
@@ -245,9 +249,22 @@ public final class TaiSettings {
         preferences.edit().putString(KEY_STT_MODEL_ID, modelId == null ? "" : modelId.trim()).apply();
     }
 
-    /** The window (in seconds) of the Whisper graph to download/use: 10 (default) or 5. Falls back
-     *  to the default for any stored value the plan doesn't offer (only 5s/10s are ever downloaded;
-     *  30s hallucinates on short speech and isn't offered — see whisper-voice-input.md). */
+    /** The speech download that becomes the model in use when it succeeds, as
+     *  {@link TaiSpeechModels.PendingDownload} JSON; empty when none is pending. */
+    @NonNull
+    public String getSttPendingDownloadJson() {
+        return preferences.getString(KEY_STT_PENDING_DOWNLOAD, "");
+    }
+
+    public void setSttPendingDownloadJson(@Nullable String json) {
+        if (json == null || json.trim().isEmpty()) preferences.edit().remove(KEY_STT_PENDING_DOWNLOAD).apply();
+        else preferences.edit().putString(KEY_STT_PENDING_DOWNLOAD, json).apply();
+    }
+
+    /** The preferred window (in seconds) for the next speech model download: 10 (default) or 5.
+     *  The window of an installed model is read off its file name ({@link TaiSpeechModels#windowSeconds}).
+     *  Falls back to the default for any stored value the plan doesn't offer (only 5s/10s are ever
+     *  downloaded; 30s hallucinates on short speech and isn't offered — see whisper-voice-input.md). */
     public int getSttWindowSeconds() {
         int value = preferences.getInt(KEY_STT_WINDOW_SECONDS, DEFAULT_STT_WINDOW_SECONDS);
         return value == 5 ? 5 : DEFAULT_STT_WINDOW_SECONDS;

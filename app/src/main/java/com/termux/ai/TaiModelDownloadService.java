@@ -146,6 +146,9 @@ public final class TaiModelDownloadService extends Service {
         } finally {
             clearCancellation(modelId);
         }
+        // A speech download that was going to become the model in use (or replace a model's
+        // window graph) settles here, whether or not the settings screen is open to see it end.
+        if (capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) TaiSpeechModels.settlePending(this);
     }
 
     private void updateProgressNotification(@NonNull JSONObject transfer) {

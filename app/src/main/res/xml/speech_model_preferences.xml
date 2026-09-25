@@ -1,0 +1,27 @@
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        app:key="speech_model_installed"
+        app:title="@string/speech_model_installed_header">
+        <Preference
+            app:key="speech_model_empty"
+            app:title="@string/speech_model_empty_title"
+            app:summary="@string/speech_model_empty_summary"
+            app:persistent="false"
+            app:selectable="false"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:key="speech_model_manage"
+        app:title="@string/speech_model_manage_header">
+        <Preference
+            app:key="speech_model_download"
+            app:title="@string/speech_model_download_title"
+            app:summary="@string/speech_model_download_summary"
+            app:persistent="false"/>
+        <Preference
+            app:key="speech_model_idle_unload"
+            app:title="@string/speech_model_idle_unload_title"
+            app:persistent="false"/>
+    </PreferenceCategory>
+</PreferenceScreen>

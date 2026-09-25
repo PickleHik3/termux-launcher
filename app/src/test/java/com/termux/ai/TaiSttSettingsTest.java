@@ -11,8 +11,10 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 
-/** Speech-to-text settings (voice input phase 1): installed model id, window, idle-unload minutes. */
+/** Speech-to-text settings: the model in use, the preferred window for downloads, idle-unload
+ *  minutes, and the download that becomes the model in use once it succeeds. */
 @RunWith(RobolectricTestRunner.class)
 public class TaiSttSettingsTest {
     private SharedPreferences preferences;
@@ -47,6 +49,18 @@ public class TaiSttSettingsTest {
         // stored value must fall back to the 10s default rather than silently propagate.
         preferences.edit().putInt(TaiSettings.KEY_STT_WINDOW_SECONDS, 30).commit();
         assertEquals(10, settings.getSttWindowSeconds());
+    }
+
+    @Test
+    public void sttPendingDownload_isEmptyByDefaultAndClearsOnEmpty() {
+        assertEquals("", settings.getSttPendingDownloadJson());
+        settings.setSttPendingDownloadJson("{\"modelId\":\"whisper-acft-base-en\",\"windowSeconds\":5}");
+        assertEquals("{\"modelId\":\"whisper-acft-base-en\",\"windowSeconds\":5}", settings.getSttPendingDownloadJson());
+        settings.setSttPendingDownloadJson("");
+        assertEquals("", settings.getSttPendingDownloadJson());
+        assertFalse(preferences.contains(TaiSettings.KEY_STT_PENDING_DOWNLOAD));
+        settings.setSttPendingDownloadJson(null);
+        assertEquals("", settings.getSttPendingDownloadJson());
     }
 
     @Test

@@ -318,6 +318,18 @@ public final class TaiModelStore {
         preferences.edit().putString(KEY_DOWNLOADS, next.toString()).commit();
     }
 
+    /** Drops every download record for {@code modelId}, leaving its registry entry and files alone
+     *  (a failed re-download of an installed model; the installed one stays as it was). */
+    public synchronized void removeDownload(@NonNull String modelId) {
+        JSONArray current = getDownloads();
+        JSONArray kept = new JSONArray();
+        for (int i = 0; i < current.length(); i++) {
+            JSONObject item = current.optJSONObject(i);
+            if (item != null && !modelId.equals(item.optString("modelId", ""))) kept.put(item);
+        }
+        preferences.edit().putString(KEY_DOWNLOADS, kept.toString()).commit();
+    }
+
     public synchronized void updateDownloadStatus(@NonNull String transferId, @NonNull String status, @NonNull String error) {
         JSONArray current = getDownloads();
         for (int i = 0; i < current.length(); i++) {

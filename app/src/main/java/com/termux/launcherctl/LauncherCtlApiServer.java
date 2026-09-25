@@ -1748,11 +1748,12 @@ public class LauncherCtlApiServer {
             "tokens by default, 3 runs), the same call and defaults Google AI Edge Gallery's Benchmark screen\n" +
             "uses, so the two are comparable 1:1. It refuses while a chat model is loaded (unload first) and\n" +
             "checks the same memory budget as tai load unless --force skips it, since Gallery has none.\n" +
-            "tai transcribe runs the installed Whisper speech model (TAI settings > Speech-to-text) on a WAV\n" +
-            "file (16 kHz mono PCM16 preferred; other rates are resampled) or raw PCM16 16 kHz mono, on the\n" +
-            "CPU in :tai_runtime, never queued behind a chat generation. --terminal biases towards shell\n" +
-            "vocabulary (git, ls, cd, sudo, apt, pkg, tab, enter, escape, ctrl); --language forces an\n" +
-            "ISO 639-1 code on multilingual models (the -en models always decode English).\n" +
+            "tai transcribe runs the speech model voice input uses (Keyboard settings > Voice input > Speech\n" +
+            "model) on a WAV file (16 kHz mono PCM16 preferred; other rates are resampled) or raw PCM16\n" +
+            "16 kHz mono, on the CPU in :tai_runtime, never queued behind a chat generation. --terminal\n" +
+            "biases towards shell vocabulary (git, ls, cd, sudo, apt, pkg, tab, enter, escape, ctrl);\n" +
+            "--language forces an ISO 639-1 code on multilingual models (the -en models always decode\n" +
+            "English).\n" +
             "OpenAI-compatible endpoints (default bind mode is localhost):\n" +
             "  /v1/models\n" +
             "  /v1/chat/completions\n" +

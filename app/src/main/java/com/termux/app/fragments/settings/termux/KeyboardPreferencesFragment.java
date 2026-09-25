@@ -16,6 +16,7 @@ import androidx.preference.PreferenceManager;
 
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
+import com.termux.ai.TaiSpeechModels;
 import com.termux.app.TermuxActivity;
 import com.termux.app.settings.TermuxPropertiesFile;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
@@ -65,8 +66,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_TAP_CORRECTION_RESET = "in_app_keyboard_tap_correction_reset";
     private static final String KEY_VOICE_ENGINE = "keyboard_voice_engine";
     private static final String KEY_VOICE_MODEL = "keyboard_voice_model";
-    /** The TAI page's speech-to-text category, which the voice rows deep-link to. */
-    private static final String TAI_STT_CATEGORY_KEY = "tai_stt_category";
 
     private static final String UPSTREAM_GITHUB_URL =
         "https://github.com/Julow/Unexpected-Keyboard";
@@ -138,9 +137,9 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         if (voiceEngine != null) {
             voiceEngine.setOnPreferenceChangeListener((preference, newValue) -> {
                 // On-device needs a speech model; without one the choice would only ever fall
-                // back, so the page that downloads one opens instead and the row stays as it was.
+                // back, so the screen that downloads one opens instead and the row stays as it was.
                 if (TermuxPreferenceConstants.TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE.equals(newValue)
-                    && TaiPreferencesFragment.installedSpeechModel(context) == null) {
+                    && TaiSpeechModels.resolveActive(context) == null) {
                     openSpeechModelSettings(context);
                     return false;
                 }
@@ -156,11 +155,10 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         SettingsLayoutUtils.applyScreenLayout(this);
     }
 
-    /** The TAI page, scrolled to its speech-to-text category. */
+    /** The Speech model screen: the installed speech models, which one is in use, and downloads. */
     private void openSpeechModelSettings(@NonNull Context context) {
         startActivity(com.termux.app.activities.SettingsActivity.createFragmentIntent(context,
-            TaiPreferencesFragment.class, R.string.termux_ai_preferences_title, null,
-            TAI_STT_CATEGORY_KEY));
+            SpeechModelPreferencesFragment.class, R.string.settings_keyboard_voice_model_title));
     }
 
     private void refreshTapCorrectionSummary(Preference preference) {
