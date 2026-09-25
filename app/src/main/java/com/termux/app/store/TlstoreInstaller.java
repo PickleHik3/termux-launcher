@@ -70,7 +70,9 @@ public final class TlstoreInstaller {
     private static final String TLSTORE_ASSET = "tlstore/tlstore";
     private static final String CATALOG_ASSET = "tlstore/catalog.tsv";
     private static final String TRUSTED_KEY_ASSET = "tlstore/trusted.pub";
-    private static final String MOTD_ASSET = "tlstore/motd.sh";
+    /** {@code motd.sh} ships at the assets root, not under {@code tlstore/}: it is the launcher's
+     *  own welcome text, not part of the pinned tlstore release (see {@code app/tlstore.lock}). */
+    private static final String MOTD_ASSET = "motd.sh";
     /** {@code tlstore/tlstore-ui-<abi>}, e.g. {@code tlstore/tlstore-ui-arm64-v8a}. */
     private static final String TLSTORE_UI_ASSET_PREFIX = "tlstore/tlstore-ui-";
 

@@ -67,7 +67,7 @@ public class TlstoreInstallerTest {
                 if (!includeTrustedKey) throw new FileNotFoundException(name);
                 return new ByteArrayInputStream(TRUSTED_KEY);
             }
-            if (name.equals("tlstore/motd.sh")) return new ByteArrayInputStream(motd);
+            if (name.equals("motd.sh")) return new ByteArrayInputStream(motd);
             if (name.equals("tlstore/tlstore-ui-arm64-v8a")) {
                 if (tlstoreUi == null) throw new FileNotFoundException(name);
                 return new ByteArrayInputStream(tlstoreUi);
