@@ -386,8 +386,22 @@ Two integration facts found on the way:
   length input, and on 1–1.5 s phrases the model repeated itself ("Enter key. Enter key",
   "Clear clear clear…"). Padding the waveform with near-silence to 5 s fixed it.
 - The graph loads in desktop `ai-edge-litert` (2.x) with the expected `encode` / `decode` /
-  `decode_1` signatures. Whether it loads in the app's LiteRT 1.4.2 is measured on pong with
-  `SpeechGraphProbe` (debug build) — see below.
+  `decode_1` signatures, and **it also loads in the app's LiteRT 1.4.2** with the
+  `TaiXnnpackDelegate` shim — measured on pong below.
+
+On pong (2026-09-25, `SpeechGraphProbe` from the debug build via `app_process` as the shell user,
+4 threads, XNNPACK shim, zeros as input):
+
+| | Parakeet v3 i8 stateful | Whisper small.en 10 s (plan doc) |
+|---|---|---|
+| load | 1141 ms | — |
+| encode | 235 ms first, **173 ms** after (one 5 s window) | ~170 ms (one 10 s window) |
+| decode | 4-token `decode` 7 ms, **`decode_1` 1 ms** | ~80 ms per token |
+| memory | **+1203 MB RSS** after load, 1425 MB peak | ~540 MB |
+
+A 5 s phrase is one encode plus ~20–60 decoder steps, so about 0.2–0.3 s on pong against ~0.4 s
+(command) to ~1.8 s (20-token sentence) for small.en. The price is memory: more than twice
+small.en's resident size, which matters under the memory manager's budget next to a chat model.
 
 Recommendation after measuring: keep Whisper (small.en on phones with room for it) as the
 default for the terminal; offer Parakeet later as an optional **dictation** engine (prompts to
