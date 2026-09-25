@@ -23,9 +23,16 @@ public class VoiceLevelCurveTest {
     }
 
     @Test
-    public void about25dBReachesAboutNinetyPercent() {
+    public void roomNoiseJustOverTheFloorLeavesTheBarEmpty() {
         float floor = 0.02f;
-        float rms = (float) (floor * Math.pow(10, 25.0 / 20.0));
+        float rms = (float) (floor * Math.pow(10, 5.0 / 20.0));
+        assertEquals(0f, VoiceLevelCurve.level(rms, floor), 0f);
+    }
+
+    @Test
+    public void about26dBOverTheFloorReachesAboutNinetyPercent() {
+        float floor = 0.02f;
+        float rms = (float) (floor * Math.pow(10, 26.0 / 20.0));
         assertEquals(0.9f, VoiceLevelCurve.level(rms, floor), 0.01f);
     }
 

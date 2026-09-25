@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -271,8 +272,25 @@ public final class VoiceInputSession {
 
     private void capture(@NonNull AudioRecord recorder) {
         VoiceActivityDetector detector = new VoiceActivityDetector(new VoiceActivityDetector.Listener() {
+            // One debug line per second of what the detector saw, for tuning it on a device.
+            private int statFrames, statVoiced;
+            private float statPeak, statSum;
+
             @Override
             public void onLevel(float rms, boolean voiced, float noiseFloor) {
+                statFrames++;
+                if (voiced) statVoiced++;
+                statPeak = Math.max(statPeak, rms);
+                statSum += rms;
+                if (statFrames == 1000 / VoiceActivityDetector.FRAME_MS) {
+                    Logger.logDebug(LOG_TAG, String.format(Locale.ROOT,
+                        "level: peak=%.1f mean=%.1f floor=%.1f dBFS voiced=%d/%d",
+                        dbfs(statPeak), dbfs(statSum / statFrames), dbfs(noiseFloor), statVoiced, statFrames));
+                    statFrames = 0;
+                    statVoiced = 0;
+                    statPeak = 0f;
+                    statSum = 0f;
+                }
                 mainHandler.post(() -> {
                     if (!ended) host.onLevel(rms, voiced, noiseFloor);
                 });
@@ -353,6 +371,8 @@ public final class VoiceInputSession {
         long start = System.nanoTime();
         File audio = null;
         try {
+            // Levelled first: see VoiceGain. The segment is ours alone, so scaling in place is safe.
+            VoiceGain.apply(pcm);
             audio = writePcm(pcm);
             JSONObject request = new JSONObject();
             request.put("file", audio.getAbsolutePath());
@@ -538,11 +558,17 @@ public final class VoiceInputSession {
         sttExecutor.shutdown();
         if (polishExecutor != null) polishExecutor.shutdown();
         EndReason reason = endReason == null ? EndReason.FAILED : endReason;
+        Logger.logInfo(LOG_TAG, "session ended: " + reason + ", segments=" + submitted.get()
+            + " delivered=" + delivered);
         // The activity going away is not something to chime about; every other end is.
         if (reason == EndReason.FAILED) feedback.onError();
         else if (reason != EndReason.DESTROYED) feedback.onStop();
         feedback.release();
         host.onEnded(reason);
+    }
+
+    private static float dbfs(float rms) {
+        return rms <= 0f ? -100f : (float) (20.0 * Math.log10(rms));
     }
 
     /**

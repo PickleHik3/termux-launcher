@@ -10,7 +10,8 @@ import java.util.ArrayList;
  * stream into the segments the Whisper graph decodes:
  * <ul>
  *   <li>speech starts when a frame's RMS is {@link #VOICE_OVER_FLOOR} (9 dB) over an adaptive
- *       noise floor; the segment keeps {@link #PAD_MS} of audio before that onset (a pre-roll ring)
+ *       noise floor and carries on while frames stay {@link #HOLD_OVER_FLOOR} (6 dB) over it, so
+ *       the quiet ends of words spoken far from the mic still count; the segment keeps {@link #PAD_MS} of audio before that onset (a pre-roll ring)
  *       and {@link #PAD_MS} after the last voiced frame — tightly cut single words hallucinate;</li>
  *   <li>a pause of {@code pauseMs} without a voiced frame closes the segment;</li>
  *   <li>a segment with less than {@link #MIN_VOICED_MS} of voiced frames is dropped, never sent —
@@ -31,10 +32,16 @@ public final class VoiceActivityDetector {
     public static final int FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS / 1000;
     public static final int PAD_MS = 300;
     public static final int MIN_VOICED_MS = 300;
-    /** 9 dB over the floor, as a linear RMS ratio. */
+    /** 9 dB over the floor, as a linear RMS ratio: what opens a segment. */
     static final float VOICE_OVER_FLOOR = 2.8f;
-    /** About −54 dBFS: nothing below this is ever voiced. */
-    static final float ABSOLUTE_FLOOR = 0.002f;
+    /** 6 dB over the floor: what keeps an open segment voiced. Room noise on pong sits 3–5 dB over it. */
+    static final float HOLD_OVER_FLOOR = 2.0f;
+    /**
+     * About −70 dBFS: nothing below this is ever voiced. pong's bottom mic on
+     * {@code VOICE_RECOGNITION} (no AGC) puts speech from arm's length at a −52 dBFS peak over a
+     * −65 dBFS room, so the old −54 dBFS floor kept whole words out.
+     */
+    static final float ABSOLUTE_FLOOR = 0.0003f;
     /** About −34 dBFS: a noise floor above this is speech being mistaken for noise. */
     static final float NOISE_FLOOR_CAP = 0.02f;
     /** How fast the floor climbs towards a louder non-voiced frame, per frame. */
@@ -132,7 +139,8 @@ public final class VoiceActivityDetector {
 
     private void processFrame(@NonNull short[] frame) {
         float rms = rms(frame);
-        boolean voiced = rms > Math.max(noiseFloor * VOICE_OVER_FLOOR, ABSOLUTE_FLOOR);
+        float overFloor = inSpeech ? HOLD_OVER_FLOOR : VOICE_OVER_FLOOR;
+        boolean voiced = rms > Math.max(noiseFloor * overFloor, ABSOLUTE_FLOOR);
         if (!voiced) {
             if (rms < noiseFloor) noiseFloor = rms;
             else noiseFloor = Math.min(NOISE_FLOOR_CAP, noiseFloor + (rms - noiseFloor) * FLOOR_RISE);
