@@ -366,12 +366,59 @@ Six changes agreed after the developer's first pong retest and the Freestyle com
   `cancel()` (discard, end at once) instead of the no-op `stop()`, and the pill shows
   "Transcribing…" once the mic has closed but a segment is still in flight.
 
+### Feedback and polish (2026-09-25)
+
+Two more from the Freestyle comparison (recommendation 3 and §4 "LLM cleanup"), implemented on
+`dev`, device check on pong pending:
+
+- **Cues** (`VoiceFeedback`): a light haptic and a 347 Hz blip when the microphone opens, a
+  confirm haptic and a 255 Hz blip when the session ends, a double haptic and a double blip when it
+  ends on a failure (nothing when the activity is destroyed). Tones are `VoiceTone` PCM16 at
+  44.1 kHz, 125 ms, gain 0.16, 10 ms fades, played through a static `AudioTrack` on
+  `USAGE_ASSISTANCE_SONIFICATION` from a `voice-feedback` thread. Tones follow the new keyboard
+  setting `keyboard_voice_sounds` (default on); haptics follow the keyboard's existing key-haptics
+  setting rather than a switch of their own — the voice key is a key. The microphone hears the
+  speaker, and at −16 dBFS the blip is well over the VAD's 9 dB threshold, so the capture loop
+  drops the first 180 ms (`VoiceLeadInDiscard`: 125 ms tone + output latency, six 30 ms frames)
+  *before* the detector, so the 300 ms pre-roll cannot hold it either.
+- **Polish** (`keyboard_voice_polish`, default off): each dictated text segment is rewritten by
+  Gemma 4 through the TAI runtime — punctuation, casing, obvious mis-hearings, filler words, same
+  wording — before it is typed. `VoiceTextPolisher` is the seam; `LocalTaiVoiceTextPolisher` is
+  the only implementation (a bring-your-own-key provider is a later addition behind the same
+  interface). Model: E4B when installed and the phone meets its RAM recommendation (or E2B is
+  absent), else E2B, the same rule as the app-drawer category sort; with neither, every phrase is
+  typed as heard (`fallback:no_model`). Gating (`VoicePolishRules`, pure): never a spoken key
+  (classified with `VoiceCommand` under the same two settings the activity uses), never under
+  4 words (that is where the shell commands live), never a segment the terminal sanitiser would
+  drop, never after a cancel. The prompt is one short user turn (kept under E4B's 128-token
+  prefill graph with a 10 s phrase) that wraps the transcript in `<transcript>` tags and declares
+  it data; angle brackets in the transcript are bent so it cannot close its own tags. Output:
+  temperature 0, thinking off, `max_tokens` ≈ 2 per input word (8–192), deadline
+  2 s + 150 ms × budget capped at 10 s (`TaiManager.openAiChatCompletions(body, timeoutMs)`).
+  Accepted only when non-empty, containing a letter or digit, and at most 2× the input's length,
+  with wrapping quotes, code fences and echoed tags stripped and every whitespace run collapsed
+  to one space — a rewrite can never put a newline into a shell, and the terminal target's
+  `VoiceTerminalCleanup` still runs on it afterwards. Rewrites run on a `voice-polish` thread
+  and call the same `deliver()` STT does, so the sequencer keeps spoken order and the session
+  still ends when every segment is delivered. Residency: the model is loaded as the mic opens
+  (`TaiRuntimePresence` first; a runtime loading or generating with another model is not
+  evicted, the first request autoloads or falls back); `insufficient_memory`, a 409
+  `model_not_loaded`, or a timeout disables polish for the rest of the session rather than paying
+  it per phrase; afterwards the model is **left resident** for the runtime's ordinary idle unload
+  — dictation comes in bursts, and restoring the previous model (what the category sort does once
+  at the end of a minutes-long job) would thrash a 12 s load per session. Log per phrase:
+  `polish: polishMs= inLength= outLength= outcome=polished|skipped:<why>|fallback:<reason>`,
+  never the text.
+
 ## Tests
 
 - Mel fixture test against Whisper's reference output; tokenizer decode test (multilingual and
   `.en` special tokens).
 - Segment → command classifier table test ("enter" → key; "enter the directory" → text).
 - Terminal cleanup table test.
+- Tone PCM (length, fades, gain, pitch), lead-in discard (sample-exact, never reaches the VAD),
+  polish rules (gating, budgets, prompt wrapping, acceptance, both runtime error shapes, the
+  request body).
 - Device on pong (with permission, phone not in the developer's hands): base.en 10 s latency per
   segment, "ls … enter" in a terminal, dictation into a Claude Code session while it streams a reply
   (the separate executor).
