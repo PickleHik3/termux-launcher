@@ -270,6 +270,8 @@ public final class TaiModelPreference extends Preference {
         }
         button.setVisibility(View.VISIBLE);
         button.setEnabled(true);
+        // The caller's label ("Parameters", "Change window") is what a screen reader announces.
+        button.setContentDescription(text);
         button.setImageTintList(ColorStateList.valueOf(
             resolveAttrColor(com.termux.shared.R.attr.termuxColorOnSurface)));
         button.setBackgroundTintList(ColorStateList.valueOf(
