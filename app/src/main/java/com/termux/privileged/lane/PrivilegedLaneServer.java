@@ -171,6 +171,10 @@ public final class PrivilegedLaneServer {
                 out.write(("ok\t" + pid[0] + "\n").getBytes(StandardCharsets.UTF_8));
                 out.flush();
             } finally {
+                // LocalSocket keeps the queued descriptors and attaches them to every later write;
+                // left set, the exit line would carry the master closed below, fail with EBADF,
+                // and the client would wait for it forever.
+                socket.setFileDescriptorsForSend(null);
                 closeQuietly(master);
             }
             Log.i(TAG, "Handed " + resolved.name + " (pid " + pid[0] + ") to the client");
@@ -202,8 +206,13 @@ public final class PrivilegedLaneServer {
             try {
                 out.write(("exit\t" + code + "\n").getBytes(StandardCharsets.UTF_8));
                 out.flush();
-            } catch (IOException ignored) {
-                // The client is already gone; the hangup thread dealt with the child.
+                // The hangup thread is still blocked reading this socket, which can hold the close
+                // below off; a shutdown ends the client's read and that thread's at once.
+                socket.shutdownOutput();
+                socket.shutdownInput();
+            } catch (IOException e) {
+                // Usually the client already left and the hangup thread dealt with the child.
+                Log.d(TAG, "Could not report the exit of pid " + pid[0] + ": " + e.getMessage());
             }
         } catch (IOException e) {
             Log.w(TAG, "Lane connection failed", e);
