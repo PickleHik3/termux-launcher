@@ -539,15 +539,6 @@ public final class TlstoreInstaller {
         return false;
     }
 
-    @NonNull
-    private static byte[] readAll(@NonNull InputStream in) throws IOException {
-        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-        byte[] buffer = new byte[8192];
-        int read;
-        while ((read = in.read(buffer)) > 0) out.write(buffer, 0, read);
-        return out.toByteArray();
-    }
-
     /** The first {@code limit} bytes as text: the marker sits in a script's opening lines. */
     @Nullable
     private static String readHead(@NonNull File file, int limit) {
