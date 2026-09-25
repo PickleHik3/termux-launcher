@@ -115,6 +115,8 @@ public class TerminalPaneController {
     private static final String STATE_WINDOW_LAYOUT = "layout_policy";
     private static final String STATE_WINDOW_NAME = "window_name";
     private static final String STATE_WINDOW_FLOATS = "floats";
+    private static final String STATE_WINDOW_FOCUS_SHARE_H = "focus_share_h";
+    private static final String STATE_WINDOW_FOCUS_SHARE_V = "focus_share_v";
     private static final String STATE_FLOAT_LEFT = "float_left";
     private static final String STATE_FLOAT_TOP = "float_top";
     private static final String STATE_FLOAT_WIDTH = "float_width";
@@ -279,6 +281,11 @@ public class TerminalPaneController {
          * can never float, and a dying tiled root promotes a float back into the tree.
          */
         final List<Leaf> floating = new ArrayList<>();
+        /**
+         * The share a focused pane grows to along each axis, learned from the last divider the
+         * user dragged in this window; 0 until then, meaning {@link #FOCUS_GROW_SHARE}.
+         */
+        float focusShareH, focusShareV;
         Window(Leaf leaf) { root = leaf; active = leaf; }
     }
 
@@ -407,7 +414,10 @@ public class TerminalPaneController {
         if (enabled) {
             applyFocusGrowth(true);
         } else {
-            for (Window w : mWindows) if (w.root != null) equalizeNode(w.root);
+            for (Window w : mWindows) {
+                forgetFocusShares(w);
+                if (w.root != null) equalizeNode(w.root);
+            }
             render();
             mHost.onTreesChanged();
         }
@@ -419,7 +429,7 @@ public class TerminalPaneController {
 
     /**
      * Re-weight the splits between the focused pane and the root so the focused side holds
-     * {@link #FOCUS_GROW_SHARE}. Splits off that path keep their ratios. A float or a maximized
+     * {@link #focusShareFor its share}. Splits off that path keep their ratios. A float or a maximized
      * pane needs no room made for it, so those leave the tree alone. With {@code animate} the
      * dividers ease over, with PTY resizing held until they settle — one reflow, not sixty.
      */
@@ -433,7 +443,8 @@ public class TerminalPaneController {
         Node node = active;
         for (Split parent = node.parent; parent != null; node = parent, parent = parent.parent) {
             float total = parent.weightA + parent.weightB;
-            float target = parent.a == node ? total * FOCUS_GROW_SHARE : total * (1f - FOCUS_GROW_SHARE);
+            float share = focusShareFor(mActiveWindow, parent.orientation);
+            float target = parent.a == node ? total * share : total * (1f - share);
             if (Math.abs(target - parent.weightA) < 0.001f) continue;
             splits.add(parent);
             fromA.add(parent.weightA);
@@ -475,6 +486,35 @@ public class TerminalPaneController {
         });
         mFocusGrowAnimator = animator;
         animator.start();
+    }
+
+    /** The share the focused pane grows to across a split of this orientation in this window. */
+    static float focusShareFor(@NonNull Window window, int orientation) {
+        float learned = orientation == LinearLayout.HORIZONTAL ? window.focusShareH : window.focusShareV;
+        return learned > 0f ? learned : FOCUS_GROW_SHARE;
+    }
+
+    /**
+     * A divider the user moved by hand becomes the size every pane in the window grows to when
+     * focused, along that divider's axis. Only splits the focused pane sits inside teach it, and
+     * a focused pane never grows to less than half.
+     */
+    private void learnFocusShare(@Nullable Window window, @Nullable Split split, @Nullable Leaf focused) {
+        if (window == null || split == null || focused == null) return;
+        Node node = focused;
+        while (node.parent != null && node.parent != split) node = node.parent;
+        if (node.parent != split) return;
+        float total = split.weightA + split.weightB;
+        if (total <= 0f) return;
+        float share = (node == split.a ? split.weightA : split.weightB) / total;
+        share = Math.max(0.5f, Math.min(0.82f, share));
+        if (split.orientation == LinearLayout.HORIZONTAL) window.focusShareH = share;
+        else window.focusShareV = share;
+    }
+
+    private static void forgetFocusShares(@NonNull Window window) {
+        window.focusShareH = 0f;
+        window.focusShareV = 0f;
     }
 
     private static void setSplitWeightA(@NonNull Split split, float weightA) {
@@ -586,6 +626,8 @@ public class TerminalPaneController {
         if (active != null) state.putString(STATE_WINDOW_ACTIVE, active.mHandle);
         if (window.layoutPolicy != null) state.putString(STATE_WINDOW_LAYOUT, window.layoutPolicy);
         if (window.name != null) state.putString(STATE_WINDOW_NAME, window.name);
+        if (window.focusShareH > 0f) state.putFloat(STATE_WINDOW_FOCUS_SHARE_H, window.focusShareH);
+        if (window.focusShareV > 0f) state.putFloat(STATE_WINDOW_FOCUS_SHARE_V, window.focusShareV);
         if (!window.floating.isEmpty()) {
             ArrayList<Bundle> floats = new ArrayList<>();
             for (Leaf leaf : window.floating) {
@@ -638,8 +680,14 @@ public class TerminalPaneController {
         String layout = state.getString(STATE_WINDOW_LAYOUT);
         if (layout != null && isKnownLayout(layout)) window.layoutPolicy = layout;
         window.name = TerminalNamePolicy.normalizeWindow(state.getString(STATE_WINDOW_NAME));
+        window.focusShareH = restoredFocusShare(state.getFloat(STATE_WINDOW_FOCUS_SHARE_H, 0f));
+        window.focusShareV = restoredFocusShare(state.getFloat(STATE_WINDOW_FOCUS_SHARE_V, 0f));
         mWindows.add(window);
         return window;
+    }
+
+    private static float restoredFocusShare(float share) {
+        return share >= 0.5f && share <= 0.82f ? share : 0f;
     }
 
     @NonNull
@@ -1186,6 +1234,7 @@ public class TerminalPaneController {
         float min = total * 0.18f;
         target.weightA = Math.max(min, Math.min(total - min, target.weightA));
         target.weightB = total - target.weightA;
+        learnFocusShare(mActiveWindow, target, mActiveWindow.active);
         // A resized divider is hand-shaping a rebuilt layout would throw away, so those go manual.
         // Dwindle never rebuilds — it keeps every ratio — so under it a resize is just a resize.
         if (!isDwindleManaged(mActiveWindow)) clearLayoutPolicy(mActiveWindow);
@@ -1369,6 +1418,7 @@ public class TerminalPaneController {
     public boolean equalizeLayout() {
         if (mActiveWindow == null || mActiveWindow.root == null) return false;
         mMaximizedLeaf = null;
+        forgetFocusShares(mActiveWindow);
         equalizeNode(mActiveWindow.root);
         render();
         mHost.onTreesChanged();
@@ -3501,6 +3551,9 @@ public class TerminalPaneController {
                         if (resized) {
                             snapSplitToCellGrid(mXSplit);
                             snapSplitToCellGrid(mYSplit);
+                            Window window = windowOf(leaf == null ? null : leaf.session);
+                            learnFocusShare(window, mXSplit, leaf);
+                            learnFocusShare(window, mYSplit, leaf);
                         }
                         if (mDraggingDivider) finishHostSurfaceResizeKeepingBottom();
                         resetTouchState();
@@ -3598,6 +3651,9 @@ public class TerminalPaneController {
             performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
             focusLeaf(mCornerTapLeaf);
             if (mXSplit != null || mYSplit != null) {
+                // Settle the focus growth first: left running, it would keep rewriting the very
+                // weights the drag starts from.
+                if (mFocusGrowAnimator != null) mFocusGrowAnimator.end();
                 mDraggingDivider = true;
                 beginHostSurfaceResize();
                 if (mXSplit != null) {

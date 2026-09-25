@@ -803,6 +803,45 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void focusGrow_aHandResizedDividerBecomesTheShareEveryFocusedPaneGrowsTo() {
+        android.provider.Settings.Global.putFloat(
+            RuntimeEnvironment.getApplication().getContentResolver(),
+            android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        assertTrue(controller.split(LinearLayout.HORIZONTAL)); // left / right, focus right
+        TerminalPaneController.Split root = (TerminalPaneController.Split) window.root;
+        TerminalSession left = ((TerminalPaneController.Leaf) root.a).session;
+        TerminalSession right = ((TerminalPaneController.Leaf) root.b).session;
+        controller.setFocusGrowEnabled(true);
+        assertEquals(1.4f, root.weightB, 0.001f);
+
+        // Shrink the focused right pane by one step: it now holds 0.64 of the width.
+        controller.resizeActive(android.view.KeyEvent.KEYCODE_DPAD_RIGHT);
+        assertEquals(0.64f, TerminalPaneController.focusShareFor(window, LinearLayout.HORIZONTAL), 0.001f);
+        assertEquals("the other axis keeps the default", TerminalPaneController.FOCUS_GROW_SHARE,
+            TerminalPaneController.focusShareFor(window, LinearLayout.VERTICAL), 0f);
+
+        controller.focusSession(left);
+        assertEquals(1.28f, root.weightA, 0.001f);
+        assertEquals(0.72f, root.weightB, 0.001f);
+
+        Map<String, TerminalSession> sessions = new HashMap<>();
+        sessions.put(left.mHandle, left);
+        sessions.put(right.mHandle, right);
+        TerminalPaneController.Window restored =
+            newController().restoreWindow(controller.saveWindow(window), sessions);
+        assertEquals(0.64f, TerminalPaneController.focusShareFor(restored, LinearLayout.HORIZONTAL), 0.001f);
+
+        controller.equalizeLayout();
+        assertEquals(TerminalPaneController.FOCUS_GROW_SHARE,
+            TerminalPaneController.focusShareFor(window, LinearLayout.HORIZONTAL), 0f);
+    }
+
+    @Test
     public void defaultLayoutPolicy_appliesToNewWindowsAndLoneUnmanagedOnes() {
         TerminalPaneController controller = newSplittingController();
         TerminalPaneController.Window lone = controller.newWindow(terminal());
