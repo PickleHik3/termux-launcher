@@ -60,6 +60,9 @@ own.
 
 ### Tlstore
 
+The store's design lives in [PickleHik3/tlstore](https://github.com/PickleHik3/tlstore); these
+terms are kept here because the launcher's own code and docs still use them.
+
 **Item**:
 One thing a person can choose to install from tlstore, by name (`fastfetch`, `fish-shell`).
 _Avoid_: package, app, tool

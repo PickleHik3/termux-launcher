@@ -374,10 +374,18 @@ GitHub Issues on `PickleHik3/termux-launcher`; every `gh` call passes `-R`. See 
 
 The five default labels, unchanged. See `docs/agents/triage-labels.md`.
 
-### The tlstore catalog
+### tlstore
 
-Adding, updating or removing a store item: items.tsv → build-catalog → test.sh → sign → rebuilt
-UI binaries when the crate changed. See `docs/agents/tlstore-catalog.md`.
+The store's own sources (its CLI, `tlstore-ui`, the catalog and its build pipeline) live in
+[PickleHik3/tlstore](https://github.com/PickleHik3/tlstore), not here — send catalog and store-code
+changes there; see that repo's `docs/maintainer/catalog.md` and `AGENTS.md`.
+
+This launcher only pins the release it ships: `app/tlstore.lock` names a tlstore release tag and
+the sha256 of each `dist/` file, and Gradle's `fetchTlstore` task downloads them into the APK's
+assets, verifying every hash. Bump the lock with the block tlstore's `scripts/release.sh` prints
+after cutting a release there. To build against a local tlstore checkout instead of a published
+release — while developing tlstore itself — pass `-Ptlstore.local=<dir>` (or set `TLSTORE_LOCAL`)
+pointing at that checkout's `dist/` folder; this skips the lock check entirely and prints a warning.
 
 ### Domain docs
 
