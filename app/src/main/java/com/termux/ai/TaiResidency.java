@@ -60,6 +60,11 @@ public final class TaiResidency {
      * TFLite's benchmark on pong, about 1.9× the file.
      */
     static final long STT_FACTOR_TENTHS = 19L;
+    /**
+     * Parakeet TDT 0.6B v3's int8 graph (614 MB file) added 1.2 GB of RSS when SpeechGraphProbe
+     * loaded it on pong: 2.0× the file.
+     */
+    static final long PARAKEET_STT_FACTOR_TENTHS = 20L;
 
     /** One resident. Immutable; {@link #setBusy} replaces the entry rather than mutating it. */
     public static final class Entry {
@@ -308,9 +313,13 @@ public final class TaiResidency {
         return fileBytes(spec) * factorTenths / 10L;
     }
 
-    /** What a speech-to-text load of this spec costs: the graph file times {@link #STT_FACTOR_TENTHS}. */
+    /**
+     * What a speech-to-text load of this spec costs: the graph file times the family's factor
+     * ({@link #PARAKEET_STT_FACTOR_TENTHS} for Parakeet, {@link #STT_FACTOR_TENTHS} otherwise).
+     */
     public static long sttEstimateBytes(@NonNull TaiModelSpec spec) {
-        return fileBytes(spec) * STT_FACTOR_TENTHS / 10L;
+        long factorTenths = MultiBackendTaiRuntime.isParakeetModel(spec) ? PARAKEET_STT_FACTOR_TENTHS : STT_FACTOR_TENTHS;
+        return fileBytes(spec) * factorTenths / 10L;
     }
 
     /**

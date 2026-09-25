@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
 
 import com.termux.R;
+import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiSettings;
@@ -57,6 +58,7 @@ public class SpeechModelPreferencesFragmentTest {
         store = new TaiModelStore(context);
         store.deleteUserModel("whisper-acft-base-en");
         store.deleteUserModel("whisper-acft-small");
+        store.deleteUserModel(TaiModelCatalog.PARAKEET_TDT_V3_ID);
     }
 
     private SpeechModelPreferencesFragment launch() {
@@ -104,7 +106,10 @@ public class SpeechModelPreferencesFragmentTest {
         assertNotNull(small);
         assertEquals("Base · English", base.getTitle().toString());
         assertEquals("Small · Many languages", small.getTitle().toString());
+        // The summary names the engine, then size and window.
+        assertTrue(base.getSummary().toString().startsWith("Whisper · "));
         assertTrue(base.getSummary().toString().contains("10-second window"));
+        assertTrue(small.getSummary().toString().startsWith("Whisper · "));
         assertTrue(small.getSummary().toString().contains("5-second window"));
         // The stale id is not written over; the first installed model simply stands in.
         assertEquals("whisper-acft-small-en", new TaiSettings(context).getSttModelId());
@@ -136,20 +141,54 @@ public class SpeechModelPreferencesFragmentTest {
     }
 
     @Test
-    public void theWhisperCatalogIdFollowsSizeAndLanguage() {
+    public void aParakeetModelIsARowUnderTheEngineNameWithNoWindowToChange() throws Exception {
+        install(TaiModelCatalog.PARAKEET_TDT_V3_ID, "parakeet_tdt_0.6b_v3_5s_i8_stateful.tflite", "parakeet-tdt");
+        new TaiSettings(context).setSttModelId(TaiModelCatalog.PARAKEET_TDT_V3_ID);
+
+        SpeechModelPreferencesFragment fragment = launch();
+
+        Preference row = fragment.getPreferenceScreen().findPreference(
+            SpeechModelPreferencesFragment.ROW_KEY_PREFIX + TaiModelCatalog.PARAKEET_TDT_V3_ID);
+        assertNotNull(row);
+        assertEquals("Parakeet · Many languages", row.getTitle().toString());
+        assertTrue(row.getSummary().toString().startsWith("Parakeet · "));
+        assertTrue(row.getSummary().toString().contains("5-second window"));
+        assertEquals(TaiModelCatalog.PARAKEET_TDT_V3_ID, new TaiSettings(context).getSttModelId());
+    }
+
+    @Test
+    public void theWhisperCatalogIdFollowsSizeAndLanguageAndParakeetHasOne() {
         assertEquals("whisper-acft-base-en", SpeechModelPreferencesFragment.whisperCatalogId(false, true));
         assertEquals("whisper-acft-small", SpeechModelPreferencesFragment.whisperCatalogId(true, false));
+        assertEquals("parakeet-tdt-0.6b-v3", TaiModelCatalog.PARAKEET_TDT_V3_ID);
+        assertEquals(5, SpeechModelPreferencesFragment.PARAKEET_WINDOW_SECONDS);
+    }
+
+    @Test
+    public void theParakeetRamWarningShowsOnlyBelowTheEntryTier() {
+        SpeechModelPreferencesFragment fragment = launch();
+        long gib = 1024L * 1024 * 1024;
+        assertNull(fragment.parakeetRamWarning(context, 12L * gib));
+        assertNull(fragment.parakeetRamWarning(context, 8L * gib));
+        assertNull("unknown memory: no warning", fragment.parakeetRamWarning(context, 0L));
+        String warning = fragment.parakeetRamWarning(context, 6L * gib);
+        assertNotNull(warning);
+        assertTrue(warning, warning.contains("6.0 GB"));
     }
 
     private void install(String id, String fileName) throws Exception {
+        install(id, fileName, "whisper-acft");
+    }
+
+    private void install(String id, String fileName, String architecture) throws Exception {
         File dir = new File(store.getModelsDirectory(), id);
         Files.createDirectories(dir.toPath());
         File file = new File(dir, fileName);
-        Files.write(file.toPath(), "not-a-real-whisper-graph".getBytes(StandardCharsets.UTF_8));
+        Files.write(file.toPath(), "not-a-real-speech-graph".getBytes(StandardCharsets.UTF_8));
         store.upsertUserModel(new TaiModelSpec(
             id, id, "Speech-to-text test model", "test", file.getAbsolutePath(), "test", 123L,
             new LinkedHashSet<>(Collections.singleton(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)),
             false, null, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM,
-            "whisper-acft", "int8_drq", 128, 0, null));
+            architecture, "int8_drq", 128, 0, null));
     }
 }

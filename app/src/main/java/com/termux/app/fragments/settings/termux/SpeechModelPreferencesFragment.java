@@ -10,6 +10,7 @@ import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.RelativeSizeSpan;
 import android.util.TypedValue;
+import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
@@ -51,7 +52,8 @@ import java.util.concurrent.Executors;
 /**
  * Keyboard → Voice input → Speech model: every installed speech-to-text model as a row (tap to
  * use it, Delete to remove it, the tune button to change its window), downloads in progress with
- * their progress and a Cancel, and the download and idle-unload options. The state itself lives in
+ * their progress and a Cancel, and the download (engine first: Whisper or Parakeet, then the
+ * engine's options) and idle-unload options. The state itself lives in
  * {@link TaiSpeechModels}; this screen shows it and asks for changes. Rows are keyed by model id
  * and updated in place on every poll, so a progress tick never rebuilds the list.
  */
@@ -63,8 +65,11 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_DOWNLOAD = "speech_model_download";
     private static final String KEY_IDLE_UNLOAD = "speech_model_idle_unload";
     private static final long POLL_INTERVAL_MS = 700L;
+    private static final long BYTES_PER_GIB = 1024L * 1024L * 1024L;
     /** Small is only offered (and then recommended) on phones with this much RAM; see the plan. */
-    private static final long SMALL_MIN_MEMORY_BYTES = 8L * 1024 * 1024 * 1024;
+    private static final long SMALL_MIN_MEMORY_BYTES = 8L * BYTES_PER_GIB;
+    /** Parakeet's one graph is a 5 s window; there is nothing to choose. */
+    static final int PARAKEET_WINDOW_SECONDS = 5;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService actionExecutor = Executors.newSingleThreadExecutor();
@@ -85,10 +90,13 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(R.xml.speech_model_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         Preference download = findPreference(KEY_DOWNLOAD);
-        if (download != null) download.setOnPreferenceClickListener(preference -> {
-            showDownloadDialog(context);
-            return true;
-        });
+        if (download != null) {
+            download.setSummary(R.string.speech_model_download_summary_engines);
+            download.setOnPreferenceClickListener(preference -> {
+                showDownloadDialog(context);
+                return true;
+            });
+        }
         Preference idleUnload = findPreference(KEY_IDLE_UNLOAD);
         if (idleUnload != null) idleUnload.setOnPreferenceClickListener(preference -> {
             showIdleUnloadDialog(context);
@@ -215,9 +223,7 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment {
             row.setPrimaryAction(getString(R.string.speech_model_action_cancel), true, false,
                 view -> cancelDownload(context, spec.id));
         } else {
-            int window = TaiSpeechModels.windowSeconds(spec);
-            String size = formatBytes(spec.sizeBytes);
-            row.setSummary(window > 0 ? size + " · " + getString(R.string.speech_model_window_summary, window) : size);
+            row.setSummary(installedSummary(spec));
             row.setDownloadProgress(false, false, 0);
             int otherWindow = otherWindow(spec);
             row.setTuneAction(otherWindow > 0 ? getString(R.string.speech_model_action_window) : null,
@@ -266,6 +272,14 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment {
             confirmRemoveDownload(context, modelId);
             return true;
         });
+    }
+
+    /** "Whisper · 97 MB · 10-second window", "Parakeet · 586 MB · 5-second window": engine, size, window when known. */
+    @NonNull
+    String installedSummary(@NonNull TaiModelSpec spec) {
+        int window = TaiSpeechModels.windowSeconds(spec);
+        String summary = TaiSpeechModels.engineLabel(spec) + " · " + formatBytes(spec.sizeBytes);
+        return window > 0 ? summary + " · " + getString(R.string.speech_model_window_summary, window) : summary;
     }
 
     private void configureProgress(@NonNull TaiModelPreference row, @NonNull JSONObject download) {
@@ -434,15 +448,45 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment {
 
     // ---- dialogs ----
 
-    /** Three plain questions: size, language, window. Small is only offered on ≥ 8 GB phones. */
+    /**
+     * The engine first — Whisper (short commands; size, language and window to choose) or
+     * Parakeet (longer dictation; one 5 s graph, ~586 MB, 8 GB+ phones) — then Whisper's three
+     * plain questions, shown only while Whisper is picked. Small is only offered on ≥ 8 GB phones;
+     * Parakeet is always offered, with a warning under it on a phone below its RAM tier.
+     */
     private void showDownloadDialog(@NonNull Context context) {
-        boolean offerSmall = TaiDeviceCapabilities.detect(context).memoryBytes >= SMALL_MIN_MEMORY_BYTES;
+        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(context);
+        boolean offerSmall = device.memoryBytes >= SMALL_MIN_MEMORY_BYTES;
         TaiSettings settings = new TaiSettings(context);
         float density = context.getResources().getDisplayMetrics().density;
+        LinearLayout content = new LinearLayout(context);
+        content.setOrientation(LinearLayout.VERTICAL);
+        int padH = Math.round(24 * density);
+        content.setPadding(padH, Math.round(8 * density), padH, 0);
+
+        content.addView(sectionLabel(context, R.string.speech_model_engine_label));
+        RadioGroup engineGroup = new RadioGroup(context);
+        engineGroup.setOrientation(RadioGroup.VERTICAL);
+        RadioButton whisperButton = new RadioButton(context);
+        whisperButton.setText(twoLines(context, getString(R.string.speech_model_engine_whisper),
+            getString(R.string.speech_model_engine_whisper_hint)));
+        RadioButton parakeetButton = new RadioButton(context);
+        String parakeetHint = getString(R.string.speech_model_engine_parakeet_hint);
+        String ramWarning = parakeetRamWarning(context, device.memoryBytes);
+        if (ramWarning != null) parakeetHint = parakeetHint + "\n" + ramWarning;
+        parakeetButton.setText(twoLines(context,
+            getString(R.string.speech_model_engine_parakeet, sizeEstimate(TaiModelCatalog.PARAKEET_TDT_V3_ID)), parakeetHint));
+        engineGroup.addView(whisperButton);
+        engineGroup.addView(parakeetButton);
+        whisperButton.setChecked(true);
+        content.addView(engineGroup);
+
+        // Whisper's questions live in their own block, hidden while Parakeet is picked.
         LinearLayout layout = new LinearLayout(context);
         layout.setOrientation(LinearLayout.VERTICAL);
-        int padH = Math.round(24 * density);
-        layout.setPadding(padH, Math.round(8 * density), padH, 0);
+        content.addView(layout);
+        engineGroup.setOnCheckedChangeListener((group, checkedId) ->
+            layout.setVisibility(parakeetButton.isChecked() ? View.GONE : View.VISIBLE));
 
         layout.addView(sectionLabel(context, R.string.speech_model_size_label));
         RadioGroup sizeGroup = new RadioGroup(context);
@@ -495,8 +539,12 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment {
         RadioButton finalSmallButton = smallButton;
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.speech_model_download_dialog_title)
-            .setView(dialogScroll(context, layout))
+            .setView(dialogScroll(context, content))
             .setPositiveButton(R.string.speech_model_download_start, (dialog, which) -> {
+                if (parakeetButton.isChecked()) {
+                    requestDownload(context, TaiModelCatalog.PARAKEET_TDT_V3_ID, PARAKEET_WINDOW_SECONDS);
+                    return;
+                }
                 boolean small = finalSmallButton != null && finalSmallButton.isChecked();
                 boolean englishOnly = englishButton.isChecked();
                 int windowSeconds = window5Button.isChecked() ? 5 : 10;
@@ -504,6 +552,19 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment {
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+    }
+
+    /**
+     * The warning under the Parakeet choice on a phone below the entry's RAM tier (the same
+     * threshold {@link TaiDeviceCapabilities#checkModelCapability} warns on), or null when the
+     * phone is fine or its memory is unknown.
+     */
+    @Nullable
+    String parakeetRamWarning(@NonNull Context context, long deviceMemoryBytes) {
+        TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(TaiModelCatalog.PARAKEET_TDT_V3_ID);
+        if (entry == null || entry.recommendedRamGb <= 0 || deviceMemoryBytes <= 0L) return null;
+        if (deviceMemoryBytes >= entry.recommendedRamGb * BYTES_PER_GIB) return null;
+        return context.getString(R.string.speech_model_engine_parakeet_ram_warning, formatBytes(deviceMemoryBytes));
     }
 
     /** A fresh download — or, for a model that is already installed, the model itself or its other window. */
@@ -526,7 +587,7 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment {
         }
     }
 
-    /** The Whisper family's catalog id for a size and language. Another engine would add its own entry point here. */
+    /** The Whisper family's catalog id for a size and language; Parakeet's is {@link TaiModelCatalog#PARAKEET_TDT_V3_ID}. */
     @NonNull
     static String whisperCatalogId(boolean small, boolean englishOnly) {
         return "whisper-acft-" + (small ? "small" : "base") + (englishOnly ? "-en" : "");

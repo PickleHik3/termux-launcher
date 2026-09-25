@@ -36,7 +36,9 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     private final TaiRuntime mnn;
     private final LiteRtEmbeddingRuntime embeddings;
     private final MnnEmbeddingRuntime mnnEmbeddings;
-    private final WhisperSttRuntime stt;
+    /** The speech engines, one per model family; at most one holds a graph at a time, see {@link #sttFor}. */
+    private final WhisperSttRuntime whisperStt;
+    private final ParakeetSttRuntime parakeetStt;
     private final TaiResidency residency;
     /** Held across load, keep-warm and unload; never by a read, a cancel or a generation. */
     private final Object loadLock = new Object();
@@ -78,7 +80,8 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         this.residency = residency;
         embeddings = new LiteRtEmbeddingRuntime(residency, context);
         mnnEmbeddings = new MnnEmbeddingRuntime(residency, context);
-        stt = new WhisperSttRuntime(residency, context);
+        whisperStt = new WhisperSttRuntime(residency, context);
+        parakeetStt = new ParakeetSttRuntime(residency, context);
         activeAssistant = liteRt;
     }
 
@@ -115,7 +118,8 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
             JSONObject result = activeAssistant.unload();
             embeddings.close();
             mnnEmbeddings.close();
-            stt.close();
+            whisperStt.close();
+            parakeetStt.close();
             return result;
         }
     }
@@ -152,7 +156,8 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
                         break;
                     case STT:
                         // Waits on the STT monitor for a transcription that started since the plan.
-                        stt.close();
+                        if (parakeetStt.isLoaded(victim.modelId)) parakeetStt.close();
+                        else whisperStt.close();
                         break;
                     case CHAT: {
                         TaiRuntime holder = chatHolder(victim.modelId);
@@ -233,19 +238,42 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     public JSONObject transcribe(@NonNull TaiModelSpec model, @NonNull File audio,
                                  @Nullable String language, @Nullable String biasPrompt) throws JSONException {
         if (!isSpeechToTextModel(model)) return notSpeechToText(model);
-        return stt.transcribe(model, audio, language, biasPrompt);
+        return sttFor(model).transcribe(model, audio, language, biasPrompt);
     }
 
-    /** Loads a {@code speech_to_text} model ahead of its first request; see {@link WhisperSttRuntime#warm}. */
+    /** Loads a {@code speech_to_text} model ahead of its first request; see {@link SttRuntime#warm}. */
     @NonNull
     public JSONObject sttWarm(@NonNull TaiModelSpec model) throws JSONException {
         if (!isSpeechToTextModel(model)) return notSpeechToText(model);
-        return stt.warm(model);
+        return sttFor(model).warm(model);
     }
 
     private boolean isSpeechToTextModel(@NonNull TaiModelSpec model) {
         String path = model.localPath == null ? "" : model.localPath.toLowerCase(Locale.ROOT);
         return model.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT) && path.endsWith(".tflite");
+    }
+
+    /**
+     * The engine for a speech model, by family: Parakeet by the catalog's architecture (or a
+     * {@code parakeet} file name for an import), Whisper otherwise. The other engine is closed
+     * first, so one STT graph is resident at a time — what {@link TaiResidency#creditedAvailable}
+     * assumes when it credits an STT load every STT resident. Closing an idle engine is free.
+     */
+    @NonNull
+    private SttRuntime sttFor(@NonNull TaiModelSpec model) {
+        if (isParakeetModel(model)) {
+            whisperStt.close();
+            return parakeetStt;
+        }
+        parakeetStt.close();
+        return whisperStt;
+    }
+
+    static boolean isParakeetModel(@NonNull TaiModelSpec model) {
+        String architecture = model.architecture == null ? "" : model.architecture.toLowerCase(Locale.ROOT);
+        if (architecture.startsWith("parakeet")) return true;
+        String name = model.localPath == null ? "" : new File(model.localPath).getName().toLowerCase(Locale.ROOT);
+        return name.contains("parakeet");
     }
 
     @NonNull

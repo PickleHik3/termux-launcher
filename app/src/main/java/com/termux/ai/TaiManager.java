@@ -1470,9 +1470,9 @@ public final class TaiManager {
      * OpenAI-style speech-to-text: {@code file} (a path — the API server writes uploads to
      * {@code cacheDir/tai-ipc}, and a path under Termux home or shared storage is accepted from
      * scripts), {@code model} (default: the installed speech model from settings), {@code language}
-     * (ISO 639-1, multilingual graphs only), {@code prompt} (a vocabulary line to bias towards) or
-     * {@code prompt_mode: "terminal"} for the default shell vocabulary. The app process resolves the
-     * model and forwards to the runtime process, whose STT lane runs the Whisper interpreter.
+     * (ISO 639-1, multilingual Whisper graphs only; Parakeet detects it) and {@code prompt} (a
+     * vocabulary line Whisper biases towards; Parakeet has no prompt). The app process resolves the
+     * model and forwards to the runtime process, whose STT lane runs the engine's interpreter.
      * Answers {@code {text, language, duration, segments, ...}}.
      */
     @NonNull
@@ -1556,16 +1556,14 @@ public final class TaiManager {
     }
 
     /**
-     * The vocabulary line behind {@code <|startofprev|>}: an explicit OpenAI {@code prompt} wins,
-     * {@code prompt_mode: "terminal"} gives the measured shell vocabulary, anything else no prompt
-     * (plain dictation).
+     * The vocabulary line behind {@code <|startofprev|>}: the request's OpenAI {@code prompt},
+     * trimmed, or none (plain dictation). There is no built-in vocabulary any more: the shell
+     * bias hurt prose (dropped words, noise read as "ok"), and voice input is dictation only.
      */
     @Nullable
     static String biasPromptFor(@NonNull JSONObject request) {
         String prompt = request.optString("prompt", "").trim();
-        if (!prompt.isEmpty()) return prompt;
-        String mode = request.optString("prompt_mode", request.optString("promptMode", "")).trim();
-        return "terminal".equalsIgnoreCase(mode) ? WhisperDecoder.TERMINAL_VOCABULARY : null;
+        return prompt.isEmpty() ? null : prompt;
     }
 
     /** The speech model a request names, or the one voice input uses; {@code null} when neither resolves. */

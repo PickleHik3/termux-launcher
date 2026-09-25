@@ -9,11 +9,12 @@ import java.util.Arrays;
  * The prompt and the greedy loop of the Whisper ACFT decoder, kept free of the interpreter so
  * {@code WhisperDecoderTest} can drive them with a scripted step function.
  *
- * <p>Prompt: an optional {@code <|startofprev|>} + vocabulary-line prefix (the terminal bias the
- * plan measured at 26/26 on shell commands), then {@code <|startoftranscript|>}, the language and
- * {@code <|transcribe|>} tokens when the vocabulary has them, then {@code <|notimestamps|>}. The
- * decoder's token input is a fixed 128-slot sequence, prompt included, so whatever the prompt
- * takes comes out of the output budget; the bias line is capped so the budget stays near 100.
+ * <p>Prompt: an optional {@code <|startofprev|>} + vocabulary-line prefix (a caller's OpenAI-style
+ * {@code prompt}; voice input is plain dictation and sends none), then {@code <|startoftranscript|>},
+ * the language and {@code <|transcribe|>} tokens when the vocabulary has them, then
+ * {@code <|notimestamps|>}. The decoder's token input is a fixed 128-slot sequence, prompt
+ * included, so whatever the prompt takes comes out of the output budget; the bias line is capped
+ * so the budget stays near 100.
  *
  * <p>Loop: each step re-runs the whole decoder (there is no KV cache) and reads the logits at the
  * last filled slot; timestamps, the {@code <|startof…|>}/task/no-speech tokens, and EOT on the first
@@ -21,12 +22,6 @@ import java.util.Arrays;
  * repeats three times, the reference decoder's guard against runaway output.
  */
 final class WhisperDecoder {
-    /**
-     * The shell words the terminal bias prompt carries by default; measured to turn "Get status"
-     * into "git status". "key" biases the decoder towards the spoken-command phrasing
-     * ({@code VoiceCommand}'s default "enter key", "tab key", …).
-     */
-    static final String TERMINAL_VOCABULARY = "git ls cd sudo apt pkg tab enter escape ctrl key";
     /** The most tokens a bias line may take, {@code <|startofprev|>} excluded. */
     static final int MAX_BIAS_TOKENS = 24;
     static final int REPETITION_NGRAM = 4;
