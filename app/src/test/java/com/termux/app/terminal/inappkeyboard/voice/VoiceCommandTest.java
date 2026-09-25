@@ -28,6 +28,11 @@ public class VoiceCommandTest {
         assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("Control-C key.", false));
         assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("Ctrl+C Key", false));
         assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("ctrl c key", false));
+        // What small.en makes of "control c key" (replay rig, 2026-09-25).
+        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("c key", false));
+        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("Ckey.", false));
+        assertNull(VoiceCommand.classify("c", false));
+        assertNull(VoiceCommand.classify("see the c key", false));
         assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("cancel key", false));
     }
 

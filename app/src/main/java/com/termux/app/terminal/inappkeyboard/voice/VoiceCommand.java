@@ -68,8 +68,14 @@ public enum VoiceCommand {
             VoiceCommand bare = matchWord(text);
             if (bare != null) return bare;
         }
+        // Whisper small.en writes "control c key" as "c key" (or "ckey") on most voices in the
+        // replay rig: the bias line's "ctrl" splits into odd pieces and "control" is dropped. A
+        // lone "c key" is not something anyone dictates, so it is Ctrl+C.
+        if ("ckey".equals(text)) text = "c" + KEY_SUFFIX;
         if (!text.endsWith(KEY_SUFFIX)) return null;
-        return matchWord(text.substring(0, text.length() - KEY_SUFFIX.length()));
+        String word = text.substring(0, text.length() - KEY_SUFFIX.length());
+        if ("c".equals(word)) return CTRL_C;
+        return matchWord(word);
     }
 
     /** {@code text}, with no "key" suffix considered, against the known command words. */
