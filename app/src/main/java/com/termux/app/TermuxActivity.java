@@ -15503,6 +15503,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void openLayoutEditor() {
                 TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
             }
+            @Override public void openWallpaperPicker() {
+                TermuxActivity.this.openWallpaperPicker();
+            }
             @Override public void editWidgets() {
                 if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();
             }
@@ -15554,6 +15557,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public void openLayoutEditor() {
                 TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.DISPLAY);
+            }
+            @Override public void openWallpaperPicker() {
+                TermuxActivity.this.openWallpaperPicker();
             }
             @Override public void startDisplay() { startEmbeddedDisplay(); }
             @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
@@ -18832,6 +18838,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void openLayoutEditor() {
             TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.TERMINAL);
+        }
+
+        @Override public void openWallpaperPicker() {
+            TermuxActivity.this.openWallpaperPicker();
         }
 
         @Override public void openSettings() {

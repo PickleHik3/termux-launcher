@@ -56,6 +56,12 @@ public final class CornerTabGlyphs {
      */
     public static final String LAYOUT = "󰕮";
 
+    /**
+     * nf-md-wallpaper (U+F0E09, a surrogate pair like {@link #LAYOUT}): open the in-app wallpaper
+     * picker.
+     */
+    public static final String WALLPAPER = "󰸉";
+
     /** The question mark the help button wears, in the tab's text font rather than the symbols one. */
     @NonNull
     public static String help(@NonNull Context context) {

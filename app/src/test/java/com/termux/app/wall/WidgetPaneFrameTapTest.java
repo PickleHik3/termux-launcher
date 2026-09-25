@@ -53,8 +53,8 @@ public class WidgetPaneFrameTapTest {
     private static final int HEIGHT = 800;
     /** The square each corner keeps, the same one a terminal pane holds. */
     private static final float CORNER_DP = CornerZones.PANE_SIZE_DP;
-    /** The resting tab: five 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
-    private static final float TAB_WIDTH_DP = 192f;
+    /** The resting tab: six 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
+    private static final float TAB_WIDTH_DP = 230f;
     private static final float TAB_INSET_DP = 0f;
     /** One button and the gap after it. */
     private static final float TAB_STEP_DP = 38f;
@@ -68,6 +68,7 @@ public class WidgetPaneFrameTapTest {
         @Override public void showHelpOverlay() { log.add("help"); }
         @Override public void openSurfaceEditor() { log.add("appearance"); }
         @Override public void openLayoutEditor() { log.add("layout"); }
+        @Override public void openWallpaperPicker() { log.add("wallpaper"); }
         @Override public int widgetGridColumns() { return columns; }
         @Override public int widgetGridRows() { return rows; }
         @Override public void setWidgetGrid(int newColumns, int newRows) {
@@ -132,6 +133,11 @@ public class WidgetPaneFrameTapTest {
     /** The fourth button: the grid that opens Layout, one button and gap further along. */
     private static float layoutX(Activity activity) {
         return buttonX(activity, 3);
+    }
+
+    /** The fifth button: the wallpaper glyph, one button and gap past Layout. */
+    private static float wallpaperX(Activity activity) {
+        return buttonX(activity, 4);
     }
 
     private static float tabCentreY(Activity activity) {
@@ -438,8 +444,9 @@ public class WidgetPaneFrameTapTest {
     }
 
     /**
-     * The page's two editor doors, side by side: the sliders open Appearance, the grid beside
-     * them opens Layout, and either one puts the tab away behind it.
+     * The page's three editor doors, side by side: the sliders open Appearance, the grid beside
+     * them opens Layout, and the wallpaper glyph past that opens the wallpaper picker — each one
+     * puts the tab away behind it.
      */
     @Test
     public void theSlidersOpenAppearanceAndTheGridOpensLayout() {
@@ -457,6 +464,11 @@ public class WidgetPaneFrameTapTest {
         holdCorner(page);
         tap(page, layoutX(activity), bounds.centerY());
         assertEquals(Arrays.asList("appearance", "layout"), calls.log);
+        assertFalse(page.isControlsTabShown());
+
+        holdCorner(page);
+        tap(page, wallpaperX(activity), bounds.centerY());
+        assertEquals(Arrays.asList("appearance", "layout", "wallpaper"), calls.log);
         assertFalse(page.isControlsTabShown());
     }
 
