@@ -18,6 +18,8 @@ import java.util.List;
 public class VoiceActivityDetectorTest {
 
     private static final int FRAME = VoiceActivityDetector.FRAME_SAMPLES;
+    /** The smoothed level stays over the threshold this many frames after the last loud one. */
+    private static final int LAG = VoiceActivityDetector.SMOOTH_FRAMES - 1;
 
     private final List<short[]> segments = new ArrayList<>();
     private int silenceTimeouts;
@@ -82,14 +84,14 @@ public class VoiceActivityDetectorTest {
 
         assertEquals(1, segments.size());
         short[] segment = segments.get(0);
-        // 10 frames of pre-roll + 20 voiced + 10 frames of tail.
-        assertEquals(40, frames(segment));
+        // 10 frames of pre-roll + 20 voiced (+ the smoothing lag) + 10 frames of tail.
+        assertEquals(40 + LAG, frames(segment));
         assertTrue("pre-roll is quiet", isQuietFrame(segment, 0));
         assertTrue("pre-roll is quiet", isQuietFrame(segment, 9));
         assertFalse("speech follows the pre-roll", isQuietFrame(segment, 10));
         assertFalse("speech runs to the tail", isQuietFrame(segment, 29));
         assertTrue("tail is quiet", isQuietFrame(segment, 30));
-        assertTrue("tail is quiet", isQuietFrame(segment, 39));
+        assertTrue("tail is quiet", isQuietFrame(segment, 39 + LAG));
     }
 
     @Test
@@ -104,8 +106,8 @@ public class VoiceActivityDetectorTest {
         vad.feed(quiet(25), 25 * FRAME);
 
         assertEquals(2, segments.size());
-        assertEquals(10 + 15 + 10 + 15 + 10, frames(segments.get(0)));
-        assertEquals(10 + 15 + 10, frames(segments.get(1)));
+        assertEquals(10 + 15 + 10 + 15 + LAG + 10, frames(segments.get(0)));
+        assertEquals(10 + 15 + LAG + 10, frames(segments.get(1)));
     }
 
     @Test
@@ -143,7 +145,7 @@ public class VoiceActivityDetectorTest {
         assertEquals("fires once until speech resumes", 1, silenceTimeouts);
 
         vad.feed(tone(15), 15 * FRAME);
-        vad.feed(quiet(84), 84 * FRAME);       // counted from the last voiced frame
+        vad.feed(quiet(84 + LAG), (84 + LAG) * FRAME);   // counted from the last voiced frame
         assertEquals(2, silenceTimeouts);
     }
 
@@ -177,7 +179,7 @@ public class VoiceActivityDetectorTest {
         assertTrue("first piece fits the window with room for padding",
             frames(segments.get(0)) <= cutFrames);
         assertTrue(frames(segments.get(0)) > cutFrames - 34);
-        assertEquals(10 + 200 + 10, frames(segments.get(0)) + frames(segments.get(1)));
+        assertEquals(10 + 200 + LAG + 10, frames(segments.get(0)) + frames(segments.get(1)));
     }
 
     @Test
@@ -224,6 +226,30 @@ public class VoiceActivityDetectorTest {
         assertTrue(frames(segments.get(0)) < 25 + 2 * 10 + 20);
     }
 
+    /** Fan-like noise: {@link #noisy} whose level jumps ±{@code swingDb} from frame to frame. */
+    private static short[] fan(int frames, double meanDbfs, double swingDb, int seed) {
+        short[] out = new short[frames * FRAME];
+        java.util.Random random = new java.util.Random(seed);
+        for (int f = 0; f < frames; f++) {
+            double db = meanDbfs + (random.nextDouble() * 2 - 1) * swingDb;
+            System.arraycopy(noisy(1, db, Double.NaN, seed * 1000 + f), 0, out, f * FRAME, FRAME);
+        }
+        return out;
+    }
+
+    @Test
+    public void aFanDoesNotOpenSegments() {
+        // pong, 2026-09-25: a fan at about −59 dBFS mean whose frames swung ±5.5 dB; 9–17 frames a
+        // second crossed the onset and held "ls" inside a 6.9 s segment.
+        VoiceActivityDetector vad = detector(600, 10);
+        vad.feed(fan(170, -59, 5.5, 1), 170 * FRAME);           // ~5 s of fan alone
+        assertEquals(0, segments.size());
+        vad.feed(noisy(12, -59, -46, 2), 12 * FRAME);            // "ls"
+        vad.feed(fan(40, -59, 5.5, 3), 40 * FRAME);
+        assertEquals(1, segments.size());
+        assertTrue(frames(segments.get(0)) < 12 + LAG + 2 * 10 + 10);
+    }
+
     @Test
     public void partialReadsAreReassembledIntoFrames() {
         VoiceActivityDetector vad = detector(600, 10);
@@ -236,6 +262,6 @@ public class VoiceActivityDetectorTest {
         vad.feed(tone(20), 20 * FRAME);
         vad.feed(quiet(30), 30 * FRAME);
         assertEquals(1, segments.size());
-        assertEquals(40, frames(segments.get(0)));
+        assertEquals(40 + LAG, frames(segments.get(0)));
     }
 }

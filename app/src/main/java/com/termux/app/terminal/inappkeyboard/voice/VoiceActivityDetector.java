@@ -57,6 +57,12 @@ public final class VoiceActivityDetector {
      * its quieter words fell out of the segment; 10 over 5 s stays on the gaps between words.
      */
     static final int FLOOR_PERCENTILE = 10;
+    /**
+     * Voice decisions and the floor use the RMS averaged (in energy) over this many frames. A fan
+     * on pong swung 11 dB frame to frame and its peaks crossed the 9 dB onset; averaging 90 ms
+     * narrows that by ~5 dB while a syllable (~200 ms) keeps its level.
+     */
+    static final int SMOOTH_FRAMES = 3;
     /** Frames needed before the floor means anything; until then nothing is voiced. */
     private static final int FLOOR_MIN_FRAMES = 8;
     /** The window cut is searched for within the last second of the segment. */
@@ -106,6 +112,10 @@ public final class VoiceActivityDetector {
     private final float[] floorSorted = new float[FLOOR_WINDOW_MS / FRAME_MS];
     private int floorCount;
     private int floorNext;
+    /** The last {@link #SMOOTH_FRAMES} frame energies (RMS squared), a ring. */
+    private final float[] recentEnergy = new float[SMOOTH_FRAMES];
+    private int recentCount;
+    private int recentNext;
 
     /**
      * @param pauseMs         silence that closes a segment (400–1200 ms from settings)
@@ -157,10 +167,11 @@ public final class VoiceActivityDetector {
 
     private void processFrame(@NonNull short[] frame) {
         float rms = rms(frame);
-        updateNoiseFloor(rms);
+        float smoothed = smooth(rms);
+        updateNoiseFloor(smoothed);
         float overFloor = inSpeech ? HOLD_OVER_FLOOR : VOICE_OVER_FLOOR;
         boolean voiced = floorCount >= FLOOR_MIN_FRAMES
-            && rms > Math.max(noiseFloor * overFloor, ABSOLUTE_FLOOR);
+            && smoothed > Math.max(noiseFloor * overFloor, ABSOLUTE_FLOOR);
         listener.onLevel(rms, voiced, noiseFloor);
         frames.add(frame);
         voicedFlags.add(voiced);
@@ -241,6 +252,16 @@ public final class VoiceActivityDetector {
             inSpeech = false;
             trimToPreRoll();
         }
+    }
+
+    /** {@code rms} folded into the running {@link #SMOOTH_FRAMES}-frame energy average, as an RMS. */
+    private float smooth(float rms) {
+        recentEnergy[recentNext] = rms * rms;
+        recentNext = (recentNext + 1) % recentEnergy.length;
+        if (recentCount < recentEnergy.length) recentCount++;
+        float sum = 0f;
+        for (int i = 0; i < recentCount; i++) sum += recentEnergy[i];
+        return (float) Math.sqrt(sum / recentCount);
     }
 
     private void updateNoiseFloor(float rms) {
