@@ -8,7 +8,6 @@ import android.os.Bundle;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.preference.ListPreference;
 import androidx.preference.MultiSelectListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
@@ -94,7 +93,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         preferenceManager.setPreferenceDataStore(store);
         setPreferencesFromResource(R.xml.termux_keyboard_preferences, rootKey);
 
-        ListPreference inputMethodPreference = findPreference("keyboard_input_method");
+        SegmentedPillPreference inputMethodPreference = findPreference("keyboard_input_method");
         if (inputMethodPreference != null) {
             updateBuiltInKeyboardRows("built_in".equals(inputMethodPreference.getValue()));
             inputMethodPreference.setOnPreferenceChangeListener((preference, newValue) -> {
@@ -133,7 +132,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             return true;
         });
 
-        ListPreference voiceEngine = findPreference(KEY_VOICE_ENGINE);
+        SegmentedPillPreference voiceEngine = findPreference(KEY_VOICE_ENGINE);
         if (voiceEngine != null) {
             voiceEngine.setOnPreferenceChangeListener((preference, newValue) -> {
                 // On-device needs a speech model; without one the choice would only ever fall

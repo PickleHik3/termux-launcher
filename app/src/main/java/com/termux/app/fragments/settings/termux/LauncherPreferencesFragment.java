@@ -12,7 +12,6 @@ import android.provider.Settings;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationManagerCompat;
-import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
@@ -80,7 +79,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             updateNotificationDotsSummary(context, notificationDotsPreference);
         }
 
-        ListPreference lockMethodPreference = findPreference("app_launcher_az_lock_method");
+        Preference lockMethodPreference = findPreference("app_launcher_az_lock_method");
         if (lockMethodPreference != null) {
             lockMethodPreference.setOnPreferenceChangeListener((preference, newValue) -> {
                 if ("accessibility".equals(newValue) && !LauncherLockAccessibilityAccess.isEnabled(context)) {

@@ -55,7 +55,7 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
         manager.setPreferenceDataStore(new X11DisplayPreferencesDataStore(context));
         setPreferencesFromResource(R.xml.x11_display_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
-        ListPreference touch = findPreference(KEY_TOUCH_MODE);
+        com.termux.app.fragments.settings.SegmentedPillPreference touch = findPreference(KEY_TOUCH_MODE);
         if (touch != null) {
             applyKeyboardFollowsTextRow(touch.getValue());
             touch.setOnPreferenceChangeListener((preference, value) -> {

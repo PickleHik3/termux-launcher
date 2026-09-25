@@ -78,14 +78,13 @@
             app:key="app_launcher_set_home"
             app:title="@string/settings_set_default_launcher_title"
             app:summary="@string/settings_set_default_launcher_summary" />
-        <ListPreference
+        <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="app_launcher_az_lock_method"
             app:title="@string/settings_double_tap_action_title"
             app:summary="@string/settings_double_tap_action_summary"
             android:defaultValue="off"
             app:entries="@array/app_launcher_az_lock_method_entries"
-            app:entryValues="@array/app_launcher_az_lock_method_values"
-            app:useSimpleSummaryProvider="true" />
+            app:entryValues="@array/app_launcher_az_lock_method_values" />
         <Preference
             app:key="app_launcher_help"
             app:title="@string/help_settings_title"
