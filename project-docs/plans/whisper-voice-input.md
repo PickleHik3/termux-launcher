@@ -422,3 +422,63 @@ Two more from the Freestyle comparison (recommendation 3 and §4 "LLM cleanup"),
 - Device on pong (with permission, phone not in the developer's hands): base.en 10 s latency per
   segment, "ls … enter" in a terminal, dictation into a Claude Code session while it streams a reply
   (the separate executor).
+
+## Replay rig (2026-09-25)
+
+Voice changes can be tested on this Linux machine from a recording instead of on the phone:
+`VoiceReplayCore` (unit-tested in isolation with a fake transcriber) feeds a WAV — a whole mic
+session, 16 kHz mono PCM16 — through the real `VoiceActivityDetector` in 30 ms reads, exactly as
+`VoiceInputSession.capture` does (silence auto-stop has no equivalent here, so it is always
+disabled); each segment goes through `VoiceGain` and then a Python Whisper server for the
+transcript, and the result through the real `VoiceCommand`/`VoiceTerminalCleanup` classification.
+`VoiceReplayRig` (`app/src/test/.../voice/VoiceReplayRig.java`) is the JUnit entry point — it stays
+skipped (`Assume`) unless `-Dvoice.replay.in` is set, so an ordinary test run never touches it.
+
+**Recordings.** Debug builds keep `cache/voice-debug/session-<yyyyMMdd-HHmmss>.pcm` (the whole
+session's audio as the VAD sees it, after the lead-in discard; newest 5 kept) alongside the
+existing per-segment `segment-N.pcm`. Pull them:
+
+```
+scripts/voice_pull_sessions.sh                      # → ~/.cache/termux-launcher/voice-clips/*.wav
+```
+
+These are the developer's own voice and are never committed. `.expect` files (see below) and
+synthetic/mixed test clips can live anywhere outside the repo, e.g. that same directory.
+
+**Noisy variants**, mixing a clean speech WAV with room noise:
+
+```
+python3 scripts/voice_mix.py speech.wav noise.wav out.wav --snr 10 --lead 1.5 --trail 1.5
+```
+
+**Running the rig**, against a directory of WAVs (an `<clip>.expect` next to a WAV — one event per
+line, `text ls` / `key ENTER` / `dropped` — turns its clip into a pass/fail):
+
+```
+./gradlew :app:testDebugUnitTest --tests VoiceReplayRig \
+  -Dvoice.replay.in=$HOME/.cache/termux-launcher/voice-clips \
+  -Dvoice.replay.model=base \
+  -Dvoice.replay.terminal=true \
+  -Dvoice.replay.out=app/build/voice-replay
+```
+
+Properties (all optional but `voice.replay.in`, which also gates the whole test):
+`voice.replay.in` (a WAV or a directory), `voice.replay.model` (`base` default, or `small`),
+`voice.replay.terminal` (the shell-vocabulary bias prompt and terminal cleanup; default `true`),
+`voice.replay.bare` ("Bare command words"; default `false`), `voice.replay.pause` (VAD pause ms,
+default 600, `VoiceInputSession`'s own default), `voice.replay.out` (default
+`app/build/voice-replay`), `voice.replay.python` (default
+`~/.cache/termux-launcher/venv/bin/python`). The event log and pass/fail land both on stdout and
+in `<out>/report.txt`; per-segment WAVs sent to the Python server are written under
+`<out>/segments/` and deleted as they are consumed.
+
+**How the bias prompt stays exact.** `WhisperDecoder`/`WhisperTokenizer` are package-private to
+`com.termux.ai`; rather than re-implementing their BPE encode in Python (a second place for it to
+drift out of sync), `VoiceReplayRig` reads the real classes by reflection at startup — the
+terminal vocabulary, the built prompt token ids (with and without the bias line) and the
+suppression ids — and hands them to `scripts/whisper_replay_server.py` as its startup arguments.
+The server (a persistent process, one JSON line in, one out, reusing
+`whisper_reference_decoder`'s mel front end and tokenizer decode) then only needs to run the
+greedy loop against ids it was given, plus a Python mirror of `WhisperSegmenter`'s own behaviour
+(drop a piece with under 0.3 s voiced; pad speech to 0.3 s from the edges) that the runtime applies
+on top of what the VAD already segmented.

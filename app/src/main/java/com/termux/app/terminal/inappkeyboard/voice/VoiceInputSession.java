@@ -17,11 +17,16 @@ import com.termux.shared.logger.Logger;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -53,6 +58,10 @@ public final class VoiceInputSession {
     /** Per-segment STT deadline: {@code base + multiplier × the segment's own audio length}. */
     private static final long SEGMENT_TIMEOUT_BASE_MS = 5_000L;
     private static final long SEGMENT_TIMEOUT_AUDIO_MULTIPLIER = 3L;
+    /** Where debug builds keep {@code segment-N.pcm} and {@code session-<timestamp>.pcm} for the replay rig. */
+    private static final String DEBUG_DIR = "voice-debug";
+    /** How many whole-session recordings {@link #pruneOldSessionRecordings} keeps; older ones are deleted. */
+    private static final int MAX_SESSION_RECORDINGS = 5;
 
     /** Why the microphone was released. */
     public enum EndReason { SILENCE, USER, HIDDEN, PAUSED, DESTROYED, FAILED }
@@ -327,6 +336,7 @@ public final class VoiceInputSession {
         VoiceLeadInDiscard leadIn = new VoiceLeadInDiscard(
             feedback.playsTones() ? VoiceLeadInDiscard.START_TONE_MS : 0, VoiceActivityDetector.SAMPLE_RATE);
         short[] buffer = new short[VoiceActivityDetector.FRAME_SAMPLES];
+        OutputStream sessionRecording = BuildConfig.DEBUG ? openSessionRecording() : null;
         try {
             while (!stopRequested.get()) {
                 int read = recorder.read(buffer, 0, buffer.length);
@@ -335,11 +345,22 @@ public final class VoiceInputSession {
                     break;
                 }
                 int drop = leadIn.take(read);
-                if (drop < read) detector.feed(buffer, drop, read - drop);
+                if (drop < read) {
+                    detector.feed(buffer, drop, read - drop);
+                    if (sessionRecording != null) writePcmLittleEndian(sessionRecording, buffer, drop, read - drop);
+                }
             }
             // A tap in the middle of a phrase still sends what was said.
             if (!failed.get()) detector.finish();
         } finally {
+            if (sessionRecording != null) {
+                try {
+                    sessionRecording.close();
+                } catch (IOException e) {
+                    Logger.logWarn(LOG_TAG, "closing the session recording failed: " + e.getMessage());
+                }
+                pruneOldSessionRecordings();
+            }
             try {
                 recorder.stop();
             } catch (IllegalStateException ignored) {
@@ -547,7 +568,7 @@ public final class VoiceInputSession {
      * {@code tai transcribe} when a phrase comes out wrong.
      */
     private void keepForDebugging(int sequence, @NonNull short[] pcm) {
-        File dir = new File(appContext.getCacheDir(), "voice-debug");
+        File dir = new File(appContext.getCacheDir(), DEBUG_DIR);
         if (!dir.isDirectory() && !dir.mkdirs()) return;
         ByteBuffer bytes = ByteBuffer.allocate(pcm.length * 2).order(ByteOrder.LITTLE_ENDIAN);
         bytes.asShortBuffer().put(pcm);
@@ -555,6 +576,53 @@ public final class VoiceInputSession {
             stream.write(bytes.array());
         } catch (IOException e) {
             Logger.logWarn(LOG_TAG, "keeping the debug segment failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Debug builds also keep the whole session's audio as the VAD sees it (after the lead-in
+     * discard) in {@code cache/voice-debug/session-<yyyyMMdd-HHmmss>.pcm}, for
+     * {@code VoiceReplayRig} to feed back through the same detector on a host machine. Streamed
+     * from the capture thread through a small buffer, never held in memory as one array; {@code null}
+     * when the file could not be opened, which the capture loop then simply does not record to.
+     */
+    @Nullable
+    private OutputStream openSessionRecording() {
+        File dir = new File(appContext.getCacheDir(), DEBUG_DIR);
+        if (!dir.isDirectory() && !dir.mkdirs()) return null;
+        String name = "session-" + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".pcm";
+        try {
+            return new BufferedOutputStream(new FileOutputStream(new File(dir, name)));
+        } catch (IOException e) {
+            Logger.logWarn(LOG_TAG, "opening the session recording failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /** {@code pcm[offset, offset + count)} as little-endian PCM16 bytes, straight to {@code out}. */
+    private static void writePcmLittleEndian(@NonNull OutputStream out, @NonNull short[] pcm, int offset, int count) {
+        try {
+            byte[] bytes = new byte[count * 2];
+            for (int i = 0; i < count; i++) {
+                short sample = pcm[offset + i];
+                bytes[i * 2] = (byte) sample;
+                bytes[i * 2 + 1] = (byte) (sample >> 8);
+            }
+            out.write(bytes);
+        } catch (IOException e) {
+            Logger.logWarn(LOG_TAG, "writing the session recording failed: " + e.getMessage());
+        }
+    }
+
+    /** Deletes every {@code session-*.pcm} beyond the {@link #MAX_SESSION_RECORDINGS} newest (by name, which sorts chronologically). */
+    private void pruneOldSessionRecordings() {
+        File dir = new File(appContext.getCacheDir(), DEBUG_DIR);
+        File[] files = dir.listFiles((d, name) -> name.startsWith("session-") && name.endsWith(".pcm"));
+        if (files == null || files.length <= MAX_SESSION_RECORDINGS) return;
+        Arrays.sort(files, (a, b) -> b.getName().compareTo(a.getName()));
+        for (int i = MAX_SESSION_RECORDINGS; i < files.length; i++) {
+            //noinspection ResultOfMethodCallIgnored
+            files[i].delete();
         }
     }
 
