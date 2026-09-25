@@ -115,9 +115,7 @@ public final class PrivilegedLaneService extends IPrivilegedLane.Stub {
                 throw new IllegalArgumentException("stage() wants a hex sha256, not '" + sha256 + "'");
             }
             File bin = new File(BIN_DIR);
-            if (!bin.isDirectory() && !bin.mkdirs()) {
-                throw new IllegalStateException("cannot create " + bin);
-            }
+            ensurePrivateDir(bin);
             File dest = new File(bin, name + "-" + digest.substring(0, DIGEST_PREFIX_LENGTH));
             if (!isAlreadyStaged(dest, digest)) {
                 copyInto(in, dest, digest);
@@ -132,6 +130,20 @@ public final class PrivilegedLaneService extends IPrivilegedLane.Stub {
         }
     }
 
+    /**
+     * Creates {@code dir} and makes it and every parent up to {@link #ROOT_DIR} mode 0700. The
+     * service's umask is 0, so a plain mkdirs() leaves them world-writable, and a staged binary
+     * any uid could swap would then run as shell.
+     */
+    private static void ensurePrivateDir(@NonNull File dir) throws ErrnoException {
+        if (!dir.isDirectory() && !dir.mkdirs()) {
+            throw new IllegalStateException("cannot create " + dir);
+        }
+        for (File d = dir; d != null && d.getPath().startsWith(ROOT_DIR); d = d.getParentFile()) {
+            Os.chmod(d.getPath(), 0700);
+        }
+    }
+
     @Override
     public ParcelFileDescriptor spawn(String path, String[] args, String[] extraEnv, int rows, int cols, int[] pidOut) {
         if (pidOut == null || pidOut.length < 1) throw new IllegalArgumentException("pidOut must hold one int");
@@ -143,8 +155,10 @@ public final class PrivilegedLaneService extends IPrivilegedLane.Stub {
         }
         String name = nameOf(binary.getName());
         File home = new File(HOME_DIR, name);
-        if (!home.isDirectory() && !home.mkdirs()) {
-            throw new IllegalStateException("cannot create " + home);
+        try {
+            ensurePrivateDir(home);
+        } catch (ErrnoException e) {
+            throw new IllegalStateException("cannot make " + home + " private: " + e.getMessage(), e);
         }
 
         Map<String, String> env = new LinkedHashMap<>();
