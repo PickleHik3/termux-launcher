@@ -50,9 +50,13 @@ public final class VoiceActivityDetector {
     /** About −34 dBFS: a noise floor above this is speech being mistaken for noise. */
     static final float NOISE_FLOOR_CAP = 0.02f;
     /** How much recent audio the noise floor is measured over. */
-    static final int FLOOR_WINDOW_MS = 3_000;
-    /** The floor is this percentile of the window's frame RMS: the room between words. */
-    static final int FLOOR_PERCENTILE = 20;
+    static final int FLOOR_WINDOW_MS = 5_000;
+    /**
+     * The floor is this percentile of the window's frame RMS: the room between words. At 20 over
+     * 3 s, a sentence spoken for several seconds on pong lifted the floor from −62 to −55 dBFS and
+     * its quieter words fell out of the segment; 10 over 5 s stays on the gaps between words.
+     */
+    static final int FLOOR_PERCENTILE = 10;
     /** Frames needed before the floor means anything; until then nothing is voiced. */
     private static final int FLOOR_MIN_FRAMES = 8;
     /** The window cut is searched for within the last second of the segment. */
