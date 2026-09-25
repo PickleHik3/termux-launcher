@@ -100,12 +100,12 @@ public final class VoiceListeningIndicator {
         return pill != null;
     }
 
-    /** A level sample; also keeps the pill above the keyboard as it moves. */
-    public void setLevel(float rms, boolean voiced) {
+    /** A level sample, with the VAD's current noise floor; also keeps the pill above the keyboard as it moves. */
+    public void setLevel(float rms, boolean voiced, float noiseFloor) {
         LevelMeterView levels = meter;
         LinearLayout view = pill;
         if (levels == null || view == null) return;
-        levels.setLevel(rms, voiced);
+        levels.setLevel(rms, voiced, noiseFloor);
         ViewGroup content = (ViewGroup) view.getParent();
         if (content == null) return;
         int margin = bottomMargin(content);
@@ -151,13 +151,23 @@ public final class VoiceListeningIndicator {
         return 0xFF888888;
     }
 
-    /** Five bars that light up with the microphone level, on a −50…−10 dBFS scale. */
+    /**
+     * Five bars that light up with the microphone level, measured in dB above the VAD's adaptive
+     * noise floor through {@link VoiceLevelCurve} — a fixed dBFS window left ordinary speech
+     * (−40…−25 dBFS, since {@code VOICE_RECOGNITION} has no AGC) filling barely a quarter of it.
+     */
     static final class LevelMeterView extends View {
+        /** Per-frame decay once the peak hold has run out (Freestyle's pill decays at 0.78–0.8/frame). */
+        private static final float DECAY = 0.78f;
+        /** How many 30 ms frames a peak is held before it starts to decay, so a single syllable stays visible. */
+        private static final int PEAK_HOLD_FRAMES = 6;
 
         private final Paint lit = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint dim = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF bar = new RectF();
         private float level;
+        private float peak;
+        private int peakHoldFrames;
 
         LevelMeterView(@NonNull Context context, int accent, int onSurface) {
             super(context);
@@ -165,12 +175,25 @@ public final class VoiceListeningIndicator {
             dim.setColor((onSurface & 0x00FFFFFF) | 0x33000000);
         }
 
-        void setLevel(float rms, boolean voiced) {
-            float db = rms <= 0f ? -100f : (float) (20.0 * Math.log10(rms));
-            float target = Math.max(0f, Math.min(1f, (db + 50f) / 40f));
-            // Rises at once, decays over a few frames, so single syllables stay visible.
-            level = target > level ? target : level * 0.8f;
-            if (!voiced && level < 0.05f) level = 0f;
+        void setLevel(float rms, boolean voiced, float noiseFloor) {
+            float target = VoiceLevelCurve.level(rms, noiseFloor);
+            if (target >= peak) {
+                // Rises at once and arms the hold.
+                level = target;
+                peak = target;
+                peakHoldFrames = PEAK_HOLD_FRAMES;
+            } else if (peakHoldFrames > 0) {
+                peakHoldFrames--;
+                level = peak;
+            } else {
+                level = level * DECAY;
+                peak = level;
+            }
+            if (!voiced && level < 0.05f) {
+                level = 0f;
+                peak = 0f;
+                peakHoldFrames = 0;
+            }
             invalidate();
         }
 

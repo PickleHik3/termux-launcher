@@ -25,7 +25,7 @@ public class VoiceActivityDetectorTest {
     private VoiceActivityDetector detector(int pauseMs, int windowSeconds) {
         return new VoiceActivityDetector(new VoiceActivityDetector.Listener() {
             @Override
-            public void onLevel(float rms, boolean voiced) {
+            public void onLevel(float rms, boolean voiced, float noiseFloor) {
             }
 
             @Override

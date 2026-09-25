@@ -74,8 +74,11 @@ public final class VoiceInputSession {
         /** The microphone is open and being read. */
         void onListening();
 
-        /** A level sample, roughly every 30 ms while listening. */
-        void onLevel(float rms, boolean voiced);
+        /**
+         * A level sample, roughly every 30 ms while listening, with the VAD's noise floor at that
+         * moment (the level meter measures from it, not an absolute dBFS scale).
+         */
+        void onLevel(float rms, boolean voiced, float noiseFloor);
 
         /** A non-empty transcript, in the order its segment was spoken. */
         void onTranscript(@NonNull String text);
@@ -198,9 +201,9 @@ public final class VoiceInputSession {
     private void capture(@NonNull AudioRecord recorder) {
         VoiceActivityDetector detector = new VoiceActivityDetector(new VoiceActivityDetector.Listener() {
             @Override
-            public void onLevel(float rms, boolean voiced) {
+            public void onLevel(float rms, boolean voiced, float noiseFloor) {
                 mainHandler.post(() -> {
-                    if (!ended) host.onLevel(rms, voiced);
+                    if (!ended) host.onLevel(rms, voiced, noiseFloor);
                 });
             }
 

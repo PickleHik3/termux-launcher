@@ -43,8 +43,11 @@ public final class VoiceActivityDetector {
     private static final int CUT_SEARCH_FRAMES = 1000 / FRAME_MS;
 
     public interface Listener {
-        /** Every frame: its RMS in [0, 1] and whether it counted as speech. */
-        void onLevel(float rms, boolean voiced);
+        /**
+         * Every frame: its RMS in [0, 1], whether it counted as speech, and the adaptive noise
+         * floor at that moment (for a level meter measured from the floor, not an absolute scale).
+         */
+        void onLevel(float rms, boolean voiced, float noiseFloor);
 
         /** A closed segment, padding included, at least {@link #MIN_VOICED_MS} of it voiced. */
         void onSegment(@NonNull short[] pcm);
@@ -120,7 +123,7 @@ public final class VoiceActivityDetector {
             if (rms < noiseFloor) noiseFloor = rms;
             else noiseFloor = Math.min(NOISE_FLOOR_CAP, noiseFloor + (rms - noiseFloor) * FLOOR_RISE);
         }
-        listener.onLevel(rms, voiced);
+        listener.onLevel(rms, voiced, noiseFloor);
         frames.add(frame);
         voicedFlags.add(voiced);
         frameLevels.add(rms);

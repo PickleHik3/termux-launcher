@@ -13681,14 +13681,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public void onLevel(float rms, boolean voiced) {
+        public void onLevel(float rms, boolean voiced, float noiseFloor) {
             // The keyboard can go down without telling the visibility listener (a focus hide);
             // the level tick, some 30 times a second, is where that is noticed.
             if (mInAppKeyboard == null || !mInAppKeyboard.isVisible()) {
                 endVoiceInput(VoiceInputSession.EndReason.HIDDEN);
                 return;
             }
-            if (mVoiceIndicator != null) mVoiceIndicator.setLevel(rms, voiced);
+            if (mVoiceIndicator != null) mVoiceIndicator.setLevel(rms, voiced, noiseFloor);
         }
 
         @Override
