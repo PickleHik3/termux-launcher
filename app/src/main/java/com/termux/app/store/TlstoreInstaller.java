@@ -46,8 +46,7 @@ import java.util.function.Consumer;
  *
  * <p>It also ships {@code tlstore-ui}, the full-screen store UI, the same way: one asset per ABI
  * ({@code tlstore/tlstore-ui-<abi>}, plain assets rather than a {@code jniLibs} entry, since this
- * is a regular program a shell execs, not a library the app dlopens — see
- * {@code project-docs/tlstore/REVISION-5.md#launcher-hooks} for why that split is safe here). The
+ * is a regular program a shell execs, not a library the app dlopens). The
  * device's first supported ABI with a matching asset wins; a device with none bundled gets nothing
  * written and keeps whatever was there before, so {@code tlstore} falls back to printing the list.
  * A binary already in place that this class did not write (no matching {@code .tlstore-ui-sha256}
@@ -70,7 +69,9 @@ public final class TlstoreInstaller {
     private static final String TLSTORE_ASSET = "tlstore/tlstore";
     private static final String CATALOG_ASSET = "tlstore/catalog.tsv";
     private static final String TRUSTED_KEY_ASSET = "tlstore/trusted.pub";
-    private static final String MOTD_ASSET = "tlstore/motd.sh";
+    /** {@code motd.sh} ships at the assets root, not under {@code tlstore/}: it is the launcher's
+     *  own welcome text, not part of the pinned tlstore release (see {@code app/tlstore.lock}). */
+    private static final String MOTD_ASSET = "motd.sh";
     /** {@code tlstore/tlstore-ui-<abi>}, e.g. {@code tlstore/tlstore-ui-arm64-v8a}. */
     private static final String TLSTORE_UI_ASSET_PREFIX = "tlstore/tlstore-ui-";
 

@@ -1,3 +1,0 @@
-#!/bin/sh
-d=$(cd "$(dirname "$0")/.." && pwd)
-printf '%s\n' "$*" >> "$d/launcherctl.log"
