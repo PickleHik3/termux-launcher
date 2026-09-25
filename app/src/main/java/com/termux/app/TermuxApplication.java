@@ -33,6 +33,7 @@ import com.termux.shared.theme.NightMode;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.app.notice.AppNotice;
 import com.termux.launcherctl.LauncherCtlApiServer;
+import com.termux.privileged.lane.PrivilegedLaneServer;
 
 import java.util.Properties;
 
@@ -101,6 +102,9 @@ public class TermuxApplication extends Application {
         } else {
             Logger.logErrorExtended(LOG_TAG, "Termux files directory is not accessible\n" + error);
         }
+        // The privileged lane's socket (@<package>.priv): catalog tools that run as shell through
+        // Shizuku. It starts whether or not Shizuku is there, so a client always gets an answer.
+        PrivilegedLaneServer.getInstance().start(context);
         // Init TermuxShellEnvironment constants and caches after everything has been setup including termux-am-socket server
         TermuxShellEnvironment.init(this);
         if (isTermuxFilesDirectoryAccessible) {

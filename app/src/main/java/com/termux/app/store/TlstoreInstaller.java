@@ -65,6 +65,20 @@ public final class TlstoreInstaller {
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
     private static final String LIBEXEC_DIR = PREFIX + "/libexec/termux-launcher/tlstore";
     private static final String DATA_HOME_DIR = TermuxConstants.TERMUX_DATA_HOME_DIR_PATH;
+    /** The engine's {@code DATA_DIR}: where a refreshed catalog and the installed state live. */
+    private static final String USER_DATA_DIR = TermuxConstants.TERMUX_HOME_DIR_PATH + "/.local/share/tlstore";
+
+    /** The catalog this class writes from the APK: the engine's {@code BASE_CATALOG}. */
+    @NonNull
+    public static File shippedCatalogFile() {
+        return new File(LIBEXEC_DIR, "catalog.tsv");
+    }
+
+    /** The catalog {@code tlstore refresh} downloads: the engine's {@code USER_CATALOG}, which wins when newer. */
+    @NonNull
+    public static File refreshedCatalogFile() {
+        return new File(USER_DATA_DIR, "catalog.tsv");
+    }
 
     private static final String TLSTORE_ASSET = "tlstore/tlstore";
     private static final String CATALOG_ASSET = "tlstore/catalog.tsv";

@@ -1344,6 +1344,18 @@
             <string name="termux_privileged_request_permission_requested">Shizuku permission requested.</string>
             <string name="termux_privileged_request_permission_unavailable">Permission request unavailable for current backend state.</string>
 
+            <string name="termux_privileged_lane_title">Privileged lane</string>
+            <string name="termux_privileged_lane_status_title">Lane status</string>
+            <string name="termux_privileged_lane_status_summary">Catalog tools marked priv=shizuku start as the shell user inside a terminal session.</string>
+            <string name="termux_privileged_lane_state_running">Running as shell (uid %1$d)</string>
+            <string name="termux_privileged_lane_state_binding">Connecting to Shizuku…</string>
+            <string name="termux_privileged_lane_state_no_shizuku">Shizuku isn\'t running</string>
+            <string name="termux_privileged_lane_state_no_permission">Shizuku permission missing</string>
+            <string name="termux_privileged_lane_state_off">Off</string>
+            <string name="termux_privileged_lane_enabled_title">Allow catalog tools to run as shell via Shizuku</string>
+            <string name="termux_privileged_lane_enabled_on">A tool the catalog marks priv=shizuku (btop, for one) may start as the shell user from a terminal session.</string>
+            <string name="termux_privileged_lane_enabled_off">Every request from the terminal is refused.</string>
+
             <!-- Background Category -->
             <string name="termux_use_system_wallpaper_summary">Shows the current system wallpaper behind launcher surfaces.</string>
             <string name="termux_fullscreen_title">Fullscreen</string>

@@ -173,6 +173,8 @@ android {
 
     buildFeatures {
         buildConfig true
+        // The privileged lane's Shizuku user service (src/main/aidl/com/termux/privileged/lane).
+        aidl true
     }
 
     sourceSets {
