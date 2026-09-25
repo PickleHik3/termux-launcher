@@ -180,6 +180,8 @@ public final class SegmentedPillPreference extends Preference {
             label.setOnClickListener(view -> setValue(value, track, indicator, true));
         }
         track.setContentDescription(getTitle());
+        // Labels are coloured by hand, so a disabled row would otherwise look live.
+        track.setAlpha(isEnabled() ? 1f : 0.38f);
         track.post(() -> {
             updateIndicatorWidth(track, indicator);
             indicator.setVisibility(selectedIndex() < 0 ? View.INVISIBLE : View.VISIBLE);
