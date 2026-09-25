@@ -123,6 +123,12 @@ public final class VoiceListeningIndicator {
         if (view != null) view.setText(text);
     }
 
+    /** The mic has closed but a captured segment is still transcribing: "Listening…" no longer fits. */
+    public void setTranscribing() {
+        TextView view = label;
+        if (view != null) view.setText(R.string.voice_input_transcribing);
+    }
+
     /** The room under the pill: from the content frame's bottom up to the keyboard's top, plus a gap. */
     private int bottomMargin(@NonNull ViewGroup content) {
         int gap = dp(8);

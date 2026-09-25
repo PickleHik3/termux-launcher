@@ -9797,13 +9797,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override
         public void requestVoiceTyping(boolean chooser) {
             // Long-press keeps the system chooser; a tap takes the engine the settings name, and
-            // a tap while the on-device engine is listening is how a session is ended by hand.
+            // a tap while the on-device engine is listening is how a session is ended by hand. A
+            // tap once the mic has already closed and captured segments are still transcribing
+            // means "stop trying": discard them instead of waiting for a hung or slow drain.
             if (chooser || !mPreferences.isInAppKeyboardVoiceOnDevice()) {
                 launchVoiceTyping(chooser);
                 return;
             }
             if (mVoiceInput != null) {
-                mVoiceInput.stop(VoiceInputSession.EndReason.USER);
+                if (mVoiceInput.isStopRequested()) {
+                    mVoiceInput.cancel(VoiceInputSession.EndReason.USER);
+                } else {
+                    mVoiceInput.stop(VoiceInputSession.EndReason.USER);
+                }
                 return;
             }
             startOnDeviceVoiceInput();
@@ -13699,6 +13705,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override
         public void onTranscript(@NonNull String text) {
             insertVoiceTranscript(text);
+        }
+
+        @Override
+        public void onDraining() {
+            if (mVoiceIndicator != null) mVoiceIndicator.setTranscribing();
         }
 
         @Override

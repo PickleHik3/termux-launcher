@@ -45,6 +45,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class VoiceInputSession {
 
     private static final String LOG_TAG = "VoiceInputSession";
+    /** Per-segment STT deadline: {@code base + multiplier × the segment's own audio length}. */
+    private static final long SEGMENT_TIMEOUT_BASE_MS = 5_000L;
+    private static final long SEGMENT_TIMEOUT_AUDIO_MULTIPLIER = 3L;
 
     /** Why the microphone was released. */
     public enum EndReason { SILENCE, USER, HIDDEN, PAUSED, DESTROYED, FAILED }
@@ -98,6 +101,12 @@ public final class VoiceInputSession {
 
         /** A non-empty transcript, in the order its segment was spoken. */
         void onTranscript(@NonNull String text);
+
+        /**
+         * The microphone has closed but at least one captured segment is still transcribing —
+         * shown as a "Transcribing…" pill, since {@link #onListening}'s "Listening…" no longer fits.
+         */
+        void onDraining();
 
         /**
          * The runtime refused or failed ({@code stt_model_not_configured}, {@code insufficient_memory},
@@ -201,10 +210,20 @@ public final class VoiceInputSession {
         }
     }
 
-    /** Releases the microphone and drops every result still in flight. */
+    /**
+     * Releases the microphone and drops every result still in flight — the undelivered segments
+     * finish transcribing (or time out) on their own but are never typed. Ends the session at once
+     * even when {@link #stop} has already been called and is only waiting on those segments, which
+     * is exactly the tap {@link #isStopRequested} is for: a hung or slow drain no longer leaves the
+     * pill and the pressed key up until the last segment comes back.
+     */
     public void cancel(@NonNull EndReason reason) {
         cancelled = true;
-        mainHandler.post(() -> discardResults = true);
+        mainHandler.post(() -> {
+            discardResults = true;
+            if (endReason == null) endReason = reason;
+            maybeEnd();
+        });
         stop(reason);
     }
 
@@ -255,6 +274,9 @@ public final class VoiceInputSession {
             stopRequested.set(true);
             mainHandler.post(() -> {
                 if (endReason == null) endReason = EndReason.FAILED;
+                // The mic has just closed; a segment already sent for transcription still has to
+                // come back (or time out) before the session actually ends.
+                if (!ended && !discardResults && submitted.get() > delivered) host.onDraining();
                 maybeEnd();
             });
         }
@@ -297,7 +319,11 @@ public final class VoiceInputSession {
             if (!config.modelId.isEmpty()) request.put("model", config.modelId);
             if (config.language != null) request.put("language", config.language);
             if (config.terminalPrompt) request.put("prompt_mode", "terminal");
-            JSONObject result = TaiManager.getInstance(appContext).transcribe(request.toString());
+            // A deadline per segment, not the IPC client's flat 120 s: a hung runtime would
+            // otherwise leave the pill and the pressed key up for minutes with nothing to show for
+            // it. base.en does a short phrase in well under a second, so this has plenty of room.
+            long timeoutMs = SEGMENT_TIMEOUT_BASE_MS + SEGMENT_TIMEOUT_AUDIO_MULTIPLIER * segmentMs;
+            JSONObject result = TaiManager.getInstance(appContext).transcribe(request.toString(), timeoutMs);
             long transcribeMs = (System.nanoTime() - start) / 1_000_000L;
             Failure failure = Failure.of(result);
             if (failure != null) {
