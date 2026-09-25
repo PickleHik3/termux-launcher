@@ -60,15 +60,27 @@ public class TaiSpeechModelsTest {
             "/m/whisper-acft-base-en/acft_whisper_base.en_10s_drq.tflite"));
         assertEquals("Small · Many languages", TaiSpeechModels.plainName("whisper-acft-small", "Whisper ACFT Small",
             "/m/whisper-acft-small/acft_whisper_small_5s_drq.tflite"));
-        // Another engine's model is just another speech_to_text entry: its own name, language kind appended.
-        assertEquals("Parakeet TDT · Many languages", TaiSpeechModels.plainName("parakeet-tdt", "Parakeet TDT", null));
-        assertEquals("parakeet-tdt · Many languages", TaiSpeechModels.plainName("parakeet-tdt", "", null));
+        // Parakeet reads like a Whisper size word: the engine's name, then the language kind.
+        assertEquals("Parakeet · Many languages", TaiSpeechModels.plainName("parakeet-tdt-0.6b-v3", "Parakeet TDT 0.6B v3",
+            "/m/parakeet-tdt-0.6b-v3/parakeet_tdt_0.6b_v3_5s_i8_stateful.tflite"));
+        // Any other engine's model is just another speech_to_text entry: its own name, language kind appended.
+        assertEquals("Other STT · Many languages", TaiSpeechModels.plainName("other-stt", "Other STT", null));
+        assertEquals("other-stt · Many languages", TaiSpeechModels.plainName("other-stt", "", null));
+    }
+
+    @Test
+    public void engineLabel_isParakeetByIdOrFileNameAndWhisperOtherwise() {
+        assertEquals("Whisper", TaiSpeechModels.engineLabel("whisper-acft-base-en", "/m/x/acft_whisper_base.en_10s_drq.tflite"));
+        assertEquals("Parakeet", TaiSpeechModels.engineLabel("parakeet-tdt-0.6b-v3", null));
+        assertEquals("Parakeet", TaiSpeechModels.engineLabel("custom-import", "/m/x/parakeet_tdt_0.6b_v3_5s_i8_stateful.tflite"));
+        assertEquals("Whisper", TaiSpeechModels.engineLabel("custom-import", "/m/x/model.tflite"));
     }
 
     @Test
     public void windowSeconds_isReadOffTheFileNameAndZeroWhenItDoesNotSay() {
         assertEquals(10, TaiSpeechModels.windowSeconds("/m/whisper-acft-base-en/acft_whisper_base.en_10s_drq.tflite"));
         assertEquals(5, TaiSpeechModels.windowSeconds("/m/whisper-acft-small/acft_whisper_small_5s_drq.tflite"));
+        assertEquals(5, TaiSpeechModels.windowSeconds("/m/parakeet-tdt-0.6b-v3/parakeet_tdt_0.6b_v3_5s_i8_stateful.tflite"));
         assertEquals(0, TaiSpeechModels.windowSeconds("/m/parakeet-tdt/model.tflite"));
         assertEquals(0, TaiSpeechModels.windowSeconds((String) null));
     }

@@ -14,7 +14,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 public final class TaiModelCatalog {
-    private static final String UNVERIFIED_ARTIFACT_POLICY = "Import-only: models.yaml provides repository URL and estimates, but no verified artifact path, revision, and checksum policy exists in code.";
+    /** The one Parakeet speech-to-text entry; the speech model picker's "Parakeet" engine. */
+    public static final String PARAKEET_TDT_V3_ID = "parakeet-tdt-0.6b-v3";
+    private static final String UNVERIFIED_ARTIFACT_POLICY ="Import-only: models.yaml provides repository URL and estimates, but no verified artifact path, revision, and checksum policy exists in code.";
     private static final Map<String, CatalogEntry> BUILT_IN_ENTRIES = buildEntries();
     private static volatile Map<String, CatalogEntry> entries = BUILT_IN_ENTRIES;
     private TaiModelCatalog() {}
@@ -273,6 +275,21 @@ public final class TaiModelCatalog {
                 "7c71a5d8f9b59f93ab17e63b568ef674716420bc8bbabcc5da315ab0576b96ef",
                 "small.en/acft_whisper_small.en_10s_drq.tflite", 286_276_128L,
                 "58edc288e8aad1da2a3df0545edadf5f1c6119ff70682e37031119ad89130daf")));
+        // NVIDIA Parakeet TDT 0.6B v3 (25 European languages, auto-detected; CC-BY-4.0 weights),
+        // Google's int8 stateful LiteRT conversion: one 5 s graph, no window choice, served by
+        // ParakeetSttRuntime. The tokenizer.json sidecar comes from NVIDIA's own repo (the
+        // conversion repo ships none). Sizes and hashes from the Hugging Face API (LFS sha256 for
+        // the graph; the tokenizer is a plain git blob, hashed after download). See
+        // project-docs/parakeet-stt-research.md.
+        entries.put(PARAKEET_TDT_V3_ID, parakeetAvailable(
+            PARAKEET_TDT_V3_ID, "Parakeet TDT 0.6B v3", "Speech-to-text (25 European languages)",
+            "litert-community/parakeet-tdt-0.6b-v3", "50dae0cb8c7b39dda477966eff7150cd7fe206ae",
+            "parakeet_tdt_0.6b_v3_5s_i8_stateful.tflite", 614_261_072L,
+            "334745b8bc7fd372b1c213516f0b6338bb827b1a2abb3e77ad35fe6fea5cd16b",
+            "586 MB", "8GB+",
+            new CatalogEntry.Sidecar(
+                "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/resolve/541d1f99c6b0c3cd0b11a95167540bb8edefd82b/tokenizer.json",
+                "tokenizer.json", "bd321b096832a3f270bd3b2a88823957920f1a5c5ada71114a26ea729d0cbe91")));
 
         entries.put("deepseek-r1-1.5b-qwen-mnn", mnnAvailable(
             "deepseek-r1-1.5b-qwen-mnn", "DeepSeek-R1 1.5B Qwen", "reasoning", "lightweight_reasoning", false,
@@ -336,6 +353,24 @@ public final class TaiModelCatalog {
             false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, "whisper-acft", "int8_drq",
             128, 128, 128, ramGb(ramTier), defaultSha256, capabilities, null, null,
             "speech_to_text", "speech_to_text", tags("Speech"), sizeEstimate, ramTier, false, true, "",
+            sidecars, windows);
+    }
+
+    /** A Parakeet TDT speech-to-text entry: one 5 s graph (its only window variant, so
+     *  {@link CatalogEntry#withWindow} is a no-op for any other window), the NVIDIA tokenizer as
+     *  its sidecar, {@link ParakeetSttRuntime#ARCHITECTURE} so the router picks that engine. */
+    private static CatalogEntry parakeetAvailable(String id, String name, String role, String repo, String revision,
+                                                   String artifactPath, long size, String sha256,
+                                                   String sizeEstimate, String ramTier,
+                                                   CatalogEntry.Sidecar tokenizerSidecar) {
+        List<CatalogEntry.Sidecar> sidecars = Collections.singletonList(tokenizerSidecar);
+        LinkedHashSet<String> capabilities = setOf(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
+        LinkedHashMap<Integer, CatalogEntry.WindowVariant> windows = new LinkedHashMap<>();
+        windows.put(5, new CatalogEntry.WindowVariant(5, artifactPath, size, sha256));
+        return new CatalogEntry(id, name, role, repo, revision, artifactPath, "CC-BY-4.0", size,
+            false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, ParakeetSttRuntime.ARCHITECTURE, "int8",
+            128, 128, 128, ramGb(ramTier), sha256, capabilities, null, null,
+            "speech_to_text", "speech_to_text", tags("Speech", "Multilingual"), sizeEstimate, ramTier, false, true, "",
             sidecars, windows);
     }
 
@@ -443,8 +478,9 @@ public final class TaiModelCatalog {
         /** Extra files a download must also fetch (e.g. a Whisper {@code tokenizer.json} from the
          *  matching {@code openai/whisper-*} repo), reusing the downloader's .part/resume/hash helpers. */
         public final List<Sidecar> sidecars;
-        /** Whisper-only: the alternate window graphs (5s/10s) this entry's model id can be downloaded
-         *  as. Empty for every non-speech entry. {@link #withWindow} swaps the active artifact. */
+        /** Speech-only: the window graphs this entry's model id can be downloaded as (Whisper's
+         *  5s/10s pair; Parakeet's one 5s graph). Empty for every non-speech entry.
+         *  {@link #withWindow} swaps the active artifact. */
         public final Map<Integer, WindowVariant> speechWindows;
 
         private CatalogEntry(String modelId, String displayName, String roleHint, String repositoryId,

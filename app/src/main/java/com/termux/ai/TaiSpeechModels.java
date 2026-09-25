@@ -106,8 +106,26 @@ public final class TaiSpeechModels {
 
     // ---- naming ----
 
-    /** "Base · Many languages", "Small · English": the size word from the id when it is one of
-     *  Whisper's, otherwise the catalog name, followed by the language kind. */
+    /** The engine a model runs on, for a row's summary: "Whisper" or "Parakeet". */
+    @NonNull
+    public static String engineLabel(@NonNull TaiModelSpec spec) {
+        return engineLabel(spec.id, spec.localPath);
+    }
+
+    @NonNull
+    public static String engineLabel(@NonNull String modelId, @Nullable String path) {
+        return isParakeet(modelId, path) ? "Parakeet" : "Whisper";
+    }
+
+    /** Parakeet by id or file name; the router decides by the catalog architecture, which the id carries too. */
+    public static boolean isParakeet(@NonNull String modelId, @Nullable String path) {
+        if (modelId.toLowerCase(Locale.ROOT).startsWith("parakeet")) return true;
+        return path != null && new File(path).getName().toLowerCase(Locale.ROOT).contains("parakeet");
+    }
+
+    /** "Base · Many languages", "Small · English", "Parakeet · Many languages": the size word from
+     *  the id when it is one of Whisper's, "Parakeet" for that engine, otherwise the catalog name,
+     *  followed by the language kind. */
     @NonNull
     public static String plainName(@NonNull TaiModelSpec spec) {
         return plainName(spec.id, spec.displayName, spec.localPath);
@@ -123,6 +141,7 @@ public final class TaiSpeechModels {
     @Nullable
     private static String sizeWord(@NonNull String modelId) {
         String id = modelId.toLowerCase(Locale.ROOT);
+        if (id.startsWith("parakeet")) return "Parakeet";
         if (!id.startsWith("whisper")) return null;
         for (String word : new String[] {"tiny", "base", "small", "medium", "large"}) {
             if (id.contains("-" + word)) return Character.toUpperCase(word.charAt(0)) + word.substring(1);
@@ -141,7 +160,8 @@ public final class TaiSpeechModels {
     }
 
     /** The window the installed graph was exported with, read off its file name
-     *  ({@code …_5s_… / …_10s_…}); 0 when the name does not say (a model without windows). */
+     *  ({@code …_5s_… / …_10s_…} for Whisper ACFT, {@code …_v3_5s_…} for Parakeet); 0 when the
+     *  name does not say (a model without windows). */
     public static int windowSeconds(@NonNull TaiModelSpec spec) {
         return windowSeconds(spec.localPath);
     }
