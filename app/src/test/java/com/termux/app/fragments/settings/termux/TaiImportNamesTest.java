@@ -39,8 +39,11 @@ public class TaiImportNamesTest {
 
     @Test
     public void variantHintsReadBuildTokensBetweenSeparators() {
-        assertEquals(R.string.termux_ai_import_variant_smaller, TaiImportNames.variantHint("gemma-3-1b-it_q4_ekv2048.litertlm"));
-        assertEquals(R.string.termux_ai_import_variant_larger, TaiImportNames.variantHint("model_q8_ekv4096.litertlm"));
+        assertEquals(R.string.termux_ai_import_variant_smallest, TaiImportNames.variantHint("gemma-3-1b-it_q4_ekv2048.litertlm"));
+        assertEquals(R.string.termux_ai_import_variant_compact, TaiImportNames.variantHint("model_q8_ekv4096.litertlm"));
+        assertEquals(R.string.termux_ai_import_variant_full,
+            TaiImportNames.variantHint("Qwen2.5-0.5B-Instruct_multi-prefill-seq_f32_ekv1280.task"));
+        assertEquals(R.string.termux_ai_import_variant_half, TaiImportNames.variantHint("model_fp16.task"));
         assertEquals(R.string.termux_ai_import_variant_web, TaiImportNames.variantHint("gemma-3n-E2B-it-web.litertlm"));
         assertEquals(0, TaiImportNames.variantHint("model_seq4096.litertlm"));
         assertEquals(0, TaiImportNames.variantHint(null));

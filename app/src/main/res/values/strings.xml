@@ -1123,8 +1123,11 @@
         <string name="termux_ai_import_gated_add_token">Add my token</string>
         <string name="termux_ai_import_choose_variant_title">Which version?</string>
         <string name="termux_ai_import_variant_recommended">recommended</string>
-        <string name="termux_ai_import_variant_smaller">smaller, a bit less accurate</string>
-        <string name="termux_ai_import_variant_larger">larger, a bit more accurate</string>
+        <string name="termux_ai_import_variant_smallest">smallest · a bit less accurate</string>
+        <string name="termux_ai_import_variant_compact">compact · a good balance for phones</string>
+        <string name="termux_ai_import_variant_half">half size</string>
+        <string name="termux_ai_import_variant_full">full size · slowest, uses the most memory</string>
+        <string name="termux_ai_import_variant_standard">Standard</string>
         <string name="termux_ai_import_variant_web">made for web browsers</string>
         <string name="termux_ai_import_variant_slow">probably slow on this phone</string>
         <string name="termux_ai_import_variant_too_big">too big for this phone</string>

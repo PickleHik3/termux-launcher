@@ -125,6 +125,34 @@ final class TaiImportFlow {
 
     // ---- pure decisions, unit-tested ----
 
+    /**
+     * {@code result} with its candidate list narrowed to what a user should be offered: a bare
+     * {@code .tflite} next to a {@code .task}/{@code .litertlm} build of the same repository is the
+     * raw graph, which this app only imports as an embedding model — for a chat repository it is
+     * a trap, so it is dropped whenever a packaged build exists. Edits {@code result} in place.
+     */
+    @Nullable
+    static JSONObject pruneCandidates(@Nullable JSONObject result) {
+        JSONArray candidates = result == null ? null : result.optJSONArray("candidates");
+        if (candidates == null) return result;
+        boolean packaged = false;
+        for (int i = 0; i < candidates.length(); i++) {
+            JSONObject candidate = candidates.optJSONObject(i);
+            if (candidate != null && !isEmbeddingFile(candidate.optString("file", ""))) packaged = true;
+        }
+        if (!packaged) return result;
+        JSONArray kept = new JSONArray();
+        for (int i = 0; i < candidates.length(); i++) {
+            JSONObject candidate = candidates.optJSONObject(i);
+            if (candidate != null && !isEmbeddingFile(candidate.optString("file", ""))) kept.put(candidate);
+        }
+        try {
+            result.put("candidates", kept);
+        } catch (JSONException ignored) {
+        }
+        return result;
+    }
+
     @NonNull
     static PreviewOutcome outcomeOf(@Nullable JSONObject result) {
         if (result == null) return PreviewOutcome.FAILED;
@@ -142,6 +170,8 @@ final class TaiImportFlow {
     /**
      * The file to pre-select from a repository's runnable files: the largest that fits this phone
      * outright, else one of unknown size, else the smallest that would be slow, else the smallest.
+     * Within the same fit, a full-precision ({@code f32}) build loses to any other: it needs about
+     * four times the memory of a compact one and runs slower, for little gain on a phone.
      */
     static int preselect(@NonNull JSONArray candidates, long deviceMemoryBytes) {
         int best = -1;
@@ -152,11 +182,12 @@ final class TaiImportFlow {
             if (candidate == null) continue;
             long size = candidate.optLong("sizeBytes", -1L);
             TaiImportFit fit = TaiImportFit.check(size, deviceMemoryBytes, isEmbeddingFile(candidate.optString("file", "")));
-            int rank = fit.verdict == TaiImportFit.Verdict.YES ? 0 : fit.verdict == TaiImportFit.Verdict.UNKNOWN ? 1
-                : fit.verdict == TaiImportFit.Verdict.SLOW ? 2 : 3;
+            int rank = (fit.verdict == TaiImportFit.Verdict.YES ? 0 : fit.verdict == TaiImportFit.Verdict.UNKNOWN ? 1
+                : fit.verdict == TaiImportFit.Verdict.SLOW ? 2 : 3) * 2
+                + (TaiImportNames.isFullPrecision(candidate.optString("file", "")) ? 1 : 0);
             // Among files that fit, prefer the largest (the more accurate build); otherwise the smallest.
             boolean better = rank < bestRank
-                || rank == bestRank && (rank == 0 ? size > bestSize : size >= 0L && (bestSize < 0L || size < bestSize));
+                || rank == bestRank && (rank / 2 == 0 ? size > bestSize : size >= 0L && (bestSize < 0L || size < bestSize));
             if (better) {
                 best = i;
                 bestRank = rank;
@@ -282,7 +313,7 @@ final class TaiImportFlow {
                 result = TaiManager.getInstance(app).downloadModel(downloadRequest(true).toString());
             } catch (JSONException | RuntimeException ignored) {
             }
-            JSONObject finalResult = result;
+            JSONObject finalResult = pruneCandidates(result);
             host.handler().post(() -> {
                 waiting.dialog.dismiss();
                 if (abandoned[0] || host.context() == null) return;
@@ -336,13 +367,15 @@ final class TaiImportFlow {
             long size = candidate == null ? -1L : candidate.optLong("sizeBytes", -1L);
             List<String> notes = new ArrayList<>();
             notes.add(size > 0L ? TaiImportMessages.formatBytes(size) : context.getString(R.string.termux_ai_import_size_unknown));
-            int hintRes = TaiImportNames.variantHint(file);
-            if (hintRes != 0) notes.add(context.getString(hintRes));
             TaiImportFit fit = TaiImportFit.check(size, deviceMemoryBytes(context), isEmbeddingFile(file));
             if (i == selected) notes.add(context.getString(R.string.termux_ai_import_variant_recommended));
             else if (fit.verdict == TaiImportFit.Verdict.SLOW) notes.add(context.getString(R.string.termux_ai_import_variant_slow));
             else if (fit.verdict == TaiImportFit.Verdict.TOO_BIG) notes.add(context.getString(R.string.termux_ai_import_variant_too_big));
-            labels[i] = twoLines(context, file, join(notes));
+            notes.add(file);
+            int titleRes = TaiImportNames.variantHint(file);
+            String title = titleRes != 0 ? capitalize(context.getString(titleRes))
+                : context.getString(R.string.termux_ai_import_variant_standard);
+            labels[i] = twoLines(context, title, join(notes));
         }
         int[] choice = {selected};
         new MaterialAlertDialogBuilder(context)
@@ -644,7 +677,7 @@ final class TaiImportFlow {
                             : importer.importMnnDirectory(adding.folder, modelId, capabilities, displayName, listener);
                     } catch (JSONException | RuntimeException ignored) {
                     }
-                    JSONObject finalResult = result;
+                    JSONObject finalResult = pruneCandidates(result);
                     host.handler().post(() -> {
                         progress.dialog.dismiss();
                         host.modelsChanged();
@@ -666,7 +699,7 @@ final class TaiImportFlow {
                         result = TaiManager.getInstance(app).downloadModel(downloadRequest(false).toString());
                     } catch (JSONException | RuntimeException ignored) {
                     }
-                    JSONObject finalResult = result;
+                    JSONObject finalResult = pruneCandidates(result);
                     host.handler().post(() -> {
                         if (host.context() == null) return;
                         switch (outcomeOf(finalResult)) {
@@ -738,36 +771,35 @@ final class TaiImportFlow {
             @Override
             public void run() {
                 if (!watching[0] || host.context() == null) return;
-                host.executor().execute(() -> {
-                    JSONObject transfer = findDownload(new TaiModelStore(app).getDownloads(), modelId);
-                    host.handler().post(() -> {
-                        if (!watching[0] || host.context() == null) return;
-                        String status = transfer == null ? "" : transfer.optString("status", "");
-                        if (TaiModelStore.STATE_INSTALLED.equals(status)) {
-                            watching[0] = false;
-                            progress.dialog.dismiss();
-                            host.modelsChanged();
-                            showReady(modelId, displayName, embeddingOnly);
-                        } else if (TaiModelStore.STATE_FAILED.equals(status)) {
-                            watching[0] = false;
-                            progress.dialog.dismiss();
-                            host.modelsChanged();
-                            showError(TaiImportMessages.forDownloadError(transfer.optString("error", "")));
-                        } else if (TaiModelStore.STATE_CANCELLED.equals(status)) {
-                            watching[0] = false;
-                            progress.dialog.dismiss();
-                            host.modelsChanged();
-                            AppNotice.show(host.context(), R.string.termux_ai_import_cancelled, false);
-                        } else {
-                            if (TaiModelStore.STATE_VERIFYING.equals(status)) {
-                                progress.text.setText(R.string.termux_ai_import_progress_verifying);
-                            } else if (transfer != null) {
-                                progress.update(host.context(), transfer.optLong("bytesRead", 0L), transfer.optLong("totalBytes", -1L));
-                            }
-                            host.handler().postDelayed(this, WATCH_INTERVAL_MS);
-                        }
-                    });
-                });
+                // Read on this thread: the download record is a SharedPreferences read the
+                // downloader keeps current every megabyte. Going through host.executor() queued
+                // behind the page's runtime calls, and on a busy runtime the dialog sat at 0 % until
+                // the file was done.
+                JSONObject transfer = findDownload(new TaiModelStore(app).getDownloads(), modelId);
+                String status = transfer == null ? "" : transfer.optString("status", "");
+                if (TaiModelStore.STATE_INSTALLED.equals(status)) {
+                    watching[0] = false;
+                    progress.dialog.dismiss();
+                    host.modelsChanged();
+                    showReady(modelId, displayName, embeddingOnly);
+                } else if (TaiModelStore.STATE_FAILED.equals(status)) {
+                    watching[0] = false;
+                    progress.dialog.dismiss();
+                    host.modelsChanged();
+                    showError(TaiImportMessages.forDownloadError(transfer.optString("error", "")));
+                } else if (TaiModelStore.STATE_CANCELLED.equals(status)) {
+                    watching[0] = false;
+                    progress.dialog.dismiss();
+                    host.modelsChanged();
+                    AppNotice.show(host.context(), R.string.termux_ai_import_cancelled, false);
+                } else {
+                    if (TaiModelStore.STATE_VERIFYING.equals(status)) {
+                        progress.text.setText(R.string.termux_ai_import_progress_verifying);
+                    } else if (transfer != null) {
+                        progress.update(host.context(), transfer.optLong("bytesRead", 0L), transfer.optLong("totalBytes", -1L));
+                    }
+                    host.handler().postDelayed(this, WATCH_INTERVAL_MS);
+                }
             }
         };
         host.handler().postDelayed(poll, WATCH_INTERVAL_MS);
@@ -1129,6 +1161,11 @@ final class TaiImportFlow {
         hint.setTextColor(resolveAttrColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
         hint.setPadding(0, Math.round(10 * density), 0, 0);
         return hint;
+    }
+
+    @NonNull
+    private static String capitalize(@NonNull String text) {
+        return text.isEmpty() ? text : Character.toUpperCase(text.charAt(0)) + text.substring(1);
     }
 
     /** A label with a smaller, dimmer second line saying what the choice means. */

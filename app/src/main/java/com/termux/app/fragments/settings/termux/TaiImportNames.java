@@ -61,23 +61,33 @@ final class TaiImportNames {
     }
 
     /**
-     * A plain hint for one of a repository's several files, or {@code 0} when its name says nothing
-     * a non-technical user needs: {@code int4}/{@code q4} builds are smaller and a bit less
-     * accurate, {@code int8}/{@code q8}/{@code fp16} larger and more so, {@code web} builds are
-     * for browsers.
+     * What one of a repository's several files is, in plain words, or {@code 0} when its name
+     * does not say: {@code f32} builds are full size (slowest, most memory), {@code fp16} half
+     * size, {@code int8}/{@code q8} compact, {@code int4}/{@code q4} the smallest and a bit less
+     * accurate, {@code web} builds are for browsers. Absolute, not "smaller than the other one":
+     * a q8 file is the small one next to f32 and the large one next to q4.
      */
     static int variantHint(@Nullable String fileName) {
         String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
         if (WEB.matcher(lower).find()) return R.string.termux_ai_import_variant_web;
-        if (SMALLER.matcher(lower).find()) return R.string.termux_ai_import_variant_smaller;
-        if (LARGER.matcher(lower).find()) return R.string.termux_ai_import_variant_larger;
+        if (SMALLEST.matcher(lower).find()) return R.string.termux_ai_import_variant_smallest;
+        if (COMPACT.matcher(lower).find()) return R.string.termux_ai_import_variant_compact;
+        if (HALF.matcher(lower).find()) return R.string.termux_ai_import_variant_half;
+        if (FULL.matcher(lower).find()) return R.string.termux_ai_import_variant_full;
         return 0;
+    }
+
+    /** A full-precision build: several times the memory of a compact one, for little gain on a phone. */
+    static boolean isFullPrecision(@Nullable String fileName) {
+        return fileName != null && FULL.matcher(fileName.toLowerCase(Locale.ROOT)).find();
     }
 
     // Build tokens sit between separators; "seq4096" must not read as a q4 build.
     private static final Pattern WEB = Pattern.compile("(^|[-_.])web(?=[-_.]|$)");
-    private static final Pattern SMALLER = Pattern.compile("(^|[-_.])(q4|int4|4bit)(?=[-_.]|$)");
-    private static final Pattern LARGER = Pattern.compile("(^|[-_.])(q8|int8|8bit|fp16|f16|bf16)(?=[-_.]|$)");
+    private static final Pattern SMALLEST = Pattern.compile("(^|[-_.])(q4|int4|4bit)(?=[-_.]|$)");
+    private static final Pattern COMPACT = Pattern.compile("(^|[-_.])(q8|int8|8bit|i8)(?=[-_.]|$)");
+    private static final Pattern HALF = Pattern.compile("(^|[-_.])(fp16|f16|bf16)(?=[-_.]|$)");
+    private static final Pattern FULL = Pattern.compile("(^|[-_.])(f32|fp32|float32)(?=[-_.]|$)");
 
     /** The web page for a Hugging Face link, so a gated model's terms are one tap away; else the link itself. */
     @NonNull

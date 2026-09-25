@@ -52,6 +52,25 @@ public class TaiImportFlowTest {
     }
 
     @Test
+    public void aCompactBuildBeatsFullPrecisionAndBareGraphsAreDropped() throws Exception {
+        // litert-community/Qwen2.5-0.5B-Instruct as the preview listed it on 2026-09-25.
+        JSONObject result = new JSONObject().put("ok", false).put("error", "artifact_selection_required")
+            .put("candidates", new JSONArray()
+                .put(new JSONObject().put("file", "Qwen2.5-0.5B-Instruct_multi-prefill-seq_f32_ekv1280.task").put("sizeBytes", 1_900_000_000L))
+                .put(new JSONObject().put("file", "Qwen2.5-0.5B-Instruct_multi-prefill-seq_f32_ekv1280.tflite").put("sizeBytes", 1_900_000_000L))
+                .put(new JSONObject().put("file", "Qwen2.5-0.5B-Instruct_multi-prefill-seq_q8_ekv1280.task").put("sizeBytes", 521_300_000L))
+                .put(new JSONObject().put("file", "Qwen2.5-0.5B-Instruct_seq128_q8_ekv1280.tflite").put("sizeBytes", 489_400_000L)));
+        JSONArray kept = TaiImportFlow.pruneCandidates(result).getJSONArray("candidates");
+        assertEquals(2, kept.length());
+        assertEquals(1, TaiImportFlow.preselect(kept, 32L * GIB));
+        assertEquals(1, TaiImportFlow.preselect(kept, 8L * GIB));
+        // A repository of bare graphs only (an embedding model) keeps them.
+        JSONObject embeddings = new JSONObject().put("candidates", new JSONArray()
+            .put(new JSONObject().put("file", "embeddinggemma_seq256.tflite").put("sizeBytes", 180_000_000L)));
+        assertEquals(1, TaiImportFlow.pruneCandidates(embeddings).getJSONArray("candidates").length());
+    }
+
+    @Test
     public void gpuFailuresOfferTheProcessor() throws Exception {
         assertTrue(TaiImportFlow.gpuFailure(new JSONObject().put("error", "accelerator_not_supported_by_device")
             .put("message", "GPU delegate could not initialise")));
