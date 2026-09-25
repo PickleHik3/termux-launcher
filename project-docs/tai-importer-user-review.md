@@ -115,3 +115,17 @@ graphics chip" → retries CPU).
 5. No jargon from this list in the default path: LiteRT, MNN, accelerator, capability,
    context, token (until needed), id, artifact, graph, quantization.
 6. "Try it" after import produces a reply or a plain-language failure with a retry.
+
+## What this branch implemented
+
+Added 2026-09-25, after the review above. The flow lives in `TaiImportFlow` (the fragment only
+launches it, owns the two system pickers and redraws when told); the pure parts are unit-tested.
+
+| Recommendation | Implemented | Still owed |
+| --- | --- | --- |
+| Step 1, two choices | "Paste a link" / "Choose a file on this phone", one line of help each. The MNN folder path is the small print under them ("Advanced: add a model folder"). | — |
+| Step 2, the app works it out | A Hugging Face link is previewed (`downloadModel` with `previewOnly`) before anything downloads. One runnable file goes straight to the card; several show "Which version?" with the file name, size, a build hint (`int4` → "smaller, a bit less accurate") and the fit for this phone, pre-selecting the largest file that fits (`TaiImportFlow.preselect`). A gated repository asks for sign-in only then, with "Open the model page" and "Add my token". | Files are still listed by their published names; no "Text" / "Text and images" labels, since nothing in the metadata says which a file is. |
+| Step 3, the card | Name (pre-filled by `TaiImportNames`), what it can do as read-only words, size, and "Will it run on this phone?" from `TaiImportFit`: the catalog's RAM tiers applied to the file size against the phone's RAM class — Yes, Probably slow (one class under), Too big (two under, with the tier named). Too big asks "Add it anyway?". Advanced (collapsed) keeps the eight checkboxes, "Runs on" (Let the app decide / Processor / Graphics chip), Model format settings and an internal name. | The tiers are inferred from size, not measured. |
+| Step 4, progress | Copies report bytes and a percentage from `TaiModelImporter`'s copy loop (folders sum their files), with Cancel; downloads are followed in the same dialog from the store's transfer record, with Cancel and Hide. | — |
+| Step 5, ready | "<Name> is ready" with Try it, Use as default, Done. Try it loads the model, asks "Say hello in five words." through the chat endpoint and shows the reply; a failed load says why in plain words and offers "Try with the processor" when the graphics chip was involved. Embedding models get a one-line explanation instead. | Not run on a device from this branch. |
+| Error messages | Mapped in `TaiImportMessages` from the stable error codes; the technical message sits behind "Show details". The importer now names its storage figures and a `reason` (`cancelled`, `unreadable_model_file`) without changing its codes. The contradictory MNN folder message is gone. | Translations. |
