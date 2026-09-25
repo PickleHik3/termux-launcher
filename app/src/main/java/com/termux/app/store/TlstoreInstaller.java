@@ -46,8 +46,7 @@ import java.util.function.Consumer;
  *
  * <p>It also ships {@code tlstore-ui}, the full-screen store UI, the same way: one asset per ABI
  * ({@code tlstore/tlstore-ui-<abi>}, plain assets rather than a {@code jniLibs} entry, since this
- * is a regular program a shell execs, not a library the app dlopens — see
- * {@code project-docs/tlstore/REVISION-5.md#launcher-hooks} for why that split is safe here). The
+ * is a regular program a shell execs, not a library the app dlopens). The
  * device's first supported ABI with a matching asset wins; a device with none bundled gets nothing
  * written and keeps whatever was there before, so {@code tlstore} falls back to printing the list.
  * A binary already in place that this class did not write (no matching {@code .tlstore-ui-sha256}
