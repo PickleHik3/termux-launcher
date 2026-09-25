@@ -40,7 +40,10 @@ import java.util.concurrent.TimeUnit;
  *
  * <ul>
  *   <li>{@code voice.replay.in} — a WAV file or a directory of WAVs (required to run this test)</li>
- *   <li>{@code voice.replay.model} — {@code base} (default) or {@code small}</li>
+ *   <li>{@code voice.replay.model} — {@code base} (default), {@code small}, or {@code parakeet}
+ *       (NVIDIA parakeet-tdt-0.6b-v3, LiteRT int8 stateful 5 s, from
+ *       {@code ~/.cache/termux-launcher/parakeet/}; see project-docs/parakeet-stt-research.md —
+ *       it has no bias prompt, so {@code voice.replay.terminal} does not change it)</li>
  *   <li>{@code voice.replay.terminal} — the terminal bias prompt and cleanup; default {@code true}</li>
  *   <li>{@code voice.replay.bare} — "Bare command words"; default {@code false}</li>
  *   <li>{@code voice.replay.pause} — the VAD pause in ms, {@code VoiceInputSession}'s own default 600</li>
@@ -85,10 +88,13 @@ public class VoiceReplayRig {
         File outDir = new File(System.getProperty("voice.replay.out", "app/build/voice-replay"));
         String python = System.getProperty("voice.replay.python", defaultPythonPath());
 
-        File modelDir = new File(System.getProperty("user.home"),
-            ".cache/termux-launcher/whisper/whisper-acft-" + ("small".equals(modelChoice) ? "small" : "base") + "-en");
-        File modelFile = new File(modelDir, "small".equals(modelChoice)
-            ? "acft_whisper_small.en_10s_drq.tflite" : "acft_whisper_base.en_10s_drq.tflite");
+        boolean parakeet = "parakeet".equals(modelChoice);
+        File modelDir = parakeet
+            ? new File(System.getProperty("user.home"), ".cache/termux-launcher/parakeet")
+            : new File(System.getProperty("user.home"),
+                ".cache/termux-launcher/whisper/whisper-acft-" + ("small".equals(modelChoice) ? "small" : "base") + "-en");
+        File modelFile = new File(modelDir, parakeet ? "parakeet_tdt_0.6b_v3_5s_i8_stateful.tflite"
+            : "small".equals(modelChoice) ? "acft_whisper_small.en_10s_drq.tflite" : "acft_whisper_base.en_10s_drq.tflite");
         File tokenizerFile = new File(modelDir, "tokenizer.json");
         Assume.assumeTrue("model not installed: " + modelFile, modelFile.isFile());
         Assume.assumeTrue("tokenizer not found: " + tokenizerFile, tokenizerFile.isFile());
@@ -100,8 +106,8 @@ public class VoiceReplayRig {
             throw new IOException("cannot create " + outDir);
         }
 
-        BiasPrompts prompts = BiasPrompts.build(tokenizerFile);
-        server = startServer(python, modelFile, tokenizerFile, prompts);
+        server = parakeet ? startParakeetServer(python, modelFile, tokenizerFile)
+            : startServer(python, modelFile, tokenizerFile, BiasPrompts.build(tokenizerFile));
         SubprocessTranscriber transcriber = new SubprocessTranscriber(server, outDir);
         VoiceReplayCore.ReplayConfig config = new VoiceReplayCore.ReplayConfig(pauseMs, WINDOW_SECONDS, terminal, bare);
 
@@ -184,11 +190,26 @@ public class VoiceReplayRig {
      */
     @NonNull
     private static File findScript() throws IOException {
-        for (String candidate : new String[] {"../scripts/whisper_replay_server.py", "scripts/whisper_replay_server.py"}) {
+        return findScript("whisper_replay_server.py");
+    }
+
+    @NonNull
+    private static File findScript(@NonNull String name) throws IOException {
+        for (String candidate : new String[] {"../scripts/" + name, "scripts/" + name}) {
             File file = new File(candidate);
             if (file.isFile()) return file;
         }
-        throw new IOException("cannot find scripts/whisper_replay_server.py from " + new File(".").getAbsolutePath());
+        throw new IOException("cannot find scripts/" + name + " from " + new File(".").getAbsolutePath());
+    }
+
+    /** scripts/parakeet_replay_server.py: the same JSON-lines protocol, no prompt arguments. */
+    @NonNull
+    private static Process startParakeetServer(@NonNull String python, @NonNull File modelFile,
+                                               @NonNull File tokenizerFile) throws IOException {
+        ProcessBuilder builder = new ProcessBuilder(python, findScript("parakeet_replay_server.py").getAbsolutePath(),
+            modelFile.getAbsolutePath(), tokenizerFile.getAbsolutePath());
+        builder.redirectError(ProcessBuilder.Redirect.INHERIT);
+        return builder.start();
     }
 
     @NonNull
@@ -247,8 +268,9 @@ public class VoiceReplayRig {
                 return new VoiceReplayCore.TranscriptResult(response.optString("text", ""),
                     response.optLong("encode_ms", 0), response.optLong("decode_ms", 0), response.optInt("steps", 0));
             } finally {
+                // -Dvoice.replay.keep=true leaves each segment (after VoiceGain) in <out>/segments.
                 //noinspection ResultOfMethodCallIgnored
-                wav.delete();
+                if (!Boolean.getBoolean("voice.replay.keep")) wav.delete();
             }
         }
 

@@ -451,7 +451,7 @@ afterEvaluate {
 // reaches it. An ordinary test run passes none of them, so nothing here changes that run.
 tasks.withType(Test).configureEach {
     ['voice.replay.in', 'voice.replay.model', 'voice.replay.terminal', 'voice.replay.bare',
-     'voice.replay.pause', 'voice.replay.out', 'voice.replay.python'].each { key ->
+     'voice.replay.pause', 'voice.replay.out', 'voice.replay.python', 'voice.replay.keep'].each { key ->
         def value = System.getProperty(key) ?: project.findProperty(key)
         if (value != null) systemProperty key, value
     }
