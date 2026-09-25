@@ -83,7 +83,7 @@ public class WhisperDecoderTest {
         assertEquals(50360, biased[0]);
         assertArrayEquals(new int[] {17606, 43979, 22927, 21061, 15409}, Arrays.copyOfRange(biased, 1, 6));
         assertArrayEquals(new int[] {50257, 50258, 50358, 50362}, Arrays.copyOfRange(biased, biased.length - 4, biased.length));
-        assertEquals(1 + 12 + 4, biased.length);
+        assertEquals(1 + 13 + 4, biased.length);
         assertTrue("bias stays under the cap", biased.length - 4 - 1 <= WhisperDecoder.MAX_BIAS_TOKENS);
     }
 

@@ -150,7 +150,8 @@ public class VoiceActivityDetectorTest {
     @Test
     public void theSilenceSettingIsHonoured() {
         VoiceActivityDetector vad = detector(600, 10, VoiceSilenceTimeout.DEFAULT_MS);
-        int frames = VoiceSilenceTimeout.DEFAULT_MS / VoiceActivityDetector.FRAME_MS;
+        // Rounded up to whole frames, as the detector does.
+        int frames = (VoiceSilenceTimeout.DEFAULT_MS + VoiceActivityDetector.FRAME_MS - 1) / VoiceActivityDetector.FRAME_MS;
         vad.feed(quiet(frames - 1), (frames - 1) * FRAME);
         assertEquals(0, silenceTimeouts);
         vad.feed(quiet(1), FRAME);
