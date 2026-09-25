@@ -163,6 +163,7 @@ public class KeyboardPreferencesFragmentTest {
         assertTrue(!store.getBoolean("keyboard_voice_bare_command_words", true));
         assertTrue(store.getBoolean("keyboard_voice_terminal_cleanup", false));
         assertEquals("600", store.getString("keyboard_voice_pause_ms", null));
+        assertEquals("10000", store.getString("keyboard_voice_silence_timeout_ms", null));
 
         KeyboardPreferencesFragment fragment = launch();
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_engine"));
@@ -181,6 +182,7 @@ public class KeyboardPreferencesFragmentTest {
         store.putBoolean("keyboard_voice_bare_command_words", true);
         store.putBoolean("keyboard_voice_terminal_cleanup", false);
         store.putString("keyboard_voice_pause_ms", "1200");
+        store.putString("keyboard_voice_silence_timeout_ms", "0");
 
         assertTrue(prefs.isInAppKeyboardVoiceOnDevice());
         assertEquals("de", prefs.getInAppKeyboardVoiceLanguage());
@@ -189,10 +191,14 @@ public class KeyboardPreferencesFragmentTest {
         assertTrue(!prefs.isInAppKeyboardVoiceTerminalCleanupEnabled());
         assertEquals(1200, prefs.getInAppKeyboardVoicePauseMs());
         assertEquals("1200", store.getString("keyboard_voice_pause_ms", null));
+        assertEquals(0, prefs.getInAppKeyboardVoiceSilenceTimeoutMs());
+        assertEquals("0", store.getString("keyboard_voice_silence_timeout_ms", null));
 
-        // A pause the list does not offer and an engine it does not know read as the defaults.
+        // A pause, silence timeout or engine the lists do not offer reads as the default.
         store.putString("keyboard_voice_pause_ms", "999");
         assertEquals("600", store.getString("keyboard_voice_pause_ms", null));
+        store.putString("keyboard_voice_silence_timeout_ms", "2500");
+        assertEquals("10000", store.getString("keyboard_voice_silence_timeout_ms", null));
         store.putString("keyboard_voice_engine", "cloud");
         assertEquals("system", store.getString("keyboard_voice_engine", null));
     }

@@ -1776,6 +1776,8 @@
     <string name="settings_keyboard_voice_terminal_cleanup_title">Terminal cleanup</string>
     <string name="settings_keyboard_voice_terminal_cleanup_summary">Drop trailing punctuation and lowercase single words when typing into a shell</string>
     <string name="settings_keyboard_voice_pause_title">Pause that ends a phrase</string>
+    <string name="settings_keyboard_voice_silence_timeout_title">Silence auto-stop</string>
+    <string name="settings_keyboard_voice_silence_timeout_until_tap">Until tap</string>
     <string name="settings_keyboard_voice_model_title">Speech model</string>
     <string name="settings_keyboard_voice_model_summary">Download or change the on-device Whisper model</string>
     <string name="voice_input_listening">Listening…</string>

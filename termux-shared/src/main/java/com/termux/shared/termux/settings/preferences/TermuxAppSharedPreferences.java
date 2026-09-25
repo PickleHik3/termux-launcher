@@ -1347,6 +1347,26 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_PAUSE_MS, pause, false);
     }
 
+    /** One of {@link TERMUX_APP#IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS_CHOICES}; anything else stored reads as the default. */
+    public int getInAppKeyboardVoiceSilenceTimeoutMs() {
+        int value = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS);
+        for (int choice : TERMUX_APP.IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS_CHOICES) {
+            if (choice == value) return value;
+        }
+        return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS;
+    }
+
+    public void setInAppKeyboardVoiceSilenceTimeoutMs(int value) {
+        int timeout = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS;
+        for (int choice : TERMUX_APP.IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS_CHOICES) {
+            if (choice == value) timeout = value;
+        }
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS, timeout, false);
+    }
+
     public boolean isInAppKeyboardKeySoundEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_SOUND_ENABLED,

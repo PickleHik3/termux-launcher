@@ -502,6 +502,15 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 }
                 mPreferences.setInAppKeyboardVoicePauseMs(pauseMs);
                 break;
+            case "keyboard_voice_silence_timeout_ms":
+                int silenceMs;
+                try {
+                    silenceMs = Integer.parseInt(value == null ? "" : value.trim());
+                } catch (NumberFormatException e) {
+                    silenceMs = TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS;
+                }
+                mPreferences.setInAppKeyboardVoiceSilenceTimeoutMs(silenceMs);
+                break;
             default:
                 break;
         }
@@ -582,6 +591,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getInAppKeyboardVoiceLanguage();
             case "keyboard_voice_pause_ms":
                 return String.valueOf(mPreferences.getInAppKeyboardVoicePauseMs());
+            case "keyboard_voice_silence_timeout_ms":
+                return String.valueOf(mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs());
             default:
                 return defValue;
         }

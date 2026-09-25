@@ -36,7 +36,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * the {@link Host} on the main thread. {@code sttWarm} goes out as the microphone opens so the
  * model loads while the user speaks.
  *
- * <p>The session ends on 2.5 s of silence, a second tap, the keyboard going down, the activity
+ * <p>The session ends on the configured silence timeout ({@link VoiceSilenceTimeout}, or never for
+ * "Until tap"), a second tap, the keyboard going down, the activity
  * pausing, or the first failure; {@link #stop} releases the microphone at once and lets segments
  * already captured finish, {@link #cancel} drops them too. The activity never blocks on it: the
  * only main-thread work is the callbacks.
@@ -58,14 +59,17 @@ public final class VoiceInputSession {
         public final boolean terminalPrompt;
         public final int pauseMs;
         public final int windowSeconds;
+        /** {@link VoiceSilenceTimeout#UNTIL_TAP} disables the timeout ("Until tap"). */
+        public final int silenceTimeoutMs;
 
         public Config(@NonNull String modelId, @Nullable String language, boolean terminalPrompt,
-                      int pauseMs, int windowSeconds) {
+                      int pauseMs, int windowSeconds, int silenceTimeoutMs) {
             this.modelId = modelId;
             this.language = language;
             this.terminalPrompt = terminalPrompt;
             this.pauseMs = pauseMs;
             this.windowSeconds = windowSeconds;
+            this.silenceTimeoutMs = silenceTimeoutMs;
         }
     }
 
@@ -216,7 +220,7 @@ public final class VoiceInputSession {
             public void onSilenceTimeout() {
                 stop(EndReason.SILENCE);
             }
-        }, config.pauseMs, config.windowSeconds);
+        }, config.pauseMs, config.windowSeconds, config.silenceTimeoutMs);
         short[] buffer = new short[VoiceActivityDetector.FRAME_SAMPLES];
         try {
             while (!stopRequested.get()) {
