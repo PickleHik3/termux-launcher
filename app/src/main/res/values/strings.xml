@@ -189,7 +189,7 @@
     <string name="settings_extra_keys_preset_replace_message">Replace the keys on page %1$d?</string>
     <string name="settings_extra_keys_preset_replace">Replace</string>
     <string name="extra_keys_default_offer_title">New key row</string>
-    <string name="extra_keys_default_offer_message">This update brings a new set of keys under the terminal. Your current row is kept in Settings, under Extra keys.</string>
+    <string name="extra_keys_default_offer_message">This update brings a new set of keys under the terminal. Your current row is kept in Settings, under Terminal extra keys.</string>
     <string name="extra_keys_default_offer_switch">Switch</string>
     <string name="extra_keys_default_offer_keep">Keep mine</string>
     <string name="extra_keys_default_offer_switched">New key row in place</string>
@@ -252,8 +252,8 @@
     <string name="settings_extra_keys_glyph_more_results">%1$d more — search by name, e.g. \"keyboard\" or \"nf-md-folder\"</string>
     <string name="settings_extra_keys_glyph_paste_hint">Nerd Font icons are bundled: search them above, or paste any icon straight into a key label.</string>
     <string name="settings_edit_extra_keys_title">Edit extra keys</string>
-    <string name="settings_edit_extra_keys_summary">Choose the keys in the row, what a swipe up does, and how they look.</string>
-    <string name="settings_terminal_key_row_header">Extra keys</string>
+    <string name="settings_edit_extra_keys_summary">Choose the keys in the row under the terminal, what a swipe up does, and how they look.</string>
+    <string name="settings_terminal_key_row_header">Terminal extra keys</string>
     <string name="settings_extra_keys_all_caps_title">Capitalize key labels</string>
     <string name="settings_extra_keys_all_caps_summary">Show ESC and TAB in capitals rather than as written.</string>
     <string name="settings_use_case_header">Use case</string>
@@ -368,8 +368,8 @@
     <string name="settings_customize_keyboard_summary">Edit keyboard size, spacing, key radius, and colors live on the home screen. Shape follows the shared surface choice.</string>
     <string name="settings_input_method_header">Input method</string>
     <string name="settings_on_screen_keyboard_title">On-screen keyboard</string>
-    <string name="settings_keyboard_input_built_in">Built-in terminal keyboard</string>
-    <string name="settings_keyboard_input_android">Android keyboard</string>
+    <string name="settings_keyboard_input_built_in">In-app</string>
+    <string name="settings_keyboard_input_android">Android IME</string>
     <string name="settings_keyboard_input_none">None</string>
     <string name="settings_hide_keyboard_hardware_title">Hide the on-screen keyboard</string>
     <string name="settings_hide_keyboard_hardware_summary">Hides the on-screen keyboard while a hardware keyboard is connected.</string>
@@ -379,8 +379,8 @@
     <string name="settings_keyboard_bottom_padding_title">Bottom padding</string>
     <string name="settings_keyboard_bottom_padding_summary">Lift the bottom key row away from the edge of the screen.</string>
     <string name="settings_layout_header">Layout</string>
-    <string name="settings_extra_keys_title">Extra keys</string>
-    <string name="settings_extra_keys_summary">Choose keys to add to the built-in keyboard.</string>
+    <string name="settings_extra_keys_title">Keyboard extra keys</string>
+    <string name="settings_extra_keys_summary">Add keys to the in-app keyboard\'s own layout.</string>
     <string name="settings_layout_documentation_title">Layout documentation</string>
     <string name="settings_supported_keys_title">Supported key values</string>
     <string name="settings_feedback_header">Feedback</string>
@@ -588,7 +588,7 @@
     <string name="settings_set_default_launcher_title">Set as default launcher</string>
     <string name="settings_set_default_launcher_summary">Opens Android’s default home app settings.</string>
     <string name="settings_double_tap_action_title">Double tap A–Z Row to lock screen</string>
-    <string name="settings_double_tap_action_summary">Choose what happens when the A–Z index is double-tapped.</string>
+    <string name="settings_double_tap_action_summary">Shizuku keeps the usual screen-off animation. Accessibility can flicker as the screen turns off.</string>
 
     <string name="application_name">&TERMUX_APP_NAME;</string>
     <string name="shared_user_label">&TERMUX_APP_NAME; user</string>
@@ -915,7 +915,7 @@
                 <string name="termux_keyboard_color_scheme_colors">Colors</string>
                 <string name="termux_keyboard_color_scheme_edit_colors">Edit colors</string>
                 <string name="termux_keyboard_color_scheme_save_colors">Save colors</string>
-                <string name="termux_keyboard_color_scheme_follow_theme">Follow theme</string>
+                <string name="termux_keyboard_color_scheme_follow_theme">Reset to theme</string>
                 <string name="termux_keyboard_color_scheme_follow_theme_title">Follow the system theme?</string>
                 <string name="termux_keyboard_color_scheme_follow_theme_message">Pinned colors and any imported palette are discarded: every keyboard color follows your system theme and wallpaper again. Keys you painted keep their slot assignments.</string>
                 <string name="termux_keyboard_color_scheme_follow_theme_clear_keys">Clear painted keys too</string>
@@ -929,12 +929,12 @@
                 <string name="termux_keyboard_color_scheme_slot_description">%1$s, %2$s, %3$s</string>
                 <string name="termux_keyboard_color_scheme_slot_unpin">Follow theme again</string>
                 <string name="termux_keyboard_color_scheme_slot_unpinned">%1$s follows the system theme again</string>
-                <string name="termux_keyboard_color_scheme_instructions">Paint keys directly: choose a color and role, then tap or drag across the keyboard. With Background, tapping a color paints the whole keyboard; tap it again to clear. Tap Edit colors and then a color to pin it to a hex value. Dashed colors follow your system theme; a dot marks a pinned one.</string>
-                <string name="termux_keyboard_color_scheme_key_bg">Key bg</string>
-                <string name="termux_keyboard_color_scheme_key_border">Key border</string>
-                <string name="termux_keyboard_color_scheme_primary">Primary</string>
-                <string name="termux_keyboard_color_scheme_secondary">Secondary</string>
-                <string name="termux_keyboard_color_scheme_secondary_bottom">Secondary bottom override</string>
+                <string name="termux_keyboard_color_scheme_instructions">• Pick a color, then what it paints below.\n• Tap a key, or drag across several. Background paints the whole keyboard.\n• Tap the pencil, then a color, to set its exact value. A dot marks a color you set.\n• Changes save as you go. Reset returns to your theme.</string>
+                <string name="termux_keyboard_color_scheme_key_bg">Key fill</string>
+                <string name="termux_keyboard_color_scheme_key_border">Border</string>
+                <string name="termux_keyboard_color_scheme_primary">Label</string>
+                <string name="termux_keyboard_color_scheme_secondary">Corner labels</string>
+                <string name="termux_keyboard_color_scheme_secondary_bottom">Bottom label</string>
                 <string name="termux_keyboard_color_scheme_background">Background</string>
                 <!-- Short Material-role names for the 24 keyboard color slots, in slot order
                      (base00 … base17). Index 06 and 10 are both colorSurface in the palette
@@ -1486,8 +1486,8 @@
                 <string name="termux_app_launcher_notification_access_settings_title">Notification access</string>
                 <string name="termux_app_launcher_permission_settings_unavailable">Permission settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_az_lock_method_off">Off</string>
-                <string name="termux_app_launcher_az_lock_method_shizuku">Shizuku\nSends a power-button keypress via Shizuku — preserves the system screen-off animation.</string>
-                <string name="termux_app_launcher_az_lock_method_accessibility">Accessibility\nUses the accessibility service to lock — the screen may flicker while turning off.</string>
+                <string name="termux_app_launcher_az_lock_method_shizuku">Shizuku</string>
+                <string name="termux_app_launcher_az_lock_method_accessibility">Accessibility</string>
                 <string name="termux_app_launcher_set_home_unavailable">Home launcher settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_title">Enable accessibility lock</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_message">Enable Termux Launcher Lock Service to lock the screen from the alphabets row.</string>
@@ -2064,7 +2064,7 @@
     <string name="tour_card_keyboard_hide_again">Tap it again to hide the keyboard.</string>
     <string name="tour_card_find_action_palette">Swipe up on the space bar to open the command palette.</string>
     <string name="tour_card_find_action_close">Search for anything, launch Android apps and reach Termux Launcher features. Tap outside the palette to close it.</string>
-    <string name="tour_card_key_row">This update brings a new row of keys under the terminal. Take it now, or keep the row you have. Either way the other row is in Settings, under Extra keys.</string>
+    <string name="tour_card_key_row">This update brings a new row of keys under the terminal. Take it now, or keep the row you have. Either way the other row is in Settings, under Terminal extra keys.</string>
     <string name="tour_card_home_choice">Use Termux as your home screen?</string>
     <string name="tour_card_home_choice_already">Termux is your home screen.</string>
     <string name="tour_card_resume_or_restart">Termux has a new, shorter introduction.</string>

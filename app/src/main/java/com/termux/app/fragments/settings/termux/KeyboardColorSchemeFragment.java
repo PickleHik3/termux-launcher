@@ -10,7 +10,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.Space;
 import android.widget.TextView;
@@ -231,37 +230,32 @@ public class KeyboardColorSchemeFragment extends Fragment {
             com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
         heading.addView(colorsTitle, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        MaterialButton edit = new MaterialButton(context, null,
-            com.google.android.material.R.attr.materialButtonOutlinedStyle);
-        edit.setText(R.string.termux_keyboard_color_scheme_edit_colors);
+        // Reset and edit sit on the heading's own line as icons, so the card's height goes to the
+        // role filters instead.
+        MaterialButton reset = headingIconButton(context, R.drawable.ic_symbol_restart,
+            R.string.termux_keyboard_color_scheme_follow_theme);
+        reset.setOnClickListener(view -> showFollowThemeDialog());
+        heading.addView(reset);
+        MaterialButton edit = headingIconButton(context, R.drawable.ic_symbol_edit,
+            R.string.termux_keyboard_color_scheme_edit_colors);
+        edit.setCheckable(true);
         edit.setOnClickListener(view -> {
             mEditingSwatches = !mEditingSwatches;
-            edit.setText(mEditingSwatches ? R.string.termux_keyboard_color_scheme_save_colors
-                : R.string.termux_keyboard_color_scheme_edit_colors);
+            edit.setIconResource(mEditingSwatches ? R.drawable.ic_symbol_check
+                : R.drawable.ic_symbol_edit);
+            edit.setContentDescription(getString(mEditingSwatches
+                ? R.string.termux_keyboard_color_scheme_save_colors
+                : R.string.termux_keyboard_color_scheme_edit_colors));
+            edit.setChecked(mEditingSwatches);
             updateSwatches();
         });
         heading.addView(edit);
         content.addView(heading);
 
-        LinearLayout actions = new LinearLayout(context);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.CENTER_VERTICAL);
-        MaterialButton followTheme = new MaterialButton(context, null,
-            com.google.android.material.R.attr.materialButtonOutlinedStyle);
-        followTheme.setText(R.string.termux_keyboard_color_scheme_follow_theme);
-        followTheme.setOnClickListener(view -> showFollowThemeDialog());
-        actions.addView(followTheme, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        actionParams.topMargin = dp(4);
-        content.addView(actions, actionParams);
-
-        HorizontalScrollView roleScroller = new HorizontalScrollView(context);
-        roleScroller.setHorizontalScrollBarEnabled(false);
-        roleScroller.setClipToPadding(false);
         ChipGroup roles = new ChipGroup(context);
-        roles.setSingleLine(true);
+        roles.setSingleLine(false);
+        roles.setChipSpacingVertical(0);
+        roles.setChipSpacingHorizontal(dp(6));
         roles.setSingleSelection(true);
         roles.setSelectionRequired(true);
         mRoleByChipId.clear();
@@ -288,12 +282,10 @@ public class KeyboardColorSchemeFragment extends Fragment {
             if (role != null)
                 mSelectedRole = role;
         });
-        roleScroller.addView(roles, new ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams roleParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        roleParams.topMargin = dp(4);
-        content.addView(roleScroller, roleParams);
+        roleParams.topMargin = dp(2);
+        content.addView(roles, roleParams);
 
         card.addView(content);
         return card;
@@ -409,6 +401,18 @@ public class KeyboardColorSchemeFragment extends Fragment {
             pinnedSwatchCount(scheme), scheme.swatchCount());
     }
 
+    /** A borderless icon button for the Colors heading, named for talkback by {@code label}. */
+    @NonNull
+    private MaterialButton headingIconButton(@NonNull android.content.Context context, int icon,
+                                             int label) {
+        MaterialButton button = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialIconButtonStyle);
+        button.setIconResource(icon);
+        button.setContentDescription(getString(label));
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(button, getString(label));
+        return button;
+    }
+
     @NonNull
     private Chip addRole(@NonNull android.content.Context context, @NonNull ChipGroup group,
                          int label, @Nullable InAppKeyboardColorScheme.Role role,
@@ -420,10 +424,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
         chip.setChecked(checked);
         if (role != null)
             mRoleByChipId.put(chip.getId(), role);
-        ChipGroup.LayoutParams params = new ChipGroup.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMarginEnd(dp(8));
-        group.addView(chip, params);
+        group.addView(chip, new ChipGroup.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return chip;
     }
 
