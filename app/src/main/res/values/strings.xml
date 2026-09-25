@@ -1800,7 +1800,6 @@
     <string name="speech_model_in_use">In use</string>
     <string name="speech_model_window_summary">%1$d-second window</string>
     <string name="speech_model_download_title">Download a model</string>
-    <string name="speech_model_download_summary">Pick a size, a language and a window length</string>
     <string name="speech_model_download_dialog_title">Download a speech model</string>
     <string name="speech_model_size_label">Size</string>
     <string name="speech_model_size_base">Base (~%1$s)</string>

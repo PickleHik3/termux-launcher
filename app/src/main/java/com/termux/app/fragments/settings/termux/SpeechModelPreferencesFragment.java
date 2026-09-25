@@ -91,7 +91,6 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment {
         SettingsLayoutUtils.applyScreenLayout(this);
         Preference download = findPreference(KEY_DOWNLOAD);
         if (download != null) {
-            download.setSummary(R.string.speech_model_download_summary_engines);
             download.setOnPreferenceClickListener(preference -> {
                 showDownloadDialog(context);
                 return true;
