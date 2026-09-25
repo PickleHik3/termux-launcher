@@ -16,9 +16,6 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -31,8 +28,8 @@ import java.util.concurrent.TimeUnit;
  * Host-side replay of the on-device voice pipeline: a WAV (a whole mic session, 16 kHz mono
  * PCM16) through the real {@link VoiceActivityDetector} exactly as {@code VoiceInputSession.capture}
  * feeds it, {@link VoiceGain}, a Python Whisper server for the transcript, and the real
- * {@link VoiceCommand}/{@link VoiceTerminalCleanup} classification — a printed event log per clip,
- * plus a pass/fail against a {@code <clip>.expect} file when one sits next to the WAV.
+ * {@link VoiceTextSanitizer} classification — a printed event log per clip, plus a pass/fail
+ * against a {@code <clip>.expect} file when one sits next to the WAV.
  *
  * <p>Skipped ({@link Assume}) unless {@code -Dvoice.replay.in} names a WAV file or a directory of
  * them; {@code app/build.gradle} forwards the {@code voice.replay.*} system properties to the test
@@ -42,10 +39,7 @@ import java.util.concurrent.TimeUnit;
  *   <li>{@code voice.replay.in} — a WAV file or a directory of WAVs (required to run this test)</li>
  *   <li>{@code voice.replay.model} — {@code base} (default), {@code small}, or {@code parakeet}
  *       (NVIDIA parakeet-tdt-0.6b-v3, LiteRT int8 stateful 5 s, from
- *       {@code ~/.cache/termux-launcher/parakeet/}; see project-docs/parakeet-stt-research.md —
- *       it has no bias prompt, so {@code voice.replay.terminal} does not change it)</li>
- *   <li>{@code voice.replay.terminal} — the terminal bias prompt and cleanup; default {@code true}</li>
- *   <li>{@code voice.replay.bare} — "Bare command words"; default {@code false}</li>
+ *       {@code ~/.cache/termux-launcher/parakeet/}; see project-docs/parakeet-stt-research.md)</li>
  *   <li>{@code voice.replay.pause} — the VAD pause in ms, {@code VoiceInputSession}'s own default 600</li>
  *   <li>{@code voice.replay.out} — where the report and per-segment WAVs land; default {@code app/build/voice-replay}</li>
  *   <li>{@code voice.replay.python} — the interpreter; default {@code ~/.cache/termux-launcher/venv/bin/python}</li>
@@ -82,8 +76,6 @@ public class VoiceReplayRig {
         Assume.assumeTrue("voice.replay.in does not exist: " + in, in.exists());
 
         String modelChoice = System.getProperty("voice.replay.model", "base").trim();
-        boolean terminal = Boolean.parseBoolean(System.getProperty("voice.replay.terminal", "true"));
-        boolean bare = Boolean.parseBoolean(System.getProperty("voice.replay.bare", "false"));
         int pauseMs = Integer.parseInt(System.getProperty("voice.replay.pause", "600").trim());
         File outDir = new File(System.getProperty("voice.replay.out", "app/build/voice-replay"));
         String python = System.getProperty("voice.replay.python", defaultPythonPath());
@@ -107,9 +99,9 @@ public class VoiceReplayRig {
         }
 
         server = parakeet ? startParakeetServer(python, modelFile, tokenizerFile)
-            : startServer(python, modelFile, tokenizerFile, BiasPrompts.build(tokenizerFile));
+            : startServer(python, modelFile, tokenizerFile, BiasPrompt.build(tokenizerFile));
         SubprocessTranscriber transcriber = new SubprocessTranscriber(server, outDir);
-        VoiceReplayCore.ReplayConfig config = new VoiceReplayCore.ReplayConfig(pauseMs, WINDOW_SECONDS, terminal, bare);
+        VoiceReplayCore.ReplayConfig config = new VoiceReplayCore.ReplayConfig(pauseMs, WINDOW_SECONDS);
 
         StringBuilder report = new StringBuilder();
         boolean anyExpectations = false;
@@ -171,12 +163,12 @@ public class VoiceReplayRig {
 
     @NonNull
     private static Process startServer(@NonNull String python, @NonNull File modelFile, @NonNull File tokenizerFile,
-                                       @NonNull BiasPrompts prompts) throws IOException {
+                                       @NonNull BiasPrompt prompt) throws IOException {
         File script = findScript();
         List<String> command = new ArrayList<>(Arrays.asList(python, script.getAbsolutePath(),
             modelFile.getAbsolutePath(), tokenizerFile.getAbsolutePath(),
-            joinInts(prompts.promptTerminal), joinInts(prompts.promptBare),
-            String.valueOf(prompts.endOfText), String.valueOf(prompts.timestampBegin), joinInts(prompts.always)));
+            joinInts(prompt.prompt), String.valueOf(prompt.endOfText), String.valueOf(prompt.timestampBegin),
+            joinInts(prompt.always)));
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.redirectErrorStream(false);
         builder.redirectError(ProcessBuilder.Redirect.INHERIT);
@@ -242,14 +234,13 @@ public class VoiceReplayRig {
 
         @NonNull
         @Override
-        public VoiceReplayCore.TranscriptResult transcribe(@NonNull short[] pcm, boolean terminalPrompt) throws IOException {
+        public VoiceReplayCore.TranscriptResult transcribe(@NonNull short[] pcm) throws IOException {
             File wav = new File(tempDir, "segment-" + (sequence++) + ".wav");
             writeWav16kMono(wav, pcm);
             try {
                 JSONObject request = new JSONObject();
                 try {
                     request.put("wav", wav.getAbsolutePath());
-                    request.put("terminal", terminalPrompt);
                 } catch (org.json.JSONException e) {
                     throw new IOException(e);
                 }
@@ -328,53 +319,47 @@ public class VoiceReplayRig {
     /**
      * The exact prompt and suppression ids {@code com.termux.ai.WhisperDecoder}/{@code WhisperTokenizer}
      * would build for this tokenizer, read by reflection since both classes are package-private to
-     * {@code com.termux.ai} — rather than re-implementing the BPE encode or duplicating the
-     * vocabulary string, the real runtime classes (already on the test classpath, same module) do
-     * the work and the token ids are handed to the Python server once at startup.
+     * {@code com.termux.ai} — rather than re-implementing the BPE encode, the real runtime classes
+     * (already on the test classpath, same module) do the work and the token ids are handed to the
+     * Python server once at startup.
      */
-    private static final class BiasPrompts {
-        final int[] promptTerminal;
-        final int[] promptBare;
+    private static final class BiasPrompt {
+        final int[] prompt;
         final int endOfText;
         final int timestampBegin;
         final int[] always;
 
-        private BiasPrompts(int[] promptTerminal, int[] promptBare, int endOfText, int timestampBegin, int[] always) {
-            this.promptTerminal = promptTerminal;
-            this.promptBare = promptBare;
+        private BiasPrompt(int[] prompt, int endOfText, int timestampBegin, int[] always) {
+            this.prompt = prompt;
             this.endOfText = endOfText;
             this.timestampBegin = timestampBegin;
             this.always = always;
         }
 
         @NonNull
-        static BiasPrompts build(@NonNull File tokenizerJson) throws ReflectiveOperationException {
+        static BiasPrompt build(@NonNull File tokenizerJson) throws ReflectiveOperationException {
             Class<?> tokenizerClass = Class.forName("com.termux.ai.WhisperTokenizer");
             Class<?> decoderClass = Class.forName("com.termux.ai.WhisperDecoder");
             Class<?> suppressionClass = Class.forName("com.termux.ai.WhisperDecoder$Suppression");
 
-            Method fromFile = tokenizerClass.getDeclaredMethod("fromFile", File.class);
+            java.lang.reflect.Method fromFile = tokenizerClass.getDeclaredMethod("fromFile", File.class);
             fromFile.setAccessible(true);
             Object tokenizer = invoke(fromFile, null, tokenizerJson);
 
-            Field vocabularyField = decoderClass.getDeclaredField("TERMINAL_VOCABULARY");
-            vocabularyField.setAccessible(true);
-            String vocabulary = (String) vocabularyField.get(null);
-
-            Method promptMethod = decoderClass.getDeclaredMethod("prompt", tokenizerClass, String.class, String.class);
+            java.lang.reflect.Method promptMethod =
+                decoderClass.getDeclaredMethod("prompt", tokenizerClass, String.class, String.class);
             promptMethod.setAccessible(true);
-            int[] promptTerminal = (int[]) invoke(promptMethod, null, tokenizer, "en", vocabulary);
-            int[] promptBare = (int[]) invoke(promptMethod, null, tokenizer, "en", null);
+            int[] prompt = (int[]) invoke(promptMethod, null, tokenizer, "en", null);
 
-            Method forTokenizer = suppressionClass.getDeclaredMethod("forTokenizer", tokenizerClass);
+            java.lang.reflect.Method forTokenizer = suppressionClass.getDeclaredMethod("forTokenizer", tokenizerClass);
             forTokenizer.setAccessible(true);
             Object suppression = invoke(forTokenizer, null, tokenizer);
 
-            Field endOfTextField = suppressionClass.getDeclaredField("endOfText");
+            java.lang.reflect.Field endOfTextField = suppressionClass.getDeclaredField("endOfText");
             endOfTextField.setAccessible(true);
-            Field timestampBeginField = suppressionClass.getDeclaredField("timestampBegin");
+            java.lang.reflect.Field timestampBeginField = suppressionClass.getDeclaredField("timestampBegin");
             timestampBeginField.setAccessible(true);
-            Field alwaysField = suppressionClass.getDeclaredField("always");
+            java.lang.reflect.Field alwaysField = suppressionClass.getDeclaredField("always");
             alwaysField.setAccessible(true);
 
             // -1 marks a special this vocabulary lacks (WhisperDecoder.Suppression itself ignores it
@@ -386,17 +371,18 @@ public class VoiceReplayRig {
             int[] always = new int[filtered.size()];
             for (int i = 0; i < always.length; i++) always[i] = filtered.get(i);
 
-            return new BiasPrompts(promptTerminal, promptBare,
+            return new BiasPrompt(prompt,
                 (int) endOfTextField.get(suppression), (int) timestampBeginField.get(suppression), always);
         }
 
         @NonNull
-        private static Object invoke(@NonNull Method method, Object target, Object... args) throws ReflectiveOperationException {
+        private static Object invoke(@NonNull java.lang.reflect.Method method, Object target, Object... args)
+                throws ReflectiveOperationException {
             try {
                 Object result = method.invoke(target, args);
                 if (result == null) throw new IllegalStateException(method + " returned null");
                 return result;
-            } catch (InvocationTargetException e) {
+            } catch (java.lang.reflect.InvocationTargetException e) {
                 Throwable cause = e.getCause();
                 if (cause instanceof ReflectiveOperationException) throw (ReflectiveOperationException) cause;
                 if (cause instanceof RuntimeException) throw (RuntimeException) cause;

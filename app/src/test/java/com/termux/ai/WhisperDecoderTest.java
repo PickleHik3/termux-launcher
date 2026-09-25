@@ -79,7 +79,8 @@ public class WhisperDecoderTest {
             WhisperMelTest.readBytes("whisper/tokenizer_base_en_trimmed.json"), StandardCharsets.UTF_8));
         // expected.json task_prompt_ids: the .en tokenizer carries <|en|>, so it is prompted with it.
         assertArrayEquals(new int[] {50257, 50258, 50358, 50362}, WhisperDecoder.taskPrompt(tokenizer, "en"));
-        int[] biased = WhisperDecoder.prompt(tokenizer, "en", WhisperDecoder.TERMINAL_VOCABULARY);
+        // The shell vocabulary the fixture's bias ids were produced with (once the built-in terminal bias).
+        int[] biased = WhisperDecoder.prompt(tokenizer, "en", "git ls cd sudo apt pkg tab enter escape ctrl key");
         assertEquals(50360, biased[0]);
         assertArrayEquals(new int[] {17606, 43979, 22927, 21061, 15409}, Arrays.copyOfRange(biased, 1, 6));
         assertArrayEquals(new int[] {50257, 50258, 50358, 50362}, Arrays.copyOfRange(biased, biased.length - 4, biased.length));

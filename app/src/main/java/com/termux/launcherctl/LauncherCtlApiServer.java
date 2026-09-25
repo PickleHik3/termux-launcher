@@ -685,7 +685,7 @@ public class LauncherCtlApiServer {
 
     /**
      * OpenAI POST /v1/audio/transcriptions. Multipart ({@code file}, {@code model}, {@code language},
-     * {@code prompt}, {@code prompt_mode}, {@code response_format}) is the OpenAI shape and what
+     * {@code prompt}, {@code response_format}) is the OpenAI shape and what
      * {@code tai transcribe} sends; the upload is written under {@code cacheDir/tai-ipc} and handed
      * to the runtime process as a path, since audio never crosses the Messenger inline. A JSON body
      * with a {@code file} path is accepted too, for scripts on the phone. {@code response_format}
@@ -707,7 +707,7 @@ public class LauncherCtlApiServer {
                 return jsonResponse(statusError(400, "stt_audio_missing", "Multipart field 'file' with the audio is required."));
             }
             taiRequest = new JSONObject();
-            for (String field : new String[] {"model", "language", "prompt", "prompt_mode", "response_format"}) {
+            for (String field : new String[] {"model", "language", "prompt", "response_format"}) {
                 MultipartFormData.Part part = parts.get(field);
                 if (part != null && part.filename == null) taiRequest.put(field, part.text());
             }
@@ -1734,7 +1734,7 @@ public class LauncherCtlApiServer {
             "  tai keep-warm [model] [--minutes N] [--auto|--cpu|--gpu]\n" +
             "  tai cancel\n" +
             "  tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\n" +
-            "  tai transcribe <file.wav> [--model id] [--language xx] [--terminal]\n" +
+            "  tai transcribe <file.wav> [--model id] [--language xx] [--prompt \"words\"]\n" +
             "  tai doctor\n" +
             "\n" +
             "TAI is authenticated through ~/.launcherctl and runs native AI in the isolated :tai_runtime process.\n" +
@@ -1750,10 +1750,10 @@ public class LauncherCtlApiServer {
             "checks the same memory budget as tai load unless --force skips it, since Gallery has none.\n" +
             "tai transcribe runs the speech model voice input uses (Keyboard settings > Voice input > Speech\n" +
             "model) on a WAV file (16 kHz mono PCM16 preferred; other rates are resampled) or raw PCM16\n" +
-            "16 kHz mono, on the CPU in :tai_runtime, never queued behind a chat generation. --terminal\n" +
-            "biases towards shell vocabulary (git, ls, cd, sudo, apt, pkg, tab, enter, escape, ctrl);\n" +
-            "--language forces an ISO 639-1 code on multilingual models (the -en models always decode\n" +
-            "English).\n" +
+            "16 kHz mono, on the CPU in :tai_runtime, never queued behind a chat generation. --prompt\n" +
+            "gives Whisper a vocabulary line to bias towards (Parakeet has no prompt); --language forces\n" +
+            "an ISO 639-1 code on multilingual Whisper models (the -en models always decode English,\n" +
+            "Parakeet detects the language itself).\n" +
             "OpenAI-compatible endpoints (default bind mode is localhost):\n" +
             "  /v1/models\n" +
             "  /v1/chat/completions\n" +
@@ -1964,13 +1964,13 @@ public class LauncherCtlApiServer {
             "    file=\"\"\n" +
             "    model=\"\"\n" +
             "    language=\"\"\n" +
-            "    terminal=\"\"\n" +
-            "    usage_transcribe() { echo \"usage: tai transcribe <file.wav> [--model id] [--language xx] [--terminal]\" >&2; exit 2; }\n" +
+            "    prompt=\"\"\n" +
+            "    usage_transcribe() { echo \"usage: tai transcribe <file.wav> [--model id] [--language xx] [--prompt words]\" >&2; exit 2; }\n" +
             "    while [ \"$#\" -gt 0 ]; do\n" +
             "      case \"$1\" in\n" +
             "        --model) shift; [ \"$#\" -gt 0 ] || usage_transcribe; model=\"$1\" ;;\n" +
             "        --language) shift; [ \"$#\" -gt 0 ] || usage_transcribe; language=\"$1\" ;;\n" +
-            "        --terminal) terminal=terminal ;;\n" +
+            "        --prompt) shift; [ \"$#\" -gt 0 ] || usage_transcribe; prompt=\"$1\" ;;\n" +
             "        --*) usage_transcribe ;;\n" +
             "        *) [ -z \"$file\" ] || usage_transcribe; file=\"$1\" ;;\n" +
             "      esac\n" +
@@ -1983,7 +1983,7 @@ public class LauncherCtlApiServer {
             "    set -- -F \"file=@$file\"\n" +
             "    [ -z \"$model\" ] || set -- \"$@\" -F \"model=$model\"\n" +
             "    [ -z \"$language\" ] || set -- \"$@\" -F \"language=$language\"\n" +
-            "    [ -z \"$terminal\" ] || set -- \"$@\" -F \"prompt_mode=terminal\"\n" +
+            "    [ -z \"$prompt\" ] || set -- \"$@\" -F \"prompt=$prompt\"\n" +
             "    if [ \"$OUTPUT_MODE\" = \"text\" ]; then set -- \"$@\" -F \"response_format=text\" -H \"X-TAI-Output: text\"; fi\n" +
             "    curl $CURL_COMMON -X POST -H \"Authorization: Bearer $TOKEN\" \"$@\" \"$BASE/v1/audio/transcriptions\"\n" +
             "    ;;\n" +

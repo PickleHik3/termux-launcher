@@ -68,26 +68,12 @@ public final class VoiceFeedback {
         cue(VoiceTone.error(), Haptic.ERROR);
     }
 
-    /**
-     * A spoken phrase was classified as a command and its key was just sent — haptic only (no
-     * tone; the pill's chip already carries the visual confirmation), and only when key haptics
-     * are on, the same setting the voice key's other cues follow.
-     */
-    public void onCommand() {
-        if (!haptics) return;
-        try {
-            executor.execute(() -> vibrate(Haptic.COMMAND));
-        } catch (RuntimeException ignored) {
-            // Already released: the session is over and a late cue is not worth a crash.
-        }
-    }
-
     /** Lets whatever is queued play out, then lets the thread go. */
     public void release() {
         executor.shutdown();
     }
 
-    private enum Haptic { LIGHT, CONFIRM, ERROR, COMMAND }
+    private enum Haptic { LIGHT, CONFIRM, ERROR }
 
     private void cue(@NonNull short[] tone, @NonNull Haptic haptic) {
         if (!sounds && !haptics) return;
@@ -110,7 +96,6 @@ public final class VoiceFeedback {
             switch (haptic) {
                 case LIGHT: predefined = VibrationEffect.EFFECT_TICK; break;
                 case CONFIRM: predefined = VibrationEffect.EFFECT_CLICK; break;
-                case COMMAND: predefined = VibrationEffect.EFFECT_HEAVY_CLICK; break;
                 default: predefined = VibrationEffect.EFFECT_DOUBLE_CLICK; break;
             }
             effect = VibrationEffect.createPredefined(predefined);
@@ -118,7 +103,6 @@ public final class VoiceFeedback {
             switch (haptic) {
                 case LIGHT: effect = VibrationEffect.createOneShot(15L, VibrationEffect.DEFAULT_AMPLITUDE); break;
                 case CONFIRM: effect = VibrationEffect.createOneShot(35L, VibrationEffect.DEFAULT_AMPLITUDE); break;
-                case COMMAND: effect = VibrationEffect.createOneShot(25L, VibrationEffect.DEFAULT_AMPLITUDE); break;
                 default: effect = VibrationEffect.createWaveform(new long[] {0L, 35L, 60L, 35L}, -1); break;
             }
         }

@@ -27,9 +27,9 @@ public class TaiModelCatalogTest {
             if (TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) mnnCount++;
         }
 
-        assertEquals(17, entries.size());
-        assertEquals(17, new HashSet<>(entries.keySet()).size());
-        assertEquals(10, liteRtCount);
+        assertEquals(18, entries.size());
+        assertEquals(18, new HashSet<>(entries.keySet()).size());
+        assertEquals(11, liteRtCount);
         assertEquals(7, mnnCount);
     }
 
@@ -200,6 +200,37 @@ public class TaiModelCatalogTest {
     }
 
     @Test
+    public void parakeet_catalogEntryPinsTheGraphTheTokenizerAndTheOneWindow() {
+        TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(TaiModelCatalog.PARAKEET_TDT_V3_ID);
+        assertNotNull(entry);
+        assertEquals("parakeet-tdt-0.6b-v3", entry.modelId);
+        assertEquals(TaiModelSpec.BACKEND_LITERT_LM, entry.backend);
+        assertEquals(TaiModelSpec.FORMAT_LITERTLM, entry.format);
+        assertEquals("parakeet-tdt", entry.architecture);
+        assertEquals("CC-BY-4.0", entry.license);
+        assertEquals(8, entry.recommendedRamGb);
+        assertTrue(entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+        assertTrue(entry.displayCapabilityTags.contains("Speech"));
+        assertTrue(entry.downloadAvailable);
+        assertEquals(614_261_072L, entry.sizeBytes);
+        assertEquals("334745b8bc7fd372b1c213516f0b6338bb827b1a2abb3e77ad35fe6fea5cd16b", entry.sha256);
+        assertEquals("https://huggingface.co/litert-community/parakeet-tdt-0.6b-v3/resolve/50dae0cb8c7b39dda477966eff7150cd7fe206ae/"
+            + "parakeet_tdt_0.6b_v3_5s_i8_stateful.tflite?download=true", entry.downloadUrl);
+        // The tokenizer comes from NVIDIA's own repo at a pinned revision, next to the graph.
+        assertEquals(1, entry.sidecars.size());
+        TaiModelCatalog.CatalogEntry.Sidecar sidecar = entry.sidecars.get(0);
+        assertEquals("tokenizer.json", sidecar.localName);
+        assertEquals("https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/resolve/541d1f99c6b0c3cd0b11a95167540bb8edefd82b/tokenizer.json", sidecar.url);
+        assertEquals("bd321b096832a3f270bd3b2a88823957920f1a5c5ada71114a26ea729d0cbe91", sidecar.sha256);
+        // One 5 s graph: asking for any other window keeps it.
+        assertEquals(1, entry.speechWindows.size());
+        assertTrue(entry.speechWindows.containsKey(5));
+        assertEquals(entry.artifactPath, entry.withWindow(10).artifactPath);
+        assertEquals(entry.artifactPath, entry.withWindow(5).artifactPath);
+        assertEquals(5, TaiSpeechModels.windowSeconds("/m/" + entry.modelId + "/" + entry.artifactPath));
+    }
+
+    @Test
     public void chatEntries_excludeSpeechToTextAndSpeechEntries_containOnlyThem() {
         Map<String, TaiModelCatalog.CatalogEntry> chat = TaiModelCatalog.chatEntries();
         Map<String, TaiModelCatalog.CatalogEntry> speech = TaiModelCatalog.speechEntries();
@@ -210,7 +241,9 @@ public class TaiModelCatalogTest {
         assertFalse(chat.containsKey("whisper-acft-small-en"));
         assertTrue(chat.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
 
-        assertEquals(4, speech.size());
+        assertEquals(5, speech.size());
+        assertFalse(chat.containsKey(TaiModelCatalog.PARAKEET_TDT_V3_ID));
+        assertTrue(speech.containsKey(TaiModelCatalog.PARAKEET_TDT_V3_ID));
         for (TaiModelCatalog.CatalogEntry entry : speech.values()) {
             assertTrue(entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
         }

@@ -17,7 +17,7 @@
         <Preference
             app:key="speech_model_download"
             app:title="@string/speech_model_download_title"
-            app:summary="@string/speech_model_download_summary"
+            app:summary="@string/speech_model_download_summary_engines"
             app:persistent="false"/>
         <Preference
             app:key="speech_model_idle_unload"

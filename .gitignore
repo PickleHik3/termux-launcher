@@ -91,3 +91,6 @@ WhatsApp Video*
 .gradle-codex-*/
 !app/src/main/assets/help-guide/*.mp4
 __pycache__/
+
+# Local notes, never committed
+project-docs/plans/TODO-voice-command-words.md

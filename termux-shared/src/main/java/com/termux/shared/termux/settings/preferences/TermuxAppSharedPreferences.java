@@ -1294,39 +1294,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_LANGUAGE, language, false);
     }
 
-    public boolean isInAppKeyboardVoiceCommandsEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_COMMANDS,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_COMMANDS);
-    }
-
-    public void setInAppKeyboardVoiceCommandsEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_COMMANDS, value, false);
-    }
-
-    public boolean isInAppKeyboardVoiceBareCommandWordsEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS);
-    }
-
-    public void setInAppKeyboardVoiceBareCommandWordsEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS, value, false);
-    }
-
-    public boolean isInAppKeyboardVoiceTerminalCleanupEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP);
-    }
-
-    public void setInAppKeyboardVoiceTerminalCleanupEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP, value, false);
-    }
-
     public boolean isInAppKeyboardVoiceSoundsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_SOUNDS,
@@ -1347,6 +1314,20 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setInAppKeyboardVoicePolishEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_POLISH, value, false);
+    }
+
+    /** The installed chat model id "Polish dictation" is pinned to, or {@code ""} for Automatic. */
+    public String getInAppKeyboardVoicePolishModelId() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_POLISH_MODEL,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_MODEL, true);
+        return value == null ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_MODEL : value;
+    }
+
+    public void setInAppKeyboardVoicePolishModelId(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_POLISH_MODEL,
+            value == null ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_MODEL : value, false);
     }
 
     /** One of {@link TERMUX_APP#IN_APP_KEYBOARD_VOICE_PAUSE_MS_CHOICES}; anything else stored reads as the default. */

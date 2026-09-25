@@ -41,7 +41,7 @@ import java.util.Locale;
  * {@link TaiResidency.Kind#STT} after the load (estimate: file size × 1.9 until the load meter
  * has measured it), busy while transcribing, deregistered on close.
  */
-final class WhisperSttRuntime implements AutoCloseable {
+final class WhisperSttRuntime implements SttRuntime {
     static final String SIGNATURE_ENCODE = "encode";
     static final String SIGNATURE_DECODE = "decode";
     static final String TOKENIZER_FILE = "tokenizer.json";
@@ -80,13 +80,15 @@ final class WhisperSttRuntime implements AutoCloseable {
     }
 
     /** Whether {@code modelId} is the graph held right now. */
-    synchronized boolean isLoaded(@NonNull String modelId) {
+    @Override
+    public synchronized boolean isLoaded(@NonNull String modelId) {
         return interpreter != null && modelId.equals(loadedModelId);
     }
 
     /** Loads the graph and tokenizer without transcribing, so a load overlaps the first words spoken. */
+    @Override
     @NonNull
-    synchronized JSONObject warm(@NonNull TaiModelSpec spec) throws JSONException {
+    public synchronized JSONObject warm(@NonNull TaiModelSpec spec) throws JSONException {
         JSONObject refusal = checkFiles(spec);
         if (refusal != null) return refusal;
         long started = System.currentTimeMillis();
@@ -114,9 +116,10 @@ final class WhisperSttRuntime implements AutoCloseable {
      * {@code null} for plain dictation. The audio is cut into pieces at pauses, each piece decoded,
      * and the texts joined with a space.
      */
+    @Override
     @NonNull
-    synchronized JSONObject transcribe(@NonNull TaiModelSpec spec, @NonNull File audioFile,
-                                       @Nullable String language, @Nullable String biasText) throws JSONException {
+    public synchronized JSONObject transcribe(@NonNull TaiModelSpec spec, @NonNull File audioFile,
+                                              @Nullable String language, @Nullable String biasText) throws JSONException {
         JSONObject refusal = checkFiles(spec);
         if (refusal != null) return refusal;
         float[] audio;

@@ -318,6 +318,11 @@ public class TaiResidencyTest {
         TaiModelSpec whisper = spec("whisper-acft-base-en", TaiModelSpec.BACKEND_LITERT_LM,
             "/models/whisper-acft-base-en/acft_whisper_base.en_10s_drq.tflite", 101_390_600L, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
         assertEquals(101_390_600L * 19L / 10L, TaiResidency.sttEstimateBytes(whisper));
+        // Parakeet's graph costs 2.0× its file (+1.2 GB RSS on pong for the 614 MB file).
+        TaiModelSpec parakeet = spec("parakeet-tdt-0.6b-v3", TaiModelSpec.BACKEND_LITERT_LM,
+            "/models/parakeet-tdt-0.6b-v3/parakeet_tdt_0.6b_v3_5s_i8_stateful.tflite", 614_261_072L, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
+        assertEquals(614_261_072L * 20L / 10L, TaiResidency.sttEstimateBytes(parakeet));
+        assertEquals(5, TaiResidency.Entry.stt(parakeet, 5).window);
         TaiResidency.Entry stt = TaiResidency.Entry.stt(whisper, 10);
         assertEquals(TaiResidency.Kind.STT, stt.kind);
         assertEquals("cpu", stt.accelerator);
