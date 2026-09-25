@@ -750,6 +750,7 @@
     <string name="action_file_received_open_directory">Open directory</string>
 
     <string name="error_wallpaper_set_failed">Couldn\'t set wallpaper.</string>
+    <string name="msg_wallpaper_applying">Applying wallpaper…</string>
 
 
 

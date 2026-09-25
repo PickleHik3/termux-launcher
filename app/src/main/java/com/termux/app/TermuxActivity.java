@@ -1119,6 +1119,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private View.OnLayoutChangeListener mAccessoryLayoutChangeListener;
     @Nullable private ActivityResultLauncher<PickVisualMediaRequest> mWallpaperPickerLauncher;
     @Nullable private ActivityResultLauncher<CropImageContractOptions> mWallpaperCropLauncher;
+    /** True while a picked wallpaper is being handed to Android on its own thread; a second pick waits. */
+    private boolean mWallpaperApplyInFlight;
     /** The help screen, launched for its result: what the reader asked the launcher to do. */
     @Nullable private ActivityResultLauncher<android.content.Intent> mHelpScreenLauncher;
     /** The page the reader was on when they asked, so closing the overlay lands them back on it. */
@@ -11768,33 +11770,57 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         };
         ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, targets);
         new MaterialAlertDialogBuilder(this)
-            .setAdapter(adapter, (dialogInterface, which) -> {
-                int selectedFlags = flags[which];
-                if (!applyManagedWallpaper(croppedUri, selectedFlags)) {
-                    showToast(getString(R.string.error_wallpaper_set_failed), true);
-                    return;
-                }
-
-                if ((selectedFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
-                    setWallpaperModeEnabled(this, true);
-                    updateWindowBackgroundForCurrentSession();
-                    View rootView = findViewById(R.id.activity_termux_root_view);
-                    if (rootView != null) {
-                        rootView.post(this::applyWallpaperOffsetFixIfNeeded);
-                    }
-                    mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-                }
-            })
+            .setAdapter(adapter, (dialogInterface, which) -> startManagedWallpaperApply(croppedUri, flags[which]))
             .show();
     }
 
-    private boolean applyManagedWallpaper(@NonNull Uri croppedUri, int wallpaperFlags) {
+    /**
+     * Hands the cropped picture to Android on its own thread. {@code setStream} returns only after
+     * system_server has cropped and re-encoded the picture, which for a large one takes seconds:
+     * run on the main thread that was the launcher's "not responding" dialog after a wallpaper pick.
+     */
+    private void startManagedWallpaperApply(@NonNull Uri croppedUri, int selectedFlags) {
+        if (mWallpaperApplyInFlight) return;
+        mWallpaperApplyInFlight = true;
+        showToast(getString(R.string.msg_wallpaper_applying), false);
+        WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
+        // Reads the window's frame, so it stays on the main thread; it is one quick binder call.
+        if ((selectedFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
+            suggestManagedWallpaperDimensions(wallpaperManager);
+        }
+        new Thread(() -> {
+            boolean applied = applyManagedWallpaper(wallpaperManager, croppedUri, selectedFlags);
+            runOnUiThread(() -> finishManagedWallpaperApply(applied, selectedFlags));
+        }, "managed-wallpaper-apply").start();
+    }
+
+    private void finishManagedWallpaperApply(boolean applied, int selectedFlags) {
+        mWallpaperApplyInFlight = false;
+        if (isFinishing() || isDestroyed()) return;
+        if (!applied) {
+            showToast(getString(R.string.error_wallpaper_set_failed), true);
+            return;
+        }
+
+        if ((selectedFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
+            // The picture is ours again now that its id is stored, so the glass must be told
+            // before the sync below re-dresses it.
+            refreshWallpaperPicture();
+            setWallpaperModeEnabled(this, true);
+            updateWindowBackgroundForCurrentSession();
+            View rootView = findViewById(R.id.activity_termux_root_view);
+            if (rootView != null) {
+                rootView.post(this::applyWallpaperOffsetFixIfNeeded);
+            }
+            mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        }
+    }
+
+    /** The file and system half of a wallpaper pick; runs off the main thread, touches no view. */
+    private boolean applyManagedWallpaper(@NonNull WallpaperManager wallpaperManager,
+                                          @NonNull Uri croppedUri, int wallpaperFlags) {
         Rect visibleCropHint = getWallpaperFullImageCropHint(croppedUri);
         try {
-            WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
-            if ((wallpaperFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
-                suggestManagedWallpaperDimensions(wallpaperManager);
-            }
             if (!setManagedWallpaperStream(wallpaperManager, croppedUri, visibleCropHint, wallpaperFlags)) {
                 return false;
             }
@@ -11805,9 +11831,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mPreferences != null) {
                     mPreferences.setManagedWallpaperSystemId(wallpaperId);
                 }
-                // The picture is ours again the moment that id is stored, so the glass must be
-                // told before the sync below re-dresses it.
-                refreshWallpaperPicture();
             }
             return true;
         } catch (Exception e) {
