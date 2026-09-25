@@ -13649,7 +13649,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void insertVoiceTranscript(@NonNull String transcript) {
         if (mInAppKeyboard == null) return;
         VoiceCommand command = mPreferences.isInAppKeyboardVoiceCommandsEnabled()
-            ? VoiceCommand.classify(transcript) : null;
+            ? VoiceCommand.classify(transcript, mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled())
+            : null;
         if (command != null) {
             juloo.keyboard2.KeyValue key = juloo.keyboard2.KeyValue.getKeyByName(command.keyName);
             if (key != null && mInAppKeyboard.dispatchKeyValue(key, command.ctrl)) {

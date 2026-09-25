@@ -743,10 +743,23 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_LANGUAGE = "auto";
 
-        /** Whether "enter", "tab", "escape", "backspace", "space" and "control c" said alone press the key. */
+        /**
+         * Whether "enter key", "tab key", "escape key", "backspace key", "space key" and
+         * "control c key" said alone press the key.
+         */
         public static final String KEY_IN_APP_KEYBOARD_VOICE_COMMANDS = "keyboard_voice_commands";
 
         public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_COMMANDS = true;
+
+        /**
+         * Whether a command word alone, with no trailing "key" ("enter" instead of "enter key"),
+         * still presses the key. Off by default: plain dictation says these words on their own far
+         * more often than a terminal command does.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS =
+            "keyboard_voice_bare_command_words";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS = false;
 
         /** Whether transcripts typed into a terminal lose trailing punctuation and single words are lowercased. */
         public static final String KEY_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP = "keyboard_voice_terminal_cleanup";

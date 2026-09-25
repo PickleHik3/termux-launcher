@@ -160,6 +160,7 @@ public class KeyboardPreferencesFragmentTest {
         assertEquals("system", store.getString("keyboard_voice_engine", null));
         assertEquals("auto", store.getString("keyboard_voice_language", null));
         assertTrue(store.getBoolean("keyboard_voice_commands", false));
+        assertTrue(!store.getBoolean("keyboard_voice_bare_command_words", true));
         assertTrue(store.getBoolean("keyboard_voice_terminal_cleanup", false));
         assertEquals("600", store.getString("keyboard_voice_pause_ms", null));
 
@@ -177,12 +178,14 @@ public class KeyboardPreferencesFragmentTest {
         store.putString("keyboard_voice_engine", "on_device");
         store.putString("keyboard_voice_language", "DE");
         store.putBoolean("keyboard_voice_commands", false);
+        store.putBoolean("keyboard_voice_bare_command_words", true);
         store.putBoolean("keyboard_voice_terminal_cleanup", false);
         store.putString("keyboard_voice_pause_ms", "1200");
 
         assertTrue(prefs.isInAppKeyboardVoiceOnDevice());
         assertEquals("de", prefs.getInAppKeyboardVoiceLanguage());
         assertTrue(!prefs.isInAppKeyboardVoiceCommandsEnabled());
+        assertTrue(prefs.isInAppKeyboardVoiceBareCommandWordsEnabled());
         assertTrue(!prefs.isInAppKeyboardVoiceTerminalCleanupEnabled());
         assertEquals(1200, prefs.getInAppKeyboardVoicePauseMs());
         assertEquals("1200", store.getString("keyboard_voice_pause_ms", null));

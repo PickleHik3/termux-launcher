@@ -1770,7 +1770,9 @@
     <string name="settings_keyboard_voice_language_title">Voice language</string>
     <string name="settings_keyboard_voice_language_auto">Auto</string>
     <string name="settings_keyboard_voice_commands_title">Spoken keys</string>
-    <string name="settings_keyboard_voice_commands_summary">"Enter", "tab", "escape", "backspace", "space" or "control c" said on its own presses the key</string>
+    <string name="settings_keyboard_voice_commands_summary">"Enter key", "tab key", "escape key", "backspace key", "space key" or "control c key" said on its own presses the key</string>
+    <string name="settings_keyboard_voice_bare_command_words_title">Bare command words</string>
+    <string name="settings_keyboard_voice_bare_command_words_summary">Also press the key for the bare word, without saying "key" ("enter" presses Enter)</string>
     <string name="settings_keyboard_voice_terminal_cleanup_title">Terminal cleanup</string>
     <string name="settings_keyboard_voice_terminal_cleanup_summary">Drop trailing punctuation and lowercase single words when typing into a shell</string>
     <string name="settings_keyboard_voice_pause_title">Pause that ends a phrase</string>

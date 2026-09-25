@@ -370,6 +370,9 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "keyboard_voice_commands":
                 mPreferences.setInAppKeyboardVoiceCommandsEnabled(value);
                 break;
+            case "keyboard_voice_bare_command_words":
+                mPreferences.setInAppKeyboardVoiceBareCommandWordsEnabled(value);
+                break;
             case "keyboard_voice_terminal_cleanup":
                 mPreferences.setInAppKeyboardVoiceTerminalCleanupEnabled(value);
                 break;
@@ -406,6 +409,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isInAppKeyboardTapCorrectionEnabled();
             case "keyboard_voice_commands":
                 return mPreferences.isInAppKeyboardVoiceCommandsEnabled();
+            case "keyboard_voice_bare_command_words":
+                return mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled();
             case "keyboard_voice_terminal_cleanup":
                 return mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled();
             case "extra_keys_text_all_caps": {

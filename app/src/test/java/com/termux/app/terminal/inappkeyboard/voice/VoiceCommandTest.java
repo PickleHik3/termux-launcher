@@ -5,38 +5,68 @@ import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
 
-/** The segment → command table: a whole segment matches, anything longer stays text. */
+/**
+ * The segment → command table: a whole segment matches, anything longer stays text. Default mode
+ * needs a trailing "key"; the "Bare command words" setting (bareWordsAllowed = true) restores the
+ * original bare-word matching.
+ */
 public class VoiceCommandTest {
 
     @Test
-    public void commandWordsSaidAloneBecomeKeys() {
-        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify("enter"));
-        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify(" Enter."));
-        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify("Return"));
-        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify("send"));
-        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify("Submit!"));
-        assertEquals(VoiceCommand.TAB, VoiceCommand.classify("tab"));
-        assertEquals(VoiceCommand.ESC, VoiceCommand.classify("Escape"));
-        assertEquals(VoiceCommand.BACKSPACE, VoiceCommand.classify("backspace"));
-        assertEquals(VoiceCommand.BACKSPACE, VoiceCommand.classify("Delete."));
-        assertEquals(VoiceCommand.SPACE, VoiceCommand.classify("space"));
-        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("control c"));
-        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("Control-C."));
-        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("Ctrl+C"));
-        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("ctrl c"));
-        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("cancel"));
+    public void defaultModeNeedsTheKeySuffix() {
+        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify("enter key", false));
+        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify(" Enter Key.", false));
+        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify("Return key", false));
+        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify("send key", false));
+        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify("Submit key!", false));
+        assertEquals(VoiceCommand.TAB, VoiceCommand.classify("tab key", false));
+        assertEquals(VoiceCommand.ESC, VoiceCommand.classify("Escape key", false));
+        assertEquals(VoiceCommand.BACKSPACE, VoiceCommand.classify("backspace key", false));
+        assertEquals(VoiceCommand.BACKSPACE, VoiceCommand.classify("Delete key.", false));
+        assertEquals(VoiceCommand.SPACE, VoiceCommand.classify("space key", false));
+        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("control c key", false));
+        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("Control-C key.", false));
+        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("Ctrl+C Key", false));
+        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("ctrl c key", false));
+        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("cancel key", false));
     }
 
     @Test
-    public void onlyAWholeSegmentMatches() {
-        assertNull(VoiceCommand.classify("enter the directory"));
-        assertNull(VoiceCommand.classify("press enter"));
-        assertNull(VoiceCommand.classify("tab completion"));
-        assertNull(VoiceCommand.classify("git status"));
-        assertNull(VoiceCommand.classify("ls"));
-        assertNull(VoiceCommand.classify(""));
-        assertNull(VoiceCommand.classify("   "));
-        assertNull(VoiceCommand.classify(null));
+    public void defaultModeTreatsTheBareWordAndBareKeyAsText() {
+        assertNull(VoiceCommand.classify("enter", false));
+        assertNull(VoiceCommand.classify("tab", false));
+        assertNull(VoiceCommand.classify("key", false));
+        assertNull(VoiceCommand.classify("control c", false));
+        assertNull(VoiceCommand.classify("ctrl c", false));
+    }
+
+    @Test
+    public void bareWordsAllowedRestoresTheOriginalMatching() {
+        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify("enter", true));
+        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify(" Enter.", true));
+        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify("Return", true));
+        assertEquals(VoiceCommand.TAB, VoiceCommand.classify("tab", true));
+        assertEquals(VoiceCommand.ESC, VoiceCommand.classify("Escape", true));
+        assertEquals(VoiceCommand.BACKSPACE, VoiceCommand.classify("backspace", true));
+        assertEquals(VoiceCommand.SPACE, VoiceCommand.classify("space", true));
+        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("control c", true));
+        assertEquals(VoiceCommand.CTRL_C, VoiceCommand.classify("cancel", true));
+        // The "key" suffix still matches too, in either mode.
+        assertEquals(VoiceCommand.ENTER, VoiceCommand.classify("enter key", true));
+    }
+
+    @Test
+    public void onlyAWholeSegmentMatchesInEitherMode() {
+        for (boolean bareWordsAllowed : new boolean[] {false, true}) {
+            assertNull(VoiceCommand.classify("enter the directory", bareWordsAllowed));
+            assertNull(VoiceCommand.classify("press enter key", bareWordsAllowed));
+            assertNull(VoiceCommand.classify("tab completion", bareWordsAllowed));
+            assertNull(VoiceCommand.classify("git status", bareWordsAllowed));
+            assertNull(VoiceCommand.classify("ls", bareWordsAllowed));
+            assertNull(VoiceCommand.classify("", bareWordsAllowed));
+            assertNull(VoiceCommand.classify("   ", bareWordsAllowed));
+            assertNull(VoiceCommand.classify(null, bareWordsAllowed));
+        }
     }
 
     @Test

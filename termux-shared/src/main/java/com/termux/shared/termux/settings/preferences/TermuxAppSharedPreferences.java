@@ -1305,6 +1305,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_COMMANDS, value, false);
     }
 
+    public boolean isInAppKeyboardVoiceBareCommandWordsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS);
+    }
+
+    public void setInAppKeyboardVoiceBareCommandWordsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS, value, false);
+    }
+
     public boolean isInAppKeyboardVoiceTerminalCleanupEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP,

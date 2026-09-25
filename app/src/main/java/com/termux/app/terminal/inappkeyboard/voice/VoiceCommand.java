@@ -8,7 +8,12 @@ import java.util.Locale;
 /**
  * The spoken words that press a key instead of typing text. Only a segment whose <em>entire</em>
  * normalized transcript is one of these matches: "enter the directory" said in one breath stays
- * text; "enter" said on its own, after a pause, presses Enter.
+ * text; "enter key" said on its own, after a pause, presses Enter.
+ *
+ * <p>By default a command word needs a trailing "key" ("enter key", "tab key", "control c key"):
+ * plain dictation says "enter" and "key" on their own far more often than a terminal command does,
+ * so the bare word stays text. The "Bare command words" keyboard setting restores the original
+ * bare-word matching for anyone who finds the suffix awkward to say.
  */
 public enum VoiceCommand {
     ENTER("enter", false),
@@ -29,11 +34,30 @@ public enum VoiceCommand {
         this.ctrl = ctrl;
     }
 
-    /** The command {@code transcript} is, or {@code null} when it is text. */
+    /** The trailing word a command needs by default, so plain dictation of the bare word stays text. */
+    private static final String KEY_SUFFIX = " key";
+
+    /**
+     * The command {@code transcript} is, or {@code null} when it is text. In the default mode
+     * ({@code bareWordsAllowed} false) the transcript must end in "key" ("enter key"); with it
+     * true, the bare word alone also matches, as the classifier did before this suffix.
+     */
     @Nullable
-    public static VoiceCommand classify(@Nullable String transcript) {
+    public static VoiceCommand classify(@Nullable String transcript, boolean bareWordsAllowed) {
         if (transcript == null) return null;
-        switch (normalize(transcript)) {
+        String text = normalize(transcript);
+        if (bareWordsAllowed) {
+            VoiceCommand bare = matchWord(text);
+            if (bare != null) return bare;
+        }
+        if (!text.endsWith(KEY_SUFFIX)) return null;
+        return matchWord(text.substring(0, text.length() - KEY_SUFFIX.length()));
+    }
+
+    /** {@code text}, with no "key" suffix considered, against the known command words. */
+    @Nullable
+    private static VoiceCommand matchWord(@NonNull String text) {
+        switch (text) {
             case "enter":
             case "return":
             case "send":
