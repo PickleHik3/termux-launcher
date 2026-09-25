@@ -221,7 +221,7 @@ on the voice key still opens the system chooser.
 
 ## Settings
 
-**In-app keyboard settings** (`termux_keyboard_preferences.xml`, new "Voice input" category, keys
+**In-app keyboard settings** (`termux_keyboard_preferences.xml`, "Voice input" category, keys
 stored through `KeyboardPreferencesDataStore` → `TermuxAppSharedPreferences`):
 
 | key | type | default |
@@ -231,17 +231,37 @@ stored through `KeyboardPreferencesDataStore` → `TermuxAppSharedPreferences`):
 | `keyboard_voice_commands` | switch: spoken "enter", "tab", … press keys | on |
 | `keyboard_voice_terminal_cleanup` | switch | on |
 | `keyboard_voice_pause_ms` | list: 400 / 600 / 800 / 1200 | 600 |
-| "Speech model" | link to the TAI speech section | — |
+| "Speech model" | opens the Speech model screen | — |
 
-Choosing On-device with no model installed opens the TAI speech section.
+Choosing On-device with no model installed opens the Speech model screen.
 
-**TAI settings** (`termux_ai_preferences.xml`, new "Speech-to-text" category):
+**Speech model screen** (`SpeechModelPreferencesFragment`, `speech_model_preferences.xml`, reached
+from Keyboard → Voice input → Speech model; the TAI page keeps one "Speech models moved" row that
+opens it). Moved here from the TAI page on 2026-09-25 because there was no way to pick between
+downloaded models.
 
-- Installed speech model row (size, language kind, window, measured memory) with delete.
-- Download: dialog asks size (base / small, with the RAM-class suggestion), English-only vs
-  multilingual, and window (10 s default, 5 s).
-- Terminal vocabulary: extra words added to the biasing prompt (project names, commands).
-- Window switch (re-downloads that graph), idle unload (default 2 min).
+- Every installed `speech_to_text` model as a row, listed by capability (a future engine's model is
+  just another catalog entry): plain name ("Small · English", "Base · Multilingual"), size, window
+  ("10-second window"), an "In use" pill on the active one. Tap a row to use it; Delete on the row
+  (confirm; deleting the active one picks another installed model or clears the choice and says
+  voice input falls back to the Android recognizer); the tune button switches the window.
+- Downloads in progress are rows with progress and Cancel; failed ones offer Retry / Remove.
+- "Download a model": size (Base = faster, fine for commands; Small = more accurate for long
+  sentences and noisy rooms, ~3× slower — recommended and only offered on ≥ 8 GB phones),
+  English only / Many languages, window (10 s default / 5 s fastest for commands).
+- Idle unload (default 2 min).
+
+State (`TaiSpeechModels`, keys in `TaiSettings`): `tai_stt_model_id` is the model in use, read
+through `TaiSpeechModels.resolveActive`, which treats an id whose files are gone as unset and falls
+back to another installed speech model (settings screen, `TermuxActivity` and
+`TaiManager.resolveSpeechModel` all resolve the same way, so a stale id never fails with
+`model_not_found`). A download becomes the model in use only when it succeeds: it is recorded as
+`tai_stt_pending_download` and settled by the download service when it ends (and by the screen's
+refresh); an explicit pick meanwhile forgets a pending fresh download, so it never overrides the
+user. A window change downloads the other window's graph under the same id first and deletes the
+old file only after the new one is registered; on failure or cancel the old graph stays and the
+failed record is dropped. Each installed graph's window is read off its file name
+(`…_5s_… / …_10s_…`); `tai_stt_window_seconds` is only the preference for the next download.
 
 Speech models are kept out of the chat model list and the chat catalog.
 
