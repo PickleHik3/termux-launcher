@@ -18,6 +18,7 @@ import com.termux.app.fragments.settings.StatusCardPreference;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.PrivilegedPolicyStore;
 import com.termux.privileged.ShizukuBackend;
+import com.termux.privileged.lane.PrivilegedLaneBinding;
 
 @Keep
 public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragment {
@@ -27,6 +28,8 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
     private static final String KEY_MASTER = PrivilegedPolicyStore.KEY_MASTER_ENABLED;
     private static final String KEY_PREFER_SHIZUKU = PrivilegedPolicyStore.KEY_PREFER_SHIZUKU;
     private static final String KEY_ALLOW_SHELL = PrivilegedPolicyStore.KEY_ALLOW_SHELL_FALLBACK;
+    private static final String KEY_LANE_STATUS = "priv_lane_status";
+    private static final String KEY_LANE = PrivilegedPolicyStore.KEY_LANE_ENABLED;
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -43,6 +46,7 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
         configureBackendToggleRefresh(context, KEY_MASTER);
         configureBackendToggleRefresh(context, KEY_PREFER_SHIZUKU);
         configureBackendToggleRefresh(context, KEY_ALLOW_SHELL);
+        configureLaneToggle(context);
         refreshStatusSummary();
     }
 
@@ -95,6 +99,8 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
             if (newValue instanceof Boolean) {
                 writePrivilegedToggle(context, key, (Boolean) newValue);
             }
+            // The master switch gates the lane too.
+            PrivilegedLaneBinding.getInstance().applyPolicy();
             PrivilegedBackendManager.getInstance().reselectBackend().thenAccept(success -> {
                 if (isAdded() && getActivity() != null) {
                     getActivity().runOnUiThread(this::refreshStatusSummary);
@@ -120,7 +126,53 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
         }
     }
 
+    private void configureLaneToggle(@NonNull Context context) {
+        Preference preference = findPreference(KEY_LANE);
+        if (preference == null)
+            return;
+
+        preference.setOnPreferenceChangeListener((changed, newValue) -> {
+            if (newValue instanceof Boolean) {
+                PrivilegedPolicyStore.setLaneEnabled(context, (Boolean) newValue);
+            }
+            PrivilegedLaneBinding.getInstance().applyPolicy();
+            // Binding is asynchronous; the row settles on the next resume or refresh.
+            refreshLaneStatus();
+            return true;
+        });
+    }
+
+    private void refreshLaneStatus() {
+        Preference lanePreference = findPreference(KEY_LANE_STATUS);
+        if (!(lanePreference instanceof StatusCardPreference))
+            return;
+
+        PrivilegedLaneBinding binding = PrivilegedLaneBinding.getInstance();
+        PrivilegedLaneBinding.State state = binding.state();
+        String label;
+        switch (state) {
+            case RUNNING:
+                label = getString(R.string.termux_privileged_lane_state_running, binding.serviceUid());
+                break;
+            case BINDING:
+                label = getString(R.string.termux_privileged_lane_state_binding);
+                break;
+            case NO_SHIZUKU:
+                label = getString(R.string.termux_privileged_lane_state_no_shizuku);
+                break;
+            case NO_PERMISSION:
+                label = getString(R.string.termux_privileged_lane_state_no_permission);
+                break;
+            case OFF:
+            default:
+                label = getString(R.string.termux_privileged_lane_state_off);
+                break;
+        }
+        ((StatusCardPreference) lanePreference).setStatus(label, state == PrivilegedLaneBinding.State.RUNNING);
+    }
+
     private void refreshStatusSummary() {
+        refreshLaneStatus();
         Preference statusPreference = findPreference(KEY_STATUS);
         if (statusPreference == null)
             return;
@@ -181,6 +233,9 @@ class PrivilegedAccessPreferencesDataStore extends PreferenceDataStore {
             case PrivilegedPolicyStore.KEY_ALLOW_SHELL_FALLBACK:
                 PrivilegedPolicyStore.setShellFallbackEnabled(mContext, value);
                 break;
+            case PrivilegedPolicyStore.KEY_LANE_ENABLED:
+                PrivilegedPolicyStore.setLaneEnabled(mContext, value);
+                break;
             default:
                 break;
         }
@@ -198,6 +253,8 @@ class PrivilegedAccessPreferencesDataStore extends PreferenceDataStore {
                 return PrivilegedPolicyStore.isPreferShizuku(mContext);
             case PrivilegedPolicyStore.KEY_ALLOW_SHELL_FALLBACK:
                 return PrivilegedPolicyStore.isShellFallbackEnabled(mContext);
+            case PrivilegedPolicyStore.KEY_LANE_ENABLED:
+                return PrivilegedPolicyStore.isLaneSwitchOn(mContext);
             default:
                 return defValue;
         }

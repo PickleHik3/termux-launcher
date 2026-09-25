@@ -26,3 +26,8 @@
     private java.io.OutputStream os;
     static java.util.Set CACHE;
 }
+
+# The privileged lane's Shizuku user service is instantiated by name, reflectively, in a
+# process Shizuku starts from this APK as the shell uid; nothing in the app calls its
+# constructors, so without this the shrinker would drop them.
+-keep class com.termux.privileged.lane.PrivilegedLaneService { *; }
