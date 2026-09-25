@@ -150,11 +150,13 @@ import com.termux.app.terminal.inappkeyboard.FloatingKeyboardController;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardHost;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
+import com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceCommand;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceInputSession;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceLanguage;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceListeningIndicator;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceTerminalCleanup;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceTextPolisher;
 import com.termux.app.terminal.io.ExtraKeysDefaultOffer;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
 import com.termux.shared.activities.ReportActivity;
@@ -13559,8 +13561,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs(),
             mPreferences.isInAppKeyboardVoiceCommandsEnabled(),
             mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled(),
-            mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled());
-        VoiceInputSession session = new VoiceInputSession(this, config, mVoiceInputHost);
+            mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled(),
+            mPreferences.isInAppKeyboardVoiceSoundsEnabled(),
+            mPreferences.isInAppKeyboardHapticsEnabled());
+        // The polisher resolves its model and loads it on its own thread once the mic is open;
+        // with no Gemma installed it simply types every phrase as heard.
+        VoiceTextPolisher polisher = mPreferences.isInAppKeyboardVoicePolishEnabled()
+            ? new LocalTaiVoiceTextPolisher(this) : null;
+        VoiceInputSession session = new VoiceInputSession(this, config, mVoiceInputHost, polisher);
         mVoiceInputTargetSession = target;
         mVoiceInputLastWasText = false;
         if (!session.start()) {

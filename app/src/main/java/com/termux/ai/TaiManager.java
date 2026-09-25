@@ -120,6 +120,7 @@ public final class TaiManager {
 
     /** {@link TaiRuntimeServiceClient}'s own flat default, kept here for callers that don't pass one. */
     static final long DEFAULT_TRANSCRIBE_TIMEOUT_MS = 120_000L;
+    static final long DEFAULT_CHAT_TIMEOUT_MS = 120_000L;
 
     @NonNull
     private JSONObject runtimeRequest(@NonNull String operation, @Nullable String body) throws JSONException {
@@ -781,7 +782,17 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject openAiChatCompletions(@NonNull String body) throws JSONException {
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_CHAT, delegatedRuntimeBody(body));
+        return openAiChatCompletions(body, DEFAULT_CHAT_TIMEOUT_MS);
+    }
+
+    /**
+     * As {@link #openAiChatCompletions(String)}, with the IPC deadline the caller wants instead of
+     * the flat default — a voice-input rewrite gives itself a few seconds, so a slow answer costs
+     * that one phrase its polish instead of stalling the session for two minutes.
+     */
+    @NonNull
+    public JSONObject openAiChatCompletions(@NonNull String body, long timeoutMs) throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_CHAT, delegatedRuntimeBody(body), timeoutMs);
         JSONObject request = parseBody(body);
         JSONArray messages = request.optJSONArray("messages");
         if (messages == null || messages.length() == 0) {
