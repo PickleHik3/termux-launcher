@@ -71,7 +71,7 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
 - **The keyboard floats.** In landscape the keyboard comes up over the display instead of
   squeezing it, so the picture keeps the size it was given and nothing on it moves as you type. In
   portrait the display makes room for the keyboard instead. Either orientation can be set the other
-  way from **Settings → Layout → Display**, after switching to the orientation you want it for.
+  way in the Layout editor on the display, after switching to the orientation you want it for.
 - **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
   terminal pane: power starts, stops or turns on the display, and the cog opens its settings. A
   tap in the corner goes to the display, so a maximised window keeps its own controls there. Tap
@@ -117,7 +117,7 @@ If you already have the `termux-x11-nightly` package installed, the launcher lea
   command of your choosing, pointing new shells at it (`DISPLAY` set in every new shell while a
   display runs), and two compatibility switches. A running display picks a change up at once.
   Where the extra keys stand while the display is showing — along the bottom or in a column on
-  the left or right edge — is in **Settings → Layout → Display**.
+  the left or right edge — is in the Layout editor, opened on the display.
 - **Preferences from a shell.** `termux-x11-preference list` shows every setting;
   `termux-x11-preference touchMode:2` sets one, exactly as in Termux:X11, and the running
   display follows.

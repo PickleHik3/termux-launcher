@@ -37,8 +37,6 @@
     <string name="launcher_widget_error">Widget couldn\'t load</string>
     <string name="settings_search_hint">Search settings</string>
     <string name="settings_search_contains">Contains: %1$s</string>
-    <string name="settings_destination_layout">Layout</string>
-    <string name="settings_destination_layout_summary">Choose what each place shows and where, for portrait and landscape</string>
     <string name="settings_layout_tab_home">Home</string>
     <string name="settings_layout_tab_terminal">Terminal</string>
     <string name="settings_layout_tab_display">Display</string>
@@ -112,9 +110,7 @@
     <string name="settings_pane_agent_api_title">Let programs and agents control panes</string>
     <string name="settings_pane_agent_api_summary">Programs you run can open, switch and close panes on their own.</string>
     <string name="settings_clock_status_header">Clock and status</string>
-    <string name="settings_clock_style_title">Clock style</string>
     <string name="settings_clock_alignment_title">Clock alignment</string>
-    <string name="settings_clock_alignment_summary">Places the expanded clock at the left, center, or right of the pane.</string>
     <string name="settings_clock_alignment_left">Left</string>
     <string name="settings_clock_alignment_center">Center</string>
     <string name="settings_clock_alignment_right">Right</string>
@@ -368,7 +364,6 @@
     <string name="termux_wall_display_stop_title">Stop the display?</string>
     <string name="termux_wall_display_stop_message">Apps running on it will close.</string>
     <string name="termux_wall_display_stop_confirm">Stop</string>
-    <string name="settings_surfaces_header">Surfaces</string>
     <string name="settings_customize_keyboard_title">Customize keyboard appearance</string>
     <string name="settings_customize_keyboard_summary">Edit keyboard size, spacing, key radius, and colors live on the home screen. Shape follows the shared surface choice.</string>
     <string name="settings_input_method_header">Input method</string>
@@ -1355,8 +1350,6 @@
             <string name="termux_fullscreen_summary">Hide system bars while using the launcher</string>
                 
             <!-- Extra Keys Category -->
-                <string name="termux_dock_tune_live_title">Surface editor</string>
-                <string name="termux_dock_tune_live_summary">Customize dock, keyboard, status panel, and terminal live on the home screen.</string>
                 <!-- Preset names describe the whole look, deliberately not the material family:
                      "Glass", "Frost" and "Solid" are what the Material control is called, and a
                      preset named after one of them read as a shortcut to that control rather than

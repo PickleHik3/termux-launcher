@@ -77,8 +77,7 @@ Use this language; it is what the code and the developer use.
   Entered from the corner tab or the long-press menu; exits straight back to the live place.
 - **Layout editor** — the overlay that edits where a place's elements sit and how big they are, on
   the miniature, one orientation at a time with a toggle to the other
-  (`app/layouteditor/LayoutEditorController`). Entered from the corner tab, the long-press menu, or
-  Settings → Layout.
+  (`app/layouteditor/LayoutEditorController`). Entered from the corner tab or the long-press menu.
 - **corner tab** — the small control strip revealed by pressing a pane or page corner; carries the
   Appearance and Layout buttons on every place, alongside the place's own actions.
 - **pane** — one terminal view in a split; **chrome** — everything the launcher draws around it.

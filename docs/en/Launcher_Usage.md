@@ -132,7 +132,7 @@ the pinned row, most-used page, notification dots, and icon browsing behavior.
 ### A–Z index
 
 Scrub horizontally across the A–Z row to jump to installed apps beginning with a letter. The index is
-a browsing control, not a text field. It can be hidden from **Settings → Layout**, on the place
+a browsing control, not a text field. It can be hidden in the Layout editor, on the place
 you want it hidden for.
 
 ### Search from the shell prompt
@@ -323,7 +323,7 @@ Long-press a surface to reach its editor, or start from Settings:
 
 - **Look** controls wallpaper colors, terminal fonts, icons, keyboard look, surfaces, and Glass Lab.
 - **Terminal** controls full screen, pane support, and lazy mode.
-- **Status bar** controls the clock, CPU, memory, weather, and notifications.
+- **Status bar** controls the 12-hour clock, CPU, memory, weather, and notifications.
 - **Keyboard** controls the on-screen input method, layouts, typing, and feedback.
 - **Apps** controls pinned apps, A–Z browsing, search, notification dots, and Home behavior.
 

@@ -86,16 +86,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(R.xml.termux_style_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         LauncherIconPackPreferenceController.configure(this, context);
-        Preference surfaceEditor = findPreference("live_surface_editor");
-        if (surfaceEditor != null) {
-            surfaceEditor.setOnPreferenceClickListener(preference -> {
-                Intent intent = new Intent(context, TermuxActivity.class);
-                intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
-                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                startActivity(intent);
-                return true;
-            });
-        }
         Preference customizeKeyboardSurface = findPreference("customize_keyboard_surface");
         if (customizeKeyboardSurface != null) customizeKeyboardSurface.setOnPreferenceClickListener(preference -> {
             Intent intent = new Intent(context, TermuxActivity.class);

@@ -39,7 +39,7 @@ import org.robolectric.annotation.ConscryptMode;
 public class RootPreferencesSearchIndexTest {
 
     private static final String[] EXPECTED_LAUNCHER_ROW_ORDER = {
-        "layout", "appearance", "terminal", "status_bar", "keyboard_input", "launcher_apps", "display"
+        "appearance", "terminal", "status_bar", "keyboard_input", "launcher_apps", "display"
     };
 
     private SettingsActivity.RootPreferencesFragment launch() {
@@ -81,9 +81,9 @@ public class RootPreferencesSearchIndexTest {
     public void searchingAClockTermFindsTheStatusBarDestinationOnly() {
         SettingsActivity.RootPreferencesFragment root = launch();
         SettingsSearchPreference search = root.findPreference("settings_search");
-        search.getOnQueryChangedListener().onQueryChanged("clock style");
+        search.getOnQueryChangedListener().onQueryChanged("12-hour");
 
-        assertTrue("status bar page contains clock style", isVisible(root, "status_bar"));
+        assertTrue("status bar page contains the 12-hour clock", isVisible(root, "status_bar"));
         assertFalse("terminal page has no clock row", isVisible(root, "terminal"));
     }
 

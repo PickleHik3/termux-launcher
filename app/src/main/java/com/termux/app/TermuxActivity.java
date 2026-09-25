@@ -251,7 +251,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     public static final String EXTRA_SURFACE_EDITOR_PLACE =
         "com.termux.app.extra.SURFACE_EDITOR_PLACE";
-    /** Opens the Layout editor over the live place, from Settings → Layout. */
+    /** Opens the Layout editor over the live place, from any door that sends an intent. */
     public static final String EXTRA_LAYOUT_EDITOR =
         "com.termux.app.extra.LAYOUT_EDITOR";
     /**
@@ -9100,7 +9100,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Settings → Layout, or any other door that names a place: the launcher comes forward on that
+     * Any door that names a place: the launcher comes forward on that
      * place with the Layout editor over it. An unnamed place opens it on whatever is on screen.
      */
     private void handleLayoutEditorIntent(@Nullable Intent intent) {

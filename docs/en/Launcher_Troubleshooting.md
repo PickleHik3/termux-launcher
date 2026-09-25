@@ -112,7 +112,7 @@ Search is designed for an idle shell prompt. Confirm the current prefix under **
 App search prefix**; `%` is the default. If the prefix conflicts with shell input, choose a
 different single character.
 
-For browsing without terminal input, use the A–Z row or enable it from **Settings → Layout**, on
+For browsing without terminal input, use the A–Z row or enable it in the Layout editor, on
 the place you want it for.
 
 ## CPU, memory, weather, media, or notifications are missing

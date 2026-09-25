@@ -18,7 +18,6 @@ import androidx.preference.Preference;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
-import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.app.statusbar.EssentialNotificationRule;
@@ -27,14 +26,12 @@ import com.termux.launcherctl.LauncherCtlNotificationListener;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
- * The status bar's own page: clock style, alignment and 12-hour choice, the CPU/memory/weather
- * cards, and media/pinned notifications with the essential notification rules that control which
- * ones stay pinned.
+ * The status bar's own page: the 12-hour choice, the CPU/memory/weather cards, and media/pinned
+ * notifications with the essential notification rules that control which ones stay pinned.
  *
  * <p>Splits the status half out of the old combined Terminal &amp; status page; the terminal half
- * is now {@link TerminalPreferencesFragment}. The "Look of this place" row on the Layout page is
- * where the status bar's surface (blur, opacity, grain, radius) is tuned now, so this page carries
- * no surface-editor entry of its own.
+ * is now {@link TerminalPreferencesFragment}. The clock's face and position, and the status bar's
+ * surface, are set in the Appearance editor, so this page repeats none of them.
  */
 @Keep
 public final class StatusBarPreferencesFragment extends MaterialPreferenceFragment {
@@ -47,19 +44,6 @@ public final class StatusBarPreferencesFragment extends MaterialPreferenceFragme
         manager.setPreferenceDataStore(TerminalIOPreferencesDataStore.getInstance(context));
         setPreferencesFromResource(R.xml.status_bar_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
-        SegmentedPillPreference alignment = findPreference("top_pane_clock_alignment");
-        if (alignment != null) alignment.setSegments(
-            new String[]{
-                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
-                    .TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_LEFT,
-                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
-                    .TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_CENTER,
-                com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
-                    .TERMUX_APP.TOP_PANE_CLOCK_ALIGNMENT_RIGHT},
-            new int[]{
-                R.string.settings_clock_alignment_left,
-                R.string.settings_clock_alignment_center,
-                R.string.settings_clock_alignment_right});
         StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_cpu"));
         StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_ram"));
         Preference access = findPreference("top_pane_notification_access");

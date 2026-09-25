@@ -7,10 +7,10 @@ This map uses the current top-level labels. Use **Search settings** at the top w
 want but not where it lives. Search indexes the preferences inside every destination, so `fonts`,
 `ligatures`, or `Shizuku` can find the containing section.
 
-## Layout
+## Layout editor
 
-Three doors, **Home**, **Terminal** and **Display**, each opening the Layout editor on that place —
-the same editor a corner tab or the long-press menu opens. A Portrait/Landscape toggle above the
+Settings has no Layout page: arrange a place by opening **Layout** from a corner tab or the
+long-press menu while you are on it. A Portrait/Landscape toggle above the
 place's miniature switches which orientation you are arranging; the real screen behind the editor
 follows what you change only for the orientation you are actually holding the phone in. Done and
 Discard let you keep or throw away everything you changed in that visit.
@@ -51,7 +51,7 @@ underneath.
 
 Use this section for visible surfaces and colors:
 
-- **Appearance:** tune the dock, keyboard, status panel, and terminal while looking at the real
+- **Appearance** (from a corner tab or the long-press menu): tune the dock, keyboard, status panel, and terminal while looking at the real
   home screen. Tap the floating palette to style every surface at once, or tap a surface to style
   it on its own. This edits the shared look every place starts from; a look that differs between
   Home, Terminal and Display is edited by opening **Appearance** from the long-press menu while
@@ -206,10 +206,11 @@ wrong — a clock that stops updating, a status reading that freezes, a rim that
 
 ## Status bar
 
-Use this section for the top row's clock and readouts. Its surface — blur, opacity, grain, and
-radius — is tuned per place in Appearance, opened from the long-press menu on that place.
+Use this section for the top row's readouts. The clock's face and position, and the bar's
+surface — blur, opacity, grain, and radius — are set per place in Appearance, opened from the
+long-press menu on that place.
 
-- **Clock style**, **Clock alignment**, and **Use 12-hour time**.
+- **Use 12-hour time**.
 - **CPU usage**, **Memory usage**, and **Weather** status cards.
 - **Media and pinned notifications** and their essential notification rules.
 
@@ -307,7 +308,7 @@ bar, starting the display with the launcher, the start command, pointing new she
 display and two compatibility switches. A line at the foot of the page says what arranges the
 windows, and that a whole desktop arranges its own. Where the extra keys
 stand while the display is showing, and everything else about its arrangement, lives in
-**Settings → Layout → Display** once the switch above is on. To have the phone try every graphics
+the Layout editor, opened on the display once the switch above is on. To have the phone try every graphics
 profile and keep the best, run `termux-x11-gpu-setup` in a shell.
 
 ## Services & permissions

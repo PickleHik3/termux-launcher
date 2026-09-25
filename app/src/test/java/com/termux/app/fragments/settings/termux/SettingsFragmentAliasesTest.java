@@ -1,6 +1,7 @@
 package com.termux.app.fragments.settings.termux;
 
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -66,7 +67,8 @@ public class SettingsFragmentAliasesTest {
     public void theStyleFragmentNameStillResolvesAndCarriesTheMovedKeyboardLookRows() {
         Fragment fragment = launch(TermuxStylePreferencesFragment.class);
         PreferenceScreen screen = ((TermuxStylePreferencesFragment) fragment).getPreferenceScreen();
-        assertNotNull(screen.findPreference("live_surface_editor"));
+        assertNull("the Appearance editor is reached from the corner tab, not Settings",
+            screen.findPreference("live_surface_editor"));
         assertNotNull("keyboard look moved in from the old Keyboard page",
             screen.findPreference("in_app_keyboard_theme"));
         assertNotNull(screen.findPreference("customize_keyboard_surface"));

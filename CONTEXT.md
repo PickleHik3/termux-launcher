@@ -40,8 +40,8 @@ _Avoid_: surface editor (legacy umbrella name), look editor, style editor, full 
 **Layout editor**:
 The editor for where a place's elements sit and how big they are: bars, dock, keyboard, widget
 grid, hidden or shown, plus dock height, keyboard height and keyboard chin. Its canvas is the
-miniature; it shows one orientation with a toggle to the other. Entered from the corner tab, the
-long-press menu or Settings → Layout.
+miniature; it shows one orientation with a toggle to the other. Entered from the corner tab or
+the long-press menu; Settings has no door to it.
 _Avoid_: arrange mode, surface editor, place editor
 
 **Miniature**:
@@ -53,10 +53,6 @@ _Avoid_: preview, thumbnail, overview
 The small control strip revealed by pressing a pane or page corner. It carries the Appearance and
 Layout buttons on every place, alongside the place's own actions.
 _Avoid_: corner menu, pane menu, controls view
-
-**Settings → Layout**:
-The Settings entry that opens the Layout editor for a chosen place. A door, not an editor of its
-own.
 
 ### Tlstore
 
