@@ -70,7 +70,7 @@ public class TaiSpeechModelsTest {
         assertEquals(10, TaiSpeechModels.windowSeconds("/m/whisper-acft-base-en/acft_whisper_base.en_10s_drq.tflite"));
         assertEquals(5, TaiSpeechModels.windowSeconds("/m/whisper-acft-small/acft_whisper_small_5s_drq.tflite"));
         assertEquals(0, TaiSpeechModels.windowSeconds("/m/parakeet-tdt/model.tflite"));
-        assertEquals(0, TaiSpeechModels.windowSeconds(null));
+        assertEquals(0, TaiSpeechModels.windowSeconds((String) null));
     }
 
     @Test

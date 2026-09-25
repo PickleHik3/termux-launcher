@@ -53,7 +53,7 @@ public class SpeechModelPreferencesFragmentTest {
     public void setUp() {
         context = RuntimeEnvironment.getApplication();
         context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit();
-        context.getSharedPreferences(TaiModelStore.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit();
+        context.getSharedPreferences("termux_ai_model_store", Context.MODE_PRIVATE).edit().clear().commit();
         store = new TaiModelStore(context);
         store.deleteUserModel("whisper-acft-base-en");
         store.deleteUserModel("whisper-acft-small");
