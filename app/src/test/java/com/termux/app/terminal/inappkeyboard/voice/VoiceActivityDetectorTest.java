@@ -192,6 +192,38 @@ public class VoiceActivityDetectorTest {
         assertEquals(10 + 20 + 5, frames(segments.get(0)));
     }
 
+    /** {@code frames} frames of pseudo-random noise with the given RMS in dBFS, plus {@code toneDbfs} of 440 Hz (or none). */
+    private static short[] noisy(int frames, double noiseDbfs, double toneDbfs, int seed) {
+        short[] out = new short[frames * FRAME];
+        double noiseAmp = Math.pow(10, noiseDbfs / 20) * Math.sqrt(3) * 32768;
+        double toneAmp = Double.isNaN(toneDbfs) ? 0 : Math.pow(10, toneDbfs / 20) * Math.sqrt(2) * 32768;
+        long state = seed;
+        for (int i = 0; i < out.length; i++) {
+            state = state * 6364136223846793005L + 1442695040888963407L;
+            double uniform = ((state >>> 11) / (double) (1L << 53)) * 2 - 1;
+            out[i] = (short) (noiseAmp * uniform + toneAmp * Math.sin(2 * Math.PI * 440 * i / VoiceActivityDetector.SAMPLE_RATE));
+        }
+        return out;
+    }
+
+    @Test
+    public void aTvInTheRoomDoesNotHoldAPhraseOpen() {
+        // pong, 2026-09-25: one near-silent frame at mic-open, then a TV at −62 dBFS; "enter key"
+        // and "tab key" at about −45 dBFS with a second's pause. The old floor stuck at the silent
+        // frame and the whole take came out as one 8.5 s segment.
+        VoiceActivityDetector vad = detector(600, 10);
+        vad.feed(quiet(2), 2 * FRAME);
+        vad.feed(noisy(130, -62, Double.NaN, 1), 130 * FRAME);   // ~4 s: the floor finds the TV
+        segments.clear();
+        vad.feed(noisy(25, -62, -45, 2), 25 * FRAME);            // "enter key"
+        vad.feed(noisy(35, -62, Double.NaN, 3), 35 * FRAME);     // ~1 s pause
+        vad.feed(noisy(25, -62, -45, 4), 25 * FRAME);            // "tab key"
+        vad.feed(noisy(35, -62, Double.NaN, 5), 35 * FRAME);
+
+        assertEquals(2, segments.size());
+        assertTrue(frames(segments.get(0)) < 25 + 2 * 10 + 20);
+    }
+
     @Test
     public void partialReadsAreReassembledIntoFrames() {
         VoiceActivityDetector vad = detector(600, 10);

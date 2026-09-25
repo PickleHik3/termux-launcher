@@ -3,6 +3,7 @@ package com.termux.app.terminal.inappkeyboard.voice;
 import androidx.annotation.NonNull;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 
 /**
  * Streaming energy VAD over 30 ms frames of 16 kHz mono PCM16: the live counterpart of the
@@ -21,8 +22,12 @@ import java.util.ArrayList;
  *   <li>{@code sessionSilenceMs} without speech tells the listener the session should end — the
  *       keyboard's "Silence auto-stop" setting, or never, for "Until tap".</li>
  * </ul>
- * The noise floor drops to any quieter non-voiced frame at once and rises slowly towards louder
- * ones, capped at {@link #NOISE_FLOOR_CAP} so continuous speech is never taken for noise. Everything
+ * The noise floor is the {@link #FLOOR_PERCENTILE}th-percentile frame RMS over the last
+ * {@link #FLOOR_WINDOW_MS} of <em>every</em> frame, as the runtime's {@code WhisperSegmenter} measures
+ * a piece, capped at {@link #NOISE_FLOOR_CAP} so continuous speech is never taken for noise. It
+ * used to follow only non-voiced frames, dropping at once and rising slowly: on pong one quiet
+ * frame at mic-open pinned it at −75 dBFS under a −62 dBFS TV, every frame after that counted as
+ * speech, so the floor never saw a frame to rise on and pauses never closed a segment. Everything
  * runs on the thread that feeds it; the listener is called on that same thread.
  */
 public final class VoiceActivityDetector {
@@ -44,8 +49,12 @@ public final class VoiceActivityDetector {
     static final float ABSOLUTE_FLOOR = 0.0003f;
     /** About −34 dBFS: a noise floor above this is speech being mistaken for noise. */
     static final float NOISE_FLOOR_CAP = 0.02f;
-    /** How fast the floor climbs towards a louder non-voiced frame, per frame. */
-    static final float FLOOR_RISE = 0.05f;
+    /** How much recent audio the noise floor is measured over. */
+    static final int FLOOR_WINDOW_MS = 3_000;
+    /** The floor is this percentile of the window's frame RMS: the room between words. */
+    static final int FLOOR_PERCENTILE = 20;
+    /** Frames needed before the floor means anything; until then nothing is voiced. */
+    private static final int FLOOR_MIN_FRAMES = 8;
     /** The window cut is searched for within the last second of the segment. */
     private static final int CUT_SEARCH_FRAMES = 1000 / FRAME_MS;
 
@@ -88,6 +97,11 @@ public final class VoiceActivityDetector {
     private int silentFrames;
     private boolean silenceTimeoutFired;
     private float noiseFloor = NOISE_FLOOR_CAP;
+    /** The last {@link #FLOOR_WINDOW_MS} of frame RMS, a ring; {@link #floorSorted} is its sort buffer. */
+    private final float[] floorWindow = new float[FLOOR_WINDOW_MS / FRAME_MS];
+    private final float[] floorSorted = new float[FLOOR_WINDOW_MS / FRAME_MS];
+    private int floorCount;
+    private int floorNext;
 
     /**
      * @param pauseMs         silence that closes a segment (400–1200 ms from settings)
@@ -139,12 +153,10 @@ public final class VoiceActivityDetector {
 
     private void processFrame(@NonNull short[] frame) {
         float rms = rms(frame);
+        updateNoiseFloor(rms);
         float overFloor = inSpeech ? HOLD_OVER_FLOOR : VOICE_OVER_FLOOR;
-        boolean voiced = rms > Math.max(noiseFloor * overFloor, ABSOLUTE_FLOOR);
-        if (!voiced) {
-            if (rms < noiseFloor) noiseFloor = rms;
-            else noiseFloor = Math.min(NOISE_FLOOR_CAP, noiseFloor + (rms - noiseFloor) * FLOOR_RISE);
-        }
+        boolean voiced = floorCount >= FLOOR_MIN_FRAMES
+            && rms > Math.max(noiseFloor * overFloor, ABSOLUTE_FLOOR);
         listener.onLevel(rms, voiced, noiseFloor);
         frames.add(frame);
         voicedFlags.add(voiced);
@@ -225,6 +237,15 @@ public final class VoiceActivityDetector {
             inSpeech = false;
             trimToPreRoll();
         }
+    }
+
+    private void updateNoiseFloor(float rms) {
+        floorWindow[floorNext] = rms;
+        floorNext = (floorNext + 1) % floorWindow.length;
+        if (floorCount < floorWindow.length) floorCount++;
+        System.arraycopy(floorWindow, 0, floorSorted, 0, floorCount);
+        Arrays.sort(floorSorted, 0, floorCount);
+        noiseFloor = Math.min(NOISE_FLOOR_CAP, floorSorted[(floorCount - 1) * FLOOR_PERCENTILE / 100]);
     }
 
     private void trimToPreRoll() {

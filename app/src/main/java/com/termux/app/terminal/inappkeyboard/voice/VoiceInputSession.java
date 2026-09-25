@@ -10,6 +10,7 @@ import android.os.Looper;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.BuildConfig;
 import com.termux.ai.TaiManager;
 import com.termux.shared.logger.Logger;
 
@@ -371,6 +372,7 @@ public final class VoiceInputSession {
         long start = System.nanoTime();
         File audio = null;
         try {
+            if (BuildConfig.DEBUG) keepForDebugging(sequence, pcm);
             // Levelled first: see VoiceGain. The segment is ours alone, so scaling in place is safe.
             VoiceGain.apply(pcm);
             audio = writePcm(pcm);
@@ -521,6 +523,23 @@ public final class VoiceInputSession {
             stream.write(bytes.array());
         }
         return out;
+    }
+
+    /**
+     * Debug builds keep each segment as captured (before {@link VoiceGain}) in
+     * {@code cache/voice-debug/segment-N.pcm}, N cycling through 0–7, to replay it with
+     * {@code tai transcribe} when a phrase comes out wrong.
+     */
+    private void keepForDebugging(int sequence, @NonNull short[] pcm) {
+        File dir = new File(appContext.getCacheDir(), "voice-debug");
+        if (!dir.isDirectory() && !dir.mkdirs()) return;
+        ByteBuffer bytes = ByteBuffer.allocate(pcm.length * 2).order(ByteOrder.LITTLE_ENDIAN);
+        bytes.asShortBuffer().put(pcm);
+        try (FileOutputStream stream = new FileOutputStream(new File(dir, "segment-" + (sequence % 8) + ".pcm"))) {
+            stream.write(bytes.array());
+        } catch (IOException e) {
+            Logger.logWarn(LOG_TAG, "keeping the debug segment failed: " + e.getMessage());
+        }
     }
 
     private void fail(@NonNull Failure failure) {
