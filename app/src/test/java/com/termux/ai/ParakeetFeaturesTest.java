@@ -1,5 +1,6 @@
 package com.termux.ai;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
@@ -172,7 +173,7 @@ public class ParakeetFeaturesTest {
         }
     }
 
-    private static JSONObject stats() throws IOException {
+    private static JSONObject stats() throws IOException, JSONException {
         return new JSONObject(new String(WhisperMelTest.readBytes("parakeet/features_stats.json"), StandardCharsets.UTF_8));
     }
 }

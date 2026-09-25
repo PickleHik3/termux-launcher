@@ -27,9 +27,9 @@ public class TaiModelCatalogTest {
             if (TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) mnnCount++;
         }
 
-        assertEquals(17, entries.size());
-        assertEquals(17, new HashSet<>(entries.keySet()).size());
-        assertEquals(10, liteRtCount);
+        assertEquals(18, entries.size());
+        assertEquals(18, new HashSet<>(entries.keySet()).size());
+        assertEquals(11, liteRtCount);
         assertEquals(7, mnnCount);
     }
 

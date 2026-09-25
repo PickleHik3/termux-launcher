@@ -157,7 +157,9 @@ public class ParakeetTdtDecoderTest {
         ParakeetTdtDecoder.Result result = ParakeetTdtDecoder.greedy(graph, 63);
         assertEquals(ParakeetTdtDecoder.MAX_TOKENS, result.tokens.length);
         assertEquals(ParakeetTdtDecoder.MAX_TOKENS, result.steps);
-        assertTrue(graph.calls.get(graph.calls.size() - 1).startsWith("decode_1["));
+        // The last token adopts its state, so the last decode call sits just before that "adopt".
+        assertEquals("adopt", graph.calls.get(graph.calls.size() - 1));
+        assertTrue(graph.calls.get(graph.calls.size() - 2).startsWith("decode_1["));
     }
 
     @Test
