@@ -297,6 +297,22 @@ tasks.register("fetchTlstore") {
 
         outDir.mkdirs()
 
+        // AGP's incremental asset merge can keep a stale copy when these files are swapped
+        // (a local build, then the pinned release, or back), so when any of them changes, the
+        // merged and compressed assets are dropped and rebuilt from scratch.
+        def snapshot = { entries.collectEntries { e ->
+            def f = new File(outDir, e.file)
+            [(e.file): f.isFile() ? sha256Hex(f) : null]
+        } }
+        def before = snapshot()
+        def dropStaleMerges = {
+            if (snapshot() != before) {
+                ["intermediates/assets", "intermediates/compressed_assets"].each {
+                    project.delete("$buildDir/$it")
+                }
+            }
+        }
+
         if (localDir) {
             def source = new File(localDir)
             if (!source.isDirectory()) {
@@ -314,6 +330,7 @@ tasks.register("fetchTlstore") {
                 java.nio.file.Files.copy(from.toPath(), new File(outDir, entry.file).toPath(),
                     java.nio.file.StandardCopyOption.REPLACE_EXISTING)
             }
+            dropStaleMerges()
             return
         }
 
@@ -350,6 +367,7 @@ tasks.register("fetchTlstore") {
                 temp.delete()
             }
         }
+        dropStaleMerges()
     }
 }
 
