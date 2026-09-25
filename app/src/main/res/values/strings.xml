@@ -1786,6 +1786,8 @@
     <string name="settings_keyboard_voice_model_summary">Download or change the on-device Whisper model</string>
     <string name="voice_input_listening">Listening…</string>
     <string name="voice_input_transcribing">Transcribing…</string>
+    <string name="voice_input_pending_mark">…</string>
+    <string name="voice_input_close">Stop voice input</string>
     <string name="voice_input_no_model">No speech model installed — using the Android recognizer</string>
     <string name="voice_input_fallback">%1$s — using the Android recognizer</string>
     <string name="voice_input_stopped">Voice input stopped: %1$s</string>

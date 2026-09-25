@@ -34,6 +34,24 @@ public enum VoiceCommand {
         this.ctrl = ctrl;
     }
 
+    /**
+     * The short chip the pill shows for ~1 s after this command's key is sent: an icon (or
+     * abbreviation) plus the key's name, so "enter key" reads back as "⏎ Enter" rather than the
+     * transcript that triggered it.
+     */
+    @NonNull
+    public String chipLabel() {
+        switch (this) {
+            case ENTER: return "⏎ Enter";
+            case TAB: return "⇥ Tab";
+            case ESC: return "Esc";
+            case BACKSPACE: return "⌫";
+            case SPACE: return "Space";
+            case CTRL_C: return "Ctrl+C";
+            default: return name();
+        }
+    }
+
     /** The trailing word a command needs by default, so plain dictation of the bare word stays text. */
     private static final String KEY_SUFFIX = " key";
 
