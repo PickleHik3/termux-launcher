@@ -285,7 +285,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             CHILD_XML_RESOURCES.put("status_bar", new int[]{
                 R.xml.status_bar_preferences});
             CHILD_XML_RESOURCES.put("keyboard_input", new int[]{
-                R.xml.termux_keyboard_preferences});
+                R.xml.termux_keyboard_preferences, R.xml.speech_model_preferences});
             CHILD_XML_RESOURCES.put("display", new int[]{
                 R.xml.x11_display_preferences});
             CHILD_XML_RESOURCES.put("launcher_apps", new int[]{
