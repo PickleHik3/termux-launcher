@@ -376,6 +376,9 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "keyboard_voice_terminal_cleanup":
                 mPreferences.setInAppKeyboardVoiceTerminalCleanupEnabled(value);
                 break;
+            case "keyboard_voice_sounds":
+                mPreferences.setInAppKeyboardVoiceSoundsEnabled(value);
+                break;
             case "extra_keys_text_all_caps":
                 // A property, not a preference: the row reads it from termux.properties, so this
                 // writes there and the styling reload picks it up like any hand edit would.
@@ -413,6 +416,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled();
             case "keyboard_voice_terminal_cleanup":
                 return mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled();
+            case "keyboard_voice_sounds":
+                return mPreferences.isInAppKeyboardVoiceSoundsEnabled();
             case "extra_keys_text_all_caps": {
                 String stored = termuxProperties()
                     .getProperty(TermuxPropertyConstants.KEY_EXTRA_KEYS_TEXT_ALL_CAPS);

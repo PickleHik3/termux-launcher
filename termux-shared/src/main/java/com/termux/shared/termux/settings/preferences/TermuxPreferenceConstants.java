@@ -787,6 +787,14 @@ public final class TermuxPreferenceConstants {
             {5_000, 10_000, 30_000, 0};
 
         /**
+         * Whether on-device voice input plays a short blip when the microphone opens and another
+         * when the session ends (haptics follow {@link #KEY_IN_APP_KEYBOARD_HAPTICS_ENABLED}).
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_SOUNDS = "keyboard_voice_sounds";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_SOUNDS = true;
+
+        /**
          * Defines the key for the absolute path of a user-imported label font file,
          * or an empty string for the system default typeface.
          */

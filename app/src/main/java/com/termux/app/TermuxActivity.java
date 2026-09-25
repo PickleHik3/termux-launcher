@@ -13559,7 +13559,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs(),
             mPreferences.isInAppKeyboardVoiceCommandsEnabled(),
             mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled(),
-            mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled());
+            mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled(),
+            mPreferences.isInAppKeyboardVoiceSoundsEnabled(),
+            mPreferences.isInAppKeyboardHapticsEnabled());
         VoiceInputSession session = new VoiceInputSession(this, config, mVoiceInputHost);
         mVoiceInputTargetSession = target;
         mVoiceInputLastWasText = false;

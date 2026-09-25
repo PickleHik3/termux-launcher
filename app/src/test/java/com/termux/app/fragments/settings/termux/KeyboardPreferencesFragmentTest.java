@@ -164,6 +164,7 @@ public class KeyboardPreferencesFragmentTest {
         assertTrue(store.getBoolean("keyboard_voice_terminal_cleanup", false));
         assertEquals("600", store.getString("keyboard_voice_pause_ms", null));
         assertEquals("10000", store.getString("keyboard_voice_silence_timeout_ms", null));
+        assertTrue(store.getBoolean("keyboard_voice_sounds", false));
 
         KeyboardPreferencesFragment fragment = launch();
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_engine"));
@@ -183,8 +184,10 @@ public class KeyboardPreferencesFragmentTest {
         store.putBoolean("keyboard_voice_terminal_cleanup", false);
         store.putString("keyboard_voice_pause_ms", "1200");
         store.putString("keyboard_voice_silence_timeout_ms", "0");
+        store.putBoolean("keyboard_voice_sounds", false);
 
         assertTrue(prefs.isInAppKeyboardVoiceOnDevice());
+        assertTrue(!prefs.isInAppKeyboardVoiceSoundsEnabled());
         assertEquals("de", prefs.getInAppKeyboardVoiceLanguage());
         assertTrue(!prefs.isInAppKeyboardVoiceCommandsEnabled());
         assertTrue(prefs.isInAppKeyboardVoiceBareCommandWordsEnabled());

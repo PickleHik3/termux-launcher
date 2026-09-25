@@ -34,7 +34,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * under {@code cacheDir/tai-ipc} and sent through {@link TaiManager#transcribe} on a single
  * {@code voice-stt} thread — in order, so results come back in order — and every result reaches
  * the {@link Host} on the main thread. {@code sttWarm} goes out as the microphone opens so the
- * model loads while the user speaks.
+ * model loads while the user speaks. {@link VoiceFeedback} marks the open, the end and a failure
+ * with a blip and a haptic; the first {@link VoiceLeadInDiscard#START_TONE_MS} of capture are
+ * dropped so the start blip is never transcribed.
  *
  * <p>The session ends on the configured silence timeout ({@link VoiceSilenceTimeout}, or never for
  * "Until tap"), a second tap, the keyboard going down, the activity
@@ -72,10 +74,15 @@ public final class VoiceInputSession {
         public final boolean commandsEnabled;
         public final boolean bareCommandWordsAllowed;
         public final boolean terminalCleanupEnabled;
+        /** The keyboard's "Voice sounds" setting: start/stop/error blips ({@link VoiceFeedback}). */
+        public final boolean soundsEnabled;
+        /** The keyboard's key-haptics setting, which the voice cues follow. */
+        public final boolean hapticsEnabled;
 
         public Config(@NonNull String modelId, @Nullable String language, boolean terminalPrompt,
                       int pauseMs, int windowSeconds, int silenceTimeoutMs, boolean commandsEnabled,
-                      boolean bareCommandWordsAllowed, boolean terminalCleanupEnabled) {
+                      boolean bareCommandWordsAllowed, boolean terminalCleanupEnabled,
+                      boolean soundsEnabled, boolean hapticsEnabled) {
             this.modelId = modelId;
             this.language = language;
             this.terminalPrompt = terminalPrompt;
@@ -85,6 +92,8 @@ public final class VoiceInputSession {
             this.commandsEnabled = commandsEnabled;
             this.bareCommandWordsAllowed = bareCommandWordsAllowed;
             this.terminalCleanupEnabled = terminalCleanupEnabled;
+            this.soundsEnabled = soundsEnabled;
+            this.hapticsEnabled = hapticsEnabled;
         }
     }
 
@@ -126,6 +135,7 @@ public final class VoiceInputSession {
     private final ExecutorService sttExecutor = Executors.newSingleThreadExecutor(
         runnable -> new Thread(runnable, "voice-stt"));
     private final VoiceResultSequencer<String> sequencer = new VoiceResultSequencer<>();
+    private final VoiceFeedback feedback;
     private final AtomicBoolean stopRequested = new AtomicBoolean();
     private final AtomicBoolean failed = new AtomicBoolean();
     /** Segments handed to the STT thread, counted on the capture thread before the microphone is released. */
@@ -149,6 +159,7 @@ public final class VoiceInputSession {
         this.appContext = context.getApplicationContext();
         this.config = config;
         this.host = host;
+        this.feedback = new VoiceFeedback(appContext, config.soundsEnabled, config.hapticsEnabled);
     }
 
     /**
@@ -181,6 +192,9 @@ public final class VoiceInputSession {
             return false;
         }
         record = recorder;
+        // The cue goes out the moment the microphone is live; the capture thread drops the
+        // lead-in the tone occupies so the blip never becomes the first "phrase".
+        feedback.onStart();
         // The model loads while the first words are spoken; a refusal here ends the session
         // before any segment is sent, which is the fast path to the fallback.
         sttExecutor.execute(this::warm);
@@ -252,6 +266,9 @@ public final class VoiceInputSession {
                 stop(EndReason.SILENCE);
             }
         }, config.pauseMs, config.windowSeconds, config.silenceTimeoutMs);
+        // In front of the detector, not inside it: frames dropped here never reach the pre-roll.
+        VoiceLeadInDiscard leadIn = new VoiceLeadInDiscard(
+            feedback.playsTones() ? VoiceLeadInDiscard.START_TONE_MS : 0, VoiceActivityDetector.SAMPLE_RATE);
         short[] buffer = new short[VoiceActivityDetector.FRAME_SAMPLES];
         try {
             while (!stopRequested.get()) {
@@ -260,7 +277,8 @@ public final class VoiceInputSession {
                     if (read < 0) Logger.logWarn(LOG_TAG, "AudioRecord.read: " + read);
                     break;
                 }
-                detector.feed(buffer, read);
+                int drop = leadIn.take(read);
+                if (drop < read) detector.feed(buffer, drop, read - drop);
             }
             // A tap in the middle of a phrase still sends what was said.
             if (!failed.get()) detector.finish();
@@ -433,7 +451,12 @@ public final class VoiceInputSession {
         if (!discardResults && delivered < submitted.get()) return;
         ended = true;
         sttExecutor.shutdown();
-        host.onEnded(endReason == null ? EndReason.FAILED : endReason);
+        EndReason reason = endReason == null ? EndReason.FAILED : endReason;
+        // The activity going away is not something to chime about; every other end is.
+        if (reason == EndReason.FAILED) feedback.onError();
+        else if (reason != EndReason.DESTROYED) feedback.onStop();
+        feedback.release();
+        host.onEnded(reason);
     }
 
     /** An error answer from the runtime, in either of its shapes: flat {@code {error, message}} or OpenAI's nested one. */

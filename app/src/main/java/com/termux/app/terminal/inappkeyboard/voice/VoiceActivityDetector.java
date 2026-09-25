@@ -102,9 +102,14 @@ public final class VoiceActivityDetector {
 
     /** Feeds {@code count} samples of {@code pcm}; whole 30 ms frames are processed as they complete. */
     public void feed(@NonNull short[] pcm, int count) {
-        int offset = 0;
-        while (offset < count) {
-            int take = Math.min(FRAME_SAMPLES - partialFill, count - offset);
+        feed(pcm, 0, count);
+    }
+
+    /** As {@link #feed(short[], int)}, from {@code offset} — the capture loop skips a discarded lead-in this way. */
+    public void feed(@NonNull short[] pcm, int offset, int count) {
+        int end = offset + count;
+        while (offset < end) {
+            int take = Math.min(FRAME_SAMPLES - partialFill, end - offset);
             System.arraycopy(pcm, offset, partial, partialFill, take);
             partialFill += take;
             offset += take;

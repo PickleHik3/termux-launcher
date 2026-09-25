@@ -144,6 +144,11 @@
             app:entryValues="@array/settings_keyboard_voice_silence_timeout_values"
             app:defaultValue="10000"
             app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:key="keyboard_voice_sounds"
+            app:title="@string/settings_keyboard_voice_sounds_title"
+            app:summary="@string/settings_keyboard_voice_sounds_summary"
+            android:defaultValue="true" />
         <Preference
             app:key="keyboard_voice_model"
             app:persistent="false"
