@@ -106,7 +106,7 @@ public final class TaiSpeechModels {
 
     // ---- naming ----
 
-    /** "Base · Multilingual", "Small · English": the size word from the id when it is one of
+    /** "Base · Many languages", "Small · English": the size word from the id when it is one of
      *  Whisper's, otherwise the catalog name, followed by the language kind. */
     @NonNull
     public static String plainName(@NonNull TaiModelSpec spec) {
@@ -117,7 +117,7 @@ public final class TaiSpeechModels {
     public static String plainName(@NonNull String modelId, @Nullable String displayName, @Nullable String path) {
         String size = sizeWord(modelId);
         String head = size != null ? size : (displayName == null || displayName.trim().isEmpty() ? modelId : displayName.trim());
-        return head + " · " + (isEnglishOnly(modelId, path) ? "English" : "Multilingual");
+        return head + " · " + (isEnglishOnly(modelId, path) ? "English" : "Many languages");
     }
 
     @Nullable

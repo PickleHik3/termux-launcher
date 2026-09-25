@@ -58,11 +58,11 @@ public class TaiSpeechModelsTest {
     public void plainName_isSizeAndLanguageForWhisperAndCatalogNameOtherwise() {
         assertEquals("Base · English", TaiSpeechModels.plainName("whisper-acft-base-en", "Whisper ACFT Base (English)",
             "/m/whisper-acft-base-en/acft_whisper_base.en_10s_drq.tflite"));
-        assertEquals("Small · Multilingual", TaiSpeechModels.plainName("whisper-acft-small", "Whisper ACFT Small",
+        assertEquals("Small · Many languages", TaiSpeechModels.plainName("whisper-acft-small", "Whisper ACFT Small",
             "/m/whisper-acft-small/acft_whisper_small_5s_drq.tflite"));
         // Another engine's model is just another speech_to_text entry: its own name, language kind appended.
-        assertEquals("Parakeet TDT · Multilingual", TaiSpeechModels.plainName("parakeet-tdt", "Parakeet TDT", null));
-        assertEquals("parakeet-tdt · Multilingual", TaiSpeechModels.plainName("parakeet-tdt", "", null));
+        assertEquals("Parakeet TDT · Many languages", TaiSpeechModels.plainName("parakeet-tdt", "Parakeet TDT", null));
+        assertEquals("parakeet-tdt · Many languages", TaiSpeechModels.plainName("parakeet-tdt", "", null));
     }
 
     @Test

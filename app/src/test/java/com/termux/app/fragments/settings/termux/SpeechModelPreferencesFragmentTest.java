@@ -103,7 +103,7 @@ public class SpeechModelPreferencesFragmentTest {
         assertNotNull(base);
         assertNotNull(small);
         assertEquals("Base · English", base.getTitle().toString());
-        assertEquals("Small · Multilingual", small.getTitle().toString());
+        assertEquals("Small · Many languages", small.getTitle().toString());
         assertTrue(base.getSummary().toString().contains("10-second window"));
         assertTrue(small.getSummary().toString().contains("5-second window"));
         // The stale id is not written over; the first installed model simply stands in.
@@ -128,7 +128,7 @@ public class SpeechModelPreferencesFragmentTest {
         Preference row = fragment.getPreferenceScreen().findPreference(
             SpeechModelPreferencesFragment.ROW_KEY_PREFIX + "whisper-acft-small");
         assertNotNull(row);
-        assertEquals("Small · Multilingual", row.getTitle().toString());
+        assertEquals("Small · Many languages", row.getTitle().toString());
         assertTrue(row.getSummary().toString().startsWith("Downloading"));
         Preference empty = fragment.getPreferenceScreen().findPreference("speech_model_empty");
         assertNotNull(empty);

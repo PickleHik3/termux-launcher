@@ -468,11 +468,13 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment {
         languageGroup.setOrientation(RadioGroup.VERTICAL);
         RadioButton englishButton = new RadioButton(context);
         englishButton.setText(R.string.speech_model_language_english_only);
-        englishButton.setChecked(true);
         RadioButton manyButton = new RadioButton(context);
         manyButton.setText(R.string.speech_model_language_many);
         languageGroup.addView(englishButton);
         languageGroup.addView(manyButton);
+        // Checked only once it is in the group: a button checked before addView is invisible to
+        // RadioGroup, which then leaves it checked when "Many languages" is picked.
+        englishButton.setChecked(true);
         layout.addView(languageGroup);
 
         layout.addView(sectionLabel(context, R.string.speech_model_window_label));
