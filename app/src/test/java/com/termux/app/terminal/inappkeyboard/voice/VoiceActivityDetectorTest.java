@@ -36,7 +36,7 @@ public class VoiceActivityDetectorTest {
             }
 
             @Override
-            public void onSegment(@NonNull short[] pcm) {
+            public void onSegment(@NonNull short[] pcm, int voicedFrames) {
                 segments.add(pcm);
             }
 

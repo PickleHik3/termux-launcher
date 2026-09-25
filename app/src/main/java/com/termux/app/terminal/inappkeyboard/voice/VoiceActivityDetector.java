@@ -49,8 +49,11 @@ public final class VoiceActivityDetector {
          */
         void onLevel(float rms, boolean voiced, float noiseFloor);
 
-        /** A closed segment, padding included, at least {@link #MIN_VOICED_MS} of it voiced. */
-        void onSegment(@NonNull short[] pcm);
+        /**
+         * A closed segment, padding included, at least {@link #MIN_VOICED_MS} of it voiced;
+         * {@code voicedFrames} is how many of its frames counted as speech, for the per-phrase log.
+         */
+        void onSegment(@NonNull short[] pcm, int voicedFrames);
 
         /** {@code sessionSilenceMs} have passed since the last voiced frame (or since the start). */
         void onSilenceTimeout();
@@ -167,7 +170,7 @@ public final class VoiceActivityDetector {
     /** Emits the segment up to {@link #PAD_MS} after its last voiced frame and goes back to idle. */
     private void closeSegment() {
         int end = Math.min(frames.size(), lastVoicedIndex + 1 + padFrames);
-        if (voicedFrames >= minVoicedFrames) listener.onSegment(concat(0, end));
+        if (voicedFrames >= minVoicedFrames) listener.onSegment(concat(0, end), voicedFrames);
         dropFrames(end);
         inSpeech = false;
         voicedFrames = 0;
@@ -194,7 +197,7 @@ public final class VoiceActivityDetector {
         for (int i = 0; i < cut; i++) {
             if (voicedFlags.get(i)) voicedBefore++;
         }
-        if (voicedBefore >= minVoicedFrames) listener.onSegment(concat(0, cut));
+        if (voicedBefore >= minVoicedFrames) listener.onSegment(concat(0, cut), voicedBefore);
         dropFrames(cut);
         voicedFrames = 0;
         lastVoicedIndex = -1;

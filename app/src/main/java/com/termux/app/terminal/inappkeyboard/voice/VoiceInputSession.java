@@ -61,15 +61,27 @@ public final class VoiceInputSession {
         public final int windowSeconds;
         /** {@link VoiceSilenceTimeout#UNTIL_TAP} disables the timeout ("Until tap"). */
         public final int silenceTimeoutMs;
+        /**
+         * These three mirror the keyboard settings the activity applies to the same transcript
+         * (commands, "Bare command words", terminal cleanup); they are carried here only so the
+         * per-phrase log's "outcome" (command / text / dropped) matches what actually happens to it.
+         */
+        public final boolean commandsEnabled;
+        public final boolean bareCommandWordsAllowed;
+        public final boolean terminalCleanupEnabled;
 
         public Config(@NonNull String modelId, @Nullable String language, boolean terminalPrompt,
-                      int pauseMs, int windowSeconds, int silenceTimeoutMs) {
+                      int pauseMs, int windowSeconds, int silenceTimeoutMs, boolean commandsEnabled,
+                      boolean bareCommandWordsAllowed, boolean terminalCleanupEnabled) {
             this.modelId = modelId;
             this.language = language;
             this.terminalPrompt = terminalPrompt;
             this.pauseMs = pauseMs;
             this.windowSeconds = windowSeconds;
             this.silenceTimeoutMs = silenceTimeoutMs;
+            this.commandsEnabled = commandsEnabled;
+            this.bareCommandWordsAllowed = bareCommandWordsAllowed;
+            this.terminalCleanupEnabled = terminalCleanupEnabled;
         }
     }
 
@@ -212,8 +224,8 @@ public final class VoiceInputSession {
             }
 
             @Override
-            public void onSegment(@NonNull short[] pcm) {
-                submitSegment(nextSequence++, pcm);
+            public void onSegment(@NonNull short[] pcm, int voicedFrames) {
+                submitSegment(nextSequence++, pcm, voicedFrames);
             }
 
             @Override
@@ -248,9 +260,9 @@ public final class VoiceInputSession {
         }
     }
 
-    private void submitSegment(int sequence, @NonNull short[] pcm) {
+    private void submitSegment(int sequence, @NonNull short[] pcm, int voicedFrames) {
         submitted.incrementAndGet();
-        sttExecutor.execute(() -> transcribe(sequence, pcm));
+        sttExecutor.execute(() -> transcribe(sequence, pcm, voicedFrames));
     }
 
     // ------------------------------------------------------------------ STT thread
@@ -268,11 +280,15 @@ public final class VoiceInputSession {
         }
     }
 
-    private void transcribe(int sequence, @NonNull short[] pcm) {
+    private void transcribe(int sequence, @NonNull short[] pcm, int voicedFrames) {
+        long segmentMs = pcm.length * 1000L / VoiceActivityDetector.SAMPLE_RATE;
+        long voicedMs = voicedFrames * (long) VoiceActivityDetector.FRAME_MS;
         if (failed.get() || cancelled) {
+            logPhrase(segmentMs, voicedMs, 0, null, 0, "dropped");
             deliver(sequence, "");
             return;
         }
+        long start = System.nanoTime();
         File audio = null;
         try {
             audio = writePcm(pcm);
@@ -282,14 +298,20 @@ public final class VoiceInputSession {
             if (config.language != null) request.put("language", config.language);
             if (config.terminalPrompt) request.put("prompt_mode", "terminal");
             JSONObject result = TaiManager.getInstance(appContext).transcribe(request.toString());
+            long transcribeMs = (System.nanoTime() - start) / 1_000_000L;
             Failure failure = Failure.of(result);
             if (failure != null) {
+                logPhrase(segmentMs, voicedMs, transcribeMs, result, 0, "failed");
                 fail(failure);
                 deliver(sequence, "");
                 return;
             }
-            deliver(sequence, result.optString("text", ""));
+            String text = result.optString("text", "");
+            logPhrase(segmentMs, voicedMs, transcribeMs, result, text.length(), outcomeFor(text));
+            deliver(sequence, text);
         } catch (IOException | JSONException | RuntimeException e) {
+            long transcribeMs = (System.nanoTime() - start) / 1_000_000L;
+            logPhrase(segmentMs, voicedMs, transcribeMs, null, 0, "failed");
             fail(new Failure("stt_failed", String.valueOf(e.getMessage())));
             deliver(sequence, "");
         } finally {
@@ -299,6 +321,43 @@ public final class VoiceInputSession {
                 audio.delete();
             }
         }
+    }
+
+    /**
+     * The same classification the activity is about to apply to {@code text} — a spoken key, a
+     * terminal-dropped non-speech segment, or ordinary text — purely so the log's "outcome" field
+     * matches what actually happens to it.
+     */
+    @NonNull
+    private String outcomeFor(@NonNull String text) {
+        if (config.commandsEnabled && VoiceCommand.classify(text, config.bareCommandWordsAllowed) != null) {
+            return "command";
+        }
+        String effective = text;
+        if (config.terminalPrompt && config.terminalCleanupEnabled) {
+            effective = VoiceTerminalCleanup.clean(text);
+        }
+        return effective.trim().isEmpty() ? "dropped" : "text";
+    }
+
+    /**
+     * One line per phrase: durations and the runtime's own timing breakdown when it sent one, the
+     * transcript's length and what became of it — never the transcript itself.
+     */
+    private static void logPhrase(long segmentMs, long voicedMs, long transcribeMs,
+                                  @Nullable JSONObject result, int textLength, @NonNull String outcome) {
+        StringBuilder message = new StringBuilder("phrase: segmentMs=").append(segmentMs)
+            .append(" voicedMs=").append(voicedMs)
+            .append(" transcribeMs=").append(transcribeMs);
+        JSONObject timings = result == null ? null : result.optJSONObject("timings");
+        if (timings != null) {
+            message.append(" melMs=").append(timings.optLong("melMs"))
+                .append(" encodeMs=").append(timings.optLong("encodeMs"))
+                .append(" decodeMs=").append(timings.optLong("decodeMs"))
+                .append(" decodeSteps=").append(timings.optLong("decodeSteps"));
+        }
+        message.append(" textLength=").append(textLength).append(" outcome=").append(outcome);
+        Logger.logInfo(LOG_TAG, message.toString());
     }
 
     /** Little-endian PCM16 at 16 kHz mono under {@code cacheDir/tai-ipc}, the form the runtime reads raw. */

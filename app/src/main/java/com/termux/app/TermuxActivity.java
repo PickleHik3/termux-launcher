@@ -13550,7 +13550,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         String language = resolveVoiceLanguage(modelId);
         VoiceInputSession.Config config = new VoiceInputSession.Config(modelId, language,
             terminalTarget, mPreferences.getInAppKeyboardVoicePauseMs(), tai.getSttWindowSeconds(),
-            mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs());
+            mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs(),
+            mPreferences.isInAppKeyboardVoiceCommandsEnabled(),
+            mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled(),
+            mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled());
         VoiceInputSession session = new VoiceInputSession(this, config, mVoiceInputHost);
         mVoiceInputTargetSession = target;
         mVoiceInputLastWasText = false;
