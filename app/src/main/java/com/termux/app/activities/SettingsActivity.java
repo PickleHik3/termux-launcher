@@ -292,8 +292,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 R.xml.services_permissions_preferences, R.xml.termux_ai_preferences,
                 R.xml.termux_privileged_access_preferences, R.xml.termux_api_preferences});
             CHILD_XML_RESOURCES.put("advanced_diagnostics", new int[]{
-                R.xml.advanced_diagnostics_preferences, R.xml.termux_terminal_io_preferences,
-                R.xml.termux_terminal_view_preferences});
+                R.xml.advanced_diagnostics_preferences});
             CHILD_XML_RESOURCES.put("about_support", new int[]{
                 R.xml.about_support_preferences});
         }

@@ -448,18 +448,6 @@
     <string name="settings_export_logs_summary">Creates a report containing diagnostics and current logcat output.</string>
     <string name="settings_clear_logs_title">Clear logs</string>
     <string name="settings_clear_logs_summary">Removes the current logcat buffer.</string>
-    <string name="settings_developer_options_header">Developer options</string>
-    <string name="settings_developer_options_title">Developer options</string>
-    <string name="settings_developer_options_summary">Shows low-level terminal, rendering, backend, and plugin settings.</string>
-    <string name="settings_developer_tools_header">Developer tools</string>
-    <string name="settings_terminal_io_title">Terminal I/O</string>
-    <string name="settings_terminal_io_summary">Inspect low-level input and pane compatibility controls.</string>
-    <string name="settings_terminal_rendering_title">Terminal rendering</string>
-    <string name="settings_terminal_rendering_summary">Inspect low-level view and task behavior.</string>
-    <string name="settings_backend_debugging_title">Backend debugging</string>
-    <string name="settings_backend_debugging_summary">Inspect privileged backend policy and state.</string>
-    <string name="settings_plugin_debugging_title">Plugin debugging</string>
-    <string name="settings_plugin_debugging_summary">Inspect Termux:API plugin debugging controls.</string>
     <string name="settings_log_level_normal">Normal</string>
     <string name="settings_default_value">Default</string>
     <string name="settings_diagnostics_copied">Diagnostics copied</string>
@@ -823,7 +811,6 @@
         <!-- Terminal IO Preferences -->
 
             <!-- Split panes Category -->
-            <string name="termux_split_panes_header">Split panes</string>
                 <string name="termux_window_bar_content_description">Terminal windows</string>
                 <string name="termux_window_tab_content_description">Window %1$d of %2$d: %3$s</string>
                 <string name="termux_window_tab_busy_content_description">working</string>
@@ -870,19 +857,7 @@
                 <string name="termux_status_widget_ai_loading">…</string>
                 <string name="termux_status_widget_ai_resident">on</string>
                 <string name="termux_status_widget_ai_unloaded">off</string>
-                <string name="termux_compatibility_mode_title">Single-pane compatibility mode</string>
-                <string name="termux_compatibility_mode_off">Window/pane splitting and tmux-style keybinds are enabled.</string>
-                <string name="termux_compatibility_mode_on">Disables all window/pane splitting and restores native Termux single-pane behaviour.</string>
-                <string name="termux_top_pane_clock_style_title">Clock style</string>
-                <string name="termux_top_pane_clock_style_summary">Choose the clock widget rendered above the window row.</string>
-                <string name="termux_top_pane_clock_am_pm_title">Use 12-hour time</string>
-                <string name="termux_top_pane_clock_am_pm_summary">Show time using AM/PM instead of 24-hour format.</string>
-                <string name="termux_status_widget_cpu_title">CPU usage</string>
                 <string name="termux_status_widget_cpu_summary">Show CPU usage on the status row. Tap for cores, load and top processes.</string>
-                <string name="termux_status_widget_ram_title">Memory usage</string>
-                <string name="termux_status_widget_ram_summary">Show memory usage on the status row. Tap for the memory breakdown.</string>
-                <string name="termux_status_widget_weather_title">Weather</string>
-                <string name="termux_status_widget_weather_summary">Show weather on the status row. Tap for hourly and weekly forecasts. Needs location permission.</string>
                 <string name="termux_top_pane_clock_style_flip">Flip</string>
                 <string name="termux_top_pane_clock_style_lcd">LCD</string>
                 <string name="termux_top_pane_clock_style_minimal">Minimal</string>
@@ -892,12 +867,8 @@
                 <!-- Toggle-group labels: six faces have to share one row. -->
 
             <!-- Keyboard Category -->
-            <string name="termux_keyboard_header">Keyboard</string>
 
                 <!-- Soft Keyboard -->
-                <string name="termux_soft_keyboard_enabled_title">Show Android keyboard</string>
-                <string name="termux_soft_keyboard_enabled_off">Does not open the Android keyboard for terminal text input.</string>
-                <string name="termux_soft_keyboard_enabled_on">Opens the Android keyboard when the terminal receives text input.</string>
 
                 <!-- In-app Keyboard -->
                 <string name="termux_keyboard_preferences_title">Keyboard</string>
@@ -1017,25 +988,15 @@
                 <string name="termux_in_app_keyboard_font_error">Could not read that file as a font.</string>
 
                 <!-- Hardware keyboard behavior -->
-                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Hide Android keyboard with hardware keyboard</string>
-                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Keeps the Android keyboard available with a hardware keyboard.</string>
-                <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Hides the Android keyboard while a hardware keyboard is connected.</string>
 
 
         <!-- Terminal View Preferences -->
 
             <!-- View Category -->
-            <string name="termux_terminal_view_view_header">View</string>
 
                 <!-- Terminal View Margin Adjustment -->
-                <string name="termux_terminal_view_terminal_margin_adjustment_title">Adjust for on-screen keyboard</string>
-                <string name="termux_terminal_view_terminal_margin_adjustment_off">Leaves the terminal at its normal size when the keyboard opens.</string>
-                <string name="termux_terminal_view_terminal_margin_adjustment_on">Keeps terminal content visible above the on-screen keyboard.</string>
 
                 <!-- Terminal View Activity Remove Task -->
-                <string name="termux_terminal_view_activity_remove_title">Show in recent apps when not Home app</string>
-                <string name="termux_terminal_view_activity_remove_off">&TERMUX_APP_NAME; will stay hidden from recent apps. Applies when you return to the launcher.</string>
-                <string name="termux_terminal_view_activity_remove_on">Shows &TERMUX_APP_NAME; in Recents when another home app is active and hides it when &TERMUX_APP_NAME; is the default launcher.</string>
 
 
         <!-- Termux Style Preferences -->
@@ -1346,7 +1307,6 @@
 
             <!-- Background Category -->
             <string name="termux_use_system_wallpaper_summary">Shows the current system wallpaper behind launcher surfaces.</string>
-            <string name="termux_fullscreen_title">Fullscreen</string>
             <string name="termux_fullscreen_summary">Hide system bars while using the launcher</string>
                 
             <!-- Extra Keys Category -->

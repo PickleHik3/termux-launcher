@@ -331,9 +331,8 @@ Use this section when investigating a problem:
 
 - log level and optional terminal key-event logging;
 - plugin and crash-report alerts;
-- privileged-backend test;
-- **Copy diagnostics**, **Export logs**, and **Clear logs**; and
-- low-level terminal, renderer, backend, and plugin developer options.
+- privileged-backend test; and
+- **Copy diagnostics**, **Export logs**, and **Clear logs**.
 
 Diagnostic output can contain device, package, and path information. Review it before posting it
 publicly.

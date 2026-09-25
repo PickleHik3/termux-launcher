@@ -102,26 +102,12 @@
     <string name="termux_crash_report_notifications_enabled_on">显示崩溃报告的通知。（默认）</string>
     <!-- Terminal IO Preferences -->
     <!-- Keyboard Category -->
-    <string name="termux_keyboard_header">键盘</string>
     <!-- Soft Keyboard -->
-    <string name="termux_soft_keyboard_enabled_title">软键盘已启用</string>
-    <string name="termux_soft_keyboard_enabled_off">软键盘将被禁用。</string>
-    <string name="termux_soft_keyboard_enabled_on">软键盘将被启用。（默认）</string>
     <!-- Soft Keyboard Only If No Hardware-->
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">无硬件时仅软键盘</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">即使连接了硬件键盘，也将启用软键盘。 （默认）</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">只有在没有连接硬件键盘时才会启用软键盘。</string>
     <!-- Terminal View Preferences -->
     <!-- View Category -->
-    <string name="termux_terminal_view_view_header">视图</string>
     <!-- Terminal View Margin Adjustment -->
-    <string name="termux_terminal_view_terminal_margin_adjustment_title">终端保证金调整</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_off">终端保证金调整将被禁用。</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_on">将启用终端保证金调整。应该启用它以尝试修复软键盘覆盖部分额外键/终端视图的问题。如果它导致设备上的屏幕闪烁，请禁用它。（默认）</string>
     <!-- Terminal View Activity Remove Task -->
-    <string name="termux_terminal_view_activity_remove_title">防止停留在最近的应用程序上</string>
-    <string name="termux_terminal_view_activity_remove_off">一旦关闭所有终端会话，&TERMUX_APP_NAME; 将关闭并在最近的应用程序中保持可见。</string>
-    <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; 如果没有活动的终端会话，将关闭并从最近的应用程序中删除自己。 （默认）</string>
     <!-- Termux:API App Preferences -->
     <!-- Termux:Float App Preferences -->
     <!-- Termux:Tasker App Preferences -->

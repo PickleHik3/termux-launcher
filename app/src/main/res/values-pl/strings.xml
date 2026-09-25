@@ -12,7 +12,6 @@
     <string name="error_termux_service_start_failed_general">Nie udało się uruchomić usługi TermuxService. Sprawdź komunikat wyjątku w logcat.</string>
     <string name="action_reset_terminal">Resetuj</string>
     <string name="action_create_named_session_confirm">Utwórz</string>
-    <string name="termux_soft_keyboard_enabled_title">Klawiatura ekranowa włączona</string>
     <string name="termux_debugging_preferences_title">Debugowanie</string>
     <string name="title_confirm_kill_process">Czy na pewno zakończyć sesję\?</string>
     <string name="notification_action_wake_lock">Uzyskaj wakelock</string>
@@ -24,8 +23,6 @@
     <string name="msg_max_terminals_reached">Zamknij istniejące przed utworzeniem nowych.</string>
     <string name="action_style_terminal">Wygląd</string>
     <string name="action_open_settings">Ustawienia</string>
-    <string name="termux_keyboard_header">Klawiatura</string>
-    <string name="termux_soft_keyboard_enabled_off">Klawiatura ekranowa zostanie wyłączona.</string>
     <string name="action_file_received_open_directory">Otwórz katalog</string>
     <string name="action_new_session_failsafe">Tryb awaryjny</string>
     <string name="action_toggle_soft_keyboard">Klawiatura</string>
@@ -68,6 +65,5 @@
     <string name="shared_user_label">Użytkownik &TERMUX_APP_NAME;</string>
     <string name="action_kill_process">Zakończ sesję (%d)</string>
     <string name="termux_style_preferences_title">Wygląd &TERMUX_APP_NAME;</string>
-    <string name="termux_terminal_view_view_header">Widok</string>
     <string name="donate_preference_title">Przekaż darowiznę</string>
 </resources>

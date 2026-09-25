@@ -1,15 +1,9 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
-import android.os.Bundle;
-import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.preference.PreferenceDataStore;
-import androidx.preference.PreferenceManager;
-import com.termux.R;
 import com.termux.app.TermuxActivity;
-import com.termux.app.fragments.settings.MaterialPreferenceFragment;
-import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.shared.file.FileUtils;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.settings.properties.SharedProperties;
@@ -25,21 +19,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
-
-@Keep
-public class TerminalViewPreferencesFragment extends MaterialPreferenceFragment {
-
-    @Override
-    public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
-        Context context = getContext();
-        if (context == null)
-            return;
-        PreferenceManager preferenceManager = getPreferenceManager();
-        preferenceManager.setPreferenceDataStore(TerminalViewPreferencesDataStore.getInstance(context));
-        setPreferencesFromResource(R.xml.termux_terminal_view_preferences, rootKey);
-        SettingsLayoutUtils.applyScreenLayout(this);
-    }
-}
 
 class TerminalViewPreferencesDataStore extends PreferenceDataStore {
 
@@ -77,9 +56,6 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
             case "terminal_margin_adjustment":
                 mPreferences.setTerminalMarginAdjustment(value);
                 break;
-            case "activity_finish_remove_task":
-                mPreferences.setRemoveTaskOnActivityFinishEnabled(value);
-                break;
             default:
                 break;
         }
@@ -97,8 +73,6 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
                     TermuxPropertyConstants.KEY_USE_FULLSCREEN, Boolean.toString(defValue)));
             case "terminal_margin_adjustment":
                 return mPreferences.isTerminalMarginAdjustmentEnabled();
-            case "activity_finish_remove_task":
-                return mPreferences.isRemoveTaskOnActivityFinishEnabled();
             default:
                 return defValue;
         }

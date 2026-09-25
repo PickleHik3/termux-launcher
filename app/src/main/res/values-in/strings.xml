@@ -71,11 +71,6 @@
     <string name="termux_crash_report_notifications_enabled_title">Notifikasi Laporan Kerusakan</string>
     <string name="termux_crash_report_notifications_enabled_off">Nonaktifkan notifikasi untuk laporan kerusakan.</string>
     <string name="termux_crash_report_notifications_enabled_on">Menampilkan pemberitahuan untuk laporan kerusakan. (Default)</string>
-    <string name="termux_keyboard_header">Papan Ketik</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Soft Keyboard akan tetap aktif meski hardware keyboard tersambung. (Default)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Soft Keyboard akan tetap aktif meski hardware keyboard tidak tersambung.</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_title">Menyesuaikan Margin Terminal</string>
-    <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; akan menutup dan menghapus sendiri dari aplikasi terbaru jika tidak ada sesi terminal yang aktif. (Default)</string>
     <string name="termux_style_preferences_title">Tampilan &TERMUX_APP_NAME;</string>
     <string name="action_file_received_open_directory">Buka direktori</string>
     <string name="error_termux_service_start_failed_general">Gagal memulai TermuxService. Periksa logcat untuk pesan pengecualian.</string>
@@ -87,14 +82,5 @@
     <string name="termux_terminal_view_key_logging_enabled_on">Log Logcat akan memiliki entri untuk kunci tampilan terminal. Ini terlalu panjang lebar dan harus dinonaktifkan dalam keadaan normal atau akan menyebabkan masalah kinerja.</string>
     <string name="termux_plugin_error_notifications_enabled_on">Menampilkan lampu flash dan notifikasi untuk kesalahan plugin. (Default)</string>
     <string name="termux_plugin_error_notifications_enabled_off">Nonaktifkan lampu flash dan notifikasi untuk kesalahan plugin.</string>
-    <string name="termux_soft_keyboard_enabled_title">Keyboard Perangkat lunak Diaktifkan</string>
-    <string name="termux_soft_keyboard_enabled_on">Keyboard Perangkat lunak Diaktifkan. (Default)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Hanya Soft Keyboard Jika Tidak Ada Hardware</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_off">Menyesuaikan margin Terminal dinonaktifkan.</string>
-    <string name="termux_terminal_view_view_header">Tampilan</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_on">Penyesuaian margin terminal akan diaktifkan. Ini harus diaktifkan untuk mencoba memperbaiki masalah di mana soft keyboard menutupi sebagian tombol tambahan/tampilan terminal. Jika hal ini menyebabkan layar berkedip pada perangkat Anda, nonaktifkan. (Default)</string>
-    <string name="termux_terminal_view_activity_remove_title">Mencegah agar tetap berada di aplikasi terbaru</string>
-    <string name="termux_terminal_view_activity_remove_off">Setelah menutup semua sesi terminal, &TERMUX_APP_NAME; akan ditutup dan tetap terlihat di aplikasi terbaru.</string>
     <string name="donate_preference_title">Donasi</string>
-    <string name="termux_soft_keyboard_enabled_off">Keyboard Perangkat lunak Dinonaktifkan.</string>
 </resources>

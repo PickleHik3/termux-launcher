@@ -26,10 +26,6 @@
     <string name="termux_logging_header">Логування</string>
     <string name="termux_crash_report_notifications_enabled_off">Вимкнути сповіщення для звітів про збої.</string>
     <string name="termux_crash_report_notifications_enabled_on">Показуються сповіщення про збої. (За замовчуванням)</string>
-    <string name="termux_keyboard_header">Клавіатура</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_title">Коригування краю терміналу</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_off">Коригування краю терміналу буде вимкнено.</string>
-    <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; закриється і вилучить себе з нещодавніх програм, якщо немає активних сеансів терміналу. (За замовчуванням)</string>
     <string name="donate_preference_title">Пожертвувати</string>
     <string name="shared_user_label">&TERMUX_APP_NAME; користувач</string>
     <string name="permission_run_command_label">Запуск команд у середовищі &TERMUX_APP_NAME;</string>
@@ -86,15 +82,5 @@
     <string name="termux_plugin_error_notifications_enabled_off">Вимкнуто повідомлення та сповіщення про помилки плагіна.</string>
     <string name="termux_plugin_error_notifications_enabled_on">Показуються повідомлення та сповіщення про помилки плагіна. (За замовчуванням)</string>
     <string name="termux_crash_report_notifications_enabled_title">Сповіщення про збій</string>
-    <string name="termux_soft_keyboard_enabled_title">Увімкнення програмної клавіатури</string>
-    <string name="termux_soft_keyboard_enabled_off">Програмну клавіатуру буде вимкнено.</string>
-    <string name="termux_soft_keyboard_enabled_on">Програмну клавіатуру буде увімкнено. (За замовчуванням)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Програмна клавіатура лише якщо немає апаратної</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Програмна клавіатура буде увімкнена навіть якщо апаратна клавіатура підключена. (За замовчуванням)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Програмна клавіатура буде увімкнена лише якщо апаратна клавіатура не підключена.</string>
-    <string name="termux_terminal_view_view_header">Вигляд</string>
-    <string name="termux_terminal_view_activity_remove_title">Заборонити залишатися в нещодавніх програмах</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Вигляд</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_on">Коригування краю терміналу буде увімкнено. Слід увімкнути, щоб спробувати вирішити проблему, коли програмна клавіатура закриває частину додаткових клавіш/вигляду терміналу. Якщо спричиняє мерехтіння екрану на ваших пристроях, вимкніть. (За замовчуванням)</string>
-    <string name="termux_terminal_view_activity_remove_off">Після закриття всіх сеансів терміналу, &TERMUX_APP_NAME; закриється і залишиться видимим у нещодавніх програмах.</string>
 </resources>

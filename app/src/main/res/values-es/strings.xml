@@ -105,30 +105,12 @@
     <string name="termux_crash_report_notifications_enabled_on">Habilitar notificaciones de informe de fallas. (Defecto)</string>
     <!-- Terminal IO Preferences -->
     <!-- Keyboard Category -->
-    <string name="termux_keyboard_header">Teclado</string>
     <!-- Soft Keyboard -->
-    <string name="termux_soft_keyboard_enabled_title">Teclado virtual habilitado</string>
-    <string name="termux_soft_keyboard_enabled_off">El teclado virtual será deshabilitado.</string>
-    <string name="termux_soft_keyboard_enabled_on">El teclado virtual será habilitado. (Defecto)</string>
     <!-- Soft Keyboard Only If No Hardware-->
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Teclado virtual sólo si no hay teclado físico</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">El teclado virtual se habilitará incluso si
-                    el teclado físico está conectado. (Defecto)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">El teclado virtual se habilitará solo si
-                    no hay ningún teclado físico conectado.</string>
     <!-- Terminal View Preferences -->
     <!-- View Category -->
-    <string name="termux_terminal_view_view_header">Vista</string>
     <!-- Terminal View Margin Adjustment -->
-    <string name="termux_terminal_view_terminal_margin_adjustment_title">Ajustes de margen de terminal</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_off">El ajuste del margen del terminal se desactivará.</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_on">Se habilitará el ajuste del margen del terminal.
-                    Debe habilitarse para intentar solucionar el problema en el que el teclado en pantalla cubre parte de las teclas adicionales/vista de terminal.
-                    Si hace que la pantalla parpadee en sus dispositivos, desactívelo. (Defecto)</string>
     <!-- Terminal View Activity Remove Task -->
-    <string name="termux_terminal_view_activity_remove_title">Deshabilitar la permanencia en apps recientes</string>
-    <string name="termux_terminal_view_activity_remove_off">Cuando no hay sesiones activas, &TERMUX_APP_NAME; se cerrará y permanecerá visible en las apps recientes.</string>
-    <string name="termux_terminal_view_activity_remove_on">&TERMUX_APP_NAME; se cerrará y no permanecerá en apps recientes cuando no haya sesiones de terminal activas. (Defecto)</string>
     <!-- Termux Style Preferences -->
     <string name="termux_style_preferences_title">Apariencia del &TERMUX_APP_NAME;</string>
     <!-- Background Category -->

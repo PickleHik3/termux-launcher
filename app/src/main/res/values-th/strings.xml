@@ -50,6 +50,4 @@
     <string name="termux_log_level_title">ระดับ log</string>
     <string name="termux_plugin_error_notifications_enabled_title">การแจ้งเตือนปลั๊กอินเกิดข้อผิดพลาด</string>
     <string name="termux_plugin_error_notifications_enabled_off">ปิดแฟลชและการแจ้งเตือนสำหรับข้อผิดพลาดของปลั๊กอิน</string>
-    <string name="termux_keyboard_header">คีย์บอร์ด</string>
-    <string name="termux_terminal_view_view_header">ดู</string>
 </resources>

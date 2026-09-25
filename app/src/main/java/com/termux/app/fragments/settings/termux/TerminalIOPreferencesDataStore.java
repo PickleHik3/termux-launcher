@@ -1,33 +1,9 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
-import android.os.Bundle;
-import androidx.annotation.Keep;
 import androidx.annotation.Nullable;
 import androidx.preference.PreferenceDataStore;
-import androidx.preference.PreferenceManager;
-import com.termux.R;
-import com.termux.app.fragments.settings.MaterialPreferenceFragment;
-import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-
-@Keep
-public class TerminalIOPreferencesFragment extends MaterialPreferenceFragment {
-
-    @Override
-    public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
-        Context context = getContext();
-        if (context == null)
-            return;
-        PreferenceManager preferenceManager = getPreferenceManager();
-        preferenceManager.setPreferenceDataStore(TerminalIOPreferencesDataStore.getInstance(context));
-        setPreferencesFromResource(R.xml.termux_terminal_io_preferences, rootKey);
-        SettingsLayoutUtils.applyScreenLayout(this);
-        // Same two switches as the Status bar page, so they answer the same Shizuku check.
-        StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_cpu"));
-        StatusWidgetPrivilegedGate.attach(context, findPreference("status_widget_ram"));
-    }
-}
 
 class TerminalIOPreferencesDataStore extends PreferenceDataStore {
 

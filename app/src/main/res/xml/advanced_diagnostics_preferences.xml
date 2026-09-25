@@ -16,18 +16,4 @@
         <Preference app:key="export_logs" app:title="@string/settings_export_logs_title" app:summary="@string/settings_export_logs_summary" />
         <Preference app:key="clear_logs" app:title="@string/settings_clear_logs_title" app:summary="@string/settings_clear_logs_summary" />
     </PreferenceCategory>
-    <PreferenceCategory app:title="@string/settings_developer_options_header">
-        <SwitchPreferenceCompat app:key="developer_options_enabled"
-            app:title="@string/settings_developer_options_title" app:summary="@string/settings_developer_options_summary" />
-    </PreferenceCategory>
-    <PreferenceCategory app:key="developer_tools" app:title="@string/settings_developer_tools_header">
-        <Preference app:title="@string/settings_terminal_io_title" app:summary="@string/settings_terminal_io_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TerminalIOPreferencesFragment" />
-        <Preference app:title="@string/settings_terminal_rendering_title" app:summary="@string/settings_terminal_rendering_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TerminalViewPreferencesFragment" />
-        <Preference app:title="@string/settings_backend_debugging_title" app:summary="@string/settings_backend_debugging_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.PrivilegedAccessPreferencesFragment" />
-        <Preference app:title="@string/settings_plugin_debugging_title" app:summary="@string/settings_plugin_debugging_summary"
-            app:fragment="com.termux.app.fragments.settings.termux_api.DebuggingPreferencesFragment" />
-    </PreferenceCategory>
 </PreferenceScreen>

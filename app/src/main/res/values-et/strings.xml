@@ -15,7 +15,6 @@
     <string name="title_confirm_kill_process">Soovite tõesti sessiooni peatada?</string>
     <string name="action_style_terminal">Stiil</string>
     <string name="action_set_background_image">Vali taustapilt</string>
-    <string name="termux_terminal_view_view_header">Vaata</string>
     <string name="bootstrap_error_abort">Katkesta</string>
     <string name="bootstrap_error_try_again">Proovi veel</string>
     <string name="action_rename_session_confirm">Määra</string>
@@ -33,9 +32,6 @@
     <string name="action_file_received_edit">Muuda</string>
     <string name="notification_action_exit">Välju</string>
     <string name="donate_preference_title">Anneta</string>
-    <string name="termux_soft_keyboard_enabled_off">Virtuaalne klaviatuur on välja lülitatud.</string>
-    <string name="termux_keyboard_header">Klaviatuur</string>
-    <string name="termux_soft_keyboard_enabled_title">Virt. klaviatuur lubatud</string>
     <string name="permission_run_command_label">Jooksuta käske &TERMUX_APP_NAME; keskkonnas</string>
     <string name="bootstrap_installer_body">Eellaadimise pakettide paigaldamine…</string>
     <string name="bootstrap_error_title">Eellaadimise paigaldamine ebaõnnestus</string>
@@ -49,10 +45,6 @@
     <string name="termux_debugging_preferences_summary">Silumise eelistused</string>
     <string name="termux_logging_header">Logimine</string>
     <string name="termux_log_level_title">Logimistase</string>
-    <string name="termux_soft_keyboard_enabled_on">Virtuaalne klaviatuur on sisse lülitatud. (Vaikimisi)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Virt. klaviatuur ainult siis, kui riistvaralist pole</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">Virtuaalne klaviatuur lülitatakse sisse ainult siis, kui riistvaralist klaviatuuri pole ühendatud.</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; välimus</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">Virtuaalne klaviatuur lülitatakse sisse ka siis, kui riistvaraline klaviatuur on ühendatud. (Vaikimisi)</string>
     <string name="shared_user_label">&TERMUX_APP_NAME; kasutaja</string>
 </resources>
