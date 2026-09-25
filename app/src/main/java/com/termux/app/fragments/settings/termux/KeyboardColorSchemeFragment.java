@@ -260,24 +260,34 @@ public class KeyboardColorSchemeFragment extends Fragment {
         roles.setSelectionRequired(true);
         mRoleByChipId.clear();
         addRole(context, roles, R.string.termux_keyboard_color_scheme_key_bg,
+            R.drawable.ic_keyboard_color_role_key_bg,
             InAppKeyboardColorScheme.Role.KEY_BACKGROUND, true);
         addRole(context, roles, R.string.termux_keyboard_color_scheme_key_border,
+            R.drawable.ic_keyboard_color_role_key_border,
             InAppKeyboardColorScheme.Role.KEY_BORDER, false);
         addRole(context, roles, R.string.termux_keyboard_color_scheme_primary,
+            R.drawable.ic_keyboard_color_role_primary,
             InAppKeyboardColorScheme.Role.PRIMARY, false);
         addRole(context, roles, R.string.termux_keyboard_color_scheme_secondary,
+            R.drawable.ic_keyboard_color_role_secondary,
             InAppKeyboardColorScheme.Role.SECONDARY, false);
         addRole(context, roles, R.string.termux_keyboard_color_scheme_secondary_bottom,
+            R.drawable.ic_keyboard_color_role_secondary_bottom,
             InAppKeyboardColorScheme.Role.SECONDARY_BOTTOM, false);
         // Not a per-key role: while checked, a swatch tap immediately becomes the whole
         // keyboard's background, and re-tapping the assigned swatch clears it again.
         Chip backgroundChip = addRole(context, roles,
-            R.string.termux_keyboard_color_scheme_background, null, false);
+            R.string.termux_keyboard_color_scheme_background,
+            R.drawable.ic_keyboard_color_role_background, null, false);
         roles.setOnCheckedStateChangeListener((group, checkedIds) -> {
             if (checkedIds.isEmpty())
                 return;
             int checkedId = checkedIds.get(0);
             mPaintingBackground = checkedId == backgroundChip.getId();
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View child = group.getChildAt(i);
+                if (child instanceof Chip) showRoleLabel((Chip) child, child.getId() == checkedId);
+            }
             InAppKeyboardColorScheme.Role role = mRoleByChipId.get(checkedId);
             if (role != null)
                 mSelectedRole = role;
@@ -401,6 +411,13 @@ public class KeyboardColorSchemeFragment extends Fragment {
             pinnedSwatchCount(scheme), scheme.swatchCount());
     }
 
+    private void showRoleLabel(@NonNull Chip chip, boolean shown) {
+        chip.setText(shown ? (CharSequence) chip.getTag() : "");
+        chip.setTextStartPadding(shown ? dpFloat(4) : 0f);
+        chip.setTextEndPadding(shown ? dpFloat(6) : 0f);
+        chip.setChipEndPadding(shown ? dpFloat(4) : dpFloat(2));
+    }
+
     /** A borderless icon button for the Colors heading, named for talkback by {@code label}. */
     @NonNull
     private MaterialButton headingIconButton(@NonNull android.content.Context context, int icon,
@@ -413,15 +430,29 @@ public class KeyboardColorSchemeFragment extends Fragment {
         return button;
     }
 
+    /**
+     * One role filter: a keycap glyph with the part it paints lit. Only the chosen role spells out
+     * its name, so the six fit the card in a line or two; the others say it to talkback and on a
+     * long press.
+     */
     @NonNull
     private Chip addRole(@NonNull android.content.Context context, @NonNull ChipGroup group,
-                         int label, @Nullable InAppKeyboardColorScheme.Role role,
+                         int label, int icon, @Nullable InAppKeyboardColorScheme.Role role,
                          boolean checked) {
         Chip chip = new Chip(context);
         chip.setId(View.generateViewId());
-        chip.setText(label);
+        chip.setTag(getString(label));
+        chip.setContentDescription(getString(label));
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(chip, getString(label));
+        chip.setChipIconResource(icon);
+        // The glyph is two-tone from the theme; a chip tint would flatten it to one colour.
+        chip.setChipIconTint(null);
+        chip.setChipIconSize(dpFloat(22));
+        chip.setChipIconVisible(true);
+        chip.setCheckedIconVisible(false);
         chip.setCheckable(true);
         chip.setChecked(checked);
+        showRoleLabel(chip, checked);
         if (role != null)
             mRoleByChipId.put(chip.getId(), role);
         group.addView(chip, new ChipGroup.LayoutParams(
