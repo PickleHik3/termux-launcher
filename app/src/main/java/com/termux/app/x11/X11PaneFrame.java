@@ -45,7 +45,7 @@ import com.termux.x11.LorieView;
  * <p>While no server is running the page shows its empty state, which is where a home screen
  * rests: the launcher never starts a display on its own. A hold on one of the page's four corners
  * drops the same tab a pane's corner does, out of the corner that was held: power, the
- * display's settings, and the Appearance and Layout doors every place carries — and, while a
+ * display's settings, and the Appearance, Layout and Wallpaper doors every place carries — and, while a
  * display runs, the scale rail along the page's leading
  * edge, which is out only while that tab is. Between the corners the edges are X's: a maximised
  * window is touchable to its rim.
@@ -65,6 +65,8 @@ public final class X11PaneFrame extends PaneContentFrame {
     @androidx.annotation.VisibleForTesting static final int ACTION_EDITOR = 3;
     /** The grid beside them, which opens Layout. */
     @androidx.annotation.VisibleForTesting static final int ACTION_LAYOUT = 4;
+    /** The wallpaper glyph, which opens the in-app wallpaper picker. */
+    @androidx.annotation.VisibleForTesting static final int ACTION_WALLPAPER = 5;
 
     /** What the page needs from the launcher. */
     public interface Host {
@@ -81,6 +83,8 @@ public final class X11PaneFrame extends PaneContentFrame {
         default void openSurfaceEditor() {}
         /** The grid: open the Layout editor on this place, as every corner tab does. */
         default void openLayoutEditor() {}
+        /** The wallpaper glyph: open the in-app wallpaper picker, as every corner tab does. */
+        default void openWallpaperPicker() {}
         /**
          * True when one of the launcher's own chords claimed this key, in which case X must not
          * see it. Everything else is the display's.
@@ -195,6 +199,7 @@ public final class X11PaneFrame extends PaneContentFrame {
             PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS),
             PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
             PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT),
+            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
         mControls.setListener(id -> {
             if (mHost == null) return;
@@ -203,6 +208,7 @@ public final class X11PaneFrame extends PaneContentFrame {
             if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
             else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
             else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
+            else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
             else if (id == ACTION_POWER) mHost.toggleDisplayPower();
             else if (id == ACTION_SETTINGS) mHost.openDisplaySettings();
         });

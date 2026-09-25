@@ -187,6 +187,8 @@ public class TerminalPaneController {
         default void openSurfaceEditor() {}
         /** The lone pane's corner asked for the Layout editor. */
         default void openLayoutEditor() {}
+        /** The lone pane's corner asked for the in-app wallpaper picker. */
+        default void openWallpaperPicker() {}
         /** The launcher's settings, asked for from the pane corner's tab. */
         default void openSettings() {}
         /** The corner tab turned automatic tiling on or off; the host keeps the setting. */
@@ -3278,6 +3280,8 @@ public class TerminalPaneController {
         private static final int ACTION_SETTINGS = 6;
         /** Turn automatic tiling on or off. */
         private static final int ACTION_AUTO_TILING = 7;
+        /** Open the in-app wallpaper picker. */
+        private static final int ACTION_WALLPAPER = 8;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
@@ -3370,9 +3374,9 @@ public class TerminalPaneController {
 
         /**
          * What the tab carries, for the pane it is out on. Alone, a pane has nothing to move,
-         * maximise or close, so it offers the two editor doors instead — Appearance and Layout,
-         * the pair every place on the wall carries; maximised, it has no neighbour to swap with.
-         * Help closes every one of them.
+         * maximise or close, so it offers the editor doors instead — Appearance, Layout and
+         * Wallpaper, the trio every place on the wall carries; maximised, it has no neighbour to
+         * swap with. Help closes every one of them.
          */
         private void applyControlActions() {
             List<PaneControlsView.Action> actions = new ArrayList<>(4);
@@ -3381,6 +3385,8 @@ public class TerminalPaneController {
                     CornerTabGlyphs.APPEARANCE));
                 actions.add(PaneControlsView.Action.glyph(ACTION_LAYOUT_EDITOR,
                     CornerTabGlyphs.LAYOUT));
+                actions.add(PaneControlsView.Action.glyph(ACTION_WALLPAPER,
+                    CornerTabGlyphs.WALLPAPER));
             } else {
                 if (mMaximizedLeaf == null) {
                     actions.add(PaneControlsView.Action.drawn(ACTION_MOVE_PANE, this::drawMoveMark,
@@ -3678,6 +3684,9 @@ public class TerminalPaneController {
             } else if (action == ACTION_LAYOUT_EDITOR) {
                 dismissControls();
                 mHost.openLayoutEditor();
+            } else if (action == ACTION_WALLPAPER) {
+                dismissControls();
+                mHost.openWallpaperPicker();
             }
         }
 

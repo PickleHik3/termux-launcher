@@ -39,7 +39,7 @@ import com.termux.view.HoldTiming;
  *
  * <p>A <em>hold</em> on one of the page's four corners drops the same tab the Display page's
  * corners drop, with the page's own buttons: the pencil that starts editing the widgets, the plus
- * that adds a page, and the two doors every place carries — Appearance and Layout.
+ * that adds a page, and the three doors every place carries — Appearance, Layout and Wallpaper.
  * It comes out of the corner that was touched, so the tab lands under the thumb that asked for it.
  * While a widget is being edited those buttons are replaced by the grid's size, which opens the
  * wheels that change it. Everything between the corners is the widgets': a grid that reaches the
@@ -56,6 +56,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         default void openSurfaceEditor() {}
         /** The grid: open the Layout editor on this place, as every corner tab does. */
         default void openLayoutEditor() {}
+        /** The wallpaper glyph: open the in-app wallpaper picker, as every corner tab does. */
+        default void openWallpaperPicker() {}
         /** The columns the grid is showing now. */
         int widgetGridColumns();
         /** The rows the grid is showing now. */
@@ -76,6 +78,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private static final int ACTION_DISCARD = 7;
     /** The plus: another widgets page, which the pane turns to. */
     private static final int ACTION_ADD_PAGE = 8;
+    private static final int ACTION_WALLPAPER = 9;
 
     private final PaneRim mRim = new PaneRim();
     @Nullable private PaneGlassBackdropView mGlass;
@@ -211,6 +214,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             PaneControlsView.Action.drawn(ACTION_ADD_PAGE, WidgetPaneFrame::drawPlusMark),
             PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
             PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT),
+            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
     }
 
@@ -292,6 +296,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
         else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
         else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
+        else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
         else if (id == ACTION_EDIT) mHost.editWidgets();
     }
 

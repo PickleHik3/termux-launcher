@@ -190,6 +190,22 @@ public class X11PaneFrameControlsTest {
         assertFalse(page.isScaleRailShown());
     }
 
+    /** The wallpaper glyph past the two editor doors opens the in-app wallpaper picker. */
+    @Test
+    public void theTabCarriesTheWallpaperButton() {
+        X11PaneFrame page = pageWithControlsOut();
+        List<String> log = new ArrayList<>();
+        page.setHost(new X11PaneFrame.Host() {
+            @Override public void startDisplay() {}
+            @Override public void openWallpaperPicker() { log.add("wallpaper"); }
+        });
+
+        tapAction(page, X11PaneFrame.ACTION_WALLPAPER);
+        assertEquals(Collections.singletonList("wallpaper"), log);
+        assertFalse(page.isControlsTabShown());
+        assertFalse(page.isScaleRailShown());
+    }
+
     /** Tap wherever the tab says that button is, which is the only way a finger can find it. */
     private static void tapAction(X11PaneFrame page, int id) {
         PaneControlsView tab = page.controlsTab();

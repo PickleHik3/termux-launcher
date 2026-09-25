@@ -65,6 +65,7 @@ public class TerminalPaneCornerTabTapTest {
         @Override public void showHelpOverlay() { log.add("help"); }
         @Override public void openSurfaceEditor() { log.add("appearance"); }
         @Override public void openLayoutEditor() { log.add("layout"); }
+        @Override public void openWallpaperPicker() { log.add("wallpaper"); }
         @Override public void openSettings() { log.add("settings"); }
         @Override public void onAutoTilingChanged(boolean enabled) {
             log.add(enabled ? "tiling on" : "tiling off");
@@ -74,14 +75,14 @@ public class TerminalPaneCornerTabTapTest {
     // ---------------------------------------------------------------- the four actions
 
     /**
-     * A pane on its own has nothing to move, maximise or close: it offers the two editor doors —
-     * Appearance and Layout — the tiling switch, settings and help.
+     * A pane on its own has nothing to move, maximise or close: it offers the three editor doors —
+     * Appearance, Layout and Wallpaper — the tiling switch, settings and help.
      */
     @Test
     public void aLonePanesTabOffersBothEditorsAndHelp() {
         Fixture fixture = fixture();
         fixture.showTab();
-        assertEquals("five buttons on a lone pane", 5, fixture.slots().length);
+        assertEquals("six buttons on a lone pane", 6, fixture.slots().length);
 
         fixture.tapSlot(0);
         assertEquals(Arrays.asList("appearance"), fixture.host.log);
@@ -90,20 +91,24 @@ public class TerminalPaneCornerTabTapTest {
         fixture.tapSlot(1);
         assertEquals(Arrays.asList("appearance", "layout"), fixture.host.log);
 
-        // The tiling button flips the setting and leaves the tab up for a second tap.
         fixture.showTab();
         fixture.tapSlot(2);
-        fixture.tapSlot(2);
-        assertEquals(Arrays.asList("appearance", "layout", "tiling on", "tiling off"),
+        assertEquals(Arrays.asList("appearance", "layout", "wallpaper"), fixture.host.log);
+
+        // The tiling button flips the setting and leaves the tab up for a second tap.
+        fixture.showTab();
+        fixture.tapSlot(3);
+        fixture.tapSlot(3);
+        assertEquals(Arrays.asList("appearance", "layout", "wallpaper", "tiling on", "tiling off"),
             fixture.host.log);
 
         fixture.host.log.clear();
         fixture.showTab();
-        fixture.tapSlot(3);
+        fixture.tapSlot(4);
         assertEquals(Arrays.asList("settings"), fixture.host.log);
 
         fixture.showTab();
-        fixture.tapSlot(4);
+        fixture.tapSlot(5);
         assertEquals(Arrays.asList("settings", "help"), fixture.host.log);
     }
 

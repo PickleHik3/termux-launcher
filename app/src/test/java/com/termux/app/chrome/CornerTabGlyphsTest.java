@@ -32,15 +32,19 @@ public class CornerTabGlyphsTest {
         assertGlyph(CornerTabGlyphs.APPEARANCE, 0xF03D8);
         // nf-md-view_dashboard, in the plane-15 block the Material Design icons sit in.
         assertGlyph(CornerTabGlyphs.LAYOUT, 0xF056E);
+        // nf-md-wallpaper, in the same plane-15 block.
+        assertGlyph(CornerTabGlyphs.WALLPAPER, 0xF0E09);
     }
 
-    /** Layout and Appearance are supplementary code points, so two chars each — and never cut in half. */
+    /** Layout, Appearance and Wallpaper are supplementary code points, so two chars each — and never cut in half. */
     @Test
     public void theLayoutGlyphIsASurrogatePair() {
         assertEquals(2, CornerTabGlyphs.LAYOUT.length());
         assertEquals(1, CornerTabGlyphs.LAYOUT.codePointCount(0, CornerTabGlyphs.LAYOUT.length()));
         assertEquals(2, CornerTabGlyphs.APPEARANCE.length());
         assertEquals(1, CornerTabGlyphs.APPEARANCE.codePointCount(0, CornerTabGlyphs.APPEARANCE.length()));
+        assertEquals(2, CornerTabGlyphs.WALLPAPER.length());
+        assertEquals(1, CornerTabGlyphs.WALLPAPER.codePointCount(0, CornerTabGlyphs.WALLPAPER.length()));
     }
 
     @Test
