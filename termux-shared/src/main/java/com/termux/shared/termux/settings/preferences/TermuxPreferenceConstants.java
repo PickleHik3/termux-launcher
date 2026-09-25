@@ -795,6 +795,15 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_SOUNDS = true;
 
         /**
+         * Whether dictated text segments (never spoken keys or short commands) are rewritten by
+         * the local Gemma chat model for punctuation, casing and mis-hearings before they are
+         * typed. Off by default: it costs a model load and seconds per phrase.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_POLISH = "keyboard_voice_polish";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH = false;
+
+        /**
          * Defines the key for the absolute path of a user-imported label font file,
          * or an empty string for the system default typeface.
          */

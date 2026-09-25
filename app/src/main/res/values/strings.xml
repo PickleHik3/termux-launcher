@@ -1775,6 +1775,8 @@
     <string name="settings_keyboard_voice_bare_command_words_summary">Also press the key for the bare word, without saying "key" ("enter" presses Enter)</string>
     <string name="settings_keyboard_voice_terminal_cleanup_title">Terminal cleanup</string>
     <string name="settings_keyboard_voice_terminal_cleanup_summary">Drop trailing punctuation and lowercase single words when typing into a shell</string>
+    <string name="settings_keyboard_voice_polish_title">Polish dictation with local model</string>
+    <string name="settings_keyboard_voice_polish_summary">Gemma 4 (E4B, or E2B on smaller phones) fixes punctuation, casing and mis-heard words in phrases of four words or more; spoken keys and short commands are typed as heard. Needs the model installed; adds a few seconds per phrase</string>
     <string name="settings_keyboard_voice_pause_title">Pause that ends a phrase</string>
     <string name="settings_keyboard_voice_silence_timeout_title">Silence auto-stop</string>
     <string name="settings_keyboard_voice_silence_timeout_until_tap">Until tap</string>

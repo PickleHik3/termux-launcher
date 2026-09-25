@@ -1338,6 +1338,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_SOUNDS, value, false);
     }
 
+    public boolean isInAppKeyboardVoicePolishEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_POLISH,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH);
+    }
+
+    public void setInAppKeyboardVoicePolishEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_POLISH, value, false);
+    }
+
     /** One of {@link TERMUX_APP#IN_APP_KEYBOARD_VOICE_PAUSE_MS_CHOICES}; anything else stored reads as the default. */
     public int getInAppKeyboardVoicePauseMs() {
         int value = SharedPreferenceUtils.getInt(mSharedPreferences,

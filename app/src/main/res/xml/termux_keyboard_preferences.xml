@@ -130,6 +130,11 @@
             app:title="@string/settings_keyboard_voice_terminal_cleanup_title"
             app:summary="@string/settings_keyboard_voice_terminal_cleanup_summary"
             android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="keyboard_voice_polish"
+            app:title="@string/settings_keyboard_voice_polish_title"
+            app:summary="@string/settings_keyboard_voice_polish_summary"
+            android:defaultValue="false" />
         <ListPreference
             app:key="keyboard_voice_pause_ms"
             app:title="@string/settings_keyboard_voice_pause_title"
