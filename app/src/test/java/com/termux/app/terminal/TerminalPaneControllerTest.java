@@ -748,7 +748,7 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
-    public void splitAuto_followsTheFocusedPanesAspectUnderAnyLayout() {
+    public void splitAuto_withAutomaticTilingOffFollowsTheScreenNotThePane() {
         FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
         TerminalPaneController controller = newSplittingController(host);
         TerminalPaneController.Window window = controller.newWindow(terminal());
@@ -758,10 +758,10 @@ public class TerminalPaneControllerTest {
         assertTrue(controller.splitAuto());
         assertEquals(LinearLayout.VERTICAL, ((TerminalPaneController.Split) window.root).orientation);
         assertEquals(null, controller.activeLayoutPolicy());
-        // The new bottom pane is 600x500, wider than tall: side by side.
+        // The new bottom pane is 600x500, wider than tall, but no spiral: it stacks again.
         layoutHost(host, 600, 1000);
         assertTrue(controller.splitAuto());
-        assertEquals(LinearLayout.HORIZONTAL, window.active.parent.orientation);
+        assertEquals(LinearLayout.VERTICAL, window.active.parent.orientation);
         assertEquals(3, controller.shellsOf(window).size());
     }
 

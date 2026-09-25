@@ -1014,12 +1014,18 @@ public class TerminalPaneController {
      * @return true when a pane was actually added, so the caller can say so.
      */
     /**
-     * Split the focused pane without being told an axis: along its longer side, the dwindle rule,
-     * whatever layout the window is under. This is the "new terminal" key — the user asks for a
-     * pane, not for a direction — and a retained layout re-tiles afterwards as it always does.
+     * Split the focused pane without being told an axis. This is the "new terminal" key — the user
+     * asks for a pane, not for a direction. While the window tiles itself it splits along the
+     * pane's longer side, the dwindle rule; with automatic tiling off it splits along the screen's
+     * longer side, as {@link #addPane} does, so the spiral stops when the user turned tiling off.
+     * Any other retained layout re-tiles afterwards as it always does.
      */
     public boolean splitAuto() {
         if (mActiveWindow == null || mActiveWindow.active == null) return false;
+        if (!isDwindleManaged(mActiveWindow)) {
+            return split(DwindleTilingPolicy.splitOrientationFor(
+                mHostView.getWidth(), mHostView.getHeight()));
+        }
         Leaf anchor = mActiveWindow.active;
         if (mActiveWindow.floating.contains(anchor)) anchor = firstLeaf(mActiveWindow.root);
         return split(dwindleOrientationFor(anchor));
