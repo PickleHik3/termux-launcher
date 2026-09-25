@@ -13,12 +13,11 @@ import java.util.regex.Pattern;
  * are sent at all, how long a rewrite may take, what the model is asked, and what of its answer
  * is trusted. Kept free of Android and of the runtime so all of it runs in a JVM test.
  *
- * <p>Gating is deliberate rather than clever. A spoken key ("enter key") must stay a key, a
- * one- or two-word shell command ("git status") must not be "corrected" into prose, and a
- * segment the terminal sanitiser would drop is not worth a model round trip; so only ordinary
- * text of at least {@link #MIN_WORDS} words is rewritten. The transcript is wrapped in tags and
- * the prompt says it is data, not instructions, which is as much as a small model can be told
- * against a dictated "ignore the previous instructions".
+ * <p>Gating is deliberate rather than clever. A one- or two-word shell command ("git status")
+ * must not be "corrected" into prose, and a segment the sanitiser would drop is not worth a model
+ * round trip; so only ordinary text of at least {@link #MIN_WORDS} words is rewritten. The
+ * transcript is wrapped in tags and the prompt says it is data, not instructions, which is as much
+ * as a small model can be told against a dictated "ignore the previous instructions".
  */
 public final class VoicePolishRules {
 
@@ -46,17 +45,14 @@ public final class VoicePolishRules {
 
     /**
      * Why {@code text} is typed as heard instead of polished, or {@code null} to polish it. The
-     * command check mirrors the activity's ({@link VoiceCommand#classify} under the same two
-     * settings) so a spoken key is never rewritten; the non-speech check mirrors the terminal
-     * sanitiser's so a dropped segment costs no round trip.
+     * non-speech check mirrors {@link VoiceTextSanitizer}'s so a dropped segment costs no round
+     * trip.
      */
     @Nullable
-    public static String skipReason(@NonNull String text, boolean commandsEnabled, boolean bareWordsAllowed,
-                                    boolean terminalCleanup) {
+    public static String skipReason(@NonNull String text) {
         String trimmed = text.trim();
         if (trimmed.isEmpty()) return "empty";
-        if (commandsEnabled && VoiceCommand.classify(trimmed, bareWordsAllowed) != null) return "command";
-        if (terminalCleanup && VoiceTerminalCleanup.clean(trimmed).isEmpty()) return "non_speech";
+        if (VoiceTextSanitizer.clean(trimmed).isEmpty()) return "non_speech";
         if (wordCount(trimmed) < MIN_WORDS) return "short";
         return null;
     }

@@ -72,38 +72,23 @@ public final class VoiceInputSession {
         @NonNull public final String modelId;
         /** The forced language for a multilingual graph, or {@code null} for an {@code .en} one. */
         @Nullable public final String language;
-        /** Whether the shell-vocabulary bias prompt is sent (typing goes to a terminal). */
-        public final boolean terminalPrompt;
         public final int pauseMs;
         public final int windowSeconds;
         /** {@link VoiceSilenceTimeout#UNTIL_TAP} disables the timeout ("Until tap"). */
         public final int silenceTimeoutMs;
-        /**
-         * These three mirror the keyboard settings the activity applies to the same transcript
-         * (commands, "Bare command words", terminal cleanup); they are carried here only so the
-         * per-phrase log's "outcome" (command / text / dropped) matches what actually happens to it.
-         */
-        public final boolean commandsEnabled;
-        public final boolean bareCommandWordsAllowed;
-        public final boolean terminalCleanupEnabled;
         /** The keyboard's "Voice sounds" setting: start/stop/error blips ({@link VoiceFeedback}). */
         public final boolean soundsEnabled;
         /** The keyboard's key-haptics setting, which the voice cues follow. */
         public final boolean hapticsEnabled;
 
-        public Config(@NonNull String modelId, @Nullable String language, boolean terminalPrompt,
-                      int pauseMs, int windowSeconds, int silenceTimeoutMs, boolean commandsEnabled,
-                      boolean bareCommandWordsAllowed, boolean terminalCleanupEnabled,
+        public Config(@NonNull String modelId, @Nullable String language,
+                      int pauseMs, int windowSeconds, int silenceTimeoutMs,
                       boolean soundsEnabled, boolean hapticsEnabled) {
             this.modelId = modelId;
             this.language = language;
-            this.terminalPrompt = terminalPrompt;
             this.pauseMs = pauseMs;
             this.windowSeconds = windowSeconds;
             this.silenceTimeoutMs = silenceTimeoutMs;
-            this.commandsEnabled = commandsEnabled;
-            this.bareCommandWordsAllowed = bareCommandWordsAllowed;
-            this.terminalCleanupEnabled = terminalCleanupEnabled;
             this.soundsEnabled = soundsEnabled;
             this.hapticsEnabled = hapticsEnabled;
         }
@@ -116,9 +101,8 @@ public final class VoiceInputSession {
 
         /**
          * The VAD has just closed a segment (silence after speech, or the pause/window limit) and
-         * handed it to the STT thread — well before its transcript (or the command it turns into)
-         * can come back, so the pill can acknowledge the phrase at once instead of only once it
-         * transcribes.
+         * handed it to the STT thread — well before its transcript can come back, so the pill can
+         * acknowledge the phrase at once instead of only once it transcribes.
          */
         void onSegmentCaptured();
 
@@ -286,11 +270,6 @@ public final class VoiceInputSession {
         return stopRequested.get();
     }
 
-    /** A phrase from this session was just classified as a command and its key sent: the haptic. */
-    public void commandFeedback() {
-        feedback.onCommand();
-    }
-
     // ------------------------------------------------------------------ capture thread
 
     private void capture(@NonNull AudioRecord recorder) {
@@ -417,7 +396,6 @@ public final class VoiceInputSession {
             request.put("file", audio.getAbsolutePath());
             if (!config.modelId.isEmpty()) request.put("model", config.modelId);
             if (config.language != null) request.put("language", config.language);
-            if (config.terminalPrompt) request.put("prompt_mode", "terminal");
             // A deadline per segment, not the IPC client's flat 120 s: a hung runtime would
             // otherwise leave the pill and the pressed key up for minutes with nothing to show for
             // it. base.en does a short phrase in well under a second, so this has plenty of room.
@@ -450,17 +428,16 @@ public final class VoiceInputSession {
 
     /**
      * A transcript on its way to the host: straight through, or by way of the polisher when there
-     * is one and {@link VoicePolishRules} lets this segment through (never a spoken key, never a
-     * short command, never once cancelled). Either way {@link #deliver} runs exactly once for the
-     * segment, so the "ends when everything is delivered" accounting is untouched.
+     * is one and {@link VoicePolishRules} lets this segment through (never a short segment, never
+     * once cancelled, never a non-speech segment). Either way {@link #deliver} runs exactly once
+     * for the segment, so the "ends when everything is delivered" accounting is untouched.
      */
     private void route(int sequence, @NonNull String text) {
         if (polisher == null || polishExecutor == null) {
             deliver(sequence, text);
             return;
         }
-        String skip = cancelled ? "cancelled" : VoicePolishRules.skipReason(text, config.commandsEnabled,
-            config.bareCommandWordsAllowed, config.terminalPrompt && config.terminalCleanupEnabled);
+        String skip = cancelled ? "cancelled" : VoicePolishRules.skipReason(text);
         if (skip != null) {
             logPolish(0, text.length(), text.length(), "skipped:" + skip);
             deliver(sequence, text);
@@ -512,20 +489,13 @@ public final class VoiceInputSession {
     }
 
     /**
-     * The same classification the activity is about to apply to {@code text} — a spoken key, a
-     * terminal-dropped non-speech segment, or ordinary text — purely so the log's "outcome" field
-     * matches what actually happens to it.
+     * The same classification the activity is about to apply to {@code text} — a dropped
+     * non-speech segment or ordinary text — purely so the log's "outcome" field matches what
+     * actually happens to it.
      */
     @NonNull
     private String outcomeFor(@NonNull String text) {
-        if (config.commandsEnabled && VoiceCommand.classify(text, config.bareCommandWordsAllowed) != null) {
-            return "command";
-        }
-        String effective = text;
-        if (config.terminalPrompt && config.terminalCleanupEnabled) {
-            effective = VoiceTerminalCleanup.clean(text);
-        }
-        return effective.trim().isEmpty() ? "dropped" : "text";
+        return VoiceTextSanitizer.clean(text).trim().isEmpty() ? "dropped" : "text";
     }
 
     /**

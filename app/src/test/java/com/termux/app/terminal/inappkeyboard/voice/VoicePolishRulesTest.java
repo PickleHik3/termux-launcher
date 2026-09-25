@@ -16,38 +16,21 @@ public class VoicePolishRulesTest {
     // ------------------------------------------------------------------ gating
 
     @Test
-    public void spokenKeysAreNeverPolished() {
-        assertEquals("command", VoicePolishRules.skipReason("enter key", true, false, true));
-        assertEquals("command", VoicePolishRules.skipReason("Control C key.", true, false, false));
-        assertEquals("command", VoicePolishRules.skipReason("enter", true, true, false));
-    }
-
-    @Test
-    public void aBareWordIsOnlyACommandWhenTheSettingSaysSo() {
-        // With bare words off, "enter" is text — and then too short to polish.
-        assertEquals("short", VoicePolishRules.skipReason("enter", true, false, false));
-        // With commands off altogether, a spoken key is text like any other.
-        assertEquals("short", VoicePolishRules.skipReason("enter key", false, false, false));
-    }
-
-    @Test
     public void shortSegmentsAreTypedAsHeard() {
-        assertEquals("short", VoicePolishRules.skipReason("git status", true, false, true));
-        assertEquals("short", VoicePolishRules.skipReason("sudo apt update", true, false, true));
-        assertEquals("empty", VoicePolishRules.skipReason("   ", true, false, true));
+        assertEquals("short", VoicePolishRules.skipReason("git status"));
+        assertEquals("short", VoicePolishRules.skipReason("sudo apt update"));
+        assertEquals("empty", VoicePolishRules.skipReason("   "));
     }
 
     @Test
-    public void nonSpeechIsSkippedForATerminalOnly() {
-        assertEquals("non_speech", VoicePolishRules.skipReason("[Music] [Music] [Music] [Music]", true, false, true));
-        // Without terminal cleanup the same segment is just four words.
-        assertNull(VoicePolishRules.skipReason("[Music] [Music] [Music] [Music]", true, false, false));
+    public void nonSpeechIsSkipped() {
+        assertEquals("non_speech", VoicePolishRules.skipReason("[Music] [Music] [Music] [Music]"));
     }
 
     @Test
     public void ordinaryProseGoesThrough() {
-        assertNull(VoicePolishRules.skipReason("please summarise the readme", true, false, true));
-        assertNull(VoicePolishRules.skipReason("um so can you like fix the failing test", true, false, true));
+        assertNull(VoicePolishRules.skipReason("please summarise the readme"));
+        assertNull(VoicePolishRules.skipReason("um so can you like fix the failing test"));
     }
 
     @Test

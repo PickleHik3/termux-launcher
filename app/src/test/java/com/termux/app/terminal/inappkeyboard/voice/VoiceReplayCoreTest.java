@@ -9,7 +9,6 @@ import androidx.annotation.NonNull;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -49,11 +48,10 @@ public class VoiceReplayCoreTest {
         return out;
     }
 
-    /** Scripts one transcript per call, in order; records whether each segment was gained (peak-scaled). */
+    /** Scripts one transcript per call, in order. */
     private static final class ScriptedTranscriber implements VoiceReplayCore.Transcriber {
         private final List<String> scripted;
         private int calls;
-        final List<Boolean> terminalFlags = new ArrayList<>();
 
         ScriptedTranscriber(String... scripted) {
             this.scripted = Arrays.asList(scripted);
@@ -61,23 +59,22 @@ public class VoiceReplayCoreTest {
 
         @NonNull
         @Override
-        public VoiceReplayCore.TranscriptResult transcribe(@NonNull short[] pcm, boolean terminalPrompt) throws IOException {
-            terminalFlags.add(terminalPrompt);
+        public VoiceReplayCore.TranscriptResult transcribe(@NonNull short[] pcm) throws IOException {
             if (calls >= scripted.size()) throw new IOException("no more scripted transcripts");
             String text = scripted.get(calls++);
             return new VoiceReplayCore.TranscriptResult(text, 12, 34, 5);
         }
     }
 
-    private static VoiceReplayCore.ReplayConfig config(boolean terminal, boolean bare) {
-        return new VoiceReplayCore.ReplayConfig(600, 10, terminal, bare);
+    private static VoiceReplayCore.ReplayConfig config() {
+        return new VoiceReplayCore.ReplayConfig(600, 10);
     }
 
     @Test
     public void oneSpokenPhraseComesBackAsTextWithATimeRange() {
         short[] pcm = concat(quiet(30), tone(20), quiet(40));
         ScriptedTranscriber transcriber = new ScriptedTranscriber("ls");
-        VoiceReplayCore.ClipResult result = VoiceReplayCore.replay("clip.wav", pcm, config(true, false), transcriber, null);
+        VoiceReplayCore.ClipResult result = VoiceReplayCore.replay("clip.wav", pcm, config(), transcriber, null);
 
         assertEquals(1, result.events.size());
         VoiceReplayCore.SegmentEvent event = result.events.get(0);
@@ -85,25 +82,13 @@ public class VoiceReplayCoreTest {
         assertEquals("ls", event.content);
         assertTrue(event.startSeconds < event.endSeconds);
         assertTrue("segment carries a plausible voiced duration", event.voicedSeconds > 0.5 && event.voicedSeconds < 0.7);
-        assertTrue("the terminal flag reached the transcriber", transcriber.terminalFlags.get(0));
     }
 
     @Test
-    public void aCommandWordBecomesAKeyEvent() {
+    public void nonSpeechIsDropped() {
         short[] pcm = concat(quiet(30), tone(20), quiet(40));
         VoiceReplayCore.ClipResult result = VoiceReplayCore.replay("clip.wav", pcm,
-            config(true, false), new ScriptedTranscriber("enter key"), null);
-
-        assertEquals(1, result.events.size());
-        assertEquals("key", result.events.get(0).outcome);
-        assertEquals("ENTER", result.events.get(0).content);
-    }
-
-    @Test
-    public void nonSpeechIsDroppedByTerminalCleanupWhenTerminalPromptIsOn() {
-        short[] pcm = concat(quiet(30), tone(20), quiet(40));
-        VoiceReplayCore.ClipResult result = VoiceReplayCore.replay("clip.wav", pcm,
-            config(true, false), new ScriptedTranscriber("[Music]"), null);
+            config(), new ScriptedTranscriber("[Music]"), null);
 
         assertEquals(1, result.events.size());
         assertEquals("dropped", result.events.get(0).outcome);
@@ -113,22 +98,23 @@ public class VoiceReplayCoreTest {
     public void twoPhrasesSeparatedByAPauseAreTwoOrderedSegments() {
         short[] pcm = concat(quiet(30), tone(20), quiet(30), tone(20), quiet(40));
         VoiceReplayCore.ClipResult result = VoiceReplayCore.replay("clip.wav", pcm,
-            config(true, false), new ScriptedTranscriber("ls", "enter key"), null);
+            config(), new ScriptedTranscriber("ls", "git status"), null);
 
         assertEquals(2, result.events.size());
         assertEquals("text", result.events.get(0).outcome);
         assertEquals("ls", result.events.get(0).content);
-        assertEquals("key", result.events.get(1).outcome);
+        assertEquals("text", result.events.get(1).outcome);
+        assertEquals("git status", result.events.get(1).content);
         assertTrue("segments are in spoken order", result.events.get(0).endSeconds <= result.events.get(1).startSeconds);
     }
 
     @Test
     public void aTranscriberFailureIsReportedNotThrown() {
         short[] pcm = concat(quiet(30), tone(20), quiet(40));
-        VoiceReplayCore.Transcriber failing = (pcm1, terminalPrompt) -> {
+        VoiceReplayCore.Transcriber failing = pcm1 -> {
             throw new IOException("server not running");
         };
-        VoiceReplayCore.ClipResult result = VoiceReplayCore.replay("clip.wav", pcm, config(true, false), failing, null);
+        VoiceReplayCore.ClipResult result = VoiceReplayCore.replay("clip.wav", pcm, config(), failing, null);
 
         assertEquals(1, result.events.size());
         assertEquals("failed", result.events.get(0).outcome);
@@ -138,13 +124,13 @@ public class VoiceReplayCoreTest {
     @Test
     public void expectationsMatchInOrderAndReportEachMismatch() {
         short[] pcm = concat(quiet(30), tone(20), quiet(30), tone(20), quiet(40));
-        VoiceReplayCore.ClipResult passing = VoiceReplayCore.replay("clip.wav", pcm, config(true, false),
-            new ScriptedTranscriber("ls", "enter key"), Arrays.asList("text ls", "key ENTER"));
+        VoiceReplayCore.ClipResult passing = VoiceReplayCore.replay("clip.wav", pcm, config(),
+            new ScriptedTranscriber("ls", "git status"), Arrays.asList("text ls", "text git status"));
         assertTrue(passing.expectation.passed);
         assertTrue(passing.expectation.mismatches.isEmpty());
 
-        VoiceReplayCore.ClipResult failing = VoiceReplayCore.replay("clip.wav", pcm, config(true, false),
-            new ScriptedTranscriber("ls", "enter key"), Arrays.asList("text cd", "key TAB"));
+        VoiceReplayCore.ClipResult failing = VoiceReplayCore.replay("clip.wav", pcm, config(),
+            new ScriptedTranscriber("ls", "git status"), Arrays.asList("text cd", "dropped"));
         assertFalse(failing.expectation.passed);
         assertEquals(2, failing.expectation.mismatches.size());
     }
@@ -152,7 +138,7 @@ public class VoiceReplayCoreTest {
     @Test
     public void textExpectationsNormalizeBeforeComparing() {
         short[] pcm = concat(quiet(30), tone(20), quiet(40));
-        VoiceReplayCore.ClipResult result = VoiceReplayCore.replay("clip.wav", pcm, config(true, false),
+        VoiceReplayCore.ClipResult result = VoiceReplayCore.replay("clip.wav", pcm, config(),
             new ScriptedTranscriber("LS."), Arrays.asList("text ls"));
         assertTrue(result.expectation.passed);
     }

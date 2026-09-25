@@ -33,14 +33,8 @@ VOICE_DIR = os.path.join(HOME, ".cache/termux-launcher/piper")
 VOICES = ["en_US-lessac-medium", "en_GB-alan-medium", "en_US-ryan-medium", "en_GB-northern_english_male-medium"]
 TV_VOICE = "en_US-lessac-medium"
 
-# kind: "key" expects one key press, "text" expects exactly that text (a typed command),
-# "dictation" is scored by word error rate.
+# kind: "text" expects exactly that text (a typed command), "dictation" is scored by word error rate.
 PHRASES = [
-    ("key", "enter key", "ENTER"),
-    ("key", "tab key", "TAB"),
-    ("key", "escape key", "ESC"),
-    ("key", "backspace key", "BACKSPACE"),
-    ("key", "control c key", "CTRL_C"),
     ("text", "ls", "ls"),
     ("text", "git status", "git status"),
     ("text", "sudo apt update", "sudo apt update"),

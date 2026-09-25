@@ -743,29 +743,6 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_LANGUAGE = "auto";
 
-        /**
-         * Whether "enter key", "tab key", "escape key", "backspace key", "space key" and
-         * "control c key" said alone press the key.
-         */
-        public static final String KEY_IN_APP_KEYBOARD_VOICE_COMMANDS = "keyboard_voice_commands";
-
-        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_COMMANDS = true;
-
-        /**
-         * Whether a command word alone, with no trailing "key" ("enter" instead of "enter key"),
-         * still presses the key. Off by default: plain dictation says these words on their own far
-         * more often than a terminal command does.
-         */
-        public static final String KEY_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS =
-            "keyboard_voice_bare_command_words";
-
-        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_BARE_COMMAND_WORDS = false;
-
-        /** Whether transcripts typed into a terminal lose trailing punctuation and single words are lowercased. */
-        public static final String KEY_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP = "keyboard_voice_terminal_cleanup";
-
-        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_TERMINAL_CLEANUP = true;
-
         /** The pause, in milliseconds, that closes a spoken phrase and sends it for transcription. */
         public static final String KEY_IN_APP_KEYBOARD_VOICE_PAUSE_MS = "keyboard_voice_pause_ms";
 
@@ -802,6 +779,15 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_IN_APP_KEYBOARD_VOICE_POLISH = "keyboard_voice_polish";
 
         public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH = false;
+
+        /**
+         * The installed chat model "Polish dictation" is pinned to, or an empty string for
+         * Automatic (Gemma 4 E4B when the phone meets its RAM recommendation, or E2B is not there
+         * to fall back on, else E2B).
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_POLISH_MODEL = "keyboard_voice_polish_model";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_MODEL = "";
 
         /**
          * Defines the key for the absolute path of a user-imported label font file,

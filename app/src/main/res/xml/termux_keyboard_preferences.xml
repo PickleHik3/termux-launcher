@@ -113,26 +113,15 @@
             app:defaultValue="auto"
             app:useSimpleSummaryProvider="true" />
         <SwitchPreferenceCompat
-            app:key="keyboard_voice_commands"
-            app:title="@string/settings_keyboard_voice_commands_title"
-            app:summary="@string/settings_keyboard_voice_commands_summary"
-            android:defaultValue="true" />
-        <SwitchPreferenceCompat
-            app:key="keyboard_voice_bare_command_words"
-            app:title="@string/settings_keyboard_voice_bare_command_words_title"
-            app:summary="@string/settings_keyboard_voice_bare_command_words_summary"
-            app:dependency="keyboard_voice_commands"
-            android:defaultValue="false" />
-        <SwitchPreferenceCompat
-            app:key="keyboard_voice_terminal_cleanup"
-            app:title="@string/settings_keyboard_voice_terminal_cleanup_title"
-            app:summary="@string/settings_keyboard_voice_terminal_cleanup_summary"
-            android:defaultValue="true" />
-        <SwitchPreferenceCompat
             app:key="keyboard_voice_polish"
             app:title="@string/settings_keyboard_voice_polish_title"
             app:summary="@string/settings_keyboard_voice_polish_summary"
             android:defaultValue="false" />
+        <Preference
+            app:key="keyboard_voice_polish_model"
+            app:persistent="false"
+            app:dependency="keyboard_voice_polish"
+            app:title="@string/settings_keyboard_voice_polish_model_title" />
         <ListPreference
             app:key="keyboard_voice_pause_ms"
             app:title="@string/settings_keyboard_voice_pause_title"

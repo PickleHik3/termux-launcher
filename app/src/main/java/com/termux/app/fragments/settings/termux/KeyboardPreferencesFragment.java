@@ -65,6 +65,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_TAP_CORRECTION_RESET = "in_app_keyboard_tap_correction_reset";
     private static final String KEY_VOICE_ENGINE = "keyboard_voice_engine";
     private static final String KEY_VOICE_MODEL = "keyboard_voice_model";
+    private static final String KEY_VOICE_POLISH_MODEL = "keyboard_voice_polish_model";
 
     private static final String UPSTREAM_GITHUB_URL =
         "https://github.com/Julow/Unexpected-Keyboard";
@@ -151,6 +152,13 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             return true;
         });
 
+        Preference polishModel = findPreference(KEY_VOICE_POLISH_MODEL);
+        if (polishModel != null) polishModel.setOnPreferenceClickListener(preference -> {
+            openCleanupModelSettings(context);
+            return true;
+        });
+        refreshPolishModelSummary(context);
+
         SettingsLayoutUtils.applyScreenLayout(this);
     }
 
@@ -158,6 +166,26 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private void openSpeechModelSettings(@NonNull Context context) {
         startActivity(com.termux.app.activities.SettingsActivity.createFragmentIntent(context,
             SpeechModelPreferencesFragment.class, R.string.settings_keyboard_voice_model_title));
+    }
+
+    /** The Cleanup model screen: which installed chat model "Polish dictation" uses, or Automatic. */
+    private void openCleanupModelSettings(@NonNull Context context) {
+        startActivity(com.termux.app.activities.SettingsActivity.createFragmentIntent(context,
+            CleanupModelPreferencesFragment.class, R.string.settings_keyboard_voice_polish_model_title));
+    }
+
+    /** The chosen model's plain name, or "Automatic" when the stored id is empty. */
+    private void refreshPolishModelSummary(@NonNull Context context) {
+        Preference polishModel = findPreference(KEY_VOICE_POLISH_MODEL);
+        if (polishModel == null) return;
+        String modelId = TermuxAppSharedPreferences.build(context, true).getInAppKeyboardVoicePolishModelId();
+        if (modelId.isEmpty()) {
+            polishModel.setSummary(R.string.cleanup_model_automatic_title);
+            return;
+        }
+        com.termux.ai.TaiModelSpec spec = com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher
+            .installedChatModels(context).get(modelId);
+        polishModel.setSummary(spec == null ? getString(R.string.cleanup_model_automatic_title) : spec.displayName);
     }
 
     private void refreshTapCorrectionSummary(Preference preference) {
@@ -220,8 +248,10 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             getActivity().setTitle(R.string.settings_destination_keyboard_input);
         }
         // The file may have been hand-edited while the screen was away.
-        if (getContext() != null)
+        if (getContext() != null) {
             KeyboardPreferencesDataStore.getInstance(getContext()).forgetTermuxProperties();
+            refreshPolishModelSummary(getContext());
+        }
     }
 
     private void bindLinkPreference(@NonNull String key, @NonNull String url) {
@@ -364,15 +394,6 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setInAppKeyboardTapCorrectionEnabled(value);
                 TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
                 break;
-            case "keyboard_voice_commands":
-                mPreferences.setInAppKeyboardVoiceCommandsEnabled(value);
-                break;
-            case "keyboard_voice_bare_command_words":
-                mPreferences.setInAppKeyboardVoiceBareCommandWordsEnabled(value);
-                break;
-            case "keyboard_voice_terminal_cleanup":
-                mPreferences.setInAppKeyboardVoiceTerminalCleanupEnabled(value);
-                break;
             case "keyboard_voice_sounds":
                 mPreferences.setInAppKeyboardVoiceSoundsEnabled(value);
                 break;
@@ -410,12 +431,6 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isInAppKeyboardKeyPopupEnabled();
             case "in_app_keyboard_tap_correction":
                 return mPreferences.isInAppKeyboardTapCorrectionEnabled();
-            case "keyboard_voice_commands":
-                return mPreferences.isInAppKeyboardVoiceCommandsEnabled();
-            case "keyboard_voice_bare_command_words":
-                return mPreferences.isInAppKeyboardVoiceBareCommandWordsEnabled();
-            case "keyboard_voice_terminal_cleanup":
-                return mPreferences.isInAppKeyboardVoiceTerminalCleanupEnabled();
             case "keyboard_voice_sounds":
                 return mPreferences.isInAppKeyboardVoiceSoundsEnabled();
             case "keyboard_voice_polish":
