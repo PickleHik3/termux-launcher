@@ -162,16 +162,27 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         SettingsLayoutUtils.applyScreenLayout(this);
     }
 
-    /** The Speech model screen: the installed speech models, which one is in use, and downloads. */
+    /**
+     * The Speech model screen: the installed speech models, which one is in use, and downloads.
+     * Pushed in place via {@link com.termux.app.activities.SettingsActivity#openScreen} rather than
+     * relaunched with {@code startActivity}, so Back returns here instead of closing Settings --
+     * this fragment only ever lives inside SettingsActivity, so the cast is always safe.
+     */
     private void openSpeechModelSettings(@NonNull Context context) {
-        startActivity(com.termux.app.activities.SettingsActivity.createFragmentIntent(context,
-            SpeechModelPreferencesFragment.class, R.string.settings_keyboard_voice_model_title));
+        if (getActivity() instanceof com.termux.app.activities.SettingsActivity) {
+            ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
+                SpeechModelPreferencesFragment.class,
+                R.string.settings_keyboard_voice_model_title, null);
+        }
     }
 
     /** The Cleanup model screen: which installed chat model "Polish dictation" uses, or Automatic. */
     private void openCleanupModelSettings(@NonNull Context context) {
-        startActivity(com.termux.app.activities.SettingsActivity.createFragmentIntent(context,
-            CleanupModelPreferencesFragment.class, R.string.settings_keyboard_voice_polish_model_title));
+        if (getActivity() instanceof com.termux.app.activities.SettingsActivity) {
+            ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
+                CleanupModelPreferencesFragment.class,
+                R.string.settings_keyboard_voice_polish_model_title, null);
+        }
     }
 
     /** The chosen model's plain name, or "Automatic" when the stored id is empty. */

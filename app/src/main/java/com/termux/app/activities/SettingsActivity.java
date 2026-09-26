@@ -2,14 +2,17 @@ package com.termux.app.activities;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.Window;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
+import androidx.fragment.app.FragmentManager;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
@@ -21,6 +24,7 @@ import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.SettingsSearchPreference;
 import com.termux.app.theme.TermuxThemeManager;
 import com.termux.shared.logger.Logger;
+import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.theme.TermuxThemeUtils;
 import com.termux.shared.activity.media.AppCompatActivityUtils;
 import com.termux.shared.theme.NightMode;
@@ -49,6 +53,23 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
      */
     public static final String EXTRA_INITIAL_PLACE = "settings_initial_place";
     public static final String EXTRA_SCROLL_TO_KEY = "settings_scroll_to_key";
+
+    /** SharedPreferences key for the JSON stack {@link SettingsBackStackState} serializes. */
+    static final String PREFS_KEY_BACK_STACK_STATE = "settings_back_stack_state_v1";
+    /** {@code Bundle} key the parallel title bookkeeping below is saved under across rotation etc. */
+    private static final String STATE_KEY_PUSHED_SCREENS = "settings_pushed_screens_v1";
+
+    /**
+     * Screens pushed after the root, in push order, kept in parallel with the FragmentManager's
+     * own back stack. The FragmentManager knows how to restore the fragments themselves (from
+     * {@code savedInstanceState}, or transaction-by-transaction as this class replays a saved
+     * stack), but not which title each one carried or which deep-link arguments it was opened
+     * with -- both of which this list keeps so the toolbar title and persisted state stay right.
+     */
+    private final List<SettingsBackStackState.Entry> mPushedScreens = new ArrayList<>();
+
+    /** Set in {@link #onStop}; read by {@link #onNewIntent} to judge whether the stack is stale. */
+    private long mLastStoppedAtEpochMs = 0;
 
     public static Intent createFragmentIntent(@NonNull Context context, @NonNull Class<? extends Fragment> fragmentClass, int titleResId) {
         Intent intent = new Intent(context, SettingsActivity.class);
@@ -104,12 +125,39 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                     "com.termux.app.fragments.settings.termux.TaiPreferencesFragment");
                 intent.putExtra(EXTRA_INITIAL_TITLE_RES, R.string.termux_ai_preferences_title);
             }
-            Fragment initialFragment = buildInitialFragment();
-            getSupportFragmentManager().beginTransaction().replace(R.id.settings, initialFragment).commit();
+            // A plain re-entry (no deep link) within the retain window means the previous
+            // instance of this task was killed (process death, not a deliberate exit) while the
+            // user was somewhere other than the root; put them back where they were instead of
+            // starting over. restoreSavedStackIfFresh returns false, doing nothing, whenever
+            // there is nothing to restore, it has expired, or it fails validation.
+            if (!(isPlainEntryIntent(intent) && restoreSavedStackIfFresh())) {
+                Fragment initialFragment = buildInitialFragment();
+                getSupportFragmentManager().beginTransaction().replace(R.id.settings, initialFragment).commit();
+            }
+        } else {
+            restorePushedScreensBookkeeping(savedInstanceState);
         }
         AppCompatActivityUtils.setToolbar(this, com.termux.shared.R.id.toolbar);
         AppCompatActivityUtils.setShowBackButtonInActionBar(this, true);
-        setTitleFromIntent(getIntent());
+        // Keeps the toolbar title in step with Back, including a Back that the platform's own
+        // OnBackPressedDispatcher integration pops without this class hearing about it directly.
+        getSupportFragmentManager().addOnBackStackChangedListener(this::onBackStackChanged);
+        if (mPushedScreens.isEmpty()) {
+            setTitleFromIntent(getIntent());
+        } else {
+            updateTitleForCurrentStack();
+        }
+    }
+
+    @Override
+    protected void onSaveInstanceState(@NonNull Bundle outState) {
+        super.onSaveInstanceState(outState);
+        // The FragmentManager saves the fragments and its own back stack by itself; this saves
+        // only the parallel title/argument bookkeeping in mPushedScreens, which it knows nothing
+        // about. The timestamp is irrelevant here (this path is a config change or process death
+        // with the Activity coming straight back, not a stale re-entry) so it is left at 0.
+        outState.putString(STATE_KEY_PUSHED_SCREENS,
+            new SettingsBackStackState(new ArrayList<>(mPushedScreens), 0).serialize());
     }
 
     @Override
@@ -121,12 +169,170 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 "com.termux.app.fragments.settings.termux.TaiPreferencesFragment");
             intent.putExtra(EXTRA_INITIAL_TITLE_RES, R.string.termux_ai_preferences_title);
         }
+        if (isPlainEntryIntent(intent) && isWithinRetainWindow()) {
+            // The user tapped Settings again from the launcher shortly after leaving it (this
+            // instance was never killed - it just went to the background); keep whatever screen
+            // and back stack they had instead of popping to root.
+            return;
+        }
+        mPushedScreens.clear();
         getSupportFragmentManager().popBackStackImmediate(null,
-            androidx.fragment.app.FragmentManager.POP_BACK_STACK_INCLUSIVE);
+            FragmentManager.POP_BACK_STACK_INCLUSIVE);
         getSupportFragmentManager().beginTransaction()
             .replace(R.id.settings, buildInitialFragment())
             .commit();
         setTitleFromIntent(intent);
+    }
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        mLastStoppedAtEpochMs = System.currentTimeMillis();
+        if (isFinishing() && mPushedScreens.isEmpty()) {
+            // A deliberate exit from the root screen (Back/Up with nothing left to pop): the next
+            // open should start fresh at root, not resume a stack that no longer exists.
+            getSettingsBackStackPreferences().edit().remove(PREFS_KEY_BACK_STACK_STATE).apply();
+        } else {
+            SettingsBackStackState state =
+                new SettingsBackStackState(new ArrayList<>(mPushedScreens), mLastStoppedAtEpochMs);
+            getSettingsBackStackPreferences().edit()
+                .putString(PREFS_KEY_BACK_STACK_STATE, state.serialize()).apply();
+        }
+    }
+
+    /**
+     * A "plain" open of Settings: no deep-linked fragment, no QA TAI shortcut, no per-place
+     * arguments. This is what {@code openSettingsHome} in TermuxActivity sends, and it is the only
+     * kind of Intent this class treats as a request to resume wherever the user left off rather
+     * than a request to open a specific screen.
+     */
+    static boolean isPlainEntryIntent(@NonNull Intent intent) {
+        return TextUtils.isEmpty(intent.getStringExtra(EXTRA_INITIAL_FRAGMENT))
+            && !intent.getBooleanExtra(EXTRA_OPEN_TAI_SETTINGS, false)
+            && intent.getStringExtra(EXTRA_INITIAL_PLACE) == null
+            && intent.getStringExtra(EXTRA_SCROLL_TO_KEY) == null;
+    }
+
+    private boolean isWithinRetainWindow() {
+        // 0 means this instance has not been stopped yet (e.g. onNewIntent while still resumed,
+        // which the platform allows for a singleTask Activity); treat that as still fresh.
+        if (mLastStoppedAtEpochMs == 0) return true;
+        long elapsed = System.currentTimeMillis() - mLastStoppedAtEpochMs;
+        return elapsed >= 0 && elapsed < SettingsBackStackState.RETAIN_WINDOW_MS;
+    }
+
+    private SharedPreferences getSettingsBackStackPreferences() {
+        return getApplicationContext().getSharedPreferences(
+            TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+            Context.MODE_PRIVATE);
+    }
+
+    /**
+     * Rebuilds the stack this Activity had when it was last stopped, provided that was within
+     * {@link SettingsBackStackState#RETAIN_WINDOW_MS}. Returns false, having built nothing, when
+     * there is no saved stack, it has expired, or its very first entry fails validation -- every
+     * one of those cases falls back to the plain root the caller builds instead. An entry after
+     * the first that fails validation (for example a fragment class an APK upgrade removed) simply
+     * stops the replay there, keeping whatever was already legitimately restored, the same way
+     * {@link #buildInitialFragment} falls back rather than crashes on a single bad entry.
+     */
+    private boolean restoreSavedStackIfFresh() {
+        String raw = getSettingsBackStackPreferences().getString(PREFS_KEY_BACK_STACK_STATE, null);
+        SettingsBackStackState saved = SettingsBackStackState.parse(raw);
+        if (saved == null || !saved.isFresh(System.currentTimeMillis())) return false;
+
+        getSupportFragmentManager().beginTransaction()
+            .replace(R.id.settings, new RootPreferencesFragment())
+            .commit();
+
+        for (SettingsBackStackState.Entry entry : saved.entries) {
+            Class<?> fragmentClass;
+            try {
+                fragmentClass = getClassLoader().loadClass(entry.className);
+            } catch (ClassNotFoundException e) {
+                break;
+            }
+            if (!isAllowedInitialFragment(fragmentClass)) break;
+            @SuppressWarnings("unchecked")
+            Class<? extends Fragment> screenClass = (Class<? extends Fragment>) fragmentClass;
+            Bundle args = null;
+            if (entry.place != null || entry.scrollToKey != null) {
+                args = new Bundle();
+                if (entry.place != null) args.putString(EXTRA_INITIAL_PLACE, entry.place);
+                if (entry.scrollToKey != null) args.putString(EXTRA_SCROLL_TO_KEY, entry.scrollToKey);
+            }
+            pushScreen(screenClass, entry.titleResId, entry.titleText, args);
+        }
+        return true;
+    }
+
+    /** Restores only the title/argument bookkeeping; the fragments/back stack restore themselves. */
+    private void restorePushedScreensBookkeeping(@NonNull Bundle savedInstanceState) {
+        SettingsBackStackState state =
+            SettingsBackStackState.parse(savedInstanceState.getString(STATE_KEY_PUSHED_SCREENS));
+        mPushedScreens.clear();
+        if (state != null) mPushedScreens.addAll(state.entries);
+    }
+
+    private void onBackStackChanged() {
+        int entryCount = getSupportFragmentManager().getBackStackEntryCount();
+        while (mPushedScreens.size() > entryCount) {
+            mPushedScreens.remove(mPushedScreens.size() - 1);
+        }
+        updateTitleForCurrentStack();
+    }
+
+    private void updateTitleForCurrentStack() {
+        if (mPushedScreens.isEmpty()) {
+            setTitle(R.string.title_activity_termux_settings);
+            return;
+        }
+        SettingsBackStackState.Entry top = mPushedScreens.get(mPushedScreens.size() - 1);
+        if (top.titleResId != 0) {
+            try {
+                setTitle(top.titleResId);
+                return;
+            } catch (android.content.res.Resources.NotFoundException e) {
+                // Fall through to the plain-text/default title below; see setTitleFromIntent for
+                // why a stale resource id can outlive the build that assigned it.
+            }
+        }
+        if (top.titleText != null) {
+            setTitle(top.titleText);
+        } else {
+            setTitle(R.string.title_activity_termux_settings);
+        }
+    }
+
+    /**
+     * Pushes a settings sub-screen onto the back stack in place, instead of relaunching this
+     * singleTask Activity through {@link #onNewIntent} -- which pops back to the root, so Back
+     * closed Settings instead of returning to the screen the user came from. Call sites inside
+     * Settings that used to do {@code startActivity(createFragmentIntent(...))} call this instead;
+     * {@link #createFragmentIntent} is unchanged for launches that arrive from outside Settings, for
+     * which going through onCreate/onNewIntent at the deep-linked screen is exactly what is wanted.
+     */
+    public void openScreen(@NonNull Class<? extends Fragment> fragmentClass, @StringRes int titleResId,
+                           @Nullable Bundle args) {
+        pushScreen(fragmentClass, titleResId, null, args);
+    }
+
+    private void pushScreen(@NonNull Class<? extends Fragment> fragmentClass, int titleResId,
+                            @Nullable String titleText, @Nullable Bundle args) {
+        Fragment fragment = getSupportFragmentManager().getFragmentFactory()
+            .instantiate(getClassLoader(), fragmentClass.getName());
+        if (args != null) fragment.setArguments(args);
+        String place = args == null ? null : args.getString(EXTRA_INITIAL_PLACE);
+        String scrollToKey = args == null ? null : args.getString(EXTRA_SCROLL_TO_KEY);
+        mPushedScreens.add(new SettingsBackStackState.Entry(
+            fragmentClass.getName(), titleResId, titleText, place, scrollToKey));
+        // Named by its position so it always pops exactly one entry at a time, staying aligned
+        // with mPushedScreens (see onBackStackChanged).
+        getSupportFragmentManager().beginTransaction()
+            .replace(R.id.settings, fragment)
+            .addToBackStack(String.valueOf(mPushedScreens.size()))
+            .commit();
+        updateTitleForCurrentStack();
     }
 
     /**
@@ -257,14 +463,20 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         String fragmentClassName = preference.getFragment();
         if (fragmentClassName == null || fragmentClassName.isEmpty())
             return false;
-        Fragment fragment = getSupportFragmentManager().getFragmentFactory()
-            .instantiate(getClassLoader(), fragmentClassName);
-        fragment.setArguments(preference.getExtras());
-        getSupportFragmentManager().beginTransaction()
-            .replace(R.id.settings, fragment)
-            .addToBackStack(null)
-            .commit();
-        return true;
+        try {
+            Class<?> fragmentClass = getClassLoader().loadClass(fragmentClassName);
+            if (!isAllowedInitialFragment(fragmentClass)) {
+                Logger.logWarn(LOG_TAG, "Refusing to open non-settings fragment: " + fragmentClassName);
+                return false;
+            }
+            @SuppressWarnings("unchecked")
+            Class<? extends Fragment> screenClass = (Class<? extends Fragment>) fragmentClass;
+            CharSequence title = preference.getTitle();
+            pushScreen(screenClass, 0, title == null ? null : title.toString(), preference.getExtras());
+            return true;
+        } catch (ClassNotFoundException e) {
+            return false;
+        }
     }
 
     public static class RootPreferencesFragment extends PreferenceFragmentCompat {

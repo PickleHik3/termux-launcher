@@ -1049,8 +1049,14 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         Preference moved = findPreference("tai_stt_moved");
         if (moved == null) return;
         moved.setOnPreferenceClickListener(preference -> {
-            startActivity(com.termux.app.activities.SettingsActivity.createFragmentIntent(context,
-                SpeechModelPreferencesFragment.class, R.string.settings_keyboard_voice_model_title));
+            // Pushed in place instead of relaunched with startActivity, so Back returns to this
+            // screen instead of closing Settings; this fragment only ever lives inside
+            // SettingsActivity, so the cast is always safe.
+            if (getActivity() instanceof com.termux.app.activities.SettingsActivity) {
+                ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
+                    SpeechModelPreferencesFragment.class,
+                    R.string.settings_keyboard_voice_model_title, null);
+            }
             return true;
         });
     }
