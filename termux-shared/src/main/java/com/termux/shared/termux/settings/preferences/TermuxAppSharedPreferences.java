@@ -1810,6 +1810,107 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKGROUND_OPACITY, value));
     }
 
+    /**
+     * Wallpaper blur radius (dp) of the keyboard's own glass backdrop. Reads the dock's radius
+     * while the stored value is still the {@code -1} "follow the dock" sentinel, so an untouched
+     * keyboard renders exactly as it always has; moving this row's slider writes an explicit
+     * number here and detaches it from the dock for good.
+     */
+    public int getInAppKeyboardBlurRadius() {
+        int raw = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS);
+        if (raw < 0) return getExtraKeysBlurRadius();
+        return DataUtils.clamp(raw, TERMUX_APP.MIN_IN_APP_KEYBOARD_BLUR_RADIUS,
+            TERMUX_APP.MAX_IN_APP_KEYBOARD_BLUR_RADIUS);
+    }
+
+    public void setInAppKeyboardBlurRadius(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS,
+            DataUtils.clamp(value, TERMUX_APP.MIN_IN_APP_KEYBOARD_BLUR_RADIUS,
+                TERMUX_APP.MAX_IN_APP_KEYBOARD_BLUR_RADIUS), false);
+    }
+
+    /**
+     * Film-grain strength (percent) of the keyboard's own glass backdrop; follows the dock's grain
+     * while the stored value is still the {@code -1} "follow the dock" sentinel. See
+     * {@link #getInAppKeyboardBlurRadius()}.
+     */
+    public int getInAppKeyboardGrain() {
+        int raw = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_GRAIN);
+        if (raw < 0) return getDockGlassGrain();
+        return DataUtils.clamp(raw, TERMUX_APP.MIN_IN_APP_KEYBOARD_GRAIN,
+            TERMUX_APP.MAX_IN_APP_KEYBOARD_GRAIN);
+    }
+
+    public void setInAppKeyboardGrain(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN,
+            DataUtils.clamp(value, TERMUX_APP.MIN_IN_APP_KEYBOARD_GRAIN,
+                TERMUX_APP.MAX_IN_APP_KEYBOARD_GRAIN), false);
+    }
+
+    /**
+     * Opacity (percent) of the keyboard's whole backdrop stack — the blurred wallpaper crop and
+     * the tint above it together, applied as one alpha over the finished drawable. {@code -1}
+     * (the stored default) renders the stack fully opaque, exactly as every keyboard has until
+     * now. Distinct from {@link #getInAppKeyboardBackgroundOpacity()}, which is only the tint
+     * layer's own colour intensity.
+     */
+    public int getInAppKeyboardBackdropOpacity() {
+        int raw = SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY);
+        if (raw < 0) return TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY;
+        return DataUtils.clamp(raw, TERMUX_APP.MIN_IN_APP_KEYBOARD_BACKDROP_OPACITY,
+            TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY);
+    }
+
+    public void setInAppKeyboardBackdropOpacity(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY,
+            DataUtils.clamp(value, TERMUX_APP.MIN_IN_APP_KEYBOARD_BACKDROP_OPACITY,
+                TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY), false);
+    }
+
+    // The three raw accessors below store and return the -1 "follow the dock" sentinel verbatim,
+    // unlike their resolved counterparts above. They exist only for the editor's entry snapshot
+    // (Undo/Reset): restoring the *resolved* number through the ordinary setter would write it as
+    // an explicit value and silently detach a row that was still following the dock when the
+    // place was opened. Nothing else in the app should need them.
+
+    public int getInAppKeyboardBlurRadiusRaw() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS);
+    }
+
+    public void setInAppKeyboardBlurRadiusRaw(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, value, false);
+    }
+
+    public int getInAppKeyboardGrainRaw() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_GRAIN);
+    }
+
+    public void setInAppKeyboardGrainRaw(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, value, false);
+    }
+
+    public int getInAppKeyboardBackdropOpacityRaw() {
+        return SharedPreferenceUtils.getInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY);
+    }
+
+    public void setInAppKeyboardBackdropOpacityRaw(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY, value, false);
+    }
+
     public boolean isSoftKeyboardEnabledOnlyIfNoHardware() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_SOFT_KEYBOARD_ENABLED_ONLY_IF_NO_HARDWARE, TERMUX_APP.DEFAULT_VALUE_KEY_SOFT_KEYBOARD_ENABLED_ONLY_IF_NO_HARDWARE);
     }

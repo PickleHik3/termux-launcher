@@ -182,6 +182,13 @@ public final class SurfaceEditorProperties {
     public static final String ID_KEYBOARD_KEY_OPACITY = "keyboard_key_opacity";
     public static final String ID_KEYBOARD_SPACING = "keyboard_spacing";
     public static final String ID_KEYBOARD_COLORS = "keyboard_colors";
+    /**
+     * The keyboard's own colour intensity (tint alpha) — the row that used to be its only glass
+     * cell, under {@code ID_OPACITY}. Given its own id once the keyboard gained Blur, Opacity and
+     * Grain rows of its own: {@code ID_OPACITY} on this panel now names the whole backdrop's
+     * visibility, matching what it means on every other surface's panel.
+     */
+    public static final String ID_KEYBOARD_INTENSITY = "keyboard_intensity";
     public static final String ID_CHIP_RADIUS = "chip_radius";
     public static final String ID_WALLPAPER = "wallpaper";
 
@@ -329,15 +336,42 @@ public final class SurfaceEditorProperties {
                 (prefs, value) -> prefs.setAppLauncherButtonCount(Math.max(1, value)),
                 PREVIEW_GEOMETRY, TERMUX_APP.KEY_APP_LAUNCHER_BUTTON_COUNT)));
 
-        // The keyboard renders the dock's material — one blurred backdrop, one grain, the dock
-        // capsule's shape — so it owns an opacity and a margin and nothing else of the glass. Its
-        // height is the drag handle on its own top edge rather than a row here.
+        // The keyboard used to render only the dock's blur radius and grain, borrowed wholesale,
+        // and owned an opacity (really a tint intensity) and a margin of its own. It now owns a
+        // Blur, an Opacity and a Grain the same way DOCK/STATUS/CANVAS do — each -1 by default,
+        // meaning "follow the dock", so an untouched keyboard still renders exactly as before —
+        // plus the pre-existing Intensity row, kept under its own id and pref so old values
+        // survive. Its height is the drag handle on its own top edge rather than a row here.
         PANELS.put(SurfaceSlot.KEYBOARD, panel(
-            // "BG opacity", not "Opacity": the keys have an opacity of their own two rows down,
-            // and this one is the slab behind them.
-            cell(ID_OPACITY, SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
-                R.string.termux_surface_editor_background_opacity,
+            // Same scopes their DOCK/STATUS/CANVAS counterparts use: SCOPE_KEYBOARD_BACKDROP
+            // already re-syncs unconditionally on every glass preview tick, so none of these three
+            // need PREVIEW_KEYBOARD's full key-layout reload — only Intensity below still does.
+            own(ID_BLUR, R.string.termux_dock_tuning_blur, Section.MATERIAL,
+                Kind.SLIDER, Unit.DP, TERMUX_APP.MAX_IN_APP_KEYBOARD_BLUR_RADIUS,
+                TermuxAppSharedPreferences::getInAppKeyboardBlurRadius,
+                TermuxAppSharedPreferences::setInAppKeyboardBlurRadius,
+                PREVIEW_BLUR | PREVIEW_SURFACES, TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS),
+            // The whole backdrop stack's visibility — the blurred wallpaper crop and the tint
+            // together — same meaning as every other surface's Opacity row.
+            own(ID_OPACITY, R.string.termux_dock_tuning_opacity, Section.MATERIAL,
+                Kind.SLIDER, Unit.PERCENT, TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY,
+                TermuxAppSharedPreferences::getInAppKeyboardBackdropOpacity,
+                TermuxAppSharedPreferences::setInAppKeyboardBackdropOpacity,
+                PREVIEW_GLASS | PREVIEW_SURFACES,
+                TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY),
+            // "Intensity", not "Opacity": this is the slab's own colour strength (tint alpha), not
+            // how visible the backdrop is — the row above answers that now. Still the cell it
+            // always was, so a place that links or detaches this cell still means the same thing.
+            // Kept on PREVIEW_KEYBOARD as it always was: the colour scheme it can swap in is read
+            // at render time and needs the keyboard's full reload, not just its backdrop redrawn.
+            cell(ID_KEYBOARD_INTENSITY, SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
+                R.string.termux_surface_editor_keyboard_intensity,
                 Section.MATERIAL, PREVIEW_SURFACES | PREVIEW_KEYBOARD),
+            own(ID_GRAIN, R.string.termux_dock_tuning_grain, Section.MATERIAL,
+                Kind.SLIDER, Unit.PERCENT, TERMUX_APP.MAX_IN_APP_KEYBOARD_GRAIN,
+                TermuxAppSharedPreferences::getInAppKeyboardGrain,
+                TermuxAppSharedPreferences::setInAppKeyboardGrain,
+                PREVIEW_GLASS | PREVIEW_SURFACES, TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN),
             cell(ID_MARGIN, SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP,
                 R.string.termux_surface_tuning_edges,
                 Section.SHAPE, PREVIEW_GEOMETRY | PREVIEW_SURFACES),

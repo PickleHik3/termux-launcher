@@ -1357,8 +1357,10 @@
                 <string name="termux_surface_editor_action_chevron">›</string>
                 <string name="termux_surface_editor_select_description">Edit %1$s</string>
                 <string name="termux_surface_editor_key_radius">Key radius</string>
-                <!-- The keyboard's slab, as against its key caps, which are the row below it. -->
-                <string name="termux_surface_editor_background_opacity">BG opacity</string>
+                <!-- The colour intensity (tint alpha) of the keyboard's slab, as against its key
+                     caps, which are the row below it. Was labelled "BG opacity"; renamed once the
+                     keyboard gained its own Opacity row for the whole backdrop's visibility. -->
+                <string name="termux_surface_editor_keyboard_intensity">Intensity</string>
                 <string name="termux_surface_editor_wallpaper_dim">Wallpaper</string>
 
                 <!-- The two questions that shape everything, one per line. One plain word each:

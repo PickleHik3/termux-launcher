@@ -4470,6 +4470,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The keyboard's own blur radius as its own glass draws it — {@code getInAppKeyboardBlurRadius}
+     * already falls back to the dock's radius while the keyboard's is still the {@code -1} "follow"
+     * sentinel, so an untouched keyboard resolves to the same number
+     * {@link #getEffectiveExtraKeysBlurRadius()} does. See that method for the wallpaper-does-not-
+     * blur gate this mirrors.
+     */
+    private int getEffectiveInAppKeyboardBlurRadius() {
+        if (mPreferences == null || !wallpaperPicture().blurs()) return 0;
+        return Math.max(0, mPreferences.getInAppKeyboardBlurRadius());
+    }
+
+    /**
      * Which picture the glass can blur, and how sure we are it is the one on screen — see
      * {@link WallpaperPicture}. Read from the cached value, because resolving it opens a file
      * descriptor and every surface in a render pass asks: {@link #refreshWallpaperPicture()} is
@@ -4834,11 +4846,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // disagree with the keyboard about its own material.
         boolean normalized = isInAppKeyboardOpacityLinked();
         Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
+        // The keyboard's own Opacity (background) row fades this same strip along with the
+        // keyboard, so the seam the whole method exists to close stays closed at any setting.
+        int stackAlpha = Math.round(255f * getInAppKeyboardBackdropOpacityPercent() / 100f);
         if (schemeBackground != null) {
-            return new ColorDrawable(withAlphaComponent(schemeBackground, Math.round(
-                255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)));
+            int tintAlpha = Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f);
+            return new ColorDrawable(withAlphaComponent(schemeBackground,
+                Math.round(tintAlpha * stackAlpha / 255f)));
         }
-        return mChrome.glass().dockSurface(inAppKeyboardGlassAlpha(state), foot, 1f, false);
+        // The keyboard's own grain, not the dock's — it may now have its own.
+        Drawable strip = mChrome.glass().surface(inAppKeyboardGlassAlpha(state), foot, 1f, false,
+            getInAppKeyboardGrainPercent());
+        strip.setAlpha(stackAlpha);
+        return strip;
     }
 
     /**
@@ -4986,6 +5006,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPreferences != null
             ? mPreferences.getInAppKeyboardBackgroundOpacity()
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
+    }
+
+    /**
+     * The keyboard's own film-grain strength — {@code getInAppKeyboardGrain} already falls back to
+     * the dock's grain while the keyboard's is still {@code -1}, so an untouched keyboard grains
+     * exactly as it always has, off the same dock number it used to read directly.
+     */
+    private int getInAppKeyboardGrainPercent() {
+        return mPreferences != null
+            ? mPreferences.getInAppKeyboardGrain()
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
+    }
+
+    /**
+     * The alpha (percent) of the keyboard's whole backdrop stack — the blurred wallpaper crop and
+     * the tint together, applied as one alpha over the finished drawable so lowering it reveals the
+     * plain wallpaper rather than cross-fading any one layer. 100 (the effective default) renders
+     * exactly as every keyboard has until now; distinct from
+     * {@link #getInAppKeyboardBackgroundOpacityPercent()}, which is the tint's own colour intensity.
+     */
+    private int getInAppKeyboardBackdropOpacityPercent() {
+        return mPreferences != null
+            ? mPreferences.getInAppKeyboardBackdropOpacity()
+            : TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY;
     }
 
     /** Whether the keyboard on screen is the split one, whose parting no surface may fill. */
@@ -5215,8 +5259,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
         int backgroundAlpha = normalized ? 255 : Math.round(
             255f * getInAppKeyboardBackgroundOpacityPercent() / 100f);
+        // The keyboard's own blur, not the dock's state it used to borrow outright — falls back to
+        // it while the keyboard's radius is still the -1 "follow" sentinel.
+        boolean keyboardBlurEnabled = ChromePolicy.dockBlurEnabled(getEffectiveInAppKeyboardBlurRadius());
         if (glassTheme) {
-            if (state.blurEnabled) {
+            if (keyboardBlurEnabled) {
                 Bitmap blurredBackdrop = obtainInAppKeyboardBackdropBitmap(state, surfaceHost);
                 if (blurredBackdrop != null) {
                     BitmapDrawable backdrop = new BitmapDrawable(getResources(), blurredBackdrop);
@@ -5233,10 +5280,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     withAlphaComponent(schemeBackground, backgroundAlpha)));
             } else {
                 // Render only the keyboard's slice of the shared light model, built at the
-                // keyboard's own opacity; the under-pill nav strip renders the remainder so the
-                // single foot lands under the pill (see the slice overload).
-                layers.add(mChrome.glass().dockSurface(inAppKeyboardGlassAlpha(state), 0f,
-                    defaultDockGlassFootFraction(), false));
+                // keyboard's own opacity and its own grain — the under-pill nav strip renders the
+                // remainder so the single foot lands under the pill (see the slice overload).
+                layers.add(mChrome.glass().surface(inAppKeyboardGlassAlpha(state), 0f,
+                    defaultDockGlassFootFraction(), false, getInAppKeyboardGrainPercent()));
             }
         } else if (capsule) {
             // Opaque themes fill the capsule with the keyboard's own background color so the
@@ -5262,6 +5309,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         Drawable material = layers.size() == 1
             ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));
+        // The keyboard's own Opacity (background) row: one alpha over the whole finished stack —
+        // backdrop bitmap, tint and ring together — so a lower setting fades all of it back to the
+        // plain wallpaper rather than cross-fading any single layer. 100 (the effective default)
+        // leaves this a no-op, so an untouched keyboard renders exactly as it always has.
+        int stackOpacityPercent = getInAppKeyboardBackdropOpacityPercent();
+        if (stackOpacityPercent < 100)
+            material.setAlpha(Math.round(255f * stackOpacityPercent / 100f));
         // A BitmapDrawable reports its captured bitmap dimensions as its minimum size. Since this
         // drawable is installed on a wrap-content host, exposing that intrinsic size feeds the old
         // backdrop height back into layout and creates a blank band below a subsequently shorter
@@ -5321,16 +5375,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (targetRect == null) {
             return mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD) ? null : mInAppKeyboardBackdropBitmap;
         }
+        // The keyboard's own radius, not the dock's state.blurRadiusDp it used to share outright —
+        // falls back to it while the keyboard's is still the -1 "follow" sentinel.
+        int keyboardBlurRadiusDp = getEffectiveInAppKeyboardBlurRadius();
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
         if (!mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD) &&
-            mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD) == state.blurRadiusDp &&
+            mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD) == keyboardBlurRadiusDp &&
             mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD) == usingManagedWallpaperSource &&
             mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD, targetRect) &&
             mInAppKeyboardBackdropBitmap != null) {
             return mInAppKeyboardBackdropBitmap;
         }
 
-        Bitmap blurredBackdrop = mChrome.blurCache().crop(state.blurRadiusDp, targetRect, wallpaperFrame);
+        Bitmap blurredBackdrop = mChrome.blurCache().crop(keyboardBlurRadiusDp, targetRect, wallpaperFrame);
         if (blurredBackdrop == null) {
             // A previous-geometry crop is worse than tint-only glass: BitmapDrawable would scale it
             // into the new keyboard height and briefly sample the wrong wallpaper region.
@@ -5338,7 +5395,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? mInAppKeyboardBackdropBitmap : null;
         }
         mInAppKeyboardBackdropBitmap = blurredBackdrop;
-        mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD, state.blurRadiusDp,
+        mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD, keyboardBlurRadiusDp,
             usingManagedWallpaperSource, targetRect);
         return mInAppKeyboardBackdropBitmap;
     }
