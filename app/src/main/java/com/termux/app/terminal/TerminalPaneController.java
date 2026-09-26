@@ -817,6 +817,7 @@ public class TerminalPaneController {
             mMotionOverlay.clearMotion();
             mSuppressNextCursorFlight = true;
         }
+        boolean switched = mActiveWindow != w;
         mActiveWindow = w;
         if (LAYOUT_STACK.equals(w.layoutPolicy) && w.active != null) {
             // Stack lives in the foreground-presentation field, not the tree, so re-entering a
@@ -826,6 +827,10 @@ public class TerminalPaneController {
             mMaximizedLeaf = null;
         }
         render();
+        // A hidden window's panes drop any resize that settled while they were off screen
+        // (setAllPaneSizeUpdatesPaused), and coming back at the same pixel size raises no
+        // onSizeChanged. Re-measure them so the PTY matches what is on screen.
+        if (switched) refreshPaneSizes();
         mHost.onActivePaneChanged();
     }
 

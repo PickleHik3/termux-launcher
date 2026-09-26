@@ -3144,6 +3144,10 @@ public final class TerminalView extends View {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         updateKittyAnimationVisibility();
+        // A cached pane re-attached at the pixel size it left with gets no onSizeChanged, so a
+        // resize it missed while hidden would never reach the PTY. The post runs after the
+        // attaching layout pass; updateSize is a no-op when the grid already fits.
+        post(this::updateSize);
         if (mTextSelectionCursorController != null) {
             getViewTreeObserver().addOnTouchModeChangeListener(mTextSelectionCursorController);
         }

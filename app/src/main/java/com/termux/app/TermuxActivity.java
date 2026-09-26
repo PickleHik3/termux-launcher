@@ -16947,9 +16947,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 topWidgets.setVisibility(collapsed || isStatusBarVertical()
                     ? View.GONE : View.VISIBLE);
             }
+            // Nothing began a resize here, so nothing is finished either: closing a lease this
+            // call never opened would end the keyboard's or an animation's early and let panes
+            // settle on a size they never reported.
             refreshTerminalWindowBar();
-            if (host != null) finishStatusBarTerminalResizeAfterLayout(host,
-                mStatusBarTerminalResizeGeneration);
             return;
         }
         if (preferenceChanged) setStatusBarCompact(collapsed);
