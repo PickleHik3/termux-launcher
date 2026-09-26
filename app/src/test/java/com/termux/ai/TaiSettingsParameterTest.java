@@ -100,26 +100,33 @@ public class TaiSettingsParameterTest {
         assertEquals(1.0d, gemma.defaultTemperature, 0.0d);
         assertEquals("gpu", gemma.compatibleAccelerators.get(0));
 
-        TaiModelProfile mobileActions = TaiModelProfile.forModel(registry.getModel(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M));
+        // FunctionGemma, DeepSeek and Qwen left the built-in catalogue (D1) but their profiles are
+        // keyed on the model id, so a model added by link with the same id still gets them.
+        TaiModelProfile mobileActions = TaiModelProfile.forModel(liteRt(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M));
         assertEquals(1024, mobileActions.defaultMaxTokens);
         assertEquals(64, mobileActions.defaultTopK);
         assertEquals(0.95d, mobileActions.defaultTopP, 0.0d);
         assertEquals(0.0d, mobileActions.defaultTemperature, 0.0d);
         assertEquals("cpu", mobileActions.compatibleAccelerators.get(0));
 
-        TaiModelProfile deepSeek = TaiModelProfile.forModel(registry.getModel("deepseek-r1-distill-qwen-1.5b-litert-lm"));
+        TaiModelProfile deepSeek = TaiModelProfile.forModel(liteRt("deepseek-r1-distill-qwen-1.5b-litert-lm"));
         // A 4096 window with a 4096 output cap leaves no room for the prompt; the cap is min(1024, window/4).
         assertEquals(1024, deepSeek.defaultMaxTokens);
         assertEquals(64, deepSeek.defaultTopK);
         assertEquals(0.95d, deepSeek.defaultTopP, 0.0d);
         assertEquals(1.0d, deepSeek.defaultTemperature, 0.0d);
 
-        TaiModelProfile qwen = TaiModelProfile.forModel(registry.getModel("qwen2.5-1.5b-instruct-litert-lm"));
+        TaiModelProfile qwen = TaiModelProfile.forModel(liteRt("qwen2.5-1.5b-instruct-litert-lm"));
         assertEquals(1024, qwen.defaultMaxTokens);
         assertEquals(4096, qwen.maxContextTokens);
         assertEquals(20, qwen.defaultTopK);
         assertEquals(0.80d, qwen.defaultTopP, 0.0d);
         assertEquals(0.70d, qwen.defaultTemperature, 0.0d);
+    }
+
+    private static TaiModelSpec liteRt(String id) {
+        return new TaiModelSpec(id, id, "test", "downloaded", "/models/" + id + "/model.litertlm", "test", 0L,
+            new java.util.LinkedHashSet<>(java.util.Collections.singleton(TaiModelSpec.CAPABILITY_TEXT_CHAT)), false);
     }
 
     @Test

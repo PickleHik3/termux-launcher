@@ -59,11 +59,11 @@ public class TaiRegressionTest {
         assertEquals(TaiModelSpec.FORMAT_LITERTLM, gemma4e2b.format);
         assertTrue(gemma4e2b.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
 
-        TaiModelCatalog.CatalogEntry mobileActions = entries.get(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M);
-        assertNotNull(mobileActions);
-        assertEquals(TaiModelSpec.BACKEND_LITERT_LM, mobileActions.backend);
-        assertEquals(TaiModelSpec.FORMAT_LITERTLM, mobileActions.format);
-        assertTrue(mobileActions.capabilities.contains("mobile_actions"));
+        TaiModelCatalog.CatalogEntry gemma4e4b = entries.get(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT);
+        assertNotNull(gemma4e4b);
+        assertEquals(TaiModelSpec.BACKEND_LITERT_LM, gemma4e4b.backend);
+        assertEquals(TaiModelSpec.FORMAT_LITERTLM, gemma4e4b.format);
+        assertTrue(gemma4e4b.capabilities.contains(TaiModelSpec.CAPABILITY_CODE));
     }
 
     @Test
