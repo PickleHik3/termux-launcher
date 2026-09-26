@@ -142,8 +142,12 @@ public final class SurfaceEditorController {
          * paying once per gesture, on release, not per tick.
          */
         void applyGeometryPreview(boolean commit);
-        /** The coalesced glass re-render; {@code blurChanged} also drops the blur cache. */
-        void applyGlassPreview(boolean blurChanged);
+        /**
+         * The coalesced glass re-render. A radius a slider settled on is simply a new cache key —
+         * {@link com.termux.app.chrome.WallpaperBlurCache#obtain} fills it without disturbing the
+         * radii already resident, so this never drops the blur cache.
+         */
+        void applyGlassPreview();
         void openKeyboardColors();
         /**
          * The extra keys row the user is looking at, or null where the place on screen has none.
@@ -3900,8 +3904,6 @@ public final class SurfaceEditorController {
     private int mPendingTuningPreviewScopes;
     private boolean mTuningPreviewScheduled;
     private final Runnable mTuningPreviewRunnable = this::runPendingTuningPreview;
-    /** Effective blur inputs the last BLUR-scoped apply saw; an unchanged set skips the re-blur. */
-    private long mLastPreviewBlurSignature = Long.MIN_VALUE;
     /** True while a slider thumb is down; heavy per-tick syncs wait for the release. */
     private boolean mSliderDragActive;
     /** Whether the active drag previewed geometry, so the release knows to commit it. */
@@ -3960,32 +3962,12 @@ public final class SurfaceEditorController {
             if (mSliderDragActive) mDragTouchedKeyboard = true;
             else keyboard().onPreferencesReloaded();
         }
-        // A BLUR request only really re-blurs when a blur input moved: the blur slider ticks far
-        // more often than its integer value changes, and Undo/preset restores ask broadly. The
-        // resolved per-surface radii are the whole input set, so comparing them is exact.
-        boolean blurChanged = false;
-        if ((scopes & SurfaceEditorProperties.PREVIEW_BLUR) != 0) {
-            long blurSignature = currentBlurSignature();
-            blurChanged = blurSignature != mLastPreviewBlurSignature;
-            mLastPreviewBlurSignature = blurSignature;
-        }
-        mHost.applyGlassPreview(blurChanged);
+        mHost.applyGlassPreview();
         // Mid-drag the card is showing the number under the finger already, and the rings do not
         // move; a full restatement per frame is CPU spent on pixels nobody is reading.
         if (mSurfaceEditorOpen && !mSliderDragActive)
             positionSelectionRings(false);
         syncDirtyActions();
-    }
-
-    /** Every resolved blur radius the glass pipeline reads, folded to one number. */
-    private long currentBlurSignature() {
-        TermuxAppSharedPreferences preferences = prefs();
-        if (preferences == null)
-            return Long.MIN_VALUE;
-        long signature = preferences.getExtraKeysBlurRadius();
-        signature = signature * 1_000_003L + preferences.getStatusBarBlurRadius();
-        signature = signature * 1_000_003L + preferences.getTerminalGlassBlurRadius();
-        return signature * 1_000_003L + preferences.getInAppKeyboardBlurRadius();
     }
 
     /** Broader live re-apply for controls that change dock geometry, terminal, or sessions surfaces. */

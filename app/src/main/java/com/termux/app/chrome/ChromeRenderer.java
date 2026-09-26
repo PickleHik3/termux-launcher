@@ -512,10 +512,14 @@ public final class ChromeRenderer {
 
     /**
      * A new wallpaper (or a wallpaper the app can suddenly read) invalidates every pre-blurred
-     * frame and every crop taken from one.
+     * frame and every crop taken from one — but tagged as a wallpaper change, so the surface that
+     * refills each radius crossfades into it rather than swapping outright. Cleared directly rather
+     * than through {@link #SCOPE_WALLPAPER_BLUR_CACHE}, which is the untagged clear a rotation or a
+     * radius change asks for.
      */
     public void onWallpaperChanged() {
-        requestSync(SCOPE_WALLPAPER_BLUR_CACHE | SCOPE_BACKDROPS | SCOPE_ACCESSORY_RENDER);
+        mBlurCache.clearForWallpaperChange();
+        requestSync(SCOPE_BACKDROPS | SCOPE_ACCESSORY_RENDER);
     }
 
     /**

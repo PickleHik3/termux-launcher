@@ -152,6 +152,17 @@ public final class WallpaperBlurCache {
     @NonNull private final Set<Integer> mPending = new HashSet<>();
     /** Bumped by every clear; a result that comes back from an older generation is dropped. */
     private int mGeneration;
+    /**
+     * Radii a {@link #clearForWallpaperChange()} displaced, still waiting for their replacement.
+     * The surface that first refills one of these — {@link #isCrossfadedRadius} turns true for it
+     * — is the one that should crossfade rather than swap outright; every other radius, and every
+     * plain {@link #clear()}, never sets this, so a rotation or a radius change keeps swapping
+     * instantly. A second clear before a radius refills drops it from here: its retired picture is
+     * two wallpapers stale, nothing to fade from.
+     */
+    @NonNull private final Set<Integer> mPendingCrossfadeRadii = new HashSet<>();
+    /** Radii whose resident frame arrived to replace one a wallpaper change displaced. */
+    @NonNull private final Set<Integer> mCrossfadedRadii = new HashSet<>();
 
     public WallpaperBlurCache(@NonNull Source source) {
         this(source, null);
@@ -368,6 +379,23 @@ public final class WallpaperBlurCache {
         }
         recordSource(frameRect, orientation, managedSource, systemWallpaperId,
             managedLastModified, managedLength);
+        if (mPendingCrossfadeRadii.remove(blurRadiusDp)) {
+            mCrossfadedRadii.add(blurRadiusDp);
+        } else {
+            mCrossfadedRadii.remove(blurRadiusDp);
+        }
+    }
+
+    /**
+     * True while the frame now resident for {@code blurRadiusDp} arrived to replace one a wallpaper
+     * change displaced, rather than a rotation, a radius change, or the first fill of a radius. A
+     * surface reads this once, at the moment it notices the bitmap it is drawing changed identity,
+     * to decide whether that swap crossfades or lands outright; it stays true until the radius is
+     * next refilled for some other reason, but a surface that swaps only once per fresh bitmap never
+     * asks twice.
+     */
+    public boolean isCrossfadedRadius(int blurRadiusDp) {
+        return mCrossfadedRadii.contains(blurRadiusDp);
     }
 
     private void recordSource(@NonNull Rect frameRect, int orientation, boolean managedSource,
@@ -445,20 +473,41 @@ public final class WallpaperBlurCache {
 
     /**
      * Empties the cache, recycling every frame nothing is drawing. Traced as {@code Blur.clear} so
-     * a system trace shows which event emptied it before a run of {@code Blur.miss}.
+     * a system trace shows which event emptied it before a run of {@code Blur.miss}. The swap that
+     * follows lands outright — a rotation, a radius change, a zoom, a managed file landing, a trim —
+     * none of those is a picture the viewer should watch fade in.
      */
     public void clear() {
+        doClear(false);
+    }
+
+    /**
+     * The wallpaper itself changed. Emptied the same way {@link #clear()} does, except the radii
+     * this displaces are marked so whichever surface refills one first crossfades into it instead
+     * of swapping outright — see {@link #isCrossfadedRadius}.
+     */
+    public void clearForWallpaperChange() {
+        doClear(true);
+    }
+
+    private void doClear(boolean crossfade) {
         Trace.beginSection("Blur.clear");
         try {
-            doClear();
+            doClearTraced(crossfade);
         } finally {
             Trace.endSection();
         }
     }
 
-    private void doClear() {
+    private void doClearTraced(boolean crossfade) {
         mGeneration++;
         mPending.clear();
+        // A radius still waiting from an earlier wallpaper-change clear has nothing left to fade
+        // from that is worth showing — a second change landed before the first one's replacement
+        // did — so it drops out rather than crossfading from a now-doubly-stale picture.
+        mPendingCrossfadeRadii.clear();
+        mCrossfadedRadii.clear();
+        if (crossfade) mPendingCrossfadeRadii.addAll(mByRadius.keySet());
         for (Bitmap cached : mByRadius.values()) {
             if (cached != null && !cached.isRecycled() && !mSource.isFrameInUse(cached)) {
                 cached.recycle();

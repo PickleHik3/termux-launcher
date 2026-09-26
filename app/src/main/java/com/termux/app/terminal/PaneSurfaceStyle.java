@@ -43,6 +43,14 @@ public interface PaneSurfaceStyle {
     int paneGapDp();
 
     /**
+     * True while {@link #paneGlassBlurFrame()} just arrived to replace one a wallpaper change
+     * displaced, so the pane should crossfade into it rather than swap outright — see
+     * {@code WallpaperBlurCache.isCrossfadedRadius}. False for a rotation, a radius change, or
+     * reduced motion, all of which still want the swap to land on the next frame.
+     */
+    default boolean paneGlassCrossfade() { return false; }
+
+    /**
      * What sits behind a page where no pane is: the wallpaper as the wall shows it, unblurred,
      * or null when a flat colour is behind. A page whose content cannot be clipped paints its
      * corner arcs with this.

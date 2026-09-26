@@ -88,6 +88,7 @@ import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.notice.TerminalDress;
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
+import com.termux.app.chrome.BitmapCrossfadeAnimator;
 import com.termux.app.chrome.ChromeInk;
 import com.termux.app.chrome.ChromePolicy;
 import com.termux.app.chrome.ChromeRenderer;
@@ -2823,6 +2824,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return obtainTerminalPaneGlassFrame();
             }
 
+            @Override public boolean paneGlassCrossfade() {
+                int radiusDp = mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0;
+                return mChrome.blurCache().isCrossfadedRadius(radiusDp)
+                    && !ReducedMotion.isEnabled(TermuxActivity.this);
+            }
+
             @Override @NonNull public Rect paneGlassBlurFrameRect() {
                 return mChrome.blurCache().frameRectRef();
             }
@@ -2968,7 +2975,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         Bitmap frame = mChrome.blurCache().obtain(0, wallpaperFrame);
-        backdrop.showFrame(frame, getManagedWallpaperFrameRect(), wallGroundColor());
+        boolean crossfade = mChrome.blurCache().isCrossfadedRadius(0) && !ReducedMotion.isEnabled(this);
+        backdrop.showFrame(frame, getManagedWallpaperFrameRect(), wallGroundColor(), crossfade);
     }
 
     /**
@@ -3112,7 +3120,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
             mWallpaperColorsChangedListener = (WallpaperColors colors, int which) -> {
-                mChrome.blurCache().clear();
+                // A wallpaper set outside the launcher is still a wallpaper change: tagged so the
+                // surface that refills each radius crossfades into it instead of swapping outright.
+                mChrome.blurCache().clearForWallpaperChange();
                 // How a wallpaper set outside the launcher reaches us: the picture can have gone
                 // from a still to a live wallpaper, or back, and every glass turns on that.
                 refreshWallpaperPicture();
@@ -5695,7 +5705,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Bitmap sourceBitmap = mManagedWallpaperSource.obtain(sourceFile, frameRect.width(),
             frameRect.height(), () -> {
                 if (isFinishing() || isDestroyed()) return;
-                mChrome.blurCache().clear();
+                // The managed file landing is a new wallpaper picture; tagged the same way, so the
+                // surface that refills each radius crossfades into it instead of swapping outright.
+                mChrome.blurCache().clearForWallpaperChange();
                 // The panes and the wall's pages hold the frame they were dressed with; they
                 // need the one that now exists, not only the accessory backdrops.
                 updateTerminalGlassFrost();
@@ -5985,9 +5997,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (frame == mPaneGlassFrame || frame == mWallBehindFrame) {
             return true;   // a pane is drawing it right now; recycling it would crash its next draw
         }
-        if (mWallpaperBackdropView != null && mWallpaperBackdropView.heldFrame() == frame) {
+        if (mWallpaperBackdropView != null && (mWallpaperBackdropView.heldFrame() == frame
+                || mWallpaperBackdropView.fadingFrame() == frame)) {
             // The self-drawn backdrop keeps the frame it is showing across a clear, so the wall
-            // does not flash the system wallpaper while the replacement is on the blur worker.
+            // does not flash the system wallpaper while the replacement is on the blur worker —
+            // and keeps the one it is fading out of for as long as that crossfade is still on screen.
             return true;
         }
         int[] frostIds = {R.id.command_palette_wallpaper_backdrop, R.id.terminal_sheet_wallpaper_backdrop,
@@ -6066,8 +6080,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
+        installAccessoryBackdropBitmap(backdrop, wallpaperBackdrop, state.blurRadiusDp);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            backdrop.setImageBitmap(wallpaperBackdrop);
             // The capsule sits inside the (horizontally overscanned) backdrop bitmap: left/right are
             // inset by the overscan, top/bottom span the full height. Hand that rect to the shader so
             // refraction happens at the real dock edge.
@@ -6089,8 +6103,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mGlassRadiusPx = radiusPx;
             mGlassParamsValid = (glass != null);
             backdrop.setRenderEffect(glass);
-        } else {
-            backdrop.setImageBitmap(wallpaperBackdrop);
         }
         // Content-aware light scatter — the frost that makes the blur read as glass, not plastic.
         backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
@@ -6106,6 +6118,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             clearInAppKeyboardBackdrop();
         }
+    }
+
+    /**
+     * Puts {@code crop} on the dock's backdrop, on the settle curve rather than outright when the
+     * cache says this radius's frame arrived to replace one a wallpaper change displaced — see
+     * {@link com.termux.app.chrome.WallpaperBlurCache#isCrossfadedRadius}. A rotation or a radius
+     * change never sets that flag, so those keep landing the way they always have.
+     */
+    private void installAccessoryBackdropBitmap(@NonNull ImageView backdrop, @NonNull Bitmap crop,
+                                                 int blurRadiusDp) {
+        Drawable previous = backdrop.getDrawable();
+        Bitmap previousBitmap = previous instanceof BitmapDrawable
+            ? ((BitmapDrawable) previous).getBitmap() : null;
+        boolean crossfade = previousBitmap != null && previousBitmap != crop
+            && !previousBitmap.isRecycled()
+            && mChrome.blurCache().isCrossfadedRadius(blurRadiusDp);
+        if (!crossfade) {
+            backdrop.setImageBitmap(crop);
+            return;
+        }
+        BitmapCrossfadeAnimator.run(backdrop, previousBitmap, crop,
+            ReducedMotion.isEnabled(this), (frame, finished) -> backdrop.setImageBitmap(frame));
     }
 
     private boolean isAccessoryBackdropCropHeightCompatible(@NonNull ImageView backdrop,
@@ -9314,11 +9348,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
 
-        @Override public void applyGlassPreview(boolean blurChanged) {
-            // Only a radius control may throw away the shared pre-blurred wallpaper frames; every
-            // other slider re-renders on top of them.
-            mChrome.requestSync((blurChanged ? ChromeRenderer.SCOPE_WALLPAPER_BLUR_CACHE : 0)
-                | ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
+        @Override public void applyGlassPreview() {
+            // A radius the editor settled on is simply a new key in the blur cache: obtain() fills
+            // it in the background without touching the radii already resident, so releasing a
+            // blur slider re-blurs only the one radius that moved rather than every surface's.
+            mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
             // Styling only: this runs once per frame of a drag, and the full preference apply
             // rebuilds the dock's whole app row.
             applySuggestionBarSurfaceStyling();

@@ -16,6 +16,8 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.chrome.FrameCrossfade;
+
 /**
  * One pane's glass. Draws the shared pre-blurred wallpaper frame through this pane's own rect, the
  * terminal tint over it, and the film grain on top — the same three layers the whole-terminal glass
@@ -39,6 +41,14 @@ public final class PaneGlassBackdropView extends View {
 
     @Nullable private Bitmap mFrame;
     @Nullable private BitmapShader mFrameShader;
+    /**
+     * The frame {@link #mFrame} is fading in from. Held (not recycled) here through the fade so a
+     * scan for what is still on screen keeps finding it as long as this pane is still drawing it.
+     */
+    @Nullable private Bitmap mPreviousFrame;
+    @Nullable private BitmapShader mPreviousFrameShader;
+    private final Paint mPreviousFramePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+    @NonNull private final FrameCrossfade mCrossfade = new FrameCrossfade();
     @Nullable private Drawable mGrain;
     /** The grain strength {@link #mGrain} was built from: a fresh drawable is not comparable. */
     private int mGrainStrength;
@@ -72,6 +82,18 @@ public final class PaneGlassBackdropView extends View {
     }
 
     /**
+     * {@link #setGlass(Bitmap, Rect, int, Drawable, int, float, ColorFilter, boolean)} without a
+     * crossfade — the swap lands outright, which is what a corner mask (never tracked for a
+     * crossfade) and every caller that predates the wallpaper crossfade both still want.
+     */
+    public boolean setGlass(@Nullable Bitmap frame, @NonNull Rect frameRect, int tintColor,
+                            @Nullable Drawable grain, int grainStrength, float radiusPx,
+                            @Nullable ColorFilter frostFilter) {
+        return setGlass(frame, frameRect, tintColor, grain, grainStrength, radiusPx, frostFilter,
+            false);
+    }
+
+    /**
      * Dress this pane, or leave it exactly as it is.
      *
      * <p>Every chrome apply re-dresses every pane, and there are two applies to a frame; a page
@@ -80,6 +102,14 @@ public final class PaneGlassBackdropView extends View {
      * tint, grain, radius and filter, is not a re-dress: it returns without building a shader or
      * invalidating, and the pane keeps the matrix it had. The frame is compared by identity, never
      * by pixels — a newly blurred frame is a new bitmap, which is what makes that sound.</p>
+     *
+     * <p>{@code frame} null while a fresh blur is in flight is not a reason to go tint-only: this
+     * pane keeps drawing whatever it already had — {@code frame} simply loses the comparison to
+     * {@code mFrame} below — until the next pass hands it a real one. {@code crossfade} asks for
+     * the swap from that frame to a genuinely new one to fade over
+     * {@link FrameCrossfade#DURATION_MS} instead of landing on the next draw; the caller already
+     * knows this arrived to replace one a wallpaper change displaced, never a rotation or a radius
+     * change.</p>
      *
      * @param frame         shared pre-blurred wallpaper frame, or null for a tint-and-grain-only pane
      * @param frameRect     that frame's rect in screen coordinates
@@ -90,14 +120,26 @@ public final class PaneGlassBackdropView extends View {
      */
     public boolean setGlass(@Nullable Bitmap frame, @NonNull Rect frameRect, int tintColor,
                             @Nullable Drawable grain, int grainStrength, float radiusPx,
-                            @Nullable ColorFilter frostFilter) {
-        Bitmap live = frame != null && !frame.isRecycled() ? frame : null;
+                            @Nullable ColorFilter frostFilter, boolean crossfade) {
+        Bitmap requested = frame != null && !frame.isRecycled() ? frame : null;
+        Bitmap live = requested != null ? requested : mFrame;
         if (mDressed && live == mFrame && mTintColor == tintColor && mRadiusPx == radiusPx
             && mGrainStrength == grainStrength && (mGrain == null) == (grain == null)
             && mFrostFilter == frostFilter && mFrameRect.equals(frameRect)) {
             return false;
         }
         mDressed = true;
+        if (live != mFrame) {
+            if (crossfade && mFrame != null && !mFrame.isRecycled() && mFrameRect.equals(frameRect)) {
+                mPreviousFrame = mFrame;
+                mPreviousFrameShader = mFrameShader;
+            } else {
+                mPreviousFrame = null;
+                mPreviousFrameShader = null;
+                mCrossfade.cancel();
+            }
+            if (mPreviousFrame != null) mCrossfade.start();
+        }
         mFrame = live;
         // CLAMP, and drawn as a shader rather than as a bitmap: the cached frame does not always
         // reach the full width of the screen (it is downsampled for the blur, and on ROMs that
@@ -115,6 +157,7 @@ public final class PaneGlassBackdropView extends View {
         mRadiusPx = radiusPx;
         mFrostFilter = frostFilter;
         mFramePaint.setColorFilter(frostFilter);
+        mPreviousFramePaint.setColorFilter(frostFilter);
         mLastLeft = Integer.MIN_VALUE;   // force the matrix to be rebuilt against the new frame
         invalidate();
         return true;
@@ -150,6 +193,22 @@ public final class PaneGlassBackdropView extends View {
         invalidate();
     }
 
+    /** The frame this pane is drawing, so the blur cache never recycles it under a draw. */
+    @Nullable
+    public Bitmap heldFrame() {
+        return mFrame;
+    }
+
+    /**
+     * The frame a crossfade is still fading out of, so the blur cache never recycles it mid-fade —
+     * null once the fade has landed on {@link #heldFrame()} alone, or when the last swap never
+     * crossfaded at all.
+     */
+    @Nullable
+    public Bitmap fadingFrame() {
+        return mCrossfade.isFinished() ? null : mPreviousFrame;
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         int width = getWidth();
@@ -177,8 +236,28 @@ public final class PaneGlassBackdropView extends View {
                 mFrameMatrix.setScale(scaleX, scaleY);
                 mFrameMatrix.postTranslate(mFrameRect.left - mLastLeft, mFrameRect.top - mLastTop);
                 mFrameShader.setLocalMatrix(mFrameMatrix);
+                // The retired frame shares this pane's rect and, always, the current frame's own
+                // size — both are full captures of the same radius — so the same matrix aims it.
+                if (mPreviousFrameShader != null) mPreviousFrameShader.setLocalMatrix(mFrameMatrix);
             }
-            canvas.drawRect(0f, 0f, width, height, mFramePaint);
+            float progress = mCrossfade.progress();
+            boolean fading = progress < 1f && mPreviousFrame != null && !mPreviousFrame.isRecycled()
+                && mPreviousFrameShader != null
+                && mPreviousFrame.getWidth() == mFrame.getWidth()
+                && mPreviousFrame.getHeight() == mFrame.getHeight();
+            if (fading) {
+                mPreviousFramePaint.setShader(mPreviousFrameShader);
+                mPreviousFramePaint.setAlpha(255);
+                canvas.drawRect(0f, 0f, width, height, mPreviousFramePaint);
+                mFramePaint.setAlpha(Math.round(255f * progress));
+                canvas.drawRect(0f, 0f, width, height, mFramePaint);
+                postInvalidateOnAnimation();
+            } else {
+                mPreviousFrame = null;
+                mPreviousFrameShader = null;
+                mFramePaint.setAlpha(255);
+                canvas.drawRect(0f, 0f, width, height, mFramePaint);
+            }
         }
         // A corner mask stands in for what is behind the page, so it takes neither the pane
         // tint nor the grain: those belong to a pane's own slab, and the page has none. It takes

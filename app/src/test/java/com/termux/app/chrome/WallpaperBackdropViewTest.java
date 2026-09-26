@@ -113,4 +113,51 @@ public class WallpaperBackdropViewTest {
         assertEquals(View.VISIBLE, backdrop.getVisibility());
         assertFalse(backdrop.isOpaque());
     }
+
+    // ------------------------------------------------------------- crossfade
+
+    @Test
+    public void aCrossfadedSwapKeepsTheOldFrameAliveWhileItFades() {
+        Bitmap wallpaper = frame(PORTRAIT);
+        Bitmap replacement = frame(PORTRAIT);
+        backdrop.showFrame(wallpaper, PORTRAIT, DIM);
+
+        backdrop.showFrame(replacement, PORTRAIT, DIM, true);
+
+        assertSame("the target frame is up right away for the next obtain() to compare against",
+            replacement, backdrop.heldFrame());
+        assertSame("the previous frame is still held so the cache cannot recycle it mid-fade",
+            wallpaper, backdrop.fadingFrame());
+    }
+
+    @Test
+    public void aSwapWithoutCrossfadeNeverKeepsAPreviousFrame() {
+        Bitmap wallpaper = frame(PORTRAIT);
+        Bitmap replacement = frame(PORTRAIT);
+        backdrop.showFrame(wallpaper, PORTRAIT, DIM);
+
+        backdrop.showFrame(replacement, PORTRAIT, DIM, false);
+
+        assertSame(replacement, backdrop.heldFrame());
+        assertNull("a rotation or a radius change lands outright, nothing to fade from",
+            backdrop.fadingFrame());
+    }
+
+    @Test
+    public void aCrossfadeIsNeverOfferedAcrossAMovedFrameRect() {
+        Bitmap wallpaper = frame(PORTRAIT);
+        backdrop.showFrame(wallpaper, PORTRAIT, DIM);
+        layout(backdrop, LANDSCAPE.width(), LANDSCAPE.height());
+
+        backdrop.showFrame(frame(LANDSCAPE), LANDSCAPE, DIM, true);
+
+        assertNull("the pixels would land in the wrong place, so this still swaps outright",
+            backdrop.fadingFrame());
+    }
+
+    @Test
+    public void theFirstFrameEverShownNeverFadesFromAnything() {
+        backdrop.showFrame(frame(PORTRAIT), PORTRAIT, DIM, true);
+        assertNull(backdrop.fadingFrame());
+    }
 }

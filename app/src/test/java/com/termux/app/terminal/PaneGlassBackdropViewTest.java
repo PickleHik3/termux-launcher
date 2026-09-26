@@ -2,6 +2,8 @@ package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -133,5 +135,69 @@ public class PaneGlassBackdropViewTest {
 
         assertEquals(540, after[0] - before[0]);
         assertEquals(0, after[1] - before[1]);
+    }
+
+    // ------------------------------------------------------------- retained + crossfaded frame
+
+    /**
+     * A miss while a fresh blur is in flight — a radius the editor just settled on, a source the
+     * cache is still re-capturing — is not a reason for the pane to go tint-only.
+     */
+    @Test
+    public void aNullFrameKeepsWhateverThePaneWasAlreadyDrawing() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        Bitmap frame = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Rect frameRect = new Rect(0, 0, 40, 60);
+        backdrop.setGlass(frame, frameRect, 0x40FF0000, null, 0, 12f, null);
+
+        backdrop.setGlass(null, frameRect, 0x40FF0000, null, 0, 12f, null);
+
+        assertSame("the pane keeps drawing the frame it already had", frame, backdrop.heldFrame());
+    }
+
+    @Test
+    public void aCrossfadedSwapKeepsTheOldFrameAliveWhileItFades() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        Bitmap frame = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Bitmap replacement = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Rect frameRect = new Rect(0, 0, 40, 60);
+        backdrop.setGlass(frame, frameRect, 0x40FF0000, null, 0, 12f, null, false);
+
+        backdrop.setGlass(replacement, frameRect, 0x40FF0000, null, 0, 12f, null, true);
+
+        assertSame("the target frame is up right away", replacement, backdrop.heldFrame());
+        assertSame("the previous frame is held so the cache cannot recycle it mid-fade",
+            frame, backdrop.fadingFrame());
+    }
+
+    @Test
+    public void aSwapWithoutCrossfadeNeverKeepsAPreviousFrame() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        Bitmap frame = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Bitmap replacement = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Rect frameRect = new Rect(0, 0, 40, 60);
+        backdrop.setGlass(frame, frameRect, 0x40FF0000, null, 0, 12f, null, false);
+
+        backdrop.setGlass(replacement, frameRect, 0x40FF0000, null, 0, 12f, null, false);
+
+        assertNull("a rotation or a radius change lands outright, nothing to fade from",
+            backdrop.fadingFrame());
+    }
+
+    @Test
+    public void aCrossfadeIsNeverOfferedAcrossAMovedFrameRect() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        Bitmap frame = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Bitmap replacement = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        backdrop.setGlass(frame, new Rect(0, 0, 40, 60), 0x40FF0000, null, 0, 12f, null, false);
+
+        backdrop.setGlass(replacement, new Rect(0, 8, 40, 68), 0x40FF0000, null, 0, 12f, null, true);
+
+        assertNull("the pixels would land in the wrong place, so this still swaps outright",
+            backdrop.fadingFrame());
     }
 }
