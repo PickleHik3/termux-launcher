@@ -50,8 +50,13 @@ public class CleanupModelPreferencesFragment extends MaterialPreferenceFragment 
         SettingsLayoutUtils.applyScreenLayout(this);
         Preference openTaiSettings = findPreference(KEY_OPEN_TAI_SETTINGS);
         if (openTaiSettings != null) openTaiSettings.setOnPreferenceClickListener(preference -> {
-            startActivity(com.termux.app.activities.SettingsActivity.createFragmentIntent(context,
-                TaiPreferencesFragment.class, R.string.settings_tai_service_title));
+            // Pushed in place instead of relaunched with startActivity, so Back returns to this
+            // screen instead of closing Settings; this fragment only ever lives inside
+            // SettingsActivity, so the cast is always safe.
+            if (getActivity() instanceof com.termux.app.activities.SettingsActivity) {
+                ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
+                    TaiPreferencesFragment.class, R.string.settings_tai_service_title, null);
+            }
             return true;
         });
         refresh(context);
