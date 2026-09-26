@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Thin line icon for the Model centre (a 1.5 stroke on a 24 grid), tinted by the view. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="@android:color/white"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5,6.5C5,5.67 5.67,5 6.5,5L17.5,5C18.33,5 19,5.67 19,6.5L19,14.5C19,15.33 18.33,16 17.5,16L10,16L6.5,19L6.5,16C5.67,16 5,15.33 5,14.5Z" />
+</vector>

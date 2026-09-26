@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The selected segment: the raised surface, not the primary fill the settings switches use,
+     so the Install pills stay the loudest thing on the screen. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="?attr/termuxColorSurfacePanelHighest" />
+    <corners android:radius="999dp" />
+</shape>

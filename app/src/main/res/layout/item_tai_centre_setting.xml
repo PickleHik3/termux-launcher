@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Model centre, bottom: how many downloads run at once (1 to 3). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="16dp"
+    android:paddingTop="18dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="8dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/tai_centre_shell"
+        android:padding="4dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/tai_centre_core"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="14dp"
+            android:paddingTop="12dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/tai_centre_setting_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/tai_centre_parallel_title"
+                    android:textColor="?attr/termuxColorOnSurface"
+                    android:textSize="13.5sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/tai_centre_parallel_summary"
+                    android:textColor="?attr/termuxColorOnSurfaceVariant"
+                    android:textSize="11.5sp" />
+            </LinearLayout>
+
+            <com.termux.app.fragments.settings.termux.TaiSegmentedTabs
+                android:id="@+id/tai_centre_parallel"
+                android:layout_width="120dp"
+                android:layout_height="36dp"
+                android:layout_marginStart="10dp"
+                android:contentDescription="@string/tai_centre_parallel_title" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

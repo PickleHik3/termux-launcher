@@ -11,9 +11,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
-import android.text.SpannableStringBuilder;
-import android.text.Spanned;
-import android.text.style.ForegroundColorSpan;
+import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -26,11 +24,8 @@ import android.widget.TextView;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.preference.EditTextPreference;
 import androidx.preference.Preference;
-import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 
@@ -41,11 +36,8 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.StatusCardPreference;
 import com.termux.ai.TaiDeviceCapabilities;
+import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiManager;
-import com.termux.ai.TaiModelCatalog;
-import com.termux.ai.TaiModelImporter;
-import com.termux.ai.TaiModelProfile;
-import com.termux.ai.TaiModelRegistry;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiSettings;
@@ -58,13 +50,11 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 @Keep
-public class TaiPreferencesFragment extends MaterialPreferenceFragment implements TaiImportFlow.Host {
-    private static final String MODEL_ROW_PREFIX = "tai_model_row_";
+public class TaiPreferencesFragment extends MaterialPreferenceFragment implements TaiDownloadHub.Listener {
 
     private static final class OverrideSpec {
         final String key;
@@ -101,19 +91,14 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
             R.array.termux_ai_idle_unload_entries, R.array.termux_ai_idle_unload_values, "10"),
     };
     private final Handler handler = new Handler(Looper.getMainLooper());
-    @Nullable private volatile JSONObject lastRuntimeStatus;
     private final ExecutorService runtimeActionExecutor = Executors.newFixedThreadPool(2, runnable -> {
         Thread thread = new Thread(runnable, "tai-settings-runtime");
         thread.setDaemon(true);
         return thread;
     });
-    // Adding a model is TaiImportFlow's job; this screen only launches it, owns the two system
-    // pickers it needs (they must be registered on a fragment) and redraws when it says so.
-    private final TaiImportFlow importFlow = new TaiImportFlow(this);
-    private final ActivityResultLauncher<String[]> modelPicker = registerForActivityResult(
-        new ActivityResultContracts.OpenDocument(), importFlow::onFileSelected);
-    private final ActivityResultLauncher<Uri> modelFolderPicker = registerForActivityResult(
-        new ActivityResultContracts.OpenDocumentTree(), importFlow::onFolderSelected);
+    /** Model count for the Model centre row; re-read only when a download changes status. */
+    private int installedCount = -1;
+    @NonNull private String downloadStatuses = "";
     private final Runnable refreshRuntimeRunnable = new Runnable() {
         @Override
         public void run() {
@@ -150,8 +135,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         configureRuntimeControls(context);
         configureOverrides(context);
         configureEndpointPreferences(context);
-        configureModelManager(context);
-        configureSttMovedRow(context);
+        configureModelCentreRow();
         configureHuggingFaceToken();
         configureAdvancedSection(context);
         configureLanToggle(context);
@@ -173,9 +157,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
                 case TaiSettings.KEY_SYSTEM_PROMPT_GENERAL:
                     showGeneralPromptDialog(context, editText);
                     return;
-                case "tai_mnn_custom_download":
-                    showMnnCustomDownloadDialog(context, editText);
-                    return;
                 default:
                     break;
             }
@@ -192,6 +173,21 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
                 preference.setText(input.getText().toString()))
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        Context context = getContext();
+        // The Model centre row's summary and progress line follow the hub's pushes; no polling.
+        if (context != null) TaiDownloadHub.get(context).addListener(this);
+    }
+
+    @Override
+    public void onStop() {
+        Context context = getContext();
+        if (context != null) TaiDownloadHub.get(context).removeListener(this);
+        super.onStop();
     }
 
     @Override
@@ -250,11 +246,9 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
 
     /** Apply a (possibly null) pre-fetched runtime status plus the non-blocking page bits, on the UI thread. */
     private void applyTaiPage(Context context, @Nullable JSONObject runtimeStatus) {
-        lastRuntimeStatus = runtimeStatus;
         updateRuntimeStatus(context, runtimeStatus);
         refreshOverrides();
         refreshEndpointPreferences(context);
-        populateModelRows(context);
         refreshLanToggle(context);
     }
 
@@ -663,95 +657,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
             .show();
     }
 
-    private void showMnnCustomDownloadDialog(Context context, EditTextPreference preference) {
-        EditText input = buildDialogEditText(context, preference.getText(),
-            InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI, false);
-
-        TextView warning = new TextView(context);
-        warning.setText(R.string.termux_ai_mnn_custom_download_warning);
-        warning.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        int padH = Math.round(24 * context.getResources().getDisplayMetrics().density);
-        warning.setPadding(0, Math.round(12 * context.getResources().getDisplayMetrics().density), 0, 0);
-
-        LinearLayout layout = wrapDialogView(context, null, input);
-        layout.addView(warning);
-
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_ai_mnn_custom_download_title)
-            .setView(dialogScroll(context, layout))
-            .setPositiveButton(R.string.termux_ai_dialog_save, (dialog, which) -> {
-                String url = input.getText().toString().trim();
-                if (!url.startsWith("https://")) {
-                    AppNotice.show(context, R.string.termux_ai_mnn_custom_download_invalid_url, true);
-                    return;
-                }
-                startMnnCustomDownload(context, url);
-            })
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
-    private void startMnnCustomDownload(Context context, String url) {
-        String modelId = deriveModelIdFromUrl(url);
-        runtimeActionExecutor.execute(() -> {
-            JSONObject result = null;
-            try {
-                JSONObject request = new JSONObject();
-                request.put("modelId", modelId);
-                request.put("url", url);
-                request.put("acceptedTerms", true);
-                JSONArray capabilities = new JSONArray();
-                capabilities.put(TaiModelSpec.CAPABILITY_TEXT_CHAT);
-                request.put("capabilities", capabilities);
-                result = TaiManager.getInstance(context.getApplicationContext()).downloadModel(request.toString());
-            } catch (JSONException | RuntimeException ignored) {
-            }
-            JSONObject finalResult = result;
-            handler.post(() -> {
-                Context currentContext = getContext();
-                if (currentContext == null) return;
-                if (finalResult != null && finalResult.optBoolean("ok", false)) {
-                    AppNotice.show(currentContext, R.string.termux_ai_model_download_started, false);
-                    handler.removeCallbacks(refreshRuntimeRunnable);
-                    handler.postDelayed(refreshRuntimeRunnable, 1000L);
-                } else {
-                    String message = finalResult == null
-                        ? currentContext.getString(R.string.termux_ai_model_action_failed)
-                        : finalResult.optString("message", currentContext.getString(R.string.termux_ai_model_action_failed));
-                    AppNotice.show(currentContext, message, true);
-                }
-                refreshTaiPage(currentContext);
-            });
-        });
-    }
-
-    private String deriveModelIdFromUrl(String url) {
-        try {
-            // For a .../resolve/main/<file> URL the file name (config.json) is useless as an id;
-            // use the repo name instead. For a bare repo URL the last segment is the repo name.
-            int resolve = url == null ? -1 : url.indexOf("/resolve/");
-            String basis = resolve > 0 ? url.substring(0, resolve) : url;
-            String lastSegment = Uri.parse(basis).getLastPathSegment();
-            if (lastSegment != null && !lastSegment.isEmpty()) {
-                String sanitized = TaiModelImporter.sanitizeModelId(
-                    TaiModelImporter.stripModelExtension(lastSegment));
-                if (!sanitized.isEmpty()) return sanitized;
-            }
-        } catch (Exception ignored) {
-        }
-        return "custom-mnn-model";
-    }
-
-    private String buildModelRowSummary(String baseSummary, String backend) {
-        String backendLabel;
-        if (TaiModelSpec.BACKEND_MNN_LLM.equals(backend)) {
-            backendLabel = getString(R.string.termux_ai_backend_label_mnn);
-        } else {
-            backendLabel = getString(R.string.termux_ai_backend_label_litert);
-        }
-        return baseSummary + " · " + backendLabel;
-    }
-
     private void updateRuntimeStatus(Context context, @Nullable JSONObject runtimeStatus) {
         Preference status = findPreference("tai_runtime_status");
         TaiRuntimeActionsPreference actions = findPreference("tai_runtime_actions");
@@ -855,29 +760,40 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         builder.append(String.format(Locale.US, "%-9s", key)).append(value).append('\n');
     }
 
-    private void configureModelManager(Context context) {
-        Preference browseCatalog = findPreference("tai_models_browse_catalog");
-        if (browseCatalog != null) {
-            browseCatalog.setSummary(R.string.termux_ai_models_browse_catalog_summary);
-        }
+    private void configureModelCentreRow() {
+        Preference centre = findPreference("tai_model_centre");
+        if (centre == null) return;
+        centre.setOnPreferenceClickListener(preference -> {
+            TaiModelCentreFragment.open(getActivity(), TaiModelCentreFragment.SEGMENT_INSTALLED);
+            return true;
+        });
+    }
 
-        Preference importModel = findPreference("tai_model_import");
-        if (importModel != null) {
-            importModel.setSummary(R.string.termux_ai_model_import_summary);
-            importModel.setOnPreferenceClickListener(preference -> {
-                importFlow.start();
-                return true;
-            });
+    /** Keeps the Model centre row's "N installed · M downloading" and its progress line current. */
+    @Override
+    public void onDownloadsChanged(@NonNull List<TaiDownloadHub.Snapshot> downloads) {
+        Context context = getContext();
+        TaiModelCentreRowPreference row = findPreference("tai_model_centre");
+        if (context == null || row == null) return;
+        StringBuilder statuses = new StringBuilder();
+        List<TaiModelCentreRows.Input> inputs = new ArrayList<>(downloads.size());
+        for (TaiDownloadHub.Snapshot item : downloads) {
+            inputs.add(TaiModelCentreRows.Input.of(item));
+            statuses.append(item.id).append('=').append(item.status).append(';');
         }
-
-        Preference refresh = findPreference("tai_models_refresh");
-        if (refresh != null) {
-            refresh.setOnPreferenceClickListener(preference -> {
-                refreshTaiPage(context);
-                return true;
-            });
+        // A finished download changes the installed count; a progress tick does not, so the
+        // store is read only when some status moved.
+        if (installedCount < 0 || !statuses.toString().equals(downloadStatuses)) {
+            installedCount = new TaiModelStore(context).getInstalledUserModels().size();
+            downloadStatuses = statuses.toString();
         }
-        refreshTaiPage(context);
+        TaiModelCentreRows.Summary summary = TaiModelCentreRows.summarize(inputs);
+        String text;
+        if (summary.downloading > 0) text = getString(R.string.tai_model_centre_row_summary_busy, installedCount, summary.downloading);
+        else if (summary.paused > 0) text = getString(R.string.tai_model_centre_row_summary_paused, installedCount, summary.paused);
+        else text = getString(R.string.tai_model_centre_row_summary, installedCount);
+        if (!TextUtils.equals(text, row.getSummary())) row.setSummary(text);
+        row.setProgress(summary.downloading > 0, summary.progress);
     }
 
     private void cancelGeneration(Context context) {
@@ -990,204 +906,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
             .show();
     }
 
-    private void populateModelRows(Context context) {
-        PreferenceCategory category = findPreference("tai_models_category");
-        if (category == null) return;
-
-        for (int i = category.getPreferenceCount() - 1; i >= 0; i--) {
-            Preference preference = category.getPreference(i);
-            if (preference != null && preference.getKey() != null && preference.getKey().startsWith(MODEL_ROW_PREFIX)) {
-                category.removePreference(preference);
-            }
-        }
-
-        TaiModelStore store = new TaiModelStore(context);
-        store.pruneMissingUserModels();
-        Map<String, TaiModelSpec> installedModels = store.getInstalledUserModels();
-        Preference empty = findPreference("tai_models_empty");
-        boolean anyChatModel = false;
-        String activeModelId = new TaiSettings(context).getDefaultAssistantModel();
-        String loadedId = loadedModelId();
-
-        for (TaiModelSpec model : installedModels.values()) {
-            // Speech-to-text models (Whisper) live in the "Speech-to-text" section, not the chat
-            // model list or the default-assistant picker.
-            if (model.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
-            anyChatModel = true;
-            TaiModelPreference row = new TaiModelPreference(context);
-            row.setKey(MODEL_ROW_PREFIX + model.id);
-            row.setTitle(model.displayName);
-            row.setSummary(buildModelRowSummary(model.roleHint, model.backend));
-            row.setMetaLine(buildInstalledMetaLine(context, model));
-            boolean modelLoaded = model.id.equals(loadedId);
-            String pill;
-            if (modelLoaded) {
-                pill = getString(R.string.termux_ai_model_state_loaded);
-            } else if (model.id.equals(activeModelId)) {
-                pill = getString(R.string.termux_ai_model_pill_active);
-            } else {
-                pill = getString(R.string.termux_ai_model_pill_installed);
-            }
-            row.setPill(pill, model.id.equals(activeModelId));
-            row.setBackendTone(TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend)
-                ? TaiModelPreference.BackendTone.MNN : TaiModelPreference.BackendTone.LITERT);
-            configureProgress(row, null);
-            row.setPersistent(false);
-            row.setOnPreferenceClickListener(preference -> {
-                showInstalledModelActions(context, model);
-                return true;
-            });
-            category.addPreference(row);
-        }
-        if (empty != null) empty.setVisible(!anyChatModel);
-    }
-
-    // ---- Speech-to-text: the models moved to Keyboard > Voice input > Speech model
-    // (SpeechModelPreferencesFragment); this page keeps one row that opens that screen. ----
-
-    private void configureSttMovedRow(Context context) {
-        Preference moved = findPreference("tai_stt_moved");
-        if (moved == null) return;
-        moved.setOnPreferenceClickListener(preference -> {
-            // Pushed in place instead of relaunched with startActivity, so Back returns to this
-            // screen instead of closing Settings; this fragment only ever lives inside
-            // SettingsActivity, so the cast is always safe.
-            if (getActivity() instanceof com.termux.app.activities.SettingsActivity) {
-                ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
-                    SpeechModelPreferencesFragment.class,
-                    R.string.settings_keyboard_voice_model_title, null);
-            }
-            return true;
-        });
-    }
-
-    private CharSequence buildInstalledMetaLine(Context context, TaiModelSpec model) {
-        String accel = null;
-        Integer minMemGb = model.recommendedRamGb > 0 ? model.recommendedRamGb : null;
-        try {
-            TaiModelProfile profile = TaiModelProfile.forModel(model);
-            accel = joinAccelerators(profile.compatibleAccelerators);
-            if (profile.minDeviceMemoryInGb != null) minMemGb = profile.minDeviceMemoryInGb;
-        } catch (Exception ignored) {
-        }
-        CharSequence meta = buildMetaLine(context, model.sizeBytes, accel, minMemGb);
-        // Multimodal LiteRT models are exposed over the API as modality-scoped ids
-        // (<id>, <id>-vision, <id>-audio); surface which modes the shell can select.
-        boolean image = model.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
-            || model.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT);
-        boolean audio = model.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)
-            || model.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
-        if (TaiModelSpec.BACKEND_LITERT_LM.equals(model.backend) && (image || audio)
-            && meta instanceof SpannableStringBuilder) {
-            StringBuilder modes = new StringBuilder("chat");
-            if (image) modes.append(" · vision");
-            if (audio) modes.append(" · audio");
-            SpannableStringBuilder builder = (SpannableStringBuilder) meta;
-            int keyColor = resolveAttrColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant);
-            int valueColor = resolveAttrColor(context, com.termux.shared.R.attr.termuxColorOnSurface);
-            builder.append("   ");
-            appendMeta(builder, "modes ", modes.toString(), keyColor, valueColor);
-        }
-        return meta;
-    }
-
-    private CharSequence buildMetaLine(Context context, long sizeBytes, String accel, Integer minMemGb) {
-        int keyColor = resolveAttrColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant);
-        int valueColor = resolveAttrColor(context, com.termux.shared.R.attr.termuxColorOnSurface);
-        SpannableStringBuilder builder = new SpannableStringBuilder();
-        appendMeta(builder, "size ", formatBytes(sizeBytes), keyColor, valueColor);
-        if (accel != null && !accel.isEmpty()) {
-            builder.append("   ");
-            appendMeta(builder, "accel ", accel, keyColor, valueColor);
-        }
-        if (minMemGb != null) {
-            builder.append("   ");
-            appendMeta(builder, "min mem ", minMemGb + " GiB", keyColor, valueColor);
-        }
-        return builder;
-    }
-
-    private void appendMeta(SpannableStringBuilder builder, String key, String value, int keyColor, int valueColor) {
-        int start = builder.length();
-        builder.append(key);
-        builder.setSpan(new ForegroundColorSpan(keyColor), start, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        start = builder.length();
-        builder.append(value);
-        builder.setSpan(new ForegroundColorSpan(valueColor), start, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-    }
-
-    private String joinAccelerators(List<String> accelerators) {
-        if (accelerators == null || accelerators.isEmpty()) return null;
-        StringBuilder joined = new StringBuilder();
-        for (int i = 0; i < accelerators.size(); i++) {
-            if (i > 0) joined.append(" · ");
-            joined.append(String.valueOf(accelerators.get(i)).toLowerCase(Locale.US));
-        }
-        return joined.toString();
-    }
-
-    private int resolveAttrColor(Context context, int attr) {
-        TypedValue value = new TypedValue();
-        if (context.getTheme().resolveAttribute(attr, value, true)) {
-            return value.data;
-        }
-        if (context.getTheme().resolveAttribute(android.R.attr.textColorSecondary, value, true)) {
-            return value.data;
-        }
-        return 0;
-    }
-
-    private void configureProgress(TaiModelPreference row, JSONObject download) {
-        if (download == null) {
-            row.setDownloadProgress(false, false, 0);
-            return;
-        }
-        String status = download.optString("status", "");
-        boolean active = TaiModelStore.STATE_QUEUED.equals(status)
-            || TaiModelStore.STATE_DOWNLOADING.equals(status)
-            || TaiModelStore.STATE_VERIFYING.equals(status);
-        long bytesRead = download.optLong("bytesRead", 0L);
-        long totalBytes = download.optLong("totalBytes", 0L);
-        row.setDownloadProgress(active, totalBytes <= 0L, totalBytes > 0L ? (int) (bytesRead * 10000L / totalBytes) : 0);
-    }
-
-    private String buildModelSummary(TaiModelCatalog.CatalogEntry entry, TaiModelSpec installed, JSONObject download) {
-        StringBuilder summary = new StringBuilder();
-        summary.append(entry.roleHint).append(" - ").append(formatBytes(entry.sizeBytes));
-        summary.append("\nBackend: ").append(entry.backend).append(" - ").append(entry.format);
-        if (entry.quantization != null) summary.append(" - ").append(entry.quantization);
-        if (entry.recommendedRamGb > 0) summary.append("\nRecommended memory: ").append(entry.recommendedRamGb).append(" GiB");
-        TaiModelSpec catalogModel = new TaiModelRegistry().getModel(entry.modelId);
-        if (catalogModel != null && TaiModelSpec.BACKEND_LITERT_LM.equals(entry.backend)) {
-            TaiModelProfile profile = TaiModelProfile.forModel(catalogModel);
-            summary.append("\nAccelerators: ").append(profile.compatibleAccelerators.toString());
-            if (profile.minDeviceMemoryInGb != null) {
-                summary.append(" - minimum memory ").append(profile.minDeviceMemoryInGb).append(" GiB");
-            }
-        }
-        if (entry.gated) {
-            summary.append(" - gated");
-        }
-        if (installed != null && installed.localPath != null) {
-            summary.append("\nInstalled: ").append(formatBytes(installed.sizeBytes));
-            summary.append("\n").append(installed.localPath);
-        } else if (download != null) {
-            summary.append("\nDownload: ").append(download.optString("status", "unknown"));
-            long bytesRead = download.optLong("bytesRead", 0L);
-            long totalBytes = download.optLong("totalBytes", 0L);
-            if (totalBytes > 0) {
-                summary.append(" ").append(formatPercent(bytesRead, totalBytes));
-            }
-            String error = download.optString("error", "");
-            if (!error.isEmpty()) {
-                summary.append("\n").append(error);
-            }
-        } else {
-            summary.append("\nNot installed");
-        }
-        return summary.toString();
-    }
-
     private String join(JSONArray values) {
         if (values == null || values.length() == 0) return "none";
         StringBuilder joined = new StringBuilder();
@@ -1198,133 +916,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         return joined.toString();
     }
 
-    private String buildInstalledModelSummary(TaiModelSpec model) {
-        StringBuilder summary = new StringBuilder();
-        summary.append(model.roleHint).append(" - ").append(model.source);
-        summary.append("\nBackend: ").append(model.backend).append(" - ").append(model.format);
-        if (model.quantization != null) summary.append(" - ").append(model.quantization);
-        if (model.recommendedRamGb > 0) summary.append("\nRecommended memory: ").append(model.recommendedRamGb).append(" GiB");
-        if (model.localPath != null) {
-            summary.append("\nInstalled: ").append(formatBytes(model.sizeBytes));
-            summary.append("\n").append(model.localPath);
-        }
-        summary.append("\nEndpoint capabilities: ").append(model.endpointCapabilities.toString());
-        if (!model.sourceCapabilities.equals(model.endpointCapabilities)) {
-            summary.append("\nSource capabilities: ").append(model.sourceCapabilities.toString());
-        }
-        summary.append("\nEndpoint context: ").append(model.endpointContextWindow);
-        if (model.sourceContextWindow != model.endpointContextWindow) {
-            summary.append(" · source ").append(model.sourceContextWindow);
-        }
-        try {
-            TaiModelProfile profile = TaiModelProfile.forModel(model);
-            summary.append("\nAccelerators: ").append(profile.compatibleAccelerators.toString());
-            if (profile.minDeviceMemoryInGb != null) {
-                summary.append(" - minimum memory ").append(profile.minDeviceMemoryInGb).append(" GiB");
-            }
-            summary.append("\nDefaults: ").append(model.defaultMaxOutputTokens).append(" max output tokens, temperature ")
-                .append(profile.defaultTemperature);
-        } catch (Exception ignored) {
-        }
-        return summary.toString();
-    }
-
-    private void showModelActions(Context context, TaiModelCatalog.CatalogEntry entry, TaiModelSpec installed, JSONObject download) {
-        if (download != null && (TaiModelStore.STATE_QUEUED.equals(download.optString("status"))
-            || TaiModelStore.STATE_DOWNLOADING.equals(download.optString("status"))
-            || TaiModelStore.STATE_VERIFYING.equals(download.optString("status")))) {
-            new MaterialAlertDialogBuilder(context)
-                .setTitle(entry.displayName)
-                .setMessage(buildModelSummary(entry, installed, download))
-                .setPositiveButton(R.string.termux_ai_model_download_cancel, (dialog, which) -> cancelModelDownload(context, entry.modelId))
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
-            return;
-        }
-        if (installed != null) {
-            new MaterialAlertDialogBuilder(context)
-                .setTitle(entry.displayName)
-                .setMessage(buildModelSummary(entry, installed, download))
-                .setPositiveButton(R.string.termux_ai_model_load_action, (dialog, which) -> loadModel(context, entry.modelId))
-                .setNeutralButton(R.string.termux_ai_model_delete_action, (dialog, which) -> deleteModel(context, entry.modelId))
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
-            return;
-        }
-
-        if (entry.gated) {
-            new MaterialAlertDialogBuilder(context)
-                .setTitle(R.string.termux_ai_model_gated_title)
-                .setMessage(context.getString(R.string.termux_ai_model_gated_message, entry.displayName))
-                .setPositiveButton(R.string.termux_ai_model_download_start, (dialog, which) -> startCatalogDownload(context, entry))
-                .setNeutralButton(R.string.termux_ai_model_open_provider, (dialog, which) -> openUrl(context, entry.providerPageUrl))
-                .setNegativeButton(android.R.string.cancel, null)
-                .show();
-            return;
-        }
-
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(context.getString(R.string.termux_ai_model_download_title, entry.displayName))
-            .setMessage(context.getString(R.string.termux_ai_model_download_message,
-                entry.displayName, formatBytes(entry.sizeBytes), entry.license))
-            .setPositiveButton(R.string.termux_ai_model_download_start, (dialog, which) -> startCatalogDownload(context, entry))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
-    @Nullable
-    private String loadedModelId() {
-        JSONObject status = lastRuntimeStatus;
-        if (status == null) return null;
-        try {
-            JSONObject runtime = status.getJSONObject("runtime");
-            if (runtime.optBoolean("loaded", false) || "loading".equals(runtime.optString("state", ""))) {
-                String id = runtime.optString("loadedModelId", "");
-                return id.isEmpty() ? null : id;
-            }
-        } catch (JSONException ignored) {
-        }
-        return null;
-    }
-
-    private boolean isModelLoaded(@Nullable String modelId) {
-        if (modelId == null) return false;
-        return modelId.equals(loadedModelId());
-    }
-
-    private void showInstalledModelActions(Context context, TaiModelSpec model) {
-        boolean active = model.id.equals(new TaiSettings(context).getDefaultAssistantModel());
-        boolean loaded = isModelLoaded(model.id);
-        String stateLine = loaded
-            ? getString(R.string.termux_ai_model_state_loaded)
-            : active
-                ? getString(R.string.termux_ai_model_pill_active)
-                : getString(R.string.termux_ai_model_pill_installed);
-        CharSequence[] actions = new CharSequence[] {
-            getString(R.string.termux_ai_model_load_action),
-            active ? getString(R.string.termux_ai_model_active_action) : getString(R.string.termux_ai_model_set_active_action),
-            getString(R.string.termux_ai_model_tune_action),
-            loaded ? getString(R.string.termux_ai_model_delete_action_loaded) : getString(R.string.termux_ai_model_delete_action)
-        };
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(model.displayName)
-            .setMessage(buildInstalledModelSummary(model) + "\n" + getString(R.string.termux_ai_model_state_label, stateLine))
-            .setItems(actions, (dialog, which) -> {
-                if (which == 0) loadModel(context, model.id);
-                else if (which == 1 && !active) setActiveModel(context, model.id);
-                else if (which == 2) openParameterScreen(model);
-                else if (which == 3) {
-                    if (loaded) {
-                        AppNotice.show(context, R.string.termux_ai_model_delete_loaded_warning, true);
-                    } else {
-                        confirmDeleteModel(context, model);
-                    }
-                }
-            })
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
     private void openParameterScreen(@Nullable TaiModelSpec model) {
         TaiParameterPreferencesFragment fragment = new TaiParameterPreferencesFragment();
         if (model != null) fragment.setArguments(TaiParameterPreferencesFragment.argumentsForModel(model));
@@ -1332,30 +923,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
             .replace(R.id.settings, fragment)
             .addToBackStack(null)
             .commit();
-    }
-
-    private void setActiveModel(Context context, String modelId) {
-        TaiModelSpec model = new TaiModelStore(context).getInstalledUserModels().get(modelId);
-        TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
-        if (model != null && TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend) && !capabilities.mnnSupported) {
-            String reason = capabilities.mnnUnsupportedReason;
-            AppNotice.show(context, reason == null ? context.getString(R.string.termux_ai_mnn_runtime_pending) : reason, true);
-            return;
-        }
-        SharedPreferences preferences = getPreferenceManager().getSharedPreferences();
-        if (preferences == null) return;
-        preferences.edit().putString(TaiSettings.KEY_ROLE_DEFAULT_ASSISTANT, modelId).apply();
-        AppNotice.show(context, R.string.termux_ai_model_active_saved, false);
-        refreshTaiPage(context);
-    }
-
-    private void confirmDeleteModel(Context context, TaiModelSpec model) {
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(getString(R.string.termux_ai_model_delete_title, model.displayName))
-            .setMessage(R.string.termux_ai_model_delete_message)
-            .setPositiveButton(R.string.termux_ai_model_delete_action, (dialog, which) -> deleteModel(context, model.id))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
     }
 
     private void showRuntimeLogs(Context context) {
@@ -1401,139 +968,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         return redacted;
     }
 
-    private void startCatalogDownload(Context context, TaiModelCatalog.CatalogEntry entry) {
-        try {
-            JSONObject result = TaiManager.getInstance(context).downloadCatalogModel(entry.modelId);
-            if (result.optBoolean("ok", false)) {
-                AppNotice.show(context, R.string.termux_ai_model_download_started, false);
-                handler.removeCallbacks(refreshRuntimeRunnable);
-                handler.postDelayed(refreshRuntimeRunnable, 1000L);
-            } else {
-                AppNotice.show(context, result.optString("message", context.getString(R.string.termux_ai_model_action_failed)), true);
-            }
-            refreshTaiPage(context);
-        } catch (JSONException e) {
-            AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
-        }
-    }
-
-    private void cancelModelDownload(Context context, String modelId) {
-        try {
-            JSONObject result = TaiManager.getInstance(context).cancelDownload(
-                new JSONObject().put("modelId", modelId).toString());
-            AppNotice.show(context, result.optBoolean("ok", false)
-                ? R.string.termux_ai_model_download_cancelled
-                : R.string.termux_ai_model_action_failed, false);
-            refreshTaiPage(context);
-        } catch (JSONException e) {
-            AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
-        }
-    }
-
-    // ---- TaiImportFlow.Host ----
-
-    @Override
-    @Nullable
-    public Context context() {
-        return isAdded() ? getContext() : null;
-    }
-
-    @Override
-    @NonNull
-    public ExecutorService executor() {
-        return runtimeActionExecutor;
-    }
-
-    @Override
-    @NonNull
-    public Handler handler() {
-        return handler;
-    }
-
-    @Override
-    public void pickFile() {
-        modelPicker.launch(TaiImportFlow.pickerMimeTypes());
-    }
-
-    @Override
-    public void pickFolder() {
-        modelFolderPicker.launch(null);
-    }
-
-    @Override
-    public void openUrl(@NonNull String url) {
-        Context context = getContext();
-        if (context != null) openUrl(context, url);
-    }
-
-    @Override
-    public void setDefaultModel(@NonNull String modelId) {
-        Context context = getContext();
-        if (context != null) setActiveModel(context, modelId);
-    }
-
-    @Override
-    public void modelsChanged() {
-        Context context = getContext();
-        if (context == null) return;
-        refreshTaiPage(context);
-        // A download the service runs shows its progress on the model row; keep polling for it.
-        handler.removeCallbacks(refreshRuntimeRunnable);
-        handler.postDelayed(refreshRuntimeRunnable, 1000L);
-    }
-
-    private void loadModel(Context context, String modelId) {
-        try {
-            JSONObject request = new JSONObject();
-            request.put("model", modelId);
-            JSONObject result = TaiManager.getInstance(context).loadModel(request.toString());
-            toastRuntimeResult(context, result, R.string.termux_ai_model_loaded);
-            refreshTaiPage(context);
-        } catch (JSONException e) {
-            AppNotice.show(context, R.string.termux_ai_runtime_action_failed, true);
-        }
-    }
-
-    private void deleteModel(Context context, String modelId) {
-        try {
-            JSONObject request = new JSONObject();
-            request.put("modelId", modelId);
-            request.put("confirm", true);
-            JSONObject result = TaiManager.getInstance(context).deleteModel(request.toString());
-            AppNotice.show(context,
-                result.optBoolean("deleted", false) ? R.string.termux_ai_model_deleted : R.string.termux_ai_model_delete_missing, false);
-            refreshTaiPage(context);
-        } catch (JSONException e) {
-            AppNotice.show(context, R.string.termux_ai_model_action_failed, true);
-        }
-    }
-
-    private JSONObject findDownload(JSONArray downloads, String modelId) {
-        if (downloads == null) return null;
-        for (int i = downloads.length() - 1; i >= 0; i--) {
-            JSONObject item = downloads.optJSONObject(i);
-            if (item != null && modelId.equals(item.optString("modelId", ""))) {
-                return item;
-            }
-        }
-        return null;
-    }
-
-    private boolean hasActiveDownloads(Context context) {
-        JSONArray downloads = new TaiModelStore(context).getDownloads();
-        for (int i = 0; i < downloads.length(); i++) {
-            JSONObject item = downloads.optJSONObject(i);
-            if (item == null) continue;
-            String status = item.optString("status", "");
-            if (TaiModelStore.STATE_QUEUED.equals(status)
-                || TaiModelStore.STATE_DOWNLOADING.equals(status)
-                || TaiModelStore.STATE_VERIFYING.equals(status)) return true;
-        }
-        return false;
-    }
-
     private boolean shouldContinueRefreshing(Context context, @Nullable JSONObject runtimeStatus) {
-        if (hasActiveDownloads(context)) return true;
         try {
             if (runtimeStatus == null) return false;
             JSONObject runtime = runtimeStatus.getJSONObject("runtime");
@@ -1544,24 +979,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         } catch (JSONException e) {
             return false;
         }
-    }
-
-    private String formatPercent(long value, long total) {
-        if (total <= 0) return "";
-        double percent = (double) value * 100.0 / (double) total;
-        return String.format(Locale.US, "%.1f%%", percent);
-    }
-
-    private String formatBytes(long bytes) {
-        if (bytes <= 0) return "unknown size";
-        double value = bytes;
-        String[] units = {"B", "KB", "MB", "GB"};
-        int unit = 0;
-        while (value >= 1024.0 && unit < units.length - 1) {
-            value /= 1024.0;
-            unit++;
-        }
-        return String.format(Locale.US, unit == 0 ? "%.0f %s" : "%.1f %s", value, units[unit]);
     }
 
     private String formatDuration(long millis) {

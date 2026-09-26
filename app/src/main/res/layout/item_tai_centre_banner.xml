@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Model centre: the follow-up strip a finished download leaves ("Whisper Base installed · Use
+     for voice"), with its one action and a dismiss. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="16dp"
+    android:paddingTop="6dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="2dp">
+
+    <LinearLayout
+        android:id="@+id/tai_centre_banner"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityLiveRegion="polite"
+        android:background="@drawable/tai_centre_banner"
+        android:gravity="center_vertical"
+        android:minHeight="44dp"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="6dp">
+
+        <ImageView
+            android:id="@+id/tai_centre_banner_icon"
+            android:layout_width="16dp"
+            android:layout_height="16dp"
+            android:importantForAccessibility="no"
+            android:src="@drawable/ic_tai_check" />
+
+        <TextView
+            android:id="@+id/tai_centre_banner_text"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:textSize="12.5sp" />
+
+        <TextView
+            android:id="@+id/tai_centre_banner_action"
+            android:layout_width="wrap_content"
+            android:layout_height="30dp"
+            android:layout_marginStart="8dp"
+            android:background="@drawable/tai_centre_pill"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="sans-serif-medium"
+            android:gravity="center"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:textSize="11.5sp" />
+
+        <ImageButton
+            android:id="@+id/tai_centre_banner_dismiss"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_marginStart="4dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/tai_centre_action_dismiss"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_tai_close" />
+    </LinearLayout>
+</FrameLayout>

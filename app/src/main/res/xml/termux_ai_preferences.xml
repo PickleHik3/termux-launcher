@@ -19,22 +19,11 @@
     <PreferenceCategory
         app:key="tai_models_category"
         app:title="@string/termux_ai_zone_models_title">
-        <Preference
-            app:key="tai_models_empty"
-            app:title="@string/termux_ai_models_empty_title"
-            app:summary="@string/termux_ai_models_empty_summary"
-            app:persistent="false"
-            app:selectable="false"/>
-        <Preference
-            app:key="tai_models_browse_catalog"
-            app:title="@string/termux_ai_models_browse_catalog_title"
-            app:summary="@string/termux_ai_models_browse_catalog_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TaiModelCatalogPreferencesFragment"
-            app:persistent="false"/>
-        <Preference
-            app:key="tai_model_import"
-            app:title="@string/termux_ai_model_import_title"
-            app:summary="@string/termux_ai_model_import_summary"
+        <!-- Everything about models (installed, catalogue, downloads, adding by link or file)
+             lives in the Model centre; this page keeps one row into it. -->
+        <com.termux.app.fragments.settings.termux.TaiModelCentreRowPreference
+            app:key="tai_model_centre"
+            app:title="@string/tai_model_centre_title"
             app:persistent="false"/>
         <Preference
             app:key="tai_huggingface_token"
@@ -44,18 +33,15 @@
     </PreferenceCategory>
 
     <PreferenceCategory
-        app:key="tai_stt_category"
-        app:title="@string/termux_ai_zone_stt_title">
-        <Preference
-            app:key="tai_stt_moved"
-            app:title="@string/termux_ai_stt_moved_title"
-            app:summary="@string/termux_ai_stt_moved_summary"
-            app:persistent="false"/>
-    </PreferenceCategory>
-
-    <PreferenceCategory
         app:key="tai_server_category"
         app:title="@string/termux_ai_zone_server_title">
+        <!-- "Model autoload" (D6), placed with the other rows about what API requests may do. -->
+        <androidx.preference.SwitchPreferenceCompat
+            app:key="tai_openai_auto_load"
+            app:title="@string/termux_ai_openai_auto_load_title"
+            app:summaryOff="@string/termux_ai_openai_auto_load_summary_off"
+            app:summaryOn="@string/termux_ai_openai_auto_load_summary_on"
+            app:defaultValue="true"/>
         <Preference
             app:key="tai_endpoint_copy"
             app:title="@string/termux_ai_endpoint_copy_title"
@@ -83,12 +69,6 @@
             app:title="@string/termux_ai_parameters_defaults_title"
             app:summary="@string/termux_ai_parameters_defaults_summary"
             app:persistent="false"/>
-        <androidx.preference.SwitchPreferenceCompat
-            app:key="tai_openai_auto_load"
-            app:title="@string/termux_ai_openai_auto_load_title"
-            app:summaryOff="@string/termux_ai_openai_auto_load_summary_off"
-            app:summaryOn="@string/termux_ai_openai_auto_load_summary_on"
-            app:defaultValue="true"/>
         <com.termux.app.fragments.settings.termux.TaiOverridesPreference
             app:key="tai_runtime_overrides"
             app:persistent="false"

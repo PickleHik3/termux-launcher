@@ -93,4 +93,16 @@ public class TaiImportFlowTest {
         assertEquals("", TaiImportFlow.replyText(new JSONObject().put("choices", new JSONArray().put(new JSONObject()
             .put("message", new JSONObject().put("content", JSONObject.NULL))))));
     }
+
+    @Test
+    public void aPastedLinkGetsItsSchemeAndLosesItsSpaces() {
+        // The link bar and the link dialog both go through this: people paste links the way the
+        // hint writes them, without https://, and with a stray space or newline.
+        assertEquals("https://huggingface.co/google/gemma-3-1b-it",
+            TaiImportFlow.normalizeLink("  huggingface.co/google/gemma-3-1b-it\n"));
+        assertEquals("https://huggingface.co/a/b", TaiImportFlow.normalizeLink("https://huggingface.co/a/b"));
+        assertEquals("http://example.com/x", TaiImportFlow.normalizeLink("http://example.com/x"));
+        assertEquals("", TaiImportFlow.normalizeLink("   "));
+        assertEquals("", TaiImportFlow.normalizeLink(null));
+    }
 }

@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Model centre model row (an installed model, or a catalogue entry to install): the nested card
+     with the kind icon, name over "speech · 586 MB · voice input", the In use / Default pills,
+     then either an Install pill (with a ring while the request runs) or the row's overflow menu.
+     A note line underneath carries a RAM warning or the "Needs 3.7 GB, 1.2 GB free" refusal. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="16dp"
+    android:paddingTop="3dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="3dp">
+
+    <LinearLayout
+        android:id="@+id/tai_centre_shell"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/tai_centre_shell"
+        android:padding="4dp">
+
+        <LinearLayout
+            android:id="@+id/tai_centre_core"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/tai_centre_core"
+            android:orientation="vertical"
+            android:paddingStart="12dp"
+            android:paddingTop="11dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="11dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <FrameLayout
+                    android:layout_width="34dp"
+                    android:layout_height="34dp"
+                    android:background="@drawable/tai_centre_icon_well">
+
+                    <ImageView
+                        android:id="@+id/tai_centre_kind_icon"
+                        android:layout_width="17dp"
+                        android:layout_height="17dp"
+                        android:layout_gravity="center"
+                        android:importantForAccessibility="no" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/tai_centre_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:fontFamily="sans-serif-medium"
+                        android:maxLines="1"
+                        android:textColor="?attr/termuxColorOnSurface"
+                        android:textSize="13.5sp" />
+
+                    <TextView
+                        android:id="@+id/tai_centre_subtitle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:fontFamily="monospace"
+                        android:maxLines="2"
+                        android:textColor="?attr/termuxColorOnSurfaceVariant"
+                        android:textSize="11sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tai_centre_pill_primary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:background="@drawable/tai_centre_pill"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingStart="9dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="9dp"
+                    android:paddingBottom="3dp"
+                    android:textSize="10.5sp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tai_centre_pill_secondary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
+                    android:background="@drawable/tai_centre_pill"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingStart="9dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="9dp"
+                    android:paddingBottom="3dp"
+                    android:textSize="10.5sp"
+                    android:visibility="gone" />
+
+                <FrameLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp">
+
+                    <TextView
+                        android:id="@+id/tai_centre_install"
+                        android:layout_width="wrap_content"
+                        android:layout_height="30dp"
+                        android:background="@drawable/tai_centre_pill"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:fontFamily="sans-serif-medium"
+                        android:gravity="center"
+                        android:paddingStart="13dp"
+                        android:paddingEnd="13dp"
+                        android:text="@string/tai_centre_action_install"
+                        android:textSize="11.5sp"
+                        android:visibility="gone" />
+
+                    <!-- Where the Install pill was, while the request is on its way. -->
+                    <com.google.android.material.progressindicator.CircularProgressIndicator
+                        android:id="@+id/tai_centre_install_ring"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:indeterminate="true"
+                        android:visibility="gone"
+                        app:indicatorSize="20dp"
+                        app:trackThickness="2dp" />
+                </FrameLayout>
+
+                <ImageButton
+                    android:id="@+id/tai_centre_more"
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:layout_marginStart="4dp"
+                    android:background="@drawable/tai_centre_round"
+                    android:padding="7dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_tai_more"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/tai_centre_note"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="44dp"
+                android:layout_marginTop="6dp"
+                android:textSize="11.5sp"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

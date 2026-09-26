@@ -29,6 +29,7 @@ import androidx.appcompat.app.AlertDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.ai.TaiDeviceCapabilities;
+import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiHuggingFace;
 import com.termux.ai.TaiImportFit;
 import com.termux.ai.TaiManager;
@@ -58,6 +59,11 @@ import java.util.concurrent.ExecutorService;
  * detects; the checkboxes, processor choice, format settings and internal name sit under
  * Advanced, collapsed. The fragment only launches the flow, forwards its picker results and
  * receives "models changed".
+ *
+ * <p>The Model centre is the host: its link bar calls {@link #submitLink} and {@link #startFile}
+ * directly, and a download the flow starts shows as a row in the centre's Downloads section, so
+ * the flow no longer opens a progress dialog of its own for one. It still follows the download
+ * (through {@link TaiDownloadHub}, never by polling) to offer "Try it" when it lands.
  */
 final class TaiImportFlow {
     /** What the flow needs from the screen that owns it. */
@@ -112,7 +118,6 @@ final class TaiImportFlow {
 
     private static final String TRY_PROMPT = "Say hello in five words.";
     private static final long TRY_TIMEOUT_MS = 90_000L;
-    private static final long WATCH_INTERVAL_MS = 1000L;
     private static final String[] PICKER_MIME_TYPES = {"application/octet-stream", "application/json", "*/*"};
 
     private final Host host;
@@ -219,38 +224,56 @@ final class TaiImportFlow {
         return fileName.toLowerCase(Locale.ROOT).endsWith(".tflite");
     }
 
-    // ---- step 1: where is the model? ----
+    // ---- step 1: where is the model? (the Model centre's link bar asks) ----
 
-    void start() {
-        Context context = host.context();
-        if (context == null) return;
+    /** The link bar's File button: straight to the system picker, no "where is it" question. */
+    void startFile() {
         draft = new Draft();
-        float density = context.getResources().getDisplayMetrics().density;
-        LinearLayout layout = column(context);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_ai_model_import_dialog_title)
-            .setView(dialogScroll(context, layout))
-            .setNegativeButton(android.R.string.cancel, null)
-            .create();
-        layout.addView(choice(context, R.string.termux_ai_import_where_link, R.string.termux_ai_import_where_link_hint, v -> {
-            dialog.dismiss();
-            showLink();
-        }));
-        layout.addView(choice(context, R.string.termux_ai_import_where_file, R.string.termux_ai_import_where_file_hint, v -> {
-            dialog.dismiss();
-            draft.source = Source.FILE;
-            host.pickFile();
-        }));
-        // The MNN folder path stays reachable, but as the small print under the two real choices.
-        TextView folder = choice(context, R.string.termux_ai_import_where_folder, R.string.termux_ai_import_where_folder_hint, v -> {
-            dialog.dismiss();
-            draft.source = Source.FOLDER;
-            host.pickFolder();
-        });
-        folder.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        folder.setPadding(Math.round(12 * density), Math.round(24 * density), Math.round(12 * density), Math.round(8 * density));
-        layout.addView(folder);
-        dialog.show();
+        draft.source = Source.FILE;
+        host.pickFile();
+    }
+
+    /** The link bar's overflow: the MNN folder import, for packages that are folders. */
+    void startFolder() {
+        draft = new Draft();
+        draft.source = Source.FOLDER;
+        host.pickFolder();
+    }
+
+    /**
+     * A link as typed or pasted, made into the URL the importer checks: surrounding space trimmed
+     * and a missing scheme added, because the hint (and people) write links without one.
+     */
+    @NonNull
+    static String normalizeLink(@Nullable String raw) {
+        String url = raw == null ? "" : raw.trim();
+        if (!url.isEmpty() && !url.contains("://")) url = "https://" + url;
+        return url;
+    }
+
+    /**
+     * Starts adding the model a link points at, the same as the link dialog's Next. Returns the
+     * reason in plain words when the link cannot be used (the caller shows it next to the field),
+     * or null when the flow has taken it from here.
+     */
+    @Nullable
+    String submitLink(@Nullable String raw) {
+        Context context = host.context();
+        if (context == null) return null;
+        String url = normalizeLink(raw);
+        TaiModelImporter.ValidationResult validation = TaiModelImporter.validateHuggingFaceImportUrl(url);
+        if (!validation.supported) {
+            TaiImportMessages.Message message = TaiImportMessages.forLink(validation);
+            return context.getString(message.resId, message.args);
+        }
+        draft = new Draft();
+        draft.source = Source.LINK;
+        draft.url = url;
+        draft.displayName = TaiImportNames.displayName(url);
+        draft.capabilities.addAll(TaiImportGuess.capabilities(url));
+        if (TaiHuggingFace.parse(url) != null) preview();
+        else showSummary();
+        return null;
     }
 
     @NonNull
@@ -259,44 +282,6 @@ final class TaiImportFlow {
     }
 
     // ---- step 2: the app works it out ----
-
-    private void showLink() {
-        Context context = host.context();
-        if (context == null) return;
-        EditText input = new EditText(context);
-        input.setSingleLine(true);
-        input.setHint(R.string.termux_ai_import_link_hint);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        input.setText(draft.url);
-        LinearLayout layout = column(context);
-        layout.addView(input);
-        AlertDialog dialog = new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_ai_import_link_title)
-            .setView(dialogScroll(context, layout))
-            .setPositiveButton(R.string.termux_ai_import_link_next, null)
-            .setNegativeButton(android.R.string.cancel, null)
-            .create();
-        dialog.setOnShowListener(d -> dialog.getButton(DialogInterface.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String url = input.getText().toString().trim();
-            // The hint shows the link the way people say it, without a scheme.
-            if (!url.isEmpty() && !url.contains("://")) url = "https://" + url;
-            TaiModelImporter.ValidationResult validation = TaiModelImporter.validateHuggingFaceImportUrl(url);
-            if (!validation.supported) {
-                TaiImportMessages.Message message = TaiImportMessages.forLink(validation);
-                input.setError(context.getString(message.resId, message.args));
-                return;
-            }
-            dialog.dismiss();
-            draft = new Draft();
-            draft.source = Source.LINK;
-            draft.url = url;
-            draft.displayName = TaiImportNames.displayName(url);
-            draft.capabilities.addAll(TaiImportGuess.capabilities(url));
-            if (TaiHuggingFace.parse(url) != null) preview();
-            else showSummary();
-        }));
-        dialog.show();
-    }
 
     /** Asks the manager what the link holds without downloading anything. */
     private void preview() {
@@ -752,78 +737,47 @@ final class TaiImportFlow {
             .show();
     }
 
-    /** Follows a download the service runs, in the same progress dialog the copies use. */
+    /**
+     * Follows a download the engine runs until it ends, then offers the ready step (or says why it
+     * failed). The progress itself is the host's to show; in the Model centre it is a row in the
+     * Downloads section, with its own pause and cancel. Driven by {@link TaiDownloadHub} pushes:
+     * the listener drops itself when the download ends or the screen has gone away.
+     */
     private void watchDownload() {
         Context context = host.context();
         if (context == null) return;
-        Context app = context.getApplicationContext();
         String modelId = modelId();
         String displayName = draft.displayName;
         boolean embeddingOnly = draft.embeddingOnly();
-        Progress progress = progress(context, context.getString(R.string.termux_ai_import_adding_title, displayName),
-            context.getString(R.string.termux_ai_import_progress_starting));
-        boolean[] watching = {true};
-        progress.dialog.setButton(DialogInterface.BUTTON_NEGATIVE, context.getString(android.R.string.cancel), (d, w) -> {
-            watching[0] = false;
-            host.executor().execute(() -> {
-                try {
-                    TaiManager.getInstance(app).cancelDownload(new JSONObject().put("modelId", modelId).toString());
-                } catch (JSONException | RuntimeException ignored) {
-                }
-                host.handler().post(host::modelsChanged);
-            });
-        });
-        // Hide keeps the download going; the model row shows its progress as before.
-        progress.dialog.setButton(DialogInterface.BUTTON_NEUTRAL, context.getString(R.string.termux_ai_dialog_hide),
-            (d, w) -> watching[0] = false);
-        progress.dialog.setCancelable(false);
-        progress.dialog.show();
-        Runnable poll = new Runnable() {
+        TaiDownloadHub hub = TaiDownloadHub.get(context);
+        AppNotice.show(context, context.getString(R.string.tai_centre_install_queued, displayName), false);
+        hub.addListener(new TaiDownloadHub.Listener() {
             @Override
-            public void run() {
-                if (!watching[0] || host.context() == null) return;
-                // Read on this thread: the download record is a SharedPreferences read the
-                // downloader keeps current every megabyte. Going through host.executor() queued
-                // behind the page's runtime calls, and on a busy runtime the dialog sat at 0 % until
-                // the file was done.
-                JSONObject transfer = findDownload(new TaiModelStore(app).getDownloads(), modelId);
-                String status = transfer == null ? "" : transfer.optString("status", "");
+            public void onDownloadsChanged(@NonNull List<TaiDownloadHub.Snapshot> downloads) {
+                if (host.context() == null) {
+                    hub.removeListener(this);
+                    return;
+                }
+                TaiDownloadHub.Snapshot transfer = null;
+                for (TaiDownloadHub.Snapshot item : downloads) {
+                    if (modelId.equals(item.modelId)) transfer = item;
+                }
+                String status = transfer == null ? "" : transfer.status;
                 if (TaiModelStore.STATE_INSTALLED.equals(status)) {
-                    watching[0] = false;
-                    progress.dialog.dismiss();
+                    hub.removeListener(this);
                     host.modelsChanged();
                     showReady(modelId, displayName, embeddingOnly);
                 } else if (TaiModelStore.STATE_FAILED.equals(status)) {
-                    watching[0] = false;
-                    progress.dialog.dismiss();
+                    // A failed row stays in Downloads with Retry; the dialog says why, once.
+                    hub.removeListener(this);
                     host.modelsChanged();
-                    showError(TaiImportMessages.forDownloadError(transfer.optString("error", "")));
-                } else if (TaiModelStore.STATE_CANCELLED.equals(status)) {
-                    watching[0] = false;
-                    progress.dialog.dismiss();
+                    showError(TaiImportMessages.forDownloadError(transfer.error));
+                } else if (TaiModelStore.STATE_CANCELLED.equals(status) || transfer == null) {
+                    hub.removeListener(this);
                     host.modelsChanged();
-                    AppNotice.show(host.context(), R.string.termux_ai_import_cancelled, false);
-                } else {
-                    if (TaiModelStore.STATE_VERIFYING.equals(status)) {
-                        progress.text.setText(R.string.termux_ai_import_progress_verifying);
-                    } else if (transfer != null) {
-                        progress.update(host.context(), transfer.optLong("bytesRead", 0L), transfer.optLong("totalBytes", -1L));
-                    }
-                    host.handler().postDelayed(this, WATCH_INTERVAL_MS);
                 }
             }
-        };
-        host.handler().postDelayed(poll, WATCH_INTERVAL_MS);
-    }
-
-    @Nullable
-    private static JSONObject findDownload(@Nullable JSONArray downloads, @NonNull String modelId) {
-        if (downloads == null) return null;
-        for (int i = downloads.length() - 1; i >= 0; i--) {
-            JSONObject item = downloads.optJSONObject(i);
-            if (item != null && modelId.equals(item.optString("modelId", ""))) return item;
-        }
-        return null;
+        });
     }
 
     // ---- step 5: ready ----
@@ -1135,22 +1089,6 @@ final class TaiImportFlow {
         ScrollView scroll = new ScrollView(context);
         scroll.addView(content);
         return scroll;
-    }
-
-    /** One of step 1's two big choices: a title with one line of help under it. */
-    @NonNull
-    private static TextView choice(@NonNull Context context, int titleRes, int hintRes, @NonNull View.OnClickListener listener) {
-        float density = context.getResources().getDisplayMetrics().density;
-        TextView view = new TextView(context);
-        view.setText(twoLines(context, context.getString(titleRes), context.getString(hintRes)));
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-        view.setPadding(Math.round(12 * density), Math.round(14 * density), Math.round(12 * density), Math.round(14 * density));
-        TypedValue background = new TypedValue();
-        context.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, background, true);
-        view.setBackgroundResource(background.resourceId);
-        view.setClickable(true);
-        view.setOnClickListener(listener);
-        return view;
     }
 
     @NonNull
