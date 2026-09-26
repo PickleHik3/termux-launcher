@@ -16,23 +16,19 @@ Models are not bundled in the APK. A download can be several gigabytes, so check
 
 ## Choosing a model
 
-The catalog can change as compatible models are added. The following table explains the current built-in choices.
+The built-in catalog is deliberately short: the two Gemma 4 chat models and the speech-to-text models voice input uses. Any other LiteRT-LM or MNN model (Qwen, DeepSeek, FunctionGemma, an embedding model) still runs when you add it by Hugging Face link or import the file; it is just not listed.
 
 | Model | Best for | Approximate download | Suggested device RAM | Notes |
 | --- | --- | ---: | ---: | --- |
 | Gemma 4 E2B IT | General chat, images, audio, and tools | 2.4 GB | 8 GB+ | Recommended general model |
 | Gemma 4 E4B IT | Better coding and reasoning | 3.7 GB | 12 GB+ | Larger and slower |
-| Qwen2.5 Coder 1.5B MNN | Coding and terminal clients | 971 MB | 4–6 GB+ | Recommended coding model; supports tools |
-| Qwen2.5 Coder 7B MNN | Higher-quality coding | 4.4 GB | 10–12 GB+ | Does not currently advertise tool use |
-| Qwen2.5 0.5B MNN | Very small, fast text model | 557 MB | 3 GB+ | Lower answer quality |
-| Qwen2.5 1.5B MNN | Lightweight general chat | 879 MB | 4–6 GB+ | Text and multilingual prompts |
-| Qwen2.5 3B MNN | Balanced general chat | 2.4 GB | 6–8 GB+ | Better quality than the smaller Qwen models |
-| DeepSeek-R1 1.5B MNN | Small reasoning tasks | 1.0 GB | 4–6 GB+ | Reasoning-focused |
-| DeepSeek-R1 Distill 1.5B LiteRT | Small reasoning tasks | 1.7 GB | 6 GB+ | LiteRT package |
-| FunctionGemma 270M | Choosing a function or device tool | 0.3 GB | 6 GB+ | CPU-only, 1,024-token context; not a general assistant |
-| Qwen2.5 1.5B LiteRT | Imported lightweight model | 1.5 GB | 6 GB+ | Import-only until a verified direct artifact is available |
+| Whisper ACFT Base / Base (English) | Voice input, multilingual or English only | 97 MB | 6 GB+ | 5 s or 10 s window |
+| Whisper ACFT Small / Small (English) | Voice input, better accuracy | 273 MB | 8 GB+ | 5 s or 10 s window |
+| Parakeet TDT 0.6B v3 | Voice input in 25 European languages | 586 MB | 8 GB+ | Language detected automatically |
 
-Only one chat/generation model is active at a time. Loading FunctionGemma is the same as loading any other model: it replaces the currently loaded chat model. TAI does not silently load it beside another assistant.
+Only one chat/generation model is active at a time: loading a model replaces the currently loaded chat model.
+
+Downloads run two at a time by default (the `tai_download_parallel` setting allows 1 to 3); the rest wait in line. A download can be paused and continues from the bytes it already has; one interrupted by the app closing or the network dropping is shown as paused and continues by itself on an unmetered (Wi-Fi) network, or waits for a tap on mobile data. Cancelling deletes the partial file. Before a download starts, the free space on the model directory must cover the remaining bytes plus a reserve of 500 MB or 5% of the volume.
 
 ## Understanding model capabilities
 
@@ -152,7 +148,10 @@ Ollama streaming uses newline-delimited JSON. Ollama registry operations (`pull`
 | POST | `/v1/ai/models/download-catalog` | Download a catalog model |
 | GET | `/v1/ai/models/downloads` | Show download progress/history |
 | POST | `/v1/ai/models/download` | Download a model from a URL |
-| POST | `/v1/ai/models/downloads/cancel` | Cancel an active download |
+| POST | `/v1/ai/models/downloads/cancel` | Cancel a download and delete its partial file |
+| POST | `/v1/ai/models/downloads/pause` | Pause a download, keeping its partial file |
+| POST | `/v1/ai/models/downloads/resume` | Continue a paused, failed or cancelled download |
+| POST | `/v1/ai/models/downloads/prioritize` | Move a queued download to the front |
 | POST | `/v1/ai/models/delete` | Delete an installed user model |
 | POST | `/v1/ai/models/load` | Load a model into the registry slot |
 | POST | `/v1/ai/models/unload` | Unload a model from the registry slot |
@@ -171,6 +170,10 @@ tai status
 tai runtime
 tai models
 tai downloads
+tai download-pause MODEL_ID
+tai download-resume MODEL_ID
+tai download-now MODEL_ID
+tai download-cancel MODEL_ID
 tai preflight MODEL_ID
 tai load MODEL_ID
 tai load MODEL_ID --cpu
