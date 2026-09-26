@@ -193,6 +193,10 @@ public class TerminalPaneController {
         default void openSettings() {}
         /** The corner tab turned automatic tiling (and focus growth with it) on or off; the host keeps both settings. */
         default void onAutoTilingChanged(boolean enabled) {}
+        /** Whether the terminal place is in minimal mode, which the corner tab's glyph shows. */
+        default boolean isMinimalMode() { return false; }
+        /** The corner tab asked to turn the terminal place's minimal mode on or off. */
+        default void toggleMinimalMode() {}
         /** Default working directory when a cwd can't be derived. */
         String defaultCwd();
         /** Spawn a new shell carrying a session name; defaults to an unnamed shell. */
@@ -321,6 +325,16 @@ public class TerminalPaneController {
 
     @Nullable private Window mActiveWindow;
     @Nullable private Leaf mMaximizedLeaf;
+    /**
+     * The terminal place is in minimal mode, which shows only one pane: a tiled split is shown
+     * maximised on its active pane for as long as the mode is on.
+     */
+    private boolean mMinimalPresentation;
+    /**
+     * The maximised pane is minimal mode's doing rather than the user's, so leaving the mode puts
+     * the split back. A pane the user maximised before stays maximised afterwards.
+     */
+    private boolean mMaximizedForMinimal;
 
     /** Fallback gap between tiled panes when no surface style is attached. */
     private static final int DIVIDER_DP = 1;
@@ -804,6 +818,31 @@ public class TerminalPaneController {
             || !Float.isFinite(width) || !Float.isFinite(height)
             || width <= 0f || height <= 0f) return defaultFloatFrac(0);
         return new RectF(left, top, left + width, top + height);
+    }
+
+    /**
+     * Minimal mode on the terminal place (CONTEXT.md): on, a tiled split is shown maximised on its
+     * active pane; off, a split minimal mode maximised is shown tiled again. A pane the user
+     * maximised themselves is left as they had it.
+     */
+    public void setMinimalPresentation(boolean minimal) {
+        if (mMinimalPresentation == minimal) return;
+        mMinimalPresentation = minimal;
+        if (!minimal && mMaximizedForMinimal) mMaximizedLeaf = null;
+        mMaximizedForMinimal = false;
+        if (mActiveWindow == null) return;
+        render();
+        mHost.onActivePaneChanged();
+    }
+
+    public boolean isMinimalPresentation() {
+        return mMinimalPresentation;
+    }
+
+    /** Redraws the corner tab, whose minimal-mode glyph is read from the host as it draws. */
+    public void invalidateControls() {
+        mInteractionOverlay.applyControlActions();
+        mInteractionOverlay.invalidate();
     }
 
     /** Make {@code w} the visible window and render its pane tree. */
@@ -2179,6 +2218,14 @@ public class TerminalPaneController {
     }
 
     private void doRender() {
+        // Minimal mode shows a split the way the maximise button does, on the active pane, and
+        // keeps doing so as windows switch and panes come and go under it.
+        if (mMinimalPresentation && mMaximizedLeaf == null && mActiveWindow != null
+            && mActiveWindow.active != null && !mActiveWindow.floating.contains(mActiveWindow.active)
+            && leavesOf(mActiveWindow.root).size() > 1) {
+            mMaximizedLeaf = mActiveWindow.active;
+            mMaximizedForMinimal = true;
+        }
         // A re-render invalidates the geometry a running divider reveal was easing toward.
         cancelSplitReveal();
         // Weights first, so the tree is built already grown; the pane-move animation carries the
@@ -3317,6 +3364,8 @@ public class TerminalPaneController {
         private static final int ACTION_AUTO_TILING = 7;
         /** Open the in-app wallpaper picker. */
         private static final int ACTION_WALLPAPER = 8;
+        /** Minimal mode on or off for the terminal place; the glyph shows which. */
+        private static final int ACTION_MINIMAL = 9;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
@@ -3427,10 +3476,16 @@ public class TerminalPaneController {
                     actions.add(PaneControlsView.Action.drawn(ACTION_MOVE_PANE, this::drawMoveMark,
                         PaneControlsView.TINT_TERTIARY));
                 }
-                actions.add(PaneControlsView.Action.drawn(ACTION_MAXIMIZE, this::drawMaximizeMark));
+                // Minimal mode holds the split maximised, so the button that would un-maximise
+                // it is not offered there: the minimal glyph beside it is the way back.
+                if (!mMinimalPresentation) {
+                    actions.add(PaneControlsView.Action.drawn(ACTION_MAXIMIZE,
+                        this::drawMaximizeMark));
+                }
                 actions.add(PaneControlsView.Action.drawn(ACTION_CLOSE, this::drawCloseMark,
                     PaneControlsView.TINT_ERROR));
             }
+            actions.add(PaneControlsView.Action.drawn(ACTION_MINIMAL, mMinimalMark));
             actions.add(PaneControlsView.Action.drawn(ACTION_AUTO_TILING, this::drawAutoTilingMark));
             // The launcher's settings, one tap from the tab on every place, as the display's tab
             // already offers them.
@@ -3439,6 +3494,10 @@ public class TerminalPaneController {
                 CornerTabGlyphs.help(getContext())));
             mControls.setActions(actions);
         }
+
+        /** The minimal-mode glyph: out to minimal, or back in once the place is minimal. */
+        private final PaneControlsView.Mark mMinimalMark =
+            com.termux.app.chrome.MinimalModeGlyph.mark(getContext(), () -> mHost.isMinimalMode());
 
         /** The tiling icon, crossed out while the window is laid out by hand, in the tab's tint. */
         private void drawAutoTilingMark(@NonNull Canvas canvas, @NonNull RectF button,
@@ -3707,6 +3766,11 @@ public class TerminalPaneController {
             } else if (action == ACTION_CLOSE) {
                 dismissControls();
                 leaf.session.finishIfRunning();
+            } else if (action == ACTION_MINIMAL) {
+                // The whole place re-lays out around the pane, so the tab goes first; opened again
+                // it shows the glyph for the way back.
+                dismissControls();
+                mHost.toggleMinimalMode();
             } else if (action == ACTION_AUTO_TILING) {
                 // The tab stays up, so the icon flipping is the answer, and a second tap undoes it.
                 toggleAutoTiling();
