@@ -162,20 +162,6 @@ public final class SurfaceEditorRows {
         return ROWS;
     }
 
-    /**
-     * The preference keys a place takes for itself when it overrides a cell: the surface's own
-     * value, and its link to Base. Both, because a scoped number the shared link still calls
-     * inherited would never be read — a place that overrides a cell overrides its whole answer.
-     */
-    @NonNull
-    public static List<String> scopeKeys(@NonNull Row row) {
-        String override = TermuxAppSharedPreferences.surfaceOverrideKey(row.slot, row.property);
-        String link = TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX
-            + row.slot.key + "_" + row.property.key;
-        return override == null ? Collections.singletonList(link)
-            : Collections.unmodifiableList(Arrays.asList(override, link));
-    }
-
     /** The row editing one cell, or null where the surface has no such property. */
     public static Row forCell(@NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
         for (Row row : ROWS) {

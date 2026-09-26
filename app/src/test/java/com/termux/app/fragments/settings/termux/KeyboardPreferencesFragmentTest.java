@@ -87,41 +87,31 @@ public class KeyboardPreferencesFragmentTest {
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
 
         PlaceLayoutStore places = places();
-        for (PaneWallPage place : PaneWallPage.values()) {
-            assertEquals(place + " follows the page", KeyboardForm.FLOATING,
-                places.keyboardForm(place, PlaceOrientation.PORTRAIT));
-        }
+        assertEquals(KeyboardForm.FLOATING, places.keyboardForm(PlaceOrientation.PORTRAIT));
         // The other orientation is somebody else's business.
         assertEquals(KeyboardForm.DOCKED,
-            places.keyboardForm(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
+            places.keyboardForm(PlaceOrientation.LANDSCAPE));
 
         SharedPreferences prefs = TermuxAppSharedPreferences
             .build(RuntimeEnvironment.getApplication(), true).getSharedPreferences();
-        assertEquals("floating", prefs.getString("place.terminal.portrait.keyboard_form", null));
+        assertEquals("floating", prefs.getString("layout.portrait.keyboard_form", null));
         // The widget grid is "home" in the store's own key names.
-        assertEquals("floating", prefs.getString("place.home.portrait.keyboard_form", null));
-        assertEquals("floating", prefs.getString("place.display.portrait.keyboard_form", null));
+        assertEquals("floating", prefs.getString("layout.portrait.keyboard_form", null));
+        assertEquals("floating", prefs.getString("layout.portrait.keyboard_form", null));
     }
 
     @Test
-    public void aReadGivesTheSharedTypeWhenThePlacesAgreeAndNothingWhenTheyDoNot() {
+    public void aReadGivesTheLayoutsTypeWhereverItWasWritten() {
         KeyboardPreferencesDataStore store = store();
-        // A fresh install: every place is docked, so the pill has an answer.
+        // A fresh install is docked, so the pill has an answer.
         assertEquals("docked", store.getString("in_app_keyboard_form", "docked"));
 
         store.putString("in_app_keyboard_form", "split");
         assertEquals("split", store.getString("in_app_keyboard_form", "docked"));
 
-        // One place given a type of its own on the Layout page: they no longer agree, and no
-        // segment is the honest answer.
-        places().setKeyboardForm(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT,
-            KeyboardForm.DOCKED);
-        assertEquals(SegmentedPillPreference.VALUE_NONE,
-            store.getString("in_app_keyboard_form", "docked"));
-
-        // Writing from this page settles the disagreement.
-        store.putString("in_app_keyboard_form", "docked");
-        assertEquals("docked", store.getString("in_app_keyboard_form", "split"));
+        // The Layout editor writes the same one key, so the page reads what it picked.
+        places().setKeyboardForm(PlaceOrientation.PORTRAIT, KeyboardForm.FLOATING);
+        assertEquals("floating", store.getString("in_app_keyboard_form", "docked"));
     }
 
     @Test
@@ -132,9 +122,9 @@ public class KeyboardPreferencesFragmentTest {
 
         PlaceLayoutStore places = places();
         assertEquals(KeyboardForm.FLOATING,
-            places.keyboardForm(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE));
+            places.keyboardForm(PlaceOrientation.LANDSCAPE));
         assertEquals(KeyboardForm.DOCKED,
-            places.keyboardForm(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+            places.keyboardForm(PlaceOrientation.PORTRAIT));
     }
 
     @Test

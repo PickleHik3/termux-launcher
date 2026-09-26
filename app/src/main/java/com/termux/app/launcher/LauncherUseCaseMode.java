@@ -5,7 +5,6 @@ import androidx.annotation.NonNull;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
@@ -83,10 +82,8 @@ public final class LauncherUseCaseMode {
         PlaceLayoutStore places = new PlaceLayoutStore(preferences);
         if (terminalOnly) {
             preferences.setAppLauncherUseCaseSnapshot(captureSnapshot(preferences));
-            for (PaneWallPage place : PaneWallPage.values()) {
-                for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                    places.setAppsRow(place, orientation, RowPlacement.HIDDEN);
-                }
+            for (PlaceOrientation orientation : PlaceOrientation.values()) {
+                places.setAppsRow(orientation, RowPlacement.HIDDEN);
             }
             preferences.setAppLauncherAzRowEnabled(false);
             preferences.setAppLauncherDrawerEnabled(false);
@@ -95,12 +92,10 @@ public final class LauncherUseCaseMode {
             return;
         }
 
-        // The apps row is per place now; there is nothing to restore it to but the shipped
-        // default, on every place — bottom in portrait, the left rail in landscape.
-        for (PaneWallPage place : PaneWallPage.values()) {
-            places.setAppsRow(place, PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
-            places.setAppsRow(place, PlaceOrientation.LANDSCAPE, RowPlacement.LEFT);
-        }
+        // The apps row is a layout value now; there is nothing to restore it to but the shipped
+        // default — bottom in portrait, the left rail in landscape.
+        places.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        places.setAppsRow(PlaceOrientation.LANDSCAPE, RowPlacement.LEFT);
 
         boolean[] snapshot = parseSnapshot(preferences.getAppLauncherUseCaseSnapshot());
         if (snapshot == null) {

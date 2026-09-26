@@ -255,11 +255,11 @@ public class FloatingKeyboardFrameTest {
         assertEquals("against the bottom", HOST_HEIGHT - frame.getHeight(), frame.positionYPx());
         // Nothing was written: an unmoved keyboard has no remembered place.
         assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET,
-            store.floatingKeyboardX(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), 0f);
+            store.floatingKeyboardX(PlaceOrientation.LANDSCAPE), 0f);
     }
 
     @Test
-    public void aDraggedPlaceIsRememberedForThatPlaceAndOrientationOnly() {
+    public void aDraggedPlaceIsRememberedForThatOrientationOnly() {
         floatAndLayout();
         FloatingKeyboardFrame frame = controller.frame();
         int travelY = HOST_HEIGHT - frame.getHeight();
@@ -268,15 +268,11 @@ public class FloatingKeyboardFrameTest {
         dispatch(frame, MotionEvent.ACTION_UP, 300, 9 - travelY);
 
         assertEquals(0, frame.positionYPx());
-        assertEquals(0f, store.floatingKeyboardY(PaneWallPage.TERMINAL,
-            PlaceOrientation.LANDSCAPE), 1e-6f);
-        assertEquals(0.5f, store.floatingKeyboardX(PaneWallPage.TERMINAL,
-            PlaceOrientation.LANDSCAPE), 1e-6f);
-        // The other orientation and the other places keep their own memory, which is none.
+        assertEquals(0f, store.floatingKeyboardY(PlaceOrientation.LANDSCAPE), 1e-6f);
+        assertEquals(0.5f, store.floatingKeyboardX(PlaceOrientation.LANDSCAPE), 1e-6f);
+        // The other orientation keeps its own memory, which is none.
         assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET,
-            store.floatingKeyboardY(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0f);
-        assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET,
-            store.floatingKeyboardY(PaneWallPage.WIDGETS, PlaceOrientation.LANDSCAPE), 0f);
+            store.floatingKeyboardY(PlaceOrientation.PORTRAIT), 0f);
         assertTrue("a moved frame needs its backdrop cropped again", fakeHost.frameMoves > 0);
     }
 
@@ -286,7 +282,7 @@ public class FloatingKeyboardFrameTest {
         FloatingKeyboardFrame frame = controller.frame();
 
         // Parked a quarter of the way across and a quarter of the way down.
-        store.setFloatingKeyboardPosition(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT,
+        store.setFloatingKeyboardPosition(PlaceOrientation.PORTRAIT,
             0.25f, 0.25f);
         fakeHost.landscape = false;
         fakeHost.widthScale = 0.9f;
@@ -417,8 +413,7 @@ public class FloatingKeyboardFrameTest {
         // The card kept the width it was dragged to once the store took over from the preview.
         layoutHost();
         assertEquals(700, frame.getWidth());
-        assertEquals(100f / 300f, store.floatingKeyboardX(PaneWallPage.TERMINAL,
-            PlaceOrientation.LANDSCAPE), 1e-6f);
+        assertEquals(100f / 300f, store.floatingKeyboardX(PlaceOrientation.LANDSCAPE), 1e-6f);
     }
 
     @Test
@@ -492,7 +487,7 @@ public class FloatingKeyboardFrameTest {
         assertEquals(518, frame.getHeight());
         assertEquals(HOST_HEIGHT, frame.positionYPx() + frame.getHeight());
         assertEquals("and the place it came to rest is the one remembered", 1f,
-            store.floatingKeyboardY(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), 1e-6f);
+            store.floatingKeyboardY(PlaceOrientation.LANDSCAPE), 1e-6f);
     }
 
     @Test
@@ -674,10 +669,6 @@ public class FloatingKeyboardFrameTest {
 
         @Nullable @Override public PlaceLayoutStore placeLayoutStore() {
             return store;
-        }
-
-        @NonNull @Override public PaneWallPage place() {
-            return PaneWallPage.TERMINAL;
         }
 
         @NonNull @Override public PlaceOrientation orientation() {

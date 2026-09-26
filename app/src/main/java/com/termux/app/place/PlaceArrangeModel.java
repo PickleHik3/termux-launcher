@@ -15,14 +15,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * What one element of a place's arrangement offers, for one orientation, and what a pick writes.
- * Pure: it builds descriptions and writers, draws nothing and holds no view, so the Place section
- * on the surface editor's cards and the rows under the Layout editor's miniature are only two
- * renderings of this, and all three are testable on their own.
+ * What one element of the arrangement offers, for one orientation, and what a pick writes. Pure: it
+ * builds descriptions and writers, draws nothing and holds no view, so the rows under the Layout
+ * editor's miniature are only a rendering of this, and both are testable on their own.
  *
- * <p>One orientation at a time is the whole point: both editors stand on a picture of a single
- * orientation — the live screen, or the miniature — so a row offers what that one holds and a pick
- * writes only its key.
+ * <p>One orientation at a time is the whole point: the editor stands on a picture of a single
+ * orientation, so a row offers what that one holds and a pick writes only its key. The arrangement
+ * is shared by every place (ADR 0003), so a pick lands everywhere; the place is asked for only to
+ * decide what is worth offering — the widget grid exists on Home alone, and only the display reads
+ * how the keyboard stands over it.
  */
 public final class PlaceArrangeModel {
 
@@ -32,7 +33,7 @@ public final class PlaceArrangeModel {
     public enum Element {
         STATUS_BAR, PINNED_APPS, AZ_INDEX, EXTRA_KEYS, KEYBOARD, WIDGET_GRID;
 
-        /** Whether the element exists on a place at all. */
+        /** Whether the element is drawn on a place at all, and so worth offering there. */
         public boolean isOn(@NonNull PaneWallPage place) {
             return this != WIDGET_GRID || place == PaneWallPage.WIDGETS;
         }
@@ -121,8 +122,8 @@ public final class PlaceArrangeModel {
     }
 
     /**
-     * One of the three sizes a place keeps per orientation: how tall its dock stands, how tall its
-     * keyboard stands, and how much air sits under the last key row.
+     * One of the three sizes the layout keeps per orientation: how tall the dock stands, how tall
+     * the keyboard stands, and how much air sits under the last key row.
      *
      * <p>The two heights are stored as scales and stand here as {@value #SCALE_STEPS} steps of
      * their own range, so one row kind covers all three and the mapping lives here rather than in
@@ -181,12 +182,6 @@ public final class PlaceArrangeModel {
     private static final int[] AZ_LABELS = {
         R.string.settings_layout_row_shown, R.string.settings_layout_row_hidden};
 
-    private static final String[] ON_ENTER_VALUES = {"as_left", "open", "closed"};
-    private static final int[] ON_ENTER_LABELS = {
-        R.string.settings_layout_keyboard_on_enter_as_left,
-        R.string.settings_layout_keyboard_on_enter_open,
-        R.string.settings_layout_keyboard_on_enter_closed};
-
     private static final String[] FORM_VALUES = {"docked", "floating", "split"};
     private static final int[] FORM_LABELS = {
         R.string.settings_layout_keyboard_form_docked,
@@ -199,8 +194,8 @@ public final class PlaceArrangeModel {
         R.string.settings_layout_keyboard_mode_overlay};
 
     /**
-     * Everything one element offers on this place in this orientation, rebuilt whenever a pick
-     * lands. Empty for an element the place does not have.
+     * Everything one element offers in this orientation, as seen from this place, rebuilt whenever
+     * a pick lands. Empty for an element the place does not draw.
      */
     @NonNull
     public static List<Group> groups(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
@@ -211,52 +206,48 @@ public final class PlaceArrangeModel {
         switch (element) {
             case STATUS_BAR:
                 groups.add(edgePills(R.string.settings_layout_status_bar_title, orientation,
-                    places.statusBarEdge(place, orientation),
-                    value -> places.setStatusBarEdge(place, orientation,
+                    places.statusBarEdge(orientation),
+                    value -> places.setStatusBarEdge(orientation,
                         Edge.parse(value, Edge.TOP))));
                 return groups;
             case PINNED_APPS:
                 groups.add(rowPills(R.string.settings_show_pinned_apps_title, orientation,
-                    places.appsRow(place, orientation),
-                    value -> places.setAppsRow(place, orientation,
+                    places.appsRow(orientation),
+                    value -> places.setAppsRow(orientation,
                         RowPlacement.parse(value, RowPlacement.BOTTOM))));
                 return groups;
             case EXTRA_KEYS:
                 groups.add(rowPills(R.string.settings_layout_miniature_keys, orientation,
-                    places.extraKeys(place, orientation),
-                    value -> places.setExtraKeys(place, orientation,
+                    places.extraKeys(orientation),
+                    value -> places.setExtraKeys(orientation,
                         RowPlacement.parse(value, RowPlacement.BOTTOM))));
                 return groups;
             case AZ_INDEX: {
-                boolean shown = places.azRowShown(place, orientation);
+                boolean shown = places.azRowShown(orientation);
                 groups.add(new Pills(R.string.settings_layout_miniature_alphabets, AZ_VALUES,
                     AZ_LABELS, shown ? AZ_SHOWN : AZ_HIDDEN,
-                    value -> places.setAzRowShown(place, orientation, AZ_SHOWN.equals(value))));
+                    value -> places.setAzRowShown(orientation, AZ_SHOWN.equals(value))));
                 // The edge is the bar's own wherever it stands: on the pinned apps row's edge it
                 // rides that row, on any other it gets a bar of its own, and this is the control
                 // that moves it between the two.
                 if (shown)
                     groups.add(edgePills(R.string.settings_layout_alphabets_edge_title, orientation,
-                        places.azBarEdge(place, orientation),
-                        value -> places.setAzBarEdge(place, orientation,
+                        places.azBarEdge(orientation),
+                        value -> places.setAzBarEdge(orientation,
                             Edge.parse(value, Edge.BOTTOM))));
                 return groups;
             }
             case KEYBOARD:
                 groups.add(new Pills(R.string.termux_surface_editor_place_keyboard_type,
                     FORM_VALUES, FORM_LABELS,
-                    places.keyboardForm(place, orientation).storageValue(),
-                    value -> places.setKeyboardForm(place, orientation,
+                    places.keyboardForm(orientation).storageValue(),
+                    value -> places.setKeyboardForm(orientation,
                         KeyboardForm.parse(value, KeyboardForm.DOCKED))));
-                groups.add(new Pills(R.string.termux_surface_editor_place_keyboard_on_enter,
-                    ON_ENTER_VALUES, ON_ENTER_LABELS, places.keyboardOnEnter(place).storageValue(),
-                    value -> places.setKeyboardOnEnter(place,
-                        KeyboardOnEnter.parse(value, KeyboardOnEnter.AS_LEFT))));
                 // Only the display has a screen of its own for a keyboard to float over.
                 if (place == PaneWallPage.DISPLAY)
                     groups.add(new Pills(R.string.settings_layout_keyboard_mode_title, MODE_VALUES,
-                        MODE_LABELS, places.keyboardMode(place, orientation).storageValue(),
-                        value -> places.setKeyboardMode(place, orientation,
+                        MODE_LABELS, places.keyboardMode(orientation).storageValue(),
+                        value -> places.setKeyboardMode(orientation,
                             KeyboardMode.parse(value, KeyboardMode.RESIZE))));
                 return groups;
             case WIDGET_GRID:
@@ -264,26 +255,26 @@ public final class PlaceArrangeModel {
                 groups.add(new Counter(R.string.settings_widget_grid_columns_title,
                     TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
                     TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
-                    places.widgetColumns(place, orientation),
-                    value -> places.setWidgetColumns(place, orientation, value)));
+                    places.widgetColumns(orientation),
+                    value -> places.setWidgetColumns(orientation, value)));
                 groups.add(new Counter(R.string.settings_widget_grid_rows_title,
                     TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
                     TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS,
-                    places.widgetRows(place, orientation),
-                    value -> places.setWidgetRows(place, orientation, value)));
+                    places.widgetRows(orientation),
+                    value -> places.setWidgetRows(orientation, value)));
                 return groups;
         }
     }
 
     /**
-     * The sizes one element owns on this place in this orientation: the dock's height, and the
-     * keyboard's height and the air under its last key row. Empty for everything else, because
-     * everything else about a place's arrangement is a position rather than a size.
+     * The sizes one element owns in this orientation: the dock's height, and the keyboard's height
+     * and the air under its last key row. Empty for everything else, because everything else about
+     * the arrangement is a position rather than a size.
      *
      * <p>Kept apart from {@link #groups} because the two answer different questions of the same
      * element — where the dock stands, and how tall it is — and only the Layout editor asks the
      * second. Both write through the store, which owns the clamps, so a step at either end of a
-     * track is the value the place actually takes.
+     * track is the value the layout actually takes.
      */
     @NonNull
     public static List<Group> sizes(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
@@ -294,22 +285,22 @@ public final class PlaceArrangeModel {
         switch (element) {
             case PINNED_APPS:
                 groups.add(scale(R.string.termux_layout_editor_height,
-                    places.dockHeightScale(place, orientation),
+                    places.dockHeightScale(orientation),
                     TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT,
                     TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT,
-                    value -> places.setDockHeightScale(place, orientation, value)));
+                    value -> places.setDockHeightScale(orientation, value)));
                 return groups;
             case KEYBOARD:
                 groups.add(scale(R.string.termux_layout_editor_height,
-                    places.keyboardHeightScale(place, orientation),
+                    places.keyboardHeightScale(orientation),
                     TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
                     TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE,
-                    value -> places.setKeyboardHeightScale(place, orientation, value)));
+                    value -> places.setKeyboardHeightScale(orientation, value)));
                 groups.add(new Size(R.string.termux_surface_tuning_peek_keyboard_chin, Unit.DP,
                     TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING,
                     TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING,
-                    places.keyboardChinDp(place, orientation),
-                    value -> places.setKeyboardChinDp(place, orientation, value)));
+                    places.keyboardChinDp(orientation),
+                    value -> places.setKeyboardChinDp(orientation, value)));
                 return groups;
             default:
                 return groups;

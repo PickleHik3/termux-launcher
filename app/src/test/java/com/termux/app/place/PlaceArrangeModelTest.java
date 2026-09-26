@@ -95,31 +95,29 @@ public class PlaceArrangeModelTest {
         assertEquals(Arrays.asList("top", "bottom"),
             Arrays.asList(((Pills) riding.get(1)).values));
 
-        places.setAppsRow(PaneWallPage.TERMINAL, PORTRAIT, RowPlacement.HIDDEN);
+        places.setAppsRow(PORTRAIT, RowPlacement.HIDDEN);
         List<Group> standingAlone = groups(PaneWallPage.TERMINAL, PORTRAIT, Element.AZ_INDEX);
         assertEquals(2, standingAlone.size());
         assertEquals(Arrays.asList("top", "bottom"),
             Arrays.asList(((Pills) standingAlone.get(1)).values));
 
-        places.setAzRowShown(PaneWallPage.TERMINAL, PORTRAIT, false);
+        places.setAzRowShown(PORTRAIT, false);
         assertEquals("away, it is one switch again",
             1, groups(PaneWallPage.TERMINAL, PORTRAIT, Element.AZ_INDEX).size());
     }
 
     @Test
-    public void theKeyboardOffersItsTypeAndOnEnterEverywhereAndTheModeOnTheDisplayAlone() {
-        assertEquals(2, groups(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD).size());
+    public void theKeyboardOffersItsTypeEverywhereAndTheModeOnTheDisplayAlone() {
+        assertEquals(1, groups(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD).size());
         assertEquals(Arrays.asList("docked", "floating", "split"),
             Arrays.asList(pills(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD, 0).values));
-        assertEquals(Arrays.asList("as_left", "open", "closed"),
-            Arrays.asList(pills(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD, 1).values));
 
         List<Group> display = groups(PaneWallPage.DISPLAY, LANDSCAPE, Element.KEYBOARD);
-        assertEquals(3, display.size());
+        assertEquals(2, display.size());
         assertEquals(Arrays.asList("resize", "overlay"),
-            Arrays.asList(((Pills) display.get(2)).values));
+            Arrays.asList(((Pills) display.get(1)).values));
         assertEquals("landscape on the display floats by default",
-            "overlay", ((Pills) display.get(2)).selected);
+            "overlay", ((Pills) display.get(1)).selected);
     }
 
     @Test
@@ -137,14 +135,13 @@ public class PlaceArrangeModelTest {
     // ------------------------------------------------------------------------ what a pick writes
 
     @Test
-    public void aPickWritesThePlaceAndOrientationItWasOfferedFor() {
+    public void aPickWritesTheOrientationItWasOfferedForOnEveryPlace() {
         pills(PaneWallPage.DISPLAY, LANDSCAPE, Element.STATUS_BAR, 0).writer.write("right");
 
-        assertEquals(Edge.RIGHT, places.statusBarEdge(PaneWallPage.DISPLAY, LANDSCAPE));
+        assertEquals("a pick offered over the display lands in the one shared layout",
+            Edge.RIGHT, places.resolve(LANDSCAPE).slot(com.termux.app.place.Element.STATUS).edge);
         assertEquals("portrait is a value of its own",
-            Edge.TOP, places.statusBarEdge(PaneWallPage.DISPLAY, PORTRAIT));
-        assertEquals("and so is every other place",
-            Edge.TOP, places.statusBarEdge(PaneWallPage.TERMINAL, LANDSCAPE));
+            Edge.TOP, places.statusBarEdge(PORTRAIT));
     }
 
     @Test
@@ -152,19 +149,17 @@ public class PlaceArrangeModelTest {
         pills(PaneWallPage.TERMINAL, PORTRAIT, Element.PINNED_APPS, 0).writer.write("hidden");
         pills(PaneWallPage.TERMINAL, PORTRAIT, Element.EXTRA_KEYS, 0).writer.write("hidden");
         pills(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD, 0).writer.write("split");
-        pills(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD, 1).writer.write("closed");
         pills(PaneWallPage.TERMINAL, PORTRAIT, Element.AZ_INDEX, 0).writer.write("hidden");
         ((Counter) groups(PaneWallPage.WIDGETS, LANDSCAPE, Element.WIDGET_GRID).get(0))
             .writer.write(6);
 
-        assertEquals(RowPlacement.HIDDEN, places.appsRow(PaneWallPage.TERMINAL, PORTRAIT));
-        assertEquals(RowPlacement.HIDDEN, places.extraKeys(PaneWallPage.TERMINAL, PORTRAIT));
-        assertEquals(KeyboardForm.SPLIT, places.keyboardForm(PaneWallPage.TERMINAL, PORTRAIT));
-        assertEquals(KeyboardOnEnter.CLOSED, places.keyboardOnEnter(PaneWallPage.TERMINAL));
-        assertFalse(places.azRowShown(PaneWallPage.TERMINAL, PORTRAIT));
-        assertEquals(6, places.widgetColumns(PaneWallPage.WIDGETS, LANDSCAPE));
+        assertEquals(RowPlacement.HIDDEN, places.appsRow(PORTRAIT));
+        assertEquals(RowPlacement.HIDDEN, places.extraKeys(PORTRAIT));
+        assertEquals(KeyboardForm.SPLIT, places.keyboardForm(PORTRAIT));
+        assertFalse(places.azRowShown(PORTRAIT));
+        assertEquals(6, places.widgetColumns(LANDSCAPE));
         assertEquals("portrait's grid is untouched",
-            4, places.widgetColumns(PaneWallPage.WIDGETS, PORTRAIT));
+            4, places.widgetColumns(PORTRAIT));
     }
 
     @Test

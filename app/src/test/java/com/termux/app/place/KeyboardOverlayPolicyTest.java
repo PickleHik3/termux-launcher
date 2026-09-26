@@ -50,7 +50,7 @@ public class KeyboardOverlayPolicyTest {
 
     private boolean overlays(PlaceLayoutStore store, PaneWallPage place,
                              PlaceOrientation orientation) {
-        return KeyboardOverlayPolicy.overlays(place, store.resolve(place, orientation));
+        return KeyboardOverlayPolicy.overlays(place, store.resolve(orientation));
     }
 
     private static PlaceLayout layout(KeyboardMode mode) {
@@ -83,7 +83,7 @@ public class KeyboardOverlayPolicyTest {
     public void theHomePlaceFloatsTheKeyboardWhateverIsStored() {
         PlaceLayoutStore store = store();
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
-            store.setKeyboardMode(PaneWallPage.WIDGETS, orientation, KeyboardMode.RESIZE);
+            store.setKeyboardMode(orientation, KeyboardMode.RESIZE);
             assertTrue(String.valueOf(orientation),
                 overlays(store, PaneWallPage.WIDGETS, orientation));
         }
@@ -94,9 +94,9 @@ public class KeyboardOverlayPolicyTest {
     @Test
     public void theDisplayTakesTheStoredModeInEitherOrientation() {
         PlaceLayoutStore store = store();
-        store.setKeyboardMode(PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT,
+        store.setKeyboardMode(PlaceOrientation.PORTRAIT,
             KeyboardMode.OVERLAY);
-        store.setKeyboardMode(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE,
+        store.setKeyboardMode(PlaceOrientation.LANDSCAPE,
             KeyboardMode.RESIZE);
         assertTrue(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT));
         assertFalse(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
@@ -108,7 +108,7 @@ public class KeyboardOverlayPolicyTest {
         for (PaneWallPage place : PaneWallPage.values()) {
             if (place == PaneWallPage.DISPLAY || place == PaneWallPage.WIDGETS) continue;
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                store.setKeyboardMode(place, orientation, KeyboardMode.OVERLAY);
+                store.setKeyboardMode(orientation, KeyboardMode.OVERLAY);
                 assertFalse(place + " " + orientation, overlays(store, place, orientation));
             }
         }
@@ -129,7 +129,7 @@ public class KeyboardOverlayPolicyTest {
         PlaceLayoutStore store = store();
         for (PaneWallPage place : PaneWallPage.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                store.setKeyboardForm(place, orientation, KeyboardForm.FLOATING);
+                store.setKeyboardForm(orientation, KeyboardForm.FLOATING);
                 assertTrue(place + " " + orientation, overlays(store, place, orientation));
             }
         }

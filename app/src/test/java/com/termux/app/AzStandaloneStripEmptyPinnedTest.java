@@ -333,7 +333,7 @@ public class AzStandaloneStripEmptyPinnedTest {
         for (PaneWallPage place : PaneWallPage.values())
             for (PlaceOrientation orientation : PlaceOrientation.values())
                 for (Element element : Element.values())
-                    store.setSlot(place, orientation, element, layout.slot(element));
+                    store.setSlot(orientation, element, layout.slot(element));
         assertFalse("the arrangement must not let the index ride the row",
             PlaceChromePolicy.azRidesAppsRow(layout));
         screen.applyEdgeStacks(layout);

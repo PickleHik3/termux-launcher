@@ -27,7 +27,6 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.R;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
@@ -154,10 +153,9 @@ public class KeyboardColorSchemeFragment extends Fragment {
                     mPreferences.getInAppKeyboardExtraKeys()));
             mKeyboard.setKeyboard(LayoutModifier.modify(previewLayout, options, getResources()));
         }
-        // The height is the terminal's, in the orientation the phone is being held in: it belongs
-        // to a place now, and the terminal is the one this preview stands for.
+        // The height is the layout's, in the orientation the phone is being held in.
         mKeyboard.setHeightScale(new PlaceLayoutStore(mPreferences).keyboardHeightScale(
-            PaneWallPage.TERMINAL, PlaceOrientation.of(getResources().getConfiguration())));
+            PlaceOrientation.of(getResources().getConfiguration())));
         mKeyboard.setKeyMarginScale(mPreferences.getInAppKeyboardKeyMarginScale());
         float radiusDp = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
         mKeyboard.setKeyCornerRadiusOverride(radiusDp < 0f ? -1f : dpFloat(radiusDp));

@@ -27,11 +27,16 @@ import java.util.List;
  * agree. Editing the other orientation therefore changes the miniature and nothing else until the
  * phone is turned.
  *
- * <p>The rows beneath the miniature are the same question asked of the same store: what this place
- * offers that no bar can be dragged into — how its keyboard stands, whether it opens on entry, how
- * many cells its grid has, and how tall its dock and its keyboard stand. They come from
- * {@link PlaceArrangeModel}, which already answers for one orientation at a time, so the toggle
- * moves the rows exactly as it moves the picture.
+ * <p>The rows beneath the miniature are the same question asked of the same store: what the layout
+ * offers that no bar can be dragged into — how the keyboard stands, how many cells the widget grid
+ * has, and how tall the dock and the keyboard stand. They come from {@link PlaceArrangeModel},
+ * which already answers for one orientation at a time, so the toggle moves the rows exactly as it
+ * moves the picture.
+ *
+ * <p>The layout is every place's (ADR 0003), so there is no place to pick and every write lands
+ * everywhere. The session still knows which place it was opened over, because that is what the
+ * miniature draws — Home's grid, the terminal's text, the display's screen — and what decides the
+ * rows worth offering: the grid only on Home, the keyboard's mode only over the display.
  *
  * <p>Pure: a store in, an answer out, no views, so every case above is testable without a window.
  * {@link LayoutEditorController} is the shell that draws it.
@@ -101,8 +106,9 @@ public final class LayoutEditorPlan {
     }
 
     @NonNull private final PlaceLayoutStore mPlaces;
+    /** The place the miniature draws and the live place behind the card; never a write target. */
     @NonNull private PaneWallPage mPlace;
-    /** The arrangement of every place as the editor found it; what Discard and ↺ put back. */
+    /** The arrangement as the editor found it; what Discard and ↺ put back. */
     @NonNull private final PlaceArrangeSnapshot mEntry;
     @NonNull private final String mEntrySignature;
     @NonNull private PlaceOrientation mDeviceOrientation;
@@ -120,7 +126,7 @@ public final class LayoutEditorPlan {
         mEntrySignature = mEntry.signature();
     }
 
-    /** Opens a session on one place, showing the orientation the phone is in. */
+    /** Opens a session over one place, showing the orientation the phone is in. */
     @NonNull
     public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
                                          @NonNull PaneWallPage place,
@@ -153,12 +159,12 @@ public final class LayoutEditorPlan {
     /** The arrangement the miniature draws: the shown orientation's, resolved. */
     @NonNull
     public PlaceLayout shownLayout() {
-        return mPlaces.resolve(mPlace, mShownOrientation);
+        return mPlaces.resolve(mShownOrientation);
     }
 
     /**
-     * The rows beneath the miniature: this place's dock height, its keyboard, and on Home its grid,
-     * for the orientation on the toggle. A pick or a drag writes through the group's own writer,
+     * The rows beneath the miniature: the dock's height, the keyboard, and on Home the grid, for
+     * the orientation on the toggle. A pick or a drag writes through the group's own writer,
      * the same way a drop writes through the picture.
      */
     @NonNull
@@ -196,9 +202,9 @@ public final class LayoutEditorPlan {
     }
 
     /**
-     * The place on the miniature. A second door opened while the editor is up — the Settings row
-     * for another place, say — moves it rather than starting a session over, so what Discard puts
-     * back is still the arrangement the user first opened the editor on.
+     * The place on the miniature. A second door opened while the editor is up moves it rather than
+     * starting a session over, so what Discard puts back is still the arrangement the user first
+     * opened the editor on. It changes the picture and the rows offered, never what is written.
      */
     public void showPlace(@NonNull PaneWallPage place) {
         mPlace = place;
@@ -221,7 +227,7 @@ public final class LayoutEditorPlan {
 
     /**
      * A bar dropped into a gap in an edge's stack, or in the tray when {@code edge} is null.
-     * Writes the shown orientation's keys for this place, and says whether the live place behind
+     * Writes the shown orientation's keys, for every place, and says whether the live place behind
      * has to follow.
      *
      * @param index the position in that edge's stack, 0 outermost, or negative for the band the
@@ -230,7 +236,7 @@ public final class LayoutEditorPlan {
     @NonNull
     public Drop drop(@NonNull MiniatureDragPolicy.Bar bar, @Nullable PlaceLayout.Edge edge,
                      int index) {
-        if (!LayoutChooserModel.applyDrop(mPlaces, mPlace, mShownOrientation, bar, edge, index))
+        if (!LayoutChooserModel.applyDrop(mPlaces, mShownOrientation, bar, edge, index))
             return Drop.NONE;
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }
@@ -274,7 +280,7 @@ public final class LayoutEditorPlan {
         return !mEntrySignature.equals(PlaceArrangeSnapshot.capture(mPlaces).signature());
     }
 
-    /** Puts every place's arrangement back the way the editor found it. */
+    /** Puts the arrangement back the way the editor found it. */
     public void revert() {
         mEntry.restore(mPlaces);
     }

@@ -108,13 +108,10 @@ import com.termux.app.place.CanvasBudgetPolicy;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.ExtraKeysColumnGeometry;
-import com.termux.app.place.KeyboardOnEnter;
 import com.termux.app.place.KeyboardOverlayPolicy;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
-import com.termux.app.place.PlaceLookPreferences;
-import com.termux.app.place.PlaceLookRefresh;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.PlaceSizePreferences;
 import com.termux.app.surfaces.SurfaceEditorController;
@@ -244,20 +241,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         "com.termux.app.extra.DOCK_TUNING";
     public static final String EXTRA_SURFACE_EDITOR_SECTION =
         "com.termux.app.extra.DOCK_TUNING_SECTION";
-    /**
-     * The place the surface editor should open on — {@code widgets}, {@code terminal} or
-     * {@code display}, as {@link com.termux.app.wall.PaneWallPage#toolName()} names them. Absent or
-     * unknown opens the editor on the shared look every place wears.
-     */
-    public static final String EXTRA_SURFACE_EDITOR_PLACE =
-        "com.termux.app.extra.SURFACE_EDITOR_PLACE";
     /** Opens the Layout editor over the live place, from any door that sends an intent. */
     public static final String EXTRA_LAYOUT_EDITOR =
         "com.termux.app.extra.LAYOUT_EDITOR";
     /**
      * The place the Layout editor should open on — {@code widgets}, {@code terminal} or
      * {@code display}, as {@link com.termux.app.wall.PaneWallPage#toolName()} names them. Absent or
-     * unknown opens it on the place the user is already looking at.
+     * unknown opens it on the place the user is already looking at. The layout is every place's, so
+     * this only decides which place the wall shows behind the editor and what its miniature draws.
      */
     public static final String EXTRA_LAYOUT_EDITOR_PLACE =
         "com.termux.app.extra.LAYOUT_EDITOR_PLACE";
@@ -607,10 +598,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.x11.X11WindowIconResolver mDisplayWindowIcons;
     /** Closes the display's apps before the server is killed; built the first time Stop is used. */
     @Nullable private com.termux.app.x11.DisplayStopSequence mDisplayStop;
-    /** The place the wall last rested on, so leaving one can record what it leaves behind. */
+    /**
+     * The place whose keyboard state is on screen: the one the wall last settled on, so arriving
+     * somewhere new can record what the place being left leaves behind.
+     */
     @NonNull private com.termux.app.wall.PaneWallPage mLastWallPage =
         com.termux.app.wall.PaneWallPage.TERMINAL;
-    /** Every place's arrangement and memory; built on the preferences the first time it is asked. */
+    /** The shared arrangement and each place's memory; built on the preferences when first asked. */
     @Nullable private PlaceLayoutStore mPlaceLayoutStore;
     /** The first-boot tour: the cards drawn over the real chrome, and the run behind them. */
     @Nullable private FirstBootTour mFirstBootTour;
@@ -618,23 +612,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Whether the one-time "take the new key row?" card is up, so it is never raised twice. */
     private boolean mExtraKeysDefaultOfferShowing;
 
-    /**
-     * The look layer sitting under {@link #mPreferences}: every surface value the chrome reads
-     * resolves through the place on screen before it falls back to the shared look. Held here so
-     * the wall can point it at the place it settles on, and the surface editor at the place it is
-     * open on.
-     */
-    @Nullable private PlaceLookPreferences mLookPreferences;
     /** The last resolved layout, kept while nothing the store answers from has moved. */
     @Nullable private PlaceLayout mCachedPlaceLayout;
-    @Nullable private com.termux.app.wall.PaneWallPage mCachedPlaceLayoutPlace;
     @Nullable private PlaceOrientation mCachedPlaceLayoutOrientation;
     private int mCachedPlaceLayoutRevision;
     /** The arrangement the chrome was last laid out for, so an unchanged one costs nothing. */
     @Nullable private PlaceLayout mAppliedPlaceLayout;
-    /** The place whose remembered status-bar state the bar on screen is showing. */
-    @NonNull private com.termux.app.wall.PaneWallPage mStatusBarPlace =
-        com.termux.app.wall.PaneWallPage.TERMINAL;
     /** The edge the bar is standing on right now; every piece of its geometry reads this. */
     @NonNull private PlaceLayout.Edge mStatusBarEdge = PlaceLayout.Edge.TOP;
     /** Whether the bar has been stood on that edge at least once since the views were built. */
@@ -646,12 +629,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * resolved order is known.
      */
     private boolean mStatusBarOnDockPlank;
-    /** The Display place raised a keyboard the terminal did not have; it goes back down with it. */
-    private boolean mDisplayShowedKeyboard;
     /** What the prefix's desktop files looked like when the drawer last listed them. */
     private long mLinuxAppsSignature;
-    /** The wall put the in-app keyboard away when it left the terminal, and owes it back. */
-    private boolean mWallHidKeyboard;
     @Nullable private com.termux.app.launcher.widget.LauncherWidgetHostController mWidgetHostController;
     @Nullable private com.termux.app.launcher.widget.WidgetPaneController mWidgetPaneController;
     private static final int REQUEST_CODE_WEATHER_LOCATION = 4711;
@@ -9278,16 +9257,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * visibility inside the {@code onCreate} above.
      *
      * <p>The terminal is left alone: there the keyboard's restored state is the answer already.
-     * {@code mLastWallPage} names the restored place by now, so this re-run moves the keyboard
-     * without rewriting another place's memory, and the pair of flags it leaves behind is the
-     * one a Widgets/Display arrival normally leaves — returning to the terminal brings the
-     * keyboard back exactly as any other transition does.
+     * Anywhere else, a keyboard that restored itself up is the terminal's — it is the one place a
+     * keyboard is kept up between launches — so the terminal is recorded as left open before this
+     * place's own memory is applied, and walking back to the terminal brings it up again, the way
+     * any other Home to Terminal move does.
      */
     private void syncWallKeyboardForRestoredPlace() {
         if (mInAppKeyboard == null) return;
         com.termux.app.wall.PaneWallPage page = currentWallPage();
         if (page == com.termux.app.wall.PaneWallPage.TERMINAL) return;
-        syncWallKeyboard(page);
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store != null && mInAppKeyboard.isVisible())
+            store.setKeyboardOpen(com.termux.app.wall.PaneWallPage.TERMINAL, true);
+        applyPlaceKeyboard(page);
         syncPlaceLayout();
     }
 
@@ -9325,25 +9307,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (intent == null || !intent.getBooleanExtra(EXTRA_SURFACE_EDITOR, false))
             return;
         String initialSection = intent.getStringExtra(EXTRA_SURFACE_EDITOR_SECTION);
-        com.termux.app.wall.PaneWallPage place =
-            parseSurfaceEditorPlace(intent.getStringExtra(EXTRA_SURFACE_EDITOR_PLACE));
         intent.removeExtra(EXTRA_SURFACE_EDITOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
-        intent.removeExtra(EXTRA_SURFACE_EDITOR_PLACE);
         // Only one editor holds the screen at a time; the Layout editor is already up.
         if (mLayoutEditor.isActive())
             return;
-        mSurfaceEditor.enter(initialSection, place);
+        mSurfaceEditor.enter(initialSection);
     }
 
     /**
-     * The place a surface-editor intent names, or null for the shared look. Anything the wall does
-     * not have a place for is not an error: the editor opens on the shared layer, which is what an
-     * unnamed place means anyway.
+     * The place a Layout editor intent names, or null for none. Anything the wall does not have a
+     * place for is not an error: the editor opens on the place on screen, which is what an unnamed
+     * place means anyway.
      */
     @Nullable
     @VisibleForTesting
-    static com.termux.app.wall.PaneWallPage parseSurfaceEditorPlace(@Nullable String name) {
+    static com.termux.app.wall.PaneWallPage parseLayoutEditorPlace(@Nullable String name) {
         if (name == null) return null;
         for (com.termux.app.wall.PaneWallPage page : com.termux.app.wall.PaneWallPage.values()) {
             if (page.toolName().equalsIgnoreCase(name.trim())) return page;
@@ -9359,7 +9338,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (intent == null || !intent.getBooleanExtra(EXTRA_LAYOUT_EDITOR, false))
             return;
         com.termux.app.wall.PaneWallPage place =
-            parseSurfaceEditorPlace(intent.getStringExtra(EXTRA_LAYOUT_EDITOR_PLACE));
+            parseLayoutEditorPlace(intent.getStringExtra(EXTRA_LAYOUT_EDITOR_PLACE));
         intent.removeExtra(EXTRA_LAYOUT_EDITOR);
         intent.removeExtra(EXTRA_LAYOUT_EDITOR_PLACE);
         openLayoutEditor(place);
@@ -9438,10 +9417,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mPreferences;
         }
 
-        @Nullable @Override public PlaceLookPreferences lookPreferences() {
-            return mLookPreferences;
-        }
-
         @NonNull @Override public PlaceLayout placeLayout() {
             return currentPlaceLayout();
         }
@@ -9478,13 +9453,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return getTermuxThemeColor(attr, fallbackRes);
         }
 
-        @Override public void holdPaneWallOnPlace(
-                @Nullable com.termux.app.wall.PaneWallPage place, boolean held) {
+        @Override public void holdPaneWall(boolean held) {
             if (mPaneWallController == null) return;
-            if (held) {
-                if (place == null) mPaneWallController.returnToTerminal(false);
-                else mPaneWallController.goTo(place, false);
-            }
             mPaneWallController.setGesturesEnabled(!held);
             syncWallGestureAvailability();
         }
@@ -9801,10 +9771,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Nullable @Override public PlaceLayoutStore placeLayoutStore() {
             return TermuxActivity.this.placeLayoutStore();
-        }
-
-        @NonNull @Override public com.termux.app.wall.PaneWallPage place() {
-            return currentWallPlace();
         }
 
         @NonNull @Override public PlaceOrientation orientation() {
@@ -10237,41 +10203,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The launcher's preferences, reading through the place on screen.
+     * The launcher's preferences, with the three sizes reading through the layout.
      *
-     * <p>Looks are shared until a place is given one of its own, and this is the one seam where
-     * that resolution happens: the preferences the activity hands to the chrome, the dock policy,
-     * the keyboard and the surface editor are backed by {@link PlaceLookPreferences} rather than
-     * the preference file directly, so every existing getter answers for the place being drawn
-     * without a single per-place branch above it. Settings screens keep building their own
-     * unscoped instance, which is what makes their sliders the shared look.
+     * <p>Every place wears one look and stands in one layout per orientation (ADR 0003), so the
+     * only thing these preferences resolve differently from the file is the dock's height, the
+     * keyboard's height and its chin: those are layout values of the orientation on screen
+     * (ADR 0001), and the same getters answer for it. The store is built here, before anything
+     * reads a look, because building it runs the migration that folded the per-place looks into
+     * the shared one.
      */
     @Nullable
     private TermuxAppSharedPreferences buildPlaceScopedPreferences(boolean exitAppOnError) {
         TermuxAppSharedPreferences base = TermuxAppSharedPreferences.build(this, exitAppOnError);
         if (base == null || base.getSharedPreferences() == null)
             return base;
-        mLookPreferences = new PlaceLookPreferences(base.getSharedPreferences());
-        TermuxAppSharedPreferences scoped = new TermuxAppSharedPreferences(base.getContext(),
-            mLookPreferences, base.getMultiProcessSharedPreferences());
-        // And the sizes, which are the place's and the orientation's rather than the place's
-        // alone, so the same getters answer for what is on screen (ADR 0001).
-        mPlaceLayoutStore = new PlaceLayoutStore(scoped);
-        scoped.setPlaceSizes(new PlaceSizePreferences(
-            () -> mPlaceLayoutStore, this::currentWallPlace, this::currentPlaceOrientation));
-        return scoped;
+        mPlaceLayoutStore = new PlaceLayoutStore(base);
+        base.setPlaceSizes(new PlaceSizePreferences(
+            () -> mPlaceLayoutStore, this::currentPlaceOrientation));
+        return base;
     }
 
     /**
      * The widget grid's columns and rows are the user's; the repository only remembers them. The
-     * grid belongs to the home place and to this orientation, so a turn of the screen re-applies it.
+     * grid belongs to the layout of this orientation, so a turn of the screen re-applies it.
      * The widgets' places belong to the orientation too: the one being left is put down and the one
      * arriving is picked up again, so turning the screen and turning it back changes nothing.
      */
     private void applyWidgetGridPreference() {
         if (mWidgetHostController == null) return;
-        PlaceLayout layout = placeLayout(com.termux.app.wall.PaneWallPage.WIDGETS,
-            currentPlaceOrientation());
+        PlaceLayout layout = placeLayout(currentPlaceOrientation());
         boolean moved = mWidgetHostController.repository().applyOrientation(
             currentPlaceOrientation().storageValue(), layout.widgetRows, layout.widgetColumns);
         mWidgetHostController.applyGrid(layout.widgetRows, layout.widgetColumns);
@@ -10319,42 +10279,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The one seam every piece of chrome asks. What is on screen and where is a property of the
-     * place and the orientation, resolved once here rather than branched on per surface.
+     * orientation, shared by every place (ADR 0003), resolved once here rather than branched on
+     * per surface.
      */
     @NonNull
     private PlaceLayout currentPlaceLayout() {
-        return placeLayout(currentWallPlace(), currentPlaceOrientation());
+        return placeLayout(currentPlaceOrientation());
     }
 
     /**
-     * Whether the status bar on screen is resting compact. It is the memory of the place it is
-     * showing for and of the orientation it is showing in, not one state for the whole launcher:
-     * a bar the user opened on a tall screen is not a bar they asked for on a short one.
+     * Whether the status bar on screen is resting compact. It is the memory of the orientation it
+     * is showing in, not one state for the whole launcher — a bar the user opened on a tall screen
+     * is not a bar they asked for on a short one — and every place shares it, so crossing the wall
+     * never moves the bar.
      */
     private boolean isStatusBarCompact() {
         if (!com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
             return true;
         }
         PlaceLayoutStore store = placeLayoutStore();
-        return store != null && store.isStatusCompact(mStatusBarPlace, currentPlaceOrientation());
+        return store != null && store.isStatusCompact(currentPlaceOrientation());
     }
 
     private void setStatusBarCompact(boolean compact) {
         PlaceLayoutStore store = placeLayoutStore();
-        if (store != null)
-            store.setStatusCompact(mStatusBarPlace, currentPlaceOrientation(), compact);
+        if (store != null) store.setStatusCompact(currentPlaceOrientation(), compact);
     }
 
     @NonNull
-    private PlaceLayout placeLayout(@NonNull com.termux.app.wall.PaneWallPage place,
-                                    @NonNull PlaceOrientation orientation) {
+    private PlaceLayout placeLayout(@NonNull PlaceOrientation orientation) {
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return NO_PREFERENCES_PLACE_LAYOUT;
-        if (mCachedPlaceLayout == null || mCachedPlaceLayoutPlace != place
+        if (mCachedPlaceLayout == null
             || mCachedPlaceLayoutOrientation != orientation
             || mCachedPlaceLayoutRevision != store.revision()) {
-            mCachedPlaceLayout = store.resolve(place, orientation);
-            mCachedPlaceLayoutPlace = place;
+            mCachedPlaceLayout = store.resolve(orientation);
             mCachedPlaceLayoutOrientation = orientation;
             mCachedPlaceLayoutRevision = store.revision();
         }
@@ -11120,30 +11079,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void doSyncPlaceLayout() {
-        // The look layer follows the wall too: a place wearing its own dock, keyboard or status
-        // surface puts it on as the wall settles on it. Nothing to re-apply when no place has one.
-        // Only the parts whose look reads differently here are repainted: a home screen that only
-        // clears its canvas costs a terminal repaint, not the whole appearance.
-        java.util.EnumSet<PlaceLookRefresh.Part> lookParts =
-            java.util.EnumSet.noneOf(PlaceLookRefresh.Part.class);
-        if (mLookPreferences != null) {
-            com.termux.app.wall.PaneWallPage from = mLookPreferences.renderPlace();
-            com.termux.app.wall.PaneWallPage to = currentWallPlace();
-            if (mLookPreferences.setRenderPlace(to)) {
-                lookParts = mLookPreferences.isEditing()
-                    ? java.util.EnumSet.allOf(PlaceLookRefresh.Part.class)
-                    : PlaceLookRefresh.partsFor(mLookPreferences.keysReadingDifferently(from, to));
-            }
-        }
-        // The dock's height, the keyboard's height and its chin are the place's and the
-        // orientation's, so a wall settling on a place sized differently — or a turn of the screen
-        // — has to re-read them even where no look was ever overridden.
-        if (applyPlaceSizes()) lookParts = java.util.EnumSet.allOf(PlaceLookRefresh.Part.class);
+        // The dock's height, the keyboard's height and its chin are the orientation's, so a turn
+        // of the screen — or a grip dragged in the Layout editor — has to re-read them. The look
+        // itself is every place's, so nothing else here depends on where the wall stands.
+        boolean sizesMoved = applyPlaceSizes();
         PlaceLayout layout = currentPlaceLayout();
         boolean arrangementChanged = !layout.equals(mAppliedPlaceLayout);
         mAppliedPlaceLayout = layout;
         // The keyboard hears the type from here rather than from the tool that wrote it: a
-        // rotation and a wall page change move it too, and this is the one pass all three take.
+        // rotation moves it too, and this is the one pass both take.
         // Hosting first: the geometry pass the keyboard then asks for has to see the keyboard where
         // it is going to be, not where it was.
         if (mFloatingKeyboard != null)
@@ -11175,7 +11119,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setTerminalToolbarHeight();
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         }
-        if (!lookParts.isEmpty()) applyPlaceLook(lookParts);
+        if (sizesMoved) applySizedSurfaces();
     }
 
     /** The three sizes as last applied, so a place or a turn that moves one is noticed. */
@@ -11183,7 +11127,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mAppliedKeyboardHeightScale = Float.NaN;
     private int mAppliedKeyboardChinDp = -1;
 
-    /** Whether the sizes the place and orientation on screen ask for have moved since. */
+    /** Whether the sizes the orientation on screen asks for have moved since. */
     private boolean applyPlaceSizes() {
         if (mPreferences == null) return false;
         float dock = mPreferences.getAppLauncherBarHeightScale();
@@ -11199,44 +11143,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Every surface re-read for the place the wall has just settled on.
+     * Every surface a size decides, re-read after the dock's height, the keyboard's height or its
+     * chin moved: a turn of the screen to an orientation sized differently, or a grip dragged in
+     * the Layout editor.
      *
      * <p>The pre-blurred wallpaper frames are deliberately kept: they depend on the wallpaper, not
-     * on the place, and the cache holds one frame per radius, so a place whose look asks for
-     * another radius builds that frame once and the crops re-cut against their recorded radius.
-     * Clearing here made every page change decode and blur the wallpaper again for each radius in
-     * use — three to four full-frame rebuilds, half a second of main thread, inside the tap or the
-     * drag that moved the wall (measured on Pong, 2026-09-07).
+     * on the sizes, and the crops re-cut against their recorded radius. Clearing them here once made
+     * every page change decode and blur the wallpaper again for each radius in use (measured on
+     * Pong, 2026-09-07); page changes no longer come through here at all, since every place has the
+     * same sizes (ADR 0003).
      */
-    private void applyPlaceLook(@NonNull java.util.Set<PlaceLookRefresh.Part> parts) {
-        Trace.beginSection("Place.applyLook");
+    private void applySizedSurfaces() {
+        Trace.beginSection("Place.applySizes");
         try {
-            doApplyPlaceLook(parts);
-        } finally {
-            Trace.endSection();
-        }
-    }
-
-    private void doApplyPlaceLook(@NonNull java.util.Set<PlaceLookRefresh.Part> parts) {
-        if (parts.contains(PlaceLookRefresh.Part.DOCK)) {
             updateAppLauncherBarHeight();
             setTerminalToolbarHeight(true);
             applySuggestionBarSurfaceStyling();
-        }
-        if (parts.contains(PlaceLookRefresh.Part.TERMINAL)) {
             applyTerminalSurfaceAppearance();
             if (mPaneController != null) mPaneController.refreshPaneLayout();
+            refreshTerminalWindowBar();
+            if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
+            mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_BACKDROPS
+                | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
+        } finally {
+            Trace.endSection();
         }
-        if (parts.contains(PlaceLookRefresh.Part.STATUS)) refreshTerminalWindowBar();
-        if (parts.contains(PlaceLookRefresh.Part.KEYBOARD) && mInAppKeyboard != null)
-            mInAppKeyboard.onPreferencesReloaded();
-        // A backdrop is a crop of the blurred wallpaper, keyed by its rect and radius already; only
-        // a surface whose own look moved has a reason to throw its crop away.
-        int scopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER;
-        if (parts.contains(PlaceLookRefresh.Part.DOCK)) scopes |= ChromeRenderer.SCOPE_BACKDROPS;
-        if (parts.contains(PlaceLookRefresh.Part.KEYBOARD))
-            scopes |= ChromeRenderer.SCOPE_KEYBOARD_BACKDROP;
-        mChrome.requestSync(scopes);
     }
 
     /**
@@ -15074,10 +15006,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     void openSurfaceEditor() {
-        // From inside the launcher the editor is opened on the place the user is looking at; the
-        // shared look is what the Settings row opens.
+        // The look is every place's, so the editor opens over whatever place is on screen and
+        // what it moves lands everywhere.
         if (mLayoutEditor.isActive()) return;
-        mSurfaceEditor.enter(null, currentWallPlace());
+        mSurfaceEditor.enter();
     }
 
     void openSettings() {
@@ -15255,134 +15187,97 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The keyboard follows the wall. Every place remembers whether it was left with the keyboard
-     * up and says how it wants it back; the terminal is the one whose keyboard is the user's own
-     * choice moment to moment, so it keeps the pair of flags that stop the wall fighting them. A
-     * widget's own text field asks for the system IME through onWidgetEditorFocused instead.
+     * The keyboard follows the wall. Home has nothing to type into, so it always comes back
+     * closed; the terminal and the display each remember whether they were left with the keyboard
+     * up and come back that way. The layout and the look are the same on every place (ADR 0003),
+     * so this is the one piece of chrome a place change moves, and it moves at settle: the page
+     * being left keeps the keyboard it had for the whole slide. A widget's own text field asks for
+     * the system IME through onWidgetEditorFocused instead.
      */
     private void syncWallKeyboard(@NonNull com.termux.app.wall.PaneWallPage page) {
-        if (page != mLastWallPage) rememberPlaceKeyboard(mLastWallPage);
+        if (page != mLastWallPage) {
+            rememberPlaceKeyboard(mLastWallPage);
+            mLastWallPage = page;
+        }
+        applyPlaceKeyboard(page);
+    }
+
+    /** Puts the keyboard where the place on screen remembers it, without recording anything. */
+    private void applyPlaceKeyboard(@NonNull com.termux.app.wall.PaneWallPage page) {
         if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
-            KeyboardUtils.hideSoftKeyboard(TermuxActivity.this, getCurrentFocus());
             // The terminal's keybind hints have no meaning over the display; nothing here is
             // a launcher chord.
             mKeybindHintPresenter.hideNow(false);
-            if (mInAppKeyboard == null) return;
-            boolean wanted = wantsKeyboardOnEnter(page);
-            boolean visible = mInAppKeyboard.isVisible();
-            if (visible && !wanted) {
-                mWallHidKeyboard = true;
-                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
-                    .TermuxInAppKeyboard.HideReason.WALL_PAGE);
-            } else if (!visible && wanted) {
-                mDisplayShowedKeyboard = !mWallHidKeyboard;
-                mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard
-                    .TermuxInAppKeyboard.ShowReason.KEYBOARD_ACTION);
-            }
-            return;
         }
+        // The phone's keyboard belongs to the terminal's text; anywhere else it is put away, and a
+        // place that wants one raises it again through its own focus.
         if (page != com.termux.app.wall.PaneWallPage.TERMINAL) {
-            boolean wanted = wantsKeyboardOnEnter(page);
-            if (mInAppKeyboard != null && mInAppKeyboard.isVisible() && !wanted) {
-                if (!mDisplayShowedKeyboard) mWallHidKeyboard = true;
-                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
-                    .TermuxInAppKeyboard.HideReason.WALL_PAGE);
-            } else if (mInAppKeyboard != null && !mInAppKeyboard.isVisible() && wanted) {
-                mDisplayShowedKeyboard = !mWallHidKeyboard;
-                mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard
-                    .TermuxInAppKeyboard.ShowReason.KEYBOARD_ACTION);
-                return;
-            }
-            mDisplayShowedKeyboard = false;
             KeyboardUtils.hideSoftKeyboard(TermuxActivity.this, getCurrentFocus());
-            return;
         }
-        // The terminal is the place a user opens and closes the keyboard on all day, so "as left"
-        // there means the pair of flags below rather than a stored state. Asking for it open or
-        // closed outright overrides them.
-        KeyboardOnEnter onEnter = keyboardOnEnter(page);
-        if (onEnter != KeyboardOnEnter.AS_LEFT && mInAppKeyboard != null) {
-            boolean wanted = onEnter == KeyboardOnEnter.OPEN;
-            mDisplayShowedKeyboard = false;
-            mWallHidKeyboard = false;
-            if (mInAppKeyboard.isVisible() != wanted) {
-                if (wanted) {
-                    mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard
-                        .TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
-                } else {
-                    mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
-                        .TermuxInAppKeyboard.HideReason.WALL_PAGE);
-                }
-            }
-            return;
-        }
-        if (mDisplayShowedKeyboard) {
-            // The terminal had no keyboard before the Display place raised one.
-            mDisplayShowedKeyboard = false;
-            if (mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
-                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
-                    .TermuxInAppKeyboard.HideReason.WALL_PAGE);
-            }
-        } else if (mWallHidKeyboard) {
-            mWallHidKeyboard = false;
-            if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
-                mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard
-                    .TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
-            }
+        if (mInAppKeyboard == null) return;
+        boolean wanted = wantsKeyboardOnEnter(page);
+        if (mInAppKeyboard.isVisible() == wanted) return;
+        if (wanted) {
+            mInAppKeyboard.show(page == com.termux.app.wall.PaneWallPage.TERMINAL
+                ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TERMINAL_TAP
+                : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason
+                    .KEYBOARD_ACTION);
+        } else {
+            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
+                .TermuxInAppKeyboard.HideReason.WALL_PAGE);
         }
     }
 
     /**
-     * The status bar rests the way each place was left. The place on screen owns the bar, so the
-     * one being left keeps the state it has and the one arriving is applied.
+     * What differs between places once the wall rests on one: the keyboard each remembers, the
+     * display's touchpad, which place owns the phone's keyboard, and which extra keys have
+     * anything to act on. Nothing is re-laid or re-styled, because the layout and the look are the
+     * same everywhere. A settle back onto the page the wall was already on changes nothing, so a
+     * drag that springs back leaves the keyboard alone.
      */
-    private void syncPlaceStatusBar(@NonNull com.termux.app.wall.PaneWallPage page) {
-        if (page == mStatusBarPlace) return;
-        // The place being left has nothing to write: every change of state has already been stored
-        // as it happened, so writing its own answer back to it only ever pinned a default nobody
-        // chose — and the store cannot tell a pinned default from a choice afterwards.
-        mStatusBarPlace = page;
-        // Mid-slide the bar takes its new height in one step: animating it would re-lay out and
-        // repaint the terminal at every intermediate height while the terminal is itself sliding,
-        // which is what made crossing between a compact and an open place judder.
-        // The page change is announced before the slide starts, so a wall still carrying an offset
-        // counts as moving.
-        com.termux.app.wall.PaneWallLayout wall =
-            mPaneWallController == null ? null : mPaneWallController.wall();
-        boolean wallMoving = wall != null && (wall.isMoving() || wall.offsetPx() != 0f);
-        setTopStatusBarCollapsed(isStatusBarCompact(), !wallMoving);
+    private void syncPlaceState(@NonNull com.termux.app.wall.PaneWallPage page) {
+        if (page == mLastWallPage) return;
+        PlaceLayout layout = currentPlaceLayout();
+        boolean overlaid = KeyboardOverlayPolicy.overlays(mLastWallPage, layout);
+        syncWallKeyboard(page);
+        syncDisplayTouchpad();
+        applyPlaceSystemImeOwner();
+        applyExtraKeysPlaceEligibility();
+        // One chrome pass at rest, for the two pieces of geometry that are the place's by design:
+        // the terminal alone pads the dock down to a whole text row, and Home and the display can
+        // float an open keyboard over their content where the terminal gives it room. An
+        // overlaying keyboard also paints an opaque fill rather than glass
+        // (KeyboardMaterialPolicy), so a keyboard that stayed up across that change is repainted.
+        int scopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
+        if (overlaid != KeyboardOverlayPolicy.overlays(page, layout))
+            scopes |= ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP;
+        mChrome.requestSync(scopes);
     }
 
     /**
-     * Writes a keyboard type for the place and orientation on screen and re-runs the arrangement,
-     * which is what tells the keyboard the type moved. False before there are preferences to
-     * write it to.
+     * Writes a keyboard type for the orientation on screen and re-runs the arrangement, which is
+     * what tells the keyboard the type moved. The type is every place's, like the rest of the
+     * layout. False before there are preferences to write it to.
      */
     private boolean setKeyboardFormForCurrentPlace(@NonNull PlaceLayout.KeyboardForm form) {
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return false;
-        store.setKeyboardForm(currentWallPlace(), currentPlaceOrientation(), form);
+        store.setKeyboardForm(currentPlaceOrientation(), form);
         syncPlaceLayout();
         return true;
     }
 
-    /** Records how a place is being left, so "as left" has something to come back to. */
+    /** Records how a place is being left, so it has something to come back to. */
     private void rememberPlaceKeyboard(@NonNull com.termux.app.wall.PaneWallPage place) {
         PlaceLayoutStore store = placeLayoutStore();
-        if (store == null) return;
-        store.setKeyboardOpen(place, mInAppKeyboard != null && mInAppKeyboard.isVisible());
-    }
-
-    @NonNull
-    private KeyboardOnEnter keyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) {
-        PlaceLayoutStore store = placeLayoutStore();
-        return store == null ? KeyboardOnEnter.CLOSED : store.keyboardOnEnter(place);
+        // Before the keyboard exists there is nothing to record: a cold start restoring the wall
+        // onto another place would otherwise write the terminal's memory down as closed.
+        if (store == null || mInAppKeyboard == null) return;
+        store.setKeyboardOpen(place, mInAppKeyboard.isVisible());
     }
 
     /** Whether the place wants its keyboard up as the wall lands on it. */
     private boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) {
-        KeyboardOnEnter onEnter = keyboardOnEnter(place);
-        if (onEnter != KeyboardOnEnter.AS_LEFT) return onEnter == KeyboardOnEnter.OPEN;
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && store.wasKeyboardOpen(place);
     }
@@ -15425,6 +15320,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean isDisplayEnabled() { return com.termux.BuildConfig.X11_SERVER; }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
+                    // Everything a place change moves apart from the bar runs here, once the wall
+                    // has stopped: the layout and the look are every place's, so the slide never
+                    // has anything to re-lay, and what is left — the keyboard, the touchpad, who
+                    // owns the phone's keyboard, which keys can act — lands in one pass at rest
+                    // rather than in the release frame (ADR 0003).
+                    syncPlaceState(page);
                     noteTerminalPlaceMayBeVisible();
                     if (mWidgetPaneController != null) {
                         mWidgetPaneController.onWallPageShown(
@@ -15486,17 +15387,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             && page != com.termux.app.wall.PaneWallPage.WIDGETS) {
                             mWidgetPaneController.onWallPageLeaving();
                         }
+                        // Only the bar is re-dressed at release, beside the cheap put-aways above:
+                        // it is the pager, and it names the place the wall has committed to. The
+                        // rest waits for the settle (syncPlaceState).
                         syncPlaceBar();
-                        syncWallKeyboard(page);
-                        syncDisplayTouchpad();
-                        syncPlaceStatusBar(page);
-                        syncPlaceLayout();
-                        mLastWallPage = page;
                         // The window chips belong to the place on screen: terminal windows on the
                         // terminal, the display's apps on the Display place.
                         com.termux.app.terminal.TerminalWindowBar chips =
                             findViewById(R.id.terminal_window_bar);
                         if (chips != null && isSplitPanesEnabled()) syncWindowBarItems(chips);
+                        // A change the wall makes at rest — a place taken away while it was
+                        // showing hands the wall to the terminal without a slide — is followed by
+                        // no settle, so the place's state is applied here instead.
+                        com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+                        if (wall != null && !wall.isMoving() && wall.offsetPx() == 0f)
+                            syncPlaceState(page);
                     });
                 }
             });
@@ -15520,10 +15425,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             state.putString(com.termux.app.wall.PaneWallController.ARG_PAGE, initialPage);
             mPaneWallController.restoreInstanceState(state);
         }
-        // A cold start can land on the place the wall last rested on without a page change to
-        // announce it, so the look layer is pointed at it before the first chrome pass rather than
-        // after one drawn in the shared look.
-        if (mLookPreferences != null) mLookPreferences.setRenderPlace(currentWallPlace());
     }
 
     /**
@@ -15886,21 +15787,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();
             }
             @Override public int widgetGridColumns() {
-                return placeLayout(com.termux.app.wall.PaneWallPage.WIDGETS,
-                    currentPlaceOrientation()).widgetColumns;
+                return placeLayout(currentPlaceOrientation()).widgetColumns;
             }
             @Override public int widgetGridRows() {
-                return placeLayout(com.termux.app.wall.PaneWallPage.WIDGETS,
-                    currentPlaceOrientation()).widgetRows;
+                return placeLayout(currentPlaceOrientation()).widgetRows;
             }
             @Override public void setWidgetGrid(int columns, int rows) {
                 PlaceLayoutStore store = placeLayoutStore();
                 if (store == null) return;
                 PlaceOrientation orientation = currentPlaceOrientation();
-                store.setWidgetColumns(com.termux.app.wall.PaneWallPage.WIDGETS, orientation,
-                    columns);
-                store.setWidgetRows(com.termux.app.wall.PaneWallPage.WIDGETS, orientation, rows);
-                // The grid is drawn from the place's layout, so the same re-read the Layout
+                store.setWidgetColumns(orientation, columns);
+                store.setWidgetRows(orientation, rows);
+                // The grid is drawn from the layout, so the same re-read the Layout
                 // page's sliders trigger is what reflows it here - no second path to applyGrid.
                 syncPlaceLayout();
             }
@@ -20877,7 +20775,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mAppDrawerController != null)
             mAppDrawerController.onPreferencesReloaded();
         // Re-lays every piece of chrome the arrangement decides — a superset of the widget grid
-        // alone, so a Layout page write (apps row, extra keys, keyboard-on-enter, the grid) reaches
+        // alone, so a Layout page write (apps row, extra keys, keyboard type, the grid) reaches
         // the running launcher on the way back from Settings, without a recreate.
         syncPlaceLayout();
         applySuggestionBarInputChar();
