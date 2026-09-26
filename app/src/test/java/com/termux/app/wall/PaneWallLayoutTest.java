@@ -15,6 +15,11 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 /**
  * Page positions. Every place is laid out at the host's size and only ever moved, so a page
  * change and a whole drag cost no layout work — and the terminal page in the middle keeps the
@@ -94,8 +99,59 @@ public class PaneWallLayoutTest {
         assertEquals(-WIDTH, widgets.getTranslationX(), EPS);
         assertEquals(WIDTH, display.getTranslationX(), EPS);
         assertEquals(View.VISIBLE, terminal.getVisibility());
+        assertEquals(1f, terminal.getAlpha(), EPS);
         assertEquals(View.INVISIBLE, widgets.getVisibility());
         assertEquals(View.INVISIBLE, display.getVisibility());
+    }
+
+    /**
+     * Unlike the other places, the Terminal page never goes INVISIBLE off screen: it stays
+     * VISIBLE and is faded to alpha 0 instead, so its display lists (kitty animation frames, the
+     * padding band, every pane's rows) survive the trip away and the frame that brings it back
+     * repaints them rather than re-recording from nothing (see PaneWallLayout#applyPagePositions
+     * and 707920f7, which is where an off-screen page first stopped drawing at all).
+     */
+    @Test
+    public void theTerminalPageStaysVisibleAndFadesInsteadOfGoingInvisible() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.goTo(PaneWallPage.WIDGETS, false);
+        assertEquals(View.VISIBLE, terminal.getVisibility());
+        assertEquals(0f, terminal.getAlpha(), EPS);
+        // The place actually on screen is unaffected: it is fully opaque, same as before.
+        assertEquals(View.VISIBLE, widgets.getVisibility());
+        assertEquals(1f, widgets.getAlpha(), EPS);
+
+        wall.goTo(PaneWallPage.TERMINAL, false);
+        assertEquals(View.VISIBLE, terminal.getVisibility());
+        assertEquals(1f, terminal.getAlpha(), EPS);
+    }
+
+    /**
+     * The Terminal page's own visibility no longer says when it left or came back, since it is
+     * never INVISIBLE any more — so the wall says so directly, once per actual crossing.
+     */
+    @Test
+    public void onTerminalOffScreenChangedFiresOnceASideOfEachCrossing() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        List<Boolean> reports = new ArrayList<>();
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public void onTerminalOffScreenChanged(boolean offScreen) {
+                reports.add(offScreen);
+            }
+        });
+        // Registering a listener does not itself replay the current state; it hears the terminal
+        // leave for the first time when the wall actually moves off it.
+        assertTrue(reports.isEmpty());
+
+        wall.goTo(PaneWallPage.WIDGETS, false);
+        assertEquals(Collections.singletonList(true), reports);
+
+        // Moving between the two pages that are not the Terminal reports nothing new.
+        wall.goTo(PaneWallPage.DISPLAY, false);
+        assertEquals(Collections.singletonList(true), reports);
+
+        wall.goTo(PaneWallPage.TERMINAL, false);
+        assertEquals(Arrays.asList(true, false), reports);
     }
 
     @Test
@@ -362,7 +418,10 @@ public class PaneWallLayoutTest {
         assertEquals(0f, wall.offsetPx(), EPS);
         assertEquals(PaneWallPage.WIDGETS, settled[0]);
         assertEquals(WIDTH, terminal.getTranslationX(), EPS);
-        assertEquals(View.INVISIBLE, terminal.getVisibility());
+        // The Terminal page stays VISIBLE off screen and is faded instead, so its display lists
+        // survive the trip away (see PaneWallLayout#applyPagePositions and 707920f7).
+        assertEquals(View.VISIBLE, terminal.getVisibility());
+        assertEquals(0f, terminal.getAlpha(), EPS);
         assertEquals(0f, widgets.getTranslationX(), EPS);
         assertTrue(wall.isPageOnScreen(PaneWallPage.WIDGETS));
         assertFalse(wall.isPageOnScreen(PaneWallPage.TERMINAL));
@@ -404,7 +463,8 @@ public class PaneWallLayoutTest {
         wall.nudgePage(PaneWallPage.TERMINAL, -WIDTH, 380L, null, () -> ended[0]++);
         assertEquals(1, ended[0]);
         assertEquals(WIDTH, terminal.getTranslationX(), EPS);
-        assertEquals(View.INVISIBLE, terminal.getVisibility());
+        assertEquals(View.VISIBLE, terminal.getVisibility());
+        assertEquals(0f, terminal.getAlpha(), EPS);
     }
 
     @Test

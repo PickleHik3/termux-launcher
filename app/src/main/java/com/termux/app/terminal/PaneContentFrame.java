@@ -266,6 +266,26 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     }
 
     /**
+     * Refresh the terminal's edge colours before anything this frame draws this pass reads them —
+     * {@link #drawChild} below paints the band from them for the terminal child, and doing this
+     * first is what keeps band and grid always the same frame's colours. Without it the band, drawn
+     * before the terminal child's own {@code onDraw} had a chance to recompute them, painted with
+     * whatever the last frame left behind; a change that arrived while this pane was off screen (an
+     * alpha-faded wall page keeps drawing, so this still ran, but nothing invalidated it to catch
+     * up) then showed the new grid over the old band for one more frame after the pane returned.
+     *
+     * <p>{@link com.termux.view.TerminalView#computeEdgeColorsIfEnabled} is allocation-free and
+     * O(rows + columns); the terminal's own {@code onDraw} calls it again right after, redundantly
+     * but just as cheaply, since nothing about padding fill depends on draw order to be correct on
+     * its own account.
+     */
+    @Override
+    protected void dispatchDraw(Canvas canvas) {
+        if (mContent instanceof TerminalView) ((TerminalView) mContent).computeEdgeColorsIfEnabled();
+        super.dispatchDraw(canvas);
+    }
+
+    /**
      * Draw the padding-fill band right before the terminal child is drawn, so it lands after the
      * glass backdrop (drawn in an earlier call, for the child added first) and under the grid.
      *

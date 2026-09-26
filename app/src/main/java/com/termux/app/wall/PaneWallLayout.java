@@ -59,6 +59,14 @@ public final class PaneWallLayout extends ViewGroup {
         /** The wall moved: {@code offsetPx} is signed distance from the current page's rest. */
         default void onWallOffsetChanged(float offsetPx) { }
         /**
+         * The Terminal page just went fully off screen, or just came back. Unlike the other
+         * places it is never {@code INVISIBLE} (see {@link #applyPagePositions}), so nothing in
+         * the view hierarchy notices it leaving on its own any more; this is the signal that
+         * stands in for that, for the things a hidden terminal has to pause — kitty animations,
+         * the cursor blinker, focus, accessibility — across every pane the terminal page holds.
+         */
+        default void onTerminalOffScreenChanged(boolean offScreen) { }
+        /**
          * A drag was under way and something else moved the wall — {@link #goTo}, or the
          * gestures being switched off. Whoever was driving the drag has to let go of the finger:
          * the wall will ignore it from here on, and a claimant that keeps streaming to it is
@@ -83,6 +91,12 @@ public final class PaneWallLayout extends ViewGroup {
     @Nullable private ValueAnimator mNudge;
     private boolean mReducedMotion;
     private boolean mGesturesEnabled = true;
+    /**
+     * Whether the last {@link #applyPagePositions} call reported the Terminal page off screen, or
+     * {@code null} before the first call, so that first call always tells the listener where it
+     * stands rather than only on a change from some assumed starting state.
+     */
+    @Nullable private Boolean mTerminalOffScreen;
 
     public PaneWallLayout(@NonNull Context context) {
         this(context, null);
@@ -167,6 +181,10 @@ public final class PaneWallLayout extends ViewGroup {
      * the record of which page is current. The two agree whenever the wall rests where it says it
      * does; a slide that was cut short leaves them apart, and then the pixels are the truth.
      * Before the first layout there are no pixels to ask, so the record answers.
+     *
+     * <p>The Terminal page stays {@code VISIBLE} even off screen (see {@link #applyPagePositions}),
+     * so this reads its translation alone for it; the two-part check below still answers correctly
+     * for it too, since an off-screen Terminal page's translation is never inside the width either.
      */
     public boolean isPageOnScreen(@NonNull PaneWallPage page) {
         View view = mPageViews.get(page);
@@ -380,6 +398,20 @@ public final class PaneWallLayout extends ViewGroup {
      * never re-laid-out, and a page that is completely off screen stops drawing — mid-slide too:
      * the ring's third page, which a slide between the other two never shows, is not drawn along
      * with them.
+     *
+     * <p>The Terminal page is the one exception, and only since 707920f7 turned out to cost a
+     * frame. That commit tightened {@code onScreen || moving ? VISIBLE : INVISIBLE} down to plain
+     * {@code onScreen ? VISIBLE : INVISIBLE} so a slide no longer drew the ring's third page for
+     * the whole motion — but it also means an off-screen page now turns INVISIBLE the very frame
+     * it leaves, which is the frame the framework drops its display lists on, so the frame it
+     * comes back has to re-record everything (the pane's rows, its glass, its padding band) from
+     * nothing and misses vsync. The Terminal page is instead kept {@code VISIBLE} always and faded
+     * with {@code alpha} to 0 while off screen: a zero-alpha node is skipped by the renderer but
+     * keeps its display lists, so coming back repaints instead of re-recording. The other places
+     * keep 707920f7's INVISIBLE behaviour unchanged — the Display page in particular owns its own
+     * surface, which INVISIBLE is exactly right for. Because the Terminal page no longer goes
+     * INVISIBLE, nothing in the view hierarchy notices it leaving on its own any more, which is
+     * what {@link Listener#onTerminalOffScreenChanged} is for.
      */
     private void applyPagePositions() {
         int width = getWidth();
@@ -397,7 +429,18 @@ public final class PaneWallLayout extends ViewGroup {
                 + (entry.getKey() == mNudgePage ? mNudgePx : 0f);
             view.setTranslationX(x);
             boolean onScreen = width <= 0 || Math.abs(x) < width;
-            view.setVisibility(onScreen ? VISIBLE : INVISIBLE);
+            if (entry.getKey() == PaneWallPage.TERMINAL) {
+                view.setVisibility(VISIBLE);
+                view.setAlpha(onScreen ? 1f : 0f);
+                boolean offScreen = !onScreen;
+                if (mListener != null
+                        && (mTerminalOffScreen == null || mTerminalOffScreen != offScreen)) {
+                    mTerminalOffScreen = offScreen;
+                    mListener.onTerminalOffScreenChanged(offScreen);
+                }
+            } else {
+                view.setVisibility(onScreen ? VISIBLE : INVISIBLE);
+            }
         }
         if (mListener != null) mListener.onWallOffsetChanged(mOffsetPx);
     }
