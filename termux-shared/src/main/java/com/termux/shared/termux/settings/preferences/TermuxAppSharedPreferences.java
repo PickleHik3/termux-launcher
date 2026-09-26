@@ -2182,6 +2182,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_USE_SYSTEM_WALLPAPER, value, false);
     }
 
+    public boolean isWallpaperParallaxEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_PARALLAX, TERMUX_APP.DEFAULT_VALUE_WALLPAPER_PARALLAX);
+    }
+
+    public void setWallpaperParallaxEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_PARALLAX, value, false);
+    }
+
     public boolean isWallpaperReadPermissionPrompted() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_READ_PERMISSION_PROMPTED, TERMUX_APP.DEFAULT_VALUE_WALLPAPER_READ_PERMISSION_PROMPTED);
     }

@@ -1416,6 +1416,15 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_USE_SYSTEM_WALLPAPER = true;
 
         /**
+         * Defines the key for whether a managed wallpaper pans as the places slide (parallax). Only
+         * a wallpaper set through the launcher's own picker can pan, and only in portrait; the
+         * system's reduce-motion setting turns it off regardless.
+         */
+        public static final String KEY_WALLPAPER_PARALLAX = "wallpaper_parallax";
+
+        public static final boolean DEFAULT_VALUE_WALLPAPER_PARALLAX = true;
+
+        /**
          * Defines the key for whether the wallpaper-read storage permission prompt has been shown.
          * Asked at most once, and only after a wallpaper read actually failed.
          */

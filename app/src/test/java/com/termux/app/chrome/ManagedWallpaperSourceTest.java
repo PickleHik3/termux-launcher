@@ -60,6 +60,22 @@ public class ManagedWallpaperSourceTest {
         assertEquals(1, ManagedWallpaperSource.sampleSize(800, 600, 1080, 2412));
     }
 
+    /**
+     * The picture's size decides how wide a frame it is decoded into — a wide crop pans, a
+     * one-screen crop does not — so it has to be readable before any decode, from the header.
+     */
+    @Test
+    public void readSize_answersThePicturesPixelSizeFromItsHeader() throws Exception {
+        ManagedWallpaperSource source = new ManagedWallpaperSource(new HeldExecutor(), r -> r.run());
+        int[] size = new int[2];
+        assertTrue(source.readSize(png(1620, 2412), size));
+        assertEquals(1620, size[0]);
+        assertEquals(2412, size[1]);
+        assertFalse("no such file, no size", source.readSize(new File(temporary.getRoot(), "missing.png"), size));
+        assertEquals(0, size[0]);
+        assertEquals(0, size[1]);
+    }
+
     @Test
     public void decodeCover_scalesDownToCoverTheFrameAndNoFurther() throws Exception {
         Bitmap bitmap = ManagedWallpaperSource.decodeCover(png(2000, 1000), 500, 400);

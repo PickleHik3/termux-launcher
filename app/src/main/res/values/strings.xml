@@ -158,6 +158,8 @@
         <item>harder</item>
     </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
+    <string name="settings_wallpaper_parallax_title">Wallpaper parallax</string>
+    <string name="settings_wallpaper_parallax_summary">The wallpaper pans a little as the places slide. Needs a wallpaper set through the launcher\'s picker; off in landscape and with animations off.</string>
     <string name="settings_wallpaper_alignment_title">Wallpaper alignment</string>
     <string name="settings_wallpaper_alignment_summary">Line up the wallpaper behind the launcher surfaces with the one on your screen.</string>
     <string name="settings_icon_appearance_header">Icon appearance</string>

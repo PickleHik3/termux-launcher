@@ -550,6 +550,12 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "use_system_wallpaper":
                 TermuxActivity.setWallpaperModeEnabled(mContext, value);
                 break;
+            case "wallpaper_parallax":
+                // The captured frame changes width with this, so the styling reload re-captures
+                // and every surface re-cuts; no recreate needed.
+                mPreferences.setWallpaperParallaxEnabled(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             case "terminal_dynamic_colors_enabled":
                 // This switch is the whole palette decision: on, the terminal and the chrome both
                 // take the wallpaper; off, both take the scheme. Either way the chrome palette
@@ -631,6 +637,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         switch(key) {
             case "use_system_wallpaper":
                 return mPreferences.isUseSystemWallpaperEnabled();
+            case "wallpaper_parallax":
+                return mPreferences.isWallpaperParallaxEnabled();
             case "terminal_dynamic_colors_enabled":
                 return mPreferences.isTerminalDynamicColorsEnabled();
             case "app_launcher_bw_icons":

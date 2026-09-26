@@ -44,6 +44,11 @@
             app:title="@string/settings_wallpaper_title"
             app:summary="@string/termux_use_system_wallpaper_summary"
             android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="wallpaper_parallax"
+            app:title="@string/settings_wallpaper_parallax_title"
+            app:summary="@string/settings_wallpaper_parallax_summary"
+            android:defaultValue="true" />
         <SeekBarPreference
             app:key="wallpaper_render_zoom"
             app:title="@string/settings_wallpaper_alignment_title"

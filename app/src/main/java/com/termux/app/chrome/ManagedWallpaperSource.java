@@ -101,6 +101,39 @@ public final class ManagedWallpaperSource {
         return mReadingKey != null;
     }
 
+    /** The identity of the file whose pixel size {@link #mSizeWidth} and {@link #mSizeHeight} hold. */
+    @Nullable private String mSizeKey;
+    private int mSizeWidth, mSizeHeight;
+
+    /**
+     * The stored picture's pixel size, read from the file's header on the calling thread and
+     * remembered per file identity, so it costs one header read per wallpaper rather than one
+     * per ask. It decides how wide the frame the picture is decoded into has to be — a picture
+     * cropped one and a half screens wide pans, one cropped a screen wide does not — which has to
+     * be known before {@link #obtain} can be asked for that frame. Returns false, and 0s, when the
+     * file cannot be read.
+     */
+    public boolean readSize(@NonNull File file, @NonNull int[] outWidthHeight) {
+        String key = identity(file.getAbsolutePath(), file.lastModified(), file.length(), 0, 0);
+        if (!key.equals(mSizeKey)) {
+            mSizeKey = key;
+            mSizeWidth = 0;
+            mSizeHeight = 0;
+            if (file.isFile()) {
+                BitmapFactory.Options bounds = new BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                BitmapFactory.decodeFile(file.getAbsolutePath(), bounds);
+                if (bounds.outWidth > 0 && bounds.outHeight > 0) {
+                    mSizeWidth = bounds.outWidth;
+                    mSizeHeight = bounds.outHeight;
+                }
+            }
+        }
+        outWidthHeight[0] = mSizeWidth;
+        outWidthHeight[1] = mSizeHeight;
+        return mSizeWidth > 0 && mSizeHeight > 0;
+    }
+
     /** Drops the held bitmap; the next call reads again. */
     public void clear() {
         if (mBitmap != null && !mBitmap.isRecycled()) mBitmap.recycle();
