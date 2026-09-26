@@ -569,6 +569,15 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         else mRim.clear(this);
     }
 
+    /**
+     * The wall moved this page, or the wallpaper panned under it: the slab re-aims at whatever
+     * is behind it now. Per frame of a slide, so nothing here but an invalidate.
+     */
+    public void onWallMoved() {
+        if (mGlass != null) mGlass.invalidateGlassPosition();
+        if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
+    }
+
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();

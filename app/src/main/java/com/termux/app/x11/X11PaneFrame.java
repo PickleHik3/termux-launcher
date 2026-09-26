@@ -819,6 +819,16 @@ public final class X11PaneFrame extends PaneContentFrame {
     }
 
     /**
+     * The wall moved this page, or the wallpaper panned under it: the slab and the corner arcs
+     * re-aim at whatever is behind them now. Per frame of a slide, so nothing here but invalidates.
+     */
+    public void onWallMoved() {
+        if (mGlass != null) mGlass.invalidateGlassPosition();
+        if (mCornerMask != null) mCornerMask.invalidateGlassPosition();
+        if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
+    }
+
+    /**
      * Dress the page from the surface style — the same values the panes beside it read, so the
      * Display page follows the Canvas surface with the rest of the wall.
      */
@@ -870,6 +880,8 @@ public final class X11PaneFrame extends PaneContentFrame {
                     android.graphics.Color.TRANSPARENT, null, 0, radiusPx, null)) {
                     mCornerMask.invalidateGlassPosition();
                 }
+                // The arcs stand in for the wall behind the page, and the wall pans.
+                mCornerMask.setParallax(style.wallpaperParallax());
                 mCornerMask.setCornerMaskFallbackColor(style.wallBehindColor());
             }
         }

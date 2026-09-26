@@ -25,12 +25,17 @@ import androidx.annotation.Nullable;
  * translation, and for the same reason. Both rely on the no-clip chain the edge-to-edge layout sets
  * up ({@code clipChildren=false} on the root and the terminal container).</p>
  *
- * <p>Nothing here runs per display frame: a frame is handed in when one lands, and the view is only
- * re-recorded then. A page sliding over it does not touch this view.</p>
+ * <p>A frame is handed in when one lands, and the view is re-recorded then. A page sliding over
+ * it does not touch this view unless the wallpaper pans: with a managed wallpaper the captured
+ * frame is wider than the screen ({@link WallpaperParallax}) and the wall's owner moves the
+ * shared offset and invalidates this view per frame of the slide, which draws the same bitmap
+ * that much further left — a translate, never a new frame.</p>
  */
 public final class WallpaperBackdropView extends View {
 
     @Nullable private Bitmap mFrame;
+    /** The wallpaper's live x-offset, read at draw time; null while nothing pans. */
+    @Nullable private WallpaperParallax mParallax;
     /**
      * The frame {@link #mFrame} is fading in from, drawn underneath it while {@link #mCrossfade}
      * has not reached 1. Held (not recycled) here through the fade so a scan for what is still on
@@ -126,6 +131,16 @@ public final class WallpaperBackdropView extends View {
         if (mFrame != null) invalidate();
     }
 
+    /**
+     * Follow the wallpaper's parallax: the frame is drawn {@code parallax.offsetPx()} further left
+     * on every draw. Null stops following. Whoever moves the offset invalidates this view.
+     */
+    public void setParallax(@Nullable WallpaperParallax parallax) {
+        if (mParallax == parallax) return;
+        mParallax = parallax;
+        if (mFrame != null) invalidate();
+    }
+
     /** Puts the backdrop away and lets go of its frames, so the cache can recycle them. */
     public void hide() {
         boolean wasShowing = mFrame != null;
@@ -188,6 +203,11 @@ public final class WallpaperBackdropView extends View {
         float progress = mCrossfade.progress();
         Bitmap previous = mPreviousFrame;
         boolean fading = progress < 1f && previous != null && !previous.isRecycled();
+        // The dim covers the view whatever the offset; only the picture slides under it. The
+        // frame is wider than the screen by the offset's whole travel, so no edge ever shows.
+        float offsetPx = mParallax == null ? 0f : mParallax.offsetPx();
+        int save = canvas.save();
+        canvas.translate(-offsetPx, 0f);
         if (fading) {
             // Both frames share this backdrop's own rect — a crossfade only ever starts when the
             // geometry held, never across a rotation — so one dest rect draws either of them.
@@ -198,6 +218,7 @@ public final class WallpaperBackdropView extends View {
             mPreviousFrame = null;
             drawFrame(canvas, frame, 255);
         }
+        canvas.restoreToCount(save);
         if (Color.alpha(mDimColor) > 0) canvas.drawRect(mDest, mDimPaint);
     }
 

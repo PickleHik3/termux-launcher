@@ -3,7 +3,6 @@ package com.termux.app.chrome;
 import android.graphics.Bitmap;
 import android.graphics.Matrix;
 import android.graphics.Rect;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.widget.ImageView;
@@ -22,6 +21,12 @@ import com.termux.app.ReducedMotion;
  * content, so the top pane, the command palette and the app drawer plane all read as flat tint —
  * or grey mud over the window dim — while the dock shows frosted wallpaper. Each of those surfaces
  * instead gets a crop of the same frame the dock is cut from, and its useless live-blur view rests.</p>
+ *
+ * <p>While the wallpaper can pan ({@link WallpaperParallax}) every crop is cut wider by the pan's
+ * whole travel and installed as a {@link ParallaxFrostDrawable}, which draws it shifted by the
+ * live offset: a slide moves where the crop is drawn from, never re-cuts it. The crop guards below
+ * key on the widened rect, so a change in the travel — the switch, a rotation, a new wallpaper —
+ * re-cuts once and then holds again.</p>
  */
 public final class WallpaperFrostPainter {
 
@@ -135,9 +140,10 @@ public final class WallpaperFrostPainter {
             return false;
         }
         boundsView.getLocationOnScreen(mTmpViewLocation);
-        Rect targetRect = new Rect(mTmpViewLocation[0], mTmpViewLocation[1],
-            mTmpViewLocation[0] + boundsView.getWidth(),
-            mTmpViewLocation[1] + boundsView.getHeight());
+        int sparePx = mSurfaces.wallpaperParallaxSparePx();
+        Rect targetRect = ParallaxFrostDrawable.overscan(new Rect(mTmpViewLocation[0],
+            mTmpViewLocation[1], mTmpViewLocation[0] + boundsView.getWidth(),
+            mTmpViewLocation[1] + boundsView.getHeight()), sparePx);
         if (!mLedger.isFrostDirty() && mLedger.matchesFrostRect(rectKey, targetRect)
             && mLedger.frostRadiusDp(SurfaceDirtyLedger.FrostRadius.TOP_PANE) == blurRadiusDp
             && frost.getDrawable() != null) {
@@ -159,7 +165,7 @@ public final class WallpaperFrostPainter {
             mLedger.clearFrostRect(rectKey);
             return false;
         }
-        installFrost(frost, crop, blurRadiusDp);
+        installFrost(frost, crop, blurRadiusDp, targetRect.width() - sparePx);
         frost.setVisibility(View.VISIBLE);
         mLedger.recordFrostRect(rectKey, targetRect);
         return true;
@@ -170,22 +176,39 @@ public final class WallpaperFrostPainter {
      * says the frame this radius now holds arrived to replace one a wallpaper change displaced —
      * see {@link WallpaperBlurCache#isCrossfadedRadius}. A rotation or a radius change never sets
      * that flag, so those keep landing the way they always have: on the next frame, all at once.
+     *
+     * @param windowWidth the crop's width less the parallax spare cut beyond it: the surface's own
      */
-    private void installFrost(@NonNull ImageView frost, @NonNull Bitmap crop, int blurRadiusDp) {
+    private void installFrost(@NonNull ImageView frost, @NonNull Bitmap crop, int blurRadiusDp,
+                              int windowWidth) {
         Drawable previous = frost.getDrawable();
-        Bitmap previousBitmap = previous instanceof BitmapDrawable
-            ? ((BitmapDrawable) previous).getBitmap() : null;
+        Bitmap previousBitmap = ParallaxFrostDrawable.bitmapOf(previous);
         boolean crossfade = previousBitmap != null && previousBitmap != crop
             && !previousBitmap.isRecycled() && mBlurCache.isCrossfadedRadius(blurRadiusDp);
         if (!crossfade) {
-            frost.setImageBitmap(crop);
+            setFrostBitmap(frost, crop, windowWidth);
             frost.setColorFilter(GlassFilters.frost());
             return;
         }
         frost.setColorFilter(GlassFilters.frost());
         BitmapCrossfadeAnimator.run(frost, previousBitmap, crop,
             ReducedMotion.isEnabled(frost.getContext()),
-            (frame, finished) -> frost.setImageBitmap(frame));
+            (frame, finished) -> setFrostBitmap(frost, frame, windowWidth));
+    }
+
+    /**
+     * The one way a crop goes onto a frost view: as a plain bitmap while nothing pans, exactly as
+     * before, or wrapped so it draws shifted by the shared offset while the wallpaper can pan.
+     * A crossfade's composites come through here too, so they follow the pan mid-fade.
+     */
+    private void setFrostBitmap(@NonNull ImageView frost, @NonNull Bitmap bitmap, int windowWidth) {
+        WallpaperParallax parallax = mSurfaces.wallpaperParallax();
+        if (parallax == null || windowWidth >= bitmap.getWidth()) {
+            frost.setImageBitmap(bitmap);
+            return;
+        }
+        frost.setImageDrawable(new ParallaxFrostDrawable(frost.getResources(), bitmap, windowWidth,
+            parallax));
     }
 
     /**
@@ -250,8 +273,12 @@ public final class WallpaperFrostPainter {
             return false;
         }
         glass.getLocationOnScreen(mTmpViewLocation);
-        Rect targetRect = new Rect(mTmpViewLocation[0], mTmpViewLocation[1],
-            mTmpViewLocation[0] + glass.getWidth(), mTmpViewLocation[1] + glass.getHeight());
+        // Widened by the pan's travel: for a plane the size of the screen that is the whole
+        // frame, which the cache answers with the frame itself rather than a copy.
+        int sparePx = mSurfaces.wallpaperParallaxSparePx();
+        Rect targetRect = ParallaxFrostDrawable.overscan(new Rect(mTmpViewLocation[0],
+            mTmpViewLocation[1], mTmpViewLocation[0] + glass.getWidth(),
+            mTmpViewLocation[1] + glass.getHeight()), sparePx);
         // Both re-apply their frost on every open (and the palette on every animated resize).
         // Without the same guard the top-pane path uses, each of those calls re-cut a full-pane crop.
         if (!mLedger.isFrostDirty() && mLedger.matchesFrostRect(rectKey, targetRect)
@@ -274,7 +301,7 @@ public final class WallpaperFrostPainter {
         }
         mLedger.recordFrostRect(rectKey, targetRect);
         mLedger.setFrostRadiusDp(radiusKey, blurRadiusDp);
-        installFrost(frost, crop, blurRadiusDp);
+        installFrost(frost, crop, blurRadiusDp, targetRect.width() - sparePx);
         frost.setVisibility(View.VISIBLE);
         return true;
     }

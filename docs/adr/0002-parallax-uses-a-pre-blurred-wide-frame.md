@@ -23,3 +23,10 @@ Consequences: a cached radius costs 1.5× the bytes, so the 72 MB budget holds a
 window bar) must move to shader-offset sampling of the shared frame, as pane glass already does,
 so that a slide never needs a new crop. A wallpaper cropped before this change is one screen wide
 and simply does not pan until it is picked again.
+
+Implementation note (2026-09-26): the crop-holding surfaces keep their crops but cut them wider
+by the pan's whole travel and draw them shifted by the shared offset (`ParallaxFrostDrawable`, a
+`BitmapDrawable`), rather than sampling the frame through a shader. The chrome reasons about
+those crops as `BitmapDrawable`s in several places — the in-use scan that guards recycling, the
+dock's height check, the wallpaper-change crossfade — and keeping the type keeps all of it true.
+The effect is the same: nothing is re-cut during a slide, only the draw offset moves.

@@ -99,6 +99,24 @@ public final class ChromeRenderer {
 
         boolean wallpaperPassthroughEnabled();
 
+        /**
+         * The wallpaper's live x-offset every frost crop follows, or null while no wallpaper here
+         * can pan (a fake, or a host without a wall). See {@link WallpaperParallax}.
+         */
+        @Nullable
+        default WallpaperParallax wallpaperParallax() {
+            return null;
+        }
+
+        /**
+         * How far the wallpaper can pan in all, in px: the width of the captured frame beyond one
+         * screen. A crop cut this much wider than its surface holds every offset the parallax
+         * can reach, so a slide never needs a new crop. 0 while nothing pans.
+         */
+        default int wallpaperParallaxSparePx() {
+            return 0;
+        }
+
 
         /** The dock's effective blur radius (0 while a live wallpaper or the slider disables it). */
         int effectiveDockBlurRadiusDp();

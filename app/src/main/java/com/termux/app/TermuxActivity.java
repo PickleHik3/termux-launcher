@@ -1000,6 +1000,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The self-drawn wallpaper behind everything; see {@link WallpaperBackdropPolicy}. */
     @Nullable private WallpaperBackdropView mWallpaperBackdropView;
     /**
+     * The wallpaper's live x-offset, shared by every glass surface; see
+     * {@link com.termux.app.chrome.WallpaperParallax}. Written by {@link #syncWallpaperParallax}
+     * per frame of a place slide, read by each surface in its own draw.
+     */
+    @NonNull private final com.termux.app.chrome.WallpaperParallax mWallpaperParallax =
+        new com.termux.app.chrome.WallpaperParallax();
+    /**
+     * How far the wallpaper can pan in all, in px: the captured frame's width beyond one screen.
+     * Recorded by {@link #getWallpaperCaptureFrameRect()} on every ask — which the blur cache
+     * makes on every obtain — so the per-frame sync never has to work it out itself. 0 while
+     * nothing pans.
+     */
+    private int mWallpaperParallaxSparePx;
+    /** Scratch for the managed picture's pixel size; never allocated per ask. */
+    @NonNull private final int[] mManagedWallpaperSize = new int[2];
+    /** The frost views that follow the parallax, looked up once; see {@link #syncWallpaperParallax}. */
+    @Nullable private View[] mParallaxFrostViews;
+    /** The keyboard crop's width less the parallax spare cut beyond it; see {@link #mInAppKeyboardBackdropBitmap}. */
+    private int mInAppKeyboardBackdropWindowWidth;
+    /**
      * The colour the wall's ground was last painted with — what shows between and around the
      * panes — so a page that paints its own corners (the display) paints them with the same.
      */
@@ -1222,7 +1242,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @NonNull @Override public Rect wallpaperFrameRect() {
-            return getManagedWallpaperFrameRect();
+            return getWallpaperCaptureFrameRect();
+        }
+
+        @NonNull @Override public com.termux.app.chrome.WallpaperParallax wallpaperParallax() {
+            return mWallpaperParallax;
+        }
+
+        @Override public int wallpaperParallaxSparePx() {
+            return mWallpaperParallaxSparePx;
         }
 
         @Override public boolean useManagedWallpaperSource() {
@@ -1371,6 +1399,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTermuxActivityRootView = findViewById(R.id.activity_termux_root_view);
         mTermuxActivityRootView.setActivity(this);
         mWallpaperBackdropView = findViewById(R.id.wallpaper_backdrop);
+        if (mWallpaperBackdropView != null) mWallpaperBackdropView.setParallax(mWallpaperParallax);
         mTermuxActivityBottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);
         mTermuxActivityRootView.setOnApplyWindowInsetsListener(new TermuxActivityRootView.WindowInsetsListener());
         View content = findViewById(android.R.id.content);
@@ -2834,6 +2863,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mChrome.blurCache().frameRectRef();
             }
 
+            @Override @NonNull public com.termux.app.chrome.WallpaperParallax wallpaperParallax() {
+                return mWallpaperParallax;
+            }
+
             @Override @Nullable public ColorFilter paneGlassFrostFilter() {
                 return com.termux.app.chrome.GlassFilters.frost();
             }
@@ -2931,6 +2964,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // same pass: a backdrop and a glass that disagreed for even one frame would show as the
         // misalignment this whole mode exists to remove.
         updateWallpaperBackdrop();
+        // The frame just asked for may be a different width from the last one (the switch, a
+        // rotation, a new wallpaper), and a different width puts the resting place at a different
+        // offset into it — whether or not the panes' own dress changed below.
+        syncWallpaperParallax();
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -2945,6 +2982,86 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** What {@link #updateTerminalGlassFrost} last dressed the panes with; null forces a pass. */
     @Nullable private com.termux.app.terminal.PaneStyleKey mAppliedPaneStyleKey;
+
+    /**
+     * Whether a managed wallpaper can pan here and now: the switch is on, the phone animates,
+     * the screen is portrait, and the launcher is drawing the wallpaper itself from a managed
+     * copy. Every other wallpaper stays still, and so does this one in landscape: the picture is
+     * cropped for the portrait screen and a landscape frame already shows it cover-cropped.
+     * Parallax needs the self-drawn backdrop because the ROM composites the system wallpaper at
+     * one fixed offset — only a picture the launcher paints can move.
+     */
+    private boolean isWallpaperParallaxAvailable() {
+        return mPreferences != null && mPreferences.isWallpaperParallaxEnabled()
+            && !isReducedMotionEnabled()
+            && getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT
+            && wallpaperBackdropMode() == WallpaperBackdropPolicy.Mode.SELF_DRAWN
+            && shouldUseManagedWallpaperBlurSource();
+    }
+
+    /**
+     * The rect the wallpaper frame is captured for, in screen coordinates: the decor's rect, and
+     * with a managed wallpaper that can pan, as wide as the stored picture is at the screen's
+     * height — one and a half screens from the picker, anchored at the screen's left edge, which
+     * is where the Home place rests. Every surface samples the frame at its own screen position
+     * plus the live offset, so the frame's extra width is exactly the offset's travel. A picture
+     * cropped before the wide picker is one screen wide and answers the decor rect: it does not
+     * pan, and nothing is zoomed to pretend it can.
+     *
+     * <p>Also where {@link #mWallpaperParallaxSparePx} is kept current, since every path that
+     * cuts or aims at the frame asks for this rect first.</p>
+     */
+    @NonNull
+    private Rect getWallpaperCaptureFrameRect() {
+        Rect frame = getManagedWallpaperFrameRect();
+        int spanPx = frame.width();
+        if (isWallpaperParallaxAvailable()
+            && mManagedWallpaperSource.readSize(getManagedWallpaperExactFile(), mManagedWallpaperSize)) {
+            spanPx = com.termux.app.wall.WallParallax.spanPx(mManagedWallpaperSize[0],
+                mManagedWallpaperSize[1], frame.width(), frame.height());
+        }
+        mWallpaperParallaxSparePx = Math.max(0, spanPx - frame.width());
+        frame.right = frame.left + spanPx;
+        return frame;
+    }
+
+    /**
+     * Puts the wallpaper where the wall is: the offset is a function of the wall's live
+     * position ({@link com.termux.app.wall.WallParallax#offsetPx}), so a drag, a fling and a
+     * settle all move the picture on the wall's own curve, and every surface that samples the
+     * frame is told to draw again when it moved. Per frame of a slide, so nothing here allocates:
+     * one number written, and invalidates.
+     */
+    private void syncWallpaperParallax() {
+        float offsetPx = 0f;
+        int sparePx = mWallpaperParallaxSparePx;
+        if (sparePx > 0 && mPaneWallController != null) {
+            offsetPx = com.termux.app.wall.WallParallax.offsetPx(mPaneWallController.pages(),
+                mPaneWallController.currentPage(), mWallOffsetPx,
+                mPaneWallController.wall().getWidth(), sparePx);
+        }
+        if (!mWallpaperParallax.setOffsetPx(offsetPx)) return;
+        if (mWallpaperBackdropView != null) mWallpaperBackdropView.invalidate();
+        if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+        if (mPaneWallController != null) {
+            if (mPaneWallController.widgetsPage() != null) mPaneWallController.widgetsPage().onWallMoved();
+            if (mPaneWallController.displayPage() != null) mPaneWallController.displayPage().onWallMoved();
+        }
+        if (mParallaxFrostViews == null) {
+            mParallaxFrostViews = new View[] {
+                findViewById(R.id.terminal_status_bar_wallpaper_backdrop),
+                findViewById(R.id.terminal_window_bar_wallpaper_backdrop),
+                findViewById(R.id.accessory_blur_backdrop),
+                findViewById(R.id.inapp_keyboard_view_host),
+                findViewById(R.id.command_palette_wallpaper_backdrop),
+                findViewById(R.id.terminal_sheet_wallpaper_backdrop),
+                findViewById(R.id.app_drawer_wallpaper_backdrop),
+            };
+        }
+        for (View frost : mParallaxFrostViews) {
+            if (frost != null && frost.getVisibility() == View.VISIBLE) frost.invalidate();
+        }
+    }
 
     /**
      * Whether the launcher paints the wallpaper itself or leaves it to the ROM.
@@ -2976,7 +3093,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         Bitmap frame = mChrome.blurCache().obtain(0, wallpaperFrame);
         boolean crossfade = mChrome.blurCache().isCrossfadedRadius(0) && !ReducedMotion.isEnabled(this);
-        backdrop.showFrame(frame, getManagedWallpaperFrameRect(), wallGroundColor(), crossfade);
+        backdrop.showFrame(frame, getWallpaperCaptureFrameRect(), wallGroundColor(), crossfade);
     }
 
     /**
@@ -5276,7 +5393,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (keyboardBlurEnabled) {
                 Bitmap blurredBackdrop = obtainInAppKeyboardBackdropBitmap(state, surfaceHost);
                 if (blurredBackdrop != null) {
-                    BitmapDrawable backdrop = new BitmapDrawable(getResources(), blurredBackdrop);
+                    BitmapDrawable backdrop = frostDrawable(blurredBackdrop,
+                        mInAppKeyboardBackdropWindowWidth);
                     // Same content-aware light scatter the dock backdrop uses — one material.
                     backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
                     backdrop.setAlpha(255);
@@ -5385,6 +5503,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (targetRect == null) {
             return mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD) ? null : mInAppKeyboardBackdropBitmap;
         }
+        // Cut wider by the parallax's whole travel, so a slide shifts the crop and never re-cuts
+        // it; the ledger keys on the widened rect, so a change in the travel re-cuts once.
+        int windowWidth = targetRect.width();
+        targetRect = com.termux.app.chrome.ParallaxFrostDrawable.overscan(targetRect,
+            mWallpaperParallaxSparePx);
         // The keyboard's own radius, not the dock's state.blurRadiusDp it used to share outright —
         // falls back to it while the keyboard's is still the -1 "follow" sentinel.
         int keyboardBlurRadiusDp = getEffectiveInAppKeyboardBlurRadius();
@@ -5405,9 +5528,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? mInAppKeyboardBackdropBitmap : null;
         }
         mInAppKeyboardBackdropBitmap = blurredBackdrop;
+        mInAppKeyboardBackdropWindowWidth = windowWidth;
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD, keyboardBlurRadiusDp,
             usingManagedWallpaperSource, targetRect);
         return mInAppKeyboardBackdropBitmap;
+    }
+
+    /**
+     * A frost crop as a drawable: plain while nothing pans, exactly as before, or wrapped so it
+     * draws shifted by the shared parallax offset while the wallpaper can pan. Both are
+     * {@link BitmapDrawable}s, so everything that scans a drawable for its bitmap keeps working.
+     *
+     * @param windowWidth the crop's width less the parallax spare cut beyond it: the surface's own
+     */
+    @NonNull
+    private BitmapDrawable frostDrawable(@NonNull Bitmap crop, int windowWidth) {
+        if (windowWidth <= 0 || windowWidth >= crop.getWidth()) {
+            return new BitmapDrawable(getResources(), crop);
+        }
+        return new com.termux.app.chrome.ParallaxFrostDrawable(getResources(), crop, windowWidth,
+            mWallpaperParallax);
     }
 
     /**
@@ -5701,7 +5841,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private Bitmap createManagedWallpaperBackdropBitmapForRect(@NonNull Rect targetRect, @NonNull View wallpaperFrame) {
         File sourceFile = getManagedWallpaperExactFile();
-        Rect frameRect = getManagedWallpaperFrameRect();
+        // The capture rect, not the decor's: with parallax the frame is as wide as the picture,
+        // so the cover draw below is the whole picture at 1:1; without it, the picture's centre.
+        Rect frameRect = getWallpaperCaptureFrameRect();
         Bitmap sourceBitmap = mManagedWallpaperSource.obtain(sourceFile, frameRect.width(),
             frameRect.height(), () -> {
                 if (isFinishing() || isDestroyed()) return;
@@ -5902,7 +6044,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mManagedWallpaperPending) return null;
         }
         final Rect target = new Rect(targetRect);
-        final Rect frameRect = getManagedWallpaperFrameRect();
+        // The system wallpaper never pans, so this is the decor's rect whenever it is reached.
+        final Rect frameRect = getWallpaperCaptureFrameRect();
         final float zoom = systemWallpaperRenderZoom();
         final WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
         return com.termux.app.chrome.WallpaperBlurCache.FrameCapture.deferred(
@@ -6054,8 +6197,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int seamOverscanPx = !isRoundedDockStyle() && shouldShowDecorNavBarSurface(state)
             ? horizontalOverscanPx : 0;
         applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx, seamOverscanPx);
+        // The dock's own overscan is what the ImageView is sized to; the parallax spare beyond it
+        // is cut into the same bitmap so a slide shifts the crop rather than re-cutting it.
         Rect backdropTargetRect = buildAccessoryBackdropTargetRect(surfaceHost, horizontalOverscanPx,
             seamOverscanPx);
+        int backdropWindowWidth = backdropTargetRect.width();
+        backdropTargetRect = com.termux.app.chrome.ParallaxFrostDrawable.overscan(backdropTargetRect,
+            mWallpaperParallaxSparePx);
         if (!mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY) &&
             mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.ACCESSORY) == state.blurRadiusDp &&
             mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.ACCESSORY) == usingManagedWallpaperSource &&
@@ -6080,7 +6228,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        installAccessoryBackdropBitmap(backdrop, wallpaperBackdrop, state.blurRadiusDp);
+        installAccessoryBackdropBitmap(backdrop, wallpaperBackdrop, state.blurRadiusDp,
+            backdropWindowWidth);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // The capsule sits inside the (horizontally overscanned) backdrop bitmap: left/right are
             // inset by the overscan, top/bottom span the full height. Hand that rect to the shader so
@@ -6127,7 +6276,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * change never sets that flag, so those keep landing the way they always have.
      */
     private void installAccessoryBackdropBitmap(@NonNull ImageView backdrop, @NonNull Bitmap crop,
-                                                 int blurRadiusDp) {
+                                                 int blurRadiusDp, int windowWidth) {
         Drawable previous = backdrop.getDrawable();
         Bitmap previousBitmap = previous instanceof BitmapDrawable
             ? ((BitmapDrawable) previous).getBitmap() : null;
@@ -6135,11 +6284,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && !previousBitmap.isRecycled()
             && mChrome.blurCache().isCrossfadedRadius(blurRadiusDp);
         if (!crossfade) {
-            backdrop.setImageBitmap(crop);
+            backdrop.setImageDrawable(frostDrawable(crop, windowWidth));
             return;
         }
         BitmapCrossfadeAnimator.run(backdrop, previousBitmap, crop,
-            ReducedMotion.isEnabled(this), (frame, finished) -> backdrop.setImageBitmap(frame));
+            ReducedMotion.isEnabled(this),
+            (frame, finished) -> backdrop.setImageDrawable(frostDrawable(frame, windowWidth)));
     }
 
     private boolean isAccessoryBackdropCropHeightCompatible(@NonNull ImageView backdrop,
@@ -11790,13 +11940,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        Rect wallpaperFrameRect = getSystemWallpaperFrameRect();
+        // One and a half portrait screens wide at the portrait screen's height, whichever way
+        // the phone is held now: the launcher keeps this wide picture as the managed copy and pans
+        // it as the places slide; the system gets its screen-sized centre.
+        Rect screenRect = getSystemWallpaperFrameRect();
+        int portraitWidth = Math.max(1, Math.min(screenRect.width(), screenRect.height()));
+        int portraitHeight = Math.max(1, Math.max(screenRect.width(), screenRect.height()));
+        int cropWidth = com.termux.app.wall.WallParallax.pickerWidthPx(portraitWidth);
         CropImageOptions cropOptions = new CropImageOptions();
         cropOptions.fixAspectRatio = true;
-        cropOptions.aspectRatioX = Math.max(1, wallpaperFrameRect.width());
-        cropOptions.aspectRatioY = Math.max(1, wallpaperFrameRect.height());
-        cropOptions.outputRequestWidth = Math.max(1, wallpaperFrameRect.width());
-        cropOptions.outputRequestHeight = Math.max(1, wallpaperFrameRect.height());
+        cropOptions.aspectRatioX = cropWidth;
+        cropOptions.aspectRatioY = portraitHeight;
+        cropOptions.outputRequestWidth = cropWidth;
+        cropOptions.outputRequestHeight = portraitHeight;
         File tempCropFile = getManagedWallpaperTempFile();
         if (tempCropFile.exists()) {
             tempCropFile.delete();
@@ -11879,8 +12035,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if ((selectedFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
             suggestManagedWallpaperDimensions(wallpaperManager);
         }
+        // The screen's portrait size, read here where the window is, decides which part of the
+        // wide picture the system is handed.
+        Rect screenRect = getSystemWallpaperFrameRect();
+        final int portraitWidth = Math.min(screenRect.width(), screenRect.height());
+        final int portraitHeight = Math.max(screenRect.width(), screenRect.height());
         new Thread(() -> {
-            boolean applied = applyManagedWallpaper(wallpaperManager, croppedUri, selectedFlags);
+            boolean applied = applyManagedWallpaper(wallpaperManager, croppedUri, selectedFlags,
+                portraitWidth, portraitHeight);
             runOnUiThread(() -> finishManagedWallpaperApply(applied, selectedFlags));
         }, "managed-wallpaper-apply").start();
     }
@@ -11909,10 +12071,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The file and system half of a wallpaper pick; runs off the main thread, touches no view. */
     private boolean applyManagedWallpaper(@NonNull WallpaperManager wallpaperManager,
-                                          @NonNull Uri croppedUri, int wallpaperFlags) {
-        Rect visibleCropHint = getWallpaperFullImageCropHint(croppedUri);
+                                          @NonNull Uri croppedUri, int wallpaperFlags,
+                                          int portraitWidth, int portraitHeight) {
+        Rect fullImage = getWallpaperFullImageCropHint(croppedUri);
+        Rect centre = managedWallpaperSystemCentre(fullImage, portraitWidth, portraitHeight);
         try {
-            if (!setManagedWallpaperStream(wallpaperManager, croppedUri, visibleCropHint, wallpaperFlags)) {
+            if (!setManagedWallpaperCentre(wallpaperManager, croppedUri, fullImage, centre, wallpaperFlags)) {
                 return false;
             }
             exportWallpaperCopyToTermuxBackgroundDirectory(croppedUri);
@@ -11928,6 +12092,57 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply managed wallpaper", e);
             return false;
         }
+    }
+
+    /**
+     * The screen-sized centre of the picked picture, in its own pixels: as tall as the picture,
+     * and as wide as the portrait screen is at that height. The whole picture when it is not
+     * wider than that — a picker that could not resize, or an unreadable header.
+     */
+    @Nullable
+    private static Rect managedWallpaperSystemCentre(@Nullable Rect fullImage, int portraitWidth,
+                                                     int portraitHeight) {
+        if (fullImage == null || portraitWidth <= 0 || portraitHeight <= 0) return fullImage;
+        int centreWidth = Math.round((float) fullImage.height() * portraitWidth / portraitHeight);
+        if (centreWidth <= 0 || centreWidth >= fullImage.width()) return fullImage;
+        int left = (fullImage.width() - centreWidth) / 2;
+        return new Rect(left, 0, left + centreWidth, fullImage.height());
+    }
+
+    /**
+     * Hands the system the screen-sized centre of the wide picture — cut here, so Android never
+     * sees the wide image and cannot choose to fit it its own way — and falls back to streaming
+     * the picture with the centre as its crop hint when the region cannot be decoded. A picture
+     * that is not wider than the screen streams whole, exactly as before.
+     */
+    private boolean setManagedWallpaperCentre(@NonNull WallpaperManager wallpaperManager,
+                                              @NonNull Uri croppedUri, @Nullable Rect fullImage,
+                                              @Nullable Rect centre, int wallpaperFlags) {
+        if (centre == null || centre.equals(fullImage)) {
+            return setManagedWallpaperStream(wallpaperManager, croppedUri, fullImage, wallpaperFlags);
+        }
+        Bitmap region = null;
+        try (InputStream inputStream = openWallpaperInputStream(croppedUri)) {
+            if (inputStream != null) {
+                android.graphics.BitmapRegionDecoder decoder =
+                    android.graphics.BitmapRegionDecoder.newInstance(inputStream, false);
+                if (decoder != null) {
+                    BitmapFactory.Options options = new BitmapFactory.Options();
+                    options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+                    region = decoder.decodeRegion(centre, options);
+                    decoder.recycle();
+                }
+            }
+            if (region != null) {
+                wallpaperManager.setBitmap(region, null, true, wallpaperFlags);
+                return true;
+            }
+        } catch (Exception | OutOfMemoryError e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply the managed wallpaper's centre; streaming with a crop hint", e);
+        } finally {
+            if (region != null) region.recycle();
+        }
+        return setManagedWallpaperStream(wallpaperManager, croppedUri, centre, wallpaperFlags);
     }
 
     private boolean setManagedWallpaperStream(@NonNull WallpaperManager wallpaperManager, @NonNull Uri croppedUri,
@@ -15209,6 +15424,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallOffsetChanged(float offsetPx) {
                     syncPlaceBarOffset(offsetPx);
+                    // The wallpaper pans with the wall, and every glass surface follows it; the
+                    // terminal's slabs re-aim whether or not it panned, since the page they sit
+                    // on moved over a wallpaper that did not go with it.
+                    syncWallpaperParallax();
+                    if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
                     // The wall moved at all, so the terminal may be sliding back into the frame:
                     // any pane whose screen changed while it was away is drawn now, before the
                     // first frame of the slide, rather than one stale frame later.

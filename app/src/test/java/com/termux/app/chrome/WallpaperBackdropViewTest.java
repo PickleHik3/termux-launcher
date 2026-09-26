@@ -114,6 +114,23 @@ public class WallpaperBackdropViewTest {
         assertFalse(backdrop.isOpaque());
     }
 
+    /**
+     * A managed wallpaper's frame is wider than the screen by the parallax's whole travel and
+     * anchored at the screen's left edge, so it covers the view at every offset the pan reaches.
+     */
+    @Test
+    public void aWideParallaxFrameStillCoversTheViewAndFollowsTheOffset() {
+        Rect wide = new Rect(0, 0, PORTRAIT.width() * 3 / 2, PORTRAIT.height());
+        WallpaperParallax parallax = new WallpaperParallax();
+        backdrop.setParallax(parallax);
+        backdrop.showFrame(frame(wide), wide, DIM);
+        assertEquals(View.VISIBLE, backdrop.getVisibility());
+        assertTrue(backdrop.isOpaque());
+        assertTrue("an offset the pan can reach is accepted", parallax.setOffsetPx(50f));
+        assertFalse("and the same offset again is not a move", parallax.setOffsetPx(50f));
+        assertTrue(backdrop.isOpaque());
+    }
+
     // ------------------------------------------------------------- crossfade
 
     @Test
