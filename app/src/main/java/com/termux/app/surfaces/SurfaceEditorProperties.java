@@ -25,11 +25,12 @@ import java.util.function.ToIntFunction;
  * is a flat list of rows that are all on screen at once. No chips, no second level, no "one open
  * property": a surface's whole table stands on its card.
  *
- * <p>The order is the same list everywhere, and it is the point of {@link #RANK}: opacity, blur,
- * grain, corners, margin, then whatever else that surface owns. A row the current state makes inert
- * — a docked surface's margin, the terminal's glass with no frame around it — is dropped rather than
- * drawn dead, and the rows below it close up into its place, so the same property is always found in
- * the same position relative to its neighbours.
+ * <p>The order is the same list everywhere, and it is the point of {@link #RANK}: opacity (with the
+ * keyboard's intensity right after it), blur, grain, corners, margin, then whatever else that
+ * surface owns. A row the current state makes inert — a docked surface's margin, the terminal's
+ * glass with no frame around it — is dropped rather than drawn dead, and the rows below it close up
+ * into its place, so the same property is always found in the same position relative to its
+ * neighbours.
  *
  * <p>Two kinds of row live here side by side. Most are cells of the inheritance model and carry
  * their {@link SurfaceEditorRows.Row}, which owns their clamp and their link to Base. The rest —
@@ -208,7 +209,7 @@ public final class SurfaceEditorProperties {
      * up with.
      */
     private static final List<String> RANK = Collections.unmodifiableList(Arrays.asList(
-        ID_OPACITY, ID_ALL_OPACITY,
+        ID_OPACITY, ID_ALL_OPACITY, ID_KEYBOARD_INTENSITY,
         ID_BLUR, ID_ALL_BLUR,
         ID_GRAIN, ID_ALL_GRAIN,
         ID_CORNERS, ID_ALL_CORNERS,

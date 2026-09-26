@@ -232,12 +232,12 @@ public class WallpaperBlurCacheTest {
     }
 
     @Test
-    public void aSecondClearBeforeARadiusRefillsForfeitsItsCrossfade() {
+    public void aSecondWallpaperChangeBeforeARadiusRefillsStillCrossfadesIt() {
         cache.obtain(8, wallpaperFrame);
 
         cache.clearForWallpaperChange();
-        // A second wallpaper change lands before 8 was ever refilled: its retired picture is now
-        // two wallpapers stale, nothing worth fading from.
+        // A second wallpaper change lands before 8 was ever refilled. The surface is still showing
+        // its last good frame, so the frame that finally lands fades in over it all the same.
         cache.clearForWallpaperChange();
         cache.obtain(8, wallpaperFrame);
 

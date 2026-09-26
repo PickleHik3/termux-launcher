@@ -272,7 +272,10 @@ public final class WallpaperBlurCache {
             if (cached != null && !cached.isRecycled()) {
                 return cached;
             }
-        } else {
+        } else if (!mByRadius.isEmpty() || !mPending.isEmpty()) {
+            // Only a cache holding frames of another source needs emptying. Right after a clear the
+            // recorded source is blank and nothing is resident, and clearing again would throw
+            // away the crossfade marks the wallpaper-change clear has just set.
             clear();
         }
         if (mWorker != null && mMainThread != null && mPending.contains(blurRadiusDp)) {
@@ -502,10 +505,10 @@ public final class WallpaperBlurCache {
     private void doClearTraced(boolean crossfade) {
         mGeneration++;
         mPending.clear();
-        // A radius still waiting from an earlier wallpaper-change clear has nothing left to fade
-        // from that is worth showing — a second change landed before the first one's replacement
-        // did — so it drops out rather than crossfading from a now-doubly-stale picture.
-        mPendingCrossfadeRadii.clear();
+        // A radius still waiting from an earlier wallpaper-change clear keeps its mark through a
+        // second wallpaper change: the surface is still drawing its last good frame, and the frame
+        // that finally lands should fade in over it just the same. A plain clear drops every mark.
+        if (!crossfade) mPendingCrossfadeRadii.clear();
         mCrossfadedRadii.clear();
         if (crossfade) mPendingCrossfadeRadii.addAll(mByRadius.keySet());
         for (Bitmap cached : mByRadius.values()) {

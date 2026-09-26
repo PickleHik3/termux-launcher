@@ -69,7 +69,10 @@ public class PaneWallControllerTest {
     }
 
     @Test public void theWallsTerminalOffScreenSignalReachesTheHost() {
-        assertNull("nothing reported before the wall ever leaves the terminal", host.terminalOffScreen);
+        // The first layout reports where the terminal stands, so a cold start restored onto
+        // another place hides it before anything moves.
+        assertEquals("the first layout reports the terminal on screen", Boolean.FALSE,
+            host.terminalOffScreen);
         controller.goTo(PaneWallPage.WIDGETS, false);
         assertEquals(Boolean.TRUE, host.terminalOffScreen);
         controller.goTo(PaneWallPage.TERMINAL, false);
