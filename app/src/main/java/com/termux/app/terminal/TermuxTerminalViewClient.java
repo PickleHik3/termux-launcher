@@ -156,6 +156,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             view.setKeepScreenOn(mHost.preferences().shouldKeepScreenOn());
             applyCursorTrailPolicy(view);
             applyUrlUnderlinePolicy(view);
+            applyPaddingFillPolicy(view);
         }
     }
 
@@ -174,6 +175,17 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 enabled = false;
         }
         view.setCursorTrailEnabled(enabled);
+    }
+
+    /**
+     * Whether a pane paints the empty band around its text grid with the background colour of the
+     * nearest edge cell (Ghostty's {@code window-padding-color = extend}). Pure preference, unlike
+     * the cursor trail: nothing about the device's power state should turn this back off.
+     */
+    public void applyPaddingFillPolicy(TerminalView view) {
+        if (view == null)
+            return;
+        view.setPaddingFillEnabled(mHost.preferences().isTerminalPaddingFillEnabled());
     }
 
     /**
@@ -212,6 +224,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         setSoftKeyboardState(true, mHost.isActivityRecreated());
         applyCursorTrailPolicy(mHost.focusedView());
         applyUrlUnderlinePolicy(mHost.focusedView());
+        applyPaddingFillPolicy(mHost.focusedView());
         mTerminalCursorBlinkerStateAlreadySet = false;
         if (mHost.focusedView().mEmulator != null) {
             // Start terminal cursor blinking if enabled

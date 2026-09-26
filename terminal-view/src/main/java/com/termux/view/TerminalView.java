@@ -118,6 +118,46 @@ public final class TerminalView extends View {
     private SizeUpdateObserver mSizeUpdateObserver;
     private int mTransparentFrameOverlayColor;
 
+    /**
+     * Ghostty's {@code window-padding-color = extend}, ported to a pane: whether the empty band
+     * between the text grid and the view's own edge is painted with the background colour of the
+     * nearest edge cell, rather than left to show whatever is behind the pane. Off leaves the band
+     * fully transparent, which is what a plain shell wants (the glass or wallpaper behind the pane
+     * keeps showing through); on, a full-screen app that paints its own background — opencode's
+     * black, for instance — reaches all the way to the pane's rounded border.
+     */
+    private boolean mPaddingFillEnabled;
+    /** Reused across frames; a fresh Paint per draw would be an allocation onDraw cannot afford. */
+    private final Paint mPaddingFillPaint = new Paint();
+    /** How many columns/rows the edge-colour arrays below currently describe; 0 while disabled or
+     *  before the first frame with an emulator attached. */
+    private int mEdgeColorsColumns;
+    private int mEdgeColorsRows;
+    /** One colour per column, taken from the top and bottom visible rows; 0 (transparent) wherever
+     *  that cell's background is the terminal's own default. Reused across frames and only grown,
+     *  never reallocated on every draw. */
+    private int[] mEdgeTopColors = new int[0];
+    private int[] mEdgeBottomColors = new int[0];
+    /** One colour per row, taken from the first and last column of each visible row. */
+    private int[] mEdgeLeftColors = new int[0];
+    private int[] mEdgeRightColors = new int[0];
+    /** The previous frame's arrays, kept only to tell whether this frame's colours actually moved —
+     *  a blinking cursor or a spinner glyph redraws every frame without changing any of them, and
+     *  the pane frame outside this view must not be asked to repaint its own band for that. */
+    private int[] mPrevEdgeTopColors = new int[0];
+    private int[] mPrevEdgeBottomColors = new int[0];
+    private int[] mPrevEdgeLeftColors = new int[0];
+    private int[] mPrevEdgeRightColors = new int[0];
+    /** Told when this frame's edge colours differ from the last frame's. Null in normal use; the
+     *  pane frame around this view sets itself once it knows its content is a terminal. */
+    @Nullable
+    private PaddingFillListener mPaddingFillListener;
+
+    /** See {@link #mPaddingFillListener}. */
+    public interface PaddingFillListener {
+        void onPaddingFillColorsChanged();
+    }
+
     private TextSelectionCursorController mTextSelectionCursorController;
 
     private Handler mTerminalCursorBlinkerHandler;
@@ -2534,10 +2574,15 @@ public final class TerminalView extends View {
             }
             final float scrollOffset = mScrollOffsetPixels;
             final float drawOffset = getVerticalContentOffset() - scrollOffset;
-            if (drawOffset != 0f) {
+            if (mPaddingFillEnabled) computeEdgeColors();
+            final boolean paintingPaddingFill = mPaddingFillEnabled && mEdgeColorsColumns > 0;
+            final boolean canvasTranslated = drawOffset != 0f || paintingPaddingFill;
+            if (canvasTranslated) {
                 canvas.save();
                 canvas.translate(0f, drawOffset);
             }
+            if (paintingPaddingFill)
+                drawPaddingFill(canvas, getHorizontalContentOffset(), drawOffset);
             mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear, mTransparentFrameOverlayColor, getHorizontalContentOffset(), scrollOffset != 0f ? 1 : 0);
             if (mFindOverlay != null) {
                 mRenderer.renderFindOverlay(mEmulator, canvas, mTopRow, mFindOverlay,
@@ -2550,7 +2595,7 @@ public final class TerminalView extends View {
                 if (needsAnotherFrame)
                     postInvalidateOnAnimation();
             }
-            if (drawOffset != 0f)
+            if (canvasTranslated)
                 canvas.restore();
             // render the text selection handles
             renderTextSelection();
@@ -2605,6 +2650,219 @@ public final class TerminalView extends View {
         if (mTransparentFrameOverlayColor == transparentFrameOverlayColor) return;
         mTransparentFrameOverlayColor = transparentFrameOverlayColor;
         invalidate();
+    }
+
+    /** See {@link #mPaddingFillEnabled}. */
+    public void setPaddingFillEnabled(boolean enabled) {
+        if (mPaddingFillEnabled == enabled) return;
+        mPaddingFillEnabled = enabled;
+        if (!enabled) clearEdgeColors();
+        invalidate();
+    }
+
+    public boolean isPaddingFillEnabled() {
+        return mPaddingFillEnabled;
+    }
+
+    /** The pane frame around this view calls this once it knows this view is its terminal child. */
+    public void setPaddingFillListener(@Nullable PaddingFillListener listener) {
+        mPaddingFillListener = listener;
+    }
+
+    /** How many columns/rows this frame's edge-colour arrays describe; 0 when there is nothing to
+     *  paint (disabled, or no emulator attached yet). */
+    public int getEdgeColumnCount() {
+        return mEdgeColorsColumns;
+    }
+
+    public int getEdgeRowCount() {
+        return mEdgeColorsRows;
+    }
+
+    /** The colour to extend into the gutter above/below column {@code column}; 0 for none. */
+    public int getEdgeColumnColorTop(int column) {
+        return column >= 0 && column < mEdgeColorsColumns ? mEdgeTopColors[column] : 0;
+    }
+
+    public int getEdgeColumnColorBottom(int column) {
+        return column >= 0 && column < mEdgeColorsColumns ? mEdgeBottomColors[column] : 0;
+    }
+
+    /** The colour to extend into the gutter left/right of row {@code row}; 0 for none. */
+    public int getEdgeRowColorLeft(int row) {
+        return row >= 0 && row < mEdgeColorsRows ? mEdgeLeftColors[row] : 0;
+    }
+
+    public int getEdgeRowColorRight(int row) {
+        return row >= 0 && row < mEdgeColorsRows ? mEdgeRightColors[row] : 0;
+    }
+
+    /** This view's own left edge of column {@code column}'s cell, in this view's coordinate space —
+     *  where the pane frame outside this view continues the same column's band into its margin. */
+    public float getPaddingColumnLeft(int column) {
+        return mRenderer == null ? 0f : getHorizontalContentOffset() + column * mRenderer.getFontWidth();
+    }
+
+    public float getPaddingColumnWidth() {
+        return mRenderer == null ? 0f : mRenderer.getFontWidth();
+    }
+
+    /** This view's own top edge of row {@code row}'s cell, in this view's coordinate space — where
+     *  the pane frame outside this view continues the same row's band into its margin. */
+    public float getPaddingRowTop(int row) {
+        if (mRenderer == null) return 0f;
+        float drawOffset = getVerticalContentOffset() - mScrollOffsetPixels;
+        return drawOffset + mRenderer.getFontLineSpacingAndAscent() + row * mRenderer.getFontLineSpacing();
+    }
+
+    public float getPaddingRowHeight() {
+        return mRenderer == null ? 0f : mRenderer.getFontLineSpacing();
+    }
+
+    /**
+     * Recompute this frame's edge colours from the current emulator screen, and tell
+     * {@link #mPaddingFillListener} when they differ from last frame's — so the pane frame outside
+     * this view knows to repaint its own band without being asked on every frame that redraws the
+     * same background (a blinking cursor, a spinner glyph turning over).
+     *
+     * <p>O(rows + columns): one style lookup per edge cell, no allocation once the arrays have
+     * grown to this screen's size.
+     */
+    private void computeEdgeColors() {
+        if (mEmulator == null || mRenderer == null) {
+            clearEdgeColors();
+            return;
+        }
+        final int columns = mEmulator.mColumns;
+        final int rows = mEmulator.mRows;
+        if (columns <= 0 || rows <= 0) {
+            clearEdgeColors();
+            return;
+        }
+        if (mEdgeTopColors.length < columns) {
+            mEdgeTopColors = new int[columns];
+            mEdgeBottomColors = new int[columns];
+        }
+        if (mEdgeLeftColors.length < rows) {
+            mEdgeLeftColors = new int[rows];
+            mEdgeRightColors = new int[rows];
+        }
+        final int[] palette = mEmulator.mColors.mCurrentColors;
+        final boolean boldWithBright = mEmulator.isBoldWithBright();
+        final boolean reverseVideo = mEmulator.isReverseVideo();
+        // Global reverse video floods the whole canvas with the palette foreground colour
+        // (TerminalRenderer#renderRows), so a "default" cell's resolved background is then that
+        // foreground — and the gutter needs no fill of its own there either.
+        final int defaultBack = reverseVideo
+            ? palette[TextStyle.COLOR_INDEX_FOREGROUND] : palette[TextStyle.COLOR_INDEX_BACKGROUND];
+        final TerminalBuffer screen = mEmulator.getScreen();
+        final int topExternalRow = mTopRow;
+        final int bottomExternalRow = mTopRow + rows - 1;
+        for (int c = 0; c < columns; c++) {
+            mEdgeTopColors[c] = edgeBackColor(screen, topExternalRow, c, palette, boldWithBright, reverseVideo, defaultBack);
+            mEdgeBottomColors[c] = edgeBackColor(screen, bottomExternalRow, c, palette, boldWithBright, reverseVideo, defaultBack);
+        }
+        for (int r = 0; r < rows; r++) {
+            final int externalRow = mTopRow + r;
+            mEdgeLeftColors[r] = edgeBackColor(screen, externalRow, 0, palette, boldWithBright, reverseVideo, defaultBack);
+            mEdgeRightColors[r] = edgeBackColor(screen, externalRow, columns - 1, palette, boldWithBright, reverseVideo, defaultBack);
+        }
+        final boolean changed = columns != mEdgeColorsColumns || rows != mEdgeColorsRows
+            || !edgeColorsMatch(mEdgeTopColors, mPrevEdgeTopColors, columns)
+            || !edgeColorsMatch(mEdgeBottomColors, mPrevEdgeBottomColors, columns)
+            || !edgeColorsMatch(mEdgeLeftColors, mPrevEdgeLeftColors, rows)
+            || !edgeColorsMatch(mEdgeRightColors, mPrevEdgeRightColors, rows);
+        mEdgeColorsColumns = columns;
+        mEdgeColorsRows = rows;
+        if (changed) {
+            if (mPrevEdgeTopColors.length < columns) {
+                mPrevEdgeTopColors = new int[columns];
+                mPrevEdgeBottomColors = new int[columns];
+            }
+            if (mPrevEdgeLeftColors.length < rows) {
+                mPrevEdgeLeftColors = new int[rows];
+                mPrevEdgeRightColors = new int[rows];
+            }
+            System.arraycopy(mEdgeTopColors, 0, mPrevEdgeTopColors, 0, columns);
+            System.arraycopy(mEdgeBottomColors, 0, mPrevEdgeBottomColors, 0, columns);
+            System.arraycopy(mEdgeLeftColors, 0, mPrevEdgeLeftColors, 0, rows);
+            System.arraycopy(mEdgeRightColors, 0, mPrevEdgeRightColors, 0, rows);
+            if (mPaddingFillListener != null) mPaddingFillListener.onPaddingFillColorsChanged();
+        }
+    }
+
+    private static boolean edgeColorsMatch(int[] current, int[] previous, int count) {
+        if (previous.length < count) return false;
+        for (int i = 0; i < count; i++) if (current[i] != previous[i]) return false;
+        return true;
+    }
+
+    /** A cell's resolved background colour, or 0 (transparent) when it is the default background —
+     *  reusing {@link TerminalRenderer#resolveRunColors} so the gutter and the grid never disagree
+     *  about what a cell's background actually is. */
+    private static int edgeBackColor(TerminalBuffer screen, int externalRow, int column, int[] palette,
+                                      boolean boldWithBright, boolean reverseVideo, int defaultBack) {
+        final long style = screen.getStyleAt(externalRow, column);
+        final int backColor = (int) TerminalRenderer.resolveRunColors(style, palette, boldWithBright, reverseVideo);
+        return backColor == defaultBack ? 0 : backColor;
+    }
+
+    private void clearEdgeColors() {
+        if (mEdgeColorsColumns == 0 && mEdgeColorsRows == 0) return;
+        mEdgeColorsColumns = 0;
+        mEdgeColorsRows = 0;
+        if (mPaddingFillListener != null) mPaddingFillListener.onPaddingFillColorsChanged();
+    }
+
+    /**
+     * Paint the in-view slack the centred/anchored grid leaves against this view's own edges: the
+     * headroom above row 0 (and, on the alternate buffer, the leftover below the last row instead),
+     * and the centring margin either side of the grid when the view is wider than its columns need.
+     * Called inside the same translate {@link #onDraw} applies before rendering the grid, so row
+     * math lines up with the renderer's exactly, scroll animation included.
+     *
+     * <p>The wider band outside this view — the pane's own rounded-corner clearance — is not this
+     * view's to paint; {@code PaneContentFrame} reads these same colours through the accessors above
+     * and extends them the rest of the way to the pane's border.
+     */
+    private void drawPaddingFill(Canvas canvas, float horizontalOffset, float drawOffset) {
+        final float fontWidth = mRenderer.getFontWidth();
+        final float fontLineSpacing = mRenderer.getFontLineSpacing();
+        final float firstRowTop = mRenderer.getFontLineSpacingAndAscent();
+        final float viewWidth = getWidth();
+        final float viewTop = -drawOffset;
+        final float viewBottom = getHeight() - drawOffset;
+        final float rowsBottom = firstRowTop + mEdgeColorsRows * fontLineSpacing;
+        for (int c = 0; c < mEdgeColorsColumns; c++) {
+            final float left = horizontalOffset + c * fontWidth;
+            final float right = left + fontWidth;
+            final int topColor = mEdgeTopColors[c];
+            if (topColor != 0) {
+                mPaddingFillPaint.setColor(topColor);
+                canvas.drawRect(left, viewTop, right, firstRowTop, mPaddingFillPaint);
+            }
+            final int bottomColor = mEdgeBottomColors[c];
+            if (bottomColor != 0) {
+                mPaddingFillPaint.setColor(bottomColor);
+                canvas.drawRect(left, rowsBottom, right, viewBottom, mPaddingFillPaint);
+            }
+        }
+        if (horizontalOffset > 0f) {
+            for (int r = 0; r < mEdgeColorsRows; r++) {
+                final float top = firstRowTop + r * fontLineSpacing;
+                final float bottom = top + fontLineSpacing;
+                final int leftColor = mEdgeLeftColors[r];
+                if (leftColor != 0) {
+                    mPaddingFillPaint.setColor(leftColor);
+                    canvas.drawRect(0f, top, horizontalOffset, bottom, mPaddingFillPaint);
+                }
+                final int rightColor = mEdgeRightColors[r];
+                if (rightColor != 0) {
+                    mPaddingFillPaint.setColor(rightColor);
+                    canvas.drawRect(viewWidth - horizontalOffset, top, viewWidth, bottom, mPaddingFillPaint);
+                }
+            }
+        }
     }
 
     public TerminalSession getCurrentSession() {

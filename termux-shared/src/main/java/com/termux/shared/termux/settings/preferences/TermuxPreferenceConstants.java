@@ -561,6 +561,14 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
         public static final boolean DEFAULT_TERMINAL_CURSOR_TRAIL = true;
 
+        /**
+         * Paint the empty band between a pane's text grid and its rounded border with the
+         * background colour of the nearest edge cell (Ghostty's {@code window-padding-color =
+         * extend}), so a full-screen app that paints its own background reaches the pane's border.
+         */
+        public static final String KEY_TERMINAL_PADDING_FILL = "terminal_padding_fill";
+        public static final boolean DEFAULT_TERMINAL_PADDING_FILL = true;
+
         /** Whether an OSC 52 query ("ESC ] 52 ; c ; ? BEL") may read the Android clipboard. */
         public static final String KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = "terminal_osc52_clipboard_read_enabled";
         public static final boolean DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = true;

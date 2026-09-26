@@ -17,6 +17,11 @@
             app:title="@string/settings_show_recents_title"
             app:summary="@string/settings_show_recents_summary"
             android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="terminal_padding_fill"
+            app:title="@string/settings_terminal_padding_fill_title"
+            app:summary="@string/settings_terminal_padding_fill_summary"
+            android:defaultValue="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_clipboard_header">

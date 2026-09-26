@@ -53,14 +53,16 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
 
         @Override public void putBoolean(String key, boolean value) {
             if ("split_pane_controls".equals(key)) io.putBoolean("compatibility_mode", !value);
-            else if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key)) view.putBoolean(key, value);
+            else if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key)
+                || "terminal_padding_fill".equals(key)) view.putBoolean(key, value);
             else if ("show_in_recents_when_not_default".equals(key)) style.putBoolean(key, value);
             else io.putBoolean(key, value);
         }
 
         @Override public boolean getBoolean(String key, boolean fallback) {
             if ("split_pane_controls".equals(key)) return !io.getBoolean("compatibility_mode", !fallback);
-            if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key)) return view.getBoolean(key, fallback);
+            if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key)
+                || "terminal_padding_fill".equals(key)) return view.getBoolean(key, fallback);
             if ("show_in_recents_when_not_default".equals(key)) return style.getBoolean(key, fallback);
             return io.getBoolean(key, fallback);
         }
