@@ -52,6 +52,8 @@ public final class TaiManager {
     private final TaiModelRegistry registry;
     private final TaiModelStore modelStore;
     private final TaiModelDownloader modelDownloader;
+    /** The download queue; null in the runtime process, which never downloads. */
+    @Nullable private final TaiDownloadEngine downloadEngine;
     @Nullable private TaiRuntime runtime;
     @Nullable private final TaiRuntimeServiceClient runtimeClient;
     private final boolean runtimeProcess;
@@ -81,6 +83,9 @@ public final class TaiManager {
         registry = new TaiModelRegistry();
         modelStore = new TaiModelStore(appContext);
         modelDownloader = new TaiModelDownloader(appContext, modelStore);
+        // Building the engine reconciles: a download the last process died under reads as paused
+        // from the first status call, never as a "downloading" nothing is doing.
+        downloadEngine = runtimeProcess ? null : TaiDownloadEngine.getInstance(appContext);
         runtime = runtimeProcess ? new MultiBackendTaiRuntime(appContext) : null;
         runtimeClient = runtimeProcess ? null : new TaiRuntimeServiceClient(appContext);
     }
@@ -437,6 +442,9 @@ public final class TaiManager {
         if (modelId.isEmpty()) return error(400, "bad_request", "Missing model id");
         TaiRuntimeState state = getRuntimeState();
         boolean activeModelLoaded = state.loadedModelId != null && state.loadedModelId.equals(modelId);
+        // A transfer still running for this model would re-create its record and files under the
+        // delete; stop it first (its partial files go with it).
+        if (downloadEngine != null && request.optBoolean("confirm", false)) downloadEngine.cancel(modelId);
         TaiModelStore.DeleteResult deleteResult = modelStore.deleteUserModel(modelId,
             activeModelLoaded, request.optBoolean("confirm", false));
         if (!deleteResult.ok) return error(409, deleteResult.errorCode, deleteResult.message);
@@ -452,19 +460,65 @@ public final class TaiManager {
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("downloads", modelStore.getDownloads());
+        data.put("parallel", settings.getDownloadParallel());
+        JSONArray running = new JSONArray();
+        if (downloadEngine != null) for (String id : downloadEngine.runningTransferIds()) running.put(id);
+        data.put("running", running);
         return data;
     }
 
+    /** Stops a download and deletes its partial files. */
     @NonNull
     public JSONObject cancelDownload(@NonNull String body) throws JSONException {
+        return downloadAction(body, "cancel");
+    }
+
+    /** Stops a download and keeps its partial file; {@link #resumeDownload} continues it. */
+    @NonNull
+    public JSONObject pauseDownload(@NonNull String body) throws JSONException {
+        return downloadAction(body, "pause");
+    }
+
+    /** Re-queues a paused, failed or cancelled download; it continues from the bytes it has. */
+    @NonNull
+    public JSONObject resumeDownload(@NonNull String body) throws JSONException {
+        return downloadAction(body, "resume");
+    }
+
+    /** "Start now": moves a queued download to the front, swapping out the oldest running one. */
+    @NonNull
+    public JSONObject prioritizeDownload(@NonNull String body) throws JSONException {
+        return downloadAction(body, "prioritize");
+    }
+
+    @NonNull
+    private JSONObject downloadAction(@NonNull String body, @NonNull String action) throws JSONException {
         JSONObject request = parseBody(body);
         String modelId = sanitizeModelId(request.optString("modelId", request.optString("model", "")));
         if (modelId.isEmpty()) return error(400, "bad_request", "Missing model id");
-        TaiModelDownloadService.requestCancel(modelId);
+        if (downloadEngine == null) return error(500, "downloads_unavailable", "Downloads run in the app process only.");
+        boolean applied;
+        switch (action) {
+            case "pause": applied = downloadEngine.pause(modelId, TaiModelStore.PAUSED_USER); break;
+            case "resume": applied = downloadEngine.resume(modelId); break;
+            case "prioritize": applied = downloadEngine.prioritize(modelId); break;
+            default: applied = downloadEngine.cancel(modelId); break;
+        }
+        JSONObject record = modelStore.findDownloadForModel(modelId);
+        if (!applied && record == null) return error(404, "download_not_found", "No download for model " + modelId);
+        if (!applied) {
+            JSONObject conflict = error(409, "download_state_conflict",
+                "Download for " + modelId + " is " + record.optString("status", "unknown") + "; cannot " + action + " it.");
+            conflict.put("transfer", record);
+            return conflict;
+        }
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("modelId", modelId);
-        data.put("cancellationRequested", true);
+        data.put("action", action);
+        // The old field name, for the CLI and scripts that read it.
+        if ("cancel".equals(action)) data.put("cancellationRequested", true);
+        if (record != null) data.put("transfer", record);
         return data;
     }
 

@@ -1196,6 +1196,35 @@
         <string name="termux_ai_model_download_started">Model download started</string>
         <string name="termux_ai_model_download_cancel">Cancel download</string>
         <string name="termux_ai_model_download_cancelled">Download cancellation requested</string>
+        <!-- The grouped download notification: one summary, one child per model. -->
+        <string name="termux_ai_download_notification_title">TAI model downloads</string>
+        <string name="termux_ai_download_notification_preparing">Preparing…</string>
+        <string name="termux_ai_download_notification_done">Downloads finished</string>
+        <plurals name="termux_ai_download_notification_downloading">
+            <item quantity="one">%d downloading</item>
+            <item quantity="other">%d downloading</item>
+        </plurals>
+        <plurals name="termux_ai_download_notification_waiting">
+            <item quantity="one">%d waiting</item>
+            <item quantity="other">%d waiting</item>
+        </plurals>
+        <plurals name="termux_ai_download_notification_paused">
+            <item quantity="one">%d paused</item>
+            <item quantity="other">%d paused</item>
+        </plurals>
+        <string name="termux_ai_download_notification_queued">Waiting</string>
+        <string name="termux_ai_download_notification_queued_at">Waiting · %1$d in line</string>
+        <string name="termux_ai_download_notification_verifying">Checking file… sha256</string>
+        <string name="termux_ai_download_notification_installed">Downloaded</string>
+        <string name="termux_ai_download_notification_failed">Failed: %1$s</string>
+        <string name="termux_ai_download_notification_paused_user">Paused</string>
+        <string name="termux_ai_download_notification_paused_app_closed">Paused · when the app closed</string>
+        <string name="termux_ai_download_notification_paused_network">Paused · waiting for Wi-Fi</string>
+        <string name="termux_ai_download_notification_paused_no_space">Paused · needs %1$s, %2$s free</string>
+        <string name="termux_ai_download_notification_pause">Pause</string>
+        <string name="termux_ai_download_notification_resume">Resume</string>
+        <string name="termux_ai_download_notification_retry">Retry</string>
+        <string name="termux_ai_download_notification_cancel">Cancel</string>
         <string name="termux_ai_model_deleted">Model entry deleted</string>
         <string name="termux_ai_model_delete_missing">No downloaded model entry found</string>
         <string name="termux_ai_model_action_failed">TAI model action failed</string>

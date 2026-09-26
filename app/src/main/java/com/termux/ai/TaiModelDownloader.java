@@ -1,8 +1,6 @@
 package com.termux.ai;
 
 import android.content.Context;
-import android.content.Intent;
-import android.os.Build;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -14,6 +12,7 @@ import org.json.JSONObject;
 import java.io.BufferedInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -23,11 +22,22 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
+/**
+ * Fetches one model (and its sidecars or package files) over HTTPS into the app-private models
+ * directory, keeping a {@code .part} file so an interrupted transfer continues from where it
+ * stopped. {@link #startDownload} only records the request and hands it to
+ * {@link TaiDownloadEngine}; the engine's workers call {@link #runDownload} from the foreground
+ * service's process and own the record while the transfer runs.
+ */
 public final class TaiModelDownloader {
     private static final String[] MNN_MODEL_FILES = new String[] {
         "config.json",
@@ -48,8 +58,66 @@ public final class TaiModelDownloader {
         "spiece.model"
     };
 
+    /** Progress writes to preferences happen this often; the callback fires more often than that. */
+    private static final long PERSIST_EVERY_BYTES = 1024L * 1024L;
+    /** The callback is not called more often than this while bytes stream; the hub throttles again. */
+    private static final long CALLBACK_EVERY_MS = 100L;
+    /** While hashing, the verified byte count goes out this often. */
+    private static final long VERIFY_REPORT_EVERY_BYTES = 8L * 1024L * 1024L;
+    /** A transfer that is paused by the network this many times in a row without moving a byte
+     *  is not waiting for the network; it is failing, and auto-resume must stop retrying it. */
+    static final int MAX_NETWORK_RETRIES_WITHOUT_PROGRESS = 3;
+
+    /** Record fields that describe one attempt, not the download; a new status clears them. */
+    private static final Set<String> VOLATILE_FIELDS = new HashSet<>(Arrays.asList(
+        "pausedReason", "requiredBytes", "freeBytes", "currentFile", "verifiedBytes"));
+
     public interface ProgressCallback {
         void onProgress(@NonNull JSONObject transfer);
+    }
+
+    /**
+     * The one handle a running transfer is steered by. The worker checks it between chunks; a
+     * pause stops the transfer and keeps the partial file, a cancel stops it and deletes the
+     * partial file. Once set, a request is not cleared: the worker acts on it exactly once.
+     */
+    public static final class Control {
+        private volatile boolean cancel;
+        @Nullable private volatile String pauseReason;
+
+        public void requestCancel() {
+            cancel = true;
+        }
+
+        /** @param reason one of the {@code TaiModelStore.PAUSED_*} values */
+        public void requestPause(@NonNull String reason) {
+            pauseReason = reason;
+        }
+
+        public boolean isCancelRequested() {
+            return cancel;
+        }
+
+        public boolean isPauseRequested() {
+            return pauseReason != null;
+        }
+
+        void checkpoint() throws Interrupted {
+            if (cancel) throw new Interrupted(null);
+            String reason = pauseReason;
+            if (reason != null) throw new Interrupted(reason);
+        }
+    }
+
+    /** Thrown out of the transfer loop when the control asks it to stop. */
+    static final class Interrupted extends Exception {
+        /** The pause reason, or null for a cancel. */
+        @Nullable final String pauseReason;
+
+        Interrupted(@Nullable String pauseReason) {
+            super(pauseReason == null ? "Download cancelled." : "Download paused: " + pauseReason);
+            this.pauseReason = pauseReason;
+        }
     }
 
     private final Context appContext;
@@ -59,6 +127,8 @@ public final class TaiModelDownloader {
         appContext = context.getApplicationContext();
         this.store = store;
     }
+
+    // ---- starting: build the record, hand it to the engine ----
 
     @NonNull
     public JSONObject startDownload(
@@ -93,7 +163,8 @@ public final class TaiModelDownloader {
         return startDownload(modelId, url, displayName, artifactLicense.isEmpty() ? license : artifactLicense, capabilities,
             TaiModelSpec.inferBackend(url), TaiModelSpec.inferFormat(url), "", "", 4096, 0,
             artifact == null ? "" : artifact.optString("sha256", ""),
-            artifact == null || packageDownload ? 0L : Math.max(0L, artifact.optLong("sizeBytes", 0)), authToken, runtimeProfile);
+            artifact == null || packageDownload ? 0L : Math.max(0L, artifact.optLong("sizeBytes", 0)), authToken, runtimeProfile,
+            Collections.<TaiModelCatalog.CatalogEntry.Sidecar>emptyList());
     }
 
     @NonNull
@@ -103,20 +174,6 @@ public final class TaiModelDownloader {
             entry.sourceCapabilities, entry.backend, entry.format, entry.architecture, entry.quantization,
             entry.endpointContextWindow, entry.recommendedRamGb, entry.sha256, entry.sizeBytes, authToken, null,
             entry.sidecars);
-    }
-
-    @NonNull
-    private JSONObject startDownload(
-        @NonNull String modelId, @NonNull String url, @NonNull String displayName,
-        @NonNull String license, @NonNull LinkedHashSet<String> capabilities,
-        @NonNull String backend, @NonNull String format, @Nullable String architecture,
-        @Nullable String quantization, int contextWindow, int recommendedRamGb,
-        @Nullable String expectedSha256, long expectedSizeBytes, @Nullable String authToken,
-        @Nullable TaiModelProfile runtimeProfile
-    ) throws JSONException {
-        return startDownload(modelId, url, displayName, license, capabilities, backend, format, architecture,
-            quantization, contextWindow, recommendedRamGb, expectedSha256, expectedSizeBytes, authToken,
-            runtimeProfile, Collections.<TaiModelCatalog.CatalogEntry.Sidecar>emptyList());
     }
 
     @NonNull
@@ -136,35 +193,61 @@ public final class TaiModelDownloader {
         File modelDir = new File(store.getModelsDirectory(), safeModelId);
         File output = new File(modelDir, fileNameFromUrl(url));
         String transferId = "download-" + safeModelId;
-        TaiModelDownloadService.clearCancellation(safeModelId);
+        // The record carries everything a worker needs to run or resume the transfer, so the
+        // scheduler can restart it after a pause or a process death from preferences alone. The
+        // token is the one thing left out: it lives in TaiSettings, never in the download list.
         JSONObject transfer = withMetadata(transfer(transferId, safeModelId, url, output.getAbsolutePath(),
-            TaiModelStore.STATE_QUEUED, 0L, expectedSizeBytes, ""),
+            TaiModelStore.STATE_QUEUED, partialBytes(output), expectedSizeBytes, ""),
             displayName, license, capabilities, backend, format, architecture, quantization, contextWindow,
             recommendedRamGb, expectedSha256);
-        store.upsertDownload(transfer);
+        transfer.put("expectedSizeBytes", expectedSizeBytes);
+        if (runtimeProfile != null) transfer.put("runtimeProfile", runtimeProfile.toJson());
+        if (!sidecars.isEmpty()) transfer.put("sidecars", sidecarsToJson(sidecars));
+        JSONObject queued = TaiDownloadEngine.getInstance(appContext).enqueue(transfer, authToken);
+        return started(queued);
+    }
 
-        Intent intent = new Intent(appContext, TaiModelDownloadService.class);
-        intent.setAction(TaiModelDownloadService.ACTION_DOWNLOAD);
-        intent.putExtra(TaiModelDownloadService.EXTRA_TRANSFER_ID, transferId);
-        intent.putExtra(TaiModelDownloadService.EXTRA_MODEL_ID, safeModelId);
-        intent.putExtra(TaiModelDownloadService.EXTRA_URL, url);
-        intent.putExtra(TaiModelDownloadService.EXTRA_OUTPUT_PATH, output.getAbsolutePath());
-        intent.putExtra(TaiModelDownloadService.EXTRA_DISPLAY_NAME, displayName);
-        intent.putExtra(TaiModelDownloadService.EXTRA_LICENSE, license);
-        intent.putExtra(TaiModelDownloadService.EXTRA_CAPABILITIES, capabilities.toArray(new String[0]));
-        intent.putExtra(TaiModelDownloadService.EXTRA_AUTH_TOKEN, authToken == null ? "" : authToken);
-        intent.putExtra(TaiModelDownloadService.EXTRA_EXPECTED_SIZE_BYTES, expectedSizeBytes);
-        if (runtimeProfile != null) {
-            intent.putExtra(TaiModelDownloadService.EXTRA_RUNTIME_PROFILE, runtimeProfile.toJson().toString());
-        }
-        putRuntimeMetadata(intent, backend, format, architecture, quantization, contextWindow,
-            recommendedRamGb, expectedSha256);
-        if (!sidecars.isEmpty()) {
-            intent.putExtra(TaiModelDownloadService.EXTRA_SIDECARS, sidecarsToJson(sidecars).toString());
-        }
-        startService(intent);
+    /** What the partial file already holds, so a re-queued record shows its progress at once. */
+    private long partialBytes(@NonNull File output) {
+        File partial = new File(output.getAbsolutePath() + ".part");
+        return partial.isFile() ? partial.length() : 0L;
+    }
 
-        return started(transfer);
+    // ---- running: called by the engine's workers ----
+
+    /** Runs the transfer a persisted record describes (see {@link #startDownload}). */
+    public void runDownload(@NonNull JSONObject record, @Nullable String authToken,
+                            @NonNull Control control, @Nullable ProgressCallback callback) {
+        TaiModelProfile runtimeProfile = null;
+        JSONObject profileJson = record.optJSONObject("runtimeProfile");
+        if (profileJson != null) {
+            try {
+                runtimeProfile = TaiModelProfile.fromJson(profileJson);
+            } catch (Exception ignored) {
+            }
+        }
+        JSONArray sidecarsJson = record.optJSONArray("sidecars");
+        runDownload(
+            record.optString("id", ""),
+            record.optString("modelId", ""),
+            record.optString("url", ""),
+            new File(record.optString("path", "")),
+            record.optString("displayName", ""),
+            record.optString("license", ""),
+            capabilitiesOf(record),
+            record.optString("backend", ""),
+            record.optString("format", ""),
+            record.optString("architecture", ""),
+            record.optString("quantization", ""),
+            record.optInt("contextWindow", 4096),
+            record.optInt("recommendedRamGb", 0),
+            record.optString("sha256", ""),
+            record.optLong("expectedSizeBytes", 0L),
+            authToken,
+            runtimeProfile,
+            sidecarsFromJson(sidecarsJson == null ? null : sidecarsJson.toString()),
+            control,
+            callback);
     }
 
     public void runDownload(
@@ -188,7 +271,8 @@ public final class TaiModelDownloader {
     ) {
         runDownload(transferId, modelId, url, output, displayName, license, capabilities, backend,
             format, architecture, quantization, contextWindow, recommendedRamGb, expectedSha256,
-            expectedSizeBytes, authToken, null, Collections.<TaiModelCatalog.CatalogEntry.Sidecar>emptyList(), callback);
+            expectedSizeBytes, authToken, null, Collections.<TaiModelCatalog.CatalogEntry.Sidecar>emptyList(),
+            new Control(), callback);
     }
 
     public void runDownload(
@@ -213,7 +297,8 @@ public final class TaiModelDownloader {
     ) {
         runDownload(transferId, modelId, url, output, displayName, license, capabilities, backend,
             format, architecture, quantization, contextWindow, recommendedRamGb, expectedSha256,
-            expectedSizeBytes, authToken, runtimeProfile, Collections.<TaiModelCatalog.CatalogEntry.Sidecar>emptyList(), callback);
+            expectedSizeBytes, authToken, runtimeProfile, Collections.<TaiModelCatalog.CatalogEntry.Sidecar>emptyList(),
+            new Control(), callback);
     }
 
     public void runDownload(
@@ -237,7 +322,43 @@ public final class TaiModelDownloader {
         @NonNull List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars,
         @Nullable ProgressCallback callback
     ) {
+        runDownload(transferId, modelId, url, output, displayName, license, capabilities, backend,
+            format, architecture, quantization, contextWindow, recommendedRamGb, expectedSha256,
+            expectedSizeBytes, authToken, runtimeProfile, sidecars, new Control(), callback);
+    }
+
+    public void runDownload(
+        String transferId,
+        String modelId,
+        String url,
+        File output,
+        String displayName,
+        String license,
+        LinkedHashSet<String> capabilities,
+        String backend,
+        String format,
+        String architecture,
+        String quantization,
+        int contextWindow,
+        int recommendedRamGb,
+        String expectedSha256,
+        long expectedSizeBytes,
+        @Nullable String authToken,
+        @Nullable TaiModelProfile runtimeProfile,
+        @NonNull List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars,
+        @NonNull Control control,
+        @Nullable ProgressCallback callback
+    ) {
+        Run run;
+        try {
+            run = new Run(transferId, modelId, url, output, displayName, license, capabilities, backend,
+                format, architecture, quantization, contextWindow, recommendedRamGb, expectedSha256,
+                expectedSizeBytes, sidecars, control, callback);
+        } catch (JSONException e) {
+            return;
+        }
         long bytesRead = 0L;
+        long startBytes = 0L;
         long contentLength = 0L;
         try {
             File parent = output.getParentFile();
@@ -257,7 +378,7 @@ public final class TaiModelDownloader {
             }
             if (status == 206 && !validContentRange(connection.getHeaderField("Content-Range"), existing)) {
                 connection.disconnect();
-                throw new IOException("Invalid partial response");
+                throw new IllegalStateException("Invalid partial response");
             }
             if (status < 200 || status >= 300) {
                 throw new IllegalStateException("Download failed with HTTP " + status);
@@ -265,31 +386,54 @@ public final class TaiModelDownloader {
             boolean resumed = existing > 0L && status == 206;
             if (!resumed) existing = 0L;
             long responseLength = connection.getHeaderFieldLong("Content-Length", -1L);
-            contentLength = responseLength > 0 ? existing + responseLength : -1L;
+            // What this response promised, for the short-read check below; contentLength (shown
+            // to the user) may be raised to the catalogue's size when the server says less.
+            long promised = responseLength > 0 ? existing + responseLength : -1L;
+            contentLength = promised;
             if (expectedSizeBytes > 0L) contentLength = Math.max(contentLength, expectedSizeBytes);
             bytesRead = existing;
-            persist(transfer(transferId, modelId, url, output.getAbsolutePath(), TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""), callback);
+            startBytes = existing;
+            run.persist(run.record(TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""));
 
             try (InputStream input = new BufferedInputStream(connection.getInputStream());
                  FileOutputStream outputStream = new FileOutputStream(partial, resumed)) {
                 byte[] buffer = new byte[1024 * 64];
                 int read;
-                long lastPersisted = 0L;
+                long lastPersisted = bytesRead;
                 while ((read = input.read(buffer)) != -1) {
-                    if (TaiModelDownloadService.isCancelled(modelId)) throw new InterruptedException("Download cancelled.");
+                    control.checkpoint();
                     outputStream.write(buffer, 0, read);
                     bytesRead += read;
-                    if (bytesRead - lastPersisted >= 1024L * 1024L) {
-                        persist(transfer(transferId, modelId, url, output.getAbsolutePath(), TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""), callback);
+                    if (bytesRead - lastPersisted >= PERSIST_EVERY_BYTES) {
+                        run.persist(run.record(TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""));
                         lastPersisted = bytesRead;
+                    } else {
+                        run.report(run.record(TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""));
                     }
                 }
             }
-
-            if (!expectedSha256.isEmpty() && !expectedSha256.equalsIgnoreCase(sha256(partial))) {
-                throw new IllegalStateException("Downloaded model failed SHA-256 verification.");
+            // A connection that ends before the promised length is the network going away, not a
+            // finished file; some HTTP stacks report it as a plain end of stream, so say so here.
+            if (promised > 0L && bytesRead < promised) {
+                throw new IOException("The connection closed after " + bytesRead + " of " + promised + " bytes");
             }
-            persist(transfer(transferId, modelId, url, output.getAbsolutePath(), TaiModelStore.STATE_VERIFYING, bytesRead, contentLength, ""), callback);
+
+            // "Checking file" is shown while the hash actually runs, so the wait after the last
+            // byte is explained; the verified byte count moves the bar meanwhile.
+            run.persist(run.record(TaiModelStore.STATE_VERIFYING, bytesRead, contentLength, ""));
+            if (!expectedSha256.isEmpty()) {
+                final long total = contentLength;
+                final long done = bytesRead;
+                String actual = sha256(partial, control, verified -> {
+                    try {
+                        run.report(withVerified(run.record(TaiModelStore.STATE_VERIFYING, done, total, ""), verified));
+                    } catch (JSONException ignored) {
+                    }
+                });
+                if (!expectedSha256.equalsIgnoreCase(actual)) {
+                    throw new IllegalStateException("Downloaded model failed SHA-256 verification.");
+                }
+            }
 
             if (isMnnPackage(url, backend, format)) {
                 if (!looksLikeSmallJson(partial, output.getName())) {
@@ -309,11 +453,11 @@ public final class TaiModelDownloader {
                 long currentBytes = output.length();
                 bytesRead = currentBytes;
                 long packageTotalBytes = expectedSizeBytes > 0L ? expectedSizeBytes : -1L;
-                persist(transfer(transferId, modelId, url, output.getAbsolutePath(), TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), callback);
+                run.persist(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""));
 
                 java.util.ArrayList<String> pendingFiles = new java.util.ArrayList<>(packageFiles);
                 for (int packageIndex = 0; packageIndex < pendingFiles.size(); packageIndex++) {
-                    if (pendingFiles.size() > 10000) throw new IOException("Model package has too many files.");
+                    if (pendingFiles.size() > 10000) throw new IllegalStateException("Model package has too many files.");
                     String fileName = pendingFiles.get(packageIndex);
                     if (output.getName().equals(fileName)) continue;
                     String fileUrl = baseUrl + encodeHuggingFacePath(fileName);
@@ -336,7 +480,7 @@ public final class TaiModelDownloader {
                         && validContentRange(fileConn.getHeaderField("Content-Range"), offset);
                     if (fileStatus == 206 && !resume) {
                         fileConn.disconnect();
-                        throw new IOException("Invalid partial response for " + fileName);
+                        throw new IllegalStateException("Invalid partial response for " + fileName);
                     }
                     if (!resume) offset = 0;
                     currentBytes += offset;
@@ -344,20 +488,20 @@ public final class TaiModelDownloader {
                         fileConn.disconnect();
                         throw new IllegalStateException("MNN package file missing: " + fileName);
                     }
-                    persist(withCurrentFile(transfer(transferId, modelId, url, output.getAbsolutePath(),
-                        TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName), callback);
+                    run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
                     try (InputStream fileInput = new BufferedInputStream(fileConn.getInputStream());
                          FileOutputStream fileOut = new FileOutputStream(filePartial, resume)) {
                         byte[] buffer = new byte[1024 * 64];
                         int read;
                         while ((read = fileInput.read(buffer)) != -1) {
-                            if (TaiModelDownloadService.isCancelled(modelId)) throw new InterruptedException("Download cancelled.");
+                            control.checkpoint();
                             fileOut.write(buffer, 0, read);
                             currentBytes += read;
                             bytesRead = currentBytes;
-                            if (currentBytes % (1024L * 1024L) < read) {
-                                persist(withCurrentFile(transfer(transferId, modelId, url, output.getAbsolutePath(),
-                                    TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName), callback);
+                            if (currentBytes % PERSIST_EVERY_BYTES < read) {
+                                run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
+                            } else {
+                                run.report(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
                             }
                         }
                     }
@@ -370,10 +514,10 @@ public final class TaiModelDownloader {
                         for (String dependency : packageFiles)
                             if (!pendingFiles.contains(dependency)) pendingFiles.add(dependency);
                     }
-                    persist(withCurrentFile(transfer(transferId, modelId, url, output.getAbsolutePath(),
-                        TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName), callback);
+                    run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
                 }
 
+                run.persist(run.record(TaiModelStore.STATE_VERIFYING, currentBytes, packageTotalBytes, ""));
                 TaiMnnPackage.validate(output);
                 LinkedHashSet<String> packageCapabilities =
                     TaiModelStore.mnnPackageCapabilities(output, capabilities);
@@ -397,8 +541,7 @@ public final class TaiModelDownloader {
                     emptyToNull(expectedSha256)
                 );
                 store.upsertUserModel(spec);
-                persist(withEffectiveConfig(transfer(transferId, modelId, url, output.getAbsolutePath(),
-                    TaiModelStore.STATE_INSTALLED, currentBytes, currentBytes, ""), output), callback);
+                run.persist(withEffectiveConfig(run.record(TaiModelStore.STATE_INSTALLED, currentBytes, currentBytes, ""), output));
                 return;
             }
 
@@ -410,12 +553,12 @@ public final class TaiModelDownloader {
             clearResumeMarker(partial);
             long installedBytes = output.length();
             if (requiresLiteRtEmbeddingTokenizer(output, capabilities)) {
-                installedBytes += downloadLiteRtEmbeddingSidecars(transferId, modelId, url, output, authToken,
-                    output.length(), expectedSizeBytes, callback);
+                installedBytes += downloadLiteRtEmbeddingSidecars(run, url, output, authToken,
+                    output.length(), expectedSizeBytes);
             }
             if (!sidecars.isEmpty()) {
-                installedBytes += downloadCatalogSidecars(transferId, modelId, url, output, sidecars, authToken,
-                    installedBytes, expectedSizeBytes, callback);
+                installedBytes += downloadCatalogSidecars(run, output, sidecars, authToken,
+                    installedBytes, expectedSizeBytes);
             }
 
             TaiModelSpec spec = new TaiModelSpec(
@@ -435,53 +578,132 @@ public final class TaiModelDownloader {
                 recommendedRamGb, emptyToNull(expectedSha256)
             );
             store.upsertUserModel(spec);
-            persist(transfer(transferId, modelId, url, output.getAbsolutePath(), TaiModelStore.STATE_INSTALLED, installedBytes, installedBytes, ""), callback);
-        } catch (InterruptedException e) {
+            run.persist(run.record(TaiModelStore.STATE_INSTALLED, installedBytes, installedBytes, ""));
+        } catch (Interrupted e) {
             try {
-                persist(transfer(transferId, modelId, url, output.getAbsolutePath(), TaiModelStore.STATE_CANCELLED, bytesRead, contentLength, "cancelled"), callback);
+                if (e.pauseReason == null) {
+                    // Cancel means "I do not want this": the partial files go, so a later download
+                    // of the same model starts clean and the disk is not left holding gigabytes.
+                    deletePartials(output);
+                    run.persist(run.record(TaiModelStore.STATE_CANCELLED, bytesRead, contentLength, "cancelled"));
+                } else {
+                    run.persist(withPause(run.record(TaiModelStore.STATE_PAUSED, bytesRead, contentLength, ""), e.pauseReason, 0L, 0L));
+                }
+            } catch (JSONException ignored) {
+            }
+        } catch (IOException e) {
+            // The socket died under the transfer, or the disk filled. Both keep the partial file
+            // and pause rather than fail: the bytes on disk are good, and the reason is one the
+            // engine can wait out (the network) or the user can fix (the space).
+            try {
+                if (isDiskFull(e)) {
+                    File dir = output.getParentFile() == null ? store.getModelsDirectory() : output.getParentFile();
+                    TaiDownloadQueue.SpaceCheck space = TaiDownloadQueue.checkSpace(dir.getUsableSpace(),
+                        dir.getTotalSpace(), contentLength, bytesRead);
+                    run.persist(withPause(run.record(TaiModelStore.STATE_PAUSED, bytesRead, contentLength, ""),
+                        TaiModelStore.PAUSED_NO_SPACE, space.requiredBytes, space.freeBytes));
+                } else if (e instanceof FileNotFoundException) {
+                    run.persist(run.record(TaiModelStore.STATE_FAILED, bytesRead, contentLength, e.getMessage()));
+                } else {
+                    JSONObject paused = withPause(run.record(TaiModelStore.STATE_PAUSED, bytesRead, contentLength,
+                        e.getMessage() == null ? "" : e.getMessage()), TaiModelStore.PAUSED_NETWORK, 0L, 0L);
+                    int retries = bytesRead > startBytes ? 0 : run.base.optInt("networkRetries", 0) + 1;
+                    paused.put("networkRetries", retries);
+                    run.persist(paused);
+                }
             } catch (JSONException ignored) {
             }
         } catch (Exception e) {
             try {
-                persist(transfer(transferId, modelId, url, output.getAbsolutePath(), TaiModelStore.STATE_FAILED, bytesRead, contentLength, e.getMessage()), callback);
+                run.persist(run.record(TaiModelStore.STATE_FAILED, bytesRead, contentLength, e.getMessage()));
             } catch (JSONException ignored) {
             }
         }
     }
 
-    private void persist(@NonNull JSONObject transfer, @Nullable ProgressCallback callback) {
-        store.upsertDownload(preserveMetadata(transfer));
-        if (callback != null) callback.onProgress(transfer);
+    /** One attempt's bookkeeping: the base record every progress write is derived from. */
+    private final class Run {
+        final JSONObject base;
+        final Control control;
+        @Nullable final ProgressCallback callback;
+        long lastCallbackMs;
+
+        Run(String transferId, String modelId, String url, File output, String displayName, String license,
+            LinkedHashSet<String> capabilities, String backend, String format, String architecture,
+            String quantization, int contextWindow, int recommendedRamGb, String expectedSha256,
+            long expectedSizeBytes, List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars,
+            Control control, @Nullable ProgressCallback callback) throws JSONException {
+            this.control = control;
+            this.callback = callback;
+            base = withMetadata(transfer(transferId, modelId, url, output.getAbsolutePath(),
+                TaiModelStore.STATE_QUEUED, 0L, expectedSizeBytes, ""),
+                displayName, license, capabilities, backend, format, architecture, quantization,
+                contextWindow, recommendedRamGb, expectedSha256);
+            base.put("expectedSizeBytes", expectedSizeBytes);
+            if (!sidecars.isEmpty()) base.put("sidecars", sidecarsToJson(sidecars));
+            // Whatever the stored record knows beyond the arguments (queue position, the runtime
+            // profile, retry counts) rides along, so a progress write never loses it.
+            JSONObject stored = store.getDownload(transferId);
+            if (stored != null) {
+                Iterator<String> keys = stored.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    if (!base.has(key) && !VOLATILE_FIELDS.contains(key)) base.put(key, stored.opt(key));
+                }
+            }
+        }
+
+        /** A fresh record for this attempt with the given state; attempt-specific fields cleared. */
+        @NonNull
+        JSONObject record(String status, long bytesRead, long totalBytes, String error) throws JSONException {
+            JSONObject json = new JSONObject();
+            Iterator<String> keys = base.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                if (!VOLATILE_FIELDS.contains(key)) json.put(key, base.opt(key));
+            }
+            json.put("status", status);
+            json.put("bytesRead", bytesRead);
+            json.put("totalBytes", totalBytes);
+            json.put("error", error == null ? "" : error);
+            json.put("updatedAtMs", System.currentTimeMillis());
+            return json;
+        }
+
+        @NonNull
+        Control control() {
+            return control;
+        }
+
+        /** Writes the record to preferences and tells the callback. */
+        void persist(@NonNull JSONObject transfer) {
+            store.upsertDownload(transfer);
+            lastCallbackMs = android.os.SystemClock.elapsedRealtime();
+            if (callback != null) callback.onProgress(transfer);
+        }
+
+        /** Tells the callback only, at most every {@link #CALLBACK_EVERY_MS}; preferences are
+         *  written by {@link #persist} on the coarser byte schedule. */
+        void report(@NonNull JSONObject transfer) {
+            if (callback == null) return;
+            long now = android.os.SystemClock.elapsedRealtime();
+            if (now - lastCallbackMs < CALLBACK_EVERY_MS) return;
+            lastCallbackMs = now;
+            callback.onProgress(transfer);
+        }
     }
+
+    // ---- record helpers ----
 
     @NonNull
-    private JSONObject preserveMetadata(@NonNull JSONObject transfer) {
-        String id = transfer.optString("id", "");
-        JSONArray downloads = store.getDownloads();
-        for (int i = downloads.length() - 1; i >= 0; i--) {
-            JSONObject existing = downloads.optJSONObject(i);
-            if (existing == null || !id.equals(existing.optString("id", ""))) continue;
-            copyIfMissing(transfer, existing, "displayName");
-            copyIfMissing(transfer, existing, "license");
-            copyIfMissing(transfer, existing, "capabilities");
-            copyIfMissing(transfer, existing, "backend");
-            copyIfMissing(transfer, existing, "format");
-            copyIfMissing(transfer, existing, "architecture");
-            copyIfMissing(transfer, existing, "quantization");
-            copyIfMissing(transfer, existing, "contextWindow");
-            copyIfMissing(transfer, existing, "recommendedRamGb");
-            copyIfMissing(transfer, existing, "sha256");
-            break;
+    static LinkedHashSet<String> capabilitiesOf(@NonNull JSONObject record) {
+        LinkedHashSet<String> capabilities = new LinkedHashSet<>();
+        JSONArray array = record.optJSONArray("capabilities");
+        if (array != null) for (int i = 0; i < array.length(); i++) {
+            String value = array.optString(i, "");
+            if (!value.isEmpty()) capabilities.add(value);
         }
-        return transfer;
-    }
-
-    private void copyIfMissing(@NonNull JSONObject target, @NonNull JSONObject source, @NonNull String key) {
-        if (target.has(key) || !source.has(key)) return;
-        try {
-            target.put(key, source.opt(key));
-        } catch (JSONException ignored) {
-        }
+        return capabilities;
     }
 
     @NonNull
@@ -532,6 +754,25 @@ public final class TaiModelDownloader {
         json.put("error", error == null ? "" : error);
         json.put("updatedAtMs", System.currentTimeMillis());
         return json;
+    }
+
+    @NonNull
+    static JSONObject withPause(@NonNull JSONObject transfer, @NonNull String reason, long requiredBytes, long freeBytes) throws JSONException {
+        transfer.put("pausedReason", reason);
+        if (TaiModelStore.PAUSED_NO_SPACE.equals(reason)) {
+            transfer.put("requiredBytes", requiredBytes);
+            transfer.put("freeBytes", freeBytes);
+        }
+        return transfer;
+    }
+
+    @NonNull
+    private JSONObject withVerified(@NonNull JSONObject transfer, long verifiedBytes) {
+        try {
+            transfer.put("verifiedBytes", verifiedBytes);
+        } catch (JSONException ignored) {
+        }
+        return transfer;
     }
 
     @NonNull
@@ -609,6 +850,33 @@ public final class TaiModelDownloader {
             && capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
     }
 
+    /** ENOSPC surfaces as an IOException whose message names it; there is no typed signal. */
+    static boolean isDiskFull(@NonNull IOException e) {
+        String message = e.getMessage() == null ? "" : e.getMessage();
+        return message.contains("ENOSPC") || message.toLowerCase(Locale.ROOT).contains("no space left");
+    }
+
+    /** Every partial file and resume marker under the model's directory; the finished files stay. */
+    static void deletePartials(@NonNull File output) {
+        new File(output.getAbsolutePath() + ".part").delete();
+        new File(output.getAbsolutePath() + ".part.source").delete();
+        File dir = output.getParentFile();
+        if (dir == null) return;
+        deletePartialsUnder(dir, 0);
+    }
+
+    private static void deletePartialsUnder(@NonNull File dir, int depth) {
+        File[] children = dir.listFiles();
+        if (children == null || depth > 8) return;
+        for (File child : children) {
+            if (child.isDirectory()) {
+                deletePartialsUnder(child, depth + 1);
+            } else if (child.getName().endsWith(".part") || child.getName().endsWith(".part.source")) {
+                child.delete();
+            }
+        }
+    }
+
     /**
      * Downloads a catalog entry's declared sidecars (e.g. Whisper's {@code tokenizer.json} from the
      * paired {@code openai/whisper-*} repo) next to the main artifact, reusing the same .part/resume/
@@ -616,11 +884,9 @@ public final class TaiModelDownloader {
      * expected hash) is skipped; a sidecar that never returns a 2xx response fails the whole download
      * cleanly rather than leaving a model installed with a missing tokenizer.
      */
-    private long downloadCatalogSidecars(@NonNull String transferId, @NonNull String modelId,
-                                         @NonNull String primaryUrl, @NonNull File output,
+    private long downloadCatalogSidecars(@NonNull Run run, @NonNull File output,
                                          @NonNull List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars,
-                                         @Nullable String authToken, long currentBytes, long expectedSizeBytes,
-                                         @Nullable ProgressCallback callback) throws Exception {
+                                         @Nullable String authToken, long currentBytes, long expectedSizeBytes) throws Exception {
         File modelDir = output.getParentFile();
         if (modelDir == null) throw new IllegalStateException("Model directory is missing.");
         long packageTotalBytes = expectedSizeBytes > 0L ? expectedSizeBytes : -1L;
@@ -629,7 +895,7 @@ public final class TaiModelDownloader {
         for (TaiModelCatalog.CatalogEntry.Sidecar sidecar : sidecars) {
             File sidecarOutput = new File(modelDir, sidecar.localName);
             if (sidecarOutput.isFile() && sidecarOutput.length() > 0L
-                && (sidecar.sha256 == null || sidecar.sha256.equalsIgnoreCase(sha256(sidecarOutput)))) {
+                && (sidecar.sha256 == null || sidecar.sha256.equalsIgnoreCase(sha256(sidecarOutput, null, null)))) {
                 continue;
             }
             File sidecarPartial = new File(sidecarOutput.getAbsolutePath() + ".part");
@@ -645,7 +911,7 @@ public final class TaiModelDownloader {
             boolean resume = offset > 0 && status == 206 && validContentRange(connection.getHeaderField("Content-Range"), offset);
             if (status == 206 && !resume) {
                 connection.disconnect();
-                throw new IOException("Invalid partial response for sidecar " + sidecar.localName);
+                throw new IllegalStateException("Invalid partial response for sidecar " + sidecar.localName);
             }
             if (!resume) offset = 0;
             if (status < 200 || status >= 300) {
@@ -654,25 +920,25 @@ public final class TaiModelDownloader {
             }
             currentBytes += offset;
             addedBytes += offset;
-            persist(withCurrentFile(transfer(transferId, modelId, primaryUrl, output.getAbsolutePath(),
-                TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), sidecar.localName), callback);
+            run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), sidecar.localName));
             try (InputStream input = new BufferedInputStream(connection.getInputStream());
                  FileOutputStream out = new FileOutputStream(sidecarPartial, resume)) {
                 byte[] buffer = new byte[1024 * 64];
                 int read;
                 while ((read = input.read(buffer)) != -1) {
-                    if (TaiModelDownloadService.isCancelled(modelId)) throw new InterruptedException("Download cancelled.");
+                    run.control().checkpoint();
                     out.write(buffer, 0, read);
                     currentBytes += read;
                     addedBytes += read;
-                    if (currentBytes % (1024L * 1024L) < read) {
-                        persist(withCurrentFile(transfer(transferId, modelId, primaryUrl, output.getAbsolutePath(),
-                            TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), sidecar.localName), callback);
+                    if (currentBytes % PERSIST_EVERY_BYTES < read) {
+                        run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), sidecar.localName));
+                    } else {
+                        run.report(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), sidecar.localName));
                     }
                 }
             }
             connection.disconnect();
-            if (sidecar.sha256 != null && !sidecar.sha256.equalsIgnoreCase(sha256(sidecarPartial))) {
+            if (sidecar.sha256 != null && !sidecar.sha256.equalsIgnoreCase(sha256(sidecarPartial, null, null))) {
                 throw new IllegalStateException("Sidecar failed SHA-256 verification: " + sidecar.localName);
             }
             if (sidecarOutput.exists() && !sidecarOutput.delete()) throw new IllegalStateException("Could not replace sidecar " + sidecar.localName);
@@ -682,9 +948,9 @@ public final class TaiModelDownloader {
         return addedBytes;
     }
 
-    /** Serializes catalog sidecars into the {@code TaiModelDownloadService} intent extra so the
-     *  download service (running on its own process/executor) can re-download them via
-     *  {@link #runDownload}. Kept as a plain JSON array of {@code {url, localName, sha256}}. */
+    /** Serializes catalog sidecars into the download record so a worker (now, or after a restart)
+     *  can re-download them via {@link #runDownload(JSONObject, String, Control, ProgressCallback)}.
+     *  Kept as a plain JSON array of {@code {url, localName, sha256}}. */
     @NonNull
     public static JSONArray sidecarsToJson(@NonNull List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars) {
         JSONArray array = new JSONArray();
@@ -721,11 +987,9 @@ public final class TaiModelDownloader {
         return sidecars;
     }
 
-    private long downloadLiteRtEmbeddingSidecars(@NonNull String transferId, @NonNull String modelId,
-                                                 @NonNull String url, @NonNull File output,
+    private long downloadLiteRtEmbeddingSidecars(@NonNull Run run, @NonNull String url, @NonNull File output,
                                                  @Nullable String authToken, long currentBytes,
-                                                 long expectedSizeBytes,
-                                                 @Nullable ProgressCallback callback) throws Exception {
+                                                 long expectedSizeBytes) throws Exception {
         String baseUrl = baseUrlFromUrl(url);
         File modelDir = output.getParentFile();
         if (modelDir == null) throw new IllegalStateException("Model directory is missing.");
@@ -740,21 +1004,19 @@ public final class TaiModelDownloader {
             HttpURLConnection fileConn = open(fileUrl, authToken, 0);
             int fileStatus = fileConn.getResponseCode();
             if (fileStatus < 200 || fileStatus >= 300) continue;
-            persist(withCurrentFile(transfer(transferId, modelId, url, output.getAbsolutePath(),
-                TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), candidate), callback);
+            run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), candidate));
             long fileBytes = 0L;
             try (InputStream fileInput = new BufferedInputStream(fileConn.getInputStream());
                  FileOutputStream fileOut = new FileOutputStream(tokenizerPartial)) {
                 byte[] buffer = new byte[1024 * 64];
                 int read;
                 while ((read = fileInput.read(buffer)) != -1) {
-                    if (TaiModelDownloadService.isCancelled(modelId)) throw new InterruptedException("Download cancelled.");
+                    run.control().checkpoint();
                     fileOut.write(buffer, 0, read);
                     currentBytes += read;
                     fileBytes += read;
-                    if (currentBytes % (1024L * 1024L) < read) {
-                        persist(withCurrentFile(transfer(transferId, modelId, url, output.getAbsolutePath(),
-                            TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), candidate), callback);
+                    if (currentBytes % PERSIST_EVERY_BYTES < read) {
+                        run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), candidate));
                     }
                 }
             }
@@ -764,8 +1026,7 @@ public final class TaiModelDownloader {
             }
             if (tokenizerOutput.exists() && !tokenizerOutput.delete()) throw new IllegalStateException("Could not replace tokenizer sidecar.");
             if (!tokenizerPartial.renameTo(tokenizerOutput)) throw new IllegalStateException("Could not finalize tokenizer sidecar download.");
-            persist(withCurrentFile(transfer(transferId, modelId, url, output.getAbsolutePath(),
-                TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), LITERT_EMBEDDING_TOKENIZER), callback);
+            run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), LITERT_EMBEDDING_TOKENIZER));
             return fileBytes;
         }
         throw new IllegalStateException("LiteRT embedding model is missing a SentencePiece tokenizer "
@@ -949,28 +1210,12 @@ public final class TaiModelDownloader {
         return base.substring(0, lastSlash + 1);
     }
 
-    private void putRuntimeMetadata(Intent intent, String backend, String format, @Nullable String architecture,
-        @Nullable String quantization, int contextWindow, int recommendedRamGb, @Nullable String sha256) {
-        intent.putExtra(TaiModelDownloadService.EXTRA_BACKEND, backend == null ? "" : backend);
-        intent.putExtra(TaiModelDownloadService.EXTRA_FORMAT, format == null ? "" : format);
-        intent.putExtra(TaiModelDownloadService.EXTRA_ARCHITECTURE, architecture == null ? "" : architecture);
-        intent.putExtra(TaiModelDownloadService.EXTRA_QUANTIZATION, quantization == null ? "" : quantization);
-        intent.putExtra(TaiModelDownloadService.EXTRA_CONTEXT_WINDOW, contextWindow);
-        intent.putExtra(TaiModelDownloadService.EXTRA_RECOMMENDED_RAM_GB, recommendedRamGb);
-        intent.putExtra(TaiModelDownloadService.EXTRA_SHA256, sha256 == null ? "" : sha256);
-    }
-
-    private void startService(Intent intent) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) appContext.startForegroundService(intent);
-        else appContext.startService(intent);
-    }
-
     private JSONObject started(JSONObject transfer) throws JSONException {
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("started", true);
         data.put("transfer", transfer);
-        data.put("message", "Download started in the Android app process. Check tai downloads for progress.");
+        data.put("message", "Download queued in the Android app process. Check tai downloads for progress.");
         return data;
     }
 
@@ -981,6 +1226,10 @@ public final class TaiModelDownloader {
      * Hugging Face bearer token is re-evaluated per hop. Auto-follow reattaches every outgoing
      * header including Authorization, so a redirect to a non-Hugging-Face host (a CDN, a
      * compromised mirror) would otherwise leak the token off huggingface.co.
+     *
+     * <p>Protocol faults here are {@link IllegalStateException}s on purpose: the transfer loop
+     * reads an {@link IOException} as "the network went away" and pauses, and a broken redirect is
+     * a failure, not a wait.
      */
     private HttpURLConnection open(String url, @Nullable String authToken, long offset) throws Exception {
         String currentUrl = url;
@@ -997,22 +1246,37 @@ public final class TaiModelDownloader {
                 String location = connection.getHeaderField("Location");
                 connection.disconnect();
                 if (location == null || location.isEmpty()) {
-                    throw new IOException("Redirect from " + currentUrl + " carried no Location header");
+                    throw new IllegalStateException("Redirect from " + currentUrl + " carried no Location header");
                 }
                 currentUrl = new URL(new URL(currentUrl), location).toString();
                 continue;
             }
             return connection;
         }
-        throw new IOException("Too many redirects resolving " + url);
+        throw new IllegalStateException("Too many redirects resolving " + url);
     }
 
-    private String sha256(File file) throws Exception {
+    /** Called with the bytes hashed so far, every {@link #VERIFY_REPORT_EVERY_BYTES}. */
+    interface HashProgress {
+        void onHashed(long bytes);
+    }
+
+    private String sha256(File file, @Nullable Control control, @Nullable HashProgress progress) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         try (InputStream input = new BufferedInputStream(new FileInputStream(file))) {
             byte[] buffer = new byte[1024 * 128];
             int read;
-            while ((read = input.read(buffer)) != -1) digest.update(buffer, 0, read);
+            long hashed = 0L;
+            long lastReported = 0L;
+            while ((read = input.read(buffer)) != -1) {
+                if (control != null) control.checkpoint();
+                digest.update(buffer, 0, read);
+                hashed += read;
+                if (progress != null && hashed - lastReported >= VERIFY_REPORT_EVERY_BYTES) {
+                    progress.onHashed(hashed);
+                    lastReported = hashed;
+                }
+            }
         }
         StringBuilder builder = new StringBuilder();
         for (byte value : digest.digest()) builder.append(String.format(Locale.US, "%02x", value));

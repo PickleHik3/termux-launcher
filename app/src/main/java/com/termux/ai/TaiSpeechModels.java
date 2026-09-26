@@ -179,9 +179,10 @@ public final class TaiSpeechModels {
 
     // ---- downloads ----
 
+    /** A download that has not ended yet. A paused one counts: it keeps its partial file and will
+     *  continue, so the pending choice it carries must not settle as a failure meanwhile. */
     public static boolean isDownloadActive(@Nullable String status) {
-        return TaiModelStore.STATE_QUEUED.equals(status) || TaiModelStore.STATE_DOWNLOADING.equals(status)
-            || TaiModelStore.STATE_VERIFYING.equals(status);
+        return TaiModelStore.isLiveDownloadState(status) || TaiModelStore.STATE_PAUSED.equals(status);
     }
 
     /** A download record is a speech model's when it says so, or when the catalog says so of its id. */

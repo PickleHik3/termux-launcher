@@ -592,6 +592,12 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "downloads", TaiManager.getInstance(context).downloads());
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/cancel".equals(request.path)) {
                 return maybeTextResponse(request, "download", TaiManager.getInstance(context).cancelDownload(request.body));
+            } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/pause".equals(request.path)) {
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).pauseDownload(request.body));
+            } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/resume".equals(request.path)) {
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).resumeDownload(request.body));
+            } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/prioritize".equals(request.path)) {
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).prioritizeDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/delete".equals(request.path)) {
                 return maybeTextResponse(request, "delete", TaiManager.getInstance(context).deleteModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/load".equals(request.path)) {
@@ -1542,6 +1548,9 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/ai/models/download", new SimpleRateLimiter(20, 60_000));
         rateLimiters.put("POST:/v1/ai/models/download-catalog", new SimpleRateLimiter(20, 60_000));
         rateLimiters.put("POST:/v1/ai/models/downloads/cancel", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/ai/models/downloads/pause", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/ai/models/downloads/resume", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/ai/models/downloads/prioritize", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/ai/models/downloads", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/ai/models/delete", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/ai/models/load", new SimpleRateLimiter(20, 60_000));
@@ -1726,6 +1735,9 @@ public class LauncherCtlApiServer {
             "  tai import <path> [model-id]\n" +
             "  tai download <model-id> <https-url> --accept-terms\n" +
             "  tai downloads\n" +
+            "  tai download-pause <model-id>\n" +
+            "  tai download-resume <model-id>\n" +
+            "  tai download-now <model-id>\n" +
             "  tai download-cancel <model-id>\n" +
             "  tai delete <model-id>\n" +
             "  tai preflight [model] [--auto|--cpu|--gpu]\n" +
@@ -1860,6 +1872,21 @@ public class LauncherCtlApiServer {
             "    [ \"$#\" -gt 0 ] || { echo \"usage: tai download-cancel <model-id>\" >&2; exit 2; }\n" +
             "    model=$(json_escape \"$1\")\n" +
             "    post_json /v1/ai/models/downloads/cancel \"{\\\"modelId\\\":\\\"$model\\\"}\"\n" +
+            "    ;;\n" +
+            "  download-pause)\n" +
+            "    [ \"$#\" -gt 0 ] || { echo \"usage: tai download-pause <model-id>\" >&2; exit 2; }\n" +
+            "    model=$(json_escape \"$1\")\n" +
+            "    post_json /v1/ai/models/downloads/pause \"{\\\"modelId\\\":\\\"$model\\\"}\"\n" +
+            "    ;;\n" +
+            "  download-resume)\n" +
+            "    [ \"$#\" -gt 0 ] || { echo \"usage: tai download-resume <model-id>\" >&2; exit 2; }\n" +
+            "    model=$(json_escape \"$1\")\n" +
+            "    post_json /v1/ai/models/downloads/resume \"{\\\"modelId\\\":\\\"$model\\\"}\"\n" +
+            "    ;;\n" +
+            "  download-now)\n" +
+            "    [ \"$#\" -gt 0 ] || { echo \"usage: tai download-now <model-id>\" >&2; exit 2; }\n" +
+            "    model=$(json_escape \"$1\")\n" +
+            "    post_json /v1/ai/models/downloads/prioritize \"{\\\"modelId\\\":\\\"$model\\\"}\"\n" +
             "    ;;\n" +
             "  delete)\n" +
             "    [ \"$#\" -gt 0 ] || { echo \"usage: tai delete <model-id>\" >&2; exit 2; }\n" +

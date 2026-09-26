@@ -27,10 +27,10 @@ public class TaiModelCatalogPreferencesFragmentTest {
         List<TaiModelCatalog.CatalogEntry> mnn = TaiModelCatalogPreferencesFragment.filterEntries(
             TaiModelCatalog.entries().values(), TaiModelCatalogPreferencesFragment.BackendFilter.MNN, "");
 
-        // Counts are derived, not hardcoded: the catalog grows, and a magic number here only
-        // records how many models existed the day the test was written.
+        // Counts are derived, not hardcoded: the catalog changes, and a magic number here only
+        // records how many models existed the day the test was written. Since D1 no MNN model is
+        // built in; the MNN filter must still be a clean (empty) partition rather than a crash.
         assertTrue("catalog should expose LiteRT models", liteRt.size() > 0);
-        assertTrue("catalog should expose MNN models", mnn.size() > 0);
         assertEquals("LiteRT and MNN must partition the whole catalog",
             TaiModelCatalog.entries().size(), liteRt.size() + mnn.size());
         for (TaiModelCatalog.CatalogEntry entry : liteRt) {
@@ -78,17 +78,18 @@ public class TaiModelCatalogPreferencesFragmentTest {
     @Test
     public void filterEntries_searchesNameIdBackendJobGroupAndCapabilityTags() {
         assertTrue(containsModel(search("Gemma 4 E2B"), TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
-        assertTrue(containsModel(search("qwen2.5-coder-1.5b"), "qwen2.5-coder-1.5b-instruct-mnn"));
-        assertTrue(search("mnn_llm").size() >= 6);
+        assertTrue(containsModel(search("gemma-4-e4b"), TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
+        assertTrue(search("litert_lm").size() >= 2);
         assertTrue(containsModel(search("general_multimodal"), TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
-        assertTrue(containsModel(search("Reasoning"), "deepseek-r1-1.5b-qwen-mnn"));
+        assertTrue(containsModel(search("Reasoning"), TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
+        assertTrue(containsModel(search("Speech"), TaiModelCatalog.PARAKEET_TDT_V3_ID));
     }
 
     @Test
     public void sortForDisplay_prioritizesDownloadedAndDefaultWithoutRecommendations() {
         List<TaiModelCatalog.CatalogEntry> entries = new ArrayList<>(TaiModelCatalog.entries().values());
-        String installed = "qwen2.5-coder-7b-instruct-mnn";
-        String active = "qwen2.5-3b-instruct-mnn";
+        String installed = TaiModelRegistry.MODEL_GEMMA_4_E4B_IT;
+        String active = TaiModelCatalog.PARAKEET_TDT_V3_ID;
         List<TaiModelCatalog.CatalogEntry> sorted = TaiModelCatalogPreferencesFragment.sortForDisplay(
             entries, new java.util.HashSet<>(java.util.Arrays.asList(installed, active)),
             new JSONArray(), active, "downloaded");
@@ -127,8 +128,11 @@ public class TaiModelCatalogPreferencesFragmentTest {
     @Test
     public void actionStateFor_returnsRequiredStatefulActions() throws Exception {
         TaiModelCatalog.CatalogEntry installable = TaiModelCatalog.get(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
-        TaiModelCatalog.CatalogEntry importOnly = TaiModelCatalog.get("qwen2.5-1.5b-instruct-litert-lm");
-        TaiModelCatalog.CatalogEntry mnn = TaiModelCatalog.get("qwen2.5-coder-1.5b-instruct-mnn");
+        // No built-in entry is import-only any more; a synthetic installed-model entry has no
+        // download URL either, which is the same "cannot be downloaded from here" shape.
+        TaiModelCatalog.CatalogEntry importOnly = TaiModelCatalog.installedModelEntry(new TaiModelSpec(
+            "added-by-link", "Added by link", "Added model", "downloaded", "/models/added/model.litertlm",
+            "test", 0L, new java.util.LinkedHashSet<>(Collections.singleton(TaiModelSpec.CAPABILITY_TEXT_CHAT)), false));
         JSONObject downloading = new JSONObject()
             .put("status", TaiModelStore.STATE_DOWNLOADING)
             .put("bytesRead", 25L)
@@ -149,9 +153,6 @@ public class TaiModelCatalogPreferencesFragmentTest {
             TaiModelCatalogPreferencesFragment.actionStateFor(installable, true, null, installable.modelId).pill);
         assertEquals(TaiModelCatalogPreferencesFragment.CatalogActionType.IMPORT_ONLY,
             TaiModelCatalogPreferencesFragment.actionStateFor(importOnly, false, null, "other").type);
-
-        assertEquals(TaiModelCatalogPreferencesFragment.CatalogActionType.INSTALL,
-            TaiModelCatalogPreferencesFragment.actionStateFor(mnn, false, null, "other").type);
     }
 
     private List<TaiModelCatalog.CatalogEntry> search(String query) {

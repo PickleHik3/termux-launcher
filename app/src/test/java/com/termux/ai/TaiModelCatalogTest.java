@@ -16,8 +16,10 @@ import static org.junit.Assert.assertTrue;
 
 public class TaiModelCatalogTest {
 
+    /** D1 of the model-centre design: only the two Gemma 4 chat models and the speech models are
+     *  built in. Everything else still runs when imported or added by link. */
     @Test
-    public void builtInCatalog_matchesYamlModelCountsAndUniqueIds() {
+    public void builtInCatalog_isGemmaPlusSpeechOnly() {
         Map<String, TaiModelCatalog.CatalogEntry> entries = TaiModelCatalog.entries();
         int liteRtCount = 0;
         int mnnCount = 0;
@@ -27,16 +29,24 @@ public class TaiModelCatalogTest {
             if (TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) mnnCount++;
         }
 
-        assertEquals(18, entries.size());
-        assertEquals(18, new HashSet<>(entries.keySet()).size());
-        assertEquals(11, liteRtCount);
-        assertEquals(7, mnnCount);
+        assertEquals(7, entries.size());
+        assertEquals(7, new HashSet<>(entries.keySet()).size());
+        assertEquals(7, liteRtCount);
+        assertEquals(0, mnnCount);
+        assertTrue(entries.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
+        assertTrue(entries.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
+        assertEquals(2, TaiModelCatalog.chatEntries().size());
+        assertEquals(5, TaiModelCatalog.speechEntries().size());
+        assertNull(TaiModelCatalog.get("qwen2.5-coder-1.5b-instruct-mnn"));
+        assertNull(TaiModelCatalog.get("deepseek-r1-distill-qwen-1.5b-litert-lm"));
+        assertNull(TaiModelCatalog.get(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M));
+        assertNull(TaiModelCatalog.get("embeddinggemma-300m"));
+        assertNull(TaiModelCatalog.get("qwen3-embedding-0.6b-mnn"));
     }
 
     @Test
     public void builtInCatalog_usesCanonicalYamlIdsAndUiMetadata() {
         TaiModelCatalog.CatalogEntry recommended = TaiModelCatalog.get("gemma-4-e2b-it-litert-lm");
-        TaiModelCatalog.CatalogEntry coder = TaiModelCatalog.get("qwen2.5-coder-1.5b-instruct-mnn");
 
         assertNotNull(recommended);
         assertEquals("general_multimodal", recommended.jobGroup);
@@ -53,28 +63,11 @@ public class TaiModelCatalogTest {
         assertEquals(32768, recommended.sourceContextWindow);
         assertEquals(4000, recommended.defaultMaxOutputTokens);
 
-        assertNotNull(coder);
-        assertEquals("coding", coder.jobGroup);
-        assertEquals("int4", coder.quantization);
-        assertEquals("4GB-6GB+", coder.ramTier);
-        assertTrue(coder.recommended);
-        assertTrue(coder.displayCapabilityTags.contains("Code"));
-        assertTrue(coder.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
-        assertTrue(coder.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_CODE));
-        assertTrue(coder.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE));
-        assertFalse(coder.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT));
-        assertFalse(coder.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT));
-        assertFalse(coder.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
-        assertEquals(TaiModelSpec.TOOL_MODE_PROMPT_FALLBACK, coder.toolMode);
-        assertEquals(16384, coder.endpointContextWindow);
-        assertEquals(32768, coder.sourceContextWindow);
-        assertEquals(1024, coder.defaultMaxOutputTokens);
     }
 
     @Test
     public void builtInCatalog_correctsModelSpecificEndpointMetadata() {
         TaiModelCatalog.CatalogEntry e4b = TaiModelCatalog.get(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT);
-        TaiModelCatalog.CatalogEntry mobileActions = TaiModelCatalog.get(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M);
 
         assertNotNull(e4b);
         assertEquals("3.7 GB", e4b.sizeEstimate);
@@ -85,39 +78,19 @@ public class TaiModelCatalogTest {
         assertTrue(e4b.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING));
         assertTrue(e4b.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_LLM_THINKING));
 
-        assertNotNull(mobileActions);
-        assertEquals("Mobile actions tool-call model", mobileActions.roleHint);
-        assertEquals(1024, mobileActions.endpointContextWindow);
-        assertEquals(1024, mobileActions.sourceContextWindow);
-        assertEquals(1024, mobileActions.defaultMaxOutputTokens);
-        assertEquals(6, mobileActions.recommendedRamGb);
-        assertEquals("6GB+", mobileActions.ramTier);
-        assertTrue(mobileActions.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE));
-        assertTrue(mobileActions.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_MOBILE_ACTIONS));
-        assertEquals(TaiModelSpec.TOOL_MODE_NATIVE, mobileActions.toolMode);
     }
 
     @Test
-    public void builtInCatalog_gatesDownloadsWithoutVerifiedArtifactMetadata() {
-        TaiModelCatalog.CatalogEntry knownArtifact = TaiModelCatalog.get(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
-        TaiModelCatalog.CatalogEntry importOnlyLiteRt = TaiModelCatalog.get("qwen2.5-1.5b-instruct-litert-lm");
-        TaiModelCatalog.CatalogEntry mnn = TaiModelCatalog.get("qwen2.5-coder-1.5b-instruct-mnn");
-
-        assertNotNull(knownArtifact);
-        assertTrue(knownArtifact.downloadAvailable);
-        assertNotNull(knownArtifact.artifactPath);
-        assertNotNull(knownArtifact.downloadUrl);
-
-        assertNotNull(importOnlyLiteRt);
-        assertFalse(importOnlyLiteRt.downloadAvailable);
-        assertNull(importOnlyLiteRt.artifactPath);
-        assertNull(importOnlyLiteRt.downloadUrl);
-        assertTrue(importOnlyLiteRt.unavailableReason.contains("Import-only"));
-
-        assertNotNull(mnn);
-        assertTrue(mnn.downloadAvailable);
-        assertEquals("taobao-mnn/Qwen2.5-Coder-1.5B-Instruct-MNN", mnn.repositoryId);
-        assertNotNull(mnn.downloadUrl);
+    public void builtInCatalog_everyEntryHasAVerifiedArtifact() {
+        // With the import-only rows gone, every built-in entry must be downloadable as is: a pinned
+        // revision, an artifact path and a URL, so the model centre never shows a dead Install pill.
+        for (TaiModelCatalog.CatalogEntry entry : TaiModelCatalog.entries().values()) {
+            assertTrue(entry.modelId, entry.downloadAvailable);
+            assertNotNull(entry.modelId, entry.artifactPath);
+            assertNotNull(entry.modelId, entry.downloadUrl);
+            assertTrue(entry.modelId, entry.downloadUrl.startsWith("https://huggingface.co/"));
+            assertFalse(entry.modelId, "main".equals(entry.revision));
+        }
     }
 
     @Test

@@ -353,7 +353,10 @@ These routes are used by the `tai` CLI and the Settings UI. They share the same 
 | POST | `/v1/ai/models/import` | Register a supported local package |
 | POST | `/v1/ai/models/download` | Download a model from a URL |
 | POST | `/v1/ai/models/download-catalog` | Download a catalog model |
-| POST | `/v1/ai/models/downloads/cancel` | Cancel an active download |
+| POST | `/v1/ai/models/downloads/cancel` | Cancel a download and delete its partial file |
+| POST | `/v1/ai/models/downloads/pause` | Pause a download, keeping its partial file |
+| POST | `/v1/ai/models/downloads/resume` | Continue a paused, failed or cancelled download from the bytes it has |
+| POST | `/v1/ai/models/downloads/prioritize` | Move a queued download to the front ("start now") |
 | POST | `/v1/ai/models/delete` | Delete an installed user model |
 | POST | `/v1/ai/models/load` | Load a model into the registry slot |
 | POST | `/v1/ai/models/unload` | Unload a model from the registry slot |

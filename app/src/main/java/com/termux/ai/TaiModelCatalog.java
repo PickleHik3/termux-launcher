@@ -16,7 +16,6 @@ import org.json.JSONObject;
 public final class TaiModelCatalog {
     /** The one Parakeet speech-to-text entry; the speech model picker's "Parakeet" engine. */
     public static final String PARAKEET_TDT_V3_ID = "parakeet-tdt-0.6b-v3";
-    private static final String UNVERIFIED_ARTIFACT_POLICY ="Import-only: models.yaml provides repository URL and estimates, but no verified artifact path, revision, and checksum policy exists in code.";
     private static final Map<String, CatalogEntry> BUILT_IN_ENTRIES = buildEntries();
     private static volatile Map<String, CatalogEntry> entries = BUILT_IN_ENTRIES;
     private TaiModelCatalog() {}
@@ -163,60 +162,10 @@ public final class TaiModelCatalog {
             "gemma-4-E4B-it.litertlm", "Apache-2.0", 3_659_530_240L, "3.7 GB", "12GB+", false,
             tags("Text", "Vision", "Audio", "Code", "Reasoning", "Tools"),
             setOf("text_chat", "image_input", "audio_input", "tool_use", "code", "reasoning", "llm_thinking", "speculative_decoding")));
-        entries.put("qwen2.5-1.5b-instruct-litert-lm", liteRtImportOnly(
-            "qwen2.5-1.5b-instruct-litert-lm", "Qwen2.5 1.5B Instruct", "lightweight_text", "lightweight_alternative", false,
-            "Lightweight text, code, and multilingual", "litert-community/Qwen2.5-1.5B-Instruct",
-            1_597_931_520L, "1.5 GB", "6GB+", "q8", "Apache-2.0",
-            tags("Text", "Code", "Multilingual"), setOf("text_chat", "code", "multilingual")));
-        entries.put("deepseek-r1-distill-qwen-1.5b-litert-lm", liteRtAvailable(
-            "deepseek-r1-distill-qwen-1.5b-litert-lm", "DeepSeek-R1 Distill 1.5B", "reasoning", "reasoning_small", false,
-            "Small reasoning model", "litert-community/DeepSeek-R1-Distill-Qwen-1.5B",
-            "2f8b8ee90d8f93b15305b699e8772b277d074a9a",
-            "DeepSeek-R1-Distill-Qwen-1.5B_multi-prefill-seq_q8_ekv4096.litertlm", "MIT",
-            1_833_451_520L, "1.7 GB", "6GB+", false, "deepseek-r1-distill-qwen", "q8",
-            "69b35f01759eed765641ab4af589bbe98131fd2825662a086d9037409b8c1295",
-            tags("Reasoning", "Text"), setOf("text_chat", "reasoning")));
-        entries.put(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M, liteRtAvailable(
-            TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M, "FunctionGemma 270M", "tool_calling", "experimental_launcher_agent", false,
-            "Mobile actions tool-call model", "litert-community/functiongemma-270m-ft-mobile-actions", "38942192c9b723af836d489074823ff33d4a3e7a",
-            "mobile_actions_q8_ekv1024.litertlm", "Gemma Terms of Use", 288_964_608L, "0.3 GB", "6GB+", true,
-            tags("Tools"), setOf("text_chat", "tool_use", "mobile_actions")));
-        // EmbeddingGemma is a raw .tflite served by LiteRtEmbeddingRuntime, not a chat .litertlm package.
-        // The text_embeddings capability + .tflite artifact make the downloader fetch the sentencepiece.model
-        // sidecar and route requests to the embedding runtime rather than the LiteRT-LM chat engine.
-        entries.put("embeddinggemma-300m", liteRtAvailable(
-            "embeddinggemma-300m", "EmbeddingGemma 300M", "embedding", "embedding_default", false,
-            "Text embeddings", "litert-community/embeddinggemma-300m", "870cbe05ef460385363c6b574c851ae5d8989ce3",
-            "embeddinggemma-300M_seq1024_mixed-precision.tflite", "Gemma Terms of Use", 183_329_528L, "183 MB", "4GB+", true,
-            "gemma", null, null,
-            tags("Embeddings"), setOf(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)));
-        // MNN-format embedding model — routes to MnnEmbeddingRuntime via the MNN Transformer::Embedding
-        // engine. config.json + text_embeddings capability make it an embedding package, not a chat model.
-        entries.put("qwen3-embedding-0.6b-mnn", mnnAvailable(
-            "qwen3-embedding-0.6b-mnn", "Qwen3 Embedding 0.6B", "embedding", "embedding_mnn", false,
-            "Text embeddings (MNN)", "taobao-mnn/Qwen3-Embedding-0.6B-MNN", 377_998_519L,
-            "378 MB", "4GB+", "qwen3", "int4", tags("Embeddings"), setOf(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)));
-
-        entries.put("qwen2.5-coder-1.5b-instruct-mnn", mnnAvailable(
-            "qwen2.5-coder-1.5b-instruct-mnn", "Qwen2.5-Coder 1.5B", "coding", "recommended_coder", true,
-            "Code and terminal assistant", "taobao-mnn/Qwen2.5-Coder-1.5B-Instruct-MNN", 971_254_765L,
-            "971 MB", "4GB-6GB+", "qwen2.5-coder", "int4", tags("Code", "Text", "Tools"), setOf("text_chat", "code", "tool_use")));
-        entries.put("qwen2.5-coder-7b-instruct-mnn", mnnAvailable(
-            "qwen2.5-coder-7b-instruct-mnn", "Qwen2.5-Coder 7B", "coding", "advanced_coder", false,
-            "Higher quality code model", "taobao-mnn/Qwen2.5-Coder-7B-Instruct-MNN", 4_426_674_424L,
-            "4.4 GB", "10GB-12GB+", "qwen2.5-coder", "int4", tags("Code", "Text"), setOf("text_chat", "code")));
-        entries.put("qwen2.5-0.5b-instruct-mnn", mnnAvailable(
-            "qwen2.5-0.5b-instruct-mnn", "Qwen2.5 0.5B", "lightweight_text", "tiny_general", false,
-            "Tiny general chat", "taobao-mnn/Qwen2.5-0.5B-Instruct-MNN", 556_808_791L,
-            "557 MB", "3GB+", "qwen2.5", "int4", tags("Text", "Multilingual"), setOf("text_chat", "multilingual")));
-        entries.put("qwen2.5-1.5b-instruct-mnn", mnnAvailable(
-            "qwen2.5-1.5b-instruct-mnn", "Qwen2.5 1.5B", "general_text", "lightweight_general", false,
-            "Lightweight text and multilingual", "taobao-mnn/Qwen2.5-1.5B-Instruct-MNN", 879_484_183L,
-            "879 MB", "4GB-6GB+", "qwen2.5", "int4", tags("Text", "Multilingual"), setOf("text_chat", "multilingual")));
-        entries.put("qwen2.5-3b-instruct-mnn", mnnAvailable(
-            "qwen2.5-3b-instruct-mnn", "Qwen2.5 3B", "general_text", "balanced_general", false,
-            "Balanced local multilingual assistant", "taobao-mnn/Qwen2.5-3B-Instruct-MNN", 2_369_484_250L,
-            "2.4 GB", "6GB-8GB+", "qwen2.5", "int4", tags("Text", "Multilingual"), setOf("text_chat", "multilingual")));
+        // The built-in catalogue is deliberately short: the two Gemma 4 chat models above and the
+        // speech models below. Every other model (Qwen, DeepSeek, FunctionGemma, the MNN packages,
+        // the embedding models) still runs when imported or added by link; it just is not offered
+        // here, so the model centre stays a list a person can read in one glance.
         // Whisper ACFT speech-to-text (litert-community/whisper-acft, phase 1: catalog + downloader
         // only — MultiBackendTaiRuntime routing is phase 2). Each size/language id ships two window
         // graphs (5s, 10s, chosen at download time); the default artifact here is the 10s graph and
@@ -291,11 +240,6 @@ public final class TaiModelCatalog {
                 "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/resolve/541d1f99c6b0c3cd0b11a95167540bb8edefd82b/tokenizer.json",
                 "tokenizer.json", "bd321b096832a3f270bd3b2a88823957920f1a5c5ada71114a26ea729d0cbe91")));
 
-        entries.put("deepseek-r1-1.5b-qwen-mnn", mnnAvailable(
-            "deepseek-r1-1.5b-qwen-mnn", "DeepSeek-R1 1.5B Qwen", "reasoning", "lightweight_reasoning", false,
-            "Small reasoning model", "taobao-mnn/DeepSeek-R1-1.5B-Qwen-MNN", 1_020_644_237L,
-            "1.0 GB", "4GB-6GB+", "deepseek-r1-qwen", "int4", tags("Reasoning", "Text"), setOf("text_chat", "reasoning")));
-
         return Collections.unmodifiableMap(entries);
     }
 
@@ -303,40 +247,11 @@ public final class TaiModelCatalog {
                                                  String role, String repo, String revision, String file, String license, long size,
                                                  String sizeEstimate, String ramTier, boolean gated, LinkedHashSet<String> displayTags,
                                                  LinkedHashSet<String> capabilities) {
-        return liteRtAvailable(id, name, jobGroup, priority, recommended, role, repo, revision, file, license, size,
-            sizeEstimate, ramTier, gated, "gemma", null, null, displayTags, capabilities);
-    }
-
-    private static CatalogEntry liteRtAvailable(String id, String name, String jobGroup, String priority, boolean recommended,
-                                                 String role, String repo, String revision, String file, String license, long size,
-                                                 String sizeEstimate, String ramTier, boolean gated, String architecture,
-                                                 @Nullable String quantization, @Nullable String sha256,
-                                                 LinkedHashSet<String> displayTags, LinkedHashSet<String> capabilities) {
         return entry(id, name, role, repo, revision, file, license, size, gated, TaiModelSpec.BACKEND_LITERT_LM,
-            TaiModelSpec.FORMAT_LITERTLM, architecture, quantization,
+            TaiModelSpec.FORMAT_LITERTLM, "gemma", null,
             TaiModelSpec.defaultEndpointContextWindowFor(id, TaiModelSpec.BACKEND_LITERT_LM),
-            ramGb(ramTier), sha256, capabilities,
+            ramGb(ramTier), null, capabilities,
             jobGroup, priority, displayTags, sizeEstimate, ramTier, recommended, true, "");
-    }
-
-    private static CatalogEntry liteRtImportOnly(String id, String name, String jobGroup, String priority, boolean recommended,
-                                                  String role, String repo, long size, String sizeEstimate, String ramTier,
-                                                  @Nullable String quantization, String license, LinkedHashSet<String> displayTags,
-                                                  LinkedHashSet<String> capabilities) {
-        return entry(id, name, role, repo, "main", null, license, size, false,
-            TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, "", quantization, 4096, ramGb(ramTier), null,
-            capabilities, jobGroup, priority, displayTags, sizeEstimate, ramTier, recommended, false, UNVERIFIED_ARTIFACT_POLICY);
-    }
-
-    private static CatalogEntry mnnAvailable(String id, String name, String jobGroup, String priority, boolean recommended,
-                                             String role, String repo, long size, String sizeEstimate, String ramTier,
-                                             String architecture, String quantization, LinkedHashSet<String> displayTags,
-                                             LinkedHashSet<String> capabilities) {
-        int endpointContextWindow = id.startsWith("qwen2.5-coder-") ? 16_384 : 8192;
-        return entry(id, name, role, repo, "main", "config.json", "Apache-2.0", size, false,
-            TaiModelSpec.BACKEND_MNN_LLM, TaiModelSpec.FORMAT_MNN, architecture, quantization, endpointContextWindow,
-            ramGb(ramTier), null, capabilities, jobGroup, priority, displayTags, sizeEstimate, ramTier,
-            recommended, true, "");
     }
 
     /** A Whisper ACFT speech-to-text entry: {@code defaultArtifactPath/defaultSize/defaultSha256} is
@@ -405,9 +320,6 @@ public final class TaiModelCatalog {
 
     private static int sourceContextWindowFor(String id, String backend, int endpointContextWindow) {
         if (TaiModelRegistry.MODEL_GEMMA_4_E2B_IT.equals(id) || TaiModelRegistry.MODEL_GEMMA_4_E4B_IT.equals(id)) return 32_768;
-        if (TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M.equals(id)) return 1024;
-        if ("qwen2.5-coder-7b-instruct-mnn".equals(id)) return 131_072;
-        if (TaiModelSpec.BACKEND_MNN_LLM.equals(backend) && id.startsWith("qwen2.5-")) return 32_768;
         return endpointContextWindow;
     }
 

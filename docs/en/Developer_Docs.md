@@ -67,6 +67,9 @@ POST /v1/ai/models/download
 POST /v1/ai/models/download-catalog
 GET  /v1/ai/models/downloads
 POST /v1/ai/models/downloads/cancel
+POST /v1/ai/models/downloads/pause
+POST /v1/ai/models/downloads/resume
+POST /v1/ai/models/downloads/prioritize
 POST /v1/ai/models/delete
 POST /v1/ai/models/load
 POST /v1/ai/models/unload
@@ -137,7 +140,7 @@ Future runtime work:
 - isolate GPU probing/loading so native GPU initialization failures cannot crash the main launcher process
 - add benchmark counters
 - expand multimodal and tool-calling support when there is a clear API boundary
-- add more download controls such as pause, cancel, and retry in the UI
+- the model centre screen over `TaiDownloadHub` (pause, resume, start now and cancel already exist in the engine, the API and the notification)
 
 Reference material:
 

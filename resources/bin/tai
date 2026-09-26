@@ -13,6 +13,9 @@ Usage:
   tai import <path> [model-id]
   tai download <model-id> <https-url> --accept-terms
   tai downloads
+  tai download-pause <model-id>
+  tai download-resume <model-id>
+  tai download-now <model-id>
   tai download-cancel <model-id>
   tai delete <model-id>
   tai preflight [model] [--auto|--cpu|--gpu]
@@ -110,6 +113,21 @@ case "$cmd" in
     [ "$#" -gt 0 ] || { echo "usage: tai download-cancel <model-id>" >&2; exit 2; }
     model=$(json_escape "$1")
     post_json /v1/ai/models/downloads/cancel "{\"modelId\":\"$model\"}"
+    ;;
+  download-pause)
+    [ "$#" -gt 0 ] || { echo "usage: tai download-pause <model-id>" >&2; exit 2; }
+    model=$(json_escape "$1")
+    post_json /v1/ai/models/downloads/pause "{\"modelId\":\"$model\"}"
+    ;;
+  download-resume)
+    [ "$#" -gt 0 ] || { echo "usage: tai download-resume <model-id>" >&2; exit 2; }
+    model=$(json_escape "$1")
+    post_json /v1/ai/models/downloads/resume "{\"modelId\":\"$model\"}"
+    ;;
+  download-now)
+    [ "$#" -gt 0 ] || { echo "usage: tai download-now <model-id>" >&2; exit 2; }
+    model=$(json_escape "$1")
+    post_json /v1/ai/models/downloads/prioritize "{\"modelId\":\"$model\"}"
     ;;
   delete)
     [ "$#" -gt 0 ] || { echo "usage: tai delete <model-id>" >&2; exit 2; }
