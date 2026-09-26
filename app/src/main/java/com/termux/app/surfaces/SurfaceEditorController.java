@@ -650,6 +650,11 @@ public final class SurfaceEditorController {
         final float initialKeyboardRadius = prefs.getInAppKeyboardKeyCornerRadiusDp();
         final int initialKeyboardKeyOpacity = prefs.getInAppKeyboardKeyOpacity();
         final int initialKeyboardBgOpacity = prefs.getInAppKeyboardBackgroundOpacity();
+        // Raw, -1 included: restoring through the resolved getter would write a followed value as
+        // an explicit one and detach the row from the dock. See the raw accessors' own comment.
+        final int initialKeyboardBlur = prefs.getInAppKeyboardBlurRadiusRaw();
+        final int initialKeyboardGrain = prefs.getInAppKeyboardGrainRaw();
+        final int initialKeyboardBackdropOpacity = prefs.getInAppKeyboardBackdropOpacityRaw();
         final int initialKeyboardInset = prefs.getInAppKeyboardHorizontalInset();
         final String initialKeyboardColorScheme = prefs.getInAppKeyboardColorScheme();
         final String initialKeyboardTheme = prefs.getInAppKeyboardTheme();
@@ -689,6 +694,9 @@ public final class SurfaceEditorController {
             prefs().setInAppKeyboardKeyCornerRadiusDp(initialKeyboardRadius);
             prefs().setInAppKeyboardKeyOpacity(initialKeyboardKeyOpacity);
             prefs().setInAppKeyboardBackgroundOpacity(initialKeyboardBgOpacity);
+            prefs().setInAppKeyboardBlurRadiusRaw(initialKeyboardBlur);
+            prefs().setInAppKeyboardGrainRaw(initialKeyboardGrain);
+            prefs().setInAppKeyboardBackdropOpacityRaw(initialKeyboardBackdropOpacity);
             prefs().setInAppKeyboardHorizontalInset(initialKeyboardInset);
             prefs().setInAppKeyboardColorScheme(initialKeyboardColorScheme);
             prefs().setInAppKeyboardTheme(initialKeyboardTheme);
@@ -2897,6 +2905,14 @@ public final class SurfaceEditorController {
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP);
         prefs().setInAppKeyboardKeyOpacity(
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY);
+        // Back to -1: "follow the dock", the same look every keyboard had before these three rows
+        // existed.
+        prefs().setInAppKeyboardBlurRadiusRaw(
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS);
+        prefs().setInAppKeyboardGrainRaw(
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_GRAIN);
+        prefs().setInAppKeyboardBackdropOpacityRaw(
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY);
         if (keyboard() != null) {
             keyboard().previewSurfaceEditorKeyOpacity(
                 TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_KEY_OPACITY);
@@ -3688,6 +3704,9 @@ public final class SurfaceEditorController {
             .append(prefs().getInAppKeyboardKeyCornerRadiusDp()).append('|')
             .append(prefs().getInAppKeyboardKeyOpacity()).append('|')
             .append(prefs().getInAppKeyboardBackgroundOpacity()).append('|')
+            .append(prefs().getInAppKeyboardBlurRadiusRaw()).append('|')
+            .append(prefs().getInAppKeyboardGrainRaw()).append('|')
+            .append(prefs().getInAppKeyboardBackdropOpacityRaw()).append('|')
             .append(prefs().getInAppKeyboardHorizontalInset()).append('|')
             .append(prefs().getInAppKeyboardColorScheme()).append('|')
             .append(prefs().getInAppKeyboardTheme()).append('|')
@@ -3965,7 +3984,8 @@ public final class SurfaceEditorController {
             return Long.MIN_VALUE;
         long signature = preferences.getExtraKeysBlurRadius();
         signature = signature * 1_000_003L + preferences.getStatusBarBlurRadius();
-        return signature * 1_000_003L + preferences.getTerminalGlassBlurRadius();
+        signature = signature * 1_000_003L + preferences.getTerminalGlassBlurRadius();
+        return signature * 1_000_003L + preferences.getInAppKeyboardBlurRadius();
     }
 
     /** Broader live re-apply for controls that change dock geometry, terminal, or sessions surfaces. */

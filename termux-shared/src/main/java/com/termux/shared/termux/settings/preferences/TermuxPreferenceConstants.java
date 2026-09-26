@@ -999,6 +999,48 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_IN_APP_KEYBOARD_BACKGROUND_OPACITY = 100;
 
         /**
+         * Wallpaper blur radius (dp) of the keyboard's own glass backdrop; {@code -1} follows the
+         * dock's ({@link #KEY_EXTRAKEYS_BLUR_RADIUS}), which is what every keyboard has rendered
+         * until now. A non-negative value overrides it for the keyboard alone.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_BLUR_RADIUS = "in_app_keyboard_blur_radius";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS = -1;
+
+        public static final int MIN_IN_APP_KEYBOARD_BLUR_RADIUS = 0;
+
+        public static final int MAX_IN_APP_KEYBOARD_BLUR_RADIUS = 30;
+
+        /**
+         * Film-grain strength (percent) of the keyboard's own glass backdrop; {@code -1} follows
+         * the dock's ({@link #KEY_DOCK_GLASS_GRAIN}). A non-negative value overrides it for the
+         * keyboard alone.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_GRAIN = "in_app_keyboard_grain";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_GRAIN = -1;
+
+        public static final int MIN_IN_APP_KEYBOARD_GRAIN = 0;
+
+        public static final int MAX_IN_APP_KEYBOARD_GRAIN = 100;
+
+        /**
+         * Opacity in percent of the keyboard's whole backdrop stack — the blurred wallpaper crop
+         * and the tint above it together — as opposed to {@link #KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY},
+         * which is only the tint's own colour intensity. {@code -1} renders the stack fully opaque,
+         * exactly as every keyboard has until now; a lower value lets the plain wallpaper show
+         * through the whole slab.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_BACKDROP_OPACITY =
+            "in_app_keyboard_backdrop_opacity";
+
+        public static final int DEFAULT_IN_APP_KEYBOARD_BACKDROP_OPACITY = -1;
+
+        public static final int MIN_IN_APP_KEYBOARD_BACKDROP_OPACITY = 0;
+
+        public static final int MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY = 100;
+
+        /**
          * Defines the key for whether the soft keyboard will be enabled only if no hardware keyboard
          * attached, for cases where users want to use a hardware keyboard instead.
          */

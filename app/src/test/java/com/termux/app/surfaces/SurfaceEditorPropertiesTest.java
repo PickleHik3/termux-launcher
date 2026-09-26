@@ -147,19 +147,38 @@ public class SurfaceEditorPropertiesTest {
     }
 
     @Test
-    public void theKeyboardShowsOnlyTheGlassItActuallyOwns() {
-        // It renders the dock's material — one blurred backdrop, one grain, the dock capsule's
-        // shape — so a blur or grain row on its panel would be a number controlling nothing.
+    public void theKeyboardOwnsItsOwnGlassAndItsCapsuleShapeAlone() {
+        // Blur, Opacity and Grain now have their own -1 "follow the dock" knobs (outside the
+        // cascade, like the terminal's radius/margin), plus the pre-existing Intensity cell —
+        // still there, just not under ID_OPACITY any more. Only the dock capsule's corner radius
+        // stays borrowed outright: the keyboard has no shape of its own to give it.
         assertNotNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
             SurfaceEditorProperties.ID_OPACITY));
         assertNotNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
+            SurfaceEditorProperties.ID_BLUR));
+        assertNotNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
+            SurfaceEditorProperties.ID_GRAIN));
+        assertNotNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
+            SurfaceEditorProperties.ID_KEYBOARD_INTENSITY));
+        assertNotNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
             SurfaceEditorProperties.ID_MARGIN));
         assertNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
-            SurfaceEditorProperties.ID_BLUR));
-        assertNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
-            SurfaceEditorProperties.ID_GRAIN));
-        assertNull(SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
             SurfaceEditorProperties.ID_CORNERS));
+        // Blur, Opacity and Grain are outside the cascade here — each is its own -1-following knob,
+        // not a cell of Base — while Intensity is still the OPACITY cell it always was.
+        Control blur = SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
+            SurfaceEditorProperties.ID_BLUR);
+        Control opacity = SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
+            SurfaceEditorProperties.ID_OPACITY);
+        Control grain = SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
+            SurfaceEditorProperties.ID_GRAIN);
+        Control intensity = SurfaceEditorProperties.find(SurfaceSlot.KEYBOARD,
+            SurfaceEditorProperties.ID_KEYBOARD_INTENSITY);
+        assertNull(blur.cell);
+        assertNull(opacity.cell);
+        assertNull(grain.cell);
+        assertNotNull(intensity.cell);
+        assertEquals(SurfaceProperty.OPACITY, intensity.cell.property);
     }
 
     @Test
