@@ -56,6 +56,13 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
             case "terminal_margin_adjustment":
                 mPreferences.setTerminalMarginAdjustment(value);
                 break;
+            case "terminal_padding_fill":
+                mPreferences.setTerminalPaddingFillEnabled(value);
+                // Applied through the same reload path "fullscreen" uses above: immediately if the
+                // activity is in front, on its next resume otherwise — see
+                // TermuxActivity#reloadActivityStyling and #applyPaddingFillPolicyToVisiblePanes.
+                TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
+                break;
             default:
                 break;
         }
@@ -73,6 +80,8 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
                     TermuxPropertyConstants.KEY_USE_FULLSCREEN, Boolean.toString(defValue)));
             case "terminal_margin_adjustment":
                 return mPreferences.isTerminalMarginAdjustmentEnabled();
+            case "terminal_padding_fill":
+                return mPreferences.isTerminalPaddingFillEnabled();
             default:
                 return defValue;
         }

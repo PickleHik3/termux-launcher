@@ -577,6 +577,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL, value, false);
     }
 
+    public boolean isTerminalPaddingFillEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_PADDING_FILL, TERMUX_APP.DEFAULT_TERMINAL_PADDING_FILL);
+    }
+
+    public void setTerminalPaddingFillEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PADDING_FILL, value, false);
+    }
+
     public boolean isOsc52ClipboardReadEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED, TERMUX_APP.DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED);

@@ -14792,6 +14792,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPreferences != null && mPreferences.isTerminalCursorTrailEnabled();
     }
 
+    /**
+     * Re-read the padding-fill preference into every live pane, the way {@link #toggleCursorTrail()}
+     * does for the cursor trail. Called from {@link #reloadActivityStyling}, which a Settings change
+     * to the preference reaches through {@link #requestTermuxActivityStylingOnNextResume} — right
+     * away if this activity is in front, otherwise on its next resume.
+     */
+    private void applyPaddingFillPolicyToVisiblePanes() {
+        if (mTermuxTerminalViewClient == null)
+            return;
+        if (mPaneController != null) {
+            for (TerminalView view : mPaneController.getVisiblePaneViews()) {
+                mTermuxTerminalViewClient.applyPaddingFillPolicy(view);
+            }
+        }
+        mTermuxTerminalViewClient.applyPaddingFillPolicy(getTerminalView());
+    }
+
     void openSurfaceEditor() {
         // From inside the launcher the editor is opened on the place the user is looking at; the
         // shared look is what the Settings row opens.
@@ -18969,6 +18986,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mTermuxTerminalViewClient != null) {
                 mTermuxTerminalViewClient.applyCursorTrailPolicy(view);
                 mTermuxTerminalViewClient.applyUrlUnderlinePolicy(view);
+                mTermuxTerminalViewClient.applyPaddingFillPolicy(view);
             }
             // A pane created while the key inspector is open must report through it too.
             com.termux.app.terminal.TerminalKeyInspector.attachTo(view);
@@ -20572,6 +20590,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         setMargins();
         updateAppLauncherBarHeight();
+        applyPaddingFillPolicyToVisiblePanes();
         applySuggestionBarPreferences();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();

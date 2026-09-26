@@ -1,7 +1,10 @@
 package com.termux.app.terminal;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Outline;
+import android.graphics.Paint;
+import android.graphics.Path;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -11,6 +14,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.view.TerminalView;
 
 /**
  * One pane's frame: the single owner of the shape the pane wears and of the clearance that shape
@@ -26,13 +30,20 @@ import com.termux.R;
  * child's margin rather than as this frame's padding, because the frame's other child is the glass
  * backdrop and it must still reach the corners the terminal now stays out of.
  */
-public class PaneContentFrame extends FrameLayout {
+public class PaneContentFrame extends FrameLayout implements TerminalView.PaddingFillListener {
 
     private float mRequestedRadiusPx;
     private boolean mClipToShape;
     private View mContent;
     /** Set on a DOWN that landed in the clearance, so the rest of that gesture follows it. */
     private boolean mForwardingToContent;
+
+    /** Reused across frames; painting the band allocates nothing once this exists. */
+    private final Paint mPaddingFillPaint = new Paint();
+    /** The pane's own rounded outline, re-built only when the size or radius actually changes, so
+     *  clipping the band to it costs nothing on the frames it does not. */
+    private final Path mShapePath = new Path();
+    private boolean mShapePathDirty = true;
 
     /** Re-capped on every ask: a divider drag resizes the frame without re-dressing the pane. */
     private final ViewOutlineProvider mShapeOutline = new ViewOutlineProvider() {
@@ -59,6 +70,7 @@ public class PaneContentFrame extends FrameLayout {
     protected void onFinishInflate() {
         super.onFinishInflate();
         mContent = findViewById(R.id.terminal_view);
+        wirePaddingFillListener();
     }
 
     /**
@@ -67,8 +79,25 @@ public class PaneContentFrame extends FrameLayout {
      */
     public void setPaneContent(@Nullable View content) {
         if (mContent == content) return;
+        if (mContent instanceof TerminalView)
+            ((TerminalView) mContent).setPaddingFillListener(null);
         mContent = content;
+        wirePaddingFillListener();
         requestLayout();
+    }
+
+    /** Tell the terminal child, if this is one, to notify this frame when its edge colours move —
+     *  a child's own invalidate does not re-record this frame's display list on its own. */
+    private void wirePaddingFillListener() {
+        if (mContent instanceof TerminalView)
+            ((TerminalView) mContent).setPaddingFillListener(this);
+    }
+
+    /** {@link TerminalView.PaddingFillListener}: the terminal's edge colours moved since last
+     *  frame, so the band this frame paints around it needs to be repainted too. */
+    @Override
+    public void onPaddingFillColorsChanged() {
+        invalidate();
     }
 
     /**
@@ -88,7 +117,96 @@ public class PaneContentFrame extends FrameLayout {
         setOutlineProvider(clipToShape ? mShapeOutline : ViewOutlineProvider.BOUNDS);
         setClipToOutline(clipToShape);
         invalidateOutline();
+        mShapePathDirty = true;
         requestLayout();
+    }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        mShapePathDirty = true;
+    }
+
+    /** The pane's own rounded-rect outline, in this frame's own bounds — the same shape the glass
+     *  clips to, whether or not this frame itself is clipping. The band must never poke past it. */
+    private Path getPaddingFillClipPath() {
+        if (mShapePathDirty) {
+            mShapePath.reset();
+            float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, getWidth(), getHeight());
+            mShapePath.addRoundRect(0f, 0f, getWidth(), getHeight(), radius, radius, Path.Direction.CW);
+            mShapePathDirty = false;
+        }
+        return mShapePath;
+    }
+
+    /**
+     * Paint the arc's own clearance — the margin {@link #onMeasure} held the terminal off the edge
+     * by — with the same edge colours the terminal itself extends into its in-view slack. Drawn
+     * just before the terminal child, so it lands over the glass backdrop and under the grid.
+     *
+     * <p>A plain shell leaves every edge colour transparent (its default background is never
+     * painted), so this draws nothing and the glass or wallpaper behind the pane keeps showing.
+     */
+    private void drawPaddingFillBand(Canvas canvas) {
+        if (!(mContent instanceof TerminalView)) return;
+        TerminalView terminal = (TerminalView) mContent;
+        if (!terminal.isPaddingFillEnabled()) return;
+        int columns = terminal.getEdgeColumnCount();
+        int rows = terminal.getEdgeRowCount();
+        if (columns <= 0 || rows <= 0) return;
+        int contentLeft = mContent.getLeft();
+        int contentTop = mContent.getTop();
+        int contentRight = mContent.getRight();
+        int contentBottom = mContent.getBottom();
+        // A pane too small to wear any radius, or a content view that already reaches every edge,
+        // has no margin at all to fill.
+        if (contentLeft <= 0 && contentTop <= 0 && contentRight >= getWidth() && contentBottom >= getHeight())
+            return;
+
+        int save = canvas.save();
+        canvas.clipPath(getPaddingFillClipPath());
+        float columnWidth = terminal.getPaddingColumnWidth();
+        float rowHeight = terminal.getPaddingRowHeight();
+        // Top and bottom bands: one rect per column, directly above/below where that column's own
+        // cells sit, so a coloured status bar or a solid full-screen app reaches the pane's border.
+        for (int c = 0; c < columns; c++) {
+            float left = contentLeft + terminal.getPaddingColumnLeft(c);
+            float right = left + columnWidth;
+            fillRect(canvas, left, 0f, right, contentTop, terminal.getEdgeColumnColorTop(c));
+            fillRect(canvas, left, contentBottom, right, getHeight(), terminal.getEdgeColumnColorBottom(c));
+        }
+        // Left and right bands: one rect per row, continuing that row's own edge colour out to the
+        // view's flush side.
+        for (int r = 0; r < rows; r++) {
+            float top = contentTop + terminal.getPaddingRowTop(r);
+            float bottom = top + rowHeight;
+            fillRect(canvas, 0f, top, contentLeft, bottom, terminal.getEdgeRowColorLeft(r));
+            fillRect(canvas, contentRight, top, getWidth(), bottom, terminal.getEdgeRowColorRight(r));
+        }
+        // The four corners: the small squares the row/column bands above do not reach, each taking
+        // the colour of the cell nearest that corner.
+        fillRect(canvas, 0f, 0f, contentLeft, contentTop, terminal.getEdgeColumnColorTop(0));
+        fillRect(canvas, contentRight, 0f, getWidth(), contentTop, terminal.getEdgeColumnColorTop(columns - 1));
+        fillRect(canvas, 0f, contentBottom, contentLeft, getHeight(), terminal.getEdgeColumnColorBottom(0));
+        fillRect(canvas, contentRight, contentBottom, getWidth(), getHeight(), terminal.getEdgeColumnColorBottom(columns - 1));
+        canvas.restoreToCount(save);
+    }
+
+    private void fillRect(Canvas canvas, float left, float top, float right, float bottom, int color) {
+        if (color == 0) return;
+        mPaddingFillPaint.setColor(color);
+        canvas.drawRect(left, top, right, bottom, mPaddingFillPaint);
+    }
+
+    /**
+     * Draw the padding-fill band right before the terminal child is drawn, so it lands after the
+     * glass backdrop (drawn in an earlier call, for the child added first) and under the grid.
+     */
+    @Override
+    protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (child == mContent)
+            drawPaddingFillBand(canvas);
+        return super.drawChild(canvas, child, drawingTime);
     }
 
     /**
