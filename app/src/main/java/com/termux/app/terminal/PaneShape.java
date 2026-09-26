@@ -61,4 +61,30 @@ public final class PaneShape {
     public static int contentInsetForBounds(float requestedRadiusPx, int widthPx, int heightPx) {
         return contentInsetPx(radiusForBounds(requestedRadiusPx, widthPx, heightPx));
     }
+
+    /**
+     * The clearance one edge owes its two corners when the content along that edge already starts
+     * {@code headroomPx} in from the content box's own edge, and the two edges meeting it are held
+     * {@code sideInsetPx} off theirs.
+     *
+     * <p>{@link #contentInsetPx} clears the 45° point of the arc, which is where a box inset the
+     * same on both axes touches it. A terminal's first row of cells does not start at its view's
+     * top, though: the renderer sets it {@code mFontLineSpacingAndAscent} down, so the view's top
+     * edge can sit higher than the symmetric inset — the corner that actually has to clear the arc
+     * is the first cell's, at ({@code sideInsetPx}, top + {@code headroomPx}), and with the sides
+     * already at the symmetric inset that corner meets the arc where the arc crosses
+     * x = {@code sideInsetPx}, which is higher up than the 45° point. Rounded up, and never below
+     * 0: headroom past what the arc needs is simply not clearance this edge has to add.
+     *
+     * @return the edge's own margin, before the headroom, so that (sideInsetPx, margin +
+     *     headroomPx) lies on or inside the arc; 0 for a square corner.
+     */
+    public static int edgeInsetPx(float radiusPx, int sideInsetPx, float headroomPx) {
+        if (radiusPx <= 0f)
+            return 0;
+        // The corner cell's near edge, measured from the arc's centre along the other axis.
+        double across = Math.max(0d, radiusPx - sideInsetPx);
+        double depth = radiusPx - Math.sqrt(Math.max(0d, (double) radiusPx * radiusPx - across * across));
+        return Math.max(0, (int) Math.ceil(depth - headroomPx));
+    }
 }

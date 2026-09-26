@@ -994,6 +994,7 @@ public final class TerminalView extends View {
                 replaced.mFontMetricsAdjustments, replaced.mBoxDrawingPolicy,
                 replaced.mFallbackTypefaces, replaced.mSymbolExpansion, replaced);
         mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
+        relayoutIfFirstRowMoved(replaced);
         // The new renderer has taken everything worth inheriting; the old one's per-row recordings
         // are the size of the screen and will never be replayed again.
         if (replaced != null) replaced.release();
@@ -1013,6 +1014,7 @@ public final class TerminalView extends View {
             r.mItalicTypeface, r.mBoldItalicTypeface, r.mSymbolMaps, r.mLigaturePolicy,
             r.mFontFeatures, r.mFontVariations, r.mFontMetricsAdjustments, r.mBoxDrawingPolicy,
             r.mFallbackTypefaces, r.mSymbolExpansion, r);
+        relayoutIfFirstRowMoved(null);
         updateSize();
     }
 
@@ -1136,6 +1138,7 @@ public final class TerminalView extends View {
             symbolMaps, ligaturePolicy, fontFeatures, fontVariations, fontMetricsAdjustments,
             boxDrawingPolicy, fallbackTypefaces, symbolExpansion, replaced);
         mRenderer.setUrlUnderlineColor(mUrlUnderlineColor);
+        relayoutIfFirstRowMoved(replaced);
         replaced.release();
         updateSize();
         invalidate();
@@ -1303,6 +1306,28 @@ public final class TerminalView extends View {
     /** The renderer's line spacing in pixels, or 0 before a renderer exists. */
     public int getFontLineSpacing() {
         return mRenderer == null ? 0 : mRenderer.mFontLineSpacing;
+    }
+
+    /**
+     * How far below this view's top edge the first row's cells start, in px, or 0 before a
+     * renderer exists: the renderer's ascent allowance, which every row is drawn under and which
+     * {@link #getVerticalContentOffset()} adds its own slack to. A frame laying this view out
+     * inside a rounded corner counts it as clearance the top edge already has.
+     */
+    public int getFirstRowTopPx() {
+        return mRenderer == null ? 0 : mRenderer.getFontLineSpacingAndAscent();
+    }
+
+    /**
+     * A new renderer may start its first row a different distance down ({@link #getFirstRowTopPx}),
+     * and the frame around this view sizes its top margin from that, so it has to measure again —
+     * a font change on its own moves no view and would leave the old margin in place until the
+     * next layout for some other reason.
+     */
+    private void relayoutIfFirstRowMoved(@Nullable TerminalRenderer replaced) {
+        if (replaced == null
+            || replaced.getFontLineSpacingAndAscent() != mRenderer.getFontLineSpacingAndAscent())
+            requestLayout();
     }
 
     private int getColumnForX(float x) {
