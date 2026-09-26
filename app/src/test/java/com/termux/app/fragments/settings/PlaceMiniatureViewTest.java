@@ -314,7 +314,7 @@ public class PlaceMiniatureViewTest {
         touch(view, MotionEvent.ACTION_MOVE, top.centerX(), top.centerY());
         touch(view, MotionEvent.ACTION_UP, top.centerX(), top.centerY());
 
-        PlaceLayout after = places.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE);
+        PlaceLayout after = places.resolve(PlaceOrientation.LANDSCAPE);
         assertEquals(Edge.TOP, after.slot(Element.APPS).edge);
         assertEquals("the index stayed where it was", Edge.BOTTOM, after.slot(Element.AZ).edge);
         assertFalse("and so stopped riding the row", after.slot(Element.AZ).hidden);
@@ -481,7 +481,7 @@ public class PlaceMiniatureViewTest {
         return (bar, edge, index) -> {
             MiniatureDragPolicy.Bar dragged = PlaceMiniatureView.barOf(bar);
             assertNotNull(dragged);
-            LayoutChooserModel.applyDrop(places, PaneWallPage.TERMINAL, orientation, dragged, edge,
+            LayoutChooserModel.applyDrop(places, orientation, dragged, edge,
                 index);
         };
     }
@@ -590,9 +590,9 @@ public class PlaceMiniatureViewTest {
         touch(landscape, MotionEvent.ACTION_UP, slot.centerX(), slot.centerY());
 
         assertNull("the gesture is over", landscape.draggedBar());
-        assertEquals("left", prefs().getString("place.terminal.landscape.apps_row", null));
+        assertEquals("left", prefs().getString("layout.landscape.apps_row", null));
         assertNull("portrait was not touched",
-            prefs().getString("place.terminal.portrait.apps_row", null));
+            prefs().getString("layout.portrait.apps_row", null));
 
         // The same drag on the portrait miniature writes portrait's own key.
         PlaceMiniatureView portrait = inParent(parent(), 1000, 400);
@@ -607,9 +607,9 @@ public class PlaceMiniatureViewTest {
         RectF tray = portrait.trayRect();
         touch(portrait, MotionEvent.ACTION_MOVE, tray.centerX(), tray.centerY());
         touch(portrait, MotionEvent.ACTION_UP, tray.centerX(), tray.centerY());
-        assertEquals("hidden", prefs().getString("place.terminal.portrait.apps_row", null));
+        assertEquals("hidden", prefs().getString("layout.portrait.apps_row", null));
         assertEquals("landscape kept the column it was given", "left",
-            prefs().getString("place.terminal.landscape.apps_row", null));
+            prefs().getString("layout.landscape.apps_row", null));
     }
 
     @Test
@@ -631,9 +631,9 @@ public class PlaceMiniatureViewTest {
         touch(view, MotionEvent.ACTION_UP, canvas.centerX(), canvas.centerY());
 
         assertNull("nothing was written for the extra keys",
-            prefs().getString("place.terminal.landscape.extra_keys", null));
+            prefs().getString("layout.landscape.extra_keys", null));
         assertNull("nor for anything else",
-            prefs().getString("place.terminal.landscape.apps_row", null));
+            prefs().getString("layout.landscape.apps_row", null));
     }
 
     @Test
@@ -656,7 +656,7 @@ public class PlaceMiniatureViewTest {
     @Test
     public void aChipInTheTrayIsDraggedBackOntoAnEdge() {
         PlaceLayoutStore places = store();
-        places.setAppsRow(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
+        places.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
         PlaceMiniatureView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
@@ -671,7 +671,7 @@ public class PlaceMiniatureViewTest {
         touch(view, MotionEvent.ACTION_MOVE, bottom.centerX(), bottom.centerY());
         touch(view, MotionEvent.ACTION_UP, bottom.centerX(), bottom.centerY());
 
-        assertEquals("bottom", prefs().getString("place.terminal.portrait.apps_row", null));
+        assertEquals("bottom", prefs().getString("layout.portrait.apps_row", null));
     }
 
     @Test
@@ -693,7 +693,7 @@ public class PlaceMiniatureViewTest {
         RectF tray = view.trayRect();
         touch(view, MotionEvent.ACTION_MOVE, tray.centerX(), tray.centerY());
         touch(view, MotionEvent.ACTION_UP, tray.centerX(), tray.centerY());
-        assertFalse(prefs().getBoolean("place.terminal.landscape.az_row", true));
+        assertFalse(prefs().getBoolean("layout.landscape.az_row", true));
     }
 
     @Test
@@ -747,13 +747,13 @@ public class PlaceMiniatureViewTest {
         touch(view, MotionEvent.ACTION_MOVE, outermost.centerX(), outermost.centerY());
         touch(view, MotionEvent.ACTION_UP, outermost.centerX(), outermost.centerY());
 
-        assertEquals(0, prefs().getInt("place.terminal.portrait.apps_row_order", -1));
-        assertEquals(1, prefs().getInt("place.terminal.portrait.extra_keys_order", -1));
-        assertEquals(2, prefs().getInt("place.terminal.portrait.az_bar_order", -1));
+        assertEquals(0, prefs().getInt("layout.portrait.apps_row_order", -1));
+        assertEquals(1, prefs().getInt("layout.portrait.extra_keys_order", -1));
+        assertEquals(2, prefs().getInt("layout.portrait.az_bar_order", -1));
         assertEquals("the bar did not leave the bottom", "bottom",
-            prefs().getString("place.terminal.portrait.apps_row", null));
+            prefs().getString("layout.portrait.apps_row", null));
         assertEquals("nothing on another edge was touched", 0,
-            places.slotOrder(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT,
+            places.slotOrder(PlaceOrientation.PORTRAIT,
                 Element.STATUS));
     }
 

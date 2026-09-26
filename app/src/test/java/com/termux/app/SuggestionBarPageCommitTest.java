@@ -291,7 +291,7 @@ public class SuggestionBarPageCommitTest {
         for (PaneWallPage place : PaneWallPage.values())
             for (PlaceOrientation orientation : PlaceOrientation.values())
                 for (Element element : Element.values())
-                    store.setSlot(place, orientation, element, layout.slot(element));
+                    store.setSlot(orientation, element, layout.slot(element));
         screen.applyEdgeStacks(layout);
         screen.syncPinnedAppsHost(layout);
         screen.applyDockLayout(screen.dockLayoutFor(layout));

@@ -12,14 +12,13 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.Slot;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * What a bar dropped on the miniature writes, and the word each of its positions goes by. Pure: a
  * store in, a write out, nothing drawn, so the picture and the Layout editor's drops are testable
  * on their own.
  *
- * <p>What a place offers that no bar can be dragged into — its keyboard, its grid — is
+ * <p>What the layout offers that no bar can be dragged into — its keyboard, its grid — is
  * {@link com.termux.app.place.PlaceArrangeModel}'s, which answers for one orientation at a time,
  * the way an editor standing on the live screen needs.
  */
@@ -41,12 +40,12 @@ public final class LayoutChooserModel {
      * @return whether the drop was a legal one — a bar dropped somewhere it cannot stand writes
      *     nothing, so the picture springs it back instead.
      */
-    public static boolean applyDrop(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
+    public static boolean applyDrop(@NonNull PlaceLayoutStore places,
                                     @NonNull PlaceOrientation orientation,
                                     @NonNull MiniatureDragPolicy.Bar bar, @Nullable Edge edge,
                                     int index) {
         Element element = bar.element();
-        PlaceLayout layout = places.resolve(place, orientation);
+        PlaceLayout layout = places.resolve(orientation);
         PlaceLayout next;
         if (edge == null) {
             // The status bar is never hidden, so the tray is not one of its targets.
@@ -59,16 +58,16 @@ public final class LayoutChooserModel {
         }
         for (Element each : Element.values()) {
             Slot slot = next.slot(each);
-            if (!slot.equals(layout.slot(each))) places.setSlot(place, orientation, each, slot);
+            if (!slot.equals(layout.slot(each))) places.setSlot(orientation, each, slot);
         }
         return true;
     }
 
     /** A bar dropped on an edge without a gap picked: the band it has always taken there. */
-    public static boolean applyDrop(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
+    public static boolean applyDrop(@NonNull PlaceLayoutStore places,
                                     @NonNull PlaceOrientation orientation,
                                     @NonNull MiniatureDragPolicy.Bar bar, @Nullable Edge edge) {
-        return applyDrop(places, place, orientation, bar, edge, -1);
+        return applyDrop(places, orientation, bar, edge, -1);
     }
 
     /** The word for an edge. Shared with the miniature, which names the same positions. */

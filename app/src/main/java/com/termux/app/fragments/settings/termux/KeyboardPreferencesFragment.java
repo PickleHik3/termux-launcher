@@ -28,7 +28,6 @@ import com.termux.app.terminal.inappkeyboard.InAppKeyboardExtraKeys;
 import com.termux.app.terminal.inappkeyboard.TapCorrectionController;
 import com.termux.app.terminal.inappkeyboard.TapModelStore;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboardLayoutLoader;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -550,59 +549,39 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
     }
 
     /**
-     * The air under the last key row, for every place at once in the orientation the phone is in.
-     * Like the keyboard type below it, the allowance belongs to a place and an orientation now;
-     * this row is the blunt one, for a user fitting the keys to their phone's chin rather than to
-     * one screen.
+     * The air under the last key row, in the orientation the phone is in. Like the keyboard type
+     * below it, the allowance is a layout value per orientation, shared by every place; this row
+     * and the Layout editor's chin track write the same key.
      */
     private void putKeyboardChin(int dp) {
         PlaceLayoutStore places = places();
         if (places == null) return;
-        PlaceOrientation orientation = orientation();
-        for (PaneWallPage place : PaneWallPage.values())
-            places.setKeyboardChinDp(place, orientation, dp);
+        places.setKeyboardChinDp(orientation(), dp);
     }
 
-    /** The allowance the places agree on, or the terminal's where they have been set apart. */
     private int keyboardChin() {
         PlaceLayoutStore places = places();
         if (places == null) return 0;
-        return places.keyboardChinDp(PaneWallPage.TERMINAL, orientation());
+        return places.keyboardChinDp(orientation());
     }
 
-    /**
-     * The keyboard type, for every place at once in the orientation the phone is in. The Layout
-     * page is where one place is given a type of its own; this row is the blunt one, for a user
-     * who wants the same keyboard wherever they are.
-     */
+    /** The keyboard type, in the orientation the phone is in, for every place alike. */
     private void putKeyboardForm(@Nullable String value) {
         PlaceLayoutStore places = places();
         if (places == null) return;
         KeyboardForm form = KeyboardForm.parse(value, KeyboardForm.DOCKED);
         PlaceOrientation orientation = orientation();
-        boolean changed = false;
-        for (PaneWallPage place : PaneWallPage.values()) {
-            if (places.keyboardForm(place, orientation) == form) continue;
-            places.setKeyboardForm(place, orientation, form);
-            changed = true;
-        }
+        if (places.keyboardForm(orientation) == form) return;
+        places.setKeyboardForm(orientation, form);
         // The keyboard is arranged by the activity, so the change lands on the way back to it.
-        if (changed) TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
+        TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
     }
 
-    /** The type every place agrees on, or nothing at all when they do not. */
     @NonNull
     private String keyboardForm() {
         PlaceLayoutStore places = places();
         if (places == null) return KeyboardForm.DOCKED.storageValue();
-        PlaceOrientation orientation = orientation();
-        KeyboardForm shared = null;
-        for (PaneWallPage place : PaneWallPage.values()) {
-            KeyboardForm form = places.keyboardForm(place, orientation);
-            if (shared == null) shared = form;
-            else if (shared != form) return SegmentedPillPreference.VALUE_NONE;
-        }
-        return shared == null ? KeyboardForm.DOCKED.storageValue() : shared.storageValue();
+        return places.keyboardForm(orientation()).storageValue();
     }
 
     @Override

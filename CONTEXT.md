@@ -49,15 +49,16 @@ _Avoid_: wallpaper scroll, wall motion
 ### Editing
 
 **Appearance editor**:
-The editor for how a place's surfaces look: glass, opacity, blur, grain, corners, palette. Entered
-from the corner tab; exits straight back to the live place. Edits the current place's surfaces
-and can style all surfaces at once.
+The editor for how the surfaces look: glass, opacity, blur, grain, corners, palette. Entered
+from the corner tab; exits straight back to the live place. There is one look, so what it edits
+lands on every place; it can style one surface or all surfaces at once.
 _Avoid_: surface editor (legacy umbrella name), look editor, style editor, full editor
 
 **Layout editor**:
-The editor for where a place's elements sit and how big they are: bars, dock, keyboard, widget
-grid, hidden or shown, plus dock height, keyboard height and keyboard chin. Its canvas is the
-miniature; it shows one orientation with a toggle to the other. Entered from the corner tab or
+The editor for where the elements sit and how big they are: bars, dock, keyboard, widget
+grid, hidden or shown, plus dock height, keyboard height and keyboard chin. The layout is shared,
+so a change lands on every place; the miniature shows the place it was opened on. It shows one
+orientation with a toggle to the other. Entered from the corner tab or
 the long-press menu; Settings has no door to it.
 _Avoid_: arrange mode, surface editor, place editor
 

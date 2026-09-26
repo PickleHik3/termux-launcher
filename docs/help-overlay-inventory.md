@@ -1,5 +1,11 @@
 # Home screen inventory for the per-place help overlays (2026-09-14)
 
+> **2026-09-26:** since [ADR 0003](adr/0003-one-layout-and-look-for-every-place.md) the layout and the
+> look are shared by every place. Where this snapshot says "per place" for a bar, a size or a look,
+> read "per orientation, for all three places"; "keyboard on enter" is gone — Terminal and Display
+> come back with the keyboard as they were left, Home always with it down. Line numbers below are
+> from the date of the snapshot.
+
 Source of truth for designing an overlay help screen on each of the three places. Every item
 lists where it sits, what gesture it takes, and whether the first-boot tour already demonstrates
 it (card numbers are the thirteen-card run in `TourRun.java`). Facts were read from the code on

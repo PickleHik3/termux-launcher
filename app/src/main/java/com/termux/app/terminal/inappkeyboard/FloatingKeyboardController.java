@@ -10,7 +10,6 @@ import androidx.annotation.Nullable;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * Hosts the in-app keyboard in its floating frame, and hands it back to the dock when the place
@@ -47,8 +46,6 @@ public final class FloatingKeyboardController {
         float floatingKeyboardHeightScale();
 
         @Nullable PlaceLayoutStore placeLayoutStore();
-
-        @NonNull PaneWallPage place();
 
         @NonNull PlaceOrientation orientation();
 
@@ -227,12 +224,9 @@ public final class FloatingKeyboardController {
     private void readRememberedPosition() {
         PlaceLayoutStore store = mHost.placeLayoutStore();
         if (store == null) return;
-        PaneWallPage place = mHost.place();
         PlaceOrientation orientation = mHost.orientation();
-        mXFraction = FloatingKeyboardGeometry.xFractionOr(
-            store.floatingKeyboardX(place, orientation));
-        mYFraction = FloatingKeyboardGeometry.yFractionOr(
-            store.floatingKeyboardY(place, orientation));
+        mXFraction = FloatingKeyboardGeometry.xFractionOr(store.floatingKeyboardX(orientation));
+        mYFraction = FloatingKeyboardGeometry.yFractionOr(store.floatingKeyboardY(orientation));
     }
 
     /** Re-measures the frame for the settings it reads, then puts it back at its remembered place. */
@@ -293,11 +287,11 @@ public final class FloatingKeyboardController {
         mHost.onFloatingFrameMoved(committed);
     }
 
-    /** The place the card is in now, kept for this place and orientation. */
+    /** Where the card is now, kept for this orientation. */
     private void rememberPosition() {
         PlaceLayoutStore store = mHost.placeLayoutStore();
         if (store == null) return;
-        store.setFloatingKeyboardPosition(mHost.place(), mHost.orientation(),
+        store.setFloatingKeyboardPosition(mHost.orientation(),
             mXFraction, mYFraction);
     }
 

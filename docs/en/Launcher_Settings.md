@@ -9,11 +9,12 @@ want but not where it lives. Search indexes the preferences inside every destina
 
 ## Layout editor
 
-Settings has no Layout page: arrange a place by opening **Layout** from a corner tab or the
-long-press menu while you are on it. A Portrait/Landscape toggle above the
-place's miniature switches which orientation you are arranging; the real screen behind the editor
-follows what you change only for the orientation you are actually holding the phone in. Done and
-Discard let you keep or throw away everything you changed in that visit.
+Settings has no Layout page: open **Layout** from a corner tab or the long-press menu. Home,
+Terminal and Display share one layout, so whatever you arrange lands on all three; the miniature
+shows the place you opened it on. A Portrait/Landscape toggle above the miniature switches which
+orientation you are arranging, since each orientation has its own layout; the real screen behind
+the editor follows what you change only for the orientation you are actually holding the phone in.
+Done and Discard let you keep or throw away everything you changed in that visit.
 
 - **Status bar** and **Apps row**: drag either on the miniature to the edge you want it on, or into
   the hide tray to hide it. **Alphabets row** shows or hides the A–Z index below the pinned apps,
@@ -34,15 +35,18 @@ keys when those stand there too: the status bar takes the top of that edge and t
 underneath.
 - **Dock height** and **Keyboard height**: how tall the dock and the built-in keyboard stand, and
   **Keyboard bottom padding** for the clearance it leaves below the keyboard, each set separately
-  per place and per orientation; upgrading carries your current values over unchanged.
-- **Keyboard on enter**: whether the on-screen keyboard comes back the way you left it, opens, or
-  stays closed when you switch to this place. Remembered per place, the same in both orientations.
-  On Home the keyboard opens over the page rather than shrinking it, so the widgets keep their
-  places; a text field inside a widget opens the Android keyboard, and the keyboard key on the
-  extra keys row opens the built-in one.
+  per orientation; upgrading carries your terminal's values over unchanged.
 - **Keyboard type**: whether the on-screen keyboard is docked along the bottom, floats over the
-  content where you put it, or is split in the middle for two thumbs. Remembered for this place
-  and orientation, and reachable from a key or the command palette as well.
+  content where you put it, or is split in the middle for two thumbs. Set per orientation, and
+  reachable from a key or the command palette as well.
+- **Keyboard mode** (opened on Display only): whether the keyboard floats over the display or
+  shrinks it. Floats in landscape until you change it.
+
+The keyboard itself remembers where it was: Terminal and Display each come back with the keyboard
+up or down the way you left them, and Home always comes back with it down. On Home the keyboard
+opens over the page rather than shrinking it, so the widgets keep their places; a text field inside
+a widget opens the Android keyboard, and the keyboard key on the extra keys row opens the built-in
+one.
 - **Grid columns** and **Grid rows** (Home only): how many widgets fit across and down a page, set
   separately for portrait and landscape; widgets that no longer fit a smaller grid move to free
   space or a new page rather than being dropped.
@@ -53,9 +57,8 @@ Use this section for visible surfaces and colors:
 
 - **Appearance** (from a corner tab or the long-press menu): tune the dock, keyboard, status panel, and terminal while looking at the real
   home screen. Tap the floating palette to style every surface at once, or tap a surface to style
-  it on its own. This edits the shared look every place starts from; a look that differs between
-  Home, Terminal and Display is edited by opening **Appearance** from the long-press menu while
-  on that place.
+  it on its own. Home, Terminal and Display wear the same look, so what you change here changes all
+  three.
   The keyboard's **BG opacity** applies to the keyboard docked under the terminal — a floating,
   split, or overlaying keyboard is a solid panel and ignores it — while its **Edges** apply to
   every keyboard.
@@ -74,8 +77,8 @@ Use this section for visible surfaces and colors:
 - **Wallpaper:** show or hide the system wallpaper behind launcher surfaces.
 - **Icon appearance:** monochrome icons, system or custom icon pack, and pinned-app icon behavior.
 - **Keyboard look:** **Theme**, **Keyboard colors**, and **Typeface** for the built-in keyboard,
-  **Bottom padding** to lift its bottom key row away from the edge of the screen (Layout sets the
-  same padding per place and orientation), and **Customize keyboard appearance** for live size,
+  **Bottom padding** to lift its bottom key row away from the edge of the screen (the same value
+  Layout sets, for the orientation you are holding the phone in), and **Customize keyboard appearance** for live size,
   spacing, radius, and color tuning. These rows are only enabled while the built-in keyboard is the
   chosen input method on the **Keyboard** page.
 
@@ -207,8 +210,8 @@ wrong — a clock that stops updating, a status reading that freezes, a rim that
 ## Status bar
 
 Use this section for the top row's readouts. The clock's face and position, and the bar's
-surface — blur, opacity, grain, and radius — are set per place in Appearance, opened from the
-long-press menu on that place.
+surface — blur, opacity, grain, and radius — are set in Appearance, opened from a corner tab or the
+long-press menu, and are the same on every place.
 
 - **Use 12-hour time**.
 - **CPU usage**, **Memory usage**, and **Weather** status cards.

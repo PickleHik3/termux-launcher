@@ -53,66 +53,62 @@ public class PlaceLayoutKeyboardFormTest {
         for (PaneWallPage place : PaneWallPage.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 assertEquals(place + " " + orientation, KeyboardForm.DOCKED,
-                    store.keyboardForm(place, orientation));
+                    store.keyboardForm(orientation));
                 assertEquals(place + " " + orientation, KeyboardForm.DOCKED,
-                    store.resolve(place, orientation).keyboardForm);
+                    store.resolve(orientation).keyboardForm);
             }
         }
     }
 
     @Test
-    public void aWrittenTypeIsWhatThatPlaceAndOrientationReadsBack() {
+    public void aWrittenTypeIsWhatThatOrientationReadsBack() {
         PlaceLayoutStore store = store();
-        store.setKeyboardForm(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE,
+        store.setKeyboardForm(PlaceOrientation.LANDSCAPE,
             KeyboardForm.FLOATING);
 
         assertEquals(KeyboardForm.FLOATING,
-            store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE).keyboardForm);
-        // The same place in the other orientation, and every other place, are untouched.
+            store.resolve(PlaceOrientation.LANDSCAPE).keyboardForm);
+        // The other orientation is untouched.
         assertEquals(KeyboardForm.DOCKED,
-            store.keyboardForm(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
-        assertEquals(KeyboardForm.DOCKED,
-            store.keyboardForm(PaneWallPage.WIDGETS, PlaceOrientation.LANDSCAPE));
-        assertEquals(KeyboardForm.DOCKED,
-            store.keyboardForm(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
+            store.keyboardForm(PlaceOrientation.PORTRAIT));
     }
 
     /** The key the value is under is a contract: a tool and the Layout page must find each other. */
     @Test
     public void theStoredKeyIsTheOneTheSpecNames() {
-        store().setKeyboardForm(PaneWallPage.WIDGETS, PlaceOrientation.PORTRAIT, KeyboardForm.SPLIT);
-        assertEquals("split", prefs.getString("place.home.portrait.keyboard_form", null));
+        store().setKeyboardForm(PlaceOrientation.PORTRAIT, KeyboardForm.SPLIT);
+        assertEquals("split", prefs.getString("layout.portrait.keyboard_form", null));
     }
 
     /** A change to the type has to retire a held layout, or nothing re-runs its geometry. */
     @Test
     public void aTypeChangeMovesTheRevisionAndTheResolvedValue() {
         PlaceLayoutStore store = store();
-        PlaceLayout before = store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
+        PlaceLayout before = store.resolve(PlaceOrientation.PORTRAIT);
         int revision = store.revision();
 
-        store.setKeyboardForm(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT, KeyboardForm.SPLIT);
+        store.setKeyboardForm(PlaceOrientation.PORTRAIT, KeyboardForm.SPLIT);
 
         assertNotEquals(revision, store.revision());
-        assertNotEquals(before, store.resolve(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+        assertNotEquals(before, store.resolve(PlaceOrientation.PORTRAIT));
     }
 
     /** Clearing a place's arrangement puts the type back with the rest of it. */
     @Test
     public void clearingThePlaceForgetsTheType() {
         PlaceLayoutStore store = store();
-        store.setKeyboardForm(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT,
+        store.setKeyboardForm(PlaceOrientation.PORTRAIT,
             KeyboardForm.FLOATING);
-        store.clear(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT);
+        store.clear(PlaceOrientation.PORTRAIT);
         assertEquals(KeyboardForm.DOCKED,
-            store.keyboardForm(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+            store.keyboardForm(PlaceOrientation.PORTRAIT));
     }
 
     @Test
     public void anUnreadableStoredValueReadsAsDocked() {
-        prefs.edit().putString("place.terminal.portrait.keyboard_form", "sideways").commit();
+        prefs.edit().putString("layout.portrait.keyboard_form", "sideways").commit();
         assertEquals(KeyboardForm.DOCKED,
-            store().keyboardForm(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT));
+            store().keyboardForm(PlaceOrientation.PORTRAIT));
     }
 
     // ------------------------------------------------------------------ the cycle
@@ -157,49 +153,47 @@ public class PlaceLayoutKeyboardFormTest {
     public void aFloatingKeyboardHasNoRememberedPlaceUntilItIsMoved() {
         PlaceLayoutStore store = store();
         assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET,
-            store.floatingKeyboardX(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0f);
+            store.floatingKeyboardX(PlaceOrientation.PORTRAIT), 0f);
         assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET,
-            store.floatingKeyboardY(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0f);
+            store.floatingKeyboardY(PlaceOrientation.PORTRAIT), 0f);
     }
 
     @Test
-    public void aRememberedPositionIsScopedToItsPlaceAndOrientation() {
+    public void aRememberedPositionIsScopedToItsOrientation() {
         PlaceLayoutStore store = store();
-        store.setFloatingKeyboardPosition(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE,
+        store.setFloatingKeyboardPosition(PlaceOrientation.LANDSCAPE,
             0.25f, 0.75f);
 
         assertEquals(0.25f,
-            store.floatingKeyboardX(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), 1e-6f);
+            store.floatingKeyboardX(PlaceOrientation.LANDSCAPE), 1e-6f);
         assertEquals(0.75f,
-            store.floatingKeyboardY(PaneWallPage.TERMINAL, PlaceOrientation.LANDSCAPE), 1e-6f);
+            store.floatingKeyboardY(PlaceOrientation.LANDSCAPE), 1e-6f);
         assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET,
-            store.floatingKeyboardX(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0f);
-        assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET,
-            store.floatingKeyboardX(PaneWallPage.WIDGETS, PlaceOrientation.LANDSCAPE), 0f);
+            store.floatingKeyboardX(PlaceOrientation.PORTRAIT), 0f);
     }
 
     /** A fraction from outside the frame is not a position; it forgets rather than clamping. */
     @Test
     public void anOutOfRangePositionIsForgotten() {
         PlaceLayoutStore store = store();
-        store.setFloatingKeyboardPosition(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT,
+        store.setFloatingKeyboardPosition(PlaceOrientation.PORTRAIT,
             0.5f, 0.5f);
-        store.setFloatingKeyboardPosition(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT,
+        store.setFloatingKeyboardPosition(PlaceOrientation.PORTRAIT,
             -0.2f, 1.4f);
 
         assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET,
-            store.floatingKeyboardX(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0f);
+            store.floatingKeyboardX(PlaceOrientation.PORTRAIT), 0f);
         assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET,
-            store.floatingKeyboardY(PaneWallPage.TERMINAL, PlaceOrientation.PORTRAIT), 0f);
+            store.floatingKeyboardY(PlaceOrientation.PORTRAIT), 0f);
     }
 
     @Test
     public void theEdgesOfTheFrameAreValidPositions() {
         PlaceLayoutStore store = store();
-        store.setFloatingKeyboardPosition(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE, 0f, 1f);
+        store.setFloatingKeyboardPosition(PlaceOrientation.LANDSCAPE, 0f, 1f);
         assertEquals(0f,
-            store.floatingKeyboardX(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE), 0f);
+            store.floatingKeyboardX(PlaceOrientation.LANDSCAPE), 0f);
         assertEquals(1f,
-            store.floatingKeyboardY(PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE), 0f);
+            store.floatingKeyboardY(PlaceOrientation.LANDSCAPE), 0f);
     }
 }

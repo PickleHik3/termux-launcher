@@ -126,14 +126,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /**
-     * Where the three sizes a place owns actually live once the launcher has a layout store.
+     * Where the three sizes the layout owns actually live once the launcher has a layout store.
      *
-     * <p>Dock height, keyboard height and the keyboard's chin are laid out per place and per
-     * orientation, not shared. The launcher installs the layout store here through
-     * {@link #setPlaceSizes}, so the getters below keep their signatures and start answering for
-     * the place and orientation on screen — the same trick that makes the look layer resolve
-     * without a per-place branch above it. Nothing installed leaves the shared values the launcher
-     * kept before, which is what the Settings screens and the tests read.
+     * <p>Dock height, keyboard height and the keyboard's chin are laid out per orientation, and
+     * shared by every place like the rest of the layout. The launcher installs the layout store
+     * here through {@link #setPlaceSizes}, so the getters below keep their signatures and start
+     * answering for the orientation on screen. Nothing installed leaves the global values the
+     * launcher kept before, which is what the Settings screens and the tests read.
      */
     public interface PlaceSizes {
         float dockHeightScale();

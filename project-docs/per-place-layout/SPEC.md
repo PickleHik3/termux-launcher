@@ -1,3 +1,11 @@
+> **Superseded by [ADR 0003](../../docs/adr/0003-one-layout-and-look-for-every-place.md)
+> (2026-09-26).** Home, Terminal and Display now share one layout per orientation and one look;
+> places differ only in state (whether the keyboard is up, and minimal mode). `PlaceLayoutStore`
+> keeps `layout.<portrait|landscape>.<key>` plus the per-place `place.<place>.keyboard_open`, and
+> migration version 6 folded the per-place keys and the place-scoped look overrides into the shared
+> ones, seeding from the Terminal place. Keyboard on enter and the place-scoped look layer
+> (`PlaceLookPreferences`) are gone. The rest of this page is kept as the record of v1.
+
 # Per-place layout — spec v1 (decided 2026-09-06)
 
 Rule: anything that decides *what is on screen and where* is a property of a **place**

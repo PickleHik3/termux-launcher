@@ -49,7 +49,8 @@ import java.util.Map;
 
 /**
  * The Layout editor: a miniature of the place the user is looking at, parked over the live place,
- * with a Portrait / Landscape toggle above it.
+ * with a Portrait / Landscape toggle above it. The layout it edits is every place's (ADR 0003), so
+ * it has no place to pick: a drop lands on Home, the terminal and the display alike.
  *
  * <p>The sibling of the surface editor and not a page of it: this one answers where a place's
  * elements sit, that one answers how its surfaces look, and only ever one of the two is open. A bar
@@ -79,7 +80,7 @@ public final class LayoutEditorController {
 
         @Nullable <T extends View> T findView(int viewId);
 
-        /** Where every place keeps its arrangement, or null before the preferences exist. */
+        /** Where the shared arrangement is kept, or null before the preferences exist. */
         @Nullable PlaceLayoutStore places();
 
         /** The place the chrome on screen belongs to: what a corner tab opens the editor on. */
@@ -341,8 +342,8 @@ public final class LayoutEditorController {
         LayoutEditorPlan plan = mPlan;
         if (card == null || plan == null)
             return;
-        // The header names what is being edited, which here is the place.
-        card.title.setText(placeLabel(plan.place()));
+        // The header says what is being edited: the one layout every place stands in.
+        card.title.setText(R.string.termux_layout_editor_scope_all);
         mRestatingToggle = true;
         card.orientation.check(plan.shownOrientation() == PlaceOrientation.LANDSCAPE
             ? R.id.layout_editor_orientation_landscape : R.id.layout_editor_orientation_portrait);
@@ -689,16 +690,6 @@ public final class LayoutEditorController {
         mRowsScroller = scroller;
         mRows = rows;
         return rows;
-    }
-
-    /** The name a place is known by on the wall, which is what the header says it is editing. */
-    @StringRes
-    private static int placeLabel(@NonNull PaneWallPage place) {
-        switch (place) {
-            case WIDGETS: return R.string.termux_wall_tile_widgets;
-            case DISPLAY: return R.string.termux_wall_tile_display;
-            default: return R.string.termux_wall_tile_terminal;
-        }
     }
 
     @StringRes

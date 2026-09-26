@@ -46,7 +46,7 @@ public class LauncherUseCaseModeTest {
         for (PaneWallPage place : PaneWallPage.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 assertEquals(place + " " + orientation, expected,
-                    rowOf(places.resolve(place, orientation), com.termux.app.place.Element.APPS));
+                    rowOf(places.resolve(orientation), com.termux.app.place.Element.APPS));
             }
         }
     }
@@ -56,9 +56,9 @@ public class LauncherUseCaseModeTest {
         PlaceLayoutStore places = places();
         for (PaneWallPage place : PaneWallPage.values()) {
             assertEquals(place + " portrait", RowPlacement.BOTTOM,
-                rowOf(places.resolve(place, PlaceOrientation.PORTRAIT), com.termux.app.place.Element.APPS));
+                rowOf(places.resolve(PlaceOrientation.PORTRAIT), com.termux.app.place.Element.APPS));
             assertEquals(place + " landscape", RowPlacement.LEFT,
-                rowOf(places.resolve(place, PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
+                rowOf(places.resolve(PlaceOrientation.LANDSCAPE), com.termux.app.place.Element.APPS));
         }
     }
 
