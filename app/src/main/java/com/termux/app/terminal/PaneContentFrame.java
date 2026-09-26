@@ -56,14 +56,24 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
 
     public PaneContentFrame(Context context) {
         super(context);
+        initPaddingFillPaint();
     }
 
     public PaneContentFrame(Context context, AttributeSet attrs) {
         super(context, attrs);
+        initPaddingFillPaint();
     }
 
     public PaneContentFrame(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
+        initPaddingFillPaint();
+    }
+
+    /** Off by default already, but stated explicitly: this band's rects share edges — with each
+     *  other and with the terminal's own in-view slack — that are snapped to whole device pixels,
+     *  and anti-aliasing would blend a translucent hairline into exactly those shared edges. */
+    private void initPaddingFillPaint() {
+        mPaddingFillPaint.setAntiAlias(false);
     }
 
     @Override
@@ -165,23 +175,40 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
 
         int save = canvas.save();
         canvas.clipPath(getPaddingFillClipPath());
-        float columnWidth = terminal.getPaddingColumnWidth();
-        float rowHeight = terminal.getPaddingRowHeight();
-        // Top and bottom bands: one rect per column, directly above/below where that column's own
-        // cells sit, so a coloured status bar or a solid full-screen app reaches the pane's border.
-        for (int c = 0; c < columns; c++) {
+        // Top and bottom bands: one rect per run of equal-coloured columns, directly above/below
+        // where those columns' own cells sit, so a coloured status bar or a solid full-screen app
+        // reaches the pane's border. Edges come from getPaddingColumnLeft, the same rounding
+        // TerminalRenderer#drawCellRect snaps a cell's own left/right edge to, so a band's inner
+        // edge meets the grid with no gap and its outer neighbours meet each other the same way;
+        // coalescing equal-coloured runs means two same-coloured columns share no internal edge
+        // at all, however that rounding falls.
+        int c = 0;
+        while (c < columns) {
+            int topColor = terminal.getEdgeColumnColorTop(c);
+            int bottomColor = terminal.getEdgeColumnColorBottom(c);
+            int runEnd = c + 1;
+            while (runEnd < columns && terminal.getEdgeColumnColorTop(runEnd) == topColor
+                && terminal.getEdgeColumnColorBottom(runEnd) == bottomColor) runEnd++;
             float left = contentLeft + terminal.getPaddingColumnLeft(c);
-            float right = left + columnWidth;
-            fillRect(canvas, left, 0f, right, contentTop, terminal.getEdgeColumnColorTop(c));
-            fillRect(canvas, left, contentBottom, right, getHeight(), terminal.getEdgeColumnColorBottom(c));
+            float right = contentLeft + terminal.getPaddingColumnLeft(runEnd);
+            fillRect(canvas, left, 0f, right, contentTop, topColor);
+            fillRect(canvas, left, contentBottom, right, getHeight(), bottomColor);
+            c = runEnd;
         }
-        // Left and right bands: one rect per row, continuing that row's own edge colour out to the
-        // view's flush side.
-        for (int r = 0; r < rows; r++) {
+        // Left and right bands: one rect per run of equal-coloured rows, continuing that row's own
+        // edge colour out to the view's flush side, with the same run-coalescing and edge-rounding.
+        int r = 0;
+        while (r < rows) {
+            int leftColor = terminal.getEdgeRowColorLeft(r);
+            int rightColor = terminal.getEdgeRowColorRight(r);
+            int runEnd = r + 1;
+            while (runEnd < rows && terminal.getEdgeRowColorLeft(runEnd) == leftColor
+                && terminal.getEdgeRowColorRight(runEnd) == rightColor) runEnd++;
             float top = contentTop + terminal.getPaddingRowTop(r);
-            float bottom = top + rowHeight;
-            fillRect(canvas, 0f, top, contentLeft, bottom, terminal.getEdgeRowColorLeft(r));
-            fillRect(canvas, contentRight, top, getWidth(), bottom, terminal.getEdgeRowColorRight(r));
+            float bottom = contentTop + terminal.getPaddingRowTop(runEnd);
+            fillRect(canvas, 0f, top, contentLeft, bottom, leftColor);
+            fillRect(canvas, contentRight, top, getWidth(), bottom, rightColor);
+            r = runEnd;
         }
         // The four corners: the small squares the row/column bands above do not reach, each taking
         // the colour of the cell nearest that corner.

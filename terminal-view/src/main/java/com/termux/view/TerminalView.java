@@ -592,6 +592,11 @@ public final class TerminalView extends View {
         // A view is important for accessibility if it fires accessibility events
         // and if it is reported to accessibility services that query the screen.
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
+
+        // Off by default already, but stated explicitly: the padding fill's rects share edges that
+        // are snapped to the same integer pixels the renderer's own cells are, and anti-aliasing
+        // would blend a translucent hairline into exactly those shared edges, undoing the snap.
+        mPaddingFillPaint.setAntiAlias(false);
     }
 
     /**
@@ -2697,26 +2702,32 @@ public final class TerminalView extends View {
         return row >= 0 && row < mEdgeColorsRows ? mEdgeRightColors[row] : 0;
     }
 
-    /** This view's own left edge of column {@code column}'s cell, in this view's coordinate space —
-     *  where the pane frame outside this view continues the same column's band into its margin. */
+    /**
+     * This view's own left edge of column {@code column}, in this view's coordinate space, rounded
+     * to the exact same device pixel {@link TerminalRenderer}'s {@code drawCellRect} snaps a cell's
+     * own left edge to. {@code column} may run one past the last real column, to read the right edge
+     * of the last one — the formula stays valid past the emulator's width, since it never indexes an
+     * array.
+     *
+     * <p>Column widths are not all equal: {@code fontWidth} is rarely a whole number of pixels, so
+     * rounding each column's edge independently — the way the grid itself is drawn — lets one column
+     * in a run absorb an extra pixel rather than leaving every column a fraction short. Handing the
+     * pane frame outside this view this same rounding, rather than a float it would round its own
+     * way, is what keeps its band meeting the grid with no hairline gap at any column boundary.
+     */
     public float getPaddingColumnLeft(int column) {
-        return mRenderer == null ? 0f : getHorizontalContentOffset() + column * mRenderer.getFontWidth();
+        return mRenderer == null ? 0f : Math.round(getHorizontalContentOffset() + column * mRenderer.getFontWidth());
     }
 
-    public float getPaddingColumnWidth() {
-        return mRenderer == null ? 0f : mRenderer.getFontWidth();
-    }
-
-    /** This view's own top edge of row {@code row}'s cell, in this view's coordinate space — where
-     *  the pane frame outside this view continues the same row's band into its margin. */
+    /**
+     * This view's own top edge of row {@code row}, in this view's coordinate space, rounded the same
+     * way {@code drawCellRect} rounds a row's own top edge. {@code row} may run one past the last
+     * real row, to read the bottom edge of the last one.
+     */
     public float getPaddingRowTop(int row) {
         if (mRenderer == null) return 0f;
         float drawOffset = getVerticalContentOffset() - mScrollOffsetPixels;
-        return drawOffset + mRenderer.getFontLineSpacingAndAscent() + row * mRenderer.getFontLineSpacing();
-    }
-
-    public float getPaddingRowHeight() {
-        return mRenderer == null ? 0f : mRenderer.getFontLineSpacing();
+        return Math.round(drawOffset + mRenderer.getFontLineSpacingAndAscent() + row * mRenderer.getFontLineSpacing());
     }
 
     /**
@@ -2821,46 +2832,80 @@ public final class TerminalView extends View {
      * Called inside the same translate {@link #onDraw} applies before rendering the grid, so row
      * math lines up with the renderer's exactly, scroll animation included.
      *
+     * <p>Every rect below shares its edges with {@code getPaddingColumnLeft}/{@code getPaddingRowTop}
+     * — the same {@code Math.round(offset + n * step)} {@code drawCellRect} snaps a cell's own edges
+     * to — and runs of equal colour are coalesced into a single rect first, so two neighbouring
+     * columns or rows of the same colour share no internal edge at all. That, together with the fill
+     * paint's anti-aliasing being off, is what keeps a translucent hairline from ever forming at a
+     * column or row boundary: there is nothing left to blend at a boundary between rects, and no
+     * boundary at all between same-coloured ones.
+     *
      * <p>The wider band outside this view — the pane's own rounded-corner clearance — is not this
      * view's to paint; {@code PaneContentFrame} reads these same colours through the accessors above
-     * and extends them the rest of the way to the pane's border.
+     * and extends them the rest of the way to the pane's border, using the same rounding.
      */
     private void drawPaddingFill(Canvas canvas, float horizontalOffset, float drawOffset) {
         final float fontWidth = mRenderer.getFontWidth();
         final float fontLineSpacing = mRenderer.getFontLineSpacing();
-        final float firstRowTop = mRenderer.getFontLineSpacingAndAscent();
+        final float firstRowTop = Math.round(mRenderer.getFontLineSpacingAndAscent());
         final float viewWidth = getWidth();
         final float viewTop = -drawOffset;
         final float viewBottom = getHeight() - drawOffset;
-        final float rowsBottom = firstRowTop + mEdgeColorsRows * fontLineSpacing;
-        for (int c = 0; c < mEdgeColorsColumns; c++) {
-            final float left = horizontalOffset + c * fontWidth;
-            final float right = left + fontWidth;
+        final float rowsBottom = Math.round(firstRowTop + mEdgeColorsRows * fontLineSpacing);
+        int c = 0;
+        while (c < mEdgeColorsColumns) {
             final int topColor = mEdgeTopColors[c];
+            int runEnd = c + 1;
+            while (runEnd < mEdgeColorsColumns && mEdgeTopColors[runEnd] == topColor) runEnd++;
             if (topColor != 0) {
+                final float left = Math.round(horizontalOffset + c * fontWidth);
+                final float right = Math.round(horizontalOffset + runEnd * fontWidth);
                 mPaddingFillPaint.setColor(topColor);
                 canvas.drawRect(left, viewTop, right, firstRowTop, mPaddingFillPaint);
             }
+            c = runEnd;
+        }
+        c = 0;
+        while (c < mEdgeColorsColumns) {
             final int bottomColor = mEdgeBottomColors[c];
+            int runEnd = c + 1;
+            while (runEnd < mEdgeColorsColumns && mEdgeBottomColors[runEnd] == bottomColor) runEnd++;
             if (bottomColor != 0) {
+                final float left = Math.round(horizontalOffset + c * fontWidth);
+                final float right = Math.round(horizontalOffset + runEnd * fontWidth);
                 mPaddingFillPaint.setColor(bottomColor);
                 canvas.drawRect(left, rowsBottom, right, viewBottom, mPaddingFillPaint);
             }
+            c = runEnd;
         }
         if (horizontalOffset > 0f) {
-            for (int r = 0; r < mEdgeColorsRows; r++) {
-                final float top = firstRowTop + r * fontLineSpacing;
-                final float bottom = top + fontLineSpacing;
+            final float leftSlackRight = Math.round(horizontalOffset);
+            final float rightSlackLeft = viewWidth - leftSlackRight;
+            int r = 0;
+            while (r < mEdgeColorsRows) {
                 final int leftColor = mEdgeLeftColors[r];
+                int runEnd = r + 1;
+                while (runEnd < mEdgeColorsRows && mEdgeLeftColors[runEnd] == leftColor) runEnd++;
                 if (leftColor != 0) {
+                    final float top = Math.round(firstRowTop + r * fontLineSpacing);
+                    final float bottom = Math.round(firstRowTop + runEnd * fontLineSpacing);
                     mPaddingFillPaint.setColor(leftColor);
-                    canvas.drawRect(0f, top, horizontalOffset, bottom, mPaddingFillPaint);
+                    canvas.drawRect(0f, top, leftSlackRight, bottom, mPaddingFillPaint);
                 }
+                r = runEnd;
+            }
+            r = 0;
+            while (r < mEdgeColorsRows) {
                 final int rightColor = mEdgeRightColors[r];
+                int runEnd = r + 1;
+                while (runEnd < mEdgeColorsRows && mEdgeRightColors[runEnd] == rightColor) runEnd++;
                 if (rightColor != 0) {
+                    final float top = Math.round(firstRowTop + r * fontLineSpacing);
+                    final float bottom = Math.round(firstRowTop + runEnd * fontLineSpacing);
                     mPaddingFillPaint.setColor(rightColor);
-                    canvas.drawRect(viewWidth - horizontalOffset, top, viewWidth, bottom, mPaddingFillPaint);
+                    canvas.drawRect(rightSlackLeft, top, viewWidth, bottom, mPaddingFillPaint);
                 }
+                r = runEnd;
             }
         }
     }
