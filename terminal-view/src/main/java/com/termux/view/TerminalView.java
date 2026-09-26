@@ -386,6 +386,7 @@ public final class TerminalView extends View {
                     float[] at = TapPrecision.clickPointFor(mTouchDownX, mTouchDownY, event.getX(),
                         event.getY(), mRenderer.mFontLineSpacing);
                     sendClickAt(getColumnForX(at[0]), getRowForY(at[1]));
+                    mClient.onMouseTrackingTap(event);
                     return true;
                 }
                 return false;

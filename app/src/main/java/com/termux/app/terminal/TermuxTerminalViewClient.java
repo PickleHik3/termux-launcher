@@ -315,8 +315,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         }
         if (!term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) {
             if (isInAppKeyboardEnabled()) {
-                mInAppKeyboardController.show(ShowReason.TERMINAL_TAP);
-                suppressSystemImeForInAppKeyboard();
+                showInAppKeyboardForTap();
                 return;
             }
             if (!mHost.areSoftKeyboardFlagsDisabled())
@@ -324,6 +323,21 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             else
                 Logger.logVerbose(LOG_TAG, "Not showing soft keyboard onSingleTapUp since its disabled");
         }
+    }
+
+    /**
+     * Once the keyboard key has put the launcher's keyboard down, a tap on a full-screen TUI that
+     * tracks the mouse brings it back the way a tap on a shell does; the program still gets the
+     * tap as its click. A scroll or a hold never lands here, so reading back does not raise it.
+     */
+    @Override
+    public void onMouseTrackingTap(MotionEvent e) {
+        if (isInAppKeyboardEnabled()) showInAppKeyboardForTap();
+    }
+
+    private void showInAppKeyboardForTap() {
+        mInAppKeyboardController.show(ShowReason.TERMINAL_TAP);
+        suppressSystemImeForInAppKeyboard();
     }
 
     @Override

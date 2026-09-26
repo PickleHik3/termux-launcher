@@ -25,6 +25,12 @@ public interface TerminalViewClient {
      */
     void onSingleTapUp(MotionEvent e);
 
+    /**
+     * A finger tap that went to a mouse-tracking program as a click. {@link #onSingleTapUp} is
+     * never called for it, so this is where a tap still gets to raise an on-screen keyboard.
+     */
+    default void onMouseTrackingTap(MotionEvent e) {}
+
     boolean shouldBackButtonBeMappedToEscape();
 
     boolean shouldEnforceCharBasedInput();
