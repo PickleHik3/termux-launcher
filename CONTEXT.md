@@ -29,6 +29,16 @@ One terminal view inside a split. Panes have corner tabs but no appearance of th
 Portrait or landscape. Each place keeps a separate layout per orientation; appearance is never
 per orientation.
 
+**Managed wallpaper**:
+A wallpaper set through the launcher's own picker, of which the launcher keeps its own copy.
+Only a managed wallpaper can move with parallax; a wallpaper set anywhere else stays still.
+_Avoid_: custom wallpaper, in-app wallpaper
+
+**Parallax**:
+The wallpaper panning by a fraction of the distance while the places slide sideways, with the
+glass on every surface staying aligned to the wallpaper behind it.
+_Avoid_: wallpaper scroll, wall motion
+
 ### Editing
 
 **Appearance editor**:
