@@ -13992,6 +13992,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (keyboardContainer == null) return;
         if (mVoiceIndicator == null) mVoiceIndicator = new VoiceListeningIndicator(this, keyboardContainer);
         mVoiceIndicator.show(this::closeVoiceInputFromPill);
+        // Talking is not touching, so the phone's screen timeout would dim and then lock mid-sentence.
+        // The window flag holds the screen on only while the pill is up; the terminal's own
+        // keep-screen-on setting is a view flag and is untouched by this.
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
     /**
@@ -14009,6 +14013,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void hideVoiceIndicator() {
         if (mVoiceIndicator != null) mVoiceIndicator.hide();
         if (mInAppKeyboard != null) mInAppKeyboard.setVoiceTypingActive(false);
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
     /**

@@ -11,7 +11,8 @@ product model.
 
 **Place**:
 One of the three full-screen pages the launcher swipes between: Home (widgets), Terminal, Display.
-Layout is stored per place per orientation; appearance overrides are stored per place.
+Layout and appearance are shared by all places (one layout per orientation). What differs per place
+is state only: whether the keyboard is up, and minimal mode.
 _Avoid_: screen, page, wall page, tab
 
 **Surface**:
@@ -26,8 +27,14 @@ The shared appearance values every surface inherits until a property is detached
 One terminal view inside a split. Panes have corner tabs but no appearance of their own.
 
 **Orientation**:
-Portrait or landscape. Each place keeps a separate layout per orientation; appearance is never
+Portrait or landscape. The shared layout has one version per orientation; appearance is never
 per orientation.
+
+**Minimal mode**:
+A place shown with only its pane: the status bar shrinks to a thin strip, the apps bar and keyboard
+go away, and the pane is maximised in either orientation. Available on Display and Terminal, turned
+on from the corner tab and remembered per place until turned off.
+_Avoid_: full screen, focus mode, zen mode
 
 **Managed wallpaper**:
 A wallpaper set through the launcher's own picker, of which the launcher keeps its own copy.
