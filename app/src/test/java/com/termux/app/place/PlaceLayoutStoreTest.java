@@ -252,6 +252,39 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
+    public void minimalModeIsRememberedPerPlaceBesideTheKeyboardAndNeverForHome() {
+        PlaceLayoutStore store = store();
+        for (PaneWallPage place : PaneWallPage.values())
+            assertFalse(place.toString(), store.isMinimal(place));
+
+        store.setKeyboardOpen(PaneWallPage.TERMINAL, true);
+        store.setMinimal(PaneWallPage.TERMINAL, true);
+        assertTrue(store.isMinimal(PaneWallPage.TERMINAL));
+        assertFalse("the display keeps its own", store.isMinimal(PaneWallPage.DISPLAY));
+        assertTrue("kept beside the keyboard memory", prefs.contains("place.terminal.minimal"));
+        // The mode does not overwrite the keyboard the place remembers; it only overrides it.
+        assertTrue(store.wasKeyboardOpen(PaneWallPage.TERMINAL));
+        assertFalse(MinimalMode.keyboardOnEnter(store.wasKeyboardOpen(PaneWallPage.TERMINAL),
+            store.isMinimal(PaneWallPage.TERMINAL)));
+
+        store.setMinimal(PaneWallPage.DISPLAY, true);
+        store.setMinimal(PaneWallPage.TERMINAL, false);
+        assertFalse(store.isMinimal(PaneWallPage.TERMINAL));
+        assertTrue(store.isMinimal(PaneWallPage.DISPLAY));
+        assertTrue("off again, the keyboard comes back as it was",
+            MinimalMode.keyboardOnEnter(store.wasKeyboardOpen(PaneWallPage.TERMINAL),
+                store.isMinimal(PaneWallPage.TERMINAL)));
+
+        // Remembered until it is turned off, across a new store over the same preferences.
+        assertTrue(store().isMinimal(PaneWallPage.DISPLAY));
+
+        // Home has no pane to give the screen to: nothing is written, and it never answers yes.
+        store.setMinimal(PaneWallPage.WIDGETS, true);
+        assertFalse(store.isMinimal(PaneWallPage.WIDGETS));
+        assertFalse(prefs.contains("place.home.minimal"));
+    }
+
+    @Test
     public void theBarRestsOncePerOrientationForEveryPlace() {
         PlaceLayoutStore store = store();
         // Portrait starts compact, the way the launcher's one status bar always has.

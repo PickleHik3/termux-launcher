@@ -25,8 +25,8 @@ import java.util.Set;
  * widget grid, the terminal and the Linux display all stand in the same chrome (ADR 0003).
  *
  * <p>Keys are {@code layout.<portrait|landscape>.<key>} for the arrangement and
- * {@code place.<home|terminal|display>.<key>} for the one thing a place still remembers of its own,
- * whether it was left with the keyboard up. A missing arrangement key falls back to the shared value
+ * {@code place.<home|terminal|display>.<key>} for the two things a place still remembers of its own:
+ * whether it was left with the keyboard up, and whether it is in minimal mode. A missing arrangement key falls back to the shared value
  * the launcher used to keep globally, and then to the shipped default, so nothing has to be written
  * before the chrome reads the way it always looked.
  *
@@ -86,6 +86,8 @@ public final class PlaceLayoutStore {
     private static final boolean LANDSCAPE_RESTS_COMPACT = true;
 
     private static final String KEY_KEYBOARD_OPEN = "keyboard_open";
+    /** Minimal mode, kept beside the keyboard memory it overrides: {@code place.<p>.minimal}. */
+    private static final String KEY_MINIMAL = "minimal";
     private static final String KEY_KEYBOARD_FLOAT_X = "keyboard_float_x";
     private static final String KEY_KEYBOARD_FLOAT_Y = "keyboard_float_y";
 
@@ -527,6 +529,23 @@ public final class PlaceLayoutStore {
         // Home has no memory to keep: it comes back closed whatever it was left with.
         if (place == PaneWallPage.WIDGETS) return;
         writeBoolean(memoryKey(place, KEY_KEYBOARD_OPEN), open);
+    }
+
+    /**
+     * Whether the place is in minimal mode (CONTEXT.md). Remembered per place until it is turned
+     * off, like the keyboard beside it, and never for Home, which has no pane to give the screen
+     * to ({@link MinimalMode#available}). It does not overwrite the keyboard memory: a minimal
+     * place simply comes back with the keyboard down, and turning the mode off brings back what
+     * the place remembered.
+     */
+    public boolean isMinimal(@NonNull PaneWallPage place) {
+        if (!MinimalMode.available(place)) return false;
+        return mStore != null && mStore.getBoolean(memoryKey(place, KEY_MINIMAL), false);
+    }
+
+    public void setMinimal(@NonNull PaneWallPage place, boolean minimal) {
+        if (!MinimalMode.available(place)) return;
+        writeBoolean(memoryKey(place, KEY_MINIMAL), minimal);
     }
 
     /**
