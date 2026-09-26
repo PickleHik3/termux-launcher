@@ -244,7 +244,8 @@ public final class TaiDownloadEngine {
     private static final String SWAP_OUT = TaiDownloadQueue.PAUSED_SWAP_OUT;
 
     /** Forgets the process singleton so a test gets a fresh engine over a fresh application. */
-    static synchronized void resetForTesting() {
+    @androidx.annotation.VisibleForTesting
+    public static synchronized void resetForTesting() {
         instance = null;
     }
 

@@ -41,6 +41,10 @@ public class TaiModelCentreFragmentTest {
     @Before
     public void setUp() {
         context = RuntimeEnvironment.getApplication();
+        // The hub and the engine are process singletons: a download another test left in them would
+        // show up here as a Downloads section and throw every row count off.
+        com.termux.ai.TaiDownloadEngine.resetForTesting();
+        com.termux.ai.TaiDownloadHub.resetForTesting();
         context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit();
         context.getSharedPreferences("termux_ai_model_store", Context.MODE_PRIVATE).edit().clear().commit();
     }

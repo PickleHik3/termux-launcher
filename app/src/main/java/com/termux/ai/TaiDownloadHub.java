@@ -144,7 +144,8 @@ public final class TaiDownloadHub {
     }
 
     /** Forgets the process singleton so a test gets a fresh hub over a fresh application. */
-    static synchronized void resetForTesting() {
+    @androidx.annotation.VisibleForTesting
+    public static synchronized void resetForTesting() {
         instance = null;
     }
 
