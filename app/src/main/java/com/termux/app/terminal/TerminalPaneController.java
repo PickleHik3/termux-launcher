@@ -191,7 +191,7 @@ public class TerminalPaneController {
         default void openWallpaperPicker() {}
         /** The launcher's settings, asked for from the pane corner's tab. */
         default void openSettings() {}
-        /** The corner tab turned automatic tiling on or off; the host keeps the setting. */
+        /** The corner tab turned automatic tiling (and focus growth with it) on or off; the host keeps both settings. */
         default void onAutoTilingChanged(boolean enabled) {}
         /** Default working directory when a cwd can't be derived. */
         String defaultCwd();
@@ -418,6 +418,7 @@ public class TerminalPaneController {
      * The corner tab's tiling button. On, the active window is re-tiled now and every new window
      * tiles itself; off, the active window keeps the shape it has and later splits are manual.
      * Either way it is the Automatic tiling setting that changes, so the two never disagree.
+     * Focus growth follows the same switch: tiling on spotlights the focused pane, off equalizes.
      */
     public boolean toggleAutoTiling() {
         if (mActiveWindow == null || mActiveWindow.active == null) return false;
@@ -431,6 +432,7 @@ public class TerminalPaneController {
             mInteractionOverlay.applyControlActions();
             mHost.onTreesChanged();
         }
+        setFocusGrowEnabled(enable);
         mHost.onAutoTilingChanged(enable);
         return enable;
     }

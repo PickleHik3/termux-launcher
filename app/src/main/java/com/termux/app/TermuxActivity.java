@@ -18872,7 +18872,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void onAutoTilingChanged(boolean enabled) {
-            if (getPreferences() != null) getPreferences().setDwindleDefaultLayoutEnabled(enabled);
+            if (getPreferences() == null) return;
+            getPreferences().setDwindleDefaultLayoutEnabled(enabled);
+            getPreferences().setFocusedPaneGrowsEnabled(enabled);
         }
 
         @Override @Nullable public TerminalSession createNamedShell(@NonNull String name,
