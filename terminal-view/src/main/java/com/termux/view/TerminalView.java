@@ -160,6 +160,15 @@ public final class TerminalView extends View {
 
     private TextSelectionCursorController mTextSelectionCursorController;
 
+    /**
+     * Whether the pane wall keeps this view's page fully off screen (see
+     * {@code PaneWallLayout#applyPagePositions}). That page's Terminal is never {@code INVISIBLE}
+     * any more, only faded with {@code alpha}, so nothing in the view hierarchy notices it leaving
+     * on its own — this view is told directly instead, and pauses everything INVISIBLE used to
+     * pause for free: kitty animations, the cursor blinker's invalidates, focus and accessibility.
+     */
+    private boolean mWallOffScreen;
+
     private Handler mTerminalCursorBlinkerHandler;
 
     private TerminalCursorBlinkerRunnable mTerminalCursorBlinkerRunnable;
@@ -2020,6 +2029,11 @@ public final class TerminalView extends View {
     @Override
     @TargetApi(23)
     public boolean onTouchEvent(MotionEvent event) {
+        // Translated fully off the wall's own width already keeps a touch from hitting this view
+        // (see PaneWallLayout#applyPagePositions); this is only the belt to that braces, since the
+        // page is never INVISIBLE any more to fall back on for the framework's own touch gating.
+        if (mWallOffScreen)
+            return false;
         if (mEmulator == null)
             return true;
         final int action = event.getAction();
@@ -2604,7 +2618,7 @@ public final class TerminalView extends View {
             }
             final float scrollOffset = mScrollOffsetPixels;
             final float drawOffset = getVerticalContentOffset() - scrollOffset;
-            if (mPaddingFillEnabled) computeEdgeColors();
+            computeEdgeColorsIfEnabled();
             final boolean paintingPaddingFill = mPaddingFillEnabled && mEdgeColorsColumns > 0;
             final boolean canvasTranslated = drawOffset != 0f || paintingPaddingFill;
             if (canvasTranslated) {
@@ -2753,6 +2767,19 @@ public final class TerminalView extends View {
         if (mRenderer == null) return 0f;
         float drawOffset = getVerticalContentOffset() - mScrollOffsetPixels;
         return Math.round(drawOffset + mRenderer.getFontLineSpacingAndAscent() + row * mRenderer.getFontLineSpacing());
+    }
+
+    /**
+     * {@link #computeEdgeColors()} if padding fill is on, otherwise a no-op. Called both from this
+     * view's own {@link #onDraw} and, before that, from {@code PaneContentFrame#dispatchDraw} — the
+     * frame around this view draws its padding-fill band from these same colours just before this
+     * view is drawn, and used to draw last frame's, because this view's own {@code onDraw} had not
+     * run yet to refresh them for the frame under way. Calling it again from here costs one cheap,
+     * allocation-free pass and changes nothing, since the colours calling it early already leaves
+     * behind are this frame's.
+     */
+    public void computeEdgeColorsIfEnabled() {
+        if (mPaddingFillEnabled) computeEdgeColors();
     }
 
     /**
@@ -3346,7 +3373,10 @@ public final class TerminalView extends View {
                     mCursorVisible = !mCursorVisible;
                     //mClient.logVerbose(LOG_TAG, "Toggling cursor blink state to " + mCursorVisible);
                     mEmulator.setCursorBlinkState(mCursorVisible);
-                    invalidate();
+                    // The state above is kept current regardless, so the cursor reads right the
+                    // instant the page returns; only the invalidate that would re-record this
+                    // view's now-retained display list for nobody to see is skipped while away.
+                    if (!mWallOffScreen) invalidate();
                 }
             } finally {
                 // Recall the Runnable after mBlinkRate milliseconds to toggle the blink state
@@ -3495,7 +3525,7 @@ public final class TerminalView extends View {
      * coming back to its pane picks it up where it would have been.
      */
     private void updateKittyAnimationVisibility() {
-        boolean onScreen = isShown() && getWindowVisibility() == View.VISIBLE;
+        boolean onScreen = !mWallOffScreen && isShown() && getWindowVisibility() == View.VISIBLE;
         TerminalSession target = onScreen && mEmulator != null ? mTermSession : null;
         if (mKittyAnimatingSession != null && mKittyAnimatingSession != target) {
             TerminalEmulator emulator = mKittyAnimatingSession.getEmulator();
@@ -3511,6 +3541,42 @@ public final class TerminalView extends View {
             target.getEmulator().setTopRowProvider(() -> mTopRow);
             target.getEmulator().setKittyAnimationsVisible(true);
         }
+    }
+
+    /**
+     * Told by the pane wall whenever this view's page crosses fully on or off screen. The wall
+     * keeps the Terminal page {@code VISIBLE} throughout, alpha-faded rather than INVISIBLE while
+     * away, so this is the only place any of the following actually changes, and it has to do by
+     * hand everything {@code onVisibilityChanged}/{@code isShown()} used to give for free:
+     * suspend kitty animation playback, stop the cursor blinker invalidating a hidden pane, drop
+     * focus so a hardware keyboard cannot type into a place the user cannot see, and pull the pane
+     * out of the accessibility tree.
+     */
+    public void setWallPageOffScreen(boolean offScreen) {
+        if (mWallOffScreen == offScreen) return;
+        mWallOffScreen = offScreen;
+        if (offScreen && isFocused()) clearFocus();
+        setImportantForAccessibility(offScreen
+            ? IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            : IMPORTANT_FOR_ACCESSIBILITY_AUTO);
+        updateKittyAnimationVisibility();
+        // The cursor blinker kept toggling its state while away, just without the invalidate that
+        // would have drawn it (see TerminalCursorBlinkerRunnable#run); one is owed now so the
+        // frame that brings the page back does not show a blink state a frame or two stale.
+        if (!offScreen) invalidate();
+    }
+
+    /**
+     * Refuse focus while the wall keeps this page off screen (see {@link #setWallPageOffScreen}),
+     * whichever way it was asked for — a click elsewhere in the pane host, focus search moving
+     * across a hardware Tab, or one of this view's own callers. Without this a hidden pane, which
+     * is never actually INVISIBLE any more, would still happily take focus back and catch a
+     * hardware keyboard's keystrokes nobody can see land.
+     */
+    @Override
+    public boolean requestFocus(int direction, @Nullable android.graphics.Rect previouslyFocusedRect) {
+        if (mWallOffScreen) return false;
+        return super.requestFocus(direction, previouslyFocusedRect);
     }
 
     @Override

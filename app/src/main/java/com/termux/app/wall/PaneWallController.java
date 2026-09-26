@@ -37,6 +37,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         default void onWallDragInterrupted() { }
         /** The wall moved: signed distance from the current page's rest, for the place switch. */
         default void onWallOffsetChanged(float offsetPx) { }
+        /** The Terminal page just went fully off screen, or just came back; see
+         *  {@link PaneWallLayout.Listener#onTerminalOffScreenChanged}. */
+        default void onTerminalOffScreenChanged(boolean offScreen) { }
     }
 
     /** Saved-instance-state key for the page the wall is showing. */
@@ -287,5 +290,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         if (mWidgetsPage != null) mWidgetsPage.onWallMoved();
         if (mDisplayPage != null) mDisplayPage.onWallMoved();
         mHost.onWallOffsetChanged(offsetPx);
+    }
+
+    @Override
+    public void onTerminalOffScreenChanged(boolean offScreen) {
+        mHost.onTerminalOffScreenChanged(offScreen);
     }
 }

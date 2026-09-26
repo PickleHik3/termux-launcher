@@ -38,12 +38,16 @@ public class PaneWallControllerTest {
         boolean widgets = true;
         boolean display = true;
         int interrupted;
+        Boolean terminalOffScreen;
 
         @Override public boolean reducedMotion() { return true; }
         @Override public boolean isTerminalOnly() { return terminalOnly; }
         @Override public boolean isWidgetsEnabled() { return widgets; }
         @Override public boolean isDisplayEnabled() { return display; }
         @Override public void onWallDragInterrupted() { interrupted++; }
+        @Override public void onTerminalOffScreenChanged(boolean offScreen) {
+            terminalOffScreen = offScreen;
+        }
     }
 
     private Activity activity;
@@ -62,6 +66,14 @@ public class PaneWallControllerTest {
         wall.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(1800, View.MeasureSpec.EXACTLY));
         wall.layout(0, 0, 1080, 1800);
+    }
+
+    @Test public void theWallsTerminalOffScreenSignalReachesTheHost() {
+        assertNull("nothing reported before the wall ever leaves the terminal", host.terminalOffScreen);
+        controller.goTo(PaneWallPage.WIDGETS, false);
+        assertEquals(Boolean.TRUE, host.terminalOffScreen);
+        controller.goTo(PaneWallPage.TERMINAL, false);
+        assertEquals(Boolean.FALSE, host.terminalOffScreen);
     }
 
     @Test public void thePlacesFollowThePreferences() {

@@ -9227,6 +9227,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // font setup) have a non-null active view before the first session/tab is shown.
         mTerminalView = mPaneController.createBootstrapView();
         mActivePane = mTerminalView;
+        // The wall may already rest on a restored place other than Terminal by the time this pane
+        // exists (createPaneWallController ran first and could not tell it about a pane that did
+        // not exist yet), so this one bootstrap view is told directly rather than waiting for the
+        // next wall movement to notice.
+        if (mPaneWallController != null) {
+            mTerminalView.setWallPageOffScreen(
+                mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.TERMINAL);
+        }
         syncTerminalWallpaperRenderingMode();
         applySuggestionBarInputChar();
         if (mTermuxTerminalViewClient != null)
@@ -15435,6 +15443,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // any pane whose screen changed while it was away is drawn now, before the
                     // first frame of the slide, rather than one stale frame later.
                     noteTerminalPlaceMayBeVisible();
+                }
+                @Override public void onTerminalOffScreenChanged(boolean offScreen) {
+                    // Every pane the terminal place holds, tiled and floating alike, has to hear
+                    // this: none of them go INVISIBLE with their page any more (PaneWallLayout,
+                    // 707920f7 and the alpha-based fix after it), so each one is told by hand to
+                    // pause what INVISIBLE used to pause for free.
+                    if (mPaneController == null) return;
+                    for (com.termux.view.TerminalView view : mPaneController.getVisiblePaneViews()) {
+                        view.setWallPageOffScreen(offScreen);
+                    }
                 }
                 @Override public void onWallDragInterrupted() {
                     // A tile tap, wall.go or Home moved the wall under a finger that was dragging
