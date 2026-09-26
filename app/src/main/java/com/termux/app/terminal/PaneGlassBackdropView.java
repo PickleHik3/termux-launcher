@@ -17,6 +17,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.FrameCrossfade;
+import com.termux.app.chrome.WallpaperParallax;
+import com.termux.app.wall.PaneWallLayout;
 
 /**
  * One pane's glass. Draws the shared pre-blurred wallpaper frame through this pane's own rect, the
@@ -27,7 +29,8 @@ import com.termux.app.chrome.FrameCrossfade;
  * <p>The wallpaper frame is never cropped into a per-pane bitmap: panes resize on every split, drag
  * and keyboard toggle, and cropping would allocate a pane-sized ARGB_8888 bitmap each time. The one
  * cached frame is drawn through a translation matrix instead, recomputed only when this view's
- * position on screen actually changes.
+ * position over the wallpaper actually changes — its layout position, the wall page's slide, or
+ * the wallpaper's own parallax offset.
  */
 public final class PaneGlassBackdropView extends View {
 
@@ -69,6 +72,13 @@ public final class PaneGlassBackdropView extends View {
     private int mLastTop = Integer.MIN_VALUE;
     private int mLastWidth = -1;
     private int mLastHeight = -1;
+    /**
+     * The wallpaper's live x-offset, or null while nothing pans. Read on every draw rather than
+     * copied in, so every slab samples the frame at the same offset the backdrop draws it at.
+     */
+    @Nullable private WallpaperParallax mParallax;
+    /** The wall slide and parallax the matrix was last aimed for, in px. */
+    private float mLastShiftX;
 
     public PaneGlassBackdropView(@NonNull Context context) {
         this(context, null);
@@ -193,6 +203,17 @@ public final class PaneGlassBackdropView extends View {
         invalidate();
     }
 
+    /**
+     * Follow the wallpaper's parallax: the frame is sampled {@code parallax.offsetPx()} further
+     * along on every draw. Null stops following. Whoever moves the offset invalidates this view;
+     * the draw itself notices the change and re-aims.
+     */
+    public void setParallax(@Nullable WallpaperParallax parallax) {
+        if (mParallax == parallax) return;
+        mParallax = parallax;
+        invalidateGlassPosition();
+    }
+
     /** The frame this pane is drawing, so the blur cache never recycles it under a draw. */
     @Nullable
     public Bitmap heldFrame() {
@@ -223,18 +244,24 @@ public final class PaneGlassBackdropView extends View {
             canvas.clipRect(mClipRect);   // the round clip is the parent frame's; this bounds ours
         }
         if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null) {
-            layoutOriginOnScreen(mLocation);
+            float slideX = layoutOriginOnScreen(mLocation);
+            // The page's slide carries this view to the right over the wallpaper, and the parallax
+            // carries the wallpaper to the left under it; either way the frame is sampled that
+            // much further along.
+            float shiftX = (mParallax == null ? 0f : mParallax.offsetPx()) + slideX;
             if (mLocation[0] != mLastLeft || mLocation[1] != mLastTop
-                || width != mLastWidth || height != mLastHeight) {
+                || width != mLastWidth || height != mLastHeight || shiftX != mLastShiftX) {
                 mLastLeft = mLocation[0];
                 mLastTop = mLocation[1];
                 mLastWidth = width;
                 mLastHeight = height;
+                mLastShiftX = shiftX;
                 float scaleX = mFrameRect.width() / (float) Math.max(1, mFrame.getWidth());
                 float scaleY = mFrameRect.height() / (float) Math.max(1, mFrame.getHeight());
                 mFrameMatrix.reset();
                 mFrameMatrix.setScale(scaleX, scaleY);
-                mFrameMatrix.postTranslate(mFrameRect.left - mLastLeft, mFrameRect.top - mLastTop);
+                mFrameMatrix.postTranslate(mFrameRect.left - mLastLeft - shiftX,
+                    mFrameRect.top - mLastTop);
                 mFrameShader.setLocalMatrix(mFrameMatrix);
                 // The retired frame shares this pane's rect and, always, the current frame's own
                 // size — both are full captures of the same radius — so the same matrix aims it.
@@ -279,18 +306,6 @@ public final class PaneGlassBackdropView extends View {
         }
         canvas.restoreToCount(save);
     }
-    /**
-     * This view's position on screen as laid out, ignoring every transform on the way up.
-     *
-     * <p>{@code getLocationOnScreen} answers with the transforms applied, and the pane frame is
-     * transformed constantly — the plank tilts and slides it under a finger, and the FLIP movement
-     * animates its translation. Pinning the frost to a transformed position baked the tilt's offset
-     * into the matrix: the frost jumped when touched, then stayed shifted once the spring settled,
-     * because no further position change ever arrived to correct it. Layout coordinates are the
-     * frost's real anchor — the wallpaper does not move when a pane tips over it, and the frost
-     * inside the pane then travels with the pane, which is what glass does.
-     */
-    // Package-private so the regression test can pin it directly.
     /** Rebuilt only when the size or the radius changes, never per draw. */
     @NonNull
     private android.graphics.Path cornerMaskPath(int width, int height) {
@@ -313,9 +328,31 @@ public final class PaneGlassBackdropView extends View {
         return path;
     }
 
-    void layoutOriginOnScreen(@NonNull int[] out) {
+    /**
+     * This view's position on screen as laid out, ignoring every transform on the way up but one:
+     * the wall page's slide, returned separately.
+     *
+     * <p>{@code getLocationOnScreen} answers with the transforms applied, and the pane frame is
+     * transformed constantly — the plank tilts and slides it under a finger, and the FLIP movement
+     * animates its translation. Pinning the frost to a transformed position baked the tilt's offset
+     * into the matrix: the frost jumped when touched, then stayed shifted once the spring settled,
+     * because no further position change ever arrived to correct it. Layout coordinates are the
+     * frost's real anchor — the wallpaper does not move when a pane tips over it, and the frost
+     * inside the pane then travels with the pane, which is what glass does.
+     *
+     * <p>A place sliding across the wall is the other case: there the whole page travels over a
+     * wallpaper that stays where it is (or pans a fraction of the way, with parallax), and glass
+     * shows what is behind it, so the frost has to stay glued to the wallpaper rather than ride
+     * along with the page. That one transform — the translation the wall puts on its page — is
+     * read off the page and handed back, so the draw can aim past it.</p>
+     *
+     * @return the wall page's translation on the way up, in px; 0 off the wall
+     */
+    // Package-private so the regression test can pin it directly.
+    float layoutOriginOnScreen(@NonNull int[] out) {
         float x = 0f;
         float y = 0f;
+        float slideX = 0f;
         View view = this;
         while (true) {
             x += view.getLeft();
@@ -323,6 +360,7 @@ public final class PaneGlassBackdropView extends View {
             android.view.ViewParent parent = view.getParent();
             if (!(parent instanceof View)) break;
             View parentView = (View) parent;
+            if (parentView instanceof PaneWallLayout) slideX += view.getTranslationX();
             x -= parentView.getScrollX();
             y -= parentView.getScrollY();
             view = parentView;
@@ -332,6 +370,7 @@ public final class PaneGlassBackdropView extends View {
         view.getLocationOnScreen(mRootLocation);
         out[0] = Math.round(x) + mRootLocation[0];
         out[1] = Math.round(y) + mRootLocation[1];
+        return slideX;
     }
 
 }

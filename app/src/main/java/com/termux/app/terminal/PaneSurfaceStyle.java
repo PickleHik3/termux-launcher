@@ -62,4 +62,12 @@ public interface PaneSurfaceStyle {
      * standing alone, opaque, when there is no frame.
      */
     default int wallBehindColor() { return android.graphics.Color.TRANSPARENT; }
+
+    /**
+     * The wallpaper's live x-offset, shared with every other glass surface, which a slab samples
+     * {@link #paneGlassBlurFrame()} further along by on every draw; null while nothing pans. The
+     * frame rect is wider than the screen by the offset's whole travel, so the slab never runs
+     * off the picture.
+     */
+    @Nullable default com.termux.app.chrome.WallpaperParallax wallpaperParallax() { return null; }
 }

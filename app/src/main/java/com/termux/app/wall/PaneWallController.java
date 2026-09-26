@@ -282,6 +282,10 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     @Override
     public void onWallOffsetChanged(float offsetPx) {
+        // The pages' glass is aimed at the wallpaper in screen space and the wall moves them by
+        // translation, which never redraws a child: each page re-aims its slab for this frame.
+        if (mWidgetsPage != null) mWidgetsPage.onWallMoved();
+        if (mDisplayPage != null) mDisplayPage.onWallMoved();
         mHost.onWallOffsetChanged(offsetPx);
     }
 }

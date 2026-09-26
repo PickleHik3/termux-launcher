@@ -198,6 +198,8 @@ public final class PaneControlsView extends View {
     private final Matrix mFrostMatrix = new Matrix();
     private final Rect mFrostRect = new Rect();
     private final int[] mLocation = new int[2];
+    /** The wallpaper's live x-offset the frost follows, or null while nothing pans. */
+    @Nullable private com.termux.app.chrome.WallpaperParallax mParallax;
     private final int[] mRootLocation = new int[2];
     @Nullable private ColorFilter mFrostFilter;
     /** Scratch for the tab's path points; never allocated per frame. */
@@ -256,10 +258,23 @@ public final class PaneControlsView extends View {
      */
     public void setPaneGlass(@Nullable Bitmap frame, @NonNull Rect frameRect,
                              @Nullable ColorFilter frostFilter) {
+        setPaneGlass(frame, frameRect, frostFilter, null);
+    }
+
+    /**
+     * {@link #setPaneGlass(Bitmap, Rect, ColorFilter)} that also follows the wallpaper's
+     * parallax, sampling the frame {@code parallax.offsetPx()} further along on every draw; null
+     * while nothing pans.
+     */
+    public void setPaneGlass(@Nullable Bitmap frame, @NonNull Rect frameRect,
+                             @Nullable ColorFilter frostFilter,
+                             @Nullable com.termux.app.chrome.WallpaperParallax parallax) {
         Bitmap live = frame != null && !frame.isRecycled() ? frame : null;
-        if (live == mFrostFrame && mFrostFilter == frostFilter && mFrostRect.equals(frameRect)) {
+        if (live == mFrostFrame && mFrostFilter == frostFilter && mFrostRect.equals(frameRect)
+            && mParallax == parallax) {
             return;
         }
+        mParallax = parallax;
         mFrostFrame = live;
         // CLAMP and a shader, as every other glass surface here draws the same frame: it does not
         // always reach the screen's full width, and a plain drawBitmap left a sharp strip.
@@ -610,23 +625,32 @@ public final class PaneControlsView extends View {
      */
     private void aimFrost() {
         if (mFrostFrame == null || mFrostShader == null) return;
-        layoutOriginOnScreen(mLocation);
+        float slideX = layoutOriginOnScreen(mLocation);
+        // Past the page's slide and the wallpaper's parallax, exactly as the slab aims: the tab
+        // is cut from the same glass and has to show the same wallpaper mid-slide.
+        float shiftX = slideX + (mParallax == null ? 0f : mParallax.offsetPx());
         float scaleX = mFrostRect.width() / (float) Math.max(1, mFrostFrame.getWidth());
         float scaleY = mFrostRect.height() / (float) Math.max(1, mFrostFrame.getHeight());
         mFrostMatrix.reset();
         mFrostMatrix.setScale(scaleX, scaleY);
-        mFrostMatrix.postTranslate(mFrostRect.left - mLocation[0], mFrostRect.top - mLocation[1]);
+        mFrostMatrix.postTranslate(mFrostRect.left - mLocation[0] - shiftX,
+            mFrostRect.top - mLocation[1]);
         mFrostShader.setLocalMatrix(mFrostMatrix);
     }
 
     /**
      * This view's position on screen as laid out, ignoring every transform on the way up — the
      * same anchor the pane's own slab uses, so the tab's frost lines up with the slab it grows
-     * out of while the pane tilts or slides under a finger.
+     * out of while the pane tilts or slides under a finger. The one transform that is not
+     * ignored is the wall page's slide, returned rather than folded in, since a page travelling
+     * over the wallpaper shows the wallpaper it is over.
+     *
+     * @return the wall page's translation on the way up, in px; 0 off the wall
      */
-    private void layoutOriginOnScreen(@NonNull int[] out) {
+    private float layoutOriginOnScreen(@NonNull int[] out) {
         float x = 0f;
         float y = 0f;
+        float slideX = 0f;
         View view = this;
         while (true) {
             x += view.getLeft();
@@ -634,6 +658,7 @@ public final class PaneControlsView extends View {
             android.view.ViewParent parent = view.getParent();
             if (!(parent instanceof View)) break;
             View parentView = (View) parent;
+            if (parentView instanceof PaneWallLayout) slideX += view.getTranslationX();
             x -= parentView.getScrollX();
             y -= parentView.getScrollY();
             view = parentView;
@@ -641,6 +666,7 @@ public final class PaneControlsView extends View {
         view.getLocationOnScreen(mRootLocation);
         out[0] = Math.round(x) + mRootLocation[0];
         out[1] = Math.round(y) + mRootLocation[1];
+        return slideX;
     }
 
     private void drawText(@NonNull Canvas canvas, @NonNull RectF button, @NonNull Action action,

@@ -2907,6 +2907,24 @@ public class TerminalPaneController {
     private int mDressedGlassPaneCount = -1;
 
     /**
+     * The wall moved the terminal page, or the wallpaper panned under it: every slab re-aims at
+     * whatever is behind it now. The wall moves its pages by translation, which never redraws a
+     * child, and the frost is aimed in screen space, so this runs per frame of a slide — and does
+     * nothing but invalidate, so a slide costs no allocation here.
+     */
+    public void invalidatePaneGlassPositions() {
+        for (FrameLayout frame : mPaneFrames.values()) {
+            PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
+            if (backdrop != null && backdrop.getVisibility() == View.VISIBLE)
+                backdrop.invalidateGlassPosition();
+        }
+        if (mInteractionOverlay != null) {
+            PaneControlsView tab = mInteractionOverlay.controlsView();
+            if (tab != null && tab.hasPaneGlass()) tab.invalidate();
+        }
+    }
+
+    /**
      * Dress (or undress) every live pane frame as a glass slab. Idempotent and cheap: the backdrop
      * view is created once per pane and only re-fed here, so this can run on every editor slider
      * tick and on every frost refresh.

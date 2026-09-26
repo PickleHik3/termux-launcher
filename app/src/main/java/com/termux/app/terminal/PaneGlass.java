@@ -68,6 +68,7 @@ public final class PaneGlass {
             style.paneGlassTintColor(), style.paneGlassGrainLayer(),
             style.paneGlassGrainStrength(), radiusPx, style.paneGlassFrostFilter(),
             style.paneGlassCrossfade());
+        backdrop.setParallax(style.wallpaperParallax());
         backdrop.setVisibility(View.VISIBLE);
         return true;
     }
@@ -87,16 +88,22 @@ public final class PaneGlass {
             return;
         }
         tab.setPaneGlass(style.paneGlassBlurFrame(), style.paneGlassBlurFrameRect(),
-            style.paneGlassFrostFilter());
+            style.paneGlassFrostFilter(), style.wallpaperParallax());
     }
 
     private static final android.graphics.Rect EMPTY_RECT = new android.graphics.Rect();
 
     /**
-     * Keep a slab aimed at the wallpaper as its frame moves. A frame moves for reasons that never
-     * redraw it (a sibling's divider drag, a float being dragged, the host resizing under the
-     * keyboard, a wall page sliding), and the frost is positioned in screen space, so every move
-     * has to re-aim the matrix.
+     * Keep a slab aimed at the wallpaper as its frame is laid out somewhere else. A frame moves in
+     * layout for reasons that never redraw it (a sibling's divider drag, a float being dragged,
+     * the host resizing under the keyboard), and the frost is positioned in screen space, so every
+     * such move has to re-aim the matrix.
+     *
+     * <p>A wall page sliding is not a layout move — the wall translates its pages — and this
+     * listener never sees it. The wall's owner re-aims every slab per frame of a slide instead
+     * ({@code onWallMoved} on the pages, {@code invalidatePaneGlassPositions} on the terminal),
+     * and the slab reads the page's translation off the wall itself, so the frost stays glued to
+     * the wallpaper while the page travels over it.</p>
      */
     public static void followLayout(@Nullable PaneGlassBackdropView backdrop) {
         if (backdrop == null) return;

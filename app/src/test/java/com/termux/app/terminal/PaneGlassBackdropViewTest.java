@@ -27,14 +27,16 @@ import org.robolectric.annotation.Config;
  * The frost's anchor. A pane is transformed constantly — the plank tilts it under a finger and the
  * FLIP movement animates its translation — and anchoring the wallpaper frost to a transformed
  * position baked those offsets in: the frost jumped when the pane was touched and stayed shifted
- * after the spring settled, while a strip of the pane showed sharp wallpaper.
+ * after the spring settled, while a strip of the pane showed sharp wallpaper. The one transform
+ * the frost does follow is the wall page's slide, reported apart from the anchor, so a page
+ * travelling over the wallpaper shows the wallpaper it is over.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {Build.VERSION_CODES.P})
 public class PaneGlassBackdropViewTest {
 
     @Test
-    public void theFrostAnchorIgnoresTransformsOnTheWayUp() {
+    public void theFrostAnchorIgnoresThePlanksTransformsOnTheWayUp() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         FrameLayout root = new FrameLayout(activity);
         FrameLayout paneFrame = new FrameLayout(activity);
@@ -60,6 +62,40 @@ public class PaneGlassBackdropViewTest {
 
         assertEquals("frost anchor moved with the tilt", settled[0], pressed[0]);
         assertEquals("frost anchor moved with the tilt", settled[1], pressed[1]);
+    }
+
+    /**
+     * A place sliding across the wall is the page's translation, and the frost has to stay glued
+     * to the wallpaper while the page travels over it: the slide is handed back beside the anchor,
+     * which itself stays where the layout put it. A tilt inside the page is still not a slide.
+     */
+    @Test
+    public void theFrostAnchorReportsTheWallPagesSlideApartFromItself() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        com.termux.app.wall.PaneWallLayout wall = new com.termux.app.wall.PaneWallLayout(activity);
+        FrameLayout page = new FrameLayout(activity);
+        FrameLayout paneFrame = new FrameLayout(activity);
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        paneFrame.addView(backdrop);
+        page.addView(paneFrame);
+        wall.addView(page);
+        activity.setContentView(wall);
+        wall.layout(0, 0, 1080, 2000);
+        page.layout(0, 0, 1080, 2000);
+        paneFrame.layout(40, 100, 1040, 1900);
+        backdrop.layout(0, 0, 1000, 1800);
+
+        int[] rest = new int[2];
+        assertEquals("nothing sliding at rest", 0f, backdrop.layoutOriginOnScreen(rest), 0f);
+
+        page.setTranslationX(-324f);          // the wall mid-slide
+        paneFrame.setTranslationX(24f);        // and the plank tipping the pane inside it
+        int[] sliding = new int[2];
+        float slide = backdrop.layoutOriginOnScreen(sliding);
+
+        assertEquals("the anchor stays where the layout put it", rest[0], sliding[0]);
+        assertEquals(rest[1], sliding[1]);
+        assertEquals("only the page's slide is reported, never the tilt", -324f, slide, 0f);
     }
 
     /**
