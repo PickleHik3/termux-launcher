@@ -24,13 +24,28 @@ import java.util.Set;
 public final class TaiModelStore {
     static final String PREFS_NAME = "termux_ai_model_store";
     private static final String KEY_MIGRATED = "tai_model_store_migrated_v1";
+    // A download record's status. queued -> downloading -> verifying -> installed is the happy
+    // path; paused keeps the partial file and a pausedReason, and goes back to queued on resume.
     public static final String STATE_QUEUED = "queued";
     public static final String STATE_DOWNLOADING = "downloading";
+    public static final String STATE_PAUSED = "paused";
     public static final String STATE_CANCELLED = "cancelled";
     public static final String STATE_FAILED = "failed";
     public static final String STATE_VERIFYING = "verifying";
     public static final String STATE_INSTALLED = "installed";
     public static final String STATE_UNAVAILABLE = "unavailable";
+
+    /** Why a record is {@link #STATE_PAUSED}: the user tapped pause, the app closed under it,
+     *  the network went away, or the disk is too full to hold the rest of it. */
+    public static final String PAUSED_USER = "user";
+    public static final String PAUSED_APP_CLOSED = "app_closed";
+    public static final String PAUSED_NETWORK = "network";
+    public static final String PAUSED_NO_SPACE = "no_space";
+
+    /** True for the states a worker thread owns: the transfer is (or is about to be) in flight. */
+    public static boolean isLiveDownloadState(@Nullable String status) {
+        return STATE_QUEUED.equals(status) || STATE_DOWNLOADING.equals(status) || STATE_VERIFYING.equals(status);
+    }
 
     public static final String ERROR_ACTIVE_MODEL_LOADED = "active_model_loaded";
     public static final String ERROR_DELETE_REQUIRES_CONFIRMATION = "delete_requires_confirmation";
@@ -316,6 +331,53 @@ public final class TaiModelStore {
         }
         if (!replaced) next.put(transfer);
         preferences.edit().putString(KEY_DOWNLOADS, next.toString()).commit();
+    }
+
+    /** The record with this transfer id, or null. */
+    @Nullable
+    public synchronized JSONObject getDownload(@NonNull String transferId) {
+        JSONArray current = getDownloads();
+        for (int i = current.length() - 1; i >= 0; i--) {
+            JSONObject item = current.optJSONObject(i);
+            if (item != null && transferId.equals(item.optString("id", ""))) return item;
+        }
+        return null;
+    }
+
+    /** The newest record for {@code modelId}, or null. */
+    @Nullable
+    public synchronized JSONObject findDownloadForModel(@NonNull String modelId) {
+        JSONArray current = getDownloads();
+        for (int i = current.length() - 1; i >= 0; i--) {
+            JSONObject item = current.optJSONObject(i);
+            if (item != null && modelId.equals(item.optString("modelId", ""))) return item;
+        }
+        return null;
+    }
+
+    /** Edits one field set of a record in place. */
+    public interface DownloadMutation {
+        void apply(@NonNull JSONObject record) throws JSONException;
+    }
+
+    /**
+     * Read-modify-write of one record under the store lock, so a status flip from the scheduler
+     * (pause a queued item, re-queue a paused one) never races another writer and never drops the
+     * metadata the record already carries. Returns the record as written, or null when there is
+     * no record with that id.
+     */
+    @Nullable
+    public synchronized JSONObject updateDownload(@NonNull String transferId, @NonNull DownloadMutation mutation) {
+        JSONObject record = getDownload(transferId);
+        if (record == null) return null;
+        try {
+            mutation.apply(record);
+            record.put("updatedAtMs", System.currentTimeMillis());
+        } catch (JSONException e) {
+            return null;
+        }
+        upsertDownload(record);
+        return record;
     }
 
     /** Drops every download record for {@code modelId}, leaving its registry entry and files alone

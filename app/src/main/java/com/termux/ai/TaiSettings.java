@@ -51,6 +51,8 @@ public final class TaiSettings {
     public static final String KEY_STT_WINDOW_SECONDS = "tai_stt_window_seconds";
     public static final String KEY_STT_IDLE_UNLOAD_MINUTES = "tai_stt_idle_unload_minutes";
     public static final String KEY_STT_PENDING_DOWNLOAD = "tai_stt_pending_download";
+    /** How many model downloads run side by side (D3): 1 to 3, default 2. */
+    public static final String KEY_DOWNLOAD_PARALLEL = "tai_download_parallel";
     public static final int DEFAULT_STT_WINDOW_SECONDS = 10;
     public static final int DEFAULT_STT_IDLE_UNLOAD_MINUTES = 2;
 
@@ -235,6 +237,25 @@ public final class TaiSettings {
 
     public boolean isOpenAiAutoLoadEnabled() {
         return preferences.getBoolean(KEY_OPENAI_AUTO_LOAD, true);
+    }
+
+    /** Downloads that may run at once, clamped to 1..3. The scheduler reads this before every
+     *  start, so a change applies to the next scheduling decision without a restart. */
+    public int getDownloadParallel() {
+        try {
+            return TaiDownloadQueue.clampParallel(preferences.getInt(KEY_DOWNLOAD_PARALLEL, TaiDownloadQueue.DEFAULT_PARALLEL));
+        } catch (ClassCastException e) {
+            // A list preference stores strings; read that shape too rather than crash the scheduler.
+            try {
+                return TaiDownloadQueue.clampParallel(Integer.parseInt(preferences.getString(KEY_DOWNLOAD_PARALLEL, "")));
+            } catch (RuntimeException ignored) {
+                return TaiDownloadQueue.DEFAULT_PARALLEL;
+            }
+        }
+    }
+
+    public void setDownloadParallel(int parallel) {
+        preferences.edit().putInt(KEY_DOWNLOAD_PARALLEL, TaiDownloadQueue.clampParallel(parallel)).apply();
     }
 
     /** The speech-to-text model voice input uses (e.g. {@code whisper-acft-base-en}), or empty when
@@ -692,6 +713,7 @@ public final class TaiSettings {
         json.put("runtimeOptions", getRuntimeOptions().toJson());
         json.put("idleUnloadMinutes", getIdleUnloadMinutes());
         json.put("openAiAutoLoadEnabled", isOpenAiAutoLoadEnabled());
+        json.put("downloadParallel", getDownloadParallel());
         json.put("huggingFaceTokenConfigured", !getHuggingFaceToken().trim().isEmpty());
         json.put("apiPort", getApiPort());
         String bindMode = getApiBindMode();
