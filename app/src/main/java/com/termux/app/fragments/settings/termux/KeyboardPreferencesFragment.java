@@ -348,6 +348,12 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         mPreferences = TermuxAppSharedPreferences.build(context, true);
     }
 
+    /** Forgets the cached store, so a test builds one against its own preferences. */
+    @androidx.annotation.VisibleForTesting
+    static synchronized void resetForTesting() {
+        mInstance = null;
+    }
+
     public static synchronized KeyboardPreferencesDataStore getInstance(Context context) {
         Context application = context.getApplicationContext();
         // One process has one application, so this only rebuilds under a test that made another.

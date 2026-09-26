@@ -20,6 +20,12 @@ public final class TaiModelCatalog {
     private static volatile Map<String, CatalogEntry> entries = BUILT_IN_ENTRIES;
     private TaiModelCatalog() {}
 
+    /** Drops a remote overlay a test applied, so the next test sees the built-in catalogue. */
+    @androidx.annotation.VisibleForTesting
+    public static synchronized void resetForTesting() {
+        entries = BUILT_IN_ENTRIES;
+    }
+
     @NonNull public static Map<String, CatalogEntry> entries() { return entries; }
     @Nullable public static CatalogEntry get(@Nullable String modelId) { return modelId == null ? null : entries.get(modelId); }
 

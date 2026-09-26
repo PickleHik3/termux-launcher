@@ -171,6 +171,9 @@ public class KeyboardPreferencesFragmentTest {
 
     @Test
     public void theVoiceRowsWriteThroughToTheSharedPreferencesAndRejectStrays() {
+        // The store is a cached singleton; one another test built can hold preferences from a
+        // context this test does not read, and the writes below would land where nothing looks.
+        KeyboardPreferencesDataStore.resetForTesting();
         KeyboardPreferencesDataStore store = store();
         TermuxAppSharedPreferences prefs =
             TermuxAppSharedPreferences.build(RuntimeEnvironment.getApplication(), true);

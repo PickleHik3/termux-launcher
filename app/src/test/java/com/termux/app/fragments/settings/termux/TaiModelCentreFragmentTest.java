@@ -45,6 +45,7 @@ public class TaiModelCentreFragmentTest {
         // show up here as a Downloads section and throw every row count off.
         com.termux.ai.TaiDownloadEngine.resetForTesting();
         com.termux.ai.TaiDownloadHub.resetForTesting();
+        com.termux.ai.TaiModelCatalog.resetForTesting();
         context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE).edit().clear().commit();
         context.getSharedPreferences("termux_ai_model_store", Context.MODE_PRIVATE).edit().clear().commit();
     }

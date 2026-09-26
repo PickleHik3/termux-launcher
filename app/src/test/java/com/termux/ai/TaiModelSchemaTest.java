@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -19,6 +20,13 @@ import static org.junit.Assert.fail;
 
 @RunWith(RobolectricTestRunner.class)
 public class TaiModelSchemaTest {
+
+    // The overlay these tests apply lives in a process-wide static; leaving it in place made later
+    // tests see the extra entries.
+    @After
+    public void dropRemoteOverlay() {
+        TaiModelCatalog.resetForTesting();
+    }
 
     @Test
     public void oldLiteRtJson_deserializesWithExistingBackendAndFormat() throws Exception {
