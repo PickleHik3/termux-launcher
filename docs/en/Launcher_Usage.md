@@ -119,6 +119,18 @@ out of the way. Leave it by swiping the status bar, tapping a place icon or pres
 place remembers whether the keyboard was up when you left. [The Linux display](X11_Display.md)
 covers turning it on, its menu, the touchpad and GPU acceleration.
 
+### Minimal mode
+
+The terminal and the Display place each have a minimal mode, which gives the pane the whole
+screen: the status bar shrinks to a thin strip, the pinned apps, the A–Z index, the extra keys and
+the keyboard go away, and the pane takes the room in portrait and landscape alike. On the terminal
+a split shows its active pane maximised. Hold a pane's corner and tap the four outward corners to
+turn it on; the same button, now pointing inward, turns it off, and so does swiping down on the
+strip. A place stays minimal until you turn it off, and the keyboard comes back as it was.
+
+Swiping between places moves the dock and the keyboard with the wall: coming from Widgets to a
+terminal left with its keyboard up, the keys rise with the slide and the dock rides up on them.
+
 ## Launch Android apps
 
 ### Pinned apps

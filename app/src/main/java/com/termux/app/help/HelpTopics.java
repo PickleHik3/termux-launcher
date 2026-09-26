@@ -217,6 +217,14 @@ public final class HelpTopics {
             .related("palette", "layout_editor", "appearance_editor").terms("pane")
             .aliases(R.string.help_topic_corners_aliases)
             .doc("Launcher_Usage.md#get-help"));
+        // Read rather than pointed at: its button is one of the corner tab's, and the tab is the
+        // thing the reader opened help from.
+        b.add(topic("minimal", Group.FIND_YOUR_WAY, R.string.help_topic_minimal_title,
+                R.string.help_topic_minimal_purpose, R.string.help_topic_minimal_action)
+            .wayBack(R.string.help_topic_minimal_back)
+            .related("corners", "status").terms("place")
+            .aliases(R.string.help_topic_minimal_aliases)
+            .doc("Launcher_Usage.md#minimal-mode"));
         b.add(topic("palette", Group.FIND_YOUR_WAY, R.string.help_topic_palette_title,
                 R.string.help_topic_space_purpose, R.string.help_topic_palette_action)
             .steps(R.string.help_topic_palette_step1, R.string.help_topic_palette_step2)
