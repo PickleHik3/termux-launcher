@@ -1,6 +1,9 @@
 <resources>
     <item name="help_split_divider" type="id" />
 
+    <!-- The Model centre's list, built in code; an id so its scroll position survives recreation. -->
+    <item name="tai_centre_list" type="id" />
+
     <!-- The corner the preset tile's outline is clipped at, which is the preset's own radius and
          so changes per tile and per render. -->
     <item name="editor_shell_preset_corner" type="id" />

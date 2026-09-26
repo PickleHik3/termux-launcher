@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A fully rounded pill. White so the adapter can tint it to any tone (accent, warn, error,
+     ghost) without a drawable per colour. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@android:color/white" />
+    <corners android:radius="999dp" />
+</shape>

@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Keyboard → Voice input → Speech model: the engine choice in the download dialog and the
-     engine label on installed rows. The rest of that screen's strings live in strings.xml. -->
+<!-- Speech model names and warnings shared by the Model centre and the Keyboard's speech model
+     picker. The rest of their strings live in strings.xml. -->
 <resources>
-    <string name="speech_model_download_summary_engines">Pick an engine — Whisper or Parakeet — then its options</string>
-    <string name="speech_model_engine_label">Engine</string>
     <string name="speech_model_engine_whisper">Whisper</string>
-    <string name="speech_model_engine_whisper_hint">Best for short commands; choose a size, a language and a window below</string>
-    <string name="speech_model_engine_parakeet">Parakeet (~%1$s)</string>
-    <string name="speech_model_engine_parakeet_hint">Most accurate for longer dictation; 25 European languages, detected automatically; one 5-second window; needs a phone with 8 GB of RAM or more</string>
     <string name="speech_model_engine_parakeet_ram_warning">This phone has %1$s of RAM: Parakeet may fail to load, or push other apps out of memory.</string>
 </resources>

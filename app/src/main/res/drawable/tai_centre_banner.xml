@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The "installed" follow-up strip; tinted with the primary container at runtime. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@android:color/white" />
+    <corners android:radius="14dp" />
+</shape>

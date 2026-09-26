@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Model centre: the Installed | Chat | Speech segmented control. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="16dp"
+    android:paddingTop="14dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="6dp">
+
+    <com.termux.app.fragments.settings.termux.TaiSegmentedTabs
+        android:id="@+id/tai_centre_segments"
+        android:layout_width="match_parent"
+        android:layout_height="42dp"
+        android:contentDescription="@string/tai_centre_segments_desc" />
+</FrameLayout>

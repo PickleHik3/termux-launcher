@@ -40,8 +40,9 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 
 /**
- * The Speech model screen lists what {@link com.termux.ai.TaiSpeechModels} says is installed —
- * by capability, under plain names — and marks the one in use even when the stored id is stale.
+ * The Speech model picker lists what {@link com.termux.ai.TaiSpeechModels} says is installed —
+ * by capability, under plain names — as cards, marks the one in use even when the stored id is
+ * stale, and leaves downloading to the Model centre.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -74,13 +75,16 @@ public class SpeechModelPreferencesFragmentTest {
     }
 
     @Test
-    public void withNothingInstalledTheScreenSaysSoAndOffersADownload() {
+    public void withNothingInstalledTheScreenSaysSoAndPointsToTheModelCentre() {
         SpeechModelPreferencesFragment fragment = launch();
 
         Preference empty = fragment.getPreferenceScreen().findPreference("speech_model_empty");
         assertNotNull(empty);
         assertTrue(empty.isVisible());
-        assertNotNull(fragment.getPreferenceScreen().findPreference("speech_model_download"));
+        assertTrue(empty.getSummary().toString().contains("Model centre"));
+        // No download UI here any more (D5): the only way to get a model is the centre.
+        assertNull(fragment.getPreferenceScreen().findPreference("speech_model_download"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference(SpeechModelPreferencesFragment.KEY_GET_MORE));
         assertNotNull(fragment.getPreferenceScreen().findPreference("speech_model_idle_unload"));
         assertNull(fragment.getPreferenceScreen().findPreference(
             SpeechModelPreferencesFragment.ROW_KEY_PREFIX + "whisper-acft-base-en"));
@@ -113,10 +117,36 @@ public class SpeechModelPreferencesFragmentTest {
         assertTrue(small.getSummary().toString().contains("5-second window"));
         // The stale id is not written over; the first installed model simply stands in.
         assertEquals("whisper-acft-small-en", new TaiSettings(context).getSttModelId());
+        assertTrue(((SpeechModelCardPreference) base).isChosen());
+        assertFalse(((SpeechModelCardPreference) small).isChosen());
+        // Both Whisper graphs come in a 5 and a 10 second window, so each card offers the other.
+        assertEquals("Change window", ((SpeechModelCardPreference) base).getWindowAction().toString());
     }
 
     @Test
-    public void aDownloadInProgressIsARowOfItsOwn() throws Exception {
+    public void tappingACardMakesItTheOneInUse() throws Exception {
+        install("whisper-acft-base-en", "acft_whisper_base.en_10s_drq.tflite");
+        install("whisper-acft-small", "acft_whisper_small_5s_drq.tflite");
+        new TaiSettings(context).setSttModelId("whisper-acft-base-en");
+
+        SpeechModelPreferencesFragment fragment = launch();
+        SpeechModelCardPreference small = fragment.getPreferenceScreen().findPreference(
+            SpeechModelPreferencesFragment.ROW_KEY_PREFIX + "whisper-acft-small");
+        assertNotNull(small);
+        assertFalse(small.isChosen());
+
+        small.getOnPreferenceClickListener().onPreferenceClick(small);
+
+        assertEquals("whisper-acft-small", new TaiSettings(context).getSttModelId());
+        assertTrue(small.isChosen());
+        SpeechModelCardPreference base = fragment.getPreferenceScreen().findPreference(
+            SpeechModelPreferencesFragment.ROW_KEY_PREFIX + "whisper-acft-base-en");
+        assertNotNull(base);
+        assertFalse(base.isChosen());
+    }
+
+    @Test
+    public void aDownloadInProgressIsNotACardHereItBelongsToTheModelCentre() throws Exception {
         store.upsertDownload(new JSONObject()
             .put("id", "download-whisper-acft-small")
             .put("modelId", "whisper-acft-small")
@@ -130,14 +160,35 @@ public class SpeechModelPreferencesFragmentTest {
 
         SpeechModelPreferencesFragment fragment = launch();
 
-        Preference row = fragment.getPreferenceScreen().findPreference(
-            SpeechModelPreferencesFragment.ROW_KEY_PREFIX + "whisper-acft-small");
-        assertNotNull(row);
-        assertEquals("Small · Many languages", row.getTitle().toString());
-        assertTrue(row.getSummary().toString().startsWith("Downloading"));
+        assertNull(fragment.getPreferenceScreen().findPreference(
+            SpeechModelPreferencesFragment.ROW_KEY_PREFIX + "whisper-acft-small"));
         Preference empty = fragment.getPreferenceScreen().findPreference("speech_model_empty");
         assertNotNull(empty);
-        assertFalse(empty.isVisible());
+        assertTrue(empty.isVisible());
+    }
+
+    @Test
+    public void aWindowSwitchOnItsWaySaysSoOnTheInstalledCard() throws Exception {
+        install("whisper-acft-base-en", "acft_whisper_base.en_10s_drq.tflite");
+        store.upsertDownload(new JSONObject()
+            .put("id", "download-whisper-acft-base-en")
+            .put("modelId", "whisper-acft-base-en")
+            .put("url", "https://example.invalid/acft_whisper_base.en_5s_drq.tflite")
+            .put("path", new File(store.getModelsDirectory(), "whisper-acft-base-en/acft_whisper_base.en_5s_drq.tflite").getAbsolutePath())
+            .put("status", TaiModelStore.STATE_DOWNLOADING)
+            .put("bytesRead", 50L)
+            .put("totalBytes", 100L)
+            .put("error", "")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)));
+
+        SpeechModelPreferencesFragment fragment = launch();
+
+        SpeechModelCardPreference card = fragment.getPreferenceScreen().findPreference(
+            SpeechModelPreferencesFragment.ROW_KEY_PREFIX + "whisper-acft-base-en");
+        assertNotNull(card);
+        // The old window stays in use while the new one arrives, and there is nothing to change meanwhile.
+        assertTrue(card.getSummary().toString().contains("10-second window"));
+        assertEquals("", card.getWindowAction().toString());
     }
 
     @Test
@@ -158,20 +209,19 @@ public class SpeechModelPreferencesFragmentTest {
 
     @Test
     public void theWhisperCatalogIdFollowsSizeAndLanguageAndParakeetHasOne() {
-        assertEquals("whisper-acft-base-en", SpeechModelPreferencesFragment.whisperCatalogId(false, true));
-        assertEquals("whisper-acft-small", SpeechModelPreferencesFragment.whisperCatalogId(true, false));
+        assertEquals("whisper-acft-base-en", TaiSpeechActions.whisperCatalogId(false, true));
+        assertEquals("whisper-acft-small", TaiSpeechActions.whisperCatalogId(true, false));
         assertEquals("parakeet-tdt-0.6b-v3", TaiModelCatalog.PARAKEET_TDT_V3_ID);
-        assertEquals(5, SpeechModelPreferencesFragment.PARAKEET_WINDOW_SECONDS);
+        assertEquals(5, TaiSpeechActions.PARAKEET_WINDOW_SECONDS);
     }
 
     @Test
     public void theParakeetRamWarningShowsOnlyBelowTheEntryTier() {
-        SpeechModelPreferencesFragment fragment = launch();
         long gib = 1024L * 1024 * 1024;
-        assertNull(fragment.parakeetRamWarning(context, 12L * gib));
-        assertNull(fragment.parakeetRamWarning(context, 8L * gib));
-        assertNull("unknown memory: no warning", fragment.parakeetRamWarning(context, 0L));
-        String warning = fragment.parakeetRamWarning(context, 6L * gib);
+        assertNull(TaiSpeechActions.parakeetRamWarning(context, 12L * gib));
+        assertNull(TaiSpeechActions.parakeetRamWarning(context, 8L * gib));
+        assertNull("unknown memory: no warning", TaiSpeechActions.parakeetRamWarning(context, 0L));
+        String warning = TaiSpeechActions.parakeetRamWarning(context, 6L * gib);
         assertNotNull(warning);
         assertTrue(warning, warning.contains("6.0 GB"));
     }

@@ -45,11 +45,11 @@ public final class TaiModelDownloadService extends Service implements TaiDownloa
     public static final String EXTRA_MODEL_ID = "model_id";
 
     /**
-     * The settings page the notification opens. TODO(model-centre): point this at
-     * {@code com.termux.app.fragments.settings.termux.TaiModelCentreFragment} once that fragment
-     * exists; until then the TAI root page is the nearest place that shows downloads.
+     * The settings page the notification opens: the Model centre, where every download has its
+     * row with pause, resume and cancel. Named rather than referenced so this service (which the
+     * API and the CLI also start) does not load the settings UI classes.
      */
-    public static final String MODEL_CENTRE_FRAGMENT = "com.termux.app.fragments.settings.termux.TaiPreferencesFragment";
+    public static final String MODEL_CENTRE_FRAGMENT = "com.termux.app.fragments.settings.termux.TaiModelCentreFragment";
 
     private static final String CHANNEL_ID = "termux_ai_model_downloads";
     private static final String GROUP_KEY = "termux_ai_model_downloads";
@@ -304,7 +304,7 @@ public final class TaiModelDownloadService extends Service implements TaiDownloa
     private PendingIntent openModelCentre() {
         Intent intent = new Intent(this, SettingsActivity.class);
         intent.putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT, MODEL_CENTRE_FRAGMENT);
-        intent.putExtra(SettingsActivity.EXTRA_INITIAL_TITLE_RES, R.string.termux_ai_preferences_title);
+        intent.putExtra(SettingsActivity.EXTRA_INITIAL_TITLE_RES, R.string.tai_model_centre_title);
         return PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
     }
 

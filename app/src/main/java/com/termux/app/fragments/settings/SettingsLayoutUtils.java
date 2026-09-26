@@ -12,8 +12,9 @@ import androidx.preference.TwoStatePreference;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.termux.CategorySortProgressPreference;
-import com.termux.app.fragments.settings.termux.TaiCatalogControlsPreference;
+import com.termux.app.fragments.settings.termux.SpeechModelCardPreference;
 import com.termux.app.fragments.settings.termux.TaiCatalogFilterPreference;
+import com.termux.app.fragments.settings.termux.TaiModelCentreRowPreference;
 import com.termux.app.fragments.settings.termux.TaiModelPreference;
 import com.termux.app.fragments.settings.termux.TaiOverridesPreference;
 import com.termux.app.fragments.settings.termux.TaiRuntimeActionsPreference;
@@ -77,7 +78,8 @@ public final class SettingsLayoutUtils {
             || preference instanceof TaiRuntimeActionsPreference
             || preference instanceof TaiOverridesPreference
             || preference instanceof TaiCatalogFilterPreference
-            || preference instanceof TaiCatalogControlsPreference
+            || preference instanceof TaiModelCentreRowPreference
+            || preference instanceof SpeechModelCardPreference
             || preference instanceof TaiModelPreference) {
             return;
         }

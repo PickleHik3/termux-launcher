@@ -1642,7 +1642,7 @@ public final class TaiManager {
         String modelId = speechModelIdFor(request);
         if (modelId.isEmpty()) {
             return openAiRequestError(400, "stt_model_not_configured",
-                "No speech-to-text model is installed. Download one under Keyboard settings > Voice input > Speech model.", "model");
+                "No speech-to-text model is installed. Get one in TAI settings > Model centre > Speech.", "model");
         }
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) return openAiRequestError(404, "model_not_found", "Unknown TAI model: " + modelId, "model");
