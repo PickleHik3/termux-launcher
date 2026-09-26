@@ -4,6 +4,7 @@ import android.graphics.Bitmap;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.widget.ImageView;
 
@@ -11,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.ReducedMotion;
 
 /**
  * Wallpaper frost: the crops of the shared pre-blurred wallpaper frame that stand in for live blur
@@ -144,16 +146,46 @@ public final class WallpaperFrostPainter {
         }
         Bitmap crop = mBlurCache.crop(blurRadiusDp, targetRect, wallpaperFrame);
         if (crop == null) {
+            // A miss while a fresh blur is in flight — a radius the editor just settled on, a
+            // source the cache is still re-capturing — is not a reason to go tint-only: whatever
+            // frost is already on screen is a closer match than nothing, so it stays right where it
+            // is until the next pass has a crop to replace it with.
+            if (frost.getDrawable() != null) {
+                frost.setVisibility(View.VISIBLE);
+                return true;
+            }
             frost.setImageDrawable(null);
             frost.setVisibility(View.GONE);
             mLedger.clearFrostRect(rectKey);
             return false;
         }
-        frost.setImageBitmap(crop);
-        frost.setColorFilter(GlassFilters.frost());
+        installFrost(frost, crop, blurRadiusDp);
         frost.setVisibility(View.VISIBLE);
         mLedger.recordFrostRect(rectKey, targetRect);
         return true;
+    }
+
+    /**
+     * Puts {@code crop} on {@code frost}, on the settle curve rather than outright when the cache
+     * says the frame this radius now holds arrived to replace one a wallpaper change displaced —
+     * see {@link WallpaperBlurCache#isCrossfadedRadius}. A rotation or a radius change never sets
+     * that flag, so those keep landing the way they always have: on the next frame, all at once.
+     */
+    private void installFrost(@NonNull ImageView frost, @NonNull Bitmap crop, int blurRadiusDp) {
+        Drawable previous = frost.getDrawable();
+        Bitmap previousBitmap = previous instanceof BitmapDrawable
+            ? ((BitmapDrawable) previous).getBitmap() : null;
+        boolean crossfade = previousBitmap != null && previousBitmap != crop
+            && !previousBitmap.isRecycled() && mBlurCache.isCrossfadedRadius(blurRadiusDp);
+        if (!crossfade) {
+            frost.setImageBitmap(crop);
+            frost.setColorFilter(GlassFilters.frost());
+            return;
+        }
+        frost.setColorFilter(GlassFilters.frost());
+        BitmapCrossfadeAnimator.run(frost, previousBitmap, crop,
+            ReducedMotion.isEnabled(frost.getContext()),
+            (frame, finished) -> frost.setImageBitmap(frame));
     }
 
     /**
@@ -229,6 +261,12 @@ public final class WallpaperFrostPainter {
         }
         Bitmap crop = mBlurCache.crop(blurRadiusDp, targetRect, wallpaperFrame);
         if (crop == null) {
+            // Same reasoning as the top-pane path: a frost already on screen outlives a miss that
+            // is only waiting on a fresh blur, rather than dropping to tint-only for it.
+            if (frost.getDrawable() != null) {
+                frost.setVisibility(View.VISIBLE);
+                return true;
+            }
             frost.setImageDrawable(null);
             frost.setVisibility(View.GONE);
             mLedger.clearFrostRect(rectKey);
@@ -236,8 +274,7 @@ public final class WallpaperFrostPainter {
         }
         mLedger.recordFrostRect(rectKey, targetRect);
         mLedger.setFrostRadiusDp(radiusKey, blurRadiusDp);
-        frost.setImageBitmap(crop);
-        frost.setColorFilter(GlassFilters.frost());
+        installFrost(frost, crop, blurRadiusDp);
         frost.setVisibility(View.VISIBLE);
         return true;
     }

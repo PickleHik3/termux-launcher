@@ -66,7 +66,8 @@ public final class PaneGlass {
             frame.getWidth(), frame.getHeight());
         backdrop.setGlass(style.paneGlassBlurFrame(), style.paneGlassBlurFrameRect(),
             style.paneGlassTintColor(), style.paneGlassGrainLayer(),
-            style.paneGlassGrainStrength(), radiusPx, style.paneGlassFrostFilter());
+            style.paneGlassGrainStrength(), radiusPx, style.paneGlassFrostFilter(),
+            style.paneGlassCrossfade());
         backdrop.setVisibility(View.VISIBLE);
         return true;
     }

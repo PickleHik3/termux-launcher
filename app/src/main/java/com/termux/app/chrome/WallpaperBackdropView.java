@@ -31,6 +31,13 @@ import androidx.annotation.Nullable;
 public final class WallpaperBackdropView extends View {
 
     @Nullable private Bitmap mFrame;
+    /**
+     * The frame {@link #mFrame} is fading in from, drawn underneath it while {@link #mCrossfade}
+     * has not reached 1. Held (not recycled) here through the fade so a scan for what is still on
+     * screen — {@code isFrameInUse} — keeps finding it exactly where {@link #heldFrame()} answers.
+     */
+    @Nullable private Bitmap mPreviousFrame;
+    @NonNull private final FrameCrossfade mCrossfade = new FrameCrossfade();
     /** The screen rect {@link #mFrame} was captured for; empty while no frame is held. */
     @NonNull private final Rect mFrameRect = new Rect();
     /** {@link #mFrameRect} in this view's own coordinates. Reused; never allocated in a draw. */
@@ -58,6 +65,15 @@ public final class WallpaperBackdropView extends View {
     }
 
     /**
+     * {@link #showFrame(Bitmap, Rect, int, boolean)} without a crossfade — every swap this makes
+     * lands outright, which is what a pending capture, a rotation and every caller that predates
+     * the wallpaper crossfade all still want.
+     */
+    public void showFrame(@Nullable Bitmap frame, @NonNull Rect frameRect, int dimColor) {
+        showFrame(frame, frameRect, dimColor, false);
+    }
+
+    /**
      * Shows {@code frame} for {@code frameRect} with {@code dimColor} over it.
      *
      * <p>A null frame means the capture is still on the blur worker. The frame already held then
@@ -66,15 +82,28 @@ public final class WallpaperBackdropView extends View {
      * two instead of the misaligned system one. When the rect itself has moved (a rotation, a
      * resize) the held frame would show as a shifted crop, so the backdrop goes away until the new
      * frame lands and the system wallpaper carries that one frame.</p>
+     *
+     * <p>{@code crossfade} asks for the swap from whatever is up now to {@code frame} to fade over
+     * {@link FrameCrossfade#DURATION_MS} instead of landing on the next draw — the caller already
+     * knows this frame arrived to replace one a wallpaper change displaced
+     * ({@link WallpaperBlurCache#isCrossfadedRadius}), never a rotation or a radius change.</p>
      */
-    public void showFrame(@Nullable Bitmap frame, @NonNull Rect frameRect, int dimColor) {
+    public void showFrame(@Nullable Bitmap frame, @NonNull Rect frameRect, int dimColor,
+                          boolean crossfade) {
         if (frame != null && frame.isRecycled()) frame = null;
         if (frame == null && (mFrame == null || mFrame.isRecycled()
             || !mFrameRect.equals(frameRect))) {
             hide();
             return;
         }
-        if (frame != null) {
+        if (frame != null && frame != mFrame) {
+            if (crossfade && mFrame != null && !mFrame.isRecycled() && mFrameRect.equals(frameRect)) {
+                mPreviousFrame = mFrame;
+                mCrossfade.start();
+            } else {
+                mPreviousFrame = null;
+                mCrossfade.cancel();
+            }
             mFrame = frame;
             mFrameRect.set(frameRect);
         }
@@ -97,10 +126,12 @@ public final class WallpaperBackdropView extends View {
         if (mFrame != null) invalidate();
     }
 
-    /** Puts the backdrop away and lets go of its frame, so the cache can recycle it. */
+    /** Puts the backdrop away and lets go of its frames, so the cache can recycle them. */
     public void hide() {
         boolean wasShowing = mFrame != null;
         mFrame = null;
+        mPreviousFrame = null;
+        mCrossfade.cancel();
         mFrameRect.setEmpty();
         mDest.setEmpty();
         setVisibility(INVISIBLE);
@@ -111,6 +142,15 @@ public final class WallpaperBackdropView extends View {
     @Nullable
     public Bitmap heldFrame() {
         return mFrame;
+    }
+
+    /**
+     * The frame a crossfade is still fading out of, so the blur cache never recycles it mid-fade —
+     * null once the fade has landed on {@link #heldFrame()} alone.
+     */
+    @Nullable
+    public Bitmap fadingFrame() {
+        return mCrossfade.isFinished() ? null : mPreviousFrame;
     }
 
     @Override
@@ -145,12 +185,32 @@ public final class WallpaperBackdropView extends View {
     protected void onDraw(@NonNull Canvas canvas) {
         Bitmap frame = mFrame;
         if (frame == null || frame.isRecycled() || mDest.isEmpty()) return;
-        if (frame.getWidth() == mDest.width() && frame.getHeight() == mDest.height()) {
-            // The frame was captured at exactly this size; drawing it 1:1 skips the filter.
-            canvas.drawBitmap(frame, mDest.left, mDest.top, null);
+        float progress = mCrossfade.progress();
+        Bitmap previous = mPreviousFrame;
+        boolean fading = progress < 1f && previous != null && !previous.isRecycled();
+        if (fading) {
+            // Both frames share this backdrop's own rect — a crossfade only ever starts when the
+            // geometry held, never across a rotation — so one dest rect draws either of them.
+            drawFrame(canvas, previous, 255);
+            drawFrame(canvas, frame, Math.round(255f * progress));
+            postInvalidateOnAnimation();
+        } else {
+            mPreviousFrame = null;
+            drawFrame(canvas, frame, 255);
+        }
+        if (Color.alpha(mDimColor) > 0) canvas.drawRect(mDest, mDimPaint);
+    }
+
+    private void drawFrame(@NonNull Canvas canvas, @NonNull Bitmap frame, int alpha) {
+        boolean sameSize = frame.getWidth() == mDest.width() && frame.getHeight() == mDest.height();
+        // The frame was captured at exactly this size; drawing it 1:1 skips the filter, same as
+        // before there was an alpha to set at all.
+        mFramePaint.setFilterBitmap(!sameSize);
+        mFramePaint.setAlpha(alpha);
+        if (sameSize) {
+            canvas.drawBitmap(frame, mDest.left, mDest.top, mFramePaint);
         } else {
             canvas.drawBitmap(frame, null, mDest, mFramePaint);
         }
-        if (Color.alpha(mDimColor) > 0) canvas.drawRect(mDest, mDimPaint);
     }
 }

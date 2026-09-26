@@ -331,6 +331,25 @@ public class ChromeRendererTest {
         assertEquals(1, surfaces.applied.size());
     }
 
+    /**
+     * The surface that refills a radius a wallpaper change displaced crossfades into it; a
+     * rotation dropping the same radius never does.
+     */
+    @Test
+    public void onlyAWallpaperChangeTagsTheRadiusItRefillsForACrossfade() {
+        chrome.blurCache().obtain(0, wallpaperFrame);
+
+        chrome.onWallpaperChanged();
+        chrome.blurCache().obtain(0, wallpaperFrame);
+        assertTrue(chrome.blurCache().isCrossfadedRadius(0));
+
+        surfaces.orientation = Configuration.ORIENTATION_LANDSCAPE;
+        chrome.onConfigurationChanged();
+        chrome.blurCache().obtain(0, wallpaperFrame);
+        assertFalse("a rotation swaps outright, never fades",
+            chrome.blurCache().isCrossfadedRadius(0));
+    }
+
     @Test
     public void aMemoryTrimReleasesTheFramesAndMarksEverySurfaceDirty() {
         chrome.blurCache().obtain(0, wallpaperFrame);
