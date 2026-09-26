@@ -2251,6 +2251,12 @@
     <string name="help_topic_places_aliases">places, switch place, home screen, terminal, widgets, display</string>
     <string name="help_topic_corners_back">Tap away from the controls to put them away.</string>
     <string name="help_topic_corners_aliases">corner, tab, pane controls, appearance, layout, help</string>
+    <!-- Help centre: minimal mode (CONTEXT.md), the corner tab's four-corners button. -->
+    <string name="help_topic_minimal_title">Minimal mode</string>
+    <string name="help_topic_minimal_purpose">Minimal mode gives the terminal or the display the whole screen, with the status bar as a thin strip.</string>
+    <string name="help_topic_minimal_action">Hold a corner, then tap the four outward corners.</string>
+    <string name="help_topic_minimal_back">Tap the same button again, or swipe down on the strip.</string>
+    <string name="help_topic_minimal_aliases">minimal, full screen, fullscreen, distraction free, hide dock, maximise, maximize, strip</string>
     <string name="help_topic_palette_title">Command palette</string>
     <string name="help_topic_palette_action">Swipe up on the space bar to open it, then type what you want.</string>
     <string name="help_topic_palette_step1">Tap an action to run it.</string>

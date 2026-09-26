@@ -67,6 +67,8 @@ public final class X11PaneFrame extends PaneContentFrame {
     @androidx.annotation.VisibleForTesting static final int ACTION_LAYOUT = 4;
     /** The wallpaper glyph, which opens the in-app wallpaper picker. */
     @androidx.annotation.VisibleForTesting static final int ACTION_WALLPAPER = 5;
+    /** Minimal mode on or off for the Display place; the glyph shows which. */
+    @androidx.annotation.VisibleForTesting static final int ACTION_MINIMAL = 6;
 
     /** What the page needs from the launcher. */
     public interface Host {
@@ -85,6 +87,10 @@ public final class X11PaneFrame extends PaneContentFrame {
         default void openLayoutEditor() {}
         /** The wallpaper glyph: open the in-app wallpaper picker, as every corner tab does. */
         default void openWallpaperPicker() {}
+        /** Whether the Display place is in minimal mode, which the tab's glyph shows. */
+        default boolean isMinimalMode() { return false; }
+        /** The minimal-mode glyph: turn the Display place's minimal mode on or off. */
+        default void toggleMinimalMode() {}
         /**
          * True when one of the launcher's own chords claimed this key, in which case X must not
          * see it. Everything else is the display's.
@@ -196,6 +202,10 @@ public final class X11PaneFrame extends PaneContentFrame {
         // answers the taps, so the view never stands between a finger and X.
         mControls = new PaneControlsView(getContext());
         mControls.setActions(PaneControlsView.Action.glyph(ACTION_POWER, CornerTabGlyphs.POWER),
+            // Minimal mode gives the display the whole screen; the mark reads the state as it
+            // draws, so the same button is the way back.
+            PaneControlsView.Action.drawn(ACTION_MINIMAL, com.termux.app.chrome.MinimalModeGlyph
+                .mark(getContext(), () -> mHost != null && mHost.isMinimalMode())),
             PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS),
             PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
             PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT),
@@ -210,6 +220,7 @@ public final class X11PaneFrame extends PaneContentFrame {
             else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
             else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
             else if (id == ACTION_POWER) mHost.toggleDisplayPower();
+            else if (id == ACTION_MINIMAL) { dismissControls(); mHost.toggleMinimalMode(); }
             else if (id == ACTION_SETTINGS) mHost.openDisplaySettings();
         });
         // The scale rail comes out with the tab, along the leading edge, while a display runs.
@@ -517,6 +528,11 @@ public final class X11PaneFrame extends PaneContentFrame {
         return !out.isEmpty();
     }
     private final android.graphics.RectF mHelpButtonBounds = new android.graphics.RectF();
+
+    /** Redraws the tab, whose minimal-mode glyph follows the place's state. */
+    public void invalidateControls() {
+        if (mControls != null) mControls.invalidate();
+    }
 
     public void dismissControls() {
         if (mControls != null) mControls.dismiss();

@@ -5,6 +5,12 @@
 > read "per orientation, for all three places"; "keyboard on enter" is gone — Terminal and Display
 > come back with the keyboard as they were left, Home always with it down. Line numbers below are
 > from the date of the snapshot.
+>
+> **2026-09-26, later:** the terminal's and the Display page's corner tabs also carry **minimal
+> mode** (four corners pointing out; pointing in while it is on), with the help topic `minimal`.
+> Like every other corner button it has no box of its own in the explorer — the tab is what help
+> was opened from — and the tab as a whole is not an accessibility node, so no button on it
+> carries a content description.
 
 Source of truth for designing an overlay help screen on each of the three places. Every item
 lists where it sits, what gesture it takes, and whether the first-boot tour already demonstrates

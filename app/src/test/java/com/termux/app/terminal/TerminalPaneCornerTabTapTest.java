@@ -70,19 +70,26 @@ public class TerminalPaneCornerTabTapTest {
         @Override public void onAutoTilingChanged(boolean enabled) {
             log.add(enabled ? "tiling on" : "tiling off");
         }
+        /** Minimal mode, as the launcher keeps it for the terminal place. */
+        boolean minimal;
+        @Override public boolean isMinimalMode() { return minimal; }
+        @Override public void toggleMinimalMode() {
+            minimal = !minimal;
+            log.add(minimal ? "minimal on" : "minimal off");
+        }
     }
 
     // ---------------------------------------------------------------- the four actions
 
     /**
      * A pane on its own has nothing to move, maximise or close: it offers the three editor doors —
-     * Appearance, Layout and Wallpaper — the tiling switch, settings and help.
+     * Appearance, Layout and Wallpaper — minimal mode, the tiling switch, settings and help.
      */
     @Test
     public void aLonePanesTabOffersBothEditorsAndHelp() {
         Fixture fixture = fixture();
         fixture.showTab();
-        assertEquals("six buttons on a lone pane", 6, fixture.slots().length);
+        assertEquals("seven buttons on a lone pane", 7, fixture.slots().length);
 
         fixture.tapSlot(0);
         assertEquals(Arrays.asList("appearance"), fixture.host.log);
@@ -95,20 +102,29 @@ public class TerminalPaneCornerTabTapTest {
         fixture.tapSlot(2);
         assertEquals(Arrays.asList("appearance", "layout", "wallpaper"), fixture.host.log);
 
-        // The tiling button flips the setting and leaves the tab up for a second tap.
+        // Minimal mode re-lays the whole place out around the pane, so the tab goes with the tap;
+        // opened again, the same slot is the way back.
         fixture.showTab();
         fixture.tapSlot(3);
+        fixture.showTab();
         fixture.tapSlot(3);
-        assertEquals(Arrays.asList("appearance", "layout", "wallpaper", "tiling on", "tiling off"),
-            fixture.host.log);
+        assertEquals(Arrays.asList("appearance", "layout", "wallpaper", "minimal on",
+            "minimal off"), fixture.host.log);
 
+        // The tiling button flips the setting and leaves the tab up for a second tap.
         fixture.host.log.clear();
         fixture.showTab();
         fixture.tapSlot(4);
+        fixture.tapSlot(4);
+        assertEquals(Arrays.asList("tiling on", "tiling off"), fixture.host.log);
+
+        fixture.host.log.clear();
+        fixture.showTab();
+        fixture.tapSlot(5);
         assertEquals(Arrays.asList("settings"), fixture.host.log);
 
         fixture.showTab();
-        fixture.tapSlot(5);
+        fixture.tapSlot(6);
         assertEquals(Arrays.asList("settings", "help"), fixture.host.log);
     }
 
@@ -123,8 +139,52 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         fixture.showTab();
 
-        assertEquals("six buttons in a split", 6, fixture.slots().length);
-        assertEquals(Arrays.asList(0, 1, 2, 7, 6, 4), fixture.idsAtEverySlot());
+        assertEquals("seven buttons in a split", 7, fixture.slots().length);
+        assertEquals(Arrays.asList(0, 1, 2, 9, 7, 6, 4), fixture.idsAtEverySlot());
+    }
+
+    /**
+     * Minimal mode shows a split maximised on its active pane, offers no maximise to undo that
+     * (the minimal glyph is the way back), and puts the split back when it is turned off.
+     */
+    @Test
+    public void minimalModeShowsASplitMaximisedAndPutsItBack() {
+        Fixture fixture = fixture();
+        assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
+        fixture.layout();
+
+        fixture.controller.setMinimalPresentation(true);
+        fixture.layout();
+        assertNotNull("the split is shown maximised",
+            ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
+        assertEquals(1, fixture.controller.tiledPaneCount());
+        fixture.showTab();
+        assertEquals(Arrays.asList(2, 9, 7, 6, 4), fixture.idsAtEverySlot());
+
+        fixture.controller.setMinimalPresentation(false);
+        fixture.layout();
+        assertEquals("the split is back", null,
+            ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
+        assertEquals(2, fixture.controller.tiledPaneCount());
+    }
+
+    /** A pane the user maximised before minimal mode stays maximised after it. */
+    @Test
+    public void minimalModeLeavesAPaneTheUserMaximisedAlone() {
+        Fixture fixture = fixture();
+        assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
+        fixture.layout();
+        fixture.showTab();
+        fixture.tapSlot(1);
+        fixture.layout();
+        Object maximised = ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf");
+        assertNotNull(maximised);
+
+        fixture.controller.setMinimalPresentation(true);
+        fixture.layout();
+        fixture.controller.setMinimalPresentation(false);
+        fixture.layout();
+        assertEquals(maximised, ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
     }
 
     /** Maximised there is no neighbour to move onto, so that slot goes and the rest shuffle up. */
@@ -140,8 +200,8 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         assertNotNull("the pane is maximized",
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
-        assertEquals("five buttons maximized", 5, fixture.slots().length);
-        assertEquals(Arrays.asList(1, 2, 7, 6, 4), fixture.idsAtEverySlot());
+        assertEquals("six buttons maximized", 6, fixture.slots().length);
+        assertEquals(Arrays.asList(1, 2, 9, 7, 6, 4), fixture.idsAtEverySlot());
     }
 
     // ---------------------------------------------------------------- a fifth button

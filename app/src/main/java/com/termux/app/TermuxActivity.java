@@ -604,6 +604,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull private com.termux.app.wall.PaneWallPage mLastWallPage =
         com.termux.app.wall.PaneWallPage.TERMINAL;
+
+    // ---- The chrome travelling with the wall (PlaceChromeTravel). Everything here is a transform
+    // or a pre-roll made during one slide, and settlePlaceChrome clears all of it at the end.
+
+    /**
+     * While true the content keeps the room it was committed with, whatever the accessory stack
+     * lays out: chrome pre-rolled for the slide grows the stack over the content instead of
+     * shrinking it, so the terminal is resized once, at settle, and never by a drag that springs
+     * back.
+     */
+    private boolean mTravelHoldsContent;
+    /** The content reservation the hold keeps, read when the hold began. */
+    private int mTravelHeldReservationPx;
+    /** The keyboard was brought up below the screen for this slide, not by the place. */
+    private boolean mTravelKeyboardPreRolled;
+    /**
+     * The place the pre-rolled keyboard is travelling toward, whose material it wears for the slide
+     * so it does not change from solid to glass as it lands; null while nothing is pre-rolled.
+     */
+    @Nullable private com.termux.app.wall.PaneWallPage mTravelKeyboardPlace;
+    /** A minimal place's dock rows were laid out again for this slide (MinimalMode#bottomOnly). */
+    private boolean mTravelDockPreRolled;
+    /** Something was moved or faded during this slide, so settle has transforms to put back. */
+    private boolean mChromeTravelMoved;
+    /** The accessory stack's share of its translationY that the wall's travel owns. */
+    private float mDockTravelTranslationPx;
+    /** The share that the system IME's lift owns (applyDockImeOffset); the two are summed. */
+    private float mDockImeLiftPx;
+    /**
+     * Set around a show or hide that the slide makes on its own behalf. Nobody asked for that
+     * keyboard, so it is not reported as a user's intent — to the display's keyboard policy or to
+     * the tour — any more than the settle it stands in for would be twice.
+     */
+    private boolean mQuietKeyboardChange;
+    /** Whether the arrangement last applied was a minimal one, so a change is applied once. */
+    private boolean mAppliedChromeMinimal;
     /** The shared arrangement and each place's memory; built on the preferences when first asked. */
     @Nullable private PlaceLayoutStore mPlaceLayoutStore;
     /** The first-boot tour: the cards drawn over the real chrome, and the run behind them. */
@@ -4334,6 +4370,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the width of a column down a side.
      */
     private int targetStatusBarHeightPx(boolean capsule, boolean collapsed) {
+        // A minimal place's bar is its strip, open or folded: every writer of the bar's thickness
+        // asks here, so the strip is one answer rather than a special case at each of them.
+        if (isChromeMinimal()) {
+            return com.termux.app.place.MinimalMode.stripThicknessPx(
+                getResources().getDisplayMetrics().density);
+        }
         return com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(mStatusBarEdge, capsule,
             collapsed, getResources().getDisplayMetrics().density);
     }
@@ -4752,9 +4794,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return PlaceLayout.KeyboardForm.DOCKED;
     }
 
-    /** Whether the keyboard lies over this place's content instead of shrinking it. */
+    /**
+     * Whether the keyboard lies over this place's content instead of shrinking it, which is what
+     * decides its material. Asked of the place the chrome is committed to rather than the page the
+     * wall has committed to at release, so the material changes at settle with the rest of the
+     * place's state — and of the place a pre-rolled keyboard is travelling toward while it slides,
+     * so it rises in the material it will keep.
+     */
     private boolean inAppKeyboardOverlays() {
-        return KeyboardOverlayPolicy.overlays(currentWallPlace(), currentPlaceLayout());
+        com.termux.app.wall.PaneWallPage place = mTravelKeyboardPlace != null
+            ? mTravelKeyboardPlace : mLastWallPage;
+        return KeyboardOverlayPolicy.overlays(place, currentPlaceLayout());
     }
 
     /** Glass, one opaque panel, or nothing at all — see {@link KeyboardMaterialPolicy}. */
@@ -6801,15 +6851,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
 
     private void applyDockImeOffset(int imeLiftPx) {
+        mDockImeLiftPx = Math.max(0, imeLiftPx);
+        applyAccessoryStackTranslation();
+    }
+
+    /**
+     * The accessory stack's one translationY, which two things own a share of: the system IME's
+     * lift, and the wall's travel sliding the dock and keyboard between two places' states. Each
+     * writes its own share and this sums them, so neither undoes the other.
+     *
+     * <p>While the travel has the stack below where it is laid out, the part that has slid past
+     * the stack's own laid-out bottom is clipped away: the root lets its children draw outside it,
+     * and a keyboard sliding off would otherwise draw across the navigation bar on its way out.
+     */
+    private void applyAccessoryStackTranslation() {
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         if (accessoryContainer == null) {
             return;
         }
-        float translationY = -Math.max(0, imeLiftPx);
+        float translationY = mDockTravelTranslationPx - mDockImeLiftPx;
         if (accessoryContainer.getTranslationY() != translationY) {
             accessoryContainer.setTranslationY(translationY);
         }
+        int travel = Math.round(Math.max(0f, mDockTravelTranslationPx));
+        if (travel <= 0) {
+            if (accessoryContainer.getClipBounds() != null) accessoryContainer.setClipBounds(null);
+            return;
+        }
+        // Generous above and to the sides: the stack's glow and ripple layers draw outside it on
+        // purpose, and only the bottom edge is the one being cut.
+        int width = Math.max(1, accessoryContainer.getWidth());
+        // The height it is about to be laid out at: a pre-roll has just written it, and the
+        // traversal that applies it runs before this frame draws.
+        ViewGroup.LayoutParams params = accessoryContainer.getLayoutParams();
+        int height = params != null && params.height > 0 ? params.height
+            : Math.max(0, accessoryContainer.getHeight());
+        mTmpTravelClip.set(-width, -Math.max(height, getResources().getDisplayMetrics().heightPixels),
+            2 * width, Math.max(0, height - travel));
+        accessoryContainer.setClipBounds(mTmpTravelClip);
     }
+
+    /** Scratch for the travel clip; setClipBounds copies it. */
+    private final Rect mTmpTravelClip = new Rect();
 
     /**
      * IME lift for the dock, owned by insets only while system bars are hidden (fullscreen property
@@ -6960,8 +7043,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.STOP);
         if (mX11Display != null) mX11Display.detachView();
         // Leaving the app counts as leaving the place on screen: it comes back the way it was
-        // left, keyboard included.
-        rememberPlaceKeyboard(currentWallPlace());
+        // left, keyboard included. The place is the one the chrome is committed to, which a slide
+        // cut short by the stop has not changed yet.
+        rememberPlaceKeyboard(mLastWallPage);
         if (mDockPlankController != null) {
             mDockPlankController.reset();
         }
@@ -9238,6 +9322,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The keyboard mouse mode's touchpad stands in is the pad's frame, raised by the pad
             // itself: nobody asked for a keyboard there, so it must not pin the policy off.
             if (mRaisingDisplayFrameKeyboard) return;
+            // A keyboard the wall's slide raised or put away on its own is nobody's intent either.
+            if (mQuietKeyboardChange) return;
             if (mX11Display != null) mX11Display.onUserKeyboardIntent(shown);
         });
         mTermuxTerminalViewClient.setInAppKeyboardController(mInAppKeyboard);
@@ -9265,7 +9351,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncWallKeyboardForRestoredPlace() {
         if (mInAppKeyboard == null) return;
         com.termux.app.wall.PaneWallPage page = currentWallPage();
-        if (page == com.termux.app.wall.PaneWallPage.TERMINAL) return;
+        if (page == com.termux.app.wall.PaneWallPage.TERMINAL) {
+            // Unless the terminal is minimal, which comes back with its keyboard put away.
+            if (isPlaceMinimal(page)) applyPlaceKeyboard(page);
+            return;
+        }
         PlaceLayoutStore store = placeLayoutStore();
         if (store != null && mInAppKeyboard.isVisible())
             store.setKeyboardOpen(com.termux.app.wall.PaneWallPage.TERMINAL, true);
@@ -9822,7 +9912,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mFloatingKeyboard.onKeyboardVisibilityRequested(visible);
             mKeyboardGeometry.onVisibilityRequested(visible);
             // The one place the in-app keyboard's visibility is decided, whichever control asked.
-            if (mFirstBootTour != null) mFirstBootTour.onKeyboardShownSettled(visible);
+            // A pre-roll for the wall's slide is not a keyboard settling anywhere.
+            if (mFirstBootTour != null && !mQuietKeyboardChange)
+                mFirstBootTour.onKeyboardShownSettled(visible);
         }
 
         @Override
@@ -10284,7 +10376,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private PlaceLayout currentPlaceLayout() {
-        return placeLayout(currentPlaceOrientation());
+        PlaceLayout layout = placeLayout(currentPlaceOrientation());
+        // Minimal mode is a state taken off the shared arrangement, not an arrangement of its own,
+        // so it is folded in here where every piece of chrome reads it. It follows the place the
+        // chrome is committed to, which only changes at settle; the one exception is the slide
+        // away from a minimal place, which lays the bottom rows out again below the screen so the
+        // dock can rise with the wall (MinimalMode#bottomOnly).
+        if (mTravelDockPreRolled) return com.termux.app.place.MinimalMode.bottomOnly(layout);
+        return isChromeMinimal() ? com.termux.app.place.MinimalMode.apply(layout) : layout;
+    }
+
+    /** Whether the chrome on screen is arranged for minimal mode, a pre-rolled slide aside. */
+    private boolean isChromeMinimal() {
+        return !mTravelDockPreRolled && isPlaceMinimal(mLastWallPage);
+    }
+
+    /** Whether {@code place} is in minimal mode (CONTEXT.md), as its memory says. */
+    private boolean isPlaceMinimal(@NonNull com.termux.app.wall.PaneWallPage place) {
+        PlaceLayoutStore store = placeLayoutStore();
+        return store != null && store.isMinimal(place);
     }
 
     /**
@@ -10297,6 +10407,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
             return true;
         }
+        // A minimal place's strip rests folded; the orientation's own memory is left as it was,
+        // for the bar to open back into when the mode is turned off.
+        if (isChromeMinimal()) return true;
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && store.isStatusCompact(currentPlaceOrientation());
     }
@@ -11212,8 +11325,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
                 (com.termux.app.statusbar.StatusBarSwipeLayout) host;
             swipeHost.setEdge(edge);
-            swipeHost.setExpansionAllowed(
-                com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(edge));
+            // On a minimal place the expand swipe is the way out of the mode, on every edge.
+            swipeHost.setExpansionAllowed(isChromeMinimal()
+                || com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(edge));
         }
         // The bar is not the system status bar's glass anywhere but along the top; everywhere else
         // the terminal simply starts under the system bar, as it does with the bar folded today.
@@ -11342,8 +11456,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // whenever the keyboard is down, this is zero and the geometry below is what it always was.
         // The system IME is not this keyboard: it never raises state.keyboardShown, so it keeps
         // resizing the window the way it does on every other place.
-        boolean keyboardOverlays = KeyboardOverlayPolicy.overlays(currentWallPlace(),
-            currentPlaceLayout());
+        // Read off the place the chrome is committed to — the one the wall last settled on — not
+        // the page the wall committed to at release: the geometry of the place being arrived at is
+        // applied once, at settle (ADR 0003), and a pass mid-slide must not apply it early. While
+        // the slide holds the content, whatever the stack lays out floats over it.
+        boolean keyboardOverlays = mTravelHoldsContent
+            || KeyboardOverlayPolicy.overlays(mLastWallPage, currentPlaceLayout());
         int keyboardOverlapPx = KeyboardOverlayPolicy.contentOverlapPx(
             keyboardOverlays, state.keyboardShown, state.keyboardHeight);
         // The keyboard coming and going is also when the place's claim on the system IME changes.
@@ -11401,7 +11519,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // On a place with no rows to land on it is only a height that changes as the keyboard comes
         // and goes — on the home place, a grid re-cut around every widget for nothing.
         boolean terminalOnScreen =
-            currentWallPlace() == com.termux.app.wall.PaneWallPage.TERMINAL;
+            mLastWallPage == com.termux.app.wall.PaneWallPage.TERMINAL;
         int terminalFlushPaddingPx = state.keyboardShown || !state.toolbarShown
             || visiblePaneCount() > 1 || activePaneFloating || isImeVisible() || !terminalOnScreen
             ? 0
@@ -11425,6 +11543,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             accessoryStackContainer,
             accessoryBottomMarginPx
         );
+        // While the wall travels with chrome pre-rolled, the content keeps exactly the room it
+        // was committed with: whatever the stack grew by for the slide, the content reaches under
+        // it by the same amount, so nothing the terminal is measured from moves until settle.
+        if (mTravelHoldsContent) {
+            keyboardOverlapPx = com.termux.app.place.PlaceChromeTravel.heldOverlapPx(
+                combinedHeight, accessoryBottomMarginPx, mTravelHeldReservationPx);
+        }
         boolean overlapChanged = applyContentKeyboardOverlap(keyboardOverlapPx);
         int contentReservationPx = KeyboardOverlayPolicy.contentReservationPx(
             combinedHeight, accessoryBottomMarginPx, keyboardOverlapPx);
@@ -11470,7 +11595,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                boolean contentReservationChanged) {
         if (!requested) return false;
         if (keyboardOverlays) return contentReservationChanged;
-        return shouldRequestTerminalResize(true, heightChanged, marginChanged, keyboardShownChanged);
+        // A change in the room the content keeps always reaches the panes. Outside an overlay it
+        // almost always comes with a height or margin change anyway; the one time it does not is
+        // the settle that ends a slide's hold, where the stack is already as tall as it will be
+        // and only the content's reach under it goes away.
+        return shouldRequestTerminalResize(true, heightChanged, marginChanged, keyboardShownChanged)
+            || contentReservationChanged;
     }
 
     /**
@@ -15189,15 +15319,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The keyboard follows the wall. Home has nothing to type into, so it always comes back
      * closed; the terminal and the display each remember whether they were left with the keyboard
-     * up and come back that way. The layout and the look are the same on every place (ADR 0003),
-     * so this is the one piece of chrome a place change moves, and it moves at settle: the page
-     * being left keeps the keyboard it had for the whole slide. A widget's own text field asks for
-     * the system IME through onWidgetEditorFocused instead.
+     * up and come back that way; a minimal place comes back with it down. The layout and the look
+     * are the same on every place (ADR 0003), so this is the one piece of chrome a place change
+     * moves: it travels with the slide as a transform (syncChromeTravel) and is committed here, at
+     * settle. A widget's own text field asks for the system IME through onWidgetEditorFocused
+     * instead.
      */
-    private void syncWallKeyboard(@NonNull com.termux.app.wall.PaneWallPage page) {
+    private void syncWallKeyboard(@NonNull com.termux.app.wall.PaneWallPage page,
+                                  boolean leavingKeyboardUp) {
         if (page != mLastWallPage) {
-            rememberPlaceKeyboard(mLastWallPage);
+            rememberPlaceKeyboard(mLastWallPage, leavingKeyboardUp);
             mLastWallPage = page;
+            // The arriving place's minimal mode before its keyboard, so the keyboard's geometry
+            // pass sees the chrome it will stand in.
+            syncChromeArrangement(false);
         }
         applyPlaceKeyboard(page);
     }
@@ -15235,11 +15370,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * same everywhere. A settle back onto the page the wall was already on changes nothing, so a
      * drag that springs back leaves the keyboard alone.
      */
-    private void syncPlaceState(@NonNull com.termux.app.wall.PaneWallPage page) {
+    private void syncPlaceState(@NonNull com.termux.app.wall.PaneWallPage page,
+                                boolean leavingKeyboardUp) {
         if (page == mLastWallPage) return;
         PlaceLayout layout = currentPlaceLayout();
         boolean overlaid = KeyboardOverlayPolicy.overlays(mLastWallPage, layout);
-        syncWallKeyboard(page);
+        syncWallKeyboard(page, leavingKeyboardUp);
         syncDisplayTouchpad();
         applyPlaceSystemImeOwner();
         applyExtraKeysPlaceEligibility();
@@ -15252,6 +15388,321 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (overlaid != KeyboardOverlayPolicy.overlays(page, layout))
             scopes |= ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP;
         mChrome.requestSync(scopes);
+    }
+
+    // ---- The chrome travelling with the wall ------------------------------------------------
+
+    /**
+     * One frame of the chrome's travel between two places (PlaceChromeTravel). The dock rises or
+     * falls and the keyboard slides in or out as a function of the wall's live offset, between the
+     * state of the place being left and the place being arrived at — Home with the dock at the
+     * bottom and the keyboard down, the terminal with the dock riding on its keyboard, a minimal
+     * place with neither. Only translationY and alpha change per frame; nothing is laid out.
+     *
+     * <p>What the frame needs that is not laid out yet is pre-rolled once, in the first frame
+     * that asks for it: the keyboard is brought up at its full height below the screen, a minimal
+     * place's bottom rows are laid out again under it, and the content is held at the room it was
+     * committed with so neither costs the terminal a resize. {@link #settlePlaceChrome} makes the
+     * outcome the layout, or undoes the pre-roll if the wall came back to where it started.
+     */
+    private void syncChromeTravel(float offsetPx) {
+        if (mPaneWallController == null) return;
+        com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+        // At rest there is nothing to travel: the settle that follows the last frame owns the
+        // chrome, and a wall that never moved has no transforms to put back.
+        if (!wall.isMoving() && offsetPx == 0f && !mChromeTravelMoved) return;
+        // Reduced motion snaps the wall, so the chrome snaps with it, at settle. The app drawer
+        // and the editors own the stack while they are up and move it their own way.
+        if (isReducedMotionEnabled() || isAppDrawerEngaged() || mSurfaceEditor.isActive()
+            || mAppliedContentReservationPx < 0) return;
+        java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
+        com.termux.app.place.PlaceChromeTravel.Frame frame =
+            com.termux.app.place.PlaceChromeTravel.at(pages, mPaneWallController.currentPage(),
+                offsetPx, wall.getWidth(), this::chromeRestOf);
+        if (!mTravelDockPreRolled
+            && com.termux.app.place.PlaceChromeTravel.needsDockPreRoll(frame, !isChromeMinimal())) {
+            preRollTravelDock();
+        }
+        if (!mTravelKeyboardPreRolled
+            && com.termux.app.place.PlaceChromeTravel.needsKeyboardPreRoll(frame,
+                isInAppKeyboardShown())
+            && canPreRollTravelKeyboard()) {
+            preRollTravelKeyboard(frame);
+        }
+        int keyboardPx = travelKeyboardLaidOutPx();
+        int dockPx = travelDockLaidOutPx(keyboardPx);
+        float translation = com.termux.app.place.PlaceChromeTravel.stackTranslationPx(frame,
+            keyboardPx, dockPx);
+        if (translation != 0f || mDockTravelTranslationPx != 0f) mChromeTravelMoved = true;
+        mDockTravelTranslationPx = translation;
+        applyAccessoryStackTranslation();
+        // A minimal place's strip has no content to show, and gets it back at settle; a normal
+        // place's content fades as the strip it is heading for comes closer. The bars minimal mode
+        // takes away from the sides and the top fade with the dock.
+        if (!isChromeMinimal()) {
+            // A pre-rolled minimal place has its side and top bars still put away; only the
+            // bottom rows came back for the slide.
+            float sideAlpha = mTravelDockPreRolled ? 0f : frame.dockReveal;
+            if (frame.statusReveal != 1f || sideAlpha != 1f) mChromeTravelMoved = true;
+            applyChromeTravelAlpha(frame.statusReveal, sideAlpha);
+        }
+    }
+
+    /**
+     * What a place's chrome looks like at rest, for the travel: the place the chrome is committed
+     * to answers from what is on screen, every other place from its memory.
+     */
+    @NonNull
+    private com.termux.app.place.PlaceChromeTravel.Rest chromeRestOf(
+            @NonNull com.termux.app.wall.PaneWallPage place) {
+        if (place == mLastWallPage) {
+            return new com.termux.app.place.PlaceChromeTravel.Rest(committedKeyboardVisible(),
+                isPlaceMinimal(place));
+        }
+        return new com.termux.app.place.PlaceChromeTravel.Rest(wantsKeyboardOnEnter(place),
+            isPlaceMinimal(place));
+    }
+
+    /**
+     * Whether the keyboard can be brought up below the screen for a slide. A floating keyboard is
+     * a frame of its own over the place rather than a band of the stack, so it has nothing to
+     * travel with and keeps its settle-time show; so does a keyboard the system IME stands in for.
+     */
+    private boolean canPreRollTravelKeyboard() {
+        return mInAppKeyboard != null && mInAppKeyboard.isEnabled() && !isKeyboardFloating()
+            && currentPlaceLayout().keyboardForm != PlaceLayout.KeyboardForm.FLOATING
+            && !isImeVisible();
+    }
+
+    /** From here to settle, the content keeps the room it was committed with. */
+    private void beginTravelHold() {
+        if (mTravelHoldsContent) return;
+        mTravelHoldsContent = true;
+        mTravelHeldReservationPx = mAppliedContentReservationPx;
+    }
+
+    /**
+     * Brings the keyboard up at its full height for the rest of the slide, held below the screen
+     * by the travel's translation until the wall reveals it. It is shown the way the arriving
+     * place would show it at settle — only earlier, and quietly.
+     */
+    private void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
+        if (mInAppKeyboard == null) return;
+        com.termux.app.wall.PaneWallPage target = frame.toward != mLastWallPage
+            && chromeRestOf(frame.toward).keyboardReveal() > 0f ? frame.toward : frame.from;
+        beginTravelHold();
+        mTravelKeyboardPreRolled = true;
+        mTravelKeyboardPlace = target;
+        mQuietKeyboardChange = true;
+        try {
+            mInAppKeyboard.show(target == com.termux.app.wall.PaneWallPage.TERMINAL
+                ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TERMINAL_TAP
+                : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason
+                    .KEYBOARD_ACTION);
+        } finally {
+            mQuietKeyboardChange = false;
+        }
+    }
+
+    /** Lays a minimal place's bottom rows out again for the slide toward a place that has them. */
+    private void preRollTravelDock() {
+        beginTravelHold();
+        mTravelDockPreRolled = true;
+        syncPlaceLayout();
+    }
+
+    /** The keyboard's height as the stack lays it out; 0 while it is down or floating. */
+    private int travelKeyboardLaidOutPx() {
+        if (!isInAppKeyboardShown() || isKeyboardFloating()) return 0;
+        return Math.max(0, mKeyboardGeometry.desiredHeightPx());
+    }
+
+    /**
+     * Everything else the stack lays out above the keyboard, and the margin under it: what has to
+     * slide down for the dock to leave the screen. A status bar standing along the bottom is a
+     * band of the same stack but not the dock's, so it is left out; it rides along with the
+     * container, and a minimal place's strip is not the dock's to take away.
+     */
+    private int travelDockLaidOutPx(int keyboardPx) {
+        View stack = findViewById(R.id.accessory_stack_container);
+        if (stack == null) return 0;
+        ViewGroup.LayoutParams params = stack.getLayoutParams();
+        int height = params != null && params.height > 0 ? params.height : 0;
+        int margin = params instanceof ViewGroup.MarginLayoutParams
+            ? Math.max(0, ((ViewGroup.MarginLayoutParams) params).bottomMargin) : 0;
+        return Math.max(0, height - keyboardPx - bottomStatusBandPx()) + margin;
+    }
+
+    /**
+     * Fades the status bar's content toward a minimal place's strip, and the bars minimal mode
+     * takes off the sides and the top with the dock. Alpha only, on views whose alpha nothing else
+     * writes; 1 puts them back.
+     */
+    private void applyChromeTravelAlpha(float statusAlpha, float sideAlpha) {
+        // Most frames of most slides move between two places that look alike here; those cost
+        // nothing past this comparison.
+        if (statusAlpha == mTravelStatusAlpha && sideAlpha == mTravelSideAlpha) return;
+        mTravelStatusAlpha = statusAlpha;
+        mTravelSideAlpha = sideAlpha;
+        setTravelAlpha(R.id.terminal_status_row, statusAlpha);
+        setTravelAlpha(R.id.terminal_status_lens, statusAlpha);
+        setTravelAlpha(R.id.place_apps_bar_host, sideAlpha);
+        setTravelAlpha(R.id.place_extra_keys_host, sideAlpha);
+        setTravelAlpha(R.id.place_az_bar_host, sideAlpha);
+        setTravelAlpha(R.id.place_off_dock_plank_host, sideAlpha);
+    }
+
+    /** The alphas the travel last wrote, 1 when it has put everything back. */
+    private float mTravelStatusAlpha = 1f;
+    private float mTravelSideAlpha = 1f;
+
+    private void setTravelAlpha(int viewId, float alpha) {
+        View view = findViewById(viewId);
+        if (view == null) return;
+        float clamped = Math.max(0f, Math.min(1f, alpha));
+        if (view.getAlpha() != clamped) view.setAlpha(clamped);
+    }
+
+    /**
+     * The wall came to rest on {@code page}: the travel's transforms are put back, and what the
+     * slide showed becomes the layout — the keyboard the place wants, the arrangement minimal mode
+     * asks for, and the content's room, with one terminal resize for all of it. A slide that came
+     * back to where it started undoes its pre-rolls instead, and the content, held all along,
+     * never moved.
+     */
+    private void settlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page) {
+        boolean leavingKeyboardUp = committedKeyboardVisible();
+        boolean keyboardPreRolled = mTravelKeyboardPreRolled;
+        boolean dockPreRolled = mTravelDockPreRolled;
+        boolean held = mTravelHoldsContent;
+        boolean moved = mChromeTravelMoved;
+        com.termux.app.wall.PaneWallPage left = mLastWallPage;
+        mTravelHoldsContent = false;
+        mTravelKeyboardPreRolled = false;
+        mTravelKeyboardPlace = null;
+        mTravelDockPreRolled = false;
+        mChromeTravelMoved = false;
+        mDockTravelTranslationPx = 0f;
+        applyAccessoryStackTranslation();
+        applyChromeTravelAlpha(1f, 1f);
+        // A keyboard pre-rolled for a place the wall did not stay on goes away quietly, as it came:
+        // the place under it never had it up. One the arriving place wants is already where it
+        // belongs, and the place's own sync below finds nothing to do.
+        if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()
+            && (page == left || !wantsKeyboardOnEnter(page))) {
+            mQuietKeyboardChange = true;
+            try {
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                    .HideReason.WALL_PAGE);
+            } finally {
+                mQuietKeyboardChange = false;
+            }
+        } else if (keyboardPreRolled && page != left
+            && page == com.termux.app.wall.PaneWallPage.DISPLAY && mX11Display != null
+            && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+            // The display hears the keyboard come up as the place's own, which is what the
+            // settle-time show the pre-roll stood in for would have told it.
+            mX11Display.onUserKeyboardIntent(true);
+        }
+        syncPlaceState(page, leavingKeyboardUp);
+        // A place that changed applied its own arrangement in syncWallKeyboard. What is left is a
+        // slide that pre-rolled a minimal place's bottom rows and then landed on a minimal place
+        // anyway — springing back, or reversing onto another — whose arrangement has to be put
+        // back even though the minimal state never changed.
+        if (dockPreRolled && isChromeMinimal()) syncChromeArrangement(true);
+        // The hold is over: one geometry pass gives the content the room the place it landed on
+        // leaves it, which is the terminal's one resize for the whole slide.
+        if (held) applyAccessoryGeometryIfNeeded(true, "wall:settle");
+        // The crops were cut where the stack was laid out; one pass re-cuts any a frame of the
+        // slide drew somewhere else.
+        if (moved || held) mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    /**
+     * Applies minimal mode's arrangement and status strip when the chrome's minimal state has
+     * changed since it was last applied, or always when {@code force} — a slide that pre-rolled
+     * the bottom rows has to put the committed arrangement back whichever way it landed.
+     */
+    private void syncChromeArrangement(boolean force) {
+        boolean minimal = isChromeMinimal();
+        if (!force && minimal == mAppliedChromeMinimal) return;
+        mAppliedChromeMinimal = minimal;
+        syncPlaceLayout();
+        applyMinimalStatusChrome();
+    }
+
+    // ---- Minimal mode ------------------------------------------------------------------------
+
+    /**
+     * Turns minimal mode (CONTEXT.md) on or off for a place, from its corner tab or the strip's
+     * swipe. On, the place's keyboard memory is kept as it was, the keyboard goes away, the chrome
+     * is arranged without the dock and the bars, and the status bar shrinks to its strip; off, all
+     * of that comes back, keyboard included. The terminal shows its tiled panes maximised on the
+     * active one while it is minimal, wherever the wall is.
+     */
+    void setPlaceMinimal(@NonNull com.termux.app.wall.PaneWallPage place, boolean minimal) {
+        if (!com.termux.app.place.MinimalMode.available(place)) return;
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null || store.isMinimal(place) == minimal) return;
+        boolean onScreen = place == mLastWallPage;
+        // Recorded before the mode is on, since a minimal place records nothing.
+        if (minimal && onScreen) rememberPlaceKeyboard(place);
+        store.setMinimal(place, minimal);
+        syncTerminalMinimalPresentation();
+        if (onScreen) {
+            if (minimal && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                    .HideReason.KEYBOARD_ACTION);
+            }
+            syncChromeArrangement(false);
+            if (!minimal) applyPlaceKeyboard(place);
+        }
+        invalidateMinimalModeGlyphs();
+    }
+
+    /** The terminal's panes follow the terminal place's minimal mode, on screen or not. */
+    private void syncTerminalMinimalPresentation() {
+        if (mPaneController != null) {
+            mPaneController.setMinimalPresentation(
+                isPlaceMinimal(com.termux.app.wall.PaneWallPage.TERMINAL));
+        }
+    }
+
+    /** The corner tabs draw the glyph from the state, so a change only has to redraw them. */
+    private void invalidateMinimalModeGlyphs() {
+        if (mPaneWallController != null && mPaneWallController.displayPage() != null)
+            mPaneWallController.displayPage().invalidateControls();
+        if (mPaneController != null) mPaneController.invalidateControls();
+    }
+
+    /**
+     * The status bar as minimal mode has it: a strip with nothing on it. Its thickness is read off
+     * {@link #targetStatusBarHeightPx} wherever the bar is sized, so this re-applies it, hides the
+     * row, the lens and the column clock so nothing on a strip too thin to read can be tapped, and
+     * lets the strip's swipe — the bar's own expand swipe — through on every edge, since that swipe
+     * is the way out of the mode.
+     */
+    private void applyMinimalStatusChrome() {
+        boolean minimal = isChromeMinimal();
+        View host = findViewById(R.id.terminal_window_bar_host);
+        if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
+            com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
+                (com.termux.app.statusbar.StatusBarSwipeLayout) host;
+            swipeHost.setExpansionAllowed(minimal
+                || com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
+        }
+        int visibility = minimal ? View.INVISIBLE : View.VISIBLE;
+        View row = findViewById(R.id.terminal_status_row);
+        if (row != null && row.getVisibility() != visibility) row.setVisibility(visibility);
+        View lens = findViewById(R.id.terminal_status_lens);
+        if (lens != null && lens.getVisibility() != visibility) lens.setVisibility(visibility);
+        if (minimal) {
+            View stackedClock = findViewById(R.id.terminal_status_column_clock);
+            if (stackedClock != null) stackedClock.setVisibility(View.GONE);
+        }
+        // The fold's own path sizes the bar, under the resize lease that gives the panes one
+        // row-and-column update for the change instead of one per pass.
+        setTopStatusBarCollapsed(isStatusBarCompact(), false);
     }
 
     /**
@@ -15269,17 +15720,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Records how a place is being left, so it has something to come back to. */
     private void rememberPlaceKeyboard(@NonNull com.termux.app.wall.PaneWallPage place) {
+        rememberPlaceKeyboard(place, committedKeyboardVisible());
+    }
+
+    private void rememberPlaceKeyboard(@NonNull com.termux.app.wall.PaneWallPage place,
+                                       boolean keyboardUp) {
         PlaceLayoutStore store = placeLayoutStore();
         // Before the keyboard exists there is nothing to record: a cold start restoring the wall
         // onto another place would otherwise write the terminal's memory down as closed.
         if (store == null || mInAppKeyboard == null) return;
-        store.setKeyboardOpen(place, mInAppKeyboard.isVisible());
+        // A minimal place put its keyboard away itself; recording that would lose the keyboard the
+        // place had before, which is what leaving minimal mode is meant to bring back.
+        if (store.isMinimal(place)) return;
+        store.setKeyboardOpen(place, keyboardUp);
+    }
+
+    /**
+     * Whether the keyboard is up as the place on screen has it: a keyboard the wall's slide has
+     * pre-rolled below the screen is the arriving place's, not this one's.
+     */
+    private boolean committedKeyboardVisible() {
+        return mInAppKeyboard != null && mInAppKeyboard.isVisible() && !mTravelKeyboardPreRolled;
     }
 
     /** Whether the place wants its keyboard up as the wall lands on it. */
     private boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) {
         PlaceLayoutStore store = placeLayoutStore();
-        return store != null && store.wasKeyboardOpen(place);
+        return store != null && com.termux.app.place.MinimalMode.keyboardOnEnter(
+            store.wasKeyboardOpen(place), store.isMinimal(place));
     }
 
     /** Whether the wall rests on the Display place. */
@@ -15324,8 +15792,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // has stopped: the layout and the look are every place's, so the slide never
                     // has anything to re-lay, and what is left — the keyboard, the touchpad, who
                     // owns the phone's keyboard, which keys can act — lands in one pass at rest
-                    // rather than in the release frame (ADR 0003).
-                    syncPlaceState(page);
+                    // rather than in the release frame (ADR 0003). The dock and the keyboard have
+                    // already travelled there with the slide; this is where what they showed
+                    // becomes the layout.
+                    settlePlaceChrome(page);
                     noteTerminalPlaceMayBeVisible();
                     if (mWidgetPaneController != null) {
                         mWidgetPaneController.onWallPageShown(
@@ -15340,6 +15810,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallOffsetChanged(float offsetPx) {
                     syncPlaceBarOffset(offsetPx);
+                    // The dock, the keyboard and the status bar's content travel with the wall
+                    // between the two places' states, as transforms only.
+                    syncChromeTravel(offsetPx);
                     // The wallpaper pans with the wall, and every glass surface follows it; the
                     // terminal's slabs re-aim whether or not it panned, since the page they sit
                     // on moved over a wallpaper that did not go with it.
@@ -15401,7 +15874,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         // no settle, so the place's state is applied here instead.
                         com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
                         if (wall != null && !wall.isMoving() && wall.offsetPx() == 0f)
-                            syncPlaceState(page);
+                            settlePlaceChrome(page);
                     });
                 }
             });
@@ -15424,6 +15897,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Bundle state = new Bundle();
             state.putString(com.termux.app.wall.PaneWallController.ARG_PAGE, initialPage);
             mPaneWallController.restoreInstanceState(state);
+        }
+        // Minimal mode is remembered across launches. The arrangement reads it through
+        // currentPlaceLayout on its own; the panes and the strip are told once here, and every
+        // change after this goes through syncChromeArrangement.
+        syncTerminalMinimalPresentation();
+        if (isChromeMinimal() != mAppliedChromeMinimal) {
+            mAppliedChromeMinimal = isChromeMinimal();
+            applyMinimalStatusChrome();
         }
     }
 
@@ -15831,6 +16312,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public void openLayoutEditor() {
                 TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.DISPLAY);
+            }
+            @Override public boolean isMinimalMode() {
+                return isPlaceMinimal(com.termux.app.wall.PaneWallPage.DISPLAY);
+            }
+            @Override public void toggleMinimalMode() {
+                setPlaceMinimal(com.termux.app.wall.PaneWallPage.DISPLAY,
+                    !isPlaceMinimal(com.termux.app.wall.PaneWallPage.DISPLAY));
             }
             @Override public void openWallpaperPicker() {
                 TermuxActivity.this.openWallpaperPicker();
@@ -16978,10 +17466,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
                 (com.termux.app.statusbar.StatusBarSwipeLayout) statusBarHost;
             swipeHost.setCollapsed(isStatusBarCompact());
-            swipeHost.setExpansionAllowed(
-                com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
+            swipeHost.setExpansionAllowed(isChromeMinimal()
+                || com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
             swipeHost.setListener(new com.termux.app.statusbar.StatusBarSwipeLayout.Listener() {
                 @Override public void onCollapsedStateRequested(boolean collapsed) {
+                    // On a minimal place the strip has nothing to open into: the swipe that would
+                    // open the bar — down, on a bar along the top — leaves minimal mode instead.
+                    if (isChromeMinimal()) {
+                        if (!collapsed) setPlaceMinimal(mLastWallPage, false);
+                        return;
+                    }
                     setTopStatusBarCollapsed(collapsed, true);
                 }
                 @Override public boolean isStatusGestureBlocked() {
@@ -19121,6 +19615,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void openSettings() {
             TermuxActivity.this.openSettings();
+        }
+
+        @Override public boolean isMinimalMode() {
+            return isPlaceMinimal(com.termux.app.wall.PaneWallPage.TERMINAL);
+        }
+
+        @Override public void toggleMinimalMode() {
+            setPlaceMinimal(com.termux.app.wall.PaneWallPage.TERMINAL,
+                !isPlaceMinimal(com.termux.app.wall.PaneWallPage.TERMINAL));
         }
 
         @Override public void onAutoTilingChanged(boolean enabled) {

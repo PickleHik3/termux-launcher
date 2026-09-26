@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Minimal mode, off: four corners pointing out, "give this place the whole screen". Drawn on
+     the tiling mark's 512 grid, in the same stroke and colour, and tinted by the corner tab. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="512"
+    android:viewportHeight="512">
+    <path
+        android:pathData="M84,200V84h116M312,84h116v116M428,312v116H312M200,428H84V312"
+        android:strokeColor="#E6E6E6"
+        android:strokeWidth="44"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+</vector>
