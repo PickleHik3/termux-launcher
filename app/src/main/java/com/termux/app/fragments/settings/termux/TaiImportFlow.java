@@ -361,6 +361,15 @@ final class TaiImportFlow {
         if (context == null || candidates == null || candidates.length() == 0) return;
         int selected = preselect(candidates, deviceMemoryBytes(context));
         CharSequence[] labels = new CharSequence[candidates.length()];
+        // A repository can publish two builds that share a quantisation, e.g. litert-community's
+        // Qwen3.5-2B ships a vision (VL) and a text-only int8 file. The build hint alone then reads
+        // "Compact" twice, so where two hints collide each title leads with its file's own name.
+        java.util.Map<String, Integer> hintCounts = new java.util.HashMap<>();
+        for (int i = 0; i < candidates.length(); i++) {
+            JSONObject candidate = candidates.optJSONObject(i);
+            String key = String.valueOf(TaiImportNames.variantHint(candidate == null ? "" : candidate.optString("file", "")));
+            hintCounts.merge(key, 1, Integer::sum);
+        }
         for (int i = 0; i < candidates.length(); i++) {
             JSONObject candidate = candidates.optJSONObject(i);
             String file = candidate == null ? "" : candidate.optString("file", "");
@@ -375,6 +384,8 @@ final class TaiImportFlow {
             int titleRes = TaiImportNames.variantHint(file);
             String title = titleRes != 0 ? capitalize(context.getString(titleRes))
                 : context.getString(R.string.termux_ai_import_variant_standard);
+            Integer sameHint = hintCounts.get(String.valueOf(titleRes));
+            if (sameHint != null && sameHint > 1) title = TaiImportNames.displayName(file) + " · " + title;
             labels[i] = twoLines(context, title, join(notes));
         }
         int[] choice = {selected};
