@@ -2757,8 +2757,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Padding the host by the arc's own depth (PaneShape.contentInsetPx) is what keeps the
         // corner glyphs whole, and because it is derived from the radius it holds at 20dp and at
         // 40dp alike — the same trade tmux and zellij make when they spend a whole cell on the
-        // frame: the frame owns space the content never enters. Each pane pays the same clearance
-        // again for its own corners, against its own radius (PaneContentFrame).
+        // frame: the frame owns space the content never enters. This is the lone pane's only arc
+        // clearance: its frame draws no arc of its own and is told it is square
+        // (TerminalPaneController.updateActiveBorders), so the terminal does not pay for the
+        // same corner twice. Split panes round their own corners and pay their own clearance.
         applyPaneHostCornerPadding(paneHost, PaneShape.contentInsetPx(innerRadiusPx));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {

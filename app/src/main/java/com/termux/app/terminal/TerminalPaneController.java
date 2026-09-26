@@ -3132,19 +3132,29 @@ public class TerminalPaneController {
         if (mActiveWindow != null) {
             for (Leaf leaf : mActiveWindow.floating) floatingSessions.add(leaf.session);
         }
+        float density = mHostView.getResources().getDisplayMetrics().density;
         for (TerminalView v : views) {
             TerminalSession paneSession = v.getCurrentSession();
             PaneContentFrame frame = mPaneFrames.get(paneSession);
             if (frame == null) continue;
             boolean floating = floatingSessions.contains(paneSession);
-            // The pane's shape, and with it the clearance the terminal is laid out inside. One
-            // radius for every pane, whatever is edging it — the glass slab, the float's card, the
-            // focus stroke's own arc — since all of them round the same corners over the same
-            // cells. Only glass clips here: a float clips on its own wrapper and a stroke does not
-            // clip at all.
             boolean glassShape = paneGlassActive();
-            frame.setPaneShape(paneRadiusPx(), glassShape);
-            if (!split && mMaximizedLeaf == null && !floating && !glassShape) {
+            // A lone plain pane wears no rim and no clip of its own: the terminal host draws the
+            // frame line and rounds the corners around this one frame, and pads the arc's
+            // clearance itself (TermuxActivity.applyPaneHostCornerPadding). So the frame is told
+            // it is square — handing it the radius as well made the terminal pay that clearance
+            // twice, the host's padding and then the frame's margin, for an arc the frame never
+            // draws.
+            boolean bare = !split && mMaximizedLeaf == null && !floating && !glassShape;
+            // Otherwise the pane's shape, and with it the clearance the terminal is laid out
+            // inside. One radius for every pane, whatever is edging it — the glass slab, the
+            // float's card, the focus stroke's own arc — since all of them round the same corners
+            // over the same cells. Only glass clips here: a float clips on its own wrapper and a
+            // stroke does not clip at all. The frame also learns how wide the rim it is about to
+            // wear is, so the band it fills behind the grid stops at the rim's inner edge.
+            frame.setPaneShape(bare ? 0f : paneRadiusPx(), glassShape);
+            frame.setRimStrokePx(bare ? 0f : paneBorderStrokePx(glassShape, true, density));
+            if (bare) {
                 PaneRim gone = mBorderStates.remove(paneSession);
                 if (gone != null) gone.clear(frame);
                 else frame.setForeground(null);
