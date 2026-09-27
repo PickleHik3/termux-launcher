@@ -291,6 +291,9 @@ public final class TaiRuntimeServiceClient {
                     String result = data.getString(TaiRuntimeIpc.KEY_RESULT, "{}");
                     request.result = new JSONObject(result);
                     pending.remove(requestId);
+                    // A stream the service ended with a plain response (it threw before its own
+                    // done event) must still wake its consumer, which then reports the error.
+                    if (request.stream) request.signalEnd();
                     request.done.countDown();
                     return;
                 }

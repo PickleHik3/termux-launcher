@@ -23,4 +23,30 @@
             app:order="1001"
             app:persistent="false"/>
     </PreferenceCategory>
+
+    <!-- Speech output (KittenTTS): the voice and speed Read aloud, tai speak and the API use when a
+         request names none, and a sample to hear them. The model itself comes from the Model
+         centre's Speech segment, under Voice output. -->
+    <PreferenceCategory
+        app:key="speech_output"
+        app:title="@string/speech_output_header">
+        <Preference
+            app:key="speech_output_missing"
+            app:title="@string/speech_output_missing_title"
+            app:summary="@string/speech_output_missing_summary"
+            app:persistent="false"/>
+        <Preference
+            app:key="speech_output_voice"
+            app:title="@string/speech_output_voice_title"
+            app:persistent="false"/>
+        <Preference
+            app:key="speech_output_speed"
+            app:title="@string/speech_output_speed_title"
+            app:persistent="false"/>
+        <Preference
+            app:key="speech_output_sample"
+            app:title="@string/speech_output_sample_title"
+            app:summary="@string/speech_output_sample_summary"
+            app:persistent="false"/>
+    </PreferenceCategory>
 </PreferenceScreen>

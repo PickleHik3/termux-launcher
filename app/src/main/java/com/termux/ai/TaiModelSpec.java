@@ -27,6 +27,9 @@ public final class TaiModelSpec {
     // Whisper ACFT .tflite graphs (speech-to-text, phase 1: catalog + downloader only, no runtime
     // routing yet). Kept out of chat catalogs, installed-model lists and /v1/models chat listings.
     public static final String CAPABILITY_SPEECH_TO_TEXT = "speech_to_text";
+    // KittenTTS .tflite graphs (speech output, KittenTtsRuntime). Speech-only like speech_to_text:
+    // kept out of chat catalogues, the installed chat list, the STT picker and /v1/models.
+    public static final String CAPABILITY_TEXT_TO_SPEECH = "text_to_speech";
     public static final String CAPABILITY_IMAGE_INPUT = "image_input";
     public static final String CAPABILITY_AUDIO_INPUT = "audio_input";
     // Declared-only intent: no runtime processes video yet, so this rides on sourceCapabilities
@@ -351,6 +354,10 @@ public final class TaiModelSpec {
         // A speech model is speech-only wherever it lives: catalog entries have no local path yet.
         if (source.contains(CAPABILITY_SPEECH_TO_TEXT)) {
             endpoint.add(CAPABILITY_SPEECH_TO_TEXT);
+            return endpoint;
+        }
+        if (source.contains(CAPABILITY_TEXT_TO_SPEECH)) {
+            endpoint.add(CAPABILITY_TEXT_TO_SPEECH);
             return endpoint;
         }
         if (localPath != null && localPath.toLowerCase(Locale.ROOT).endsWith(".tflite")) {

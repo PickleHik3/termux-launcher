@@ -31,7 +31,23 @@ Ollama responses use NDJSON streaming while OpenAI responses use SSE. Both adapt
 the same `TaiChatRequest`, runtime options, capability checks, model load lifecycle, and cancellation
 path.
 
-`/v1/audio/speech` exists so clients get a clear OpenAI-shaped error. Local LiteRT-LM and MNN runners do not currently generate audio output, so audio-output requests return `unsupported_audio_output` with HTTP 501.
+`/v1/audio/speech` speaks with the voice model (KittenTTS nano 0.8, installed from Model centre >
+Speech > Voice output). It takes OpenAI's body: `input` (up to 4096 characters), `voice` (`Bruno`,
+`Hugo`, `Jasper` or `Rosie`; OpenAI names such as `alloy` map onto them), `speed` (0.5 to 2.0) and
+`response_format`: `wav` (the default; the whole file once synthesis ends) or `pcm` (24 kHz, 16-bit
+signed little-endian mono, streamed sentence by sentence). `mp3`, `opus`, `aac` and `flac` are
+refused. `model` may be omitted or be any OpenAI speech model name. Synthesis runs on the CPU in the
+`:tai_runtime` process, never queued behind a chat generation.
+
+```sh
+curl -sS -H "Authorization: Bearer $(cat ~/.launcherctl/token)" -H 'Content-Type: application/json' \
+  -d '{"input":"The build finished.","voice":"Rosie","response_format":"wav"}' \
+  "$(cat ~/.launcherctl/endpoint)/v1/audio/speech" -o hello.wav
+```
+
+On the phone itself, `tai speak "text"` (or text on stdin) reads aloud through the speaker,
+`tai speak --out file.wav` saves instead, and `tai speak --stop` or Ctrl-C stops. Selected terminal
+text has a **Read aloud** action in its toolbar; tapping it again stops the reading.
 
 `/v1/embeddings` accepts a string or an array of strings and returns float
 vectors in OpenAI's `embedding` list shape. Use it only with models whose
@@ -358,7 +374,7 @@ Examples:
 - text-only LiteRT model image input: `capability_not_supported`
 - unknown content part type: `unsupported_content_part`
 - chat audio output through `modalities:["audio"]`: `unsupported_audio_output`, HTTP 501
-- `/v1/audio/speech`: `unsupported_audio_output`, HTTP 501
+- `/v1/audio/speech` without a voice model installed: `tts_model_not_installed`, HTTP 400
 
 This behavior is intentional for OpenAI-compatible CLI tools. Silent media dropping makes prompts misleading.
 

@@ -545,6 +545,12 @@ public final class TaiManager {
                 "Model " + modelId + " is a speech-to-text model. It is served on demand via /v1/audio/transcriptions "
                     + "and tai transcribe and does not load into the chat runtime.");
         }
+        if (spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) {
+            // Voice models load on demand behind /v1/audio/speech, tai speak and Read aloud.
+            return error(400, "tts_model_not_loadable",
+                "Model " + modelId + " is a voice model. It is served on demand via /v1/audio/speech "
+                    + "and tai speak and does not load into the chat runtime.");
+        }
         String requestedBackend = request.optString("backend", "").trim();
         if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
             return error(409, "backend_mismatch", "Model " + modelId + " requires backend " + spec.backend + ".");
@@ -980,14 +986,6 @@ public final class TaiManager {
         return response;
     }
 
-    @NonNull
-    public JSONObject openAiAudioSpeech(@NonNull String body) throws JSONException {
-        parseBody(body);
-        return openAiError(error(501, "unsupported_audio_output",
-            "Audio output is not available from the local LiteRT-LM or MNN runners. "
-                + "Use text responses or a separate text-to-speech backend."));
-    }
-
     public boolean isStreamRequest(@NonNull String body) {
         try {
             return parseBody(body).optBoolean("stream", false);
@@ -1262,6 +1260,7 @@ public final class TaiManager {
             // Speech-to-text models aren't chat models: MultiBackendTaiRuntime doesn't route
             // speech_to_text yet (phase 2), and they're never a valid /v1/chat/completions target.
             if (stored.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
+            if (stored.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) continue;
             Integer userContext = settings.getRuntimeOptions(stored).contextWindow;
             TaiModelSpec spec = advertisedContextWindow(TaiContextWindowPolicy.apply(stored, device.memoryBytes,
                 userContext), device, presence, userContext != null);
@@ -1614,6 +1613,339 @@ public final class TaiManager {
     /** The idle limit for a resident speech model, for the runtime process's memory watch. */
     public long sttIdleLimitMs() {
         return sttIdleLimitMs;
+    }
+
+    // ---- speech output ----
+
+    /** One sentence of speech for {@link #synthesizeSpeech}: PCM16 little-endian mono at {@code sampleRate}. */
+    public interface SpeechAudioSink {
+        void onAudio(@NonNull byte[] pcm16, int sampleRate) throws IOException;
+    }
+
+    /**
+     * The IPC deadline for {@link #speak}: the call returns only once the text has been heard, so
+     * the deadline covers synthesis and playback of the whole text, generously (a slow phone
+     * synthesising slower than it speaks, and the model load on first use).
+     */
+    static long speakTimeoutMs(int chars) {
+        return Math.min(60L * 60_000L, 60_000L + chars * 200L);
+    }
+
+    /**
+     * Speaks {@code input} through the phone's speaker with the speech-output model and returns
+     * when it has been heard or stopped: {@code tai speak}, Read aloud and the settings sample.
+     * Body: {@code input} (or {@code text}), {@code voice}, {@code speed}, {@code model}; voice and
+     * speed default to the settings'. Answers {@code ok, model, voice, speed, sentences,
+     * audioSeconds, firstSoundMs, played, stopped, timings}.
+     */
+    @NonNull
+    public JSONObject speak(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        TaiSpeechRequest parsed = parseSpeechRequest(request, TaiSpeechRequest.MAX_SPEAK_CHARS);
+        if (!parsed.isValid()) return speechRefusal(parsed);
+        TaiModelSpec spec = resolveTtsModel(request, parsed);
+        if (spec == null) return ttsModelError(request, parsed);
+        if (shouldDelegateRuntime()) {
+            return runtimeRequest(TaiRuntimeIpc.OP_TTS_SPEAK, delegatedTtsBody(parsed, spec),
+                speakTimeoutMs(parsed.text.length()));
+        }
+        MultiBackendTaiRuntime router = ttsRouter();
+        if (router == null) return noTtsRuntime();
+        JSONObject refusal = decideTtsLoad(router, spec);
+        if (refusal != null) return refusal;
+        return TaiSpeechOutput.speak(appContext, router, spec, parsed);
+    }
+
+    /** Stops whatever the phone is saying; answers {@code {ok, stopped}}. Never waits for synthesis. */
+    @NonNull
+    public JSONObject stopSpeaking() throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_TTS_STOP, "{}", RUNTIME_STATUS_TIMEOUT_MS);
+        return TaiSpeechOutput.stop(ttsRouter());
+    }
+
+    /** Loads the speech-output model ahead of its first sentence. */
+    @NonNull
+    public JSONObject ttsWarm(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        TaiSpeechRequest parsed = TaiSpeechRequest.parse(new JSONObject(request.toString()).put("input", "."),
+            settings.getTtsVoice(), settings.getTtsSpeed(), TaiSpeechRequest.MAX_SPEAK_CHARS);
+        TaiModelSpec spec = resolveTtsModel(request, parsed);
+        if (spec == null) return ttsModelError(request, parsed);
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_TTS_WARM, delegatedTtsBody(parsed, spec));
+        MultiBackendTaiRuntime router = ttsRouter();
+        if (router == null) return noTtsRuntime();
+        JSONObject refusal = decideTtsLoad(router, spec);
+        if (refusal != null) return refusal;
+        return router.ttsWarm(spec);
+    }
+
+    /**
+     * Checks a speech request without running it: the refusal (OpenAI error shape with
+     * {@code _statusCode}) or {@code null} when it would run. The API calls this before it commits
+     * to a 200 and a streamed body.
+     */
+    @Nullable
+    public JSONObject checkSpeechRequest(@NonNull String body, int maxChars) throws JSONException {
+        JSONObject request = parseBody(body);
+        TaiSpeechRequest parsed = parseSpeechRequest(request, maxChars);
+        if (!parsed.isValid()) return speechRefusal(parsed);
+        return resolveTtsModel(request, parsed) == null ? ttsModelError(request, parsed) : null;
+    }
+
+    /** {@code wav} or {@code pcm} for a request that {@link #checkSpeechRequest} accepted. */
+    @NonNull
+    public static String speechResponseFormat(@NonNull String body) {
+        try {
+            return TaiSpeechRequest.parse(new JSONObject(body.trim().isEmpty() ? "{}" : body), TaiTtsVoices.DEFAULT_VOICE,
+                TaiTtsVoices.DEFAULT_SPEED, Integer.MAX_VALUE).format;
+        } catch (JSONException e) {
+            return TaiSpeechRequest.FORMAT_WAV;
+        }
+    }
+
+    /** The 44-byte RIFF header for {@code dataBytes} of mono PCM16, for the API's {@code wav} answer. */
+    @NonNull
+    public static byte[] wavHeader(int dataBytes, int sampleRate) {
+        return TaiWav.header(dataBytes, sampleRate);
+    }
+
+    /** The limit {@code /v1/audio/speech} applies, OpenAI's; {@code tai speak} gets {@link #speakCharacterLimit}. */
+    public static int apiSpeechCharacterLimit() {
+        return TaiSpeechRequest.MAX_API_CHARS;
+    }
+
+    public static int speakCharacterLimit() {
+        return TaiSpeechRequest.MAX_SPEAK_CHARS;
+    }
+
+    /**
+     * Synthesises without playing, handing each sentence to {@code sink} as it is ready: the
+     * OpenAI {@code /v1/audio/speech} route and {@code tai speak --out}. The runtime process writes
+     * each sentence as a PCM16 file under {@code cacheDir/tai-ipc} and says so; this side reads
+     * it, deletes it and passes the bytes on, so audio never crosses the Messenger inline. Returns
+     * the runtime's summary, or a refusal or failure in the OpenAI error shape. When {@code sink}
+     * throws (the HTTP client went away) synthesis is stopped and the exception rethrown.
+     */
+    @NonNull
+    public JSONObject synthesizeSpeech(@NonNull String body, int maxChars, @NonNull SpeechAudioSink sink)
+            throws JSONException, IOException {
+        JSONObject request = parseBody(body);
+        TaiSpeechRequest parsed = parseSpeechRequest(request, maxChars);
+        if (!parsed.isValid()) return speechRefusal(parsed);
+        TaiModelSpec spec = resolveTtsModel(request, parsed);
+        if (spec == null) return ttsModelError(request, parsed);
+        if (!shouldDelegateRuntime()) {
+            // In-process (a runtime override): synthesise straight into the sink.
+            MultiBackendTaiRuntime router = ttsRouter();
+            if (router == null) return noTtsRuntime();
+            final IOException[] failure = new IOException[1];
+            JSONObject result = router.synthesizeSpeech(spec, parsed.text, parsed.voice, parsed.speed, (samples, count, index) -> {
+                byte[] pcm = new byte[count * 2];
+                TaiWav.floatToPcm16(samples, 0, count, pcm, 0);
+                try {
+                    sink.onAudio(pcm, router.ttsSampleRate());
+                    return true;
+                } catch (IOException e) {
+                    failure[0] = e;
+                    return false;
+                }
+            }, () -> failure[0] != null);
+            if (failure[0] != null) throw failure[0];
+            return result;
+        }
+        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "TAI runtime service client is unavailable.");
+        final JSONObject[] summary = new JSONObject[1];
+        try {
+            runtimeClient.stream(TaiRuntimeIpc.OP_TTS_SYNTHESIZE, delegatedTtsBody(parsed, spec), new OpenAiStreamSink() {
+                @Override
+                public void onEvent(@NonNull JSONObject event) throws IOException {
+                    String file = event.optString("file", "");
+                    if (!file.isEmpty()) {
+                        File pcm = new File(file);
+                        try {
+                            sink.onAudio(readAllBytes(pcm), event.optInt("sampleRate", KittenTtsRuntime.SAMPLE_RATE));
+                        } finally {
+                            //noinspection ResultOfMethodCallIgnored
+                            pcm.delete();
+                        }
+                    } else if (event.has("result")) {
+                        summary[0] = event.optJSONObject("result");
+                    } else if (event.has("error")) {
+                        summary[0] = event;
+                    }
+                }
+
+                @Override
+                public void onDone() {
+                }
+            });
+        } catch (IOException | RuntimeException e) {
+            // The client went away mid-stream: stop synthesising audio nobody will hear.
+            try {
+                stopSpeaking();
+            } catch (JSONException ignored) {
+            }
+            throw e;
+        }
+        if (summary[0] == null) return error(500, "tts_stream_incomplete", "The speech runtime ended without a result.");
+        return summary[0];
+    }
+
+    /** The runtime-process half of {@link #synthesizeSpeech}: files out, one event per sentence, then the summary. */
+    void synthesizeSpeechToEvents(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        JSONObject request = parseBody(body);
+        TaiSpeechRequest parsed = parseSpeechRequest(request, TaiSpeechRequest.MAX_SPEAK_CHARS);
+        TaiModelSpec spec = parsed.isValid() ? resolveTtsModel(request, parsed) : null;
+        MultiBackendTaiRuntime router = ttsRouter();
+        JSONObject result;
+        if (!parsed.isValid()) {
+            result = speechRefusal(parsed);
+        } else if (spec == null) {
+            result = ttsModelError(request, parsed);
+        } else if (router == null) {
+            result = noTtsRuntime();
+        } else {
+            JSONObject refusal = decideTtsLoad(router, spec);
+            if (refusal != null) {
+                result = refusal;
+            } else {
+                final IOException[] failure = new IOException[1];
+                result = TaiSpeechOutput.synthesizeToFiles(appContext, router, spec, parsed, (file, samples, sampleRate, index) -> {
+                    try {
+                        JSONObject event = new JSONObject();
+                        event.put("file", file.getAbsolutePath());
+                        event.put("samples", samples);
+                        event.put("sampleRate", sampleRate);
+                        event.put("index", index);
+                        sink.onEvent(event);
+                        return true;
+                    } catch (IOException | JSONException e) {
+                        failure[0] = e instanceof IOException ? (IOException) e : new IOException(e.getMessage());
+                        //noinspection ResultOfMethodCallIgnored
+                        file.delete();
+                        return false;
+                    }
+                });
+                if (failure[0] != null) throw failure[0];
+            }
+        }
+        if (result.has("error") && !result.optBoolean("ok", true)) {
+            sink.onEvent(result);
+        } else {
+            sink.onEvent(new JSONObject().put("result", result));
+        }
+        sink.onDone();
+    }
+
+    @NonNull
+    private TaiSpeechRequest parseSpeechRequest(@NonNull JSONObject request, int maxChars) {
+        return TaiSpeechRequest.parse(request, settings.getTtsVoice(), settings.getTtsSpeed(), maxChars);
+    }
+
+    @NonNull
+    private JSONObject speechRefusal(@NonNull TaiSpeechRequest parsed) throws JSONException {
+        return openAiRequestError(parsed.statusCode, parsed.errorCode == null ? "bad_request" : parsed.errorCode,
+            parsed.errorMessage == null ? "Bad speech request." : parsed.errorMessage, parsed.errorParam);
+    }
+
+    @NonNull
+    private JSONObject noTtsRuntime() throws JSONException {
+        return openAiRequestError(501, "capability_not_supported", "Speech output needs the multi-backend runtime.", "model");
+    }
+
+    /**
+     * The speech-output model a request names, or the installed one when it names none, one of
+     * OpenAI's speech model names, or an id this phone has never heard of (OpenAI-shaped clients
+     * send a model field they may not know how to leave out); {@code null} when that does not
+     * resolve to a {@code text_to_speech} model. In the runtime process the app process's
+     * resolved spec rides along in the body.
+     */
+    @Nullable
+    private TaiModelSpec resolveTtsModel(@NonNull JSONObject request, @NonNull TaiSpeechRequest parsed) {
+        String modelId = parsed.model;
+        if (runtimeProcess) {
+            TaiModelSpec supplied = resolveModel(request, modelId);
+            return supplied != null && TaiTtsModels.isTtsModel(supplied) ? supplied : null;
+        }
+        if (TaiSpeechRequest.isDefaultModelAlias(modelId)) return TaiTtsModels.resolveActive(modelStore);
+        TaiModelSpec spec = resolveModel(request, modelId);
+        if (spec == null && TaiModelCatalog.get(modelId) == null) return TaiTtsModels.resolveActive(modelStore);
+        return spec != null && TaiTtsModels.isTtsModel(spec) ? spec : null;
+    }
+
+    @NonNull
+    private JSONObject ttsModelError(@NonNull JSONObject request, @NonNull TaiSpeechRequest parsed) throws JSONException {
+        String modelId = parsed.model;
+        TaiModelSpec spec = TaiSpeechRequest.isDefaultModelAlias(modelId) ? null : resolveModel(request, modelId);
+        if (spec != null && !TaiTtsModels.isTtsModel(spec)) {
+            return openAiRequestError(400, "not_a_tts_model", "Model '" + modelId + "' is not a voice model.", "model");
+        }
+        if (!TaiSpeechRequest.isDefaultModelAlias(modelId) && TaiModelCatalog.get(modelId) != null) {
+            return openAiRequestError(400, "tts_model_not_installed", "Model '" + modelId + "' is not installed.", "model");
+        }
+        return openAiRequestError(400, "tts_model_not_installed",
+            "No voice model is installed. Get one in TAI settings > Model centre > Speech > Voice output.", "model");
+    }
+
+    /** The runtime-process body: the parsed request with the resolved spec riding along. */
+    @NonNull
+    private String delegatedTtsBody(@NonNull TaiSpeechRequest parsed, @NonNull TaiModelSpec spec) throws JSONException {
+        JSONObject body = new JSONObject();
+        body.put("input", parsed.text);
+        body.put("voice", parsed.voice);
+        body.put("speed", (double) parsed.speed);
+        body.put("response_format", parsed.format);
+        body.put("model", spec.id);
+        body.put(INTERNAL_MODEL_SPEC, spec.toJson());
+        return body.toString();
+    }
+
+    @Nullable
+    private MultiBackendTaiRuntime ttsRouter() {
+        TaiRuntime local = runtime;
+        return local instanceof MultiBackendTaiRuntime ? (MultiBackendTaiRuntime) local : null;
+    }
+
+    /**
+     * The budget for a speech-output model that is not resident yet: the measured or estimated
+     * cost against what is free, with idle embeddings evicted if that is what it takes. Speech
+     * output never evicts speech-to-text or chat: dictating and chatting matter more than a voice
+     * that reloads in a second. {@code null} means go ahead.
+     */
+    @Nullable
+    private JSONObject decideTtsLoad(@NonNull MultiBackendTaiRuntime router, @NonNull TaiModelSpec spec) throws JSONException {
+        if (router.residency().isResident(TaiResidency.Kind.TTS, spec.id)) return null;
+        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+        List<TaiResidency.Entry> residents = router.residency().snapshot();
+        long available = TaiResidency.creditedAvailable(device.availableMemoryBytes, residents, TaiResidency.Kind.TTS, spec.backend);
+        long worst = TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 0);
+        TaiLoadBudget.Estimate estimate = worst > 0L ? TaiLoadBudget.Estimate.measured(worst)
+            : TaiLoadBudget.Estimate.ratio(TaiResidency.ttsEstimateBytes(spec), 0L);
+        List<TaiResidency.Entry> candidates = new ArrayList<>();
+        for (TaiResidency.Entry entry : TaiResidency.evictionCandidates(residents, TaiResidency.Kind.TTS, spec.backend)) {
+            if (entry.kind == TaiResidency.Kind.EMBEDDING) candidates.add(entry);
+        }
+        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
+            device.memoryThresholdBytes, candidates);
+        if (!plan.fits) return openAiError(insufficientMemory(spec.displayName, plan));
+        evict(plan);
+        return null;
+    }
+
+    @NonNull
+    private static byte[] readAllBytes(@NonNull File file) throws IOException {
+        long length = file.length();
+        if (length > Integer.MAX_VALUE) throw new IOException("Audio file too large");
+        byte[] out = new byte[(int) length];
+        try (java.io.FileInputStream in = new java.io.FileInputStream(file)) {
+            int done = 0;
+            while (done < out.length) {
+                int read = in.read(out, done, out.length - done);
+                if (read < 0) break;
+                done += read;
+            }
+            return done == out.length ? out : java.util.Arrays.copyOf(out, done);
+        }
     }
 
     /**

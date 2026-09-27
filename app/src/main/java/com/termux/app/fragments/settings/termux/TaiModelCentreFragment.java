@@ -38,6 +38,8 @@ import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiSettings;
 import com.termux.ai.TaiSpeechModels;
+import com.termux.ai.TaiReadAloud;
+import com.termux.ai.TaiTtsModels;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.notice.AppNotice;
 
@@ -121,6 +123,8 @@ public class TaiModelCentreFragment extends Fragment
     @NonNull private Map<String, TaiModelSpec> installedAll = Collections.emptyMap();
     @NonNull private List<TaiModelSpec> installedChat = Collections.emptyList();
     @NonNull private List<TaiModelSpec> installedSpeech = Collections.emptyList();
+    /** Installed speech-output (voice) models; shown under Installed and never as chat or speech-to-text. */
+    @NonNull private List<TaiModelSpec> installedVoice = Collections.emptyList();
     @Nullable private String defaultId;
     @Nullable private String voiceId;
     @Nullable private String loadedId;
@@ -266,10 +270,13 @@ public class TaiModelCentreFragment extends Fragment
         installedAll = store.getInstalledUserModels();
         List<TaiModelSpec> chat = new ArrayList<>();
         for (TaiModelSpec spec : installedAll.values()) {
-            if (!TaiSpeechModels.isSpeechModel(spec)) chat.add(spec);
+            if (!TaiSpeechModels.isSpeechModel(spec) && !TaiTtsModels.isTtsModel(spec)) chat.add(spec);
         }
         installedChat = chat;
         installedSpeech = TaiSpeechModels.installed(store);
+        installedVoice = TaiTtsModels.installed(store);
+        // Read aloud is offered only with a voice installed; an install or delete here changes that.
+        TaiReadAloud.invalidateAvailability();
         TaiSettings settings = new TaiSettings(context);
         defaultId = settings.getDefaultAssistantModel();
         TaiModelSpec active = TaiSpeechModels.chooseActive(settings.getSttModelId(), installedSpeech);
@@ -320,7 +327,10 @@ public class TaiModelCentreFragment extends Fragment
             new TaiModelCentreAdapter.Segments(segment, labels), false));
         switch (SEGMENTS[segment]) {
             case SEGMENT_CHAT: addCatalogue(context, items, TaiModelCatalog.chatEntries().values(), false, busy); break;
-            case SEGMENT_SPEECH: addCatalogue(context, items, TaiModelCatalog.speechEntries().values(), true, busy); break;
+            case SEGMENT_SPEECH:
+                addCatalogue(context, items, TaiModelCatalog.speechEntries().values(), true, busy);
+                addVoiceOutput(context, items, busy);
+                break;
             default: addInstalled(context, items); break;
         }
         items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SETTING, "parallel", "parallel|" + parallel,
@@ -363,10 +373,13 @@ public class TaiModelCentreFragment extends Fragment
                 ids.add(item.id);
                 busy.add(item.modelId);
                 TaiModelCentreRows.State state = TaiModelCentreRows.stateFor(context, item);
-                boolean speech = item.isSpeech() || TaiModelCatalog.speechEntries().containsKey(item.modelId);
-                String title = centreName(item.modelId, item.displayName, item.record.optString("path", ""), speech);
-                String subtitle = kindLine(context, speech, item.totalBytes > 0L ? item.totalBytes : catalogueSize(item.modelId),
-                    !TaiModelCatalog.entries().containsKey(item.modelId));
+                boolean voice = TaiModelCatalog.ttsEntries().containsKey(item.modelId);
+                boolean speech = voice || item.isSpeech() || TaiModelCatalog.speechEntries().containsKey(item.modelId);
+                String title = voice ? item.displayName
+                    : centreName(item.modelId, item.displayName, item.record.optString("path", ""), speech);
+                long size = item.totalBytes > 0L ? item.totalBytes : catalogueSize(item.modelId);
+                String subtitle = voice ? voiceKindLine(context, size)
+                    : kindLine(context, speech, size, !TaiModelCatalog.entries().containsKey(item.modelId));
                 String signature = title + '|' + subtitle + '|' + state.phase + '|' + state.pill + '|' + state.metaStart
                     + '|' + state.metaEnd + '|' + state.bar + '|' + state.progress + '|' + state.actions;
                 items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_DOWNLOAD, item.id, signature,
@@ -399,6 +412,8 @@ public class TaiModelCentreFragment extends Fragment
     private void addBanners(@NonNull Context context, @NonNull List<TaiModelCentreAdapter.Item> items) {
         for (Map.Entry<String, Boolean> entry : banners.entrySet()) {
             String modelId = entry.getKey();
+            // A voice model needs no "use as" choice: it simply speaks once installed.
+            if (TaiModelCatalog.ttsEntries().containsKey(modelId)) continue;
             boolean speech = entry.getValue();
             TaiModelSpec spec = installedAll.get(modelId);
             String name = spec == null ? modelId : centreName(modelId, spec.displayName, spec.localPath, speech);
@@ -445,7 +460,14 @@ public class TaiModelCentreFragment extends Fragment
             row.pillPrimary = spec.id.equals(voiceId) ? getString(R.string.tai_centre_pill_in_use) : "";
             addModelRow(items, row);
         }
-        if (chat.isEmpty() && speech.isEmpty()) {
+        for (TaiModelSpec spec : installedVoice) {
+            TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(spec.id, true, spec, TaiModelCatalog.get(spec.id));
+            row.voiceOutput = true;
+            row.title = spec.displayName;
+            row.subtitle = voiceKindLine(context, spec.sizeBytes) + " · " + new TaiSettings(context).getTtsVoice();
+            addModelRow(items, row);
+        }
+        if (chat.isEmpty() && speech.isEmpty() && installedVoice.isEmpty()) {
             items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_EMPTY, "empty-installed", "empty-installed",
                 new TaiModelCentreAdapter.Empty(getString(R.string.tai_centre_empty_installed_title),
                     getString(R.string.tai_centre_empty_installed_summary)), false));
@@ -495,6 +517,49 @@ public class TaiModelCentreFragment extends Fragment
 
     private static void addModelRow(@NonNull List<TaiModelCentreAdapter.Item> items, @NonNull TaiModelCentreAdapter.ModelRow row) {
         items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_MODEL, row.modelId, row.signature(), row, false));
+    }
+
+    /**
+     * The Speech segment's "Voice output" section: the speech-output catalogue (KittenTTS) under
+     * its own heading, below the speech-to-text models, or a line saying it is installed.
+     */
+    private void addVoiceOutput(@NonNull Context context, @NonNull List<TaiModelCentreAdapter.Item> items,
+                                @NonNull Set<String> busy) {
+        String header = getString(R.string.tai_centre_voice_output_header);
+        items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SECTION, "voice-output", "voice-output|" + header,
+            new TaiModelCentreAdapter.Section(header, "", getString(R.string.tai_centre_voice_output_sub)), false));
+        int added = 0;
+        for (TaiModelCatalog.CatalogEntry entry : TaiModelCatalog.ttsEntries().values()) {
+            if (installedAll.containsKey(entry.modelId) || busy.contains(entry.modelId)) continue;
+            TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(entry.modelId, true, null, entry);
+            row.voiceOutput = true;
+            row.title = entry.displayName;
+            String size = entry.sizeEstimate == null || entry.sizeEstimate.isEmpty()
+                ? TaiModelCentreRows.formatBytes(entry.sizeBytes) : entry.sizeEstimate;
+            row.subtitle = getString(R.string.tai_centre_kind_voice) + " · " + size + " · "
+                + getString(R.string.tai_centre_voice_names);
+            row.installable = entry.downloadAvailable;
+            row.installing = installing.contains(entry.modelId);
+            String error = errors.get(entry.modelId);
+            if (error != null) {
+                row.note = error;
+                row.noteIsError = true;
+            }
+            addModelRow(items, row);
+            added++;
+        }
+        if (added == 0) {
+            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_EMPTY, "empty-voice", "empty-voice",
+                new TaiModelCentreAdapter.Empty("", getString(R.string.tai_centre_empty_voice)), false));
+        }
+    }
+
+    /** "voice · 90 MB". */
+    @NonNull
+    private static String voiceKindLine(@NonNull Context context, long sizeBytes) {
+        StringBuilder line = new StringBuilder(context.getString(R.string.tai_centre_kind_voice));
+        if (sizeBytes > 0L) line.append(" · ").append(TaiModelCentreRows.formatBytes(sizeBytes));
+        return line.toString();
     }
 
     /** "chat · 2.4 GB", "speech · 97 MB", "chat · 2.1 GB · from link". */
@@ -692,6 +757,11 @@ public class TaiModelCentreFragment extends Fragment
         TaiModelCatalog.CatalogEntry entry = row.entry;
         if (context == null || entry == null || row.installing) return;
         TaiMotion.tick(source);
+        if (row.voiceOutput) {
+            // A voice model is a plain catalogue download: no window, no "use for" choice.
+            install(entry.modelId, false, 0, source);
+            return;
+        }
         if (row.speech && TaiSpeechActions.isWhisper(entry.modelId)) {
             TaiSpeechInstallSheet.show(context, entry.modelId, new TaiSettings(context).getSttWindowSeconds(),
                 deviceMemory(context), (modelId, window) -> install(modelId, true, window, source));
@@ -769,7 +839,15 @@ public class TaiModelCentreFragment extends Fragment
         if (context == null || spec == null) return;
         PopupMenu menu = new PopupMenu(context, anchor);
         Menu items = menu.getMenu();
-        if (row.speech) {
+        if (row.voiceOutput) {
+            items.add(Menu.NONE, 1, Menu.NONE, R.string.tai_centre_voice_settings);
+            items.add(Menu.NONE, 2, Menu.NONE, R.string.speech_model_action_delete);
+            menu.setOnMenuItemClickListener(item -> {
+                if (item.getItemId() == 1) openVoiceSettings();
+                else confirmDeleteVoice(context, spec);
+                return true;
+            });
+        } else if (row.speech) {
             if (!spec.id.equals(voiceId)) items.add(Menu.NONE, 1, Menu.NONE, R.string.tai_centre_use_voice);
             int other = TaiSpeechActions.otherWindow(spec);
             if (other > 0) items.add(Menu.NONE, 2, Menu.NONE, R.string.speech_model_action_window);
@@ -880,6 +958,26 @@ public class TaiModelCentreFragment extends Fragment
             .setTitle(getString(R.string.tai_centre_delete_chat_title, spec.displayName))
             .setMessage(R.string.termux_ai_model_delete_message)
             .setPositiveButton(R.string.termux_ai_model_delete_action, (dialog, which) -> deleteModel(context, spec.id, null))
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    /** The voice picker lives with the speech settings (Keyboard > Voice input > Speech model). */
+    private void openVoiceSettings() {
+        if (getActivity() instanceof SettingsActivity) {
+            ((SettingsActivity) getActivity()).openScreen(SpeechModelPreferencesFragment.class,
+                R.string.settings_keyboard_voice_model_title, null);
+        }
+    }
+
+    private void confirmDeleteVoice(@NonNull Context context, @NonNull TaiModelSpec spec) {
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(getString(R.string.tai_centre_delete_voice_title, spec.displayName))
+            .setMessage(R.string.tai_centre_delete_voice_message)
+            .setPositiveButton(R.string.speech_model_action_delete, (dialog, which) -> {
+                TaiReadAloud.stop(context);
+                deleteModel(context, spec.id, null);
+            })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
     }

@@ -107,7 +107,7 @@ POST /v1/audio/speech
 
 Ollama-compatible endpoints (`/api/version`, `/api/tags`, `/api/show`, `/api/ps`, `/api/chat`, `/api/generate`, `/api/embed`, legacy `/api/embeddings`) are served from the same base address without `/v1`. Ollama registry operations (`pull`, `create`, `push`, `copy`, `delete`) return 501. See [LauncherCtl API](LauncherCtl_API) for the full route tables.
 
-`/v1/audio/speech` returns a clear `unsupported_audio_output` error because the local runners do not currently generate audio output.
+`/v1/audio/speech` speaks with the voice model from Model centre > Speech > Voice output (`wav` or streamed `pcm`); `tai speak` reads text aloud on the phone. See [Termux AI Backends](Termux_AI_Backends).
 
 `/v1/embeddings` is accepted only for installed models whose `/v1/models`
 `_capabilities` include `text_embeddings`. EmbeddingGemma `.tflite` installs

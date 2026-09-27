@@ -137,6 +137,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         boolean installing;
         @NonNull String note = "";
         boolean noteIsError;
+        /** A speech-output (voice) model: its own menu and install path, the wave icon like speech. */
+        boolean voiceOutput;
 
         ModelRow(@NonNull String modelId, boolean speech, @Nullable TaiModelSpec installed,
                  @Nullable TaiModelCatalog.CatalogEntry entry) {

@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit;
  * <pre>
  *   lowMemory                         → RELEASE_ALL: cancel in-flight work, unload everything
  *   availMem &lt; threshold × 1.25       → CHAT: also give up idle chat
- *   availMem &lt; floor                  → AUXILIARY: give up idle embeddings, then idle STT
+ *   availMem &lt; floor                  → AUXILIARY: give up idle embeddings, idle speech output, then idle STT
  *   otherwise                         → NONE
  * </pre>
  *
@@ -44,6 +44,11 @@ final class TaiPressureWatch {
     static final long EMBEDDING_IDLE_MS = TimeUnit.MINUTES.toMillis(5);
     /** A speech-to-text model nobody has used for this long is closed. */
     static final long STT_IDLE_MS = TimeUnit.MINUTES.toMillis(2);
+    /**
+     * A speech-output model nobody has used for this long is closed. Longer than STT's: reading
+     * aloud comes in bursts a few minutes apart, and a reload delays the first word by the load.
+     */
+    static final long TTS_IDLE_MS = TimeUnit.MINUTES.toMillis(5);
     /**
      * With only the {@link TaiResidency#RUNTIME_BASELINE_BYTES} entry left and no request for this
      * long, the process exits to give the baseline back (§3b of the plan).
@@ -88,7 +93,7 @@ final class TaiPressureWatch {
 
     /**
      * The one resident {@code tier} gives up next, or {@code null} when it has nothing to give:
-     * idle embeddings first, then idle STT, then — in {@link Tier#CHAT} only — idle chat; the
+     * idle embeddings first, then idle speech output, then idle STT, then — in {@link Tier#CHAT} only — idle chat; the
      * least recently used first within a kind. Busy residents and the RUNTIME baseline are never
      * candidates. {@link Tier#RELEASE_ALL} is not an eviction and answers {@code null}.
      */
@@ -103,7 +108,8 @@ final class TaiPressureWatch {
     @NonNull
     static List<TaiResidency.Entry> idleInEvictionOrder(@NonNull List<TaiResidency.Entry> residents, boolean includeChat) {
         ArrayList<TaiResidency.Entry> ordered = new ArrayList<>();
-        for (TaiResidency.Kind kind : new TaiResidency.Kind[] {TaiResidency.Kind.EMBEDDING, TaiResidency.Kind.STT, TaiResidency.Kind.CHAT}) {
+        for (TaiResidency.Kind kind : new TaiResidency.Kind[] {TaiResidency.Kind.EMBEDDING, TaiResidency.Kind.TTS,
+                TaiResidency.Kind.STT, TaiResidency.Kind.CHAT}) {
             if (kind == TaiResidency.Kind.CHAT && !includeChat) continue;
             ArrayList<TaiResidency.Entry> ofKind = new ArrayList<>();
             for (TaiResidency.Entry entry : residents) {
@@ -131,6 +137,8 @@ final class TaiPressureWatch {
                 return EMBEDDING_IDLE_MS;
             case STT:
                 return sttIdleLimitMs;
+            case TTS:
+                return TTS_IDLE_MS;
             default:
                 return 0L;
         }

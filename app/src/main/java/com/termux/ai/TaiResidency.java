@@ -32,7 +32,12 @@ import java.util.Locale;
  */
 public final class TaiResidency {
 
-    public enum Kind { CHAT, EMBEDDING, STT, RUNTIME }
+    /**
+     * {@code TTS} is speech output ({@link KittenTtsRuntime}); like STT it is given up before idle
+     * chat and closed after its own idle limit, and nothing it loads is ever credited against
+     * another kind's load.
+     */
+    public enum Kind { CHAT, EMBEDDING, STT, RUNTIME, TTS }
 
     private static final long MIB = 1024L * 1024L;
 
@@ -65,6 +70,13 @@ public final class TaiResidency {
      * loaded it on pong: 2.0× the file.
      */
     static final long PARAKEET_STT_FACTOR_TENTHS = 20L;
+    /**
+     * Speech-output footprint per byte of the whole KittenTTS package (three fp32 graphs, the
+     * phonemizer graph, voices and dictionary; the catalogue's figure) until a measured load is on
+     * record: the mapped graphs plus the dynamic tensor arenas and the in-memory dictionary. A
+     * deliberate over-estimate (2×) until the load meter has measured one on a phone.
+     */
+    static final long TTS_FACTOR_TENTHS = 20L;
 
     /** One resident. Immutable; {@link #setBusy} replaces the entry rather than mutating it. */
     public static final class Entry {
@@ -113,6 +125,13 @@ public final class TaiResidency {
         public static Entry stt(@NonNull TaiModelSpec spec, int windowSeconds) {
             return new Entry(spec.id, Kind.STT, spec.backend, "cpu", windowSeconds,
                 sttEstimateBytes(spec), null, System.currentTimeMillis(), false);
+        }
+
+        /** A speech-output model (the three KittenTTS graphs and its phonemizer) on the CPU. */
+        @NonNull
+        public static Entry tts(@NonNull TaiModelSpec spec) {
+            return new Entry(spec.id, Kind.TTS, spec.backend, "cpu", 0,
+                ttsEstimateBytes(spec), null, System.currentTimeMillis(), false);
         }
 
         /** The bytes the budget counts for this resident: measured when known, else the estimate. */
@@ -320,6 +339,11 @@ public final class TaiResidency {
     public static long sttEstimateBytes(@NonNull TaiModelSpec spec) {
         long factorTenths = MultiBackendTaiRuntime.isParakeetModel(spec) ? PARAKEET_STT_FACTOR_TENTHS : STT_FACTOR_TENTHS;
         return fileBytes(spec) * factorTenths / 10L;
+    }
+
+    /** What a speech-output load of this spec costs: the package size times {@link #TTS_FACTOR_TENTHS}. */
+    public static long ttsEstimateBytes(@NonNull TaiModelSpec spec) {
+        return fileBytes(spec) * TTS_FACTOR_TENTHS / 10L;
     }
 
     /**

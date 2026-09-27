@@ -81,6 +81,18 @@ public final class TaiRuntimeService extends Service {
         return thread;
     });
     /**
+     * Speech output has a lane of its own too: speaking lasts as long as the text takes to say, and
+     * neither a chat generation nor a transcription should wait for it, nor it for them. One
+     * thread, so utterances play one after another rather than over each other.
+     */
+    private final ExecutorService ttsExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "tai-runtime-tts");
+        thread.setDaemon(true);
+        return thread;
+    });
+    /** Speech-output requests running now; the service stays in the foreground while one plays. */
+    private final AtomicInteger ttsInFlight = new AtomicInteger();
+    /**
      * Carries out what the watch decides. Evictions take the router's load lock, so a load in
      * progress holds them up; that must stall neither the watch tick (which also publishes
      * presence) nor the cancel/unload lane, hence a lane of their own. One action is queued at a
@@ -145,6 +157,7 @@ public final class TaiRuntimeService extends Service {
         executor.shutdownNow();
         controlExecutor.shutdownNow();
         sttExecutor.shutdownNow();
+        ttsExecutor.shutdownNow();
         pressureExecutor.shutdownNow();
         super.onDestroy();
         if (idleExitAnnounced) {
@@ -214,12 +227,23 @@ public final class TaiRuntimeService extends Service {
                 sttExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
                 return;
             }
+            if (isTtsOperation(operation)) {
+                ttsExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
+                return;
+            }
             executor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
         }
     }
 
     static boolean isConcurrentControlOperation(@NonNull String operation) {
-        return TaiRuntimeIpc.OP_CANCEL.equals(operation) || TaiRuntimeIpc.OP_UNLOAD_MODEL.equals(operation);
+        return TaiRuntimeIpc.OP_CANCEL.equals(operation) || TaiRuntimeIpc.OP_UNLOAD_MODEL.equals(operation)
+            || TaiRuntimeIpc.OP_TTS_STOP.equals(operation);
+    }
+
+    /** Speech output runs on {@link #ttsExecutor}; its stop is a control operation, not one of these. */
+    static boolean isTtsOperation(@NonNull String operation) {
+        return TaiRuntimeIpc.OP_TTS_SPEAK.equals(operation) || TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)
+            || TaiRuntimeIpc.OP_TTS_WARM.equals(operation);
     }
 
     /** Speech-to-text runs on {@link #sttExecutor}, never behind a generation on the serial lane. */
@@ -239,13 +263,16 @@ public final class TaiRuntimeService extends Service {
         @Nullable String body,
         @Nullable String bodyFile
     ) {
+        boolean speech = isTtsOperation(operation);
+        if (speech) ttsInFlight.incrementAndGet();
         try {
             String payload = body != null ? body : readBodyFile(bodyFile);
             if (isForegroundOperation(operation)) {
-                ensureForeground("TAI runtime", "Preparing " + operation);
+                ensureForeground("TAI runtime", speech ? "Speaking" : "Preparing " + operation);
             }
             if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
-                || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)) {
+                || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)
+                || TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)) {
                 runStreamRequest(replyTo, requestId, operation, payload);
                 return;
             }
@@ -254,6 +281,7 @@ public final class TaiRuntimeService extends Service {
         } catch (Throwable throwable) {
             sendResponse(replyTo, requestId, error(500, "tai_runtime_service_error", message(throwable)));
         } finally {
+            if (speech) ttsInFlight.decrementAndGet();
             deleteBodyFile(bodyFile);
             if (!isStatusOperation(operation)) lastActivityMs = System.currentTimeMillis();
             inFlight.decrementAndGet();
@@ -291,6 +319,12 @@ public final class TaiRuntimeService extends Service {
                 return manager.transcribe(body);
             case TaiRuntimeIpc.OP_STT_WARM:
                 return manager.sttWarm(body);
+            case TaiRuntimeIpc.OP_TTS_SPEAK:
+                return manager.speak(body);
+            case TaiRuntimeIpc.OP_TTS_WARM:
+                return manager.ttsWarm(body);
+            case TaiRuntimeIpc.OP_TTS_STOP:
+                return manager.stopSpeaking();
             default:
                 return error(400, "bad_runtime_operation", "Unknown TAI runtime operation: " + operation);
         }
@@ -314,7 +348,9 @@ public final class TaiRuntimeService extends Service {
                 sendStreamDone(replyTo, requestId);
             }
         };
-        if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)) {
+        if (TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)) {
+            manager.synthesizeSpeechToEvents(body, sink);
+        } else if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)) {
             manager.openAiChatCompletionsStream(body, sink);
         } else {
             manager.openAiCompletionsStream(body, sink);
@@ -332,7 +368,10 @@ public final class TaiRuntimeService extends Service {
             // Not only for keep-alive: as a plain bound service this process sits in the OEM's
             // little-core cpuset (pong: nt_foreground = CPUs 0-3), which made Whisper 2.5-3x slower.
             || TaiRuntimeIpc.OP_TRANSCRIBE.equals(operation)
-            || TaiRuntimeIpc.OP_STT_WARM.equals(operation);
+            || TaiRuntimeIpc.OP_STT_WARM.equals(operation)
+            // Speech output for the same cpuset reason, and so playback is not cut off when the
+            // launcher goes to the background mid-sentence.
+            || isTtsOperation(operation);
     }
 
     /** A chat model is held, coming up, warm or generating: the foreground and presence cases. */
@@ -352,7 +391,10 @@ public final class TaiRuntimeService extends Service {
             TaiRuntimeState state = manager.getRuntimeState();
             TaiRuntimePresence.publish(this, state, manager.residentChatBytes());
             boolean chat = chatActive(state);
-            if (chat) {
+            if (ttsInFlight.get() > 0) {
+                // Speaking: stay in the foreground whatever else finished just now.
+                ensureForeground("TAI runtime", chat ? state.status : "Speaking");
+            } else if (chat) {
                 ensureForeground("TAI runtime", state.status);
             } else if (foreground) {
                 stopForeground(true);

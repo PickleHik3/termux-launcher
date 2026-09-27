@@ -14,8 +14,8 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Routes the one loaded assistant between the LiteRT-LM and MNN backends and serves embeddings and
- * speech-to-text from their own runtimes.
+ * Routes the one loaded assistant between the LiteRT-LM and MNN backends and serves embeddings,
+ * speech-to-text and speech output from their own runtimes.
  *
  * <p>Locking. {@link #loadLock} serializes what changes the loaded model — load, keep-warm and unload,
  * including the backend switch — and is the only router lock held across native initialization or
@@ -26,10 +26,11 @@ import java.util.Locale;
  * runtime — the STT runtime too — serializes its work and close on its own monitor, so nothing
  * here is held for the duration of native work.
  *
- * <p>Residency. The router owns the one {@link TaiResidency} table and hands it to all five
- * runtimes, which register and deregister at their own load and close points — the backends close
- * engines on idle timers and after cancelled generations without passing through here, so the
- * router itself never writes the table. {@link #residency()} is read without any lock.
+ * <p>Residency. The router owns the one {@link TaiResidency} table and hands it to every runtime
+ * (chat, embedding, speech-to-text, speech output), which register and deregister at their own
+ * load and close points — the backends close engines on idle timers and after cancelled
+ * generations without passing through here, so the router itself never writes the table.
+ * {@link #residency()} is read without any lock.
  */
 public class MultiBackendTaiRuntime implements TaiRuntime {
     private final TaiRuntime liteRt;
@@ -39,6 +40,8 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     /** The speech engines, one per model family; at most one holds a graph at a time, see {@link #sttFor}. */
     private final WhisperSttRuntime whisperStt;
     private final ParakeetSttRuntime parakeetStt;
+    /** Speech output; serialises its own synthesis and close, like the STT engines. */
+    private final KittenTtsRuntime tts;
     private final TaiResidency residency;
     /** Held across load, keep-warm and unload; never by a read, a cancel or a generation. */
     private final Object loadLock = new Object();
@@ -82,6 +85,7 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         mnnEmbeddings = new MnnEmbeddingRuntime(residency, context);
         whisperStt = new WhisperSttRuntime(residency, context);
         parakeetStt = new ParakeetSttRuntime(residency, context);
+        tts = new KittenTtsRuntime(residency, context);
         activeAssistant = liteRt;
     }
 
@@ -120,6 +124,8 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
             mnnEmbeddings.close();
             whisperStt.close();
             parakeetStt.close();
+            tts.interrupt();
+            tts.close();
             return result;
         }
     }
@@ -158,6 +164,10 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
                         // Waits on the STT monitor for a transcription that started since the plan.
                         if (parakeetStt.isLoaded(victim.modelId)) parakeetStt.close();
                         else whisperStt.close();
+                        break;
+                    case TTS:
+                        // Waits on the TTS monitor for a sentence that started since the plan.
+                        tts.close();
                         break;
                     case CHAT: {
                         TaiRuntime holder = chatHolder(victim.modelId);
@@ -246,6 +256,53 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     public JSONObject sttWarm(@NonNull TaiModelSpec model) throws JSONException {
         if (!isSpeechToTextModel(model)) return notSpeechToText(model);
         return sttFor(model).warm(model);
+    }
+
+    /**
+     * Speech output for a {@code text_to_speech} model, sentence by sentence into {@code sink}. No
+     * router lock, like {@link #transcribe}: the TTS runtime serialises on its own monitor, and
+     * reading aloud must not wait for a chat generation to finish.
+     */
+    @NonNull
+    public JSONObject synthesizeSpeech(@NonNull TaiModelSpec model, @NonNull String text, @NonNull String voice, float speed,
+                                       @NonNull TtsRuntime.Sink sink, @NonNull TtsRuntime.Cancellation cancellation)
+            throws JSONException {
+        if (!isTextToSpeechModel(model)) return notTextToSpeech(model);
+        return tts.synthesize(model, text, voice, speed, sink, cancellation);
+    }
+
+    /** Loads a {@code text_to_speech} model ahead of its first sentence. */
+    @NonNull
+    public JSONObject ttsWarm(@NonNull TaiModelSpec model) throws JSONException {
+        if (!isTextToSpeechModel(model)) return notTextToSpeech(model);
+        return tts.warm(model);
+    }
+
+    /** Asks a running speech graph to stop; never blocks on the TTS monitor. */
+    public void interruptSpeech() {
+        tts.interrupt();
+    }
+
+    public int ttsSampleRate() {
+        return tts.sampleRate();
+    }
+
+    static boolean isTextToSpeechModel(@NonNull TaiModelSpec model) {
+        String path = model.localPath == null ? "" : model.localPath.toLowerCase(Locale.ROOT);
+        return model.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH) && path.endsWith(".tflite");
+    }
+
+    @NonNull
+    private JSONObject notTextToSpeech(@NonNull TaiModelSpec model) throws JSONException {
+        JSONObject error = new JSONObject();
+        error.put("message", "Speech output is not available for model '" + model.id + "'.");
+        error.put("type", "invalid_request_error");
+        error.put("param", "model");
+        error.put("code", "capability_not_supported");
+        JSONObject response = new JSONObject();
+        response.put("error", error);
+        response.put("_statusCode", 400);
+        return response;
     }
 
     private boolean isSpeechToTextModel(@NonNull TaiModelSpec model) {

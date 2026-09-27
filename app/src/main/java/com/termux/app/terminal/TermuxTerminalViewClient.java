@@ -16,6 +16,7 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import com.termux.ai.TaiReadAloud;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
 import com.termux.R;
@@ -817,6 +818,28 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @Override
     public void onShowNotice(CharSequence text) {
         AppNotice.confirm(mContext, "⧉", text);
+    }
+
+    @Override
+    public boolean isReadAloudAvailable() {
+        return TaiReadAloud.isAvailable(mContext);
+    }
+
+    @Override
+    public boolean isReadingAloud() {
+        return TaiReadAloud.isSpeaking();
+    }
+
+    /** Reads the selection with the voice model, or stops the reading already under way. */
+    @Override
+    public void onReadAloud(String text) {
+        if (text == null || text.trim().isEmpty()) {
+            if (TaiReadAloud.isSpeaking()) TaiReadAloud.stop(mContext);
+            return;
+        }
+        TaiReadAloud.toggle(mContext, text, error -> {
+            if (error != null) AppNotice.show(mContext, error, true);
+        });
     }
 
     @Override
