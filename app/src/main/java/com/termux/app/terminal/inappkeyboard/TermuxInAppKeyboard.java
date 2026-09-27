@@ -410,16 +410,46 @@ public final class TermuxInAppKeyboard {
         // one exception: it has to show the rows it is resizing.
         if (mPreferences.isKeyboardTurnedOff() && reason != ShowReason.HEIGHT_ADJUSTMENT)
             return;
-        boolean wasVisible = mVisible;
-        mLastShowReason = Objects.requireNonNull(reason, "reason");
-        mVisible = true;
-        // Shown, this keyboard is the one typing: the place gives the IME back — unless the place
-        // keeps it while this keyboard is up, in which case the suppression below is a no-op.
-        if (!(mPlaceOwnsSystemIme && mPlaceKeepsSystemImeWhileVisible))
-            mPlaceHoldsSystemIme = false;
-        suppressSystemIme();
-        showInternal();
-        if (!wasVisible && reason != ShowReason.FOCUS) notifyVisibilityChanged(true);
+        Trace.beginSection("Keyboard.show");
+        try {
+            boolean wasVisible = mVisible;
+            mLastShowReason = Objects.requireNonNull(reason, "reason");
+            mVisible = true;
+            // Shown, this keyboard is the one typing: the place gives the IME back — unless the
+            // place keeps it while this keyboard is up, in which case the suppression below is a
+            // no-op.
+            if (!(mPlaceOwnsSystemIme && mPlaceKeepsSystemImeWhileVisible))
+                mPlaceHoldsSystemIme = false;
+            suppressSystemIme();
+            showInternal();
+            if (!wasVisible && reason != ShowReason.FOCUS) notifyVisibilityChanged(true);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * {@link #show}, for the wall's slide bringing the keyboard up below the screen ahead of the
+     * place that wants it (TermuxActivity#preRollTravelKeyboard). Nothing can be typed on a
+     * keyboard that has not been revealed yet, so the place keeps the system IME until the wall
+     * lands and settles who owns it ({@link #setPlaceOwnsSystemIme}): changing the window's IME
+     * flags relayouts the whole window, which the first frame of a slide cannot afford.
+     */
+    public void showForTravel(ShowReason reason) {
+        if (!mEnabled || mDestroyed)
+            return;
+        if (mPreferences.isKeyboardTurnedOff())
+            return;
+        Trace.beginSection("Keyboard.showForTravel");
+        try {
+            boolean wasVisible = mVisible;
+            mLastShowReason = Objects.requireNonNull(reason, "reason");
+            mVisible = true;
+            showInternal();
+            if (!wasVisible && reason != ShowReason.FOCUS) notifyVisibilityChanged(true);
+        } finally {
+            Trace.endSection();
+        }
     }
 
     public void hide(HideReason reason) {
@@ -427,17 +457,22 @@ public final class TermuxInAppKeyboard {
             return;
         if (mHeightAdjusting && reason != HideReason.PREFERENCE_DISABLED)
             return;
-        boolean wasVisible = mVisible;
-        mLastHideReason = Objects.requireNonNull(reason, "reason");
-        mVisible = false;
-        resetInputPipeline();
-        // The panel stands over the keys, so it goes down with them; the next show is the keys.
-        mHost.hideClipboardPanel();
-        setContainerVisible(false);
-        mHost.requestAccessoryGeometrySync();
-        // Down on a place that has its own fields, the IME goes back to the place.
-        syncPlaceSystemIme();
-        if (wasVisible && reason != HideReason.FOCUS) notifyVisibilityChanged(false);
+        Trace.beginSection("Keyboard.hide");
+        try {
+            boolean wasVisible = mVisible;
+            mLastHideReason = Objects.requireNonNull(reason, "reason");
+            mVisible = false;
+            resetInputPipeline();
+            // The panel stands over the keys, so it goes down with them; the next show is the keys.
+            mHost.hideClipboardPanel();
+            setContainerVisible(false);
+            mHost.requestAccessoryGeometrySync();
+            // Down on a place that has its own fields, the IME goes back to the place.
+            syncPlaceSystemIme();
+            if (wasVisible && reason != HideReason.FOCUS) notifyVisibilityChanged(false);
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /** Whether the user has switched the keyboard off, so nothing but turning it on raises it. */
@@ -1048,29 +1083,36 @@ public final class TermuxInAppKeyboard {
             if (terminalView == null || activity == null)
                 return;
 
-            // Hide through the insets API first: it works at the window level, so it still
-            // lands when no view is served — the IMM hide alone fails there, and setting
-            // ALT_FOCUSABLE_IM before a successful hide strands the IME on screen for good.
-            hideSystemImeViaInsets(activity);
-            KeyboardUtils.hideSoftKeyboard(activity, terminalView);
-            KeyboardUtils.setDisableSoftKeyboardFlags(activity);
-            int softInputMode = activity.getWindow().getAttributes().softInputMode;
-            softInputMode = (softInputMode & ~(WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE
-                | WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST))
-                | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
-                | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
-            activity.getWindow().setSoftInputMode(softInputMode);
-            if (mSystemImeFocusListener == null) {
-                mSystemImeFocusListener = (view, hasFocus) -> {
-                    if (hasFocus) {
-                        hideSystemImeViaInsets(activity);
-                        KeyboardUtils.hideSoftKeyboard(activity, terminalView);
-                        KeyboardUtils.setDisableSoftKeyboardFlags(activity);
-                    }
-                };
-                terminalView.setOnFocusChangeListener(mSystemImeFocusListener);
+            // Changing the window's IME flags or soft-input mode relayouts the whole window, so
+            // this shows up in a trace as its own section when it lands in a frame.
+            Trace.beginSection("Keyboard.suppressSystemIme");
+            try {
+                // Hide through the insets API first: it works at the window level, so it still
+                // lands when no view is served — the IMM hide alone fails there, and setting
+                // ALT_FOCUSABLE_IM before a successful hide strands the IME on screen for good.
+                hideSystemImeViaInsets(activity);
+                KeyboardUtils.hideSoftKeyboard(activity, terminalView);
+                KeyboardUtils.setDisableSoftKeyboardFlags(activity);
+                int softInputMode = activity.getWindow().getAttributes().softInputMode;
+                softInputMode = (softInputMode & ~(WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE
+                    | WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST))
+                    | WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
+                    | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
+                activity.getWindow().setSoftInputMode(softInputMode);
+                if (mSystemImeFocusListener == null) {
+                    mSystemImeFocusListener = (view, hasFocus) -> {
+                        if (hasFocus) {
+                            hideSystemImeViaInsets(activity);
+                            KeyboardUtils.hideSoftKeyboard(activity, terminalView);
+                            KeyboardUtils.setDisableSoftKeyboardFlags(activity);
+                        }
+                    };
+                    terminalView.setOnFocusChangeListener(mSystemImeFocusListener);
+                }
+                terminalView.requestFocus();
+            } finally {
+                Trace.endSection();
             }
-            terminalView.requestFocus();
         });
     }
 
@@ -1088,17 +1130,22 @@ public final class TermuxInAppKeyboard {
                 return;
             Activity activity = findActivity(requireContainer().getContext());
             if (activity == null) return;
-            TerminalView terminalView = mHost.getTerminalView();
-            if (terminalView != null && mSystemImeFocusListener != null)
-                terminalView.setOnFocusChangeListener(null);
-            mSystemImeFocusListener = null;
-            KeyboardUtils.clearDisableSoftKeyboardFlags(activity);
-            int mode = activity.getWindow().getAttributes().softInputMode;
-            mode = (mode & ~(WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE
-                | WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST))
-                | WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED
-                | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
-            activity.getWindow().setSoftInputMode(mode);
+            Trace.beginSection("Keyboard.releaseSystemIme");
+            try {
+                TerminalView terminalView = mHost.getTerminalView();
+                if (terminalView != null && mSystemImeFocusListener != null)
+                    terminalView.setOnFocusChangeListener(null);
+                mSystemImeFocusListener = null;
+                KeyboardUtils.clearDisableSoftKeyboardFlags(activity);
+                int mode = activity.getWindow().getAttributes().softInputMode;
+                mode = (mode & ~(WindowManager.LayoutParams.SOFT_INPUT_MASK_STATE
+                    | WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST))
+                    | WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED
+                    | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
+                activity.getWindow().setSoftInputMode(mode);
+            } finally {
+                Trace.endSection();
+            }
         });
     }
 
@@ -1189,13 +1236,18 @@ public final class TermuxInAppKeyboard {
             setContainerVisible(false);
             return;
         }
-        ensureKeyboardView();
-        // Hiding keeps the renderer alive, so a theme or wallpaper change that arrived while the
-        // keyboard was off screen is applied on the way back on.
-        refreshMaterialPaletteIfSignatureMoved();
-        setContainerVisible(true);
-        mHost.requestAccessoryGeometrySync();
-        recheckLayout();
+        Trace.beginSection("Keyboard.showInternal");
+        try {
+            ensureKeyboardView();
+            // Hiding keeps the renderer alive, so a theme or wallpaper change that arrived while
+            // the keyboard was off screen is applied on the way back on.
+            refreshMaterialPaletteIfSignatureMoved();
+            setContainerVisible(true);
+            mHost.requestAccessoryGeometrySync();
+            recheckLayout();
+        } finally {
+            Trace.endSection();
+        }
     }
 
     private void ensureKeyboardView() {

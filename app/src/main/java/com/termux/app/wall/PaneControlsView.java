@@ -640,33 +640,15 @@ public final class PaneControlsView extends View {
 
     /**
      * This view's position on screen as laid out, ignoring every transform on the way up — the
-     * same anchor the pane's own slab uses, so the tab's frost lines up with the slab it grows
-     * out of while the pane tilts or slides under a finger. The one transform that is not
-     * ignored is the wall page's slide, returned rather than folded in, since a page travelling
-     * over the wallpaper shows the wallpaper it is over.
+     * same anchor the pane's own slab uses ({@link com.termux.app.chrome.GlassAnchor}), so the
+     * tab's frost lines up with the slab it grows out of while the pane tilts or slides under a
+     * finger. The one transform that is not ignored is the wall page's slide, returned rather
+     * than folded in, since a page travelling over the wallpaper shows the wallpaper it is over.
      *
      * @return the wall page's translation on the way up, in px; 0 off the wall
      */
     private float layoutOriginOnScreen(@NonNull int[] out) {
-        float x = 0f;
-        float y = 0f;
-        float slideX = 0f;
-        View view = this;
-        while (true) {
-            x += view.getLeft();
-            y += view.getTop();
-            android.view.ViewParent parent = view.getParent();
-            if (!(parent instanceof View)) break;
-            View parentView = (View) parent;
-            if (parentView instanceof PaneWallLayout) slideX += view.getTranslationX();
-            x -= parentView.getScrollX();
-            y -= parentView.getScrollY();
-            view = parentView;
-        }
-        view.getLocationOnScreen(mRootLocation);
-        out[0] = Math.round(x) + mRootLocation[0];
-        out[1] = Math.round(y) + mRootLocation[1];
-        return slideX;
+        return com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, out, mRootLocation);
     }
 
     private void drawText(@NonNull Canvas canvas, @NonNull RectF button, @NonNull Action action,

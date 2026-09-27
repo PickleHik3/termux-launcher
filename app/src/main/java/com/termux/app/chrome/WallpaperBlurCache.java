@@ -2,12 +2,7 @@ package com.termux.app.chrome;
 
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.graphics.BitmapShader;
-import android.graphics.Canvas;
-import android.graphics.Matrix;
-import android.graphics.Paint;
 import android.graphics.Rect;
-import android.graphics.Shader;
 import android.os.Trace;
 import android.view.View;
 
@@ -24,16 +19,19 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 
 /**
- * The one pre-blurred wallpaper frame every accessory glass surface is cut from.
+ * The one pre-blurred wallpaper frame every glass surface samples.
  *
- * <p>Pre-blurred wallpaper frames shared by dock, keyboard, gesture-nav, and top-pane frost
- * crops — one frame per requested blur radius, LRU-capped. Surfaces are tuned independently
- * (dock and status frost carry their own radius sliders); the previous single-slot cache
- * was invalidated by every radius alternation, re-decoding and re-blurring the wallpaper on
- * the main thread two or three times on every return home (1-3s of dropped frames).</p>
+ * <p>Pre-blurred wallpaper frames shared by the dock, the keyboard, the gesture-nav strip, the
+ * top bars, the panes and the planes — one frame per requested blur radius, LRU-capped. Surfaces
+ * are tuned independently (dock and status frost carry their own radius sliders); the previous
+ * single-slot cache was invalidated by every radius alternation, re-decoding and re-blurring the
+ * wallpaper on the main thread two or three times on every return home (1-3s of dropped
+ * frames).</p>
  *
- * <p>Geometry changes only crop this bitmap; they never capture and blur a second, visually
- * different copy.</p>
+ * <p>A frame is held at the resolution it was blurred at and drawn scaled up through a shader
+ * aimed at each surface's live position ({@link SharedFrameDrawable}); geometry changes re-aim,
+ * they never cut a copy. The frame rect ({@link #frameRectRef()}) says which screen rect a frame
+ * stands for, whatever its pixel size.</p>
  */
 public final class WallpaperBlurCache {
 
@@ -118,11 +116,12 @@ public final class WallpaperBlurCache {
      */
     public static final int MAX_CACHED_WALLPAPER_BLUR_RADII = 6;
     /**
-     * How many bytes of pre-blurred frames stay resident, whatever the radius count. A frame is a
-     * full-screen ARGB_8888 bitmap — about 10 MB on a 1080x2400 panel and 18 MB at 1440x3200 — so
-     * a count alone let a QHD phone hold 55 MB of wallpaper nobody was looking at. The most recent
-     * frame always stays, however large. Sized so the six radii above fit a 1080x2412 panel
-     * (6 x 10.4 MB); a QHD phone still holds only what fits.
+     * How many bytes of pre-blurred frames stay resident, whatever the radius count. A count alone
+     * let a QHD phone hold 55 MB of wallpaper nobody was looking at, so the budget bounds the bytes
+     * and the most recent frame always stays, however large. A blurred frame is held at the size
+     * it was blurred at — a quarter of the panel at the usual radii, ~1 MB for a 1.5×-wide parallax
+     * frame on 1080x2412 (2026-09-27); only radius 0, the wallpaper itself, and a radius under the
+     * blur's 25px cap keep a full-size frame (~15.6 MB wide). Sized for the full set of six.
      */
     public static final long DEFAULT_MAX_CACHED_WALLPAPER_BLUR_BYTES = 72L * 1024 * 1024;
 
@@ -247,10 +246,6 @@ public final class WallpaperBlurCache {
         return total;
     }
 
-    /**
-     * Returns the pre-blurred full wallpaper frame for {@code blurRadiusDp}, capturing and blurring
-     * one only when no valid frame is resident.
-     */
     /**
      * The pre-blurred frame for {@code blurRadiusDp}, or null while there is none: nothing could
      * be captured, or — with a worker — the capture and blur are running off the main thread and
@@ -409,38 +404,6 @@ public final class WallpaperBlurCache {
         mSystemId = systemWallpaperId;
         mManagedLastModified = managedLastModified;
         mManagedLength = managedLength;
-    }
-
-    /**
-     * Crops the shared full-frame blur in screen coordinates, clamping any overscan at its edges.
-     *
-     * <p>A full-screen surface (the command palette glass, the app drawer plane) asks for exactly
-     * the cached frame's rect, and copying it would allocate a second full-screen ARGB_8888 bitmap
-     * — ~10MB on a 1080x2400 panel, on the first frame of the open gesture. That request is
-     * answered with the cached frame itself; the returned bitmap is then shared, so
-     * {@link #clear()} detaches it from the glass frosts before recycling.</p>
-     */
-    @Nullable
-    public Bitmap crop(int blurRadiusDp, @NonNull Rect targetRect, @NonNull View wallpaperFrame) {
-        Bitmap fullBlur = obtain(blurRadiusDp, wallpaperFrame);
-        if (fullBlur == null) {
-            return null;
-        }
-        if (targetRect.equals(mFrameRect)) {
-            return fullBlur;
-        }
-        int width = Math.max(1, targetRect.width());
-        int height = Math.max(1, targetRect.height());
-        Bitmap crop = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-        Canvas canvas = new Canvas(crop);
-        BitmapShader shader = new BitmapShader(fullBlur, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        Matrix matrix = new Matrix();
-        matrix.setTranslate(mFrameRect.left - targetRect.left, mFrameRect.top - targetRect.top);
-        shader.setLocalMatrix(matrix);
-        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        paint.setShader(shader);
-        canvas.drawRect(0f, 0f, width, height, paint);
-        return crop;
     }
 
     /** True while the resident frames still describe the wallpaper, orientation and frame rect. */

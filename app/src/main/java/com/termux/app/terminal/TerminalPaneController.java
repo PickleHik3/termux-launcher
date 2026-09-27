@@ -1080,6 +1080,18 @@ public class TerminalPaneController {
         return Math.max(1, leavesOf(mActiveWindow.root).size());
     }
 
+    /**
+     * The view of the one tiled pane, when the active window tiles exactly one (a maximized pane
+     * counts): the pane whose bottom edge is the host's, so a host resize is its resize alone.
+     * Null with a split, where each tile's share of the change is the tiling's to know.
+     */
+    @Nullable public TerminalView soleTiledPaneView() {
+        if (mActiveWindow == null) return null;
+        if (mMaximizedLeaf != null) return mPaneViews.get(mMaximizedLeaf.session);
+        List<Leaf> leaves = leavesOf(mActiveWindow.root);
+        return leaves.size() == 1 ? mPaneViews.get(leaves.get(0).session) : null;
+    }
+
     /** Re-measure every visible pane once layout settles. Returning from another app can leave the
      *  panes measured against a stale (tiny) host size; posting updateSize after the next layout
      *  pass recomputes rows/cols against the restored full size. */

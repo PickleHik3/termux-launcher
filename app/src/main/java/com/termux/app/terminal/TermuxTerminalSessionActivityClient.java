@@ -255,15 +255,21 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return;
         if (!mHost.isVisible())
             return;
-        // Taken and emptied before a single pane is drawn, so a redraw that lands us back here —
-        // an accessibility event, a listener — finds nothing owed rather than the same list again.
-        java.util.List<TerminalSession> deferred =
-            new ArrayList<>(mDeferredScreenUpdateSessions);
-        mDeferredScreenUpdateSessions.clear();
-        for (TerminalSession session : deferred) {
-            com.termux.view.TerminalView view = mHost.viewForSession(session);
-            if (view != null)
-                drawScreen(view);
+        android.os.Trace.beginSection("Terminal.placeMayBeVisible");
+        try {
+            // Taken and emptied before a single pane is drawn, so a redraw that lands us back
+            // here — an accessibility event, a listener — finds nothing owed rather than the same
+            // list again.
+            java.util.List<TerminalSession> deferred =
+                new ArrayList<>(mDeferredScreenUpdateSessions);
+            mDeferredScreenUpdateSessions.clear();
+            for (TerminalSession session : deferred) {
+                com.termux.view.TerminalView view = mHost.viewForSession(session);
+                if (view != null)
+                    drawScreen(view);
+            }
+        } finally {
+            android.os.Trace.endSection();
         }
     }
 

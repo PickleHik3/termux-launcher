@@ -211,6 +211,25 @@ public class KeyboardOverlayPolicyTest {
         assertEquals(0, KeyboardOverlayPolicy.contentReservationPx(100, 0, 400));
     }
 
+    @Test
+    public void twoPlacesRestReservationsDifferByExactlyWhatDiffersBetweenThem() {
+        // The terminal with its keyboard up, flush against the navigation bar.
+        int terminalUp = KeyboardOverlayPolicy.restReservationPx(120, 0, true, false, 300, 0);
+        assertEquals(420, terminalUp);
+        // Home: the keyboard is down and the Floating dock keeps its gap under it.
+        int home = KeyboardOverlayPolicy.restReservationPx(120, 0, false, true, 300, 16);
+        assertEquals(136, home);
+        // Leaving the terminal for Home gives the keyboard's room back, less the dock's gap.
+        assertEquals(300 - 16, terminalUp - home);
+        // The display with the keyboard floating over it: the keyboard's room is handed back.
+        int displayOverlay = KeyboardOverlayPolicy.restReservationPx(120, 0, true, true, 300, 0);
+        assertEquals(120, displayOverlay);
+        // The terminal with the keyboard down pads the dock down to a whole row.
+        int terminalDown = KeyboardOverlayPolicy.restReservationPx(120, 9, false, false, 300, 16);
+        assertEquals(145, terminalDown);
+        assertEquals(9, terminalDown - home);
+    }
+
     private static int contentHeight(boolean overlays, boolean keyboardShown, int keyboardPx,
                                      int availablePx, int dockPx, int marginPx) {
         int overlapPx = KeyboardOverlayPolicy.contentOverlapPx(overlays, keyboardShown, keyboardPx);

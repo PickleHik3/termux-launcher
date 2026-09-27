@@ -152,24 +152,19 @@ public class WallpaperBlurCacheTest {
     }
 
     @Test
-    public void aFullFrameRequestIsAnsweredWithTheSharedFrameRatherThanACopy() {
-        Bitmap full = cache.obtain(8, wallpaperFrame);
+    public void theFrameRectDescribesTheScreenWhateverSizeTheFrameIsHeldAt() {
+        // The renderer hands back the frame at the size it blurred it at; the rect the cache
+        // records is still the screen rect it was captured for, which is what every surface aims
+        // its shader from.
+        source.blurScale = 4;
+        Bitmap frame = cache.obtain(8, wallpaperFrame);
         Rect frameRect = new Rect();
         cache.copyFrameRect(frameRect);
 
-        assertSame("a full-screen crop must not allocate a second full-screen bitmap",
-            full, cache.crop(8, frameRect, wallpaperFrame));
-    }
-
-    @Test
-    public void aSmallerTargetIsCutFromTheSharedFrame() {
-        cache.obtain(8, wallpaperFrame);
-
-        Bitmap crop = cache.crop(8, new Rect(0, 150, 100, 200), wallpaperFrame);
-
-        assertEquals(100, crop.getWidth());
-        assertEquals(50, crop.getHeight());
-        assertEquals("cropping must not re-capture the wallpaper", 1, source.captureCount);
+        assertEquals(25, frame.getWidth());
+        assertEquals(50, frame.getHeight());
+        assertEquals(new Rect(0, 0, 100, 200), frameRect);
+        assertSame(frame, cache.obtain(8, wallpaperFrame));
     }
 
     @Test

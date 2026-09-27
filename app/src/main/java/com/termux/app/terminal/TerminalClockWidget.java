@@ -586,19 +586,24 @@ public final class TerminalClockWidget extends View {
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         if (mSnapshot == null || getWidth() <= 0 || getHeight() <= 0) return;
-        long now = SystemClock.uptimeMillis();
-        switch (mForm) {
-            case MONO_CHIP:
-                drawMonoChip(canvas);
-                break;
-            case COMPACT:
-                drawCompact(canvas, now);
-                break;
-            default:
-                drawFull(canvas, now);
-                break;
+        android.os.Trace.beginSection("Clock.onDraw");
+        try {
+            long now = SystemClock.uptimeMillis();
+            switch (mForm) {
+                case MONO_CHIP:
+                    drawMonoChip(canvas);
+                    break;
+                case COMPACT:
+                    drawCompact(canvas, now);
+                    break;
+                default:
+                    drawFull(canvas, now);
+                    break;
+            }
+            if (hasRunningAnimation(now)) requestAnimationFrame();
+        } finally {
+            android.os.Trace.endSection();
         }
-        if (hasRunningAnimation(now)) requestAnimationFrame();
     }
 
     /**

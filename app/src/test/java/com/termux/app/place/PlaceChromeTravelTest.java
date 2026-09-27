@@ -2,6 +2,7 @@ package com.termux.app.place;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -55,6 +56,11 @@ public class PlaceChromeTravelTest {
         return PlaceChromeTravel.at(RING, current, offsetPx, WIDTH, s);
     }
 
+    /** Where the chrome is when the wall is {@code fraction} of the way: see PlaceChromeTravel.LANDING. */
+    private static float chrome(float fraction) {
+        return PlaceChromeTravel.chromeFraction(fraction);
+    }
+
     @Test
     public void atRestAPlaceShowsItsOwnState() {
         PlaceChromeTravel.States s = states(true, false);
@@ -79,14 +85,14 @@ public class PlaceChromeTravelTest {
         for (int step = 0; step <= 10; step++) {
             float offset = -WIDTH * step / 10f;
             Frame frame = at(PaneWallPage.WIDGETS, offset, s);
-            assertEquals(step / 10f, frame.keyboardReveal, EPSILON);
+            assertEquals(chrome(step / 10f), frame.keyboardReveal, EPSILON);
             assertEquals(1f, frame.dockReveal, EPSILON);
             assertTrue("the keyboard only ever rises on the way in",
                 frame.keyboardReveal >= previous);
             previous = frame.keyboardReveal;
             // Laid out at its full height below the screen, the keyboard is revealed by sliding
             // the whole stack up: the dock sits on the keys the whole way.
-            assertEquals(KEYBOARD * (1f - step / 10f),
+            assertEquals(KEYBOARD * (1f - chrome(step / 10f)),
                 PlaceChromeTravel.stackTranslationPx(frame, KEYBOARD, DOCK), EPSILON);
         }
     }
@@ -98,8 +104,8 @@ public class PlaceChromeTravelTest {
         Frame quarter = at(PaneWallPage.TERMINAL, WIDTH * 0.25f, s);
         assertSame(PaneWallPage.WIDGETS, quarter.from);
         assertSame(PaneWallPage.TERMINAL, quarter.toward);
-        assertEquals(0.75f, quarter.keyboardReveal, EPSILON);
-        assertEquals(KEYBOARD * 0.25f,
+        assertEquals(chrome(0.75f), quarter.keyboardReveal, EPSILON);
+        assertEquals(KEYBOARD * (1f - chrome(0.75f)),
             PlaceChromeTravel.stackTranslationPx(quarter, KEYBOARD, DOCK), EPSILON);
         Frame arrived = at(PaneWallPage.WIDGETS, 0f, s);
         // The keys are all the way below the screen and the dock is where Home keeps it; settle
@@ -204,7 +210,7 @@ public class PlaceChromeTravelTest {
         assertEquals(1f, edge.keyboardReveal, EPSILON);
         Frame inward = PlaceChromeTravel.at(LINE, PaneWallPage.TERMINAL, -250f, WIDTH, s);
         assertSame(PaneWallPage.DISPLAY, inward.toward);
-        assertEquals(0.75f, inward.keyboardReveal, EPSILON);
+        assertEquals(1f - chrome(0.25f), inward.keyboardReveal, EPSILON);
     }
 
     @Test
@@ -229,5 +235,68 @@ public class PlaceChromeTravelTest {
         int overlap = PlaceChromeTravel.heldOverlapPx(DOCK + KEYBOARD, 16, held);
         assertEquals(held, KeyboardOverlayPolicy.contentReservationPx(DOCK + KEYBOARD, 16,
             overlap));
+    }
+
+    @Test
+    public void theArrivingPlaceIsWhicheverSideOfTheFrameIsNotBeingLeft() {
+        PlaceChromeTravel.States s = states(true, false);
+        // Leaving the terminal toward Home on the left: the frame reads Home -> Terminal.
+        Frame left = at(PaneWallPage.TERMINAL, 300f, s);
+        assertSame(PaneWallPage.WIDGETS, PlaceChromeTravel.arriving(left, PaneWallPage.TERMINAL));
+        // And toward the display on the right, where the terminal is the near side.
+        Frame right = at(PaneWallPage.TERMINAL, -300f, s);
+        assertSame(PaneWallPage.DISPLAY, PlaceChromeTravel.arriving(right, PaneWallPage.TERMINAL));
+        // Past the commit the wall's page moved on, but the chrome is still the terminal's.
+        Frame committed = at(PaneWallPage.WIDGETS, -700f, s);
+        assertSame(PaneWallPage.WIDGETS, PlaceChromeTravel.arriving(committed, PaneWallPage.TERMINAL));
+        // At rest, or pressed into a line's edge, nothing is arriving.
+        assertNull(PlaceChromeTravel.arriving(at(PaneWallPage.TERMINAL, 0f, s), PaneWallPage.TERMINAL));
+        Frame edge = PlaceChromeTravel.at(LINE, PaneWallPage.TERMINAL, 200f, WIDTH, s);
+        assertNull(PlaceChromeTravel.arriving(edge, PaneWallPage.TERMINAL));
+    }
+
+    @Test
+    public void progressTowardAPlaceReadsTheSameWhicheverSideItIsOn() {
+        PlaceChromeTravel.States s = states(true, false);
+        // Home is the near side of a leftward frame: three tenths of the way there, on the
+        // chrome's shortened way.
+        Frame left = at(PaneWallPage.TERMINAL, 300f, s);
+        assertEquals(chrome(0.3f), PlaceChromeTravel.progressToward(left, PaneWallPage.WIDGETS),
+            EPSILON);
+        assertEquals(1f - chrome(0.3f),
+            PlaceChromeTravel.progressToward(left, PaneWallPage.TERMINAL), EPSILON);
+        // The display is the far side of a rightward one.
+        Frame right = at(PaneWallPage.TERMINAL, -300f, s);
+        assertEquals(chrome(0.3f), PlaceChromeTravel.progressToward(right, PaneWallPage.DISPLAY),
+            EPSILON);
+        // A place the frame does not touch, and a frame at rest, are at 0.
+        assertEquals(0f, PlaceChromeTravel.progressToward(right, PaneWallPage.WIDGETS), EPSILON);
+        assertEquals(0f, PlaceChromeTravel.progressToward(at(PaneWallPage.TERMINAL, 0f, s),
+            PaneWallPage.TERMINAL), EPSILON);
+        // Springing back reads down through the same number, and rests over the landing.
+        assertEquals(0f, PlaceChromeTravel.progressToward(at(PaneWallPage.TERMINAL, 50f, s),
+            PaneWallPage.WIDGETS), EPSILON);
+        assertEquals(1f, PlaceChromeTravel.progressToward(at(PaneWallPage.TERMINAL, 950f, s),
+            PaneWallPage.WIDGETS), EPSILON);
+    }
+
+    @Test
+    public void theChromeLandsBeforeTheWallDoesAndLeavesAfterIt() {
+        PlaceChromeTravel.States s = states(true, false);
+        // Over the first stretch of the way the keyboard has not moved; over the last, it has
+        // landed - so it is not still creeping while the page's edge creeps at the screen's.
+        assertEquals(1f, at(PaneWallPage.TERMINAL, WIDTH * 0.05f, s).keyboardReveal, EPSILON);
+        assertEquals(0f, at(PaneWallPage.TERMINAL, WIDTH * 0.95f, s).keyboardReveal, EPSILON);
+        // Half way is half way, so a reversal at the midpoint reads the same either way round.
+        assertEquals(0.5f, at(PaneWallPage.TERMINAL, WIDTH * 0.5f, s).keyboardReveal, EPSILON);
+        assertEquals(0.5f, PlaceChromeTravel.chromeFraction(0.5f), EPSILON);
+        assertEquals(0f, PlaceChromeTravel.chromeFraction(PlaceChromeTravel.LANDING), EPSILON);
+        assertEquals(1f, PlaceChromeTravel.chromeFraction(1f - PlaceChromeTravel.LANDING),
+            EPSILON);
+        // The pre-roll still belongs to the first frame, before the reveal has moved.
+        PlaceChromeTravel.States display = states(true, true);
+        Frame first = at(PaneWallPage.DISPLAY, 4f, display);
+        assertEquals(0f, first.keyboardReveal, EPSILON);
+        assertTrue(PlaceChromeTravel.needsKeyboardPreRoll(first, false));
     }
 }

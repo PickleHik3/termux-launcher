@@ -373,6 +373,42 @@ public final class TerminalBuffer {
     }
 
     /**
+     * Where a rows-only {@link #resize} would put the rows now on screen, without doing it: the
+     * number of rows down that every surviving screen row moves (negative is up), so old external
+     * row {@code i} is found at {@code i + shift} afterwards. It mirrors the fast path of
+     * {@link #resize} exactly — the blank rows below the cursor that a shrink drops first, the
+     * transcript a growth reveals above, the bottom anchor — so a view can draw the screen where
+     * the resize will land it before the resize has happened.
+     *
+     * <p>Only for a resize that keeps the columns: a reflow rewraps every line and there is no
+     * single shift to speak of. A growth past the buffer's total rows — the alternate screen's,
+     * which is exactly as tall as the screen — takes the slow path, which copies the rows
+     * top-aligned, so that answers 0.
+     *
+     * @param cursorRow          the cursor's external row before the resize
+     * @param keepCursorAtBottom as for {@link #resize}, already narrowed by the caller to a cursor
+     *                           near the bottom edge
+     */
+    public int predictRowsOnlyResizeShift(int newRows, int cursorRow, boolean keepCursorAtBottom) {
+        if (newRows > mTotalRows) return 0;
+        int shiftDownOfTopRow = mScreenRows - newRows;
+        if (shiftDownOfTopRow > 0 && shiftDownOfTopRow < mScreenRows) {
+            for (int i = mScreenRows - 1; i > 0; i--) {
+                if (cursorRow >= i)
+                    break;
+                int r = externalToInternalRow(i);
+                if (mLines[r] == null || mLines[r].isBlank()) {
+                    if (--shiftDownOfTopRow == 0)
+                        break;
+                }
+            }
+        } else if (shiftDownOfTopRow < 0 && !keepCursorAtBottom) {
+            shiftDownOfTopRow = Math.max(shiftDownOfTopRow, -mActiveTranscriptRows);
+        }
+        return -shiftDownOfTopRow;
+    }
+
+    /**
      * Resize with an optional bottom anchor. The anchored form exposes transcript rows (or blank
      * rows when history is exhausted) above the old screen so the cursor retains its distance from
      * the bottom edge as rows are added.

@@ -17,8 +17,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.FrameCrossfade;
+import com.termux.app.chrome.GlassAnchor;
 import com.termux.app.chrome.WallpaperParallax;
-import com.termux.app.wall.PaneWallLayout;
 
 /**
  * One pane's glass. Draws the shared pre-blurred wallpaper frame through this pane's own rect, the
@@ -330,47 +330,14 @@ public final class PaneGlassBackdropView extends View {
 
     /**
      * This view's position on screen as laid out, ignoring every transform on the way up but one:
-     * the wall page's slide, returned separately.
-     *
-     * <p>{@code getLocationOnScreen} answers with the transforms applied, and the pane frame is
-     * transformed constantly — the plank tilts and slides it under a finger, and the FLIP movement
-     * animates its translation. Pinning the frost to a transformed position baked the tilt's offset
-     * into the matrix: the frost jumped when touched, then stayed shifted once the spring settled,
-     * because no further position change ever arrived to correct it. Layout coordinates are the
-     * frost's real anchor — the wallpaper does not move when a pane tips over it, and the frost
-     * inside the pane then travels with the pane, which is what glass does.
-     *
-     * <p>A place sliding across the wall is the other case: there the whole page travels over a
-     * wallpaper that stays where it is (or pans a fraction of the way, with parallax), and glass
-     * shows what is behind it, so the frost has to stay glued to the wallpaper rather than ride
-     * along with the page. That one transform — the translation the wall puts on its page — is
-     * read off the page and handed back, so the draw can aim past it.</p>
+     * the wall page's slide, returned separately — the anchor every glass surface shares, see
+     * {@link GlassAnchor#layoutOriginOnScreen}.
      *
      * @return the wall page's translation on the way up, in px; 0 off the wall
      */
     // Package-private so the regression test can pin it directly.
     float layoutOriginOnScreen(@NonNull int[] out) {
-        float x = 0f;
-        float y = 0f;
-        float slideX = 0f;
-        View view = this;
-        while (true) {
-            x += view.getLeft();
-            y += view.getTop();
-            android.view.ViewParent parent = view.getParent();
-            if (!(parent instanceof View)) break;
-            View parentView = (View) parent;
-            if (parentView instanceof PaneWallLayout) slideX += view.getTranslationX();
-            x -= parentView.getScrollX();
-            y -= parentView.getScrollY();
-            view = parentView;
-        }
-        // `view` is now the root of this hierarchy; it carries no transform of its own, so asking
-        // the framework for its screen position is safe.
-        view.getLocationOnScreen(mRootLocation);
-        out[0] = Math.round(x) + mRootLocation[0];
-        out[1] = Math.round(y) + mRootLocation[1];
-        return slideX;
+        return GlassAnchor.layoutOriginOnScreen(this, out, mRootLocation);
     }
 
 }

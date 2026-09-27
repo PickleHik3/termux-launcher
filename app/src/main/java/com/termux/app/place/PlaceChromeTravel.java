@@ -1,6 +1,7 @@
 package com.termux.app.place;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.PaneWallPolicy;
@@ -74,6 +75,17 @@ public final class PlaceChromeTravel {
         @NonNull Rest restOf(@NonNull PaneWallPage place);
     }
 
+    /**
+     * The stretch of the way, at either end, over which the chrome already rests: the reveals
+     * move over the middle {@code 1 - 2 * LANDING} of a step and sit at the far place's state
+     * for the last {@code LANDING} of it. The slide's curve ({@code Motion.settle}) spends its
+     * last ~300 ms on the last few percent of the way, and a keyboard still creeping up over the
+     * text while the page's edge creeps at the screen's edge read as the keyboard landing late
+     * (pong, 2026-09-27). The same margin at both ends, so a reversal and a drag that springs
+     * back still read one function of position.
+     */
+    public static final float LANDING = 0.08f;
+
     /** The chrome for one frame of the wall's motion. */
     public static final class Frame {
         /** The place on the near side of the frame: the one whose state the fraction starts from. */
@@ -82,24 +94,38 @@ public final class PlaceChromeTravel {
         @NonNull public final PaneWallPage toward;
         /** How far across from {@link #from} to {@link #toward} the screen is, 0 to 1. */
         public final float fraction;
+        /** How far across the chrome is: {@link #fraction} with {@link #LANDING} taken off each end. */
+        public final float chromeFraction;
         public final float keyboardReveal;
         public final float dockReveal;
         public final float statusReveal;
+        /** Whether either side of the frame shows the keyboard, or the dock: what a pre-roll is for. */
+        public final boolean keyboardInPlay;
+        public final boolean dockInPlay;
 
         Frame(@NonNull PaneWallPage from, @NonNull PaneWallPage toward, float fraction,
-              float keyboardReveal, float dockReveal, float statusReveal) {
+              float keyboardReveal, float dockReveal, float statusReveal,
+              boolean keyboardInPlay, boolean dockInPlay) {
             this.from = from;
             this.toward = toward;
             this.fraction = fraction;
+            this.chromeFraction = chromeFraction(fraction);
             this.keyboardReveal = keyboardReveal;
             this.dockReveal = dockReveal;
             this.statusReveal = statusReveal;
+            this.keyboardInPlay = keyboardInPlay;
+            this.dockInPlay = dockInPlay;
         }
 
         @NonNull @Override public String toString() {
             return "Frame{" + from + "->" + toward + " @" + fraction + ", keyboard=" + keyboardReveal
                 + ", dock=" + dockReveal + ", status=" + statusReveal + "}";
         }
+    }
+
+    /** {@code fraction} with {@link #LANDING} taken off each end, clamped: where the chrome is. */
+    public static float chromeFraction(float fraction) {
+        return clamp01((fraction - LANDING) / (1f - 2f * LANDING));
     }
 
     /**
@@ -130,24 +156,28 @@ public final class PlaceChromeTravel {
         PaneWallPage toward = PaneWallPolicy.neighbour(pages, current, near + 1);
         Rest a = states.restOf(from);
         Rest b = toward == from ? a : states.restOf(toward);
+        boolean keyboardInPlay = a.keyboardReveal() > 0f || b.keyboardReveal() > 0f;
+        boolean dockInPlay = a.dockReveal() > 0f || b.dockReveal() > 0f;
         if (fraction <= 0f || a.equals(b)) {
             // Snap the degenerate cases, so a frame between two places that look the same is
             // exactly their state rather than a rounding of it.
             float f = fraction <= 0f ? 0f : fraction;
             return new Frame(from, toward, f, a.keyboardReveal(), a.dockReveal(),
-                a.statusReveal());
+                a.statusReveal(), keyboardInPlay, dockInPlay);
         }
+        // The chrome lands before the wall does (LANDING): the reveals read the shortened way.
+        float t = chromeFraction(fraction);
         return new Frame(from, toward, fraction,
-            lerp(a.keyboardReveal(), b.keyboardReveal(), fraction),
-            lerp(a.dockReveal(), b.dockReveal(), fraction),
-            lerp(a.statusReveal(), b.statusReveal(), fraction));
+            lerp(a.keyboardReveal(), b.keyboardReveal(), t),
+            lerp(a.dockReveal(), b.dockReveal(), t),
+            lerp(a.statusReveal(), b.statusReveal(), t), keyboardInPlay, dockInPlay);
     }
 
     /** The chrome of a place at rest. */
     @NonNull
     public static Frame rest(@NonNull PaneWallPage place, @NonNull Rest state) {
         return new Frame(place, place, 0f, state.keyboardReveal(), state.dockReveal(),
-            state.statusReveal());
+            state.statusReveal(), state.keyboardReveal() > 0f, state.dockReveal() > 0f);
     }
 
     /**
@@ -172,16 +202,18 @@ public final class PlaceChromeTravel {
     }
 
     /**
-     * Whether a frame shows more keyboard than the stack lays out, which is the cue to pre-roll
-     * it: lay it out at its full height below the screen, so the slide can bring it up.
+     * Whether a frame is going to show more keyboard than the stack lays out, which is the cue to
+     * pre-roll it: lay it out at its full height below the screen, so the slide can bring it up.
+     * Read off the places in play rather than the reveal, which rests over the first
+     * {@link #LANDING} of the way: the pre-roll belongs to the slide's first frame.
      */
     public static boolean needsKeyboardPreRoll(@NonNull Frame frame, boolean keyboardLaidOut) {
-        return !keyboardLaidOut && frame.keyboardReveal > 0f;
+        return !keyboardLaidOut && frame.keyboardInPlay;
     }
 
     /** As {@link #needsKeyboardPreRoll}, for the dock rows a minimal place has put away. */
     public static boolean needsDockPreRoll(@NonNull Frame frame, boolean dockLaidOut) {
-        return !dockLaidOut && frame.dockReveal > 0f;
+        return !dockLaidOut && frame.dockInPlay;
     }
 
     /**
@@ -197,6 +229,31 @@ public final class PlaceChromeTravel {
                                     int heldReservationPx) {
         return Math.max(0, Math.max(0, stackHeightPx) + Math.max(0, stackBottomMarginPx)
             - Math.max(0, heldReservationPx));
+    }
+
+    /**
+     * The place a frame is travelling toward, seen from the place the chrome is committed to:
+     * whichever side of the frame is not {@code leaving}. Null while the frame blends the leaving
+     * place with itself — at rest, or pressed into an outer edge's resistance.
+     */
+    @Nullable
+    public static PaneWallPage arriving(@NonNull Frame frame, @NonNull PaneWallPage leaving) {
+        if (frame.toward != leaving) return frame.toward == frame.from ? null : frame.toward;
+        return frame.from == leaving ? null : frame.from;
+    }
+
+    /**
+     * How far, 0 to 1, the chrome has travelled toward {@code place}: the frame's
+     * {@link Frame#chromeFraction} when the place is the frame's far side, the rest of it when the
+     * place is the near side, and 0 for a place the frame does not touch. On the chrome's way
+     * rather than the wall's, so what follows it — the terminal's rows — lands with the keyboard.
+     * A drag that springs back reads back down to 0 through the same number.
+     */
+    public static float progressToward(@NonNull Frame frame, @NonNull PaneWallPage place) {
+        if (frame.toward == frame.from) return 0f;
+        if (place == frame.toward) return frame.chromeFraction;
+        if (place == frame.from) return 1f - frame.chromeFraction;
+        return 0f;
     }
 
     private static float lerp(float a, float b, float t) {

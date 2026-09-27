@@ -942,6 +942,22 @@ public final class TerminalEmulator {
     }
 
     /**
+     * Where {@link #resize} to {@code rows} rows, at the same columns, would move the rows now on
+     * screen: how many rows down each surviving row lands (negative is up), before any resize has
+     * happened. The bottom anchor is judged the way {@link #resize} judges it, against the cursor
+     * on the screen as it is. 0 when the row count does not change, and 0 on the alternate screen:
+     * a shrinking alternate buffer keeps its old ring but wraps it at the new, smaller total, so its
+     * rows do not land anywhere stable — the full-screen program repaints after the resize anyway.
+     *
+     * @see TerminalBuffer#predictRowsOnlyResizeShift
+     */
+    public int predictRowsOnlyResizeShift(int rows, boolean keepCursorAtBottom) {
+        if (rows == mRows || rows < 2 || mScreen == mAltBuffer) return 0;
+        keepCursorAtBottom &= mCursorRow >= mRows - 2;
+        return mScreen.predictRowsOnlyResizeShift(rows, mCursorRow, keepCursorAtBottom);
+    }
+
+    /**
      * Tell the program its new size, if it asked for that with mode 2048: "CSI 48 ; rows ; columns ;
      * height ; width t", where the two pixel figures are those of the whole text area, the same ones
      * XTWINOPS 14 reports.
