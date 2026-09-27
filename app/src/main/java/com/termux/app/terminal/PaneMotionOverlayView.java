@@ -20,6 +20,7 @@ import android.view.animation.PathInterpolator;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.terminal.TerminalEmulator;
 import com.termux.view.KittyCursorTrail;
 
 import java.util.ArrayList;
@@ -189,6 +190,9 @@ public final class PaneMotionOverlayView extends View {
         mCursorTargetProvider = provider;
     }
 
+    /** Scratch for {@link #onFrame}, so the per-frame path allocates nothing. */
+    private final RectF mPreviousTrailBounds = new RectF();
+
     /**
      * The cursor may have moved (an in-pane jump), or focus may have moved to another pane — to the
      * engine these are the same event, since both just change what {@link #mCursorTargetProvider}
@@ -232,11 +236,12 @@ public final class PaneMotionOverlayView extends View {
             return;
         }
         mCursorTargetValid = true;
-        RectF previous = new RectF(cursorTrailBounds());
-        // System.currentTimeMillis(), not the Choreographer frame time: the emulator stamps
-        // TerminalEmulator#getCursorPositionChangedAtMillis() on that same clock, and comparing two
+        RectF previous = mPreviousTrailBounds;
+        previous.set(cursorTrailBounds());
+        // The emulator's own clock, not the Choreographer frame time: it stamps
+        // TerminalEmulator#getCursorPositionChangedAtMillis() on that clock, and comparing two
         // different clocks' epochs against each other would make the delay gate meaningless.
-        long now = System.currentTimeMillis();
+        long now = TerminalEmulator.monotonicMillis();
         boolean needsFrame = mCursorTrail.update(now, mCursorTarget.left, mCursorTarget.top,
             mCursorTarget.right, mCursorTarget.bottom, mCursorTarget.dectcemOn,
             mCursorTarget.positionChangedAtMillis, false, mCursorTarget.cellWidthPx,

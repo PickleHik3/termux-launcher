@@ -1216,7 +1216,12 @@ public final class TerminalEmulator {
         long nowMillis();
     }
 
-    private Clock mClock = System::currentTimeMillis;
+    /** Monotonic, so a wall-clock change cannot open or shut the trail's delay gate. */
+    public static long monotonicMillis() {
+        return System.nanoTime() / 1_000_000L;
+    }
+
+    private Clock mClock = TerminalEmulator::monotonicMillis;
 
     /** For tests only: makes {@link #getCursorPositionChangedAtMillis()} deterministic. */
     void setClockForTests(Clock clock) {

@@ -104,18 +104,31 @@ public class KittyCursorTrailTest {
         // First frame has no elapsed time to integrate over, so opacity starts at zero.
         trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
         assertEquals(0f, trail.opacity(), 1e-4f);
-        // DECTCEM on: opacity climbs towards one over decay_slow seconds.
-        trail.update(200L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        // DECTCEM on: opacity climbs towards one over decay_slow seconds. Driven in 16 ms frames,
+        // since the engine clamps a single step to 1/20 s so a paused app cannot jump the trail.
+        long t = runFrames(trail, 0L, 200L, true, cfg);
         assertTrue(trail.opacity() > 0f);
         assertTrue(trail.opacity() < 1f);
-        trail.update(1000L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        t = runFrames(trail, t, 800L, true, cfg);
         assertEquals(1f, trail.opacity(), 1e-4f);
         // DECTCEM off: opacity falls back towards zero, at the same rate.
-        trail.update(1200L, 0f, 0f, CELL_W, CELL_H, false, 0L, false, CELL_W, CELL_H, cfg);
+        t = runFrames(trail, t, 200L, false, cfg);
         assertTrue(trail.opacity() < 1f);
         assertTrue(trail.opacity() > 0f);
-        trail.update(3000L, 0f, 0f, CELL_W, CELL_H, false, 0L, false, CELL_W, CELL_H, cfg);
+        runFrames(trail, t, 800L, false, cfg);
         assertEquals(0f, trail.opacity(), 1e-4f);
+    }
+
+    /** Step the trail at a fixed cursor in 16 ms frames for {@code spanMillis}; returns the end time. */
+    private static long runFrames(KittyCursorTrail trail, long fromMillis, long spanMillis,
+                                  boolean dectcemOn, KittyCursorTrail.Config cfg) {
+        long t = fromMillis;
+        long end = fromMillis + spanMillis;
+        while (t < end) {
+            t = Math.min(end, t + 16L);
+            trail.update(t, 0f, 0f, CELL_W, CELL_H, dectcemOn, 0L, false, CELL_W, CELL_H, cfg);
+        }
+        return t;
     }
 
     /** needs_render stays true for one extra frame after every corner has actually settled. */
