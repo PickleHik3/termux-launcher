@@ -131,3 +131,36 @@ _Avoid_: the AI backend, the internal AI, the model server
 The model TAI answers with when a program does not name one, chosen in the launcher's AI settings.
 _Avoid_: default model, current model, loaded model (a model can be the default without being
 loaded)
+
+### Voice input
+
+**Dictation**:
+One stretch of speech-to-text, from the voice key or the Dictate key until it stops (a second tap,
+the pill's ×, the silence timeout). What is said collects in the panel as heard; nothing is typed
+while the user speaks.
+_Avoid_: voice typing (the Android recognizer's path), voice session
+
+**Pill**:
+The small bar at the top right of the place viewport while a dictation is up: waveform, state and a
+× that only stops listening. Same corner on every place.
+_Avoid_: voice indicator, overlay
+
+**Panel**:
+What the pill grows into, downward: the dictation's text (seven lines, the oldest scrolling off the
+top) over Copy, the bin (discard) and ✓. It is where the text waits until one of them is used.
+_Avoid_: transcript view, preview
+
+**Cleanup**:
+The one pass a local chat model makes over the whole dictation once it stops, at the level chosen in
+Settings (Light or Polished; off by default). The panel marks what it changed, and the cleaned text
+is what ✓ and Copy use; a refusal or an answer falls back to the text as heard.
+_Avoid_: polish (the setting's old name), rewrite, per-phrase cleanup
+
+**Insert**:
+✓: the dictation typed once where the keyboard would type on the place on screen, never with an
+Enter. Where nothing takes typing, it copies instead.
+_Avoid_: replace, swap (the retired in-place rewrite of the terminal line)
+
+**Dictate key**:
+`tool:voice.dictate` on the extra-keys row: starts or stops a dictation on any place, with the
+keyboard up, down or not the launcher's.
