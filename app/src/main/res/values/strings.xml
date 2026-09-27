@@ -1052,6 +1052,8 @@
         <string name="termux_ai_import_variant_half">half size</string>
         <string name="termux_ai_import_variant_full">full size · slowest, uses the most memory</string>
         <string name="termux_ai_import_variant_standard">Standard</string>
+        <string name="termux_ai_import_variant_gpu_build">GPU build</string>
+        <string name="termux_ai_import_variant_chip_build">for %1$s</string>
         <string name="termux_ai_import_variant_web">made for web browsers</string>
         <string name="termux_ai_import_variant_slow">probably slow on this phone</string>
         <string name="termux_ai_import_variant_too_big">too big for this phone</string>

@@ -410,6 +410,11 @@ final class TaiImportFlow {
                 : context.getString(R.string.termux_ai_import_variant_standard);
             Integer sameHint = hintCounts.get(String.valueOf(titleRes));
             if (sameHint != null && sameHint > 1) title = TaiImportNames.displayName(file) + " · " + title;
+            // Two builds can share both the model name and the quantisation and differ only in the
+            // target, e.g. granite-4.0-h-350m_int8 and _int8_gpu: say which one is which.
+            String chip = com.termux.ai.TaiImportProfiles.socTarget(file);
+            if (chip != null) title = title + " · " + context.getString(R.string.termux_ai_import_variant_chip_build, chip);
+            else if (com.termux.ai.TaiImportProfiles.gpuBuild(file)) title = title + " · " + context.getString(R.string.termux_ai_import_variant_gpu_build);
             labels[i] = twoLines(context, title, join(notes));
         }
         int[] choice = {selected};

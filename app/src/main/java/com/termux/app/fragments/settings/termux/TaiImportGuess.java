@@ -69,8 +69,9 @@ final class TaiImportGuess {
     }
 
     /**
-     * The accelerators a load may try, best first. Only publications known to run on the GPU list
-     * it; everything else is CPU, the choice that never fails a first load.
+     * The accelerators a load may try, best first. Publications known to run on the GPU, and files
+     * built for it ({@code _gpu}), put the GPU first; any other LiteRT model tries the CPU first,
+     * the choice that never fails a first load, with the GPU still allowed.
      */
     @NonNull
     static List<String> accelerators(@Nullable String source) {
@@ -82,7 +83,11 @@ final class TaiImportGuess {
             || value.contains("gemma-4-e2b") || value.contains("gemma-4-e4b")
             || value.contains("deepseek-r1-distill-qwen-1.5b")
             || value.contains("qwen2.5-1.5b-instruct"));
-        return knownGpu ? Arrays.asList("gpu", "cpu") : Collections.singletonList("cpu");
+        if (knownGpu || (!mnn && TaiImportProfiles.gpuBuild(value))) return Arrays.asList("gpu", "cpu");
+        // CPU first, so a first load never fails on a GPU that cannot take the graph, but the GPU
+        // stays allowed: listing the CPU alone made the runtime refuse even an explicit GPU load
+        // (codegemma-7b-it imported that way could never be tried on the GPU).
+        return mnn ? Collections.singletonList("cpu") : Arrays.asList("cpu", "gpu");
     }
 
     /** Qwen3's thinking publications: the one family whose thought markers the importer knows. */
