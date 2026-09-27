@@ -29,4 +29,19 @@ public class ParakeetTokenizerTest {
         assertEquals("git status", tokenizer.decode(new int[] {ParakeetTdtDecoder.BLANK, 2, ParakeetTdtDecoder.BLANK, 3}));
         assertEquals("git", tokenizer.decode(new int[] {2, 9999, -1}));
     }
+
+    @Test
+    public void digitsListedAmongTheAddedTokensAreKept() throws Exception {
+        // parakeet-tdt-0.6b-v3 lists the ten digits among its added tokens, unflagged as special,
+        // next to control markup such as <|nospeech|>. Only the markup may be dropped.
+        String json = "{\"model\":{\"type\":\"BPE\",\"vocab\":{\"<unk>\":0,\"<|nospeech|>\":1,"
+            + "\"\u2581took\":2,\"4\":3,\"2\":4,\"\u2581seconds\":5,\"\u2581\":6}},"
+            + "\"added_tokens\":[{\"id\":0,\"content\":\"<unk>\",\"special\":true},"
+            + "{\"id\":1,\"content\":\"<|nospeech|>\",\"special\":false},"
+            + "{\"id\":3,\"content\":\"4\",\"special\":false},"
+            + "{\"id\":4,\"content\":\"2\",\"special\":false}]}";
+        ParakeetTokenizer tokenizer = ParakeetTokenizer.parse(json);
+        org.junit.Assert.assertEquals("took 42 seconds",
+            tokenizer.decode(new int[] {1, 2, 6, 3, 4, 5, 0}));
+    }
 }
