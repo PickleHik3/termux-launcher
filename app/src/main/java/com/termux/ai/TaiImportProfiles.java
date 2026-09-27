@@ -304,13 +304,33 @@ public final class TaiImportProfiles {
 
     /**
      * A file the variant picker should not pre-select while a portable build exists: one tied to a
-     * chip's NPU, or one built for the GPU (on a phone whose GPU cannot take it, the load fails).
+     * chip's NPU, one built for the GPU (on a phone whose GPU cannot take it, the load fails), or a
+     * web (WebGPU) build.
      */
     public static boolean deprioritised(@Nullable String fileName) {
-        return socTarget(fileName) != null || gpuBuild(fileName);
+        return socTarget(fileName) != null || gpuBuild(fileName) || webBuild(fileName);
+    }
+
+    /** A build named for the web ({@code -web}): a WebGPU bundle, never the phone's default. */
+    public static boolean webBuild(@Nullable String fileName) {
+        String name = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
+        return WEB_TOKEN.matcher(name).find();
+    }
+
+    /**
+     * litert-community's Gemma 4 {@code -gpu} and {@code -web} files. Their headers (read 2026-09-27)
+     * hold one {@code tf_lite_artisan_text_decoder} section with {@code backend_constraint=gpu_artisan}:
+     * text-only, run on LiteRT-LM's hand-written GPU_ARTISAN path at FP16 activations, not the ML
+     * Drift delegate the standard file uses. On an Adreno 730 both produced corrupted text, and
+     * Google's AI Edge Gallery allowlist ships only the standard files, so the picker says so.
+     */
+    public static boolean artisanBundle(@Nullable String fileName) {
+        String name = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
+        return name.matches("gemma-4-e[24]b-it-(gpu|web)\\.litertlm");
     }
 
     private static final Pattern GPU_TOKEN = Pattern.compile("(^|[._-])gpu(?=[._-]|$)");
+    private static final Pattern WEB_TOKEN = Pattern.compile("(^|[-_.])web(?=[-_.]|$)");
     private static final Pattern SEQ_TOKEN = Pattern.compile("(?:^|[._-])seq(\\d+)(?=[._-]|$)");
 
     @NonNull

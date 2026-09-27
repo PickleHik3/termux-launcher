@@ -493,6 +493,9 @@ final class TaiImportFlow {
             if (TaiImportFacts.largerThanRam(size, ram)) {
                 facts.add(context.getString(R.string.termux_ai_import_variant_larger_than_ram, TaiImportFacts.ramGb(ram)));
             }
+            if (com.termux.ai.TaiImportProfiles.artisanBundle(file)) {
+                facts.add(context.getString(R.string.termux_ai_import_variant_artisan));
+            }
             StringBuilder hint = new StringBuilder(join(facts));
             String quote = candidate == null ? "" : candidate.optString("cardQuote", "");
             if (!quote.isEmpty()) hint.append('\n').append(context.getString(R.string.termux_ai_import_card_quote, quote));

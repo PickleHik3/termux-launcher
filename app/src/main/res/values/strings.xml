@@ -1071,6 +1071,7 @@
              card says, and plain measurements of this phone. No build is called better or worse
              here; comparative words come from the card, quoted. -->
         <string name="termux_ai_import_variant_gpu_build">GPU build</string>
+        <string name="termux_ai_import_variant_artisan">text-only GPU Artisan bundle (file header) · Google AI Edge Gallery ships the standard file instead</string>
         <string name="termux_ai_import_variant_web_build">web build</string>
         <string name="termux_ai_import_variant_chip_build">for %1$s</string>
         <string name="termux_ai_import_variant_context">%1$d-token context</string>

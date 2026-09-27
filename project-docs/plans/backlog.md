@@ -100,3 +100,11 @@ Small, deliberate omissions recorded where they happened. Listed here so they ar
   `TaiModelSpec` only promotes that capability into its endpoint set after reading flags out of a
   real `.litertlm` package, so the shown path needs instrumentation with a model installed.
   `TaiParameterPreferencesFragmentHidingTest` covers only the hidden cases.
+- Retest litert-community's Gemma 4 `-gpu` files on pong (Adreno 730) once a LiteRT-LM release ships
+  commit 495bee7da (`EngineConfig.activationDataType`, merged 2026-09-16, not in 0.17.1). The files
+  are text-only GPU_ARTISAN bundles that run at FP16 activations and produced corrupted, mixed-script
+  text on pong (`project-docs/plans/voice-cleanup-benchmark-2026-09-27.md`, round 4), matching
+  LiteRT-LM #2992 and #2814. Try `activationDataType = FLOAT32` with the `-gpu` file; if the output is
+  clean, weigh its speed and memory against the standard file before offering it. Until then the
+  catalogue ships only the standard `gemma-4-E2B-it.litertlm` and `gemma-4-E4B-it.litertlm`, and the
+  importer names Artisan bundles and never pre-selects them.

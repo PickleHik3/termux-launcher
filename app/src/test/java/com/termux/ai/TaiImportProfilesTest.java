@@ -283,4 +283,14 @@ public class TaiImportProfilesTest {
         assertEquals(TaiModelProfile.THINKING_SWITCH_SYSTEM_FLAG, profile.thinkingSwitch);
         assertEquals(4096, profile.maxContextTokens);
     }
+
+    @Test
+    public void gemmaArtisanBundlesAreNamedAndNeverTheDefault() {
+        org.junit.Assert.assertTrue(TaiImportProfiles.artisanBundle("gemma-4-E2B-it-gpu.litertlm"));
+        org.junit.Assert.assertTrue(TaiImportProfiles.artisanBundle("gemma-4-E4B-it-web.litertlm"));
+        org.junit.Assert.assertFalse(TaiImportProfiles.artisanBundle("gemma-4-E2B-it.litertlm"));
+        org.junit.Assert.assertTrue(TaiImportProfiles.deprioritised("gemma-4-E2B-it-web.litertlm"));
+        org.junit.Assert.assertTrue(TaiImportProfiles.deprioritised("gemma-4-E2B-it-gpu.litertlm"));
+        org.junit.Assert.assertFalse(TaiImportProfiles.deprioritised("gemma-4-E2B-it.litertlm"));
+    }
 }
