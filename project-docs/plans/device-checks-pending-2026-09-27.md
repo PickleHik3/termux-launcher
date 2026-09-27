@@ -5,7 +5,7 @@ d14d2b68. Remember: after an install, the TAI API stays down until the launcher 
 Run the memory watchdog for any model session.
 
 ## New in this build (not on pong yet)
-1. **System role fold** (d14d2b68): `tai chat` against codegemma with a system prompt.
+1. **System role fold** (d14d2b68). 1a and 1b dropped 2026-09-27: codegemma kept crashing pong, so no codegemma tests. `tai chat` against codegemma with a system prompt.
    - a. The first message succeeds through the fold instead of failing with "System role not supported".
      If it still fails, the error is raised at send time rather than at `createConversation`, and the
      retry has to move to the send path (`LiteRtTaiRuntime.generate`).
@@ -69,3 +69,25 @@ Run the memory watchdog for any model session.
 12. Settings restore on pong (already verified on HTC).
 13. Importer fact labels.
 14. Padding fill corners.
+
+## Results on pong v0.2.40 (2026-09-27)
+- **Pass:**
+  - 1c: gemma-4-e2b honours the system prompt.
+  - 2: keyboard off toggle (the developer).
+  - 3: first sound after 0.4 s matches what was heard.
+  - 4a: pill top-right, Warming up chip. Once, the pill vanished about 2 s in; not reproduced.
+  - 4d, 4e: nothing reaches the terminal while dictating, and the cleanup runs on stop.
+  - ✓ types once with no Enter.
+  - Copy works.
+  - Bin and swipe discard.
+  - Early ✓ (E) and continuing (f2).
+  - 4f3: Dictate key (the developer).
+  - 4g: refusal guard kept "What is the capital of France" as dictated.
+- **Fail / redesign:**
+  - A, first try: the panel showed clean text, then the raw text with "um", then clean again.
+  - Long-press raw/cleaned does nothing. Replace it with an undo button.
+  - Copy should be an icon.
+  - B: "ls dash la" stayed "Ls dash La", because under 4 words skips the cleanup. "L S dash La" became "LS dash La", because "LS" doesn't match the command list.
+  - The waveform freezes on its last frame when listening stops.
+  - × both stops and closes.
+- **Dropped:** 1a and 1b (codegemma).
