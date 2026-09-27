@@ -2793,7 +2793,10 @@ public class TerminalPaneController {
      * more; the trail masks the live cursor cell it is currently over instead (kitty does the same).
      */
     private void flyCursorBetweenPanes(@Nullable TerminalSession from, @Nullable TerminalSession to) {
-        applyCursorOwnership();
+        // Not applyCursorOwnership(): this runs before the caller (focusSession) assigns the new
+        // leaf, so getActiveSession() would still answer with the pane being left. "to" is what
+        // the caller is committed to making active the instant this call returns.
+        applyCursorOwnership(to);
         if (from == null || to == null || from == to) return;
         if (mSuppressNextCursorFlight) {
             mSuppressNextCursorFlight = false;
@@ -2815,7 +2818,11 @@ public class TerminalPaneController {
      * independently.
      */
     private void applyCursorOwnership() {
-        TerminalSession active = getActiveSession();
+        applyCursorOwnership(getActiveSession());
+    }
+
+    /** As {@link #applyCursorOwnership()}, against an explicit session rather than the read of it. */
+    private void applyCursorOwnership(@Nullable TerminalSession active) {
         for (Map.Entry<TerminalSession, TerminalView> entry : mPaneViews.entrySet()) {
             TerminalView view = entry.getValue();
             if (view == null) continue;
