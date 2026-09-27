@@ -2552,20 +2552,25 @@ public final class TerminalView extends View {
         int newColumns = Math.max(4, (int) (viewWidth / mRenderer.mFontWidth));
         int newRows = Math.max(4, (viewHeight - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
         if (mEmulator == null || (newColumns != mEmulator.mColumns || newRows != mEmulator.mRows)) {
-            mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(),
-                mRenderer.getFontLineSpacing(), keepCursorAtBottom);
-            mEmulator = mTermSession.getEmulator();
-            updateKittyAnimationVisibility();
-            mClient.onEmulatorSet();
-            // Update mTerminalCursorBlinkerRunnable inner class mEmulator on session change
-            if (mTerminalCursorBlinkerRunnable != null)
-                mTerminalCursorBlinkerRunnable.setEmulator(mEmulator);
-            mTopRow = 0;
-            clearScrollOffset();
-            scrollTo(0, 0);
-            // Reflow moved every cell, so the remembered cursor cell no longer means anything.
-            notifyCursorTrailSnap();
-            invalidate();
+            android.os.Trace.beginSection("Terminal.updateSize");
+            try {
+                mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(),
+                    mRenderer.getFontLineSpacing(), keepCursorAtBottom);
+                mEmulator = mTermSession.getEmulator();
+                updateKittyAnimationVisibility();
+                mClient.onEmulatorSet();
+                // Update mTerminalCursorBlinkerRunnable inner class mEmulator on session change
+                if (mTerminalCursorBlinkerRunnable != null)
+                    mTerminalCursorBlinkerRunnable.setEmulator(mEmulator);
+                mTopRow = 0;
+                clearScrollOffset();
+                scrollTo(0, 0);
+                // Reflow moved every cell, so the remembered cursor cell no longer means anything.
+                notifyCursorTrailSnap();
+                invalidate();
+            } finally {
+                android.os.Trace.endSection();
+            }
         }
     }
 

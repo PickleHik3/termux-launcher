@@ -6926,6 +6926,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         float translationY = mDockTravelTranslationPx - mDockImeLiftPx;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+            Trace.setCounter("Wall.stackTranslationPx", Math.round(mDockTravelTranslationPx));
         if (accessoryContainer.getTranslationY() != translationY) {
             accessoryContainer.setTranslationY(translationY);
             // The dock's and the keyboard's glass sample the wallpaper through this translation
@@ -15743,6 +15745,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * outcome the layout, or undoes the pre-roll if the wall came back to where it started.
      */
     private void syncChromeTravel(float offsetPx) {
+        Trace.beginSection("Wall.chromeTravel");
+        try {
+            doSyncChromeTravel(offsetPx);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doSyncChromeTravel(float offsetPx) {
         if (mPaneWallController == null) return;
         com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
         // At rest there is nothing to travel: the settle that follows the last frame owns the
@@ -15827,6 +15838,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
         if (mInAppKeyboard == null) return;
+        Trace.beginSection("Wall.preRollKeyboard");
         com.termux.app.wall.PaneWallPage target = frame.toward != mLastWallPage
             && chromeRestOf(frame.toward).keyboardReveal() > 0f ? frame.toward : frame.from;
         beginTravelHold();
@@ -15840,14 +15852,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     .KEYBOARD_ACTION);
         } finally {
             mQuietKeyboardChange = false;
+            Trace.endSection();
         }
     }
 
     /** Lays a minimal place's bottom rows out again for the slide toward a place that has them. */
     private void preRollTravelDock() {
-        beginTravelHold();
-        mTravelDockPreRolled = true;
-        syncPlaceLayout();
+        Trace.beginSection("Wall.preRollDock");
+        try {
+            beginTravelHold();
+            mTravelDockPreRolled = true;
+            syncPlaceLayout();
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /** The keyboard's height as the stack lays it out; 0 while it is down or floating. */
@@ -15910,6 +15928,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * never moved.
      */
     private void settlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page) {
+        Trace.beginSection("Wall.settleChrome");
+        try {
+            doSettlePlaceChrome(page);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    private void doSettlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page) {
         boolean leavingKeyboardUp = committedKeyboardVisible();
         boolean keyboardPreRolled = mTravelKeyboardPreRolled;
         boolean dockPreRolled = mTravelDockPreRolled;
@@ -16131,6 +16158,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean isDisplayEnabled() { return com.termux.BuildConfig.X11_SERVER; }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
+                    Trace.beginSection("Wall.pageSettled");
+                    try {
+                        onWallPageSettledTraced(page);
+                    } finally {
+                        Trace.endSection();
+                    }
+                }
+                private void onWallPageSettledTraced(
+                        @NonNull com.termux.app.wall.PaneWallPage page) {
                     // Everything a place change moves apart from the bar runs here, once the wall
                     // has stopped: the layout and the look are every place's, so the slide never
                     // has anything to re-lay, and what is left — the keyboard, the touchpad, who
@@ -16144,7 +16180,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mWidgetPaneController.onWallPageShown(
                             page == com.termux.app.wall.PaneWallPage.WIDGETS);
                     }
-                    syncDisplayPageAttachment(page);
+                    Trace.beginSection("Wall.displayAttachment");
+                    try {
+                        syncDisplayPageAttachment(page);
+                    } finally {
+                        Trace.endSection();
+                    }
                     // Where the wall rests is where the home screen comes back to, across Home
                     // presses and across launches alike.
                     if (mPreferences != null) mPreferences.setWallLastPage(page.name());
@@ -16152,6 +16193,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mFirstBootTour != null) mFirstBootTour.onPlaceSettled(page.name());
                 }
                 @Override public void onWallOffsetChanged(float offsetPx) {
+                    Trace.beginSection("Wall.offsetChanged");
+                    try {
+                        onWallOffsetChangedTraced(offsetPx);
+                    } finally {
+                        Trace.endSection();
+                    }
+                }
+                private void onWallOffsetChangedTraced(float offsetPx) {
+                    // A perfetto counter beside the stack's (applyAccessoryStackTranslation), so
+                    // a trace shows whether the chrome lands with the wall or after it.
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                        Trace.setCounter("Wall.offsetPx", Math.round(offsetPx));
                     syncPlaceBarOffset(offsetPx);
                     // The dock, the keyboard and the status bar's content travel with the wall
                     // between the two places' states, as transforms only.

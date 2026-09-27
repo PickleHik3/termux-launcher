@@ -1,6 +1,7 @@
 package com.termux.app.wall;
 
 import android.content.Context;
+import android.os.Trace;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
@@ -296,19 +297,29 @@ public final class PaneWallLayout extends ViewGroup {
 
     public void beginDrag() {
         if (!mGesturesEnabled) return;
-        mDragging = true;
-        stopSlide();
-        stopNudge();
+        Trace.beginSection("Wall.beginDrag");
+        try {
+            mDragging = true;
+            stopSlide();
+            stopNudge();
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /** Move the wall for a finger that has travelled {@code dxPx} since it went down. */
     public void dragTo(float dxPx) {
         if (!mDragging) return;
-        int width = getWidth();
-        mOffsetPx = PaneWallPolicy.offsetForDrag(dxPx, width,
-            PaneWallPolicy.hasNeighbour(mPages, mCurrent, -1),
-            PaneWallPolicy.hasNeighbour(mPages, mCurrent, 1));
-        applyPagePositions();
+        Trace.beginSection("Wall.dragTo");
+        try {
+            int width = getWidth();
+            mOffsetPx = PaneWallPolicy.offsetForDrag(dxPx, width,
+                PaneWallPolicy.hasNeighbour(mPages, mCurrent, -1),
+                PaneWallPolicy.hasNeighbour(mPages, mCurrent, 1));
+            applyPagePositions();
+        } finally {
+            Trace.endSection();
+        }
     }
 
     /** Release the drag at {@code velocityPxPerSec} (positive to the right). */
@@ -383,10 +394,15 @@ public final class PaneWallLayout extends ViewGroup {
     }
 
     private void settleImmediately() {
-        stopSlide();
-        mOffsetPx = 0f;
-        applyPagePositions();
-        if (mListener != null) mListener.onWallPageSettled(mCurrent);
+        Trace.beginSection("Wall.settle");
+        try {
+            stopSlide();
+            mOffsetPx = 0f;
+            applyPagePositions();
+            if (mListener != null) mListener.onWallPageSettled(mCurrent);
+        } finally {
+            Trace.endSection();
+        }
     }
 
     private void notifyPageChanged() {
