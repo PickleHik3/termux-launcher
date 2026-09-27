@@ -91,3 +91,31 @@ Run the memory watchdog for any model session.
   - The waveform freezes on its last frame when listening stops.
   - × both stops and closes.
 - **Dropped:** 1a and 1b (codegemma).
+
+## Round 2 checks (voice pill and panel, after the pong run)
+Watch logcat tag `VoiceSessionCleanup`. A command now logs `outcome=fallback:skipped:command` only
+if it reaches the cleanup; normally it never does.
+1. **Pause / resume / ×.** The pill shows pause and × while listening.
+   - a. Pause: phrases still transcribing arrive (resume is greyed out meanwhile), the cleanup runs on
+      its own, and pause becomes a microphone (resume).
+   - b. Resume carries on the same text. The next pause cleans all of it. The voice key and the
+      Dictate key do the same: start, pause, resume.
+   - c. × while listening, while transcribing, while cleaning and while waiting: each time the text
+      is gone, the pill closes at once, and nothing reaches the terminal. Swiping the card does the same.
+2. **Panel icons.** Three icons: undo, copy, ✓. No bin, and no "Copy" text. TalkBack reads each one.
+   - a. Undo shows only after a cleanup or a command formatting. It puts back the text as heard and
+      turns into redo. Redo brings the cleaned text back. ✓ and Copy use whichever is showing.
+   - b. After Kept as heard or Ready there is no undo.
+   - c. Long-pressing the text does nothing.
+3. **Bug A (versions).** With cleanup on, dictate several phrases, one with "um". The panel only goes
+   raw (dim) → shimmer → cleaned. The text never switches back to raw by itself. Also try it with a
+   resume after the cleanup has landed: the carried text stays as shown, and new phrases join it.
+4. **Bug B (commands).** With cleanup off, then on:
+   - a. "ls dash la" gives `ls -la`, and so does "L S dash La". The status says "Formatted as a command".
+   - b. "git status" gives `git status`, "cd slash home slash user" gives `cd /home/user`, and "cat
+      file dot txt" gives `cat file.txt`. There's no capital and no full stop.
+   - c. "Make sure the tests pass before you push" is prose: with cleanup on it is cleaned as usual.
+   - d. Undo on a command gives the words as heard.
+5. **Waveform rest.** On pause, the bars ease down to a dim line in about a third of a second, and
+   they rise again on resume. With animations off (developer options) they jump. At rest, GPU
+   profiling or gfxinfo shows no ongoing frames from the pill.

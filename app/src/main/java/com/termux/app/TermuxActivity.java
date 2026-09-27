@@ -152,6 +152,7 @@ import com.termux.app.terminal.inappkeyboard.InAppKeyboardHost;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceCommandFormatter;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceDictation;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceInputSession;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceLanguage;
@@ -10142,9 +10143,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public void requestVoiceTyping(boolean chooser) {
             // Long-press keeps the system chooser; a tap takes the engine the settings name, and
             // a tap while the on-device engine is listening is how a session is ended by hand.
-            // Like the pill's ×, it never throws away what was said: once the mic has closed, a
+            // Like the pill's pause, it never throws away what was said: once the mic has closed, a
             // further tap lets the captured phrases finish (each has its own deadline), and the
-            // text waits in the panel; only its bin or a swipe of the card discards it.
+            // text waits in the panel, where the next tap resumes on it; only the pill's × or a
+            // swipe of the card discards it.
             if (chooser || !mPreferences.isInAppKeyboardVoiceOnDevice()) {
                 launchVoiceTyping(chooser);
                 return;
@@ -14182,21 +14184,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final long VOICE_PILL_ACTION_ON_CLEANED_MS = 2_500L;
 
     /**
-     * The pill's × and the card's swipe, and the panel's Copy, bin and ✓. The × only stops
-     * listening: every phrase still transcribing arrives and the text waits. The bin and the
-     * swipe discard the dictation and close at once. Copy and ✓ use the text once it is final,
-     * stopping first when pressed while listening. None of them ever erases or retypes anything
-     * in the terminal.
+     * The pill's pause/resume and ×, the card's swipe, and the panel's undo, Copy and ✓. Pause
+     * stops listening: every phrase still transcribing arrives, the cleanup runs and the text
+     * waits; resume carries on the same text. The × and the swipe only ever discard the
+     * dictation and close at once. Copy and ✓ use the text once it is final, stopping first when
+     * pressed while listening. None of them ever erases or retypes anything in the terminal.
      */
     private final VoiceListeningIndicator.Callbacks mVoicePillCallbacks = new VoiceListeningIndicator.Callbacks() {
         @Override
-        public void onStop() {
+        public void onPause() {
             endVoiceInput(VoiceInputSession.EndReason.USER);
         }
 
         @Override
-        public void onSwipedAway() {
+        public void onResume() {
+            resumeVoiceDictation();
+        }
+
+        @Override
+        public void onClose() {
             discardVoiceDictation();
+        }
+
+        @Override
+        public void onUndo() {
+            if (!mVoiceDictation.toggleUndo()) return;
+            if (mVoiceIndicator != null) mVoiceIndicator.setUndone(mVoiceDictation.isUndone());
         }
 
         @Override
@@ -14205,17 +14218,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public void onDiscard() {
-            discardVoiceDictation();
-        }
-
-        @Override
         public void onInsert() {
             useVoiceDictation(VoiceDictation.Use.INSERT);
         }
     };
 
-    /** The bin, or a swipe: whatever is still transcribing is dropped with the text. */
+    /**
+     * The pill's resume: listening again on the text in the panel, as the voice key or the
+     * Dictate key would. A dictation the voice key started stays tied to the keyboard while that
+     * keyboard is up. Not while the last phrases are still transcribing (the button waits then).
+     */
+    private void resumeVoiceDictation() {
+        if (mVoiceInput != null || mPreferences == null) return;
+        boolean fromKeyboard = mVoiceTiedToKeyboard && mInAppKeyboard != null && mInAppKeyboard.isVisible();
+        startOnDeviceVoiceInput(fromKeyboard);
+    }
+
+    /** The pill's ×, or a swipe: whatever is still transcribing is dropped with the text. */
     private void discardVoiceDictation() {
         VoiceInputSession session = mVoiceInput;
         if (session != null) session.cancel(VoiceInputSession.EndReason.USER);
@@ -14314,8 +14333,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The microphone is released and every phrase delivered. Nothing heard closes the pill; with
-     * cleanup on and something worth cleaning, the one pass runs; otherwise the text waits as heard.
+     * The microphone is released and every phrase delivered. Nothing heard closes the pill; a
+     * dictated command is written as one ({@link VoiceCommandFormatter}, no model, cleanup on or
+     * off); with cleanup on and something worth cleaning, the one pass runs; otherwise the text
+     * waits as heard.
      */
     private void finishVoiceSession(@NonNull VoiceInputSession.EndReason reason) {
         mVoiceDictation.onStopped();
@@ -14327,12 +14348,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         VoiceSessionCleanup cleanup = mVoiceCleanup;
+        String command = VoiceCommandFormatter.format(raw);
+        if (command != null) {
+            // The formatter's alone: the model is never sent a command (skipReason "command").
+            mVoiceCleanup = null;
+            if (cleanup != null) cleanup.cancel();
+            if (command.isEmpty() || command.equals(raw)) {
+                indicator.showAsHeard(R.string.voice_input_ready);
+                settleVoiceDictation(raw, false);
+            } else {
+                indicator.showCleaned(command, R.string.voice_input_formatted_command);
+                settleVoiceDictation(command, true);
+            }
+            return;
+        }
         // A failure is often the runtime short of memory: no second model on top of it.
         boolean cleanable = reason != VoiceInputSession.EndReason.FAILED
             && VoiceSessionCleanup.skipReason(raw) == null;
         if (cleanup != null && cleanable) {
             indicator.setCleaningUp();
-            cleanup.run(raw, this::onVoiceCleaned);
+            cleanup.run(raw, (cleanedRaw, result) -> onVoiceCleaned(cleanup, cleanedRaw, result));
             cleanup.close();
             return;
         }
@@ -14344,19 +14379,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The one pass has landed. Anything but a real change keeps the text as heard; a change shows
-     * with its words marked. Either way the text now waits for the panel's buttons.
+     * with its words marked. Either way the text now waits for the panel's buttons. A pass that
+     * is no longer the dictation's own — a resume or a discard replaced it, or the text moved on
+     * from what it cleaned — is dropped, so an older version never comes back over the panel.
      */
-    private void onVoiceCleaned(@NonNull String raw, @NonNull VoiceTextPolisher.Result result) {
+    private void onVoiceCleaned(@NonNull VoiceSessionCleanup cleanup, @NonNull String raw,
+                                @NonNull VoiceTextPolisher.Result result) {
+        if (mVoiceCleanup != cleanup) return;
         mVoiceCleanup = null;
         VoiceListeningIndicator indicator = mVoiceIndicator;
         if (indicator == null || !indicator.isShowing()) return;
+        if (mVoiceDictation.phase() != VoiceDictation.Phase.FINISHING
+            || !raw.trim().equals(mVoiceDictation.raw().trim())) return;
         String cleaned = result.isPolished() ? VoiceTextSanitizer.clean(result.text) : "";
         if (cleaned.isEmpty() || cleaned.equals(raw.trim())) {
             indicator.showAsHeard(R.string.voice_input_kept_as_heard);
             settleVoiceDictation(raw.trim(), false);
             return;
         }
-        indicator.showCleaned(cleaned);
+        indicator.showCleaned(cleaned, R.string.voice_input_cleaned_up);
         settleVoiceDictation(cleaned, true);
     }
 
@@ -14364,7 +14405,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void settleVoiceDictation(@NonNull String text, boolean cleaned) {
         // Waiting is not talking: the screen may time out again.
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        VoiceDictation.Use early = mVoiceDictation.onSettled(text);
+        VoiceDictation.Use early = cleaned ? mVoiceDictation.onCleaned(text) : mVoiceDictation.onSettled(text);
         if (early != null) carryOutVoiceUse(early, text, cleaned);
     }
 

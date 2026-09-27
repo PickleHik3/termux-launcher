@@ -43,20 +43,27 @@ import java.util.List;
  * and revealed by moving a transparent span, so the lines never reflow while typing. With
  * animations off, a phrase appears at once and the shimmer is still.
  *
- * <p>With cleanup on, the raw text shows dim. Once the one pass has landed, the cleaned text
- * replaces it with the changes marked from {@link VoiceWordDiff}: changed and added words in the
- * accent colour, removed words struck through, held for {@link #MARK_HOLD_MS} and then faded into
- * the plain cleaned text. A long press toggles the raw text back.
+ * <p>With cleanup on, the raw text shows dim. Once the one pass has landed (the model's, or the
+ * command formatter's), the cleaned text replaces it with the changes marked from
+ * {@link VoiceWordDiff}: changed and added words in the accent colour, removed words struck
+ * through, held for {@link #MARK_HOLD_MS} and then faded into the plain cleaned text.
  *
- * <p>Under the text sit Copy, the bin (discard) and ✓ (insert at the cursor, once). Both Copy and ✓ may
- * be pressed early; the host stops listening and carries the press out once the text settles.
+ * <p>The text only ever moves one way: as heard (dim while a cleanup is to come), then cleaned.
+ * What is shown is always {@link #shownText()}; a phrase that arrives after the cleanup joins
+ * that, never the as-heard copy behind it, so an older version cannot come back. Only undo
+ * shows the as-heard text again, and only on purpose.
+ *
+ * <p>Under the text sit three icons: undo (and, once undone, redo; only while there is a cleanup
+ * to take back), Copy and ✓ (insert at the cursor, once). Both Copy and ✓ may be pressed early;
+ * the host stops listening and carries the press out once the text settles. Discarding is the
+ * pill's ×, or a swipe of the card.
  */
 final class VoiceTranscriptPanel extends LinearLayout {
 
     interface Actions {
-        void onCopy();
+        void onUndo();
 
-        void onDiscard();
+        void onCopy();
 
         void onInsert();
     }
@@ -71,19 +78,23 @@ final class VoiceTranscriptPanel extends LinearLayout {
     private final TextView text;
     private final ShimmerBar shimmer;
     private final LinearLayout actions;
+    private final ImageView undo;
     private final int onSurface;
     private final int dimText;
     private final int accent;
     private final ForegroundColorSpan hidden = new ForegroundColorSpan(Color.TRANSPARENT);
 
-    /** Everything the dictation has heard, as heard (and the text it carried on from). */
+    /** What goes into the cleanup: the text carried on from, then every phrase as heard. */
     private final StringBuilder raw = new StringBuilder();
     private boolean dimRaw;
     private int revealed;
     @Nullable private ValueAnimator typing;
 
+    /** The cleanup that landed on {@link #raw}, or {@code null} while there is none. */
+    @Nullable private String cleaned;
     @Nullable private List<VoiceWordDiff.Op> ops;
-    private boolean showingRaw;
+    /** Undo is showing {@link #raw} in place of {@link #cleaned}. */
+    private boolean undone;
     @Nullable private ValueAnimator markFade;
     private final Runnable fadeMarks = this::fadeMarks;
 
@@ -104,8 +115,6 @@ final class VoiceTranscriptPanel extends LinearLayout {
         text.setVerticalScrollBarEnabled(false);
         text.setVerticalFadingEdgeEnabled(true);
         text.setFadingEdgeLength(dp(14));
-        text.setOnLongClickListener(v -> toggleRaw());
-        text.setLongClickable(false);
         addView(text, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         shimmer = new ShimmerBar(context, onSurface);
@@ -115,15 +124,18 @@ final class VoiceTranscriptPanel extends LinearLayout {
         shimmer.setVisibility(GONE);
         addView(shimmer, shimmerParams);
 
-        // Copy on its own at the start; the bin and ✓ together at the end, ✓ nearest the edge the pill
-        // hangs from.
+        // Undo, Copy and ✓ together at the end, ✓ nearest the edge the pill hangs from. Undo is
+        // there only while a cleanup can be taken back.
         actions = new LinearLayout(context);
         actions.setOrientation(HORIZONTAL);
         actions.setGravity(Gravity.CENTER_VERTICAL);
-        actions.addView(actionButton(context, R.string.voice_input_cleanup_copy, v -> callbacks.onCopy()));
         actions.addView(new View(context), new LayoutParams(0, 1, 1f));
-        actions.addView(iconButton(context, R.drawable.ic_symbol_delete, onSurface,
-            R.string.voice_input_discard, v -> callbacks.onDiscard()));
+        undo = iconButton(context, R.drawable.ic_symbol_undo, onSurface,
+            R.string.voice_input_undo, v -> callbacks.onUndo());
+        undo.setVisibility(GONE);
+        actions.addView(undo);
+        actions.addView(iconButton(context, R.drawable.ic_symbol_content_copy, onSurface,
+            R.string.voice_input_cleanup_copy, v -> callbacks.onCopy()));
         actions.addView(iconButton(context, R.drawable.ic_symbol_check, accent,
             R.string.voice_input_insert, v -> callbacks.onInsert()));
         actions.setVisibility(GONE);
@@ -171,6 +183,12 @@ final class VoiceTranscriptPanel extends LinearLayout {
     void append(@NonNull String typed) {
         if (typed.isEmpty()) return;
         finishTyping();
+        if (cleaned != null) {
+            // Past the cleanup: the phrase joins the text as shown, never the as-heard copy behind it.
+            String shown = shownText();
+            raw.setLength(0);
+            raw.append(shown);
+        }
         clearCleanup();
         actions.setVisibility(VISIBLE);
         int from = raw.length();
@@ -203,23 +221,57 @@ final class VoiceTranscriptPanel extends LinearLayout {
         actions.setVisibility(raw.length() > 0 ? VISIBLE : GONE);
     }
 
-    /** The cleanup has landed: {@code cleaned} replaces the raw text with its changes marked. */
-    void showCleaned(@NonNull String cleaned) {
+    /**
+     * The cleanup has landed: {@code cleanedText} replaces the raw text with its changes marked.
+     * The text is final from here; undo is offered.
+     */
+    void showCleaned(@NonNull String cleanedText) {
         finishTyping();
-        removeCallbacks(fadeMarks);
-        ops = VoiceWordDiff.diff(raw.toString(), cleaned);
-        showingRaw = false;
-        text.setLongClickable(true);
+        clearCleanup();
+        dimRaw = false;
+        cleaned = cleanedText;
+        ops = VoiceWordDiff.diff(raw.toString(), cleanedText);
+        undone = false;
+        showUndo(true);
         renderCleaned(true, 0f);
         postDelayed(fadeMarks, MARK_HOLD_MS);
     }
 
-    /** The text is final as heard (no cleanup, or nothing better came back): no longer dim. */
+    /**
+     * The text is final as heard (no cleanup, or nothing better came back): no longer dim. A
+     * cleanup already shown stays; this never brings the as-heard text back over it.
+     */
     void showFinalRaw() {
         finishTyping();
-        if (!dimRaw) return;
+        if (cleaned != null || !dimRaw) return;
         dimRaw = false;
         renderRaw();
+    }
+
+    /**
+     * Undo ({@code true}): the text as it went into the cleanup, plain; redo ({@code false}): the
+     * cleaned text again, plain. No-op without a cleanup.
+     */
+    void setUndone(boolean undoneNow) {
+        if (cleaned == null || undone == undoneNow) return;
+        undone = undoneNow;
+        cancelMarks();
+        if (undone) {
+            SpannableStringBuilder builder = new SpannableStringBuilder(raw);
+            builder.setSpan(new ForegroundColorSpan(onSurface), 0, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            text.setText(builder, TextView.BufferType.SPANNABLE);
+            scrollToEnd();
+        } else {
+            renderCleaned(false, 1f);
+        }
+        undo.setImageResource(undone ? R.drawable.ic_symbol_redo : R.drawable.ic_symbol_undo);
+        undo.setContentDescription(getContext().getString(undone ? R.string.voice_input_redo : R.string.voice_input_undo));
+    }
+
+    /** The text as it stands on screen: the cleaned text, or what went into it when undone or not yet cleaned. */
+    @NonNull
+    String shownText() {
+        return cleaned == null || undone ? raw.toString() : cleaned;
     }
 
     /** ✓ or Copy has used the text: the buttons go, the text stays while the pill says so. */
@@ -230,11 +282,7 @@ final class VoiceTranscriptPanel extends LinearLayout {
     /** Stops every animation; the panel is going away. */
     void release() {
         finishTyping();
-        removeCallbacks(fadeMarks);
-        if (markFade != null) {
-            markFade.cancel();
-            markFade = null;
-        }
+        cancelMarks();
         shimmer.setVisibility(GONE);
     }
 
@@ -272,20 +320,32 @@ final class VoiceTranscriptPanel extends LinearLayout {
 
     // ------------------------------------------------------------------ cleaned text
 
+    /** Forgets the cleanup (the text carries on, or starts over) and stops its marks. */
     private void clearCleanup() {
-        if (ops == null) return;
+        cancelMarks();
+        cleaned = null;
         ops = null;
-        showingRaw = false;
-        text.setLongClickable(false);
+        undone = false;
+        showUndo(false);
+    }
+
+    private void cancelMarks() {
         removeCallbacks(fadeMarks);
-        if (markFade != null) {
-            markFade.cancel();
-            markFade = null;
+        ValueAnimator animator = markFade;
+        markFade = null;
+        if (animator != null) animator.cancel();
+    }
+
+    private void showUndo(boolean shown) {
+        if (!shown) {
+            undo.setImageResource(R.drawable.ic_symbol_undo);
+            undo.setContentDescription(getContext().getString(R.string.voice_input_undo));
         }
+        undo.setVisibility(shown ? VISIBLE : GONE);
     }
 
     private void fadeMarks() {
-        if (ops == null || showingRaw) return;
+        if (ops == null || undone) return;
         if (!ValueAnimator.areAnimatorsEnabled()) {
             renderCleaned(false, 1f);
             return;
@@ -293,7 +353,7 @@ final class VoiceTranscriptPanel extends LinearLayout {
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(MARK_FADE_MS);
         animator.addUpdateListener(a -> {
-            if (ops == null || showingRaw) return;
+            if (markFade != a || ops == null || undone) return;
             float fraction = (float) a.getAnimatedValue();
             if (fraction >= 1f) renderCleaned(false, 1f);
             else renderCleaned(true, fraction);
@@ -341,26 +401,6 @@ final class VoiceTranscriptPanel extends LinearLayout {
         scrollToEnd();
     }
 
-    /** Long press: the raw text as heard, and back. */
-    private boolean toggleRaw() {
-        if (ops == null) return false;
-        showingRaw = !showingRaw;
-        if (showingRaw) {
-            removeCallbacks(fadeMarks);
-            if (markFade != null) {
-                markFade.cancel();
-                markFade = null;
-            }
-            SpannableStringBuilder builder = new SpannableStringBuilder(raw);
-            builder.setSpan(new ForegroundColorSpan(dimText), 0, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            text.setText(builder, TextView.BufferType.SPANNABLE);
-            scrollToEnd();
-        } else {
-            renderCleaned(false, 1f);
-        }
-        return true;
-    }
-
     // ------------------------------------------------------------------ layout
 
     /** Keeps the newest line at the bottom; the ones above scroll up under the fading edge. */
@@ -389,23 +429,6 @@ final class VoiceTranscriptPanel extends LinearLayout {
         }
         button.setOnClickListener(listener);
         button.setLayoutParams(new LayoutParams(dp(40), dp(40)));
-        return button;
-    }
-
-    @NonNull
-    private TextView actionButton(@NonNull Context context, int label, @NonNull OnClickListener listener) {
-        TextView button = new TextView(context);
-        button.setText(label);
-        button.setTextColor(accent);
-        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        button.setPadding(dp(12), dp(8), dp(12), dp(8));
-        button.setMinHeight(dp(36));
-        button.setGravity(Gravity.CENTER);
-        TypedValue ripple = new TypedValue();
-        if (context.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, ripple, true)) {
-            button.setBackgroundResource(ripple.resourceId);
-        }
-        button.setOnClickListener(listener);
         return button;
     }
 
