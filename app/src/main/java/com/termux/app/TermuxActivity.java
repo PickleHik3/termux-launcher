@@ -16477,6 +16477,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Where the wall stands relative to its rest, as its last offset callback said. */
     private float mWallOffsetPx;
+    /** Scratch for the place strip's clip while it slides; setClipBounds copies it. */
+    private final Rect mTmpStripClip = new Rect();
 
     /** Dress the bar for the place on screen: row content, accents, summary, icons and tint. */
     private void syncPlaceBar() {
@@ -16640,6 +16642,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             strip.setTranslationX(vertical ? 0f : offsetPx);
             strip.setTranslationY(vertical ? offsetPx : 0f);
             strip.setAlpha(alpha);
+            // What slides out of the strip's own place is cut there rather than carried over the
+            // stat widgets beside it, which hold still: the row clips its children to itself,
+            // not to each other, and a pill label read over the CPU figure mid-slide. The clip is
+            // in the strip's coordinates, so it moves against the translation to stay put.
+            if (offsetPx == 0f) {
+                if (strip.getClipBounds() != null) strip.setClipBounds(null);
+            } else {
+                int dx = vertical ? 0 : Math.round(-offsetPx);
+                int dy = vertical ? Math.round(-offsetPx) : 0;
+                mTmpStripClip.set(dx, dy, dx + strip.getWidth(), dy + strip.getHeight());
+                strip.setClipBounds(mTmpStripClip);
+            }
         }
         if (mPaneWallController == null) return;
         java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
