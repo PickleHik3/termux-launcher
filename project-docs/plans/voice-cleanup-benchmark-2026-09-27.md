@@ -72,3 +72,25 @@ Prompts and cases: `voice-cleanup-levels-bench-2026-09-27.py` and `voice-cleanup
 **Decision:** two levels, Light (Freestyle Low) and Polished (careful/Medium). Default Gemma 4 E2B + Polished.
 Both models get both levels, behind a refusal/answer guard: if the output starts like a refusal or an
 answer ("I cannot", "I am programmed", "As an AI"), or loses most of the input's words, insert the raw text.
+
+## Round 4: fair rerun (right files, GPU allowed, manifest settings)
+
+The round 2 results were partly unfair: every dialog import was stored CPU-only (fixed in 99b8c60b),
+pong held the Qwen3.5-2B VL build instead of the text build, LFM2.5 was the slowest int8 CPU export,
+and Granite 4.2 had 1024 output tokens where its manifest asks for at least 2048. All five were
+deleted and downloaded fresh through `/v1/ai/models/download` with explicit profiles.
+
+| Model (file, backend) | Load | TTFT | 67 s / 111 s | Kept (worst) | New words (worst) | Verdict |
+|---|---|---|---|---|---|---|
+| Gemma 4 E2B, standard `.litertlm`, GPU | 6.4 s | 0.66 s | 6.1 / 10.0 s | 0.97 | 1% | **Use it** |
+| Gemma 4 E2B `-gpu.litertlm`, GPU | 11.0 s | 0.53 s | 6.3 / 4.9 s | 0.00 | 100% | **Corrupt output** on Adreno 730 (mixed Devanagari/CJK/Cyrillic tokens) |
+| Gemma 4 E4B `-gpu.litertlm`, GPU | 13.1 s | 1.0-1.7 s | — / 16.3 s (75 s clip) | 0.88 | — | **Corrupt output** ("cleanupJadi", "aird", "ays") |
+| LFM2.5 1.2B `_int4_gpu`, GPU | 17.2 s | 0.66 s | 4.9 / 6.7 s | 0.44-0.70 | 7-29% | Fast now, but drops and adds content |
+| Granite 4.0-H 1B int8, GPU | 51.8 s | 3.1 s | 11.6 / 19.9 s | 0.93 | 1% | Faithful, 3x slower |
+| Ministral 3 3B q4, GPU | 21.2 s | 2.6 s | 16.1 / 25.1 s | 0.70-0.94 | 3-17% | Keeps text, barely edits |
+| Qwen3.5 2B text int8, GPU | 120 s | — | — | — | — | GPU load hit the watchdog at 1.45 GB free |
+| Granite 4.2 3B int4, GPU, 2048 tokens | 32.8 s | 341 s | 409 s / — | — | — | Answers now, after ~8-10 k chars of thought |
+
+**Decision confirmed:** Gemma 4 E2B, standard file. **Do not ship the Gemma 4 `-gpu` files:** both
+produce corrupted text on pong's GPU. The catalogue keeps the standard `gemma-4-E2B-it.litertlm` and
+`gemma-4-E4B-it.litertlm`.
