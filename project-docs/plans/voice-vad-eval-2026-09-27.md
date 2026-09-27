@@ -12,6 +12,65 @@ did not help: it clipped more onsets on clean audio and doubled hallucinations w
 moonshine-tiny was dropped (60-70% WER on clean audio). Whisper small.en is the steadier speech model in
 noise; Parakeet stays the faster one for quiet, close-up dictation.
 
+## Shipping it: conversion, parity and the app side
+
+**Conversion** (`scripts/voice-eval/convert_silero.py`). Source: Silero VAD v5.1.2
+`src/silero_vad/data/silero_vad.onnx` (sha256 `2623a295…bdd788f`). The 16 kHz branch of the graph is
+small and fixed, so it was rebuilt by hand as a TensorFlow function with the weights copied out of
+the ONNX constants, then converted with `TFLiteConverter` restricted to `TFLITE_BUILTINS`, float32,
+no optimisations. onnx2tf and ai-edge-torch were not needed: the rebuild sidesteps Silero's
+`sr == 16000 / 8000` If nodes and its dynamic-shape LSTM wrapper, and gives the interface the app
+wants directly:
+
+| tensor | shape | meaning |
+|---|---|---|
+| in `input` | `[1, 576]` float32 | 64 samples of context (the previous chunk's tail, zeros at the start) + one 512-sample chunk at 16 kHz, samples in [-1, 1] |
+| in `state` | `[2, 1, 128]` float32 | LSTM h and c; zeros at the start of a stream |
+| out `prob` | `[1, 1]` float32 | speech probability of the chunk |
+| out `state` | `[2, 1, 128]` float32 | state for the next chunk |
+
+The LSTM state is an explicit input/output pair, never a model variable, so the Java side owns it.
+The `sr` input is gone (16 kHz only), which also drops the 8 kHz weights: the file is **1,247,416
+bytes** (the upstream ONNX is 2.3 MB), sha256 `c2fd2657…deab751429`. Its ops are all builtin and all
+version 1 (no Flex): ADD, CONCATENATION, CONV_2D, FULLY_CONNECTED, LOGISTIC, MIRROR_PAD, MUL, PAD,
+RELU, RESHAPE, SPLIT, SQRT, STRIDED_SLICE, TANH. About 0.7 M multiply-adds per 32 ms chunk.
+
+Tool versions (a Python 3.12 venv at `~/.cache/termux-launcher/silero-conv`, made with uv, because
+the harness venv's Python 3.14 has no TensorFlow wheels): tensorflow-cpu 2.19.0, onnx 1.17.0,
+onnxruntime 1.20.1, ai-edge-litert 1.4.0, numpy 2.1.3. The conversion is deterministic (two runs
+gave the same sha256).
+
+**Parity.** The script streams 16 clips (near/far/fan/tv, four voices each) plus 5 s of white noise
+chunk by chunk through the ONNX model (onnxruntime) and the tflite (ai-edge-litert), carrying state
+and context exactly as the app does: over 1,945 chunks the largest |p_onnx − p_tflite| is
+**2.6e-6** (target < 1e-3), with no decision flips at the 0.5 onset or the 0.35 hold.
+
+**App side** (`app/src/main/java/com/termux/app/terminal/inappkeyboard/voice/`):
+
+- `SileroVad` reads the asset into a direct buffer on the capture thread and runs it on the classic
+  `org.tensorflow.lite.Interpreter` (litert 1.4.2) with one thread and stock XNNPACK; the
+  `TaiXnnpackDelegate` thread-pool shim buys nothing for a model this small. Buffers are allocated
+  once, and tensors are matched by size rather than by index.
+- `SileroVoiceDecider` (pure Java, tested with a fake probability source) re-chunks the detector's
+  30 ms frames into 512-sample chunks with 64 samples of context, and gives frame *i* the
+  probability of the chunk that has finished by the end of frame *i* (0 before the first), with
+  onset 0.5 / hold 0.35: the alignment `vads.py`'s `SileroDecider` evaluated.
+- `VoiceActivityDetector` takes the decider as an optional fifth constructor argument. Only the
+  voiced decision changes; pre-roll, pause close, minimum voiced time, window cut and silence
+  auto-stop are untouched, and frame RMS and the noise floor are still measured for the level meter
+  and the quietest-frame cut. The energy decision's 8-frame (240 ms) floor warm-up does not apply on
+  the Silero path, so a word spoken the moment the microphone opens is no longer clipped.
+- Fallback: if the model cannot be opened (missing asset, LiteRT's native library not loading,
+  unexpected tensors) the session uses the energy detector; if it throws mid-stream the rest of the
+  session does. Either is logged once per process under the `SileroVad` tag. `VoiceInputSession`
+  logs `voiced decision: silero|energy (N ms to load)` at every session start.
+- `VoiceReplayRig` / `VoiceReplayCore` (host JVM) still use the energy decision, because LiteRT's
+  native library does not run there. The PC harness remains the place to replay Silero.
+
+Device checks owed: the load-time log line (tens of milliseconds expected), `voiced decision:
+silero` appearing, the first word after the start tone not being clipped, pauses still closing
+segments with a TV or fan on, and the per-chunk CPU cost (should be well under 1 ms).
+
 ---
 
 # Voice VAD × STT evaluation

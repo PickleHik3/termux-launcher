@@ -59,6 +59,11 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   Milius. The weather animations in `app/src/main/assets/weather/` are the fill style of
   `@meteocons/lottie`, unmodified apart from compact re-serialization; the license text ships beside
   them as `app/src/main/assets/weather/LICENSE.txt`.
+- **[Silero VAD](https://github.com/snakers4/silero-vad) v5.1.2** — MIT — Copyright 2020-present
+  Silero Team. The voice key's speech detector, `app/src/main/assets/vad/silero_vad_v5.tflite`, is
+  the 16 kHz graph of the upstream `silero_vad.onnx` rebuilt for LiteRT with its weights unchanged
+  (`scripts/voice-eval/convert_silero.py`); the license text ships beside it as
+  `app/src/main/assets/vad/LICENSE-silero.txt`.
 
 ## Runtime libraries
 

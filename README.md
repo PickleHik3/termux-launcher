@@ -131,5 +131,6 @@ project. See [LICENSE](LICENSE), [license exceptions](LICENSE-EXCEPTIONS.md), an
 **Settings > Open-source licenses**.
 
 Bundled assets carry their own licenses: the weather animations are
-[Meteocons](https://github.com/basmilius/meteocons) (MIT, Copyright 2020-present Bas Milius), and
-the icon font is [Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts) (SIL OFL 1.1).
+[Meteocons](https://github.com/basmilius/meteocons) (MIT, Copyright 2020-present Bas Milius), the
+voice key's speech detector is [Silero VAD](https://github.com/snakers4/silero-vad) (MIT, Copyright
+2020-present Silero Team), and the icon font is [Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts) (SIL OFL 1.1).
