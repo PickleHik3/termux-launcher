@@ -72,6 +72,12 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     @Nullable private List<String> conversationTranscript;
     /** Transcript of the request being generated, promoted to {@link #conversationTranscript} on success. */
     @Nullable private List<String> pendingTranscript;
+    /**
+     * The message {@link #generate} must actually send, when {@link #ensureConversationLocked}
+     * folded the system prompt into the first user turn instead of the request's own
+     * {@link TaiChatRequest#message}. {@code null} means send the request's message unchanged.
+     */
+    @Nullable private Message pendingSendMessage;
     private String loadedModelId;
     private String loadedModelPath;
     private String backendName = "none";
@@ -317,6 +323,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         @Nullable TaiGenerationCallback callback
     ) throws JSONException {
         Conversation activeConversation;
+        Message sendMessage;
         String generationId;
         long startedAt;
         synchronized (this) {
@@ -326,6 +333,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 return error(409, "generation_active", "A LiteRT-LM generation is already running. Cancel it or wait for it to finish.");
             }
             activeConversation = ensureConversationLocked(mode, request, options);
+            sendMessage = pendingSendMessage != null ? pendingSendMessage : request.message;
+            pendingSendMessage = null;
             generationId = beginGenerationLocked();
             startedAt = activeGenerationStartedAtMs;
         }
@@ -351,7 +360,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             : loadedProfile.defaultMaxTokens;
         boolean unloadRequested;
         try {
-            activeConversation.sendMessageAsync(request.message, new MessageCallback() {
+            activeConversation.sendMessageAsync(sendMessage, new MessageCallback() {
                     @Override
                     public void onMessage(@NonNull Message message) {
                         String text = textFromMessage(message);
@@ -792,6 +801,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         List<String> requestTranscript = transcriptRequest
             ? TaiConversationTranscript.fingerprints(request.messagesJson) : null;
         pendingTranscript = requestTranscript;
+        pendingSendMessage = null;
         if (request.reusableConversation && conversation != null && conversation.isAlive() && key.equals(conversationKey)
             && (transcriptRequest
                 ? TaiConversationTranscript.continuesFrom(conversationTranscript, requestTranscript)
@@ -802,6 +812,38 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         conversationTranscript = requestTranscript == null ? null : Collections.unmodifiableList(requestTranscript);
         // A blank prompt must be null: LiteRT-LM adds a system turn for any non-null instruction.
         String systemPrompt = thinkingSystemPrompt(request.systemPrompt, options, loadedProfile);
+        boolean systemPromptPresent = !systemPrompt.trim().isEmpty();
+        // Some chat templates (codegemma among them) reject a system-role message outright. Once
+        // that verdict is recorded for this model, skip straight to the folded form so the retry
+        // below is paid at most once per model.
+        if (systemPromptPresent && TaiRuntimeHistory.isSystemRoleKnownUnsupported(appContext, loadedModelId)) {
+            TaiChatRequest folded = TaiSystemPromptFolding.foldSystemIntoFirstUserTurn(request, systemPrompt);
+            conversation = createConversationLocked("", folded, options);
+            pendingSendMessage = folded.message;
+        } else {
+            try {
+                conversation = createConversationLocked(systemPrompt, request, options);
+            } catch (RuntimeException creationError) {
+                if (!systemPromptPresent || !TaiSystemPromptFolding.looksLikeSystemRoleRejection(creationError)) {
+                    throw creationError;
+                }
+                TaiRuntimeHistory.recordSystemRoleUnsupported(appContext, loadedModelId);
+                TaiChatRequest folded = TaiSystemPromptFolding.foldSystemIntoFirstUserTurn(request, systemPrompt);
+                conversation = createConversationLocked("", folded, options);
+                pendingSendMessage = folded.message;
+            }
+        }
+        conversationKey = request.reusableConversation ? key : "";
+        return conversation;
+    }
+
+    /** Builds and initializes the {@link Conversation} for a fresh (non-reused) turn. */
+    @NonNull
+    private Conversation createConversationLocked(
+        @NonNull String systemPrompt,
+        @NonNull TaiChatRequest request,
+        @NonNull TaiRuntimeOptions options
+    ) {
         Contents systemContents = systemPrompt.trim().isEmpty() ? null : contents(systemPrompt);
         ConversationConfig conversationConfig = conversationConfig(systemContents, request, options);
         synchronized (EXPERIMENTAL_FLAGS_LOCK) {
@@ -811,15 +853,13 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 ExperimentalFlags.INSTANCE.setEnableConversationConstrainedDecoding(true);
             }
             try {
-                conversation = engine.createConversation(conversationConfig);
+                return engine.createConversation(conversationConfig);
             } finally {
                 if (constrainedDecoding) {
                     ExperimentalFlags.INSTANCE.setEnableConversationConstrainedDecoding(false);
                 }
             }
         }
-        conversationKey = request.reusableConversation ? key : "";
-        return conversation;
     }
 
     @NonNull

@@ -86,6 +86,41 @@ public final class TaiRuntimeHistory {
     }
 
     /**
+     * Records that this model's chat template rejects a system-role message (codegemma among
+     * them) — {@link TaiSystemPromptFolding} folds the system text into the first user turn
+     * instead, and this verdict makes later conversations with the model skip straight to the
+     * folded form rather than paying for the failed attempt every time.
+     */
+    public static void recordSystemRoleUnsupported(@NonNull Context context, @NonNull String modelId) {
+        try {
+            JSONObject history = history(context);
+            JSONObject entry = new JSONObject();
+            entry.put("modelId", modelId);
+            entry.put("feature", "system_role");
+            entry.put("success", false);
+            entry.put("updatedAtMs", System.currentTimeMillis());
+            history.put(systemRoleKey(modelId), entry);
+            prefs(context).edit().putString(KEY_HISTORY, history.toString()).apply();
+        } catch (JSONException ignored) {
+        }
+    }
+
+    /** Whether this model is already known to reject a system-role message; see {@link #recordSystemRoleUnsupported}. */
+    public static boolean isSystemRoleKnownUnsupported(@NonNull Context context, @Nullable String modelId) {
+        if (modelId == null) return false;
+        JSONObject entry = history(context).optJSONObject(systemRoleKey(modelId));
+        return entry != null && !entry.optBoolean("success", true);
+    }
+
+    @NonNull
+    private static String systemRoleKey(@NonNull String modelId) {
+        // Keyed by the underlying model, not a per-modality virtual variant: whether a chat
+        // template accepts a system role is a property of the model file, shared across every
+        // request shape.
+        return "system_role|" + TaiModelVariants.baseModelId(modelId);
+    }
+
+    /**
      * Whether a preflight refusal with this code is a verdict on the model/accelerator pair, and so
      * worth recording as its failure. See the caller in TaiManager for why the rest are not.
      */
