@@ -686,6 +686,16 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_IN_APP_KEYBOARD_ENABLED = true;
 
         /**
+         * Whether the user has switched the keyboard off. Off, a tap on the terminal or a text
+         * field taking focus no longer raises either keyboard; only the keyboard key, or the
+         * palette's on/off action, brings it back. Unlike the input method choice this is a
+         * temporary stance, so it keeps whichever keyboard the user picked in Settings.
+         */
+        public static final String KEY_KEYBOARD_TURNED_OFF = "keyboard_turned_off";
+
+        public static final boolean DEFAULT_KEYBOARD_TURNED_OFF = false;
+
+        /**
          * Defines the key for the in-app keyboard color theme.
          */
         public static final String KEY_IN_APP_KEYBOARD_THEME = "in_app_keyboard_theme";

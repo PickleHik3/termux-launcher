@@ -705,6 +705,8 @@
     <string name="status_widget_needs_shizuku_enable_anyway">Enable anyway</string>
     <string name="notice_tap_to_open">tap to open</string>
     <string name="notice_shell_wants_attention">%1$s wants attention</string>
+    <string name="notice_keyboard_turned_off">Keyboard off. The keyboard key turns it back on.</string>
+    <string name="notice_keyboard_turned_on">Keyboard on</string>
     <string name="shell_notification_channel">Terminal messages</string>
     <string name="shell_notification_channel_description">Messages sent to you by a program running in the terminal.</string>
     <string name="shell_notification_channel_urgent">Urgent terminal messages</string>
@@ -1729,7 +1731,9 @@
     <string name="tool_keyboard_show">Show keyboard</string>
     <string name="tool_keyboard_hide">Hide keyboard</string>
     <string name="tool_keyboard_clipboard">Clipboard history</string>
+    <string name="tool_keyboard_toggle_enabled">Keyboard on/off</string>
     <string name="tool_desc_keyboard_clipboard">Open or close the list of things you copied.</string>
+    <string name="tool_desc_keyboard_toggle_enabled">Turn the keyboard off so tapping the terminal leaves it closed, or turn it back on.</string>
     <string name="tool_keyboard_cycle_layout">Cycle keyboard layout</string>
     <string name="tool_keyboard_select_layout">Switch keyboard layout</string>
     <string name="tool_terminal_toggle_toolbar">Toggle dock</string>

@@ -312,6 +312,12 @@ Open **Settings → Keyboard** to change input method, layouts, typing, feedback
 `~/.termux/keyboard/layout.xml` support; its look — theme, colors, and typeface — is on **Settings →
 Look** now.
 
+A hidden keyboard comes back the next time you tap the terminal. To keep it shut, run **Keyboard
+on/off** from the command palette, or put `tool:keyboard.toggle_enabled` on the extra-keys row.
+While the keyboard is off, taps and text fields no longer open it, and it stays off after a
+restart. Press the keyboard key or run **Keyboard on/off** again to turn it back on. This works
+with the built-in keyboard and with Android's.
+
 The extra keys editor gives the **Display label** and **Swipe-up label** fields a glyph picker
 (the `Ω` button) with a searchable catalogue of arrows, box drawing, blocks, shapes, Powerline
 separators, technical key symbols, and terminal marks. Key caps are drawn with the user-interface

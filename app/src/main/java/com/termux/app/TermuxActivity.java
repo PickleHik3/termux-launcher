@@ -16640,6 +16640,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void toggleKeyboardVisibility() {
                     if (toggleDisplayFrameKeyboard()) return;
                     if (mInAppKeyboard == null) return;
+                    // The keyboard key is the way back from "off", here as on the terminal.
+                    if (mInAppKeyboard.isTurnedOff()) {
+                        mInAppKeyboard.setTurnedOff(false);
+                        return;
+                    }
                     if (mInAppKeyboard.isVisible()) {
                         mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard
                             .TermuxInAppKeyboard.HideReason.KEYBOARD_ACTION);
@@ -19942,6 +19947,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // even where the launcher's is switched off.
             boolean system = displayTakesSystemKeyboard();
             if (!system && (mInAppKeyboard == null || !mInAppKeyboard.isEnabled())) return false;
+            // Switched off, a focus signal is ignored; a person asking by hand turns it back on.
+            if (!system && mInAppKeyboard.isTurnedOff()) {
+                if (fromFocus) return false;
+                mInAppKeyboard.setTurnedOff(false);
+                return true;
+            }
             // A focus source is a signal, not an order: on the Display place the policy decides
             // whether it means a keyboard, and it is the one that will close it again.
             if (fromFocus && mX11Display != null && mX11Display.onTextFocusSignal(true)) return true;

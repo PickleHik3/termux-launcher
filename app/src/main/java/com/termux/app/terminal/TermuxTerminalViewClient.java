@@ -19,6 +19,7 @@ import android.widget.TextView;
 import com.termux.ai.TaiReadAloud;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.R;
 import com.termux.app.SuggestionBarCallback;
 import com.termux.shared.file.FileUtils;
@@ -328,6 +329,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             }
         }
         if (!term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) {
+            // Switched off, a tap is only a tap: the keyboard waits for its own key.
+            if (isKeyboardTurnedOff()) return;
             if (isInAppKeyboardEnabled()) {
                 showInAppKeyboardForTap();
                 return;
@@ -346,7 +349,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     @Override
     public void onMouseTrackingTap(MotionEvent e) {
-        if (isInAppKeyboardEnabled()) showInAppKeyboardForTap();
+        if (isInAppKeyboardEnabled() && !isKeyboardTurnedOff()) showInAppKeyboardForTap();
     }
 
     private void showInAppKeyboardForTap() {
@@ -1042,6 +1045,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // On the Display place with mouse mode on, the keyboard and the touchpad share one frame:
         // this key swaps which of them holds it rather than taking the frame away.
         if (mHost.toggleDisplayFrameKeyboard()) return;
+        // The keyboard key is the way back from "off": it turns the keyboard on and raises it.
+        if (isKeyboardTurnedOff()) {
+            setKeyboardTurnedOff(false);
+            return;
+        }
         if (isInAppKeyboardEnabled()) {
             mInAppKeyboardController.toggle(ToggleReason.KEYBOARD_ACTION);
             suppressSystemImeForInAppKeyboard();
@@ -1098,7 +1106,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // theme. For android 8.+, the "defaultFocusHighlightEnabled" attribute is also set to false
         // in TerminalView layout to fix the issue.
         // If soft keyboard is disabled by user for Termux (check function docs for Termux behaviour info)
-        if (KeyboardUtils.shouldSoftKeyboardBeDisabled(mContext, mHost.preferences().isSoftKeyboardEnabled(), mHost.preferences().isSoftKeyboardEnabledOnlyIfNoHardware())) {
+        if (isKeyboardTurnedOff() || KeyboardUtils.shouldSoftKeyboardBeDisabled(mContext, mHost.preferences().isSoftKeyboardEnabled(), mHost.preferences().isSoftKeyboardEnabledOnlyIfNoHardware())) {
             Logger.logVerbose(LOG_TAG, "Maintaining disabled soft keyboard");
             mHost.disableSoftKeyboard(mHost.focusedView());
             mHost.focusedView().requestFocus();
@@ -1195,6 +1203,45 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     private void showSystemSoftKeyboard(@NonNull View target) {
         mHost.onSystemImeRequested();
         KeyboardUtils.showSoftKeyboard(mContext, target);
+    }
+
+    /** Whether the user switched the keyboard off, from the palette or its extra key. */
+    public boolean isKeyboardTurnedOff() {
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        return preferences != null && preferences.isKeyboardTurnedOff();
+    }
+
+    /**
+     * Flips the keyboard off or on, answering whether it is now on. Off holds whichever keyboard
+     * is in use down until it is turned on again; a tap on the terminal no longer raises it.
+     */
+    public boolean toggleKeyboardTurnedOff() {
+        boolean off = !isKeyboardTurnedOff();
+        setKeyboardTurnedOff(off);
+        AppNotice.show(mContext, off ? R.string.notice_keyboard_turned_off
+            : R.string.notice_keyboard_turned_on);
+        return !off;
+    }
+
+    private void setKeyboardTurnedOff(boolean off) {
+        if (isInAppKeyboardEnabled()) {
+            mInAppKeyboardController.setTurnedOff(off);
+            suppressSystemImeForInAppKeyboard();
+            return;
+        }
+        mHost.preferences().setKeyboardTurnedOff(off);
+        View view = mHost.focusedView();
+        if (view == null) return;
+        if (off) {
+            mHost.disableSoftKeyboard(view);
+        } else {
+            mHost.clearDisableSoftKeyboardFlags();
+            // Android's keyboard switched off in Settings stays off; this only undoes our own.
+            if (mHost.preferences().isSoftKeyboardEnabled()) {
+                view.requestFocus();
+                showSystemSoftKeyboard(view);
+            }
+        }
     }
 
     private boolean isInAppKeyboardEnabled() {

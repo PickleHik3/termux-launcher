@@ -1196,6 +1196,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_IN_APP_KEYBOARD_ENABLED, value, false);
     }
 
+    public boolean isKeyboardTurnedOff() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_KEYBOARD_TURNED_OFF, TERMUX_APP.DEFAULT_KEYBOARD_TURNED_OFF);
+    }
+
+    public void setKeyboardTurnedOff(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_KEYBOARD_TURNED_OFF, value, false);
+    }
+
     public String getInAppKeyboardTheme() {
         String value = SharedPreferenceUtils.getString(
             mSharedPreferences,

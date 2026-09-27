@@ -243,6 +243,9 @@ public final class TermuxInAppKeyboard {
             mLastShowReason = ShowReason.FIRST_ENABLE;
         }
 
+        // Switched off, the keyboard starts down whatever the last instance left it as.
+        if (mPreferences.isKeyboardTurnedOff())
+            mVisible = false;
         if (mEnabled) {
             suppressSystemIme();
             if (mVisible)
@@ -361,14 +364,17 @@ public final class TermuxInAppKeyboard {
             mKeyCornerRadiusDp = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
             mKeyOpacity = mPreferences.getInAppKeyboardKeyOpacity();
             mEnabled = true;
-            mVisible = true;
+            mVisible = !mPreferences.isKeyboardTurnedOff();
             mLastShowReason = ShowReason.FIRST_ENABLE;
             // The ring may have been edited while the keyboard was off; render the layout it
             // ends on rather than the one this instance was created with.
             reloadLayoutRing(false);
             mSelectedLayoutId = mActiveTextLayoutId;
             suppressSystemIme();
-            showInternal();
+            if (mVisible)
+                showInternal();
+            else
+                setContainerVisible(false);
         } else if (enabled) {
             // Settings may have toggled the feature or forgotten the learned taps.
             mTapCorrection.reload();
@@ -399,6 +405,11 @@ public final class TermuxInAppKeyboard {
     public void show(ShowReason reason) {
         if (!mEnabled || mDestroyed)
             return;
+        // Switched off, nothing raises it — not a tap, not a focus signal, not a key that meant
+        // to. Whoever turns it back on goes through setTurnedOff first. The height editor is the
+        // one exception: it has to show the rows it is resizing.
+        if (mPreferences.isKeyboardTurnedOff() && reason != ShowReason.HEIGHT_ADJUSTMENT)
+            return;
         boolean wasVisible = mVisible;
         mLastShowReason = Objects.requireNonNull(reason, "reason");
         mVisible = true;
@@ -427,6 +438,27 @@ public final class TermuxInAppKeyboard {
         // Down on a place that has its own fields, the IME goes back to the place.
         syncPlaceSystemIme();
         if (wasVisible && reason != HideReason.FOCUS) notifyVisibilityChanged(false);
+    }
+
+    /** Whether the user has switched the keyboard off, so nothing but turning it on raises it. */
+    public boolean isTurnedOff() {
+        return mPreferences.isKeyboardTurnedOff();
+    }
+
+    /**
+     * Switches the keyboard off or back on. Off puts it down now and keeps it down; on raises it,
+     * since whoever turned it on is about to type.
+     */
+    public void setTurnedOff(boolean off) {
+        if (mDestroyed)
+            return;
+        mPreferences.setKeyboardTurnedOff(off);
+        if (!mEnabled)
+            return;
+        if (off)
+            hide(HideReason.KEYBOARD_ACTION);
+        else
+            show(ShowReason.KEYBOARD_ACTION);
     }
 
     /** Watch every show and hide that is not a focus signal; pass null to stop. */

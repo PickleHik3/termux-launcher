@@ -158,6 +158,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_KEYBOARD_SHOW = "keyboard.show";
     public static final String TOOL_KEYBOARD_HIDE = "keyboard.hide";
     public static final String TOOL_KEYBOARD_CLIPBOARD = "keyboard.clipboard";
+    public static final String TOOL_KEYBOARD_TOGGLE_ENABLED = "keyboard.toggle_enabled";
     public static final String TOOL_APPEARANCE_SET_WALLPAPER = "appearance.set_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_WALLPAPER = "appearance.toggle_wallpaper";
     public static final String TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT = "terminal.jump_previous_prompt";
@@ -327,6 +328,7 @@ public final class TerminalActionDispatcher {
             case TOOL_KEYBOARD_SHOW:
             case TOOL_KEYBOARD_HIDE:
             case TOOL_KEYBOARD_CLIPBOARD:
+            case TOOL_KEYBOARD_TOGGLE_ENABLED:
             case TOOL_TERMINAL_TOGGLE_TOOLBAR:
             case TOOL_TERMINAL_FONT_SIZE_INCREASE:
             case TOOL_TERMINAL_FONT_SIZE_DECREASE:
@@ -1324,6 +1326,11 @@ public final class TerminalActionDispatcher {
                     // stand the panel over, which the caller can fix with keyboard.show first.
                     boolean shown = host.toggleKeyboardClipboard();
                     return ok().put("shown", shown);
+                }
+                case TOOL_KEYBOARD_TOGGLE_ENABLED: {
+                    TermuxTerminalViewClient viewClient = host.viewClient();
+                    if (viewClient == null) return error(503, "unavailable", "Terminal view client is not ready");
+                    return ok().put("enabled", viewClient.toggleKeyboardTurnedOff());
                 }
                 case TOOL_KEYBOARD_SHOW:
                 case TOOL_KEYBOARD_HIDE: {
