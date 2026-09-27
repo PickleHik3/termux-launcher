@@ -80,12 +80,23 @@ public class VoiceSessionCleanupTest {
         FakePolisher polisher = new FakePolisher();
         VoiceSessionCleanup cleanup = new VoiceSessionCleanup(polisher, new DirectExecutor(), Runnable::run);
         List<VoiceTextPolisher.Result> got = new ArrayList<>();
-        cleanup.run("git status", (raw, result) -> got.add(result));
+        cleanup.run("sounds good", (raw, result) -> got.add(result));
         assertTrue(polisher.calls.isEmpty());
         assertEquals(1, got.size());
-        assertEquals("git status", got.get(0).text);
+        assertEquals("sounds good", got.get(0).text);
         assertEquals("fallback:skipped:short", got.get(0).outcome);
         assertNull(VoiceSessionCleanup.skipReason("please run the tests"));
+    }
+
+    @Test
+    public void aDictatedCommandNeverReachesTheModel() {
+        FakePolisher polisher = new FakePolisher();
+        VoiceSessionCleanup cleanup = new VoiceSessionCleanup(polisher, new DirectExecutor(), Runnable::run);
+        List<VoiceTextPolisher.Result> got = new ArrayList<>();
+        cleanup.run("git commit dash m fix the failing voice test", (raw, result) -> got.add(result));
+        assertTrue(polisher.calls.isEmpty());
+        assertEquals(1, got.size());
+        assertEquals("fallback:skipped:command", got.get(0).outcome);
     }
 
     @Test

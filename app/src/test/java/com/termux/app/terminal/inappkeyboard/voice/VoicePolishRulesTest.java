@@ -17,9 +17,20 @@ public class VoicePolishRulesTest {
 
     @Test
     public void shortSegmentsAreTypedAsHeard() {
-        assertEquals("short", VoicePolishRules.skipReason("git status"));
-        assertEquals("short", VoicePolishRules.skipReason("sudo apt update"));
+        assertEquals("short", VoicePolishRules.skipReason("sounds good"));
+        assertEquals("short", VoicePolishRules.skipReason("thanks a lot"));
         assertEquals("empty", VoicePolishRules.skipReason("   "));
+    }
+
+    @Test
+    public void commandsAreNeverSentToTheModel() {
+        assertEquals("command", VoicePolishRules.skipReason("git status"));
+        assertEquals("command", VoicePolishRules.skipReason("sudo apt update"));
+        assertEquals("command", VoicePolishRules.skipReason("Ls dash La"));
+        // However long: the formatter writes it, and a model could only undo that.
+        assertEquals("command", VoicePolishRules.skipReason("git commit dash m fix the failing voice test today"));
+        // An everyday word that is also a command, opening a sentence, is prose.
+        assertNull(VoicePolishRules.skipReason("make sure the tests pass before you push"));
     }
 
     @Test

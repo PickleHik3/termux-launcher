@@ -46,10 +46,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * dropped so the start blip is never transcribed.
  *
  * <p>The session ends on the configured silence timeout ({@link VoiceSilenceTimeout}, or never for
- * "Until tap"), a second tap (the voice key or the Dictate key), the pill's ×, a press of ✓ or
- * Copy, the keyboard that started it going down, the activity pausing, or the first failure;
+ * "Until tap"), a second tap (the voice key or the Dictate key), the pill's pause, a press of ✓
+ * or Copy, the keyboard that started it going down, the activity pausing, or the first failure;
  * {@link #stop} releases the microphone at once and lets segments already captured finish,
- * {@link #cancel} (the panel's bin, a swipe of the card, the activity going away) drops them too.
+ * {@link #cancel} (the pill's ×, a swipe of the card, the activity going away) drops them too.
  * Every phrase is delivered as heard; the optional cleanup is one pass over the whole
  * session once it has ended, owned by the host ({@link VoiceSessionCleanup}). The activity never
  * blocks on it: the only main-thread work is the callbacks.
@@ -249,8 +249,8 @@ public final class VoiceInputSession {
      * Releases the microphone and drops every result still in flight — the undelivered segments
      * finish transcribing (or time out) on their own but are never delivered. Ends the session at
      * once even when {@link #stop} has already been called and is only waiting on those segments.
-     * Only the panel's bin, a swipe of the card and the activity going away do this; the ×, the
-     * voice key and the Dictate key stop and deliver.
+     * Only the pill's ×, a swipe of the card and the activity going away do this; the pill's
+     * pause, the voice key and the Dictate key stop and deliver.
      */
     public void cancel(@NonNull EndReason reason) {
         cancelled = true;

@@ -99,7 +99,7 @@ public final class VoicePolishRules {
         "nineteen", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
         "hundred", "thousand", "million", "billion", "point", "first", "second", "third"));
     /** First words that make a dictation a shell command, for {@link #startsWithCommand}. */
-    private static final Set<String> COMMAND_NAMES = new HashSet<>(Arrays.asList(
+    static final Set<String> COMMAND_NAMES = new HashSet<>(Arrays.asList(
         "adb", "apt", "awk", "bash", "brew", "cargo", "cat", "cd", "chmod", "chown", "claude", "clear",
         "codex", "cp", "curl", "df", "diff", "docker", "du", "echo", "exit", "export", "fastboot", "fd",
         "find", "fish", "gh", "git", "go", "gradle", "gradlew", "grep", "head", "htop", "java", "jq",
@@ -142,15 +142,17 @@ public final class VoicePolishRules {
     }
 
     /**
-     * Why {@code text} is left as heard instead of cleaned, or {@code null} to clean it. The
-     * non-speech check mirrors {@link VoiceTextSanitizer}'s so a dropped session costs no round
-     * trip.
+     * Why {@code text} is left to the model-free passes instead of cleaned, or {@code null} to clean
+     * it. The non-speech check mirrors {@link VoiceTextSanitizer}'s so a dropped session costs no
+     * round trip. A dictated command is {@link VoiceCommandFormatter}'s alone: a model sent
+     * "ls dash la" could only undo what the formatter writes, or answer it.
      */
     @Nullable
     public static String skipReason(@NonNull String text) {
         String trimmed = text.trim();
         if (trimmed.isEmpty()) return "empty";
         if (VoiceTextSanitizer.clean(trimmed).isEmpty()) return "non_speech";
+        if (VoiceCommandFormatter.isCommand(trimmed)) return "command";
         if (wordCount(trimmed) < MIN_WORDS) return "short";
         return null;
     }

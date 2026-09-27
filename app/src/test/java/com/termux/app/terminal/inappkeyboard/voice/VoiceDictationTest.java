@@ -109,4 +109,60 @@ public class VoiceDictationTest {
         dictation.press(VoiceDictation.Use.INSERT);
         assertEquals("", dictation.carryOver());
     }
+
+    @Test
+    public void undoTakesTheCleanupBackAndRedoPutsItAgain() {
+        VoiceDictation dictation = new VoiceDictation();
+        dictation.start("");
+        dictation.append("um so open the settings");
+        dictation.onStopped();
+        assertFalse(dictation.canUndo());
+        assertNull(dictation.onCleaned("Open the settings."));
+        assertTrue(dictation.canUndo());
+        assertFalse(dictation.isUndone());
+        assertTrue(dictation.toggleUndo());
+        assertTrue(dictation.isUndone());
+        assertEquals("um so open the settings", dictation.result());
+        // A resumed dictation carries on from the text as it stands.
+        assertEquals("um so open the settings", dictation.carryOver());
+        assertTrue(dictation.toggleUndo());
+        assertFalse(dictation.isUndone());
+        assertEquals("Open the settings.", dictation.result());
+        assertTrue(dictation.press(VoiceDictation.Use.INSERT));
+        assertEquals("Open the settings.", dictation.result());
+        // Used: nothing left to switch.
+        assertFalse(dictation.canUndo());
+        assertFalse(dictation.toggleUndo());
+    }
+
+    @Test
+    public void thereIsNothingToUndoWithoutACleanup() {
+        VoiceDictation dictation = new VoiceDictation();
+        dictation.start("");
+        dictation.append("sounds good");
+        dictation.onStopped();
+        dictation.onSettled("sounds good");
+        assertFalse(dictation.canUndo());
+        assertFalse(dictation.toggleUndo());
+        assertEquals("sounds good", dictation.result());
+    }
+
+    @Test
+    public void aResumedDictationStartsWithNothingToUndo() {
+        VoiceDictation dictation = new VoiceDictation();
+        dictation.start("");
+        dictation.append("ls dash la");
+        dictation.onStopped();
+        dictation.onCleaned("ls -la");
+        dictation.start(dictation.carryOver());
+        assertEquals("ls -la", dictation.raw());
+        assertFalse(dictation.canUndo());
+        assertFalse(dictation.isUndone());
+        dictation.append("dash h");
+        dictation.onStopped();
+        dictation.onCleaned("ls -la -h");
+        assertTrue(dictation.toggleUndo());
+        // Undo goes back to what went into this cleanup: the carried-on text and the new words.
+        assertEquals("ls -la dash h", dictation.result());
+    }
 }

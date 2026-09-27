@@ -23,7 +23,7 @@ public final class VoiceDictation {
         LISTENING,
         /** The microphone has closed; phrases are still transcribing or the cleanup is running. */
         FINISHING,
-        /** The text is final and waits in the panel for ✓, Copy or ×. */
+        /** The text is final and waits in the panel for ✓, Copy, undo, resume or ×. */
         WAITING,
         /** ✓ or Copy has used the text; the panel is only saying so. */
         USED
@@ -41,6 +41,10 @@ public final class VoiceDictation {
     private Phase phase = Phase.IDLE;
     @Nullable private Use pending;
     @Nullable private String result;
+    /** The cleanup's text when one was accepted (the model's, or the command formatter's); undo goes back from it. */
+    @Nullable private String cleaned;
+    /** Undo has put the text back as it went into the cleanup; {@link #toggleUndo} again redoes it. */
+    private boolean undone;
 
     /**
      * The microphone has opened. {@code base} is text already waiting in the panel that the new
@@ -52,6 +56,8 @@ public final class VoiceDictation {
         phase = Phase.LISTENING;
         pending = null;
         result = null;
+        cleaned = null;
+        undone = false;
     }
 
     /**
@@ -85,18 +91,60 @@ public final class VoiceDictation {
     }
 
     /**
-     * The text is final: the cleaned text when the pass was accepted, the raw text otherwise.
+     * The text is final as heard: no cleanup, or nothing better came back.
      *
      * @return a press made while the text was still coming, to be carried out now on
      *     {@link #result()}, or {@code null} to leave it waiting for one
      */
     @Nullable
     public Use onSettled(@NonNull String text) {
+        cleaned = null;
+        undone = false;
+        return settle(text);
+    }
+
+    /**
+     * The text is final as {@code cleanedText}, a cleanup of {@link #raw()} that undo can take
+     * back. Returns what {@link #onSettled} does.
+     */
+    @Nullable
+    public Use onCleaned(@NonNull String cleanedText) {
+        cleaned = cleanedText;
+        undone = false;
+        return settle(cleanedText);
+    }
+
+    @Nullable
+    private Use settle(@NonNull String text) {
         result = text;
         Use early = pending;
         pending = null;
         phase = early != null ? Phase.USED : Phase.WAITING;
         return early;
+    }
+
+    /** Whether the waiting text is a cleanup that undo (or, once undone, redo) can switch. */
+    public boolean canUndo() {
+        return cleaned != null && phase == Phase.WAITING;
+    }
+
+    /** Whether undo has put the text back as it went into the cleanup. */
+    public boolean isUndone() {
+        return undone;
+    }
+
+    /**
+     * Undo, or redo after an undo: the waiting text goes back to what went into the cleanup (as
+     * heard, or as carried on from), or forward to the cleaned text again. ✓, Copy and a resumed
+     * dictation all take the text as it now stands.
+     *
+     * @return false when there is no cleanup to switch
+     */
+    public boolean toggleUndo() {
+        if (!canUndo()) return false;
+        undone = !undone;
+        result = undone ? raw.toString() : cleaned;
+        return true;
     }
 
     /**
@@ -152,11 +200,13 @@ public final class VoiceDictation {
         return phase;
     }
 
-    /** × on the panel, a swipe, or the pill closing: the text is gone. */
+    /** The pill's ×, a swipe, or the pill closing: the text is gone. */
     public void clear() {
         raw.setLength(0);
         phase = Phase.IDLE;
         pending = null;
         result = null;
+        cleaned = null;
+        undone = false;
     }
 }

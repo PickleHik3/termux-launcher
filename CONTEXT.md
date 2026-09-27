@@ -135,26 +135,50 @@ loaded)
 ### Voice input
 
 **Dictation**:
-One stretch of speech-to-text, from the voice key or the Dictate key until it stops (a second tap,
-the pill's ×, the silence timeout). What is said collects in the panel as heard; nothing is typed
+One stretch of speech-to-text, from the voice key or the Dictate key until it pauses (a second tap,
+the pill's pause, the silence timeout). What is said collects in the panel as heard; nothing is typed
 while the user speaks.
 _Avoid_: voice typing (the Android recognizer's path), voice session
 
 **Pill**:
-The small bar at the top right of the place viewport while a dictation is up: waveform, state and a
-× that only stops listening. Same corner on every place.
+The small bar at the top right of the place viewport while a dictation is up: waveform, state,
+pause/resume and ×. Same corner on every place. The waveform rests (a dim line) while not listening.
 _Avoid_: voice indicator, overlay
+
+**Pause / resume**:
+Pause stops listening: the phrases still transcribing arrive, then the cleanup runs on its own.
+Resume listens again and carries on the same text; the next pause cleans all of it. The voice key
+and the Dictate key do the same (start, pause, resume).
+_Avoid_: stop (the × is not a stop)
+
+**×**:
+The pill's discard: it stops listening if need be, throws the text away and closes. A sideways swipe
+of the card is the same. It never means stop.
+_Avoid_: close (on its own), bin (retired)
 
 **Panel**:
 What the pill grows into, downward: the dictation's text (seven lines, the oldest scrolling off the
-top) over Copy, the bin (discard) and ✓. It is where the text waits until one of them is used.
+top) over three icons: undo, Copy and ✓. It is where the text waits until one of them is used.
 _Avoid_: transcript view, preview
 
 **Cleanup**:
-The one pass a local chat model makes over the whole dictation once it stops, at the level chosen in
+The one pass a local chat model makes over the whole dictation once it pauses, at the level chosen in
 Settings (Light or Polished; off by default). The panel marks what it changed, and the cleaned text
-is what ✓ and Copy use; a refusal or an answer falls back to the text as heard.
+is what ✓ and Copy use; a refusal or an answer falls back to the text as heard. A dictated command
+never goes to the model: command formatting handles it.
 _Avoid_: polish (the setting's old name), rewrite, per-phrase cleanup
+
+**Command formatting**:
+The fixed, model-free rules that write a dictation starting with a command name as a command:
+"L S dash La" becomes `ls -la`, "cd slash home" becomes `cd /home`. It runs whatever the length and
+whether cleanup is on or off. The panel shows it like a cleanup, and undo takes it back.
+_Avoid_: command cleanup, command rule (the model prompt's old rule)
+
+**Undo**:
+The panel's icon that puts the cleaned (or formatted) text back to what went into the cleanup: the
+text as heard, or as carried on from. It turns into redo. It is only there while there is a cleanup
+to take back.
+_Avoid_: raw toggle, long-press (retired)
 
 **Insert**:
 ✓: the dictation typed once where the keyboard would type on the place on screen, never with an

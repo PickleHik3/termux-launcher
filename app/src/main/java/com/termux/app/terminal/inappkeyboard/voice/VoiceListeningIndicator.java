@@ -41,29 +41,34 @@ import com.termux.R;
  * <p>The pill row holds the scrolling waveform ({@link VoiceWaveformView}), the state
  * ("Listening…", "Transcribing…", "Cleaning up…", then what became of the text), a "Warming up"
  * chip with a ring while the speech model, the voiced decision or the cleanup model is still
- * loading — recording has already started — and, while listening, the ×. The panel
- * ({@link VoiceTranscriptPanel}) holds the whole dictation's text and its Copy, bin and ✓.
+ * loading — recording has already started — then pause/resume and the ×. The panel
+ * ({@link VoiceTranscriptPanel}) holds the whole dictation's text and its undo, Copy and ✓.
  *
- * <p>The pill's × only stops listening: every phrase still transcribing arrives and the text
- * waits in the panel; with nothing left to stop, it goes. Discarding is the panel's bin, drawn as
- * a bin so the two never read alike, or a sideways swipe of the card. All of them are the host's
- * to act on through {@link Callbacks}.
+ * <p>Pause stops listening: every phrase still transcribing arrives and the automatic cleanup
+ * runs; the button then turns into resume, which carries on the same text (it waits, disabled,
+ * while phrases are still transcribing). The × only ever discards: it stops listening if need
+ * be, throws the text away and closes, and a sideways swipe of the card is the same. The waveform
+ * rests while the microphone is closed. All of them are the host's to act on through
+ * {@link Callbacks}.
  */
 public final class VoiceListeningIndicator {
 
     /** Main thread. */
     public interface Callbacks {
-        /** The pill's ×: close the microphone; the text stays in the panel. */
-        void onStop();
+        /** Pause: close the microphone; the phrases still transcribing arrive, then the cleanup runs. */
+        void onPause();
 
-        /** Swiped away: the same as the panel's bin. */
-        void onSwipedAway();
+        /** Resume: listen again, carrying on the text in the panel. */
+        void onResume();
+
+        /** The pill's ×, or a swipe of the card: stop if need be, discard the text and close. */
+        void onClose();
+
+        /** The panel's undo (redo once undone): the cleanup taken back, or put again. */
+        void onUndo();
 
         /** The panel's Copy: the text to the clipboard (stopping first when still listening). */
         void onCopy();
-
-        /** The panel's bin: discard the dictation and close. */
-        void onDiscard();
 
         /** The panel's ✓: insert the text at the cursor, once (stopping first when still listening). */
         void onInsert();
@@ -79,7 +84,9 @@ public final class VoiceListeningIndicator {
     @Nullable private SwipeCard card;
     @Nullable private TextView status;
     @Nullable private View chip;
-    @Nullable private View stop;
+    /** Pause while listening, resume once the microphone has closed; gone once the text is used. */
+    @Nullable private ImageView toggle;
+    private boolean toggleListening;
     @Nullable private VoiceWaveformView wave;
     @Nullable private VoiceTranscriptPanel panel;
     private int lastTop = -1;
@@ -87,6 +94,8 @@ public final class VoiceListeningIndicator {
     /** Captured segments still transcribing; the shimmer line shows while any are. */
     private int pending;
     private boolean cleaningUp;
+    /** What the state says for the cleaned text, for redo to put back. */
+    @StringRes private int cleanedStatus = R.string.voice_input_cleaned_up;
     /** Keeps the card in place once the level ticks have stopped and the text waits: the keyboard, the bars. */
     private final View.OnLayoutChangeListener anchorMoved =
         (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> v.post(this::reposition);
@@ -115,7 +124,7 @@ public final class VoiceListeningIndicator {
         int accent = themeColor(context, com.termux.shared.R.attr.termuxColorPrimary);
         int surface = themeColor(context, com.termux.shared.R.attr.termuxColorSurfaceBase);
 
-        SwipeCard view = new SwipeCard(context, () -> callbacks.onSwipedAway());
+        SwipeCard view = new SwipeCard(context, callbacks::onClose);
         view.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable background = new GradientDrawable();
         background.setColor(surface);
@@ -149,20 +158,18 @@ public final class VoiceListeningIndicator {
         chipParams.setMarginStart(dp(6));
         row.addView(warming, chipParams);
 
-        // The pill's full height as the tap target around an 18 dp glyph. Gone once the
-        // microphone has closed; the row's end padding keeps the label off the edge then.
-        ImageView stopButton = new ImageView(context);
-        stopButton.setImageResource(R.drawable.ic_symbol_close);
-        stopButton.setColorFilter(onSurface, PorterDuff.Mode.SRC_IN);
-        stopButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        stopButton.setContentDescription(context.getString(R.string.voice_input_close));
-        stopButton.setPadding(dp(9), dp(9), dp(9), dp(9));
-        TypedValue ripple = new TypedValue();
-        if (context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true)) {
-            stopButton.setBackgroundResource(ripple.resourceId);
-        }
-        stopButton.setOnClickListener(v -> callbacks.onStop());
-        row.addView(stopButton, new LinearLayout.LayoutParams(dp(PILL_HEIGHT_DP), dp(PILL_HEIGHT_DP)));
+        // Pause/resume, then the ×: each the pill's full height as the tap target around an 18 dp
+        // glyph. The × stays for the pill's whole life, and only ever discards.
+        ImageView toggleButton = pillButton(context, R.drawable.ic_symbol_pause, onSurface, R.string.voice_input_pause);
+        toggleButton.setOnClickListener(v -> {
+            if (!v.isEnabled()) return;
+            if (toggleListening) callbacks.onPause();
+            else callbacks.onResume();
+        });
+        row.addView(toggleButton, new LinearLayout.LayoutParams(dp(PILL_HEIGHT_DP), dp(PILL_HEIGHT_DP)));
+        ImageView closeButton = pillButton(context, R.drawable.ic_symbol_close, onSurface, R.string.voice_input_close);
+        closeButton.setOnClickListener(v -> callbacks.onClose());
+        row.addView(closeButton, new LinearLayout.LayoutParams(dp(PILL_HEIGHT_DP), dp(PILL_HEIGHT_DP)));
         row.setPaddingRelative(dp(12), 0, dp(4), 0);
 
         view.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(PILL_HEIGHT_DP)));
@@ -170,13 +177,13 @@ public final class VoiceListeningIndicator {
         VoiceTranscriptPanel transcript = new VoiceTranscriptPanel(context, onSurface, accent,
             new VoiceTranscriptPanel.Actions() {
                 @Override
-                public void onCopy() {
-                    callbacks.onCopy();
+                public void onUndo() {
+                    callbacks.onUndo();
                 }
 
                 @Override
-                public void onDiscard() {
-                    callbacks.onDiscard();
+                public void onCopy() {
+                    callbacks.onCopy();
                 }
 
                 @Override
@@ -203,11 +210,13 @@ public final class VoiceListeningIndicator {
         card = view;
         status = label;
         chip = warming;
-        stop = stopButton;
+        toggle = toggleButton;
         wave = levels;
         panel = transcript;
         pending = 0;
         cleaningUp = false;
+        cleanedStatus = R.string.voice_input_cleaned_up;
+        setToggle(true, true);
         updatePanelVisibility();
         fitPanel();
     }
@@ -217,7 +226,8 @@ public final class VoiceListeningIndicator {
         pending = 0;
         cleaningUp = false;
         setStatus(R.string.voice_input_listening);
-        if (stop != null) stop.setVisibility(View.VISIBLE);
+        setToggle(true, true);
+        if (wave != null) wave.setResting(false);
         VoiceTranscriptPanel view = panel;
         if (view != null) {
             view.setDimRaw(dimRaw);
@@ -233,7 +243,7 @@ public final class VoiceListeningIndicator {
         card = null;
         status = null;
         chip = null;
-        stop = null;
+        toggle = null;
         wave = null;
         panel = null;
         lastTop = -1;
@@ -268,16 +278,34 @@ public final class VoiceListeningIndicator {
         setStatus(R.string.voice_input_listening);
     }
 
-    /** The mic has closed but a captured segment is still transcribing: "Listening…" no longer fits. */
+    /**
+     * The mic has closed but a captured segment is still transcribing: "Listening…" no longer
+     * fits, and resume waits until the phrases are in.
+     */
     public void setTranscribing() {
-        onMicrophoneClosed();
+        onMicrophoneClosed(false);
         setStatus(R.string.voice_input_transcribing);
     }
 
-    /** Nothing more to stop: the × goes. */
-    public void onMicrophoneClosed() {
-        View view = stop;
-        if (view != null) view.setVisibility(View.GONE);
+    /**
+     * The microphone has closed: the waveform rests and pause turns into resume, enabled once
+     * there is nothing left to transcribe.
+     */
+    private void onMicrophoneClosed(boolean canResume) {
+        setToggle(false, canResume);
+        VoiceWaveformView levels = wave;
+        if (levels != null) levels.setResting(true);
+    }
+
+    private void setToggle(boolean listening, boolean enabled) {
+        ImageView view = toggle;
+        if (view == null) return;
+        toggleListening = listening;
+        view.setImageResource(listening ? R.drawable.ic_symbol_pause : R.drawable.ic_symbol_mic);
+        view.setContentDescription(activity.getString(listening ? R.string.voice_input_pause : R.string.voice_input_resume));
+        view.setEnabled(enabled);
+        view.setAlpha(enabled ? 1f : 0.38f);
+        view.setVisibility(View.VISIBLE);
     }
 
     public void setStatus(@StringRes int text) {
@@ -308,18 +336,23 @@ public final class VoiceListeningIndicator {
     /** The session has ended and the one cleanup pass is running. */
     public void setCleaningUp() {
         cleaningUp = true;
-        onMicrophoneClosed();
+        onMicrophoneClosed(true);
         setWarmingUp(false);
         setStatus(R.string.voice_input_cleaning_up);
         updateShimmer();
     }
 
-    /** The cleanup has landed and waits with its changes marked; see {@link VoiceTranscriptPanel#showCleaned}. */
-    public void showCleaned(@NonNull String cleaned) {
+    /**
+     * The cleanup has landed and waits with its changes marked; see
+     * {@link VoiceTranscriptPanel#showCleaned}. {@code status} says which: "Cleaned up", or
+     * "Formatted as a command".
+     */
+    public void showCleaned(@NonNull String cleaned, @StringRes int status) {
         cleaningUp = false;
-        onMicrophoneClosed();
+        onMicrophoneClosed(true);
         updateShimmer();
-        setStatus(R.string.voice_input_cleaned_up);
+        cleanedStatus = status;
+        setStatus(status);
         VoiceTranscriptPanel view = panel;
         if (view != null) view.showCleaned(cleaned);
         updatePanelVisibility();
@@ -331,17 +364,25 @@ public final class VoiceListeningIndicator {
      */
     public void showAsHeard(@StringRes int text) {
         cleaningUp = false;
-        onMicrophoneClosed();
+        onMicrophoneClosed(true);
         updateShimmer();
         setStatus(text);
         VoiceTranscriptPanel view = panel;
         if (view != null) view.showFinalRaw();
     }
 
-    /** ✓ or Copy has used the text: the buttons go and the state says what happened. */
+    /** Undo ({@code true}) or redo: the panel shows the text as it went into the cleanup, or cleaned again. */
+    public void setUndone(boolean undone) {
+        VoiceTranscriptPanel view = panel;
+        if (view != null) view.setUndone(undone);
+        setStatus(undone ? R.string.voice_input_as_heard : cleanedStatus);
+    }
+
+    /** ✓ or Copy has used the text: the buttons go (resume too) and the state says what happened. */
     public void onActionDone(@StringRes int text) {
         VoiceTranscriptPanel view = panel;
         if (view != null) view.hideActions();
+        if (toggle != null) toggle.setVisibility(View.GONE);
         setStatus(text);
     }
 
@@ -434,6 +475,21 @@ public final class VoiceListeningIndicator {
     // ------------------------------------------------------------------ pieces
 
     @NonNull
+    private ImageView pillButton(@NonNull Context context, int icon, int tint, @StringRes int description) {
+        ImageView button = new ImageView(context);
+        button.setImageResource(icon);
+        button.setColorFilter(tint, PorterDuff.Mode.SRC_IN);
+        button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        button.setContentDescription(context.getString(description));
+        button.setPadding(dp(9), dp(9), dp(9), dp(9));
+        TypedValue ripple = new TypedValue();
+        if (context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true)) {
+            button.setBackgroundResource(ripple.resourceId);
+        }
+        return button;
+    }
+
+    @NonNull
     private View warmingChip(@NonNull Context context, int onSurface, int accent) {
         LinearLayout chipView = new LinearLayout(context);
         chipView.setOrientation(LinearLayout.HORIZONTAL);
@@ -477,7 +533,7 @@ public final class VoiceListeningIndicator {
 
     /**
      * The pill and its panel, swipeable sideways: a horizontal drag past the touch slop is taken
-     * from the children (so the × and the actions still get their taps), follows the finger and
+     * from the children (so the pill's buttons and the actions still get their taps), follows the finger and
      * fades, and past a third of the width or on a fling it leaves and reports the swipe. Touches
      * that land on the card never fall through to the terminal under it.
      */
