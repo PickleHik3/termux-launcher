@@ -154,10 +154,23 @@ public class PaneWallLayoutTest {
         assertEquals(Arrays.asList(true, false), reports);
     }
 
+    /** Brings {@code page} on screen and runs the layout pass that follows. */
+    private void showAndLayOut(PaneWallPage page) {
+        wall.goTo(page, false);
+        wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, WIDTH, HEIGHT);
+    }
+
     @Test
     public void everyPageIsLaidOutAtTheHostsSize() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
-        for (View page : new View[]{widgets, terminal, display}) {
+        // Pages parked off screen skip layout; each is laid out once it is on screen.
+        PaneWallPage[] pages = {PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY};
+        View[] views = {widgets, terminal, display};
+        for (int i = 0; i < pages.length; i++) {
+            showAndLayOut(pages[i]);
+            View page = views[i];
             assertEquals(0, page.getLeft());
             assertEquals(0, page.getTop());
             assertEquals(WIDTH, page.getWidth());
@@ -181,15 +194,19 @@ public class PaneWallLayoutTest {
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         wall.layout(0, 0, WIDTH, HEIGHT);
 
-        for (View page : new View[]{widgets, terminal, display}) {
+        // The pages still sit one full wall width apart, frame and all.
+        assertEquals(-WIDTH, widgets.getTranslationX(), EPS);
+        assertEquals(WIDTH, display.getTranslationX(), EPS);
+        PaneWallPage[] pages = {PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY};
+        View[] views = {widgets, terminal, display};
+        for (int i = 0; i < pages.length; i++) {
+            showAndLayOut(pages[i]);
+            View page = views[i];
             assertEquals(24, page.getLeft());
             assertEquals(10, page.getTop());
             assertEquals(WIDTH - 24, page.getRight());
             assertEquals(HEIGHT - 30, page.getBottom());
         }
-        // The pages still sit one full wall width apart, frame and all.
-        assertEquals(-WIDTH, widgets.getTranslationX(), EPS);
-        assertEquals(WIDTH, display.getTranslationX(), EPS);
     }
 
     @Test
