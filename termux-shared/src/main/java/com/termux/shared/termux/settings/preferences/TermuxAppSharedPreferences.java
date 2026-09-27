@@ -1346,6 +1346,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             value == null ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_MODEL : value, false);
     }
 
+    /** {@code light} or {@code polished}; anything else stored reads as the default, Polished. */
+    public String getInAppKeyboardVoicePolishLevel() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_POLISH_LEVEL,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_LEVEL, true);
+        return TERMUX_APP.IN_APP_KEYBOARD_VOICE_POLISH_LEVEL_LIGHT.equals(value)
+            ? TERMUX_APP.IN_APP_KEYBOARD_VOICE_POLISH_LEVEL_LIGHT
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_LEVEL;
+    }
+
+    public void setInAppKeyboardVoicePolishLevel(String value) {
+        String level = TERMUX_APP.IN_APP_KEYBOARD_VOICE_POLISH_LEVEL_LIGHT.equals(value)
+            ? TERMUX_APP.IN_APP_KEYBOARD_VOICE_POLISH_LEVEL_LIGHT
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_LEVEL;
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_POLISH_LEVEL, level, false);
+    }
+
     /** One of {@link TERMUX_APP#IN_APP_KEYBOARD_VOICE_PAUSE_MS_CHOICES}; anything else stored reads as the default. */
     public int getInAppKeyboardVoicePauseMs() {
         int value = SharedPreferenceUtils.getInt(mSharedPreferences,

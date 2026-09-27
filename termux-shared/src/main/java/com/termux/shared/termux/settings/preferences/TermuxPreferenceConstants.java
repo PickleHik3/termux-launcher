@@ -790,9 +790,10 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_SOUNDS = true;
 
         /**
-         * Whether dictated text segments (never spoken keys or short commands) are rewritten by
-         * the local Gemma chat model for punctuation, casing and mis-hearings before they are
-         * typed. Off by default: it costs a model load and seconds per phrase.
+         * Whether a dictation session's text (never a short command) is cleaned up by the local
+         * Gemma chat model for punctuation, casing and mis-hearings in one pass once the session
+         * ends; the phrases are typed as heard first and the line is swapped when it is untouched.
+         * Off by default: it costs a model load and a few seconds at the end.
          */
         public static final String KEY_IN_APP_KEYBOARD_VOICE_POLISH = "keyboard_voice_polish";
 
@@ -806,6 +807,19 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_IN_APP_KEYBOARD_VOICE_POLISH_MODEL = "keyboard_voice_polish_model";
 
         public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_MODEL = "";
+
+        /**
+         * How far the dictation cleanup goes: {@code light} (punctuation, capitals, fillers and
+         * self-corrections only) or {@code polished} (also grammar and awkward phrasing, in the
+         * speaker's words; the default).
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_POLISH_LEVEL = "keyboard_voice_polish_level";
+
+        public static final String IN_APP_KEYBOARD_VOICE_POLISH_LEVEL_LIGHT = "light";
+
+        public static final String IN_APP_KEYBOARD_VOICE_POLISH_LEVEL_POLISHED = "polished";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_LEVEL = IN_APP_KEYBOARD_VOICE_POLISH_LEVEL_POLISHED;
 
         /**
          * Defines the key for the absolute path of a user-imported label font file,

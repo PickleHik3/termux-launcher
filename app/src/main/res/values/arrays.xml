@@ -89,6 +89,14 @@
         <item>30000</item>
         <item>0</item>
     </string-array>
+    <string-array name="settings_keyboard_voice_polish_level_entries">
+        <item>@string/settings_keyboard_voice_polish_level_light</item>
+        <item>@string/settings_keyboard_voice_polish_level_polished</item>
+    </string-array>
+    <string-array name="settings_keyboard_voice_polish_level_values">
+        <item>light</item>
+        <item>polished</item>
+    </string-array>
     <string-array name="termux_theme_mode_entries">
         <item>@string/termux_theme_mode_system</item>
         <item>@string/termux_theme_mode_light</item>

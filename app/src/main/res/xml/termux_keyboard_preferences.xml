@@ -123,6 +123,14 @@
             app:dependency="keyboard_voice_polish"
             app:title="@string/settings_keyboard_voice_polish_model_title" />
         <ListPreference
+            app:key="keyboard_voice_polish_level"
+            app:dependency="keyboard_voice_polish"
+            app:title="@string/settings_keyboard_voice_polish_level_title"
+            app:entries="@array/settings_keyboard_voice_polish_level_entries"
+            app:entryValues="@array/settings_keyboard_voice_polish_level_values"
+            app:defaultValue="polished"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
             app:key="keyboard_voice_pause_ms"
             app:title="@string/settings_keyboard_voice_pause_title"
             app:entries="@array/settings_keyboard_voice_pause_entries"

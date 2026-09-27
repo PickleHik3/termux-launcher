@@ -1,229 +1,378 @@
 package com.termux.app.terminal.inappkeyboard.voice;
 
-import android.animation.ValueAnimator;
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
 import android.app.Activity;
 import android.content.Context;
-import android.graphics.Canvas;
-import android.graphics.Paint;
+import android.content.res.ColorStateList;
 import android.graphics.PorterDuff;
-import android.graphics.RectF;
+import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.termux.R;
 
 /**
- * The small "Listening…" pill with a live level meter, floated just above the in-app keyboard
- * while a {@link VoiceInputSession} runs. It lives in the window's content frame rather than the
- * accessory stack, so it never takes part in the keyboard's geometry passes; its bottom margin is
- * re-read from the keyboard container's position on every level update, which is cheap and keeps
- * it above a keyboard that moves. After a segment transcribes, the pill shows that text until the
- * next one.
+ * The dictation pill (agreed design, 2026-09-27): top right, under the status bar, 36 dp tall
+ * with 6 dp above and below its contents, and a panel that grows down from it over the pane's
+ * right side. It lives in the window's content frame rather than the accessory stack, so it never
+ * takes part in the keyboard's geometry passes; its position is re-read from the pane area
+ * ({@code terminal_surface_host}) on every level update, which is cheap and follows bars that move.
  *
- * <p>A close button sits at the pill's end for the whole session; {@link #setPending} marks a
- * segment the VAD has just closed but has not transcribed yet, so the tap that ended a phrase is
- * acknowledged well before the transcript can arrive.
+ * <p>The pill row holds the scrolling waveform ({@link VoiceWaveformView}), the state
+ * ("Listening…", "Transcribing…", "Cleaning up…"), a "Warming up" chip with a ring while the
+ * speech model, the voiced decision or the cleanup model is still loading — recording has already
+ * started — and the ×. The panel ({@link VoiceTranscriptPanel}) holds the whole session's text.
+ *
+ * <p>× stops listening and still delivers every phrase waiting to transcribe; swiping the pill
+ * sideways discards them. Both are the host's to act on through {@link Callbacks}.
  */
 public final class VoiceListeningIndicator {
 
-    private static final int BARS = 5;
+    /** Main thread. */
+    public interface Callbacks {
+        /** The ×: stop listening, deliver what is waiting (or close a finished pill). */
+        void onClose();
 
-    private final Activity activity;
-    private final View keyboardContainer;
-    @Nullable private LinearLayout pill;
-    @Nullable private TextView label;
-    @Nullable private TextView pendingMark;
-    @Nullable private LevelMeterView meter;
-    @Nullable private ValueAnimator pendingAnimator;
-    private int lastBottomMargin = -1;
+        /** Swiped away: discard what has not been delivered, close at once. */
+        void onSwipedAway();
 
-    public VoiceListeningIndicator(@NonNull Activity activity, @NonNull View keyboardContainer) {
-        this.activity = activity;
-        this.keyboardContainer = keyboardContainer;
+        /** The panel's Replace, offered when the cleanup could not swap the line itself. */
+        void onReplace();
+
+        /** The panel's Copy. */
+        void onCopy();
     }
 
-    /** @param onClose called on a tap of the pill's close button; discards the session at once. */
-    public void show(@NonNull Runnable onClose) {
-        if (pill != null) return;
+    private static final int PILL_HEIGHT_DP = 36;
+    private static final int MAX_WIDTH_DP = 300;
+    private static final int GAP_DP = 8;
+
+    private final Activity activity;
+    /** The pane area: the pill sits at its top right, under whatever bars are above it. */
+    private final View anchor;
+    @Nullable private SwipeCard card;
+    @Nullable private TextView status;
+    @Nullable private View chip;
+    @Nullable private VoiceWaveformView wave;
+    @Nullable private VoiceTranscriptPanel panel;
+    private int lastTop = -1;
+    private int lastEnd = -1;
+    /** Captured segments still transcribing; the shimmer line shows while any are. */
+    private int pending;
+    private boolean cleaningUp;
+
+    public VoiceListeningIndicator(@NonNull Activity activity, @NonNull View anchor) {
+        this.activity = activity;
+        this.anchor = anchor;
+    }
+
+    /** @param dimRaw whether a cleanup pass will follow, so the raw text shows dim until it lands. */
+    public void show(@NonNull Callbacks callbacks, boolean dimRaw) {
+        if (card != null) return;
         ViewGroup content = activity.findViewById(android.R.id.content);
         if (content == null) return;
         Context context = activity;
         int onSurface = themeColor(context, com.termux.shared.R.attr.termuxColorOnSurface);
         int accent = themeColor(context, com.termux.shared.R.attr.termuxColorPrimary);
-        LinearLayout view = new LinearLayout(context);
-        view.setOrientation(LinearLayout.HORIZONTAL);
-        view.setGravity(Gravity.CENTER_VERTICAL);
-        view.setBackgroundResource(R.drawable.settings_pill_background);
+        int surface = themeColor(context, com.termux.shared.R.attr.termuxColorSurfaceBase);
+
+        SwipeCard view = new SwipeCard(context, () -> callbacks.onSwipedAway());
+        view.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(surface);
+        background.setCornerRadius(dp(PILL_HEIGHT_DP / 2));
+        view.setBackground(background);
         view.setElevation(dp(4));
-        int padH = dp(14), padV = dp(8);
-        view.setPadding(padH, padV, dp(6), padV);
-        view.setClickable(false);
-        view.setFocusable(false);
+        view.setClipToOutline(true);
 
-        LevelMeterView levels = new LevelMeterView(context, accent, onSurface);
-        LinearLayout.LayoutParams meterParams = new LinearLayout.LayoutParams(dp(28), dp(16));
-        meterParams.setMarginEnd(dp(10));
-        view.addView(levels, meterParams);
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPaddingRelative(dp(12), 0, 0, 0);
 
-        TextView text = new TextView(context);
-        text.setTextColor(onSurface);
-        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        text.setSingleLine();
-        text.setEllipsize(TextUtils.TruncateAt.START);
-        text.setMaxWidth(dp(200));
-        text.setText(R.string.voice_input_listening);
-        view.addView(text, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
+        VoiceWaveformView levels = new VoiceWaveformView(context, accent, onSurface);
+        LinearLayout.LayoutParams waveParams = new LinearLayout.LayoutParams(dp(56), dp(16));
+        waveParams.setMarginEnd(dp(10));
+        row.addView(levels, waveParams);
 
-        TextView pending = new TextView(context);
-        pending.setTextColor(onSurface);
-        pending.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        pending.setText(R.string.voice_input_pending_mark);
-        pending.setVisibility(View.GONE);
-        LinearLayout.LayoutParams pendingParams = new LinearLayout.LayoutParams(
+        TextView label = new TextView(context);
+        label.setTextColor(onSurface);
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        label.setSingleLine();
+        label.setEllipsize(TextUtils.TruncateAt.END);
+        label.setText(R.string.voice_input_listening);
+        row.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+
+        View warming = warmingChip(context, onSurface, accent);
+        warming.setVisibility(View.GONE);
+        LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        pendingParams.setMarginStart(dp(2));
-        view.addView(pending, pendingParams);
+        chipParams.setMarginStart(dp(6));
+        row.addView(warming, chipParams);
 
-        // A 44dp touch target around an 18dp glyph: the pill barely grows, the tap target does not.
+        // The pill's full height as the tap target around an 18 dp glyph.
         ImageView close = new ImageView(context);
         close.setImageResource(R.drawable.ic_symbol_close);
         close.setColorFilter(onSurface, PorterDuff.Mode.SRC_IN);
         close.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         close.setContentDescription(context.getString(R.string.voice_input_close));
-        close.setPadding(dp(13), dp(13), dp(13), dp(13));
+        close.setPadding(dp(9), dp(9), dp(9), dp(9));
         TypedValue ripple = new TypedValue();
         if (context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true)) {
             close.setBackgroundResource(ripple.resourceId);
         }
-        close.setOnClickListener(v -> onClose.run());
-        LinearLayout.LayoutParams closeParams = new LinearLayout.LayoutParams(dp(44), dp(44));
-        closeParams.setMarginStart(dp(4));
-        view.addView(close, closeParams);
+        close.setOnClickListener(v -> callbacks.onClose());
+        row.addView(close, new LinearLayout.LayoutParams(dp(PILL_HEIGHT_DP), dp(PILL_HEIGHT_DP)));
 
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        params.bottomMargin = bottomMargin(content);
-        lastBottomMargin = params.bottomMargin;
+        view.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(PILL_HEIGHT_DP)));
+
+        VoiceTranscriptPanel transcript = new VoiceTranscriptPanel(context, onSurface, accent,
+            new VoiceTranscriptPanel.Actions() {
+                @Override
+                public void onReplace() {
+                    callbacks.onReplace();
+                }
+
+                @Override
+                public void onCopy() {
+                    callbacks.onCopy();
+                }
+            });
+        transcript.setDimRaw(dimRaw);
+        transcript.setPaddingRelative(dp(14), 0, dp(12), dp(10));
+        transcript.setVisibility(View.GONE);
+        view.addView(transcript, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width(content),
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.END);
+        int[] place = place(content);
+        params.topMargin = place[0];
+        params.setMarginEnd(place[1]);
+        lastTop = place[0];
+        lastEnd = place[1];
         content.addView(view, params);
-        pill = view;
-        label = text;
-        pendingMark = pending;
-        meter = levels;
+        card = view;
+        status = label;
+        chip = warming;
+        wave = levels;
+        panel = transcript;
+        pending = 0;
+        cleaningUp = false;
     }
 
     public void hide() {
-        LinearLayout view = pill;
-        pill = null;
-        label = null;
-        pendingMark = null;
-        meter = null;
-        lastBottomMargin = -1;
-        stopPendingAnimator();
+        SwipeCard view = card;
+        if (panel != null) panel.release();
+        card = null;
+        status = null;
+        chip = null;
+        wave = null;
+        panel = null;
+        lastTop = -1;
+        lastEnd = -1;
+        pending = 0;
+        cleaningUp = false;
         if (view == null) return;
+        view.animate().cancel();
         ViewGroup parent = (ViewGroup) view.getParent();
         if (parent != null) parent.removeView(view);
     }
 
     public boolean isShowing() {
-        return pill != null;
+        return card != null;
     }
 
-    /** A level sample, with the VAD's current noise floor; also keeps the pill above the keyboard as it moves. */
+    /** A level sample with the VAD's noise floor at that moment; also keeps the pill in place as bars move. */
     public void setLevel(float rms, boolean voiced, float noiseFloor) {
-        LevelMeterView levels = meter;
-        LinearLayout view = pill;
-        if (levels == null || view == null) return;
-        levels.setLevel(rms, voiced, noiseFloor);
-        ViewGroup content = (ViewGroup) view.getParent();
-        if (content == null) return;
-        int margin = bottomMargin(content);
-        if (margin != lastBottomMargin) {
-            lastBottomMargin = margin;
-            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
-            params.bottomMargin = margin;
-            view.setLayoutParams(params);
-        }
+        VoiceWaveformView levels = wave;
+        if (levels == null) return;
+        levels.push(rms, voiced, noiseFloor);
+        reposition();
     }
 
-    /** The last transcript, shown in the pill until the next segment. */
-    public void setTranscript(@NonNull CharSequence text) {
-        TextView view = label;
-        if (view != null) view.setText(text);
-        clearPending();
+    /** The "Warming up" chip, with its ring, while a model or the voiced decision is still loading. */
+    public void setWarmingUp(boolean warming) {
+        View view = chip;
+        if (view != null) view.setVisibility(warming ? View.VISIBLE : View.GONE);
+    }
+
+    public void setListening() {
+        setStatus(R.string.voice_input_listening);
     }
 
     /** The mic has closed but a captured segment is still transcribing: "Listening…" no longer fits. */
     public void setTranscribing() {
-        TextView view = label;
-        if (view != null) view.setText(R.string.voice_input_transcribing);
+        setStatus(R.string.voice_input_transcribing);
+    }
+
+    public void setStatus(@StringRes int text) {
+        TextView view = status;
+        if (view != null) view.setText(text);
+    }
+
+    /** The VAD has closed a segment: a shimmer line stands in for it until it transcribes. */
+    public void onSegmentCaptured() {
+        pending++;
+        updateShimmer();
+    }
+
+    /** A captured segment has come back, with text or without. */
+    public void onSegmentSettled() {
+        pending = Math.max(0, pending - 1);
+        updateShimmer();
+    }
+
+    /** One phrase, exactly as typed, into the panel. */
+    public void appendTranscript(@NonNull String typed) {
+        VoiceTranscriptPanel view = panel;
+        if (view == null) return;
+        view.append(typed);
+        updatePanelVisibility();
+    }
+
+    /** The session has ended and the one cleanup pass is running. */
+    public void setCleaningUp() {
+        cleaningUp = true;
+        setWarmingUp(false);
+        setStatus(R.string.voice_input_cleaning_up);
+        updateShimmer();
     }
 
     /**
-     * The VAD has just closed a segment that has not transcribed yet: a small mark next to the
-     * text so a spoken phrase is acknowledged well inside the latency it takes to come back as a
-     * transcript. Pulses unless the system has animations turned off.
+     * The cleanup has landed; see {@link VoiceTranscriptPanel#showCleaned}.
+     *
+     * @param swapped whether the line in the terminal was already swapped for {@code cleaned}
      */
-    public void setPending() {
-        TextView view = pendingMark;
+    public void showCleaned(@NonNull String cleaned, boolean swapped, boolean canReplace) {
+        cleaningUp = false;
+        updateShimmer();
+        setStatus(swapped ? R.string.voice_input_cleaned_up : R.string.voice_input_cleaned_up_not_swapped);
+        VoiceTranscriptPanel view = panel;
+        if (view != null) view.showCleaned(cleaned, !swapped, canReplace);
+        updatePanelVisibility();
+    }
+
+    /** The cleanup came back with nothing better (or failed): the text stays as heard. */
+    public void showKeptAsHeard() {
+        cleaningUp = false;
+        updateShimmer();
+        setStatus(R.string.voice_input_kept_as_heard);
+    }
+
+    /** Replace or Copy was used: the actions go and the state says what happened. */
+    public void onActionDone(@StringRes int text) {
+        VoiceTranscriptPanel view = panel;
+        if (view != null) view.hideActions();
+        setStatus(text);
+    }
+
+    private void updateShimmer() {
+        VoiceTranscriptPanel view = panel;
         if (view == null) return;
-        view.setVisibility(View.VISIBLE);
-        if (pendingAnimator != null) return;
-        if (!ValueAnimator.areAnimatorsEnabled()) {
-            view.setAlpha(1f);
-            return;
-        }
-        ValueAnimator animator = ValueAnimator.ofFloat(1f, 0.25f);
-        animator.setDuration(500L);
-        animator.setRepeatCount(ValueAnimator.INFINITE);
-        animator.setRepeatMode(ValueAnimator.REVERSE);
-        animator.addUpdateListener(a -> {
-            TextView target = pendingMark;
-            if (target != null) target.setAlpha((float) a.getAnimatedValue());
-        });
-        animator.start();
-        pendingAnimator = animator;
+        view.setShimmering(pending > 0 || cleaningUp);
+        updatePanelVisibility();
     }
 
-    /** The pending segment delivered as a transcript, or the session moved on. */
-    public void clearPending() {
-        TextView view = pendingMark;
-        if (view != null) view.setVisibility(View.GONE);
-        stopPendingAnimator();
+    private void updatePanelVisibility() {
+        VoiceTranscriptPanel view = panel;
+        if (view == null) return;
+        int visibility = view.hasContent() ? View.VISIBLE : View.GONE;
+        if (view.getVisibility() != visibility) view.setVisibility(visibility);
     }
 
-    private void stopPendingAnimator() {
-        if (pendingAnimator != null) {
-            pendingAnimator.cancel();
-            pendingAnimator = null;
-        }
-        TextView view = pendingMark;
-        if (view != null) view.setAlpha(1f);
+    // ------------------------------------------------------------------ placement
+
+    private void reposition() {
+        SwipeCard view = card;
+        if (view == null) return;
+        ViewGroup content = (ViewGroup) view.getParent();
+        if (content == null) return;
+        int[] place = place(content);
+        if (place[0] == lastTop && place[1] == lastEnd) return;
+        lastTop = place[0];
+        lastEnd = place[1];
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
+        params.topMargin = place[0];
+        params.setMarginEnd(place[1]);
+        view.setLayoutParams(params);
     }
 
-    /** The room under the pill: from the content frame's bottom up to the keyboard's top, plus a gap. */
-    private int bottomMargin(@NonNull ViewGroup content) {
-        int gap = dp(8);
-        if (keyboardContainer.getVisibility() != View.VISIBLE || keyboardContainer.getHeight() == 0) {
-            return gap;
+    /**
+     * {top margin, end margin} in the content frame: just inside the pane area's top right
+     * corner, which is under the status bar and whatever top bars the layout puts above the panes;
+     * under the system status bar when the pane area is not laid out.
+     */
+    @NonNull
+    private int[] place(@NonNull ViewGroup content) {
+        int gap = dp(GAP_DP);
+        if (anchor.isShown() && anchor.getHeight() > 0 && anchor.getWidth() > 0) {
+            int[] panes = new int[2];
+            int[] frame = new int[2];
+            anchor.getLocationInWindow(panes);
+            content.getLocationInWindow(frame);
+            int top = panes[1] - frame[1] + gap;
+            int end = (frame[0] + content.getWidth()) - (panes[0] + anchor.getWidth()) + gap;
+            return new int[] {Math.max(gap, top), Math.max(gap, end)};
         }
-        int[] keyboard = new int[2];
-        int[] frame = new int[2];
-        keyboardContainer.getLocationInWindow(keyboard);
-        content.getLocationInWindow(frame);
-        int contentBottom = frame[1] + content.getHeight();
-        return Math.max(gap, contentBottom - keyboard[1] + gap);
+        int statusBar = 0;
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(content);
+        if (insets != null) statusBar = insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
+        return new int[] {statusBar + gap, gap};
+    }
+
+    /** Fixed for the session, so the pill does not jump as the panel fills: at most 300 dp, and never wider than the frame allows. */
+    private int width(@NonNull ViewGroup content) {
+        int frame = content.getWidth() > 0 ? content.getWidth() : activity.getResources().getDisplayMetrics().widthPixels;
+        return Math.min(dp(MAX_WIDTH_DP), frame - 2 * dp(GAP_DP) - dp(40));
+    }
+
+    // ------------------------------------------------------------------ pieces
+
+    @NonNull
+    private View warmingChip(@NonNull Context context, int onSurface, int accent) {
+        LinearLayout chipView = new LinearLayout(context);
+        chipView.setOrientation(LinearLayout.HORIZONTAL);
+        chipView.setGravity(Gravity.CENTER_VERTICAL);
+        chipView.setPaddingRelative(dp(6), dp(2), dp(8), dp(2));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor((onSurface & 0x00FFFFFF) | 0x1A000000);
+        background.setCornerRadius(dp(10));
+        chipView.setBackground(background);
+
+        ProgressBar ring = new ProgressBar(context);
+        ring.setIndeterminate(true);
+        ring.setIndeterminateTintList(ColorStateList.valueOf(accent));
+        LinearLayout.LayoutParams ringParams = new LinearLayout.LayoutParams(dp(12), dp(12));
+        ringParams.setMarginEnd(dp(4));
+        chipView.addView(ring, ringParams);
+
+        TextView text = new TextView(context);
+        text.setTextColor(onSurface);
+        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        text.setSingleLine();
+        text.setText(R.string.voice_input_warming_up);
+        chipView.addView(text, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        return chipView;
     }
 
     private int dp(int value) {
@@ -241,63 +390,139 @@ public final class VoiceListeningIndicator {
     }
 
     /**
-     * Five bars that light up with the microphone level, measured in dB above the VAD's adaptive
-     * noise floor through {@link VoiceLevelCurve} — a fixed dBFS window left ordinary speech
-     * (−40…−25 dBFS, since {@code VOICE_RECOGNITION} has no AGC) filling barely a quarter of it.
+     * The pill and its panel, swipeable sideways: a horizontal drag past the touch slop is taken
+     * from the children (so the × and the actions still get their taps), follows the finger and
+     * fades, and past a third of the width or on a fling it leaves and reports the swipe. Touches
+     * that land on the card never fall through to the terminal under it.
      */
-    static final class LevelMeterView extends View {
-        /** Per-frame decay once the peak hold has run out (Freestyle's pill decays at 0.78–0.8/frame). */
-        private static final float DECAY = 0.78f;
-        /** How many 30 ms frames a peak is held before it starts to decay, so a single syllable stays visible. */
-        private static final int PEAK_HOLD_FRAMES = 6;
+    static final class SwipeCard extends LinearLayout {
+        private static final float DISMISS_FRACTION = 0.35f;
+        private static final long SETTLE_MS = 180L;
 
-        private final Paint lit = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint dim = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final RectF bar = new RectF();
-        private float level;
-        private float peak;
-        private int peakHoldFrames;
+        private final Runnable onSwiped;
+        private final int touchSlop;
+        private final int minFling;
+        private float downX;
+        private float downY;
+        private boolean dragging;
+        private boolean gone;
+        @Nullable private VelocityTracker velocity;
 
-        LevelMeterView(@NonNull Context context, int accent, int onSurface) {
+        SwipeCard(@NonNull Context context, @NonNull Runnable onSwiped) {
             super(context);
-            lit.setColor(accent);
-            dim.setColor((onSurface & 0x00FFFFFF) | 0x33000000);
-        }
-
-        void setLevel(float rms, boolean voiced, float noiseFloor) {
-            float target = VoiceLevelCurve.level(rms, noiseFloor);
-            if (target >= peak) {
-                // Rises at once and arms the hold.
-                level = target;
-                peak = target;
-                peakHoldFrames = PEAK_HOLD_FRAMES;
-            } else if (peakHoldFrames > 0) {
-                peakHoldFrames--;
-                level = peak;
-            } else {
-                level = level * DECAY;
-                peak = level;
-            }
-            if (!voiced && level < 0.05f) {
-                level = 0f;
-                peak = 0f;
-                peakHoldFrames = 0;
-            }
-            invalidate();
+            this.onSwiped = onSwiped;
+            ViewConfiguration configuration = ViewConfiguration.get(context);
+            touchSlop = configuration.getScaledTouchSlop();
+            minFling = configuration.getScaledMinimumFlingVelocity() * 4;
         }
 
         @Override
-        protected void onDraw(Canvas canvas) {
-            super.onDraw(canvas);
-            float width = getWidth(), height = getHeight();
-            float slot = width / BARS;
-            float barWidth = slot * 0.6f;
-            for (int i = 0; i < BARS; i++) {
-                float threshold = (i + 1f) / BARS;
-                float barHeight = height * (0.35f + 0.65f * (i + 1f) / BARS);
-                float left = i * slot + (slot - barWidth) / 2f;
-                bar.set(left, height - barHeight, left + barWidth, height);
-                canvas.drawRoundRect(bar, barWidth / 2f, barWidth / 2f, level >= threshold ? lit : dim);
+        public boolean onInterceptTouchEvent(MotionEvent event) {
+            track(event);
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    downX = event.getRawX();
+                    downY = event.getRawY();
+                    dragging = false;
+                    return false;
+                case MotionEvent.ACTION_MOVE:
+                    return startDragIfHorizontal(event);
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    recycleVelocity();
+                    return false;
+                default:
+                    return dragging;
+            }
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            if (gone) return true;
+            // Down reaches here only when no child took it; the card claims it so the drag can follow.
+            track(event);
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    downX = event.getRawX();
+                    downY = event.getRawY();
+                    dragging = false;
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (!dragging) startDragIfHorizontal(event);
+                    if (dragging) follow(event.getRawX() - downX);
+                    return true;
+                case MotionEvent.ACTION_UP:
+                    if (dragging) release(event.getRawX() - downX);
+                    dragging = false;
+                    recycleVelocity();
+                    return true;
+                case MotionEvent.ACTION_CANCEL:
+                    if (dragging) settleBack();
+                    dragging = false;
+                    recycleVelocity();
+                    return true;
+                default:
+                    return true;
+            }
+        }
+
+        private boolean startDragIfHorizontal(@NonNull MotionEvent event) {
+            if (dragging) return true;
+            float dx = event.getRawX() - downX;
+            float dy = event.getRawY() - downY;
+            if (Math.abs(dx) > touchSlop && Math.abs(dx) > Math.abs(dy) * 1.5f) {
+                dragging = true;
+                if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+            }
+            return dragging;
+        }
+
+        private void follow(float dx) {
+            setTranslationX(dx);
+            float width = Math.max(1f, getWidth());
+            setAlpha(Math.max(0.2f, 1f - Math.abs(dx) / width));
+        }
+
+        private void release(float dx) {
+            float vx = 0f;
+            if (velocity != null) {
+                velocity.computeCurrentVelocity(1000);
+                vx = velocity.getXVelocity();
+            }
+            boolean far = Math.abs(dx) > getWidth() * DISMISS_FRACTION;
+            boolean flung = Math.abs(vx) > minFling && Math.signum(vx) == Math.signum(dx);
+            if (!far && !flung) {
+                settleBack();
+                return;
+            }
+            gone = true;
+            float target = Math.signum(dx == 0f ? vx : dx) * (getWidth() + getRight());
+            animate().translationX(target).alpha(0f).setDuration(SETTLE_MS)
+                .setListener(new AnimatorListenerAdapter() {
+                    @Override
+                    public void onAnimationEnd(Animator animation) {
+                        onSwiped.run();
+                    }
+                }).start();
+        }
+
+        private void settleBack() {
+            animate().translationX(0f).alpha(1f).setDuration(SETTLE_MS).setListener(null).start();
+        }
+
+        private void track(@NonNull MotionEvent event) {
+            if (velocity == null) velocity = VelocityTracker.obtain();
+            // Raw coordinates: the card itself moves under the finger.
+            MotionEvent copy = MotionEvent.obtain(event);
+            copy.setLocation(event.getRawX(), event.getRawY());
+            velocity.addMovement(copy);
+            copy.recycle();
+        }
+
+        private void recycleVelocity() {
+            if (velocity != null) {
+                velocity.recycle();
+                velocity = null;
             }
         }
     }

@@ -154,11 +154,13 @@ public class KeyboardPreferencesFragmentTest {
         assertEquals("10000", store.getString("keyboard_voice_silence_timeout_ms", null));
         assertTrue(store.getBoolean("keyboard_voice_sounds", false));
         assertTrue(!store.getBoolean("keyboard_voice_polish", true));
+        assertEquals("polished", store.getString("keyboard_voice_polish_level", null));
 
         KeyboardPreferencesFragment fragment = launch();
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_engine"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_model"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_level"));
     }
 
     @Test
@@ -201,5 +203,12 @@ public class KeyboardPreferencesFragmentTest {
         assertEquals("10000", store.getString("keyboard_voice_silence_timeout_ms", null));
         store.putString("keyboard_voice_engine", "cloud");
         assertEquals("system", store.getString("keyboard_voice_engine", null));
+
+        // The cleanup level: light or polished, and anything else reads as Polished.
+        store.putString("keyboard_voice_polish_level", "light");
+        assertEquals("light", prefs.getInAppKeyboardVoicePolishLevel());
+        assertEquals("light", store.getString("keyboard_voice_polish_level", null));
+        store.putString("keyboard_voice_polish_level", "careful");
+        assertEquals("polished", prefs.getInAppKeyboardVoicePolishLevel());
     }
 }

@@ -3,12 +3,12 @@ package com.termux.app.terminal.inappkeyboard.voice;
 import androidx.annotation.NonNull;
 
 /**
- * Rewrites one dictated text segment — punctuation, casing, obvious mis-hearings, filler words —
- * without changing what was said. {@link VoiceInputSession} calls it on its own
- * {@code voice-polish} thread, once per segment that {@link VoicePolishRules} lets through, and
- * types whatever comes back in the segment's spoken order. An implementation never throws and
- * never blocks past the deadline it is given: on any trouble it hands the raw text back with the
- * reason, and the session types that instead.
+ * Rewrites a dictation session's text — punctuation, casing, obvious mis-hearings, filler words —
+ * without changing what was said. {@link VoiceSessionCleanup} calls it on its own
+ * {@code voice-cleanup} thread, once per session that {@link VoicePolishRules} lets through, after
+ * every phrase has already been typed as heard. An implementation never throws and never blocks
+ * past the deadline it is given: on any trouble it hands the raw text back with the reason, and
+ * the raw text stays.
  *
  * <p>Today's only implementation is {@link LocalTaiVoiceTextPolisher} (Gemma through the TAI
  * runtime). The seam exists so a bring-your-own-key provider can be added later without the
@@ -47,9 +47,9 @@ public interface VoiceTextPolisher {
     }
 
     /**
-     * Gets ready ahead of the first segment (loads a model, opens a connection): called once as
-     * the microphone opens, on the polish thread, before any {@link #polish}. Best effort; a
-     * failure here shows up as a fallback per segment, never as a session failure.
+     * Gets ready ahead of the cleanup (loads a model, opens a connection): called once as the
+     * microphone opens, on the cleanup thread, before any {@link #polish}. Best effort; a failure
+     * here shows up as a fallback at the end, never as a session failure.
      */
     void warm();
 

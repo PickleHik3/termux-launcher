@@ -32,7 +32,6 @@ import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -47,10 +46,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * dropped so the start blip is never transcribed.
  *
  * <p>The session ends on the configured silence timeout ({@link VoiceSilenceTimeout}, or never for
- * "Until tap"), a second tap, the keyboard going down, the activity
+ * "Until tap"), a second tap, the pill's ×, the keyboard going down, the activity
  * pausing, or the first failure; {@link #stop} releases the microphone at once and lets segments
- * already captured finish, {@link #cancel} drops them too. The activity never blocks on it: the
- * only main-thread work is the callbacks.
+ * already captured finish, {@link #cancel} (a swipe of the pill, the activity going away) drops
+ * them too. Every phrase is delivered as heard; the optional cleanup is one pass over the whole
+ * session once it has ended, owned by the host ({@link VoiceSessionCleanup}). The activity never
+ * blocks on it: the only main-thread work is the callbacks.
  */
 public final class VoiceInputSession {
 
@@ -107,6 +108,19 @@ public final class VoiceInputSession {
         void onSegmentCaptured();
 
         /**
+         * One segment {@link #onSegmentCaptured} announced has come back, as text or as nothing
+         * (non-speech, a failure): exactly once per captured segment, in the order they settle,
+         * which is before its text (if any) reaches {@link #onTranscript}.
+         */
+        void onSegmentSettled();
+
+        /**
+         * The speech model has warmed and the voiced decision is loaded: the pill's "Warming up"
+         * chip can go. Recording has been running all along; nothing waited for this.
+         */
+        void onSpeechReady();
+
+        /**
          * A level sample, roughly every 30 ms while listening, with the VAD's noise floor at that
          * moment (the level meter measures from it, not an absolute dBFS scale).
          */
@@ -140,15 +154,9 @@ public final class VoiceInputSession {
         runnable -> new Thread(runnable, "voice-stt"));
     private final VoiceResultSequencer<String> sequencer = new VoiceResultSequencer<>();
     private final VoiceFeedback feedback;
-    /** Null when the "Polish dictation" setting is off; otherwise every text segment goes through it. */
-    @Nullable private final VoiceTextPolisher polisher;
-    /**
-     * Rewrites run here, not on {@code voice-stt}, so a slow rewrite never delays the next
-     * segment's transcription; the sequencer still types results in spoken order. Null without a
-     * polisher.
-     */
-    @Nullable private final ExecutorService polishExecutor;
     private final AtomicBoolean stopRequested = new AtomicBoolean();
+    /** The speech model's warm-up and the voiced decision's load, counted down to {@link Host#onSpeechReady}. */
+    private final AtomicInteger warmingParts = new AtomicInteger(2);
     private final AtomicBoolean failed = new AtomicBoolean();
     /** Segments handed to the STT thread, counted on the capture thread before the microphone is released. */
     private final AtomicInteger submitted = new AtomicInteger();
@@ -168,19 +176,10 @@ public final class VoiceInputSession {
     @Nullable private EndReason endReason;
 
     public VoiceInputSession(@NonNull Context context, @NonNull Config config, @NonNull Host host) {
-        this(context, config, host, null);
-    }
-
-    /** @param polisher rewrites text segments before they are typed, or null to type them as heard. */
-    public VoiceInputSession(@NonNull Context context, @NonNull Config config, @NonNull Host host,
-                             @Nullable VoiceTextPolisher polisher) {
         this.appContext = context.getApplicationContext();
         this.config = config;
         this.host = host;
         this.feedback = new VoiceFeedback(appContext, config.soundsEnabled, config.hapticsEnabled);
-        this.polisher = polisher;
-        this.polishExecutor = polisher == null ? null
-            : Executors.newSingleThreadExecutor(runnable -> new Thread(runnable, "voice-polish"));
     }
 
     /**
@@ -219,10 +218,6 @@ public final class VoiceInputSession {
         // The model loads while the first words are spoken; a refusal here ends the session
         // before any segment is sent, which is the fast path to the fallback.
         sttExecutor.execute(this::warm);
-        // The chat model's load (~12 s cold) overlaps the first phrase the same way; it queues
-        // ahead of the first rewrite on the polish thread, so that rewrite waits for it rather
-        // than racing it.
-        if (polishExecutor != null) polishExecutor.execute(this::warmPolisher);
         Thread thread = new Thread(() -> capture(recorder), "voice-capture");
         captureThread = thread;
         thread.start();
@@ -252,9 +247,9 @@ public final class VoiceInputSession {
     /**
      * Releases the microphone and drops every result still in flight — the undelivered segments
      * finish transcribing (or time out) on their own but are never typed. Ends the session at once
-     * even when {@link #stop} has already been called and is only waiting on those segments, which
-     * is exactly the tap {@link #isStopRequested} is for: a hung or slow drain no longer leaves the
-     * pill and the pressed key up until the last segment comes back.
+     * even when {@link #stop} has already been called and is only waiting on those segments. Only
+     * a swipe of the pill and the activity going away do this; the × and the voice key stop and
+     * deliver.
      */
     public void cancel(@NonNull EndReason reason) {
         cancelled = true;
@@ -282,6 +277,7 @@ public final class VoiceInputSession {
         SileroVoiceDecider speech = SileroVad.openDecider(appContext);
         Logger.logDebug(LOG_TAG, String.format(Locale.ROOT, "voiced decision: %s (%d ms to load)",
             speech != null ? "silero" : "energy", (System.nanoTime() - speechLoadStart) / 1_000_000));
+        warmedPart();
         VoiceActivityDetector detector = new VoiceActivityDetector(new VoiceActivityDetector.Listener() {
             // One debug line per second of what the detector saw, for tuning it on a device.
             private int statFrames, statVoiced;
@@ -382,9 +378,18 @@ public final class VoiceInputSession {
             JSONObject result = TaiManager.getInstance(appContext).sttWarm(request.toString());
             Failure failure = Failure.of(result);
             if (failure != null) fail(failure);
+            else warmedPart();
         } catch (JSONException | RuntimeException e) {
             fail(new Failure("stt_warm_failed", String.valueOf(e.getMessage())));
         }
+    }
+
+    /** One of the speech model's warm-up and the voiced decision's load is done; both → {@link Host#onSpeechReady}. */
+    private void warmedPart() {
+        if (warmingParts.decrementAndGet() != 0) return;
+        mainHandler.post(() -> {
+            if (!ended) host.onSpeechReady();
+        });
     }
 
     private void transcribe(int sequence, @NonNull short[] pcm, int voicedFrames) {
@@ -421,7 +426,9 @@ public final class VoiceInputSession {
             }
             String text = result.optString("text", "");
             logPhrase(segmentMs, voicedMs, transcribeMs, result, text.length(), outcomeFor(text));
-            route(sequence, text);
+            // Typed as heard: any cleanup is one pass over the whole session once it has ended
+            // (VoiceSessionCleanup), so no phrase ever waits for a chat model.
+            deliver(sequence, text);
         } catch (IOException | JSONException | RuntimeException e) {
             long transcribeMs = (System.nanoTime() - start) / 1_000_000L;
             logPhrase(segmentMs, voicedMs, transcribeMs, null, 0, "failed");
@@ -434,68 +441,6 @@ public final class VoiceInputSession {
                 audio.delete();
             }
         }
-    }
-
-    /**
-     * A transcript on its way to the host: straight through, or by way of the polisher when there
-     * is one and {@link VoicePolishRules} lets this segment through (never a short segment, never
-     * once cancelled, never a non-speech segment). Either way {@link #deliver} runs exactly once
-     * for the segment, so the "ends when everything is delivered" accounting is untouched.
-     */
-    private void route(int sequence, @NonNull String text) {
-        if (polisher == null || polishExecutor == null) {
-            deliver(sequence, text);
-            return;
-        }
-        String skip = cancelled ? "cancelled" : VoicePolishRules.skipReason(text);
-        if (skip != null) {
-            logPolish(0, text.length(), text.length(), "skipped:" + skip);
-            deliver(sequence, text);
-            return;
-        }
-        try {
-            polishExecutor.execute(() -> polish(sequence, text));
-        } catch (RejectedExecutionException e) {
-            // A cancel ended the session between the check above and here; the result is
-            // discarded anyway, but the accounting still wants its delivery.
-            logPolish(0, text.length(), text.length(), "skipped:cancelled");
-            deliver(sequence, text);
-        }
-    }
-
-    // ------------------------------------------------------------------ polish thread
-
-    private void warmPolisher() {
-        if (polisher == null || cancelled || failed.get()) return;
-        try {
-            polisher.warm();
-        } catch (RuntimeException e) {
-            Logger.logWarn(LOG_TAG, "polish warm failed: " + e.getMessage());
-        }
-    }
-
-    private void polish(int sequence, @NonNull String text) {
-        if (polisher == null || cancelled) {
-            logPolish(0, text.length(), text.length(), "skipped:cancelled");
-            deliver(sequence, text);
-            return;
-        }
-        long start = System.nanoTime();
-        VoiceTextPolisher.Result result;
-        try {
-            result = polisher.polish(text, VoicePolishRules.timeoutMs(text));
-        } catch (RuntimeException e) {
-            result = VoiceTextPolisher.Result.fallback(text, "exception");
-        }
-        long polishMs = (System.nanoTime() - start) / 1_000_000L;
-        logPolish(polishMs, text.length(), result.text.length(), result.outcome);
-        deliver(sequence, result.text);
-    }
-
-    /** One line per phrase that reached the polish step: timing, lengths and outcome — never the text. */
-    private static void logPolish(long polishMs, int inLength, int outLength, @NonNull String outcome) {
-        Logger.logInfo(LOG_TAG, "polish: polishMs=" + polishMs + " inLength=" + inLength
-            + " outLength=" + outLength + " outcome=" + outcome);
     }
 
     /**
@@ -623,6 +568,7 @@ public final class VoiceInputSession {
             delivered++;
             List<String> ready = sequencer.offer(sequence, text);
             if (!discardResults && !ended) {
+                host.onSegmentSettled();
                 for (String item : ready) {
                     if (item.trim().isEmpty()) continue;
                     anyTranscript = true;
@@ -639,7 +585,6 @@ public final class VoiceInputSession {
         if (!discardResults && delivered < submitted.get()) return;
         ended = true;
         sttExecutor.shutdown();
-        if (polishExecutor != null) polishExecutor.shutdown();
         EndReason reason = endReason == null ? EndReason.FAILED : endReason;
         Logger.logInfo(LOG_TAG, "session ended: " + reason + ", segments=" + submitted.get()
             + " delivered=" + delivered);

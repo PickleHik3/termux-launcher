@@ -23,39 +23,43 @@ import java.util.Map;
 
 /**
  * {@link VoiceTextPolisher} on the local Gemma chat model through the TAI runtime: one
- * non-streamed {@code /v1/chat/completions} per segment at temperature 0, thinking off, with the
- * tight budgets {@link VoicePolishRules} computes. Chat requests run on the runtime's serial chat
- * lane and STT on its own, so a rewrite never holds up the next transcription.
+ * non-streamed {@code /v1/chat/completions} for the whole session at temperature 0, thinking off,
+ * with the budgets and the prompt for the chosen cleanup level that {@link VoicePolishRules}
+ * computes. Chat requests run on the runtime's serial chat lane and STT on its own, so the load
+ * never holds up a transcription.
  *
  * <p><b>Model.</b> The "Cleanup model" keyboard setting names an installed chat model to use, or
- * is empty for Automatic: Gemma 4 E4B when it is installed and the phone meets its RAM
- * recommendation (or E2B is not there to fall back on), else E2B — the same rule the app-drawer
- * category sort uses ({@code CategorySortDialogs.resolveModel}). A named model that is no longer
- * installed falls back to Automatic the same way; with nothing installed every segment is typed
- * as heard and the log says {@code fallback:no_model}. Resolution happens in {@link #warm}, off
- * the main thread, because the model store reads files.
+ * is empty for Automatic: Gemma 4 E2B (the standard file) when it is installed, else E4B. The
+ * 2026-09-27 benchmark on pong settled it: E2B cleans a 111 s dictation in ~10 s and keeps the
+ * speaker's words, E4B is three times slower for slightly better punctuation and refused a
+ * dictated instruction outright, so E4B stays an opt-in pick. A named model that is no longer
+ * installed falls back to Automatic; with nothing installed the session stays as heard and the
+ * log says {@code fallback:no_model}. Resolution happens in {@link #warm}, off the main thread,
+ * because the model store reads files.
  *
- * <p><b>Residency.</b> {@link #warm} loads the model as the microphone opens so the first
- * rewrite does not pay the ~12 s load, unless the runtime is loading or generating with another
- * model — then nothing is evicted and the first request autoloads (or is refused) on its own. A
- * refusal ({@code insufficient_memory}, the 409 {@code model_not_loaded} when autoload is off)
- * or a timeout disables polish for the rest of the session rather than paying it per phrase.
- * After the session the model is <em>left resident</em> for the runtime's ordinary idle unload:
- * dictation comes in bursts, and reloading whatever was there before (as the category sort
- * does, once, at the end of a minutes-long job) would thrash a 12 s load on every session.
+ * <p><b>Residency.</b> {@link #warm} loads the model as the microphone opens so the pass at the
+ * end does not pay the load, unless the runtime is loading or generating with another model —
+ * then nothing is evicted and the request autoloads (or is refused) on its own. After the session
+ * the model is <em>left resident</em> for the runtime's ordinary idle unload: dictation comes in
+ * bursts, and reloading whatever was there before would thrash a multi-second load on every
+ * session.
  */
 public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
 
     private static final String LOG_TAG = "VoiceTextPolisher";
 
     private final Context appContext;
+    /** {@link VoicePolishRules#LEVEL_LIGHT} or {@link VoicePolishRules#LEVEL_POLISHED}. */
+    @NonNull private final String level;
     /** Resolved in {@link #warm}; empty until then. */
     @NonNull private volatile String modelId = "";
-    /** Once set, every segment falls back with this reason and the runtime is not asked again. */
+    /** Once set, every request falls back with this reason and the runtime is not asked again. */
     @Nullable private volatile String unavailableReason;
 
-    public LocalTaiVoiceTextPolisher(@NonNull Context context) {
+    /** @param level the "Cleanup level" setting; anything unknown reads as Polished. */
+    public LocalTaiVoiceTextPolisher(@NonNull Context context, @Nullable String level) {
         this.appContext = context.getApplicationContext();
+        this.level = VoicePolishRules.normalizeLevel(level);
     }
 
     /**
@@ -70,16 +74,14 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
         Map<String, TaiModelSpec> installed = new TaiModelStore(context).getDownloadedReadableModels();
         TaiModelSpec e4b = installed.get(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT);
         TaiModelSpec e2b = installed.get(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
-        boolean e4bMeetsRam = e4b != null
-            && TaiDeviceCapabilities.detect(context).checkModelCapability(e4b).warning == null;
-        return resolveModelId(preferredId, installedChatModels(context), e4b, e2b, e4bMeetsRam);
+        return resolveModelId(preferredId, installedChatModels(context), e4b, e2b, false);
     }
 
     /**
      * The pure half of {@link #resolveModelId(Context)}: {@code preferredId} when it names a
-     * model in {@code installedChatModels}, else the automatic Gemma rule (E4B when the phone
-     * meets its RAM recommendation, or E2B is not there to fall back on; else E2B), or
-     * {@code null} when nothing is installed.
+     * model in {@code installedChatModels}, else the automatic Gemma rule (E2B when installed,
+     * else E4B), or {@code null} when nothing is installed. {@code e4bMeetsRam} no longer decides
+     * anything: E4B is only the fallback, and a phone short of RAM for it is told so by the load.
      */
     @Nullable
     public static String resolveModelId(@Nullable String preferredId, @NonNull Map<String, TaiModelSpec> installedChatModels,
@@ -88,7 +90,6 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
             TaiModelSpec preferred = installedChatModels.get(preferredId);
             if (preferred != null) return preferred.id;
         }
-        if (e4b != null && (e2b == null || e4bMeetsRam)) return e4b.id;
         if (e2b != null) return e2b.id;
         return e4b != null ? e4b.id : null;
     }
@@ -172,14 +173,19 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
         }
         try {
             JSONObject response = TaiManager.getInstance(appContext)
-                .openAiChatCompletions(request(model, text).toString(), timeoutMs);
+                .openAiChatCompletions(request(model, level, text).toString(), timeoutMs);
             VoiceInputSession.Failure failure = VoiceInputSession.Failure.of(response);
             if (failure != null) {
                 if (disablesForSession(failure.code)) unavailableReason = failure.code;
                 return Result.fallback(text, failure.code);
             }
-            String accepted = VoicePolishRules.accept(text, VoicePolishRules.contentOf(response));
-            return accepted == null ? Result.fallback(text, "unusable_output") : Result.polished(accepted);
+            String content = VoicePolishRules.contentOf(response);
+            String accepted = VoicePolishRules.accept(text, content);
+            if (accepted != null) return Result.polished(accepted);
+            // Kept apart in the log: a refusal or an answer is the model misbehaving, not an empty reply.
+            boolean guarded = content != null && !content.trim().isEmpty()
+                && VoicePolishRules.looksLikeRefusalOrAnswer(text, content);
+            return Result.fallback(text, guarded ? "refusal_or_answer" : "unusable_output");
         } catch (JSONException | RuntimeException e) {
             return Result.fallback(text, "exception");
         }
@@ -205,10 +211,10 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
     }
 
     @NonNull
-    static JSONObject request(@NonNull String model, @NonNull String text) throws JSONException {
+    static JSONObject request(@NonNull String model, @Nullable String level, @NonNull String text) throws JSONException {
         JSONObject system = new JSONObject();
         system.put("role", "system");
-        system.put("content", VoicePolishRules.INSTRUCTIONS);
+        system.put("content", VoicePolishRules.instructions(level, text));
         JSONObject message = new JSONObject();
         message.put("role", "user");
         message.put("content", VoicePolishRules.prompt(text));

@@ -549,6 +549,9 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 }
                 mPreferences.setInAppKeyboardVoiceSilenceTimeoutMs(silenceMs);
                 break;
+            case "keyboard_voice_polish_level":
+                mPreferences.setInAppKeyboardVoicePolishLevel(value);
+                break;
             default:
                 break;
         }
@@ -611,6 +614,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return String.valueOf(mPreferences.getInAppKeyboardVoicePauseMs());
             case "keyboard_voice_silence_timeout_ms":
                 return String.valueOf(mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs());
+            case "keyboard_voice_polish_level":
+                return mPreferences.getInAppKeyboardVoicePolishLevel();
             default:
                 return defValue;
         }

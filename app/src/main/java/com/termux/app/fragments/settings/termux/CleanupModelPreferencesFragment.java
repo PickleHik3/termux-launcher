@@ -27,8 +27,8 @@ import java.util.Set;
 
 /**
  * Keyboard → Voice input → Polish dictation → Cleanup model: which installed chat model rewrites
- * dictated text before it is typed. "Automatic" (the default, an empty stored id) picks Gemma 4
- * E4B when the phone meets its RAM recommendation or E2B is not installed, else E2B, the same rule
+ * dictated text once a session ends. "Automatic" (the default, an empty stored id) picks Gemma 4
+ * E2B when it is installed, else E4B, the same rule
  * {@link LocalTaiVoiceTextPolisher} falls back to; every other row is one installed chat model, in
  * the same shape {@link SpeechModelPreferencesFragment} lists speech models. No download dialog
  * here — models are downloaded from the TAI settings page, this screen only chooses among what is
@@ -155,10 +155,7 @@ public class CleanupModelPreferencesFragment extends MaterialPreferenceFragment 
         Map<String, TaiModelSpec> installed = new TaiModelStore(context).getDownloadedReadableModels();
         TaiModelSpec e4b = installed.get(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT);
         TaiModelSpec e2b = installed.get(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
-        if (e4b != null && (e2b == null
-                || TaiDeviceCapabilities.detect(context).checkModelCapability(e4b).warning == null)) return e4b;
-        if (e2b != null) return e2b;
-        return e4b;
+        return e2b != null ? e2b : e4b;
     }
 
     @NonNull

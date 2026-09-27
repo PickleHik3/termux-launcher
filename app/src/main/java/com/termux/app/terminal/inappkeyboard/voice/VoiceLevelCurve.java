@@ -15,6 +15,9 @@ final class VoiceLevelCurve {
     private static final double GAIN = 0.11512925464970229;
     /** Room noise measured on pong wanders 3–5 dB over the floor; speech starts at 9. */
     static final double ZERO_OVER_FLOOR_DB = 6.0;
+    /** The waveform's range over its held floor ({@link VoiceWaveformFloor}): quiet speech still shows. */
+    static final double WAVE_BOTTOM_DB = 3.0;
+    static final double WAVE_TOP_DB = 30.0;
 
     private VoiceLevelCurve() {
     }
@@ -31,5 +34,19 @@ final class VoiceLevelCurve {
         if (raw < 0.0) return 0f;
         if (raw > 1.0) return 1f;
         return (float) raw;
+    }
+
+    /**
+     * One bar of the scrolling waveform, in [0, 1]: linear in dB from {@link #WAVE_BOTTOM_DB} to
+     * {@link #WAVE_TOP_DB} over {@code floor} (the agreed range, "floor+3 to floor+30 dB"), so
+     * every 30 ms slice of a quiet voice still has a visible height. 0 without a usable floor.
+     */
+    static float waveLevel(float rms, float floor) {
+        if (rms <= 0f || floor <= 0f) return 0f;
+        double db = 20.0 * Math.log10(rms / (double) floor);
+        double level = (db - WAVE_BOTTOM_DB) / (WAVE_TOP_DB - WAVE_BOTTOM_DB);
+        if (level <= 0.0) return 0f;
+        if (level >= 1.0) return 1f;
+        return (float) level;
     }
 }
