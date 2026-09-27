@@ -16,6 +16,8 @@ import org.json.JSONObject;
 public final class TaiModelCatalog {
     /** The one Parakeet speech-to-text entry; the speech model picker's "Parakeet" engine. */
     public static final String PARAKEET_TDT_V3_ID = "parakeet-tdt-0.6b-v3";
+    /** The one speech-output entry: KittenTTS nano 0.8, the Model centre's "Voice output" row. */
+    public static final String KITTEN_TTS_NANO_ID = "kittentts-nano-0.8";
     private static final Map<String, CatalogEntry> BUILT_IN_ENTRIES = buildEntries();
     private static volatile Map<String, CatalogEntry> entries = BUILT_IN_ENTRIES;
     private TaiModelCatalog() {}
@@ -29,17 +31,31 @@ public final class TaiModelCatalog {
     @NonNull public static Map<String, CatalogEntry> entries() { return entries; }
     @Nullable public static CatalogEntry get(@Nullable String modelId) { return modelId == null ? null : entries.get(modelId); }
 
-    /** {@link #entries()} minus speech-to-text models — the chat catalog screen, the installed
-     *  chat-model list, and the default-assistant picker should never show a Whisper entry
-     *  alongside chat models. Speech models get their own "Speech-to-text" section instead. */
+    /** {@link #entries()} minus speech models (speech-to-text and speech output) — the chat
+     *  catalog screen, the installed chat-model list, and the default-assistant picker should never
+     *  show a Whisper or KittenTTS entry alongside chat models. Speech models get their own
+     *  sections on the Speech segment instead. */
     @NonNull
     public static Map<String, CatalogEntry> chatEntries() {
         LinkedHashMap<String, CatalogEntry> chat = new LinkedHashMap<>();
         for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
             if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
+            if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) continue;
             chat.put(entry.getKey(), entry.getValue());
         }
         return chat;
+    }
+
+    /** Speech-output catalog entries only (the Speech segment's "Voice output" section). */
+    @NonNull
+    public static Map<String, CatalogEntry> ttsEntries() {
+        LinkedHashMap<String, CatalogEntry> tts = new LinkedHashMap<>();
+        for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
+            if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) {
+                tts.put(entry.getKey(), entry.getValue());
+            }
+        }
+        return tts;
     }
 
     /** Speech-to-text catalog entries only (the TAI "Speech-to-text" settings section). */
@@ -245,6 +261,36 @@ public final class TaiModelCatalog {
             new CatalogEntry.Sidecar(
                 "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/resolve/541d1f99c6b0c3cd0b11a95167540bb8edefd82b/tokenizer.json",
                 "tokenizer.json", "bd321b096832a3f270bd3b2a88823957920f1a5c5ada71114a26ea729d0cbe91")));
+        // KittenTTS nano 0.8 speech output (litert-community/kitten-tts-nano-0.8, Apache-2.0),
+        // served by KittenTtsRuntime. The main artifact is the fp32 predictor graph; the prosody
+        // and vocoder graphs and voices.npz are sidecars from the same repo, and the GPL-free
+        // phonemizer (the Clear BSD OpenPhonemizer dictionary, the MIT DeepPhonemizer graph and its
+        // vocabulary) comes from litert-community/Matcha-TTS, which publishes it. fp32 because the
+        // model card deploys fp32. sizeBytes is the whole package (94,365,672 bytes), so the space
+        // check and the progress bar cover every file; sha256 is the predictor's. Sizes and hashes
+        // from the Hugging Face API (LFS sha256; g2p_meta.json is a plain git blob, hashed after
+        // download). See scripts/tts-eval/.
+        final String kittenRevision = "d4662d891f9bf54b3d93432610d0d296d229e026";
+        final String matchaRevision = "8d650e794583c0b0869c87027c2f3a7c293902cb";
+        entries.put(KITTEN_TTS_NANO_ID, kittenTtsAvailable(
+            KITTEN_TTS_NANO_ID, "KittenTTS Nano 0.8", "Voice output (English)",
+            "litert-community/kitten-tts-nano-0.8", kittenRevision,
+            KittenTtsRuntime.PREDICTOR_FILE, 94_365_672L,
+            "0ca50bbf3c2fa1ba2c779e3851a5d3c8e59dbb68790a6c392d03eff4fac49296",
+            "90 MB", "4GB+",
+            Arrays.asList(
+                hfSidecar("litert-community/kitten-tts-nano-0.8", kittenRevision, KittenTtsRuntime.PROSODY_FILE,
+                    "99b90a4ac4f564068d57eab9eff04534dba31d430c2c831a825c81c328324532"),
+                hfSidecar("litert-community/kitten-tts-nano-0.8", kittenRevision, KittenTtsRuntime.VOCODER_FILE,
+                    "87afb43780fb78434418a143de100740e68d804aa8f45adfdeb0370c85ec4eaa"),
+                hfSidecar("litert-community/kitten-tts-nano-0.8", kittenRevision, KittenTtsRuntime.VOICES_FILE,
+                    "8aa7cee235abb0739cb51e6559685f65a4dacd95568833d05699b1633f519b3f"),
+                hfSidecar("litert-community/Matcha-TTS", matchaRevision, KittenTtsRuntime.PHONEMIZER_FILE,
+                    "6e4b481f6874dfabc32ce73bf6f0ea1ba6ab5986ee6f76a27779364be8a53c73"),
+                hfSidecar("litert-community/Matcha-TTS", matchaRevision, KittenTtsRuntime.DICTIONARY_FILE,
+                    "5b3493a8cd4d20b72c7b91415afaf3f32335ebd81f349698e1cedc898c59f979"),
+                hfSidecar("litert-community/Matcha-TTS", matchaRevision, KittenTtsRuntime.PHONEMIZER_META_FILE,
+                    "7b87bfeaaa072be236e8491d771b0cb97cc92c3e5d83e3558fff8849868810f5"))));
 
         return Collections.unmodifiableMap(entries);
     }
@@ -293,6 +339,26 @@ public final class TaiModelCatalog {
             128, 128, 128, ramGb(ramTier), sha256, capabilities, null, null,
             "speech_to_text", "speech_to_text", tags("Speech", "Multilingual"), sizeEstimate, ramTier, false, true, "",
             sidecars, windows);
+    }
+
+    /** A speech-output entry: the predictor graph as the artifact, the rest of the package as
+     *  sidecars, {@link KittenTtsRuntime#ARCHITECTURE} so the router picks that engine. No window
+     *  variants: speech output has no window to choose. */
+    private static CatalogEntry kittenTtsAvailable(String id, String name, String role, String repo, String revision,
+                                                   String artifactPath, long packageSize, String sha256,
+                                                   String sizeEstimate, String ramTier,
+                                                   List<CatalogEntry.Sidecar> sidecars) {
+        LinkedHashSet<String> capabilities = setOf(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH);
+        return new CatalogEntry(id, name, role, repo, revision, artifactPath, "Apache-2.0", packageSize,
+            false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, KittenTtsRuntime.ARCHITECTURE, "fp32",
+            128, 128, 128, ramGb(ramTier), sha256, capabilities, null, null,
+            "text_to_speech", "text_to_speech", tags("Voice"), sizeEstimate, ramTier, false, true, "",
+            sidecars, null);
+    }
+
+    /** A sidecar file from a Hugging Face repo at a pinned revision. */
+    private static CatalogEntry.Sidecar hfSidecar(String repo, String revision, String file, String sha256) {
+        return new CatalogEntry.Sidecar("https://huggingface.co/" + repo + "/resolve/" + revision + "/" + file, file, sha256);
     }
 
     /** {@code url/localName/sha256} for the {@code tokenizer.json} sidecar of the matching
@@ -344,6 +410,7 @@ public final class TaiModelCatalog {
         if (capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) tags.add("Text");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) tags.add("Embeddings");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) tags.add("Speech");
+        if (capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) tags.add("Voice");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)) tags.add("Vision");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) tags.add("Audio");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_CODE)) tags.add("Code");

@@ -112,7 +112,7 @@ You do not need these routes for normal use, but they help when configuring anot
 | POST | `/v1/chat/completions` | Chat Completions text, streaming, media, and tools |
 | POST | `/v1/completions` | Legacy text completions |
 | POST | `/v1/embeddings` | Embeddings for models advertising `text_embeddings` |
-| POST | `/v1/audio/speech` | Returns an unsupported-operation error; speech output is not available |
+| POST | `/v1/audio/speech` | Speech output with the voice model: `input`, `voice`, `speed`, `response_format` `wav` or `pcm` |
 
 OpenAI streaming uses server-sent events and ends with `data: [DONE]`.
 

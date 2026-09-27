@@ -16,8 +16,8 @@ import static org.junit.Assert.assertTrue;
 
 public class TaiModelCatalogTest {
 
-    /** D1 of the model-centre design: only the two Gemma 4 chat models and the speech models are
-     *  built in. Everything else still runs when imported or added by link. */
+    /** D1 of the model-centre design: only the two Gemma 4 chat models, the speech models and the
+     *  voice model are built in. Everything else still runs when imported or added by link. */
     @Test
     public void builtInCatalog_isGemmaPlusSpeechOnly() {
         Map<String, TaiModelCatalog.CatalogEntry> entries = TaiModelCatalog.entries();
@@ -29,14 +29,15 @@ public class TaiModelCatalogTest {
             if (TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) mnnCount++;
         }
 
-        assertEquals(7, entries.size());
-        assertEquals(7, new HashSet<>(entries.keySet()).size());
-        assertEquals(7, liteRtCount);
+        assertEquals(8, entries.size());
+        assertEquals(8, new HashSet<>(entries.keySet()).size());
+        assertEquals(8, liteRtCount);
         assertEquals(0, mnnCount);
         assertTrue(entries.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
         assertTrue(entries.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
         assertEquals(2, TaiModelCatalog.chatEntries().size());
         assertEquals(5, TaiModelCatalog.speechEntries().size());
+        assertEquals(1, TaiModelCatalog.ttsEntries().size());
         assertNull(TaiModelCatalog.get("qwen2.5-coder-1.5b-instruct-mnn"));
         assertNull(TaiModelCatalog.get("deepseek-r1-distill-qwen-1.5b-litert-lm"));
         assertNull(TaiModelCatalog.get(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M));
@@ -220,7 +221,38 @@ public class TaiModelCatalogTest {
         for (TaiModelCatalog.CatalogEntry entry : speech.values()) {
             assertTrue(entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
         }
-        assertEquals(TaiModelCatalog.entries().size() - speech.size(), chat.size());
+        assertEquals(TaiModelCatalog.entries().size() - speech.size() - TaiModelCatalog.ttsEntries().size(), chat.size());
+    }
+
+    @Test
+    public void kittenTts_isOneVoiceEntryWithTheWholePackagePinnedAndHashed() {
+        TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(TaiModelCatalog.KITTEN_TTS_NANO_ID);
+        assertNotNull(entry);
+        assertEquals("litert-community/kitten-tts-nano-0.8", entry.repositoryId);
+        assertEquals("d4662d891f9bf54b3d93432610d0d296d229e026", entry.revision);
+        assertEquals(KittenTtsRuntime.PREDICTOR_FILE, entry.artifactPath);
+        assertEquals("0ca50bbf3c2fa1ba2c779e3851a5d3c8e59dbb68790a6c392d03eff4fac49296", entry.sha256);
+        assertEquals(KittenTtsRuntime.ARCHITECTURE, entry.architecture);
+        assertEquals("Apache-2.0", entry.license);
+        // The whole package, so the space check and the progress bar cover every file.
+        assertEquals(94_365_672L, entry.sizeBytes);
+        assertTrue(entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH));
+        assertFalse(entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
+        assertFalse(entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+        assertTrue(entry.speechWindows.isEmpty());
+        assertEquals(KittenTtsRuntime.SIDECAR_FILES.length, entry.sidecars.size());
+        for (int i = 0; i < entry.sidecars.size(); i++) {
+            TaiModelCatalog.CatalogEntry.Sidecar sidecar = entry.sidecars.get(i);
+            assertEquals(KittenTtsRuntime.SIDECAR_FILES[i], sidecar.localName);
+            assertNotNull(sidecar.localName, sidecar.sha256);
+            assertEquals(sidecar.localName, 64, sidecar.sha256.length());
+            assertTrue(sidecar.url, sidecar.url.startsWith("https://huggingface.co/litert-community/"));
+            assertFalse(sidecar.url, sidecar.url.contains("/resolve/main/"));
+            assertTrue(sidecar.url, sidecar.url.endsWith("/" + sidecar.localName));
+        }
+        assertFalse(TaiModelCatalog.chatEntries().containsKey(entry.modelId));
+        assertFalse(TaiModelCatalog.speechEntries().containsKey(entry.modelId));
+        assertTrue(TaiModelCatalog.ttsEntries().containsKey(entry.modelId));
     }
 
     @Test

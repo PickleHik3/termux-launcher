@@ -646,7 +646,12 @@ public class LauncherCtlApiServer {
             } else if ("POST".equals(request.method) && "/v1/audio/transcriptions".equals(request.path)) {
                 return audioTranscriptions(context, request);
             } else if ("POST".equals(request.method) && "/v1/audio/speech".equals(request.path)) {
-                return jsonResponse(TaiManager.getInstance(context).openAiAudioSpeech(request.body));
+                String body = request.body == null || request.body.trim().isEmpty() ? "{}" : request.body;
+                return audioSpeech(context, body, TaiManager.apiSpeechCharacterLimit());
+            } else if ("POST".equals(request.method) && "/v1/ai/speak".equals(request.path)) {
+                return aiSpeak(context, request);
+            } else if ("POST".equals(request.method) && "/v1/ai/speak/stop".equals(request.path)) {
+                return maybeTextResponse(request, "speak-stop", TaiManager.getInstance(context).stopSpeaking());
             }
 
             JSONObject notFound = jsonError("not_found", "Unknown endpoint");
@@ -689,6 +694,142 @@ public class LauncherCtlApiServer {
         JSONObject error = jsonError("model_not_found", "Model '" + modelId + "' does not exist");
         error.put("_statusCode", 404);
         return error;
+    }
+
+    /**
+     * OpenAI POST /v1/audio/speech: {@code {model, input, voice, speed, response_format}} in, audio
+     * out. {@code wav} (the default here; OpenAI's mp3/opus/aac/flac are refused rather than
+     * answered with something else) is sent once synthesis is done, since a RIFF header carries the
+     * length; {@code pcm} (24 kHz, 16-bit signed little-endian mono, OpenAI's shape) is
+     * streamed sentence by sentence, so a client can start playing after the first sentence. The
+     * request is checked before anything is committed to, and the model loaded first for pcm, so a
+     * refusal or a model that cannot load still answers with its own status.
+     */
+    private HttpResponse audioSpeech(Context context, String body, int maxChars) throws JSONException {
+        TaiManager manager = TaiManager.getInstance(context);
+        JSONObject refusal = manager.checkSpeechRequest(body, maxChars);
+        if (refusal != null) return jsonResponse(refusal);
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Cache-Control", "no-cache");
+        headers.put("X-Tai-Sample-Rate", "24000");
+        if ("pcm".equals(TaiManager.speechResponseFormat(body))) {
+            JSONObject warm = manager.ttsWarm(body);
+            if (isSpeechFailure(warm)) return jsonResponse(speechFailure(warm));
+            headers.put("X-Accel-Buffering", "no");
+            return new HttpResponse(200, "audio/pcm", output -> {
+                try {
+                    manager.synthesizeSpeech(body, maxChars, (pcm, sampleRate) -> {
+                        output.write(pcm);
+                        output.flush();
+                    });
+                } catch (JSONException e) {
+                    throw new IOException(e.getMessage(), e);
+                }
+            }, headers);
+        }
+        // WAV needs its length up front, so the sentences are collected first — into a file under
+        // cacheDir/tai-ipc rather than memory, since this is the launcher process and a long text
+        // is minutes of audio — and the file then streams out behind its header.
+        File dir = new File(context.getCacheDir(), TaiManager.STT_IPC_DIR);
+        if (!dir.isDirectory() && !dir.mkdirs()) {
+            return jsonResponse(statusError(500, "tts_output_failed", "Could not create " + dir));
+        }
+        File collected = new File(dir, "tts-out-" + UUID.randomUUID() + ".pcm");
+        final int[] rate = {24000};
+        JSONObject result;
+        try (FileOutputStream sink = new FileOutputStream(collected)) {
+            result = manager.synthesizeSpeech(body, maxChars, (bytes, sampleRate) -> {
+                rate[0] = sampleRate;
+                sink.write(bytes);
+            });
+        } catch (IOException e) {
+            deleteQuietly(collected);
+            return jsonResponse(statusError(500, "tts_output_failed", "Speech could not be collected: " + e.getMessage()));
+        } catch (JSONException | RuntimeException e) {
+            deleteQuietly(collected);
+            throw e;
+        }
+        if (isSpeechFailure(result)) {
+            deleteQuietly(collected);
+            return jsonResponse(speechFailure(result));
+        }
+        long dataBytes = collected.length();
+        headers.put("Content-Length", Long.toString(TaiManager.wavHeader(0, rate[0]).length + dataBytes));
+        return new HttpResponse(200, "audio/wav", output -> {
+            try (InputStream in = new java.io.FileInputStream(collected)) {
+                output.write(TaiManager.wavHeader((int) Math.min(Integer.MAX_VALUE, dataBytes), rate[0]));
+                byte[] buffer = new byte[64 * 1024];
+                int read;
+                while ((read = in.read(buffer)) != -1) output.write(buffer, 0, read);
+            } finally {
+                deleteQuietly(collected);
+            }
+        }, headers);
+    }
+
+    /**
+     * {@code tai speak}: POST /v1/ai/speak plays the text on the phone and answers when it has been
+     * heard. The body is JSON ({@code input}, {@code voice}, {@code speed}, {@code model}) or plain
+     * text with those as query parameters, which is what the script sends so it never has to
+     * escape the text into JSON. With {@code response_format} ({@code ?format=wav}) it returns the
+     * audio instead of playing it, the same as /v1/audio/speech with {@code tai speak}'s longer
+     * text limit: that is {@code tai speak --out}.
+     */
+    private HttpResponse aiSpeak(Context context, HttpRequest request) throws JSONException {
+        JSONObject body = speakBody(request);
+        if (body.has("response_format")) {
+            return audioSpeech(context, body.toString(), TaiManager.speakCharacterLimit());
+        }
+        JSONObject result = TaiManager.getInstance(context).speak(body.toString());
+        if (isSpeechFailure(result) && "text".equalsIgnoreCase(request.headers.get("x-tai-output"))) {
+            JSONObject nested = result.optJSONObject("error");
+            if (nested != null) {
+                JSONObject flat = new JSONObject();
+                flat.put("ok", false);
+                flat.put("error", nested.optString("code", "tai_error"));
+                flat.put("message", nested.optString("message", ""));
+                flat.put("_statusCode", result.optInt("_statusCode", 500));
+                return maybeTextResponse(request, "speak", flat);
+            }
+        }
+        return maybeTextResponse(request, "speak", isSpeechFailure(result) ? speechFailure(result) : result);
+    }
+
+    /** The speak request from a JSON body, or from a text body plus {@code voice/speed/model/format} query parameters. */
+    private JSONObject speakBody(HttpRequest request) throws JSONException {
+        String contentType = request.headers.get("content-type");
+        String raw = request.body == null ? "" : request.body;
+        boolean json = contentType == null ? raw.trim().startsWith("{") : contentType.toLowerCase(Locale.ROOT).contains("json");
+        JSONObject body = json && !raw.trim().isEmpty() ? new JSONObject(raw) : new JSONObject();
+        if (!json) body.put("input", raw);
+        Map<String, String> query = queryParameters(request.query);
+        for (String key : new String[] {"voice", "model"}) {
+            String value = query.get(key);
+            if (value != null && !value.trim().isEmpty()) body.put(key, value.trim());
+        }
+        String speed = query.get("speed");
+        if (speed != null && !speed.trim().isEmpty()) {
+            try {
+                body.put("speed", Double.parseDouble(speed.trim()));
+            } catch (NumberFormatException e) {
+                body.put("speed", speed.trim());
+            }
+        }
+        String format = query.get("format");
+        if (format == null) format = query.get("response_format");
+        if (format != null && !format.trim().isEmpty()) body.put("response_format", format.trim());
+        return body;
+    }
+
+    /** A speech answer that is a refusal or a failure rather than a summary. */
+    private static boolean isSpeechFailure(JSONObject result) {
+        return result.has("error") && !result.optBoolean("ok", false);
+    }
+
+    /** A failure with a status: the runtime client's own errors carry none, and must not go out as 200. */
+    private static JSONObject speechFailure(JSONObject result) throws JSONException {
+        if (!result.has("_statusCode")) result.put("_statusCode", 500);
+        return result;
     }
 
     /**
@@ -1640,6 +1781,8 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/completions", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/embeddings", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/audio/speech", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/v1/ai/speak", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/v1/ai/speak/stop", new SimpleRateLimiter(120, 60_000));
         // Voice input sends one request per spoken phrase; a fast talker is a few per second.
         rateLimiters.put("POST:/v1/audio/transcriptions", new SimpleRateLimiter(240, 60_000));
         rateLimiters.put("GET:/api/version", new SimpleRateLimiter(120, 60_000));
@@ -1746,7 +1889,7 @@ public class LauncherCtlApiServer {
         supportedEndpoints.put("/api/embeddings");
         data.put("supportedEndpoints", supportedEndpoints);
         data.put("embeddingsNote", "Embeddings support is model-capability dependent; check /v1/models _capabilities for text_embeddings.");
-        data.put("audioOutputNote", "Audio output returns an explicit unsupported_audio_output error until a local runner exposes generated audio.");
+        data.put("audioOutputNote", "/v1/audio/speech speaks with the installed voice model (KittenTTS nano, on the CPU in :tai_runtime): input (up to 4096 characters), voice (Bruno, Hugo, Jasper, Rosie or an OpenAI voice name), speed (0.5-2.0), response_format wav (whole file) or pcm (24 kHz 16-bit mono, streamed per sentence).");
         data.put("audioInputNote", "/v1/audio/transcriptions runs the installed Whisper ACFT speech model on the CPU; multipart file (WAV or raw PCM16 16 kHz mono), model, language, prompt, response_format json|text.");
         data.put("modelFormatNote", "TAI supports LiteRT-LM and MNN model packages only; GGUF/raw weights are not supported by this APK.");
         if (includeToken) {
@@ -1818,6 +1961,8 @@ public class LauncherCtlApiServer {
             "  tai cancel\n" +
             "  tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\n" +
             "  tai transcribe <file.wav> [--model id] [--language xx] [--prompt \"words\"]\n" +
+            "  tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text]\n" +
+            "  tai speak --stop\n" +
             "  tai doctor\n" +
             "\n" +
             "TAI is authenticated through ~/.launcherctl and runs native AI in the isolated :tai_runtime process.\n" +
@@ -1837,6 +1982,10 @@ public class LauncherCtlApiServer {
             "gives Whisper a vocabulary line to bias towards (Parakeet has no prompt); --language forces\n" +
             "an ISO 639-1 code on multilingual Whisper models (the -en models always decode English,\n" +
             "Parakeet detects the language itself).\n" +
+            "tai speak reads text aloud on the phone with the voice model (Model centre > Speech > Voice\n" +
+            "output): the text from the command line or stdin, the voice and speed from the options or\n" +
+            "TAI settings. Speech starts after the first sentence; Ctrl-C or tai speak --stop stops it.\n" +
+            "--out file.wav saves the audio instead of playing it.\n" +
             "OpenAI-compatible endpoints (default bind mode is localhost):\n" +
             "  /v1/models\n" +
             "  /v1/chat/completions\n" +
@@ -1855,7 +2004,7 @@ public class LauncherCtlApiServer {
             "Security notes:\n" +
             "  LAN mode (opt-in via settings) exposes the API to your local network and always requires the token.\n" +
             "  /v1/embeddings is model-capability dependent. Not all models support embeddings.\n" +
-            "  /v1/audio/speech returns unsupported_audio_output until a local runner exposes generated audio.\n" +
+            "  /v1/audio/speech speaks with the installed voice model: input, voice, speed, response_format wav|pcm.\n" +
             "  Check /v1/models for capability metadata (for example, _backend and _capabilities per model).\n" +
             "\n" +
             "Use tai --json <command> for raw API JSON.\n" +
@@ -2084,6 +2233,60 @@ public class LauncherCtlApiServer {
             "    [ -z \"$prompt\" ] || set -- \"$@\" -F \"prompt=$prompt\"\n" +
             "    if [ \"$OUTPUT_MODE\" = \"text\" ]; then set -- \"$@\" -F \"response_format=text\" -H \"X-TAI-Output: text\"; fi\n" +
             "    curl $CURL_COMMON -X POST -H \"Authorization: Bearer $TOKEN\" \"$@\" \"$BASE/v1/audio/transcriptions\"\n" +
+            "    ;;\n" +
+            "  speak)\n" +
+            "    voice=\"\"\n" +
+            "    speed=\"\"\n" +
+            "    model=\"\"\n" +
+            "    out=\"\"\n" +
+            "    usage_speak() { echo \"usage: tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text...]  (reads stdin when no text is given; tai speak --stop stops)\" >&2; exit 2; }\n" +
+            "    while [ \"$#\" -gt 0 ]; do\n" +
+            "      case \"$1\" in\n" +
+            "        --voice) shift; [ \"$#\" -gt 0 ] || usage_speak; voice=\"$1\" ;;\n" +
+            "        --speed) shift; [ \"$#\" -gt 0 ] || usage_speak; speed=\"$1\" ;;\n" +
+            "        --model) shift; [ \"$#\" -gt 0 ] || usage_speak; model=\"$1\" ;;\n" +
+            "        --out|-o) shift; [ \"$#\" -gt 0 ] || usage_speak; out=\"$1\" ;;\n" +
+            "        --stop) post_json /v1/ai/speak/stop '{}'; exit $? ;;\n" +
+            "        --) shift; break ;;\n" +
+            "        -*) usage_speak ;;\n" +
+            "        *) break ;;\n" +
+            "      esac\n" +
+            "      shift\n" +
+            "    done\n" +
+            "    case \"$voice$model\" in *[!A-Za-z0-9._-]*) echo \"tai speak: voice and model are plain names\" >&2; exit 2 ;; esac\n" +
+            "    case \"$speed\" in *[!0-9.]*) echo \"tai speak: --speed takes a number such as 1.2\" >&2; exit 2 ;; esac\n" +
+            "    # The text goes up as a plain-text body, so it never has to be escaped into JSON; the options\n" +
+            "    # ride as query parameters.\n" +
+            "    query=\"\"\n" +
+            "    add_query() { if [ -z \"$query\" ]; then query=\"?$1\"; else query=\"$query&$1\"; fi; }\n" +
+            "    [ -z \"$voice\" ] || add_query \"voice=$voice\"\n" +
+            "    [ -z \"$speed\" ] || add_query \"speed=$speed\"\n" +
+            "    [ -z \"$model\" ] || add_query \"model=$model\"\n" +
+            "    [ -z \"$out\" ] || add_query \"format=wav\"\n" +
+            "    tmp=$(mktemp \"${TMPDIR:-$HOME}/tai-speak.XXXXXX\") || exit 1\n" +
+            "    if [ \"$#\" -gt 0 ]; then printf '%s' \"$*\" > \"$tmp\"; else cat > \"$tmp\"; fi\n" +
+            "    [ -s \"$tmp\" ] || { rm -f \"$tmp\"; usage_speak; }\n" +
+            "    CURL_SPEAK=\"--fail-with-body -sS --connect-timeout 2 --max-time 3600\"\n" +
+            "    if [ -n \"$out\" ]; then\n" +
+            "      if curl $CURL_SPEAK -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: text/plain; charset=utf-8\" --data-binary \"@$tmp\" -o \"$out.part\" \"$BASE/v1/ai/speak$query\"; then\n" +
+            "        mv -f \"$out.part\" \"$out\"\n" +
+            "        rm -f \"$tmp\"\n" +
+            "        [ \"$OUTPUT_MODE\" = \"json\" ] && printf '{\"ok\":true,\"file\":\"%s\"}\\n' \"$out\" || echo \"Saved $out\"\n" +
+            "        exit 0\n" +
+            "      fi\n" +
+            "      rc=$?\n" +
+            "      cat \"$out.part\" >&2 2>/dev/null || true\n" +
+            "      echo >&2\n" +
+            "      rm -f \"$out.part\" \"$tmp\"\n" +
+            "      exit \"$rc\"\n" +
+            "    fi\n" +
+            "    # Ctrl-C stops the voice too, not just this command.\n" +
+            "    trap 'post_json /v1/ai/speak/stop \"{}\" >/dev/null 2>&1; rm -f \"$tmp\"; exit 130' INT TERM\n" +
+            "    if [ \"$OUTPUT_MODE\" = \"text\" ]; then set -- -H \"X-TAI-Output: text\"; else set --; fi\n" +
+            "    if curl $CURL_SPEAK -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: text/plain; charset=utf-8\" \"$@\" --data-binary \"@$tmp\" \"$BASE/v1/ai/speak$query\"; then rc=0; else rc=$?; fi\n" +
+            "    trap - INT TERM\n" +
+            "    rm -f \"$tmp\"\n" +
+            "    exit \"$rc\"\n" +
             "    ;;\n" +
             "  doctor)\n" +
             "    get_json /v1/ai/runtime\n" +

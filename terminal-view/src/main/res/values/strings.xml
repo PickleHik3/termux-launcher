@@ -2,6 +2,8 @@
   <string name="paste_text">Paste</string>
   <string name="copy_text">Copy</string>
   <string name="text_selection_more">More…</string>
+  <string name="text_selection_read_aloud">Read aloud</string>
+  <string name="text_selection_stop_reading">Stop reading</string>
   <string name="copied_to_clipboard_text">Screen copied to clipboard</string>
   <string name="a11y_termux_menu_text">More…</string>
   <string name="a11y_copy_screen_text">Copy Screen</string>

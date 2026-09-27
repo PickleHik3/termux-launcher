@@ -125,6 +125,56 @@ project.
   been granted. Open-Meteo's own server software is AGPLv3; Termux Launcher calls the public API and
   distributes none of it.
 
+## Speech output model (downloaded on request)
+
+Nothing below ships inside the APK. The files are downloaded from Hugging Face only when the user
+installs the voice model in **Settings > TAI > Model centre > Speech > Voice output**, and they run
+on the phone in the app's own runtime process.
+
+- **[KittenTTS nano 0.8](https://huggingface.co/litert-community/kitten-tts-nano-0.8)** —
+  Apache-2.0 — Copyright KittenML (KittenTTS). The LiteRT conversion (`kitten_predictor.tflite`,
+  `kitten_prosody.tflite`, `kitten_vocoder.tflite`, `voices.npz`) is published by
+  litert-community. The on-device pipeline follows Google's Apache-2.0 LiteRT sample
+  (`google-ai-edge/litert-samples`, `text_to_speech_streaming`).
+- **OpenPhonemizer pronunciation dictionary** (`g2p_dict.txt.gz`, as published in
+  [litert-community/Matcha-TTS](https://huggingface.co/litert-community/Matcha-TTS)) — The Clear
+  BSD License — Copyright (c) 2024 mrfakename, NeuralVox, OpenPhonemizer Contributors. The Clear BSD
+  License grants **no patent rights**; see its full text below.
+- **[DeepPhonemizer](https://github.com/as-ideas/DeepPhonemizer)** (`dp_g2p_matcha_fp16.tflite`
+  and `g2p_meta.json`, OpenPhonemizer's checkpoint converted for LiteRT) — MIT — Copyright (c) 2021
+  Axel Springer News Media & Tech GmbH & Co. KG - Ideas Engineering. The MIT terms are those of the
+  nlohmann/json notice below with this copyright line.
+
+No GPL phonemizer (espeak-ng) is used or downloaded.
+
+## The Clear BSD License, for the OpenPhonemizer dictionary
+
+Copyright (c) 2024 mrfakename, NeuralVox, OpenPhonemizer Contributors
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification, are permitted
+(subject to the limitations in the disclaimer below) provided that the following conditions are
+met:
+
+- Redistributions of source code must retain the above copyright notice, this list of conditions
+  and the following disclaimer.
+- Redistributions in binary form must reproduce the above copyright notice, this list of
+  conditions and the following disclaimer in the documentation and/or other materials provided
+  with the distribution.
+- Neither the name of the copyright holder nor the names of its contributors may be used to
+  endorse or promote products derived from this software without specific prior written
+  permission.
+
+NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE GRANTED BY THIS LICENSE. THIS
+SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF
+THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
 ## MIT notice for nlohmann/json
 
 Copyright © 2013-2022 Niels Lohmann

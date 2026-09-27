@@ -51,6 +51,9 @@ public final class TaiSettings {
     public static final String KEY_STT_WINDOW_SECONDS = "tai_stt_window_seconds";
     public static final String KEY_STT_IDLE_UNLOAD_MINUTES = "tai_stt_idle_unload_minutes";
     public static final String KEY_STT_PENDING_DOWNLOAD = "tai_stt_pending_download";
+    /** Speech output: the voice (one of {@link TaiTtsVoices#VOICES}) and the speed (a float, 1.0 = the voice's own pace). */
+    public static final String KEY_TTS_VOICE = "tai_tts_voice";
+    public static final String KEY_TTS_SPEED = "tai_tts_speed";
     /** How many model downloads run side by side (D3): 1 to 3, default 2. */
     public static final String KEY_DOWNLOAD_PARALLEL = "tai_download_parallel";
     public static final int DEFAULT_STT_WINDOW_SECONDS = 10;
@@ -304,6 +307,27 @@ public final class TaiSettings {
 
     public void setSttIdleUnloadMinutes(int minutes) {
         preferences.edit().putInt(KEY_STT_IDLE_UNLOAD_MINUTES, Math.max(0, minutes)).apply();
+    }
+
+    /** The voice speech output uses when a request names none; Jasper until the user picks. */
+    @NonNull
+    public String getTtsVoice() {
+        String stored = TaiTtsVoices.canonical(preferences.getString(KEY_TTS_VOICE, TaiTtsVoices.DEFAULT_VOICE));
+        return stored == null ? TaiTtsVoices.DEFAULT_VOICE : stored;
+    }
+
+    public void setTtsVoice(@NonNull String voice) {
+        String canonical = TaiTtsVoices.canonical(voice);
+        preferences.edit().putString(KEY_TTS_VOICE, canonical == null ? TaiTtsVoices.DEFAULT_VOICE : canonical).apply();
+    }
+
+    /** The speed speech output uses when a request names none, clamped to what the model says clearly. */
+    public float getTtsSpeed() {
+        return TaiTtsVoices.clampSpeed(preferences.getFloat(KEY_TTS_SPEED, TaiTtsVoices.DEFAULT_SPEED));
+    }
+
+    public void setTtsSpeed(float speed) {
+        preferences.edit().putFloat(KEY_TTS_SPEED, TaiTtsVoices.clampSpeed(speed)).apply();
     }
 
     @NonNull
@@ -738,7 +762,7 @@ public final class TaiSettings {
         supportedEndpoints.put("/v1/embeddings");
         supportedEndpoints.put("/v1/audio/speech");
         json.put("supportedEndpoints", supportedEndpoints);
-        json.put("audioOutputNote", "Audio output returns an explicit unsupported_audio_output error until a local runner exposes generated audio.");
+        json.put("audioOutputNote", "/v1/audio/speech speaks with the installed voice model (KittenTTS): input, voice (Bruno, Hugo, Jasper, Rosie), speed, response_format wav|pcm.");
         json.put("embeddingsNote", "Embeddings support is model-capability dependent.");
         json.put("autoGenerationDefaultState", "nullable generation overrides use model profile or MNN config defaults in the selected runtime");
         return json;

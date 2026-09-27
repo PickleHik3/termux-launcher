@@ -45,12 +45,34 @@ public final class TaiCliFormatter {
                     return formatCancel(data);
                 case "launcher-status":
                     return formatLauncherStatus(data);
+                case "speak":
+                    return formatSpeak(data);
+                case "speak-stop":
+                    return data.optBoolean("stopped", false) ? "Stopped.\n" : "Nothing was speaking.\n";
                 default:
                     return formatGeneric(data);
             }
         } catch (Exception e) {
             return data.toString() + "\n";
         }
+    }
+
+    /** "Spoke 3 sentences (4.2 s) as Jasper; first sound after 0.9 s." or "Stopped after 1 sentence." */
+    @NonNull
+    private static String formatSpeak(@NonNull JSONObject data) {
+        int sentences = data.optInt("sentences", 0);
+        String counted = sentences + (sentences == 1 ? " sentence" : " sentences");
+        if (data.optBoolean("stopped", false) || data.optBoolean("cancelled", false)) {
+            return "Stopped after " + counted + ".\n";
+        }
+        StringBuilder out = new StringBuilder();
+        out.append("Spoke ").append(counted)
+            .append(String.format(Locale.US, " (%.1f s)", data.optDouble("audioSeconds", 0.0)));
+        String voice = data.optString("voice", "");
+        if (!voice.isEmpty()) out.append(" as ").append(voice);
+        long firstSound = data.optLong("firstSoundMs", -1L);
+        if (firstSound >= 0L) out.append(String.format(Locale.US, "; first sound after %.1f s", firstSound / 1000.0));
+        return out.append(".\n").toString();
     }
 
     @NonNull

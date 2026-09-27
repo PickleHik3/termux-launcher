@@ -60,6 +60,23 @@ public interface TerminalViewClient {
         return false;
     }
 
+    /**
+     * Whether the selection toolbar offers "Read aloud". The view knows nothing about speech; the
+     * host says yes when it has a voice to read with.
+     */
+    default boolean isReadAloudAvailable() {
+        return false;
+    }
+
+    /** Whether the host is reading aloud now, so the toolbar offers "Stop reading" in its place. */
+    default boolean isReadingAloud() {
+        return false;
+    }
+
+    /** "Read aloud" was tapped on a selection: read {@code text}, or stop if already reading. */
+    default void onReadAloud(String text) {
+    }
+
     boolean readControlKey();
 
     boolean readAltKey();

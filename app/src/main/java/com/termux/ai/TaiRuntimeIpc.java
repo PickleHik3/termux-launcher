@@ -33,6 +33,15 @@ final class TaiRuntimeIpc {
     /** Speech-to-text; both run on the service's own STT lane, never behind a chat generation. */
     static final String OP_TRANSCRIBE = "transcribe";
     static final String OP_STT_WARM = "sttWarm";
+    /**
+     * Speech output. Speak, synthesize (a stream: one event per sentence file, then the summary)
+     * and warm run on the service's own TTS lane; stop runs on the control lane so it reaches a
+     * sentence in progress instead of queuing behind it.
+     */
+    static final String OP_TTS_SPEAK = "ttsSpeak";
+    static final String OP_TTS_SYNTHESIZE = "ttsSynthesize";
+    static final String OP_TTS_WARM = "ttsWarm";
+    static final String OP_TTS_STOP = "ttsStop";
 
     private TaiRuntimeIpc() {
     }

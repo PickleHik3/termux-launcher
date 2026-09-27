@@ -14,7 +14,10 @@ import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiSettings;
+import com.termux.ai.TaiReadAloud;
 import com.termux.ai.TaiSpeechModels;
+import com.termux.ai.TaiTtsModels;
+import com.termux.ai.TaiTtsVoices;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.notice.AppNotice;
@@ -28,7 +31,8 @@ import java.util.Set;
 /**
  * Keyboard → Voice input → Speech model, the picker (D5): every installed speech-to-text model as
  * a selectable card (engine · size · window, "In use" on the chosen one), a "Change window" on the
- * models that have another window, and the idle-unload option. Downloading and deleting live in
+ * models that have another window, and the idle-unload option. Below it, Voice output: the voice
+ * and speed speech output uses when a request names none, and a sample to hear them. Downloading and deleting live in
  * the Model centre; "Get more in Model centre" opens it on its Speech segment, and so does the
  * empty state's hint. The state itself lives in {@link TaiSpeechModels}; this screen shows it and
  * asks for changes. Cards are keyed by model id and updated in place.
@@ -44,6 +48,15 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
     private static final String KEY_EMPTY = "speech_model_empty";
     static final String KEY_GET_MORE = "speech_model_get_more";
     private static final String KEY_IDLE_UNLOAD = "speech_model_idle_unload";
+    private static final String KEY_OUTPUT_MISSING = "speech_output_missing";
+    private static final String KEY_OUTPUT_VOICE = "speech_output_voice";
+    private static final String KEY_OUTPUT_SPEED = "speech_output_speed";
+    private static final String KEY_OUTPUT_SAMPLE = "speech_output_sample";
+    /** The speeds offered: a few steps either side of the voice's own pace, inside what stays clear. */
+    private static final float[] OUTPUT_SPEEDS = {0.75f, 0.9f, 1.0f, 1.15f, 1.3f, 1.5f, 1.75f};
+
+    /** Whether the sample this screen started is still playing, so the row can offer to stop it. */
+    private boolean samplePlaying;
 
     /** The download statuses as of the last redraw; a push that changes none of them is skipped. */
     @NonNull private String lastStatuses = "";
@@ -64,6 +77,7 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
             showIdleUnloadDialog(context);
             return true;
         });
+        bindVoiceOutput(context);
         refresh(context);
     }
 
@@ -132,6 +146,7 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
         if (empty != null) empty.setVisible(keep.isEmpty());
         Preference idleUnload = findPreference(KEY_IDLE_UNLOAD);
         if (idleUnload != null) idleUnload.setSummary(idleUnloadSummary(settings.getSttIdleUnloadMinutes()));
+        refreshVoiceOutput(context, store, settings);
     }
 
     @NonNull
@@ -178,6 +193,110 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
     @NonNull
     String installedSummary(@NonNull TaiModelSpec spec) {
         return TaiSpeechActions.installedSummary(requireContext(), spec);
+    }
+
+    // ---- voice output ----
+
+    private void bindVoiceOutput(@NonNull Context context) {
+        Preference missing = findPreference(KEY_OUTPUT_MISSING);
+        if (missing != null) missing.setOnPreferenceClickListener(preference -> {
+            TaiModelCentreFragment.open(getActivity(), TaiModelCentreFragment.SEGMENT_SPEECH);
+            return true;
+        });
+        Preference voice = findPreference(KEY_OUTPUT_VOICE);
+        if (voice != null) voice.setOnPreferenceClickListener(preference -> {
+            showVoiceDialog(context);
+            return true;
+        });
+        Preference speed = findPreference(KEY_OUTPUT_SPEED);
+        if (speed != null) speed.setOnPreferenceClickListener(preference -> {
+            showSpeedDialog(context);
+            return true;
+        });
+        Preference sample = findPreference(KEY_OUTPUT_SAMPLE);
+        if (sample != null) sample.setOnPreferenceClickListener(preference -> {
+            toggleSample(context);
+            return true;
+        });
+    }
+
+    private void refreshVoiceOutput(@NonNull Context context, @NonNull TaiModelStore store, @NonNull TaiSettings settings) {
+        boolean installed = TaiTtsModels.resolveActive(store) != null;
+        Preference missing = findPreference(KEY_OUTPUT_MISSING);
+        if (missing != null) missing.setVisible(!installed);
+        Preference voice = findPreference(KEY_OUTPUT_VOICE);
+        if (voice != null) voice.setSummary(settings.getTtsVoice());
+        Preference speed = findPreference(KEY_OUTPUT_SPEED);
+        if (speed != null) speed.setSummary(getString(R.string.speech_output_speed_summary, speedLabel(settings.getTtsSpeed())));
+        Preference sample = findPreference(KEY_OUTPUT_SAMPLE);
+        if (sample != null) {
+            sample.setEnabled(installed);
+            sample.setSummary(samplePlaying ? R.string.speech_output_sample_playing : R.string.speech_output_sample_summary);
+        }
+    }
+
+    private void showVoiceDialog(@NonNull Context context) {
+        TaiSettings settings = new TaiSettings(context);
+        String current = settings.getTtsVoice();
+        int checked = 0;
+        for (int i = 0; i < TaiTtsVoices.VOICES.length; i++) {
+            if (TaiTtsVoices.VOICES[i].equals(current)) checked = i;
+        }
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.speech_output_voice_title)
+            .setSingleChoiceItems(TaiTtsVoices.VOICES, checked, (dialog, which) -> {
+                settings.setTtsVoice(TaiTtsVoices.VOICES[which]);
+                refresh(context);
+                dialog.dismiss();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private void showSpeedDialog(@NonNull Context context) {
+        TaiSettings settings = new TaiSettings(context);
+        float current = settings.getTtsSpeed();
+        String[] labels = new String[OUTPUT_SPEEDS.length];
+        int checked = 0;
+        for (int i = 0; i < OUTPUT_SPEEDS.length; i++) {
+            labels[i] = speedLabel(OUTPUT_SPEEDS[i]) + "×";
+            if (Math.abs(OUTPUT_SPEEDS[i] - current) < Math.abs(OUTPUT_SPEEDS[checked] - current)) checked = i;
+        }
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.speech_output_speed_title)
+            .setSingleChoiceItems(labels, checked, (dialog, which) -> {
+                settings.setTtsSpeed(OUTPUT_SPEEDS[which]);
+                refresh(context);
+                dialog.dismiss();
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    /** Plays the sample in the chosen voice and speed, or stops the one playing. */
+    private void toggleSample(@NonNull Context context) {
+        if (samplePlaying) {
+            TaiReadAloud.stop(context);
+            return;
+        }
+        TaiSettings settings = new TaiSettings(context);
+        String voice = settings.getTtsVoice();
+        samplePlaying = true;
+        refresh(context);
+        TaiReadAloud.speak(context, getString(R.string.speech_output_sample_text, voice), voice, settings.getTtsSpeed(), error -> {
+            samplePlaying = false;
+            Context current = getContext();
+            if (current == null || !isAdded()) return;
+            if (error != null) AppNotice.show(current, error, true);
+            refresh(current);
+        });
+    }
+
+    @NonNull
+    private static String speedLabel(float speed) {
+        String text = String.format(java.util.Locale.US, "%.2f", speed);
+        while (text.endsWith("0")) text = text.substring(0, text.length() - 1);
+        return text.endsWith(".") ? text.substring(0, text.length() - 1) : text;
     }
 
     // ---- idle unload ----

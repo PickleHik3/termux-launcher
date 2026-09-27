@@ -396,7 +396,9 @@ launcherctl clipboard paste        # {"ok":true,"text":"…"}
 | POST | `/v1/responses` | Stateless OpenAI Responses adapter (text/image input, function calls/results) |
 | POST | `/v1/completions` | Legacy text completions, SSE streaming |
 | POST | `/v1/embeddings` | Embeddings for models advertising `text_embeddings` |
-| POST | `/v1/audio/speech` | Always returns `unsupported_audio_output` (HTTP 501) |
+| POST | `/v1/audio/speech` | Speech output with the voice model (KittenTTS): `wav` whole, `pcm` streamed per sentence |
+| POST | `/v1/ai/speak` | `tai speak`: plays the text on the phone (JSON or plain-text body; `?voice=&speed=`; `?format=wav` returns audio instead) |
+| POST | `/v1/ai/speak/stop` | Stops whatever the phone is reading aloud |
 
 OpenAI `/v1/*` streaming uses Server-Sent Events (`text/event-stream`) and ends with `data: [DONE]`.
 

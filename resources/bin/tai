@@ -23,6 +23,8 @@ Usage:
   tai unload
   tai keep-warm [model] [--minutes N] [--auto|--cpu|--gpu]
   tai cancel
+  tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text]
+  tai speak --stop
   tai doctor
 
 TAI is authenticated through ~/.launcherctl and hosts local LiteRT-LM/MNN models in the APK runtime.
@@ -30,6 +32,8 @@ GGUF/raw weight files are not supported by this APK.
 Auto honors model compatibility profiles and uses backend-specific CPU/GPU policy where available.
 Use OpenAI-compatible clients against /v1/models, /v1/chat/completions, and /v1/responses.
 Ollama-compatible clients can use /api/tags, /api/chat, /api/generate, and /api/embed.
+tai speak reads text aloud on the phone with the voice model (Model centre > Speech > Voice
+output); Ctrl-C or tai speak --stop stops it, --out file.wav saves the audio instead.
 Use tai --json <command> for raw API JSON.
 EOF
 }
@@ -231,6 +235,60 @@ case "$cmd" in
     ;;
   cancel)
     post_json /v1/ai/runtime/cancel '{}'
+    ;;
+  speak)
+    voice=""
+    speed=""
+    model=""
+    out=""
+    usage_speak() { echo "usage: tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text...]  (reads stdin when no text is given; tai speak --stop stops)" >&2; exit 2; }
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --voice) shift; [ "$#" -gt 0 ] || usage_speak; voice="$1" ;;
+        --speed) shift; [ "$#" -gt 0 ] || usage_speak; speed="$1" ;;
+        --model) shift; [ "$#" -gt 0 ] || usage_speak; model="$1" ;;
+        --out|-o) shift; [ "$#" -gt 0 ] || usage_speak; out="$1" ;;
+        --stop) post_json /v1/ai/speak/stop '{}'; exit $? ;;
+        --) shift; break ;;
+        -*) usage_speak ;;
+        *) break ;;
+      esac
+      shift
+    done
+    case "$voice$model" in *[!A-Za-z0-9._-]*) echo "tai speak: voice and model are plain names" >&2; exit 2 ;; esac
+    case "$speed" in *[!0-9.]*) echo "tai speak: --speed takes a number such as 1.2" >&2; exit 2 ;; esac
+    # The text goes up as a plain-text body, so it never has to be escaped into JSON; the options
+    # ride as query parameters.
+    query=""
+    add_query() { if [ -z "$query" ]; then query="?$1"; else query="$query&$1"; fi; }
+    [ -z "$voice" ] || add_query "voice=$voice"
+    [ -z "$speed" ] || add_query "speed=$speed"
+    [ -z "$model" ] || add_query "model=$model"
+    [ -z "$out" ] || add_query "format=wav"
+    tmp=$(mktemp "${TMPDIR:-$HOME}/tai-speak.XXXXXX") || exit 1
+    if [ "$#" -gt 0 ]; then printf '%s' "$*" > "$tmp"; else cat > "$tmp"; fi
+    [ -s "$tmp" ] || { rm -f "$tmp"; usage_speak; }
+    CURL_SPEAK="--fail-with-body -sS --connect-timeout 2 --max-time 3600"
+    if [ -n "$out" ]; then
+      if curl $CURL_SPEAK -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: text/plain; charset=utf-8" --data-binary "@$tmp" -o "$out.part" "$BASE/v1/ai/speak$query"; then
+        mv -f "$out.part" "$out"
+        rm -f "$tmp"
+        [ "$OUTPUT_MODE" = "json" ] && printf '{"ok":true,"file":"%s"}\n' "$out" || echo "Saved $out"
+        exit 0
+      fi
+      rc=$?
+      cat "$out.part" >&2 2>/dev/null || true
+      echo >&2
+      rm -f "$out.part" "$tmp"
+      exit "$rc"
+    fi
+    # Ctrl-C stops the voice too, not just this command.
+    trap 'post_json /v1/ai/speak/stop "{}" >/dev/null 2>&1; rm -f "$tmp"; exit 130' INT TERM
+    if [ "$OUTPUT_MODE" = "text" ]; then set -- -H "X-TAI-Output: text"; else set --; fi
+    if curl $CURL_SPEAK -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: text/plain; charset=utf-8" "$@" --data-binary "@$tmp" "$BASE/v1/ai/speak$query"; then rc=0; else rc=$?; fi
+    trap - INT TERM
+    rm -f "$tmp"
+    exit "$rc"
     ;;
   doctor)
     get_json /v1/ai/runtime
