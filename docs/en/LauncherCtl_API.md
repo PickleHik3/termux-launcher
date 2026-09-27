@@ -1,13 +1,13 @@
 # LauncherCtl API (Local AI Endpoint)
 
 ## Overview
-LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compatible inference endpoint, model management for the on-device Termux AI (TAI) runtime, one app-launch route, and the pane routes that let a process in a shell open and drive a terminal pane of its own. It is not a general device-control or agent bridge.
+LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compatible inference endpoint, model management for the on-device Termux AI (TAI) runtime, one app-launch route, the pane routes that let a process in a shell open and drive a terminal pane of its own, and the signal routes (a notification, the progress ring, the clipboard) for a process that has no terminal to write the matching escape sequence into. It is not a general device-control or agent bridge.
 
 - Server: in app process, isolated from native model work which runs in `:tai_runtime`.
 - Bind mode: `localhost` (default, `127.0.0.1`) or opt-in `lan` (`0.0.0.0`).
 - Auth: bearer token from `~/.launcherctl/token`, or `X-Api-Key: <token>` header. The token can be made optional for localhost (see [Auth](#auth)).
 - Endpoint URL: `~/.launcherctl/endpoint`.
-- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>` and `launcherctl pane …`. The launcher app installs both when `TermuxActivity` starts.
+- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`, `launcherctl pane …`, `launcherctl notify`, `launcherctl progress` and `launcherctl clipboard`. The launcher app installs both when `TermuxActivity` starts.
 - Removed helpers: `launcherctl-mcp` and `launcher-restart` are no longer installed and are deleted on upgrade.
 
 `tai` uses this authenticated server for the local Termux AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
@@ -76,7 +76,7 @@ remote page points its own hostname at `127.0.0.1` so the browser treats the API
 
 ## Endpoint Reference
 
-The complete route surface is below. App launch is the only non-TAI action route. There are no notification, media, resource, event, agent, MCP, restart, or general device-control routes.
+The complete route surface is below. Besides the TAI routes there are app launch, the pane and window routes, the on-screen keyboard, and the three signal routes (notification, progress, clipboard). There are no media, resource, event, MCP, restart, or general device-control routes.
 
 ### Health and discovery
 
@@ -134,7 +134,7 @@ launcherctl launch maps
 launcherctl launch com.example.maps
 ```
 
-`launcherctl`'s other command is `pane`, below. Use `tai` for model and inference commands.
+`launcherctl`'s other commands are `pane`, `window`, `agent`, `notify`, `progress`, `clipboard`, `keyboard` and `x11`, below. Use `tai` for model and inference commands.
 
 ### Panes
 
@@ -290,6 +290,100 @@ launcherctl keyboard show --source focus
 launcherctl keyboard hide --source focus
 launcherctl keyboard show          # source=manual
 launcherctl keyboard hide --hold   # keep it down until this session shows it again or ends
+```
+
+### Notifications, the progress ring and the clipboard
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/notify` | A message in the phone's notification shade — what `OSC 99` sends |
+| POST | `/v1/progress` | The progress ring on a window chip — what `OSC 9;4` sets |
+| POST | `/v1/clipboard` | Put text on the Android clipboard — what an `OSC 52` write does |
+| GET | `/v1/clipboard` | Read the Android clipboard — what an `OSC 52` query answers |
+
+A program that has a terminal sends these things as escape sequences and needs none of this. These
+routes exist for a process that does not: a coding agent's tool runner is typically a service
+parented to init with stdin on `/dev/null`, so nothing it prints can reach any terminal. Each route
+runs the very same code its escape sequence does — the app has one implementation per signal
+(`ShellSignals`), and the OSC handlers and these routes both call it — so a notification posted
+either way is indistinguishable, a ring set either way is the same ring, and the clipboard rules are
+the same rules.
+
+**Attribution.** None of these needs a pane id. The body's optional `pane` names the pane the
+signal belongs to (the window whose chip shows the ring, the pane a tapped notification returns
+to); without it the signal goes to the current pane. The shell client fills `pane` from
+`$TERMUX_LAUNCHER_PANE` when that is set, so from an ordinary shell the result is exactly what the
+escape sequence would have done; in an environment without it (opencode's tool runner) the current
+pane is a sensible default. An unknown `pane` is HTTP 404 `pane_not_found`; no pane at all (no
+session) is HTTP 409 `no_session`.
+
+**Background.** Like the pane routes, these only need the launcher to be *running*, not on screen:
+`activity_not_running` (409) means the process is gone. A notification sent while the user is in
+another app is precisely the case the shade is for; a progress report is state the chip picks up
+when the terminal is next seen. The clipboard is the exception, see below.
+
+`POST /v1/notify` takes:
+
+```json
+{"title": "Build", "body": "42 tests passed", "id": "build", "urgency": "normal", "pane": "6d3f…"}
+```
+
+- `body` — the message; required unless `title` is given. Multi-line is fine.
+- `title` — optional headline. As with `OSC 99`, a message with only a body uses it as the headline.
+- `id` — optional name (up to 256 characters): sending the same name again replaces the earlier
+  message instead of stacking another one.
+- `urgency` — `low` (silent), `normal` (default), or `critical` (the urgent channel); the
+  protocol's `0`/`1`/`2` are accepted too.
+
+Answers `{"ok": true, "pane": "…", "id": "build", "shown": true}`. `shown` is false when nothing
+reached the user: the launcher's notifications are turned off and it is not on screen either.
+Rate limit: 60 a minute.
+
+`POST /v1/progress` takes:
+
+```json
+{"state": "normal", "percent": 42, "pane": "6d3f…"}
+```
+
+- `state` — `clear`, `normal`, `error`, `indeterminate` or `paused` (`0`–`4` in `OSC 9;4` terms).
+  May be omitted when `percent` is given, which means `normal`.
+- `percent` — 0–100. Optional for `normal`, `error` and `paused`, in which case the ring keeps its
+  last value, as the escape does.
+
+Answers `{"ok": true, "pane": "…", "state": "normal", "percent": 42}`. A pane whose terminal has not
+started yet is 409 `pane_not_ready`. Rate limit: 600 a minute, the same as agent status reports,
+since a build prints a percentage often.
+
+`POST /v1/clipboard` takes `{"text": "…"}` and answers `{"ok": true, "length": 12}`.
+`GET /v1/clipboard` answers `{"ok": true, "text": "…"}` (`""` when the clipboard holds no text).
+
+The clipboard is the one place a signal can *take* something from the user or replace what they
+just copied, so both directions follow the rules an `OSC 52` write and query already follow, and
+answer with their own codes rather than a generic one:
+
+- The launcher has to be on screen. Off screen, both answer 409 `launcher_not_visible` and touch
+  nothing — a program in a shell nobody is looking at does not get to replace what the user copied
+  in another app.
+- Reading also needs **Settings → Terminal → Let programs read the clipboard** (on by default), the
+  same switch that gates `OSC 52` queries. Off, `GET /v1/clipboard` is 403 `clipboard_read_disabled`.
+
+There is no separate clipboard history to keep in step: the Android clipboard is the one clipboard
+here, and the in-app keyboard's paste key, the terminal's own paste, the Linux display and every
+other app all read it. Rate limit: 60 a minute each way.
+
+The shell client wraps all of this:
+
+```sh
+launcherctl notify [--title T] [--id ID] [--urgency low|normal|critical] [--pane ID] <body>
+printf 'line one\nline two' | launcherctl notify --title Report      # body from stdin
+launcherctl progress 42            # normal, 42 %
+launcherctl progress error         # keeps the last percentage
+launcherctl progress indeterminate
+launcherctl progress clear         # always clear when the work is done
+launcherctl progress 70 --pane "$id"
+launcherctl clipboard copy 'some text'
+git diff | launcherctl clipboard copy
+launcherctl clipboard paste        # {"ok":true,"text":"…"}
 ```
 
 ### OpenAI-compatible
@@ -502,6 +596,10 @@ Inspect `/v1/models` first to confirm both `_backend == "mnn-llm"` and the endpo
   screen. This does not add capabilities — ownership still confines `write`/`text`/`close` to panes
   opened through the API, and nothing here can bring the launcher to the Android foreground on its
   own — but the same token now reaches a pane for longer.
+- The signal routes give the token what any program in a shell already has through escape
+  sequences, no more: the clipboard routes keep the on-screen requirement and the read setting
+  that gate `OSC 52`, and a notification or a progress ring is something the user sees, not
+  something the caller learns.
 
 ## Troubleshooting
 

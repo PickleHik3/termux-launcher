@@ -240,8 +240,9 @@ public final class KittyNotifications {
         return keys;
     }
 
+    /** A name bounded to what the protocol allows; null reads as unnamed. */
     @NonNull
-    private static String clampId(@Nullable String id) {
+    static String clampId(@Nullable String id) {
         if (id == null) return "";
         return id.length() > MAX_ID_LENGTH ? id.substring(0, MAX_ID_LENGTH) : id;
     }

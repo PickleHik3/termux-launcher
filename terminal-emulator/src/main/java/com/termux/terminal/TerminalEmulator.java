@@ -4092,28 +4092,43 @@ public final class TerminalEmulator {
         } catch (NumberFormatException e) {
             return;
         }
+        int percent = -1;
+        if (parts.length > 2) {
+            try {
+                // Clamped from below here: on the wire a negative percentage is a malformed
+                // zero, whereas a negative passed to setProgress means "keep the last value".
+                percent = Math.max(0, Integer.parseInt(parts[2].trim()));
+            } catch (NumberFormatException ignored) {
+                // Keep the previous value.
+            }
+        }
+        setProgress(state, percent);
+    }
+
+    /**
+     * The one place a progress report lands, whether it came in as {@code OSC 9;4} or from the
+     * launcher's local API: {@code state} is a {@code PROGRESS_STATE_*} constant and
+     * {@code percent} the new value, or negative to keep the last one (what a report without a
+     * percentage means). Out-of-range percentages are clamped. Returns false for a state this
+     * terminal does not know, which is left alone rather than reset.
+     */
+    public boolean setProgress(int state, int percent) {
         switch (state) {
             case PROGRESS_STATE_NONE:
                 mProgressState = PROGRESS_STATE_NONE;
                 mProgressValue = 0;
-                break;
+                return true;
             case PROGRESS_STATE_INDETERMINATE:
                 mProgressState = state;
-                break;
+                return true;
             case PROGRESS_STATE_NORMAL:
             case PROGRESS_STATE_ERROR:
             case PROGRESS_STATE_PAUSED:
                 mProgressState = state;
-                if (parts.length > 2) {
-                    try {
-                        mProgressValue = Math.max(0, Math.min(100, Integer.parseInt(parts[2].trim())));
-                    } catch (NumberFormatException ignored) {
-                        // Keep the previous value.
-                    }
-                }
-                break;
+                if (percent >= 0) mProgressValue = Math.min(100, percent);
+                return true;
             default:
-                break;
+                return false;
         }
     }
 

@@ -22,7 +22,6 @@ import com.termux.shared.termux.shell.command.runner.terminal.TermuxSession;
 import com.termux.shared.termux.terminal.TermuxTerminalSessionClientBase;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
-import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.app.TermuxService;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 import com.termux.shared.termux.terminal.io.BellHandler;
@@ -84,9 +83,25 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     @NonNull private String mLastFontErrorSummary = "";
     private final Runnable mForegroundTerminalRefreshRunnable;
 
+    /**
+     * Notifications, the progress ring and the clipboard: the escape callbacks below hand these
+     * straight to it, and {@link TerminalActionDispatcher} reaches the same object for the local
+     * API's routes, so each signal has exactly one implementation.
+     */
+    @NonNull private final ShellSignals mSignals;
+
     public TermuxTerminalSessionActivityClient(@NonNull Context context, @NonNull TerminalHost host) {
         this.mContext = context;
         this.mHost = host;
+        this.mSignals = new ShellSignals(context, host, new ShellSignals.Notices() {
+            @Override @Nullable public String describe(@NonNull TerminalSession session) {
+                return toToastTitle(session);
+            }
+
+            @Override public void bringToFront(@NonNull TerminalSession session) {
+                setCurrentSession(session);
+            }
+        });
         this.mForegroundTerminalRefreshRunnable = () -> {
             mForegroundRefreshPending = false;
             if (!mHost.isVisible()) return;
@@ -375,11 +390,16 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         }
     }
 
+    /** The signal paths this client feeds, for the local API to feed the same way. */
+    @NonNull
+    public ShellSignals signals() {
+        return mSignals;
+    }
+
+    /** An OSC 52 write, or the terminal's own copy: one clipboard path, see {@link ShellSignals}. */
     @Override
     public void onCopyTextToClipboard(@NonNull TerminalSession session, String text) {
-        if (!mHost.isVisible())
-            return;
-        ShareUtils.copyTextToClipboard(mContext, text);
+        if (text != null) mSignals.clipboardWrite(text);
     }
 
     @Override
@@ -392,18 +412,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
-     * Answer an OSC 52 clipboard read query ({@code ESC ] 52 ; c ; ? BEL}). Null (not the launcher
-     * being visible, the setting off, or nothing on the clipboard) reads as an empty clipboard to
-     * the caller, which still answers the query rather than leaving the program hanging.
+     * Answer an OSC 52 clipboard read query ({@code ESC ] 52 ; c ; ? BEL}). Null (the read refused
+     * — launcher not visible or the setting off — or nothing on the clipboard) reads as an empty
+     * clipboard to the caller, which still answers the query rather than leaving the program
+     * hanging. The rules themselves are {@link ShellSignals#clipboardReadRefusal()}.
      */
     @Override
     public String onReadTextFromClipboard(@NonNull TerminalSession session) {
-        if (!mHost.isVisible())
-            return null;
-        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(mContext, false);
-        if (preferences == null || !preferences.isOsc52ClipboardReadEnabled())
-            return null;
-        return ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
+        return mSignals.clipboardRead();
     }
 
     @Override
@@ -430,51 +446,25 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
-     * A terminal notification is a bell with words: the window is marked the same way, and the
-     * message itself is shown — from any window, since unlike a bell it says something.
+     * A terminal notification (OSC 9, OSC 777) is a bell with words: the window is marked the
+     * same way, and the message itself is shown as an in-app notice — from any window, since
+     * unlike a bell it says something. See {@link ShellSignals#notice}.
      */
     @Override
     public void onNotification(@NonNull TerminalSession session, String title, String body) {
-        mHost.noteShellAttention(session);
-        if (!mHost.isVisible())
-            return;
-        String where = toToastTitle(session);
-        String headline = title != null && !title.trim().isEmpty() ? title.trim()
-            : (where == null || where.isEmpty() ? null
-                : mContext.getString(R.string.notice_shell_wants_attention, where));
-        String detail = body == null ? "" : body.trim();
-        if (headline == null && detail.isEmpty())
-            return;
-        AppNotice.shell(mContext, headline == null ? detail : headline,
-            headline == null || detail.isEmpty() ? null : detail,
-            "\uf0f3" /* nf-fa-bell */, true,
-            session == mHost.currentSession() ? null : () -> setCurrentSession(session));
+        mSignals.notice(session, title, body);
     }
 
-    /**
-     * A message with more to it than words: it can be named, replaced, taken down again, and
-     * marked urgent. That belongs in the phone's own notification shade, where the user reads it
-     * with the launcher put away and taps it to come back to the pane that sent it.
-     */
+    /** OSC 99: the phone's notification shade, through the same path the local API uses. */
     @Override
     public void onKittyNotification(@NonNull TerminalSession session,
                                     @NonNull com.termux.terminal.KittyNotification notification) {
-        mHost.noteShellAttention(session);
-        boolean visible = mHost.isVisible();
-        boolean inFront = session == mHost.currentSession();
-        if (!ShellNotifications.shouldShow(notification, visible, inFront))
-            return;
-        if (ShellNotifications.post(mContext, session, notification, visible, inFront) == null
-            && visible) {
-            // Nothing reached the shade — notifications are turned off for the launcher — so the
-            // message still gets the older in-app notice rather than being lost.
-            onNotification(session, notification.getTitle(), notification.getBody());
-        }
+        mSignals.notify(session, notification);
     }
 
     @Override
     public void onKittyNotificationClose(@NonNull TerminalSession session, @NonNull String id) {
-        ShellNotifications.close(mContext, session, id);
+        mSignals.notifyClose(session, id);
     }
 
     /**

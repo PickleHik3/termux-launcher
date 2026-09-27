@@ -39,11 +39,11 @@ Send these and they work. Details and limits live in [Kitty protocols](Terminal_
 | Sixel, iTerm inline images (OSC 1337) | Same, older protocols |
 | Kitty keyboard protocol (`CSI > flags u`) | Exact modifiers, key release, disambiguated Esc |
 | OSC 8 | Clickable links |
-| OSC 52 | Write the Android clipboard |
+| OSC 52 | Write, or with `?` read, the Android clipboard — the one clipboard the terminal, the in-app keyboard's paste key, the display and every app share. Reading needs the launcher on screen and *Let programs read the clipboard* on. Same code as `launcherctl clipboard` |
 | OSC 133 A/C/D | Prompt marks; the window chip shows whether the foreground is a command or an idle prompt |
 | OSC 7 `file:///path` | New panes opened from this one start in that folder |
-| OSC 9;4;state;pct | Progress ring on the window chip (ConEmu style) |
-| OSC 9 / OSC 777 / OSC 99 | Notifications. 9 and 777 are one line; 99 is kitty's: title, body, urgency, chunked, tap returns to the pane |
+| OSC 9;4;state;pct | Progress ring on the window chip (ConEmu style). Same code as `launcherctl progress` |
+| OSC 9 / OSC 777 / OSC 99 | Notifications. 9 and 777 are one-line in-app notices; 99 is kitty's, in the phone's shade: title, body, urgency, chunked, tap returns to the pane. Same code as `launcherctl notify` |
 | OSC 22 | Pointer shape for a hardware mouse |
 | Private mode 2026 | Synchronized output: hold redraws, paint once |
 | Private mode 2048 | In-band resize reports with cell and pixel sizes |
@@ -66,6 +66,11 @@ printf '\033]99;i=1:d=0:p=title;Build finished\033\\'
 printf '\033]99;i=1:d=1:p=body;42 tests passed\033\\'
 ```
 
+The same notification, the ring and the clipboard from a process that has no terminal to print an
+escape into (a coding agent's tool runner, a background service): `launcherctl notify`,
+`launcherctl progress`, `launcherctl clipboard`. Escape and command run one implementation in the
+app, so a notification posted either way is the same notification.
+
 ## launcherctl: drive the launcher from the shell
 
 `$PREFIX/bin/launcherctl` wraps a localhost HTTP API. The app writes the endpoint and bearer token to
@@ -76,6 +81,9 @@ launcherctl launch <app name, package or activity>         # open an Android app
 launcherctl pane list | open [--cwd DIR] [--title NAME] [--no-focus] [-- CMD...] | focus <id> | write <id> [--enter] <text> | read <id> [--lines N] | close <id>
 launcherctl agent working|blocked|idle|clear [--pane ID]    # what the chips say about you
 launcherctl agent install-hooks                             # wires the Claude Code hooks that send those states
+launcherctl notify [--title T] [--id ID] [--urgency low|normal|critical] [--pane ID] <body>   # the shade, as OSC 99
+launcherctl progress <0-100|clear|error|indeterminate> [--pane ID]                          # the chip's ring, as OSC 9;4
+launcherctl clipboard copy [<text>] | paste                 # the Android clipboard, as OSC 52
 launcherctl keyboard show|hide [--source focus]             # the in-app keyboard
 launcherctl x11 gpu [--env]                                 # the GPU row that fits this phone
 ```
