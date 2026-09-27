@@ -14,6 +14,11 @@ answers follow, depending on what the escape does:
   `scripts/tty.sh` finds it (walks up the process tree from `$$` for the first ancestor whose
   fd 0/1/2 points at `/dev/pts/*`, falling back to `/dev/tty`); `notify.sh` and `progress.sh` use
   it already, so prefer those over hand-rolling the escape.
+  **This only works when your tools run under your pane.** Claude Code's do. opencode 2 runs
+  its tools in a background service (`opencode serve --service`, parent PID 1, stdin
+  `/dev/null`) that belongs to no pane, so no tty is found and both scripts exit 1 with a
+  message. Tell the user in your reply instead. `TERMUX_LAUNCHER_PANE` is also missing there,
+  so `launcherctl agent` needs an explicit `--pane`. Checked on a device, 2026-09-27.
 - **Anything that draws** (an image, OSC 66 sized text, styled TUI output) must **never** go to
   your own pane — even if you could reach its tty, you'd scribble over whatever your own output
   or a TUI is showing there. Draw in a pane you open for the purpose:
@@ -21,12 +26,12 @@ answers follow, depending on what the escape does:
   does this for a single image. For anything more (multiple sequences, a script driving a TUI),
   write a small script to a temp file and run *that* in the opened pane, e.g.:
   ```sh
-  cat >/tmp/draw.sh <<'EOF'
+  cat >"$TMPDIR/draw.sh" <<'EOF'
   #!/bin/sh
   printf '\033]66;s=2;Report\033\\\n'
   cat results.txt
   EOF
-  launcherctl pane open --no-focus --title report -- sh /tmp/draw.sh
+  launcherctl pane open --no-focus --title report -- sh "$TMPDIR/draw.sh"
   ```
 
 ## Detection

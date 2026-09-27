@@ -41,7 +41,9 @@ tlskill_pane_tty() {
 tlskill_resolve_tty() {
     TLSKILL_TTY=$(tlskill_pane_tty 2>/dev/null)
     if [ -z "$TLSKILL_TTY" ]; then
-        if [ -w /dev/tty ] && : >/dev/tty 2>/dev/null; then
+        # A subshell, so a failed open shows in its status instead of passing -w
+        # and failing later with the shell's own complaint.
+        if (: >/dev/tty) 2>/dev/null; then
             TLSKILL_TTY=/dev/tty
         else
             echo "tlskill: could not find this pane's terminal device (no /dev/pts ancestor, no /dev/tty)" >&2
