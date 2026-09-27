@@ -97,3 +97,6 @@ project-docs/plans/TODO-voice-command-words.md
 
 # voice-eval harness output and caches (segments, transcripts, alignments; never audio in git)
 scripts/voice-eval/out/
+
+# tts-eval listening samples and report (models cached in ~/.cache/termux-launcher/tts, never in git)
+scripts/tts-eval/out/
