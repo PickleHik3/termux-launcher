@@ -199,13 +199,17 @@ final class TaiTtsPlayer {
                 while (offset < sentence.length && !stopped) {
                     waitWhilePaused();
                     if (stopped) break;
+                    // Stamped before the write: a blocking write of a sentence longer than the track's
+                    // buffer only returns once most of it is queued, so stamping after it reported the
+                    // first sentence's length as the delay (1.3 s on pong for a sound that started
+                    // 0.16 s after the track did).
+                    if (firstSoundAtMs < 0) firstSoundAtMs = SystemClock.elapsedRealtime();
                     int written = current.write(sentence, offset, sentence.length - offset, AudioTrack.WRITE_BLOCKING);
                     if (written < 0) {
                         Log.w(TAG, "AudioTrack write failed: " + written);
                         stopped = true;
                         break;
                     }
-                    if (written > 0 && firstSoundAtMs < 0) firstSoundAtMs = SystemClock.elapsedRealtime();
                     offset += written;
                     framesWritten += written;
                 }
