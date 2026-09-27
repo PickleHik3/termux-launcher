@@ -629,6 +629,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.wall.PaneWallPage mTravelKeyboardPlace;
     /** A minimal place's dock rows were laid out again for this slide (MinimalMode#bottomOnly). */
     private boolean mTravelDockPreRolled;
+    /**
+     * The content was given the arriving place's roomier room for this slide (ADR 0003, amended):
+     * the terminal's grid is paused under it and resized once, at settle, by
+     * {@link #finishTravelContentResizeAfterLayout}.
+     */
+    private boolean mTravelContentPreRolled;
+    /** The place {@link #mTravelRoomChangePx} was worked out for, so a frame costs one lookup. */
+    @Nullable private com.termux.app.wall.PaneWallPage mTravelRoomArriving;
+    private int mTravelRoomChangePx;
     /** Something was moved or faded during this slide, so settle has transforms to put back. */
     private boolean mChromeTravelMoved;
     /** The accessory stack's share of its translationY that the wall's travel owns. */
@@ -1197,6 +1206,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final int[] mTmpViewLocation = new int[2];
     private long mLastAccessoryGeometryApplyUptimeMs;
     private int mAppliedTerminalFlushPaddingPx;
+    /** The dock's rows and the bottom status band as the last geometry pass laid them out. */
+    private int mAppliedDockContentHeightPx;
     /**
      * The room the accessory stack last took from the content root, after the keyboard overlay
      * handed its share back. -1 until the first geometry pass, so that pass always counts as a
@@ -11575,6 +11586,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int dockContentHeightPx = (state.toolbarShown
             ? dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) : 0)
             + statusBandPx;
+        mAppliedDockContentHeightPx = dockContentHeightPx;
         int accessoryContentHeightPx = computeAccessoryStackHeight(
             dockContentHeightPx, 0, state.keyboardHeight);
         // The embedded keyboard suspends flush absorption: its height is user-scaled and its
@@ -11633,8 +11645,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean contentReservationChanged = contentReservationPx != mAppliedContentReservationPx;
         mAppliedContentReservationPx = contentReservationPx;
         boolean keyboardShownChanged = mKeyboardGeometry.applyKeyboardShown(state.keyboardShown);
-        if (shouldRequestTerminalResize(requestTerminalResize, accessoryHeightChanged,
-            accessoryMarginChanged, keyboardShownChanged, keyboardOverlays,
+        // While the slide holds the content, the room it gives back is laid out under a grid the
+        // travel has paused (preRollTravelContent); the settle sends the PTY its one size.
+        if (!mTravelHoldsContent && shouldRequestTerminalResize(requestTerminalResize,
+            accessoryHeightChanged, accessoryMarginChanged, keyboardShownChanged, keyboardOverlays,
             contentReservationChanged) && mTerminalView != null) {
             // Bottom-anchored, like the window-bar collapse: the keyboard or dock changing height
             // must not strand a prompt that a shell placed against the bottom edge — growing the
@@ -11761,11 +11775,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveAccessoryStackBottomMarginPx(@NonNull ChromeSpec state) {
-        if (!state.toolbarShown && !state.keyboardShown)
+        return resolveAccessoryStackBottomMarginPx(state.toolbarShown, state.keyboardShown);
+    }
+
+    /** The same, for a stack other than the one on screen: the arriving place's, mid-slide. */
+    private int resolveAccessoryStackBottomMarginPx(boolean toolbarShown, boolean keyboardShown) {
+        if (!toolbarShown && !keyboardShown)
             return 0;
         // The embedded keyboard is an ordinary bottom child. Root/decor inset policy already keeps
         // it above navigation bars, so a floating-dock gap must not be inserted beneath it.
-        if (state.keyboardShown)
+        if (keyboardShown)
             return mImeLiftPx;
         // The capsule floats, so it keeps its bottom gap even when the keyboard is up — otherwise it
         // sits flush against the keyboard. Non-capsule styles stay flush.
@@ -15777,6 +15796,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && canPreRollTravelKeyboard()) {
             preRollTravelKeyboard(frame);
         }
+        // Toward a place whose chrome takes less room from the content than this one's, the
+        // content gets that room now rather than at settle, so no band of wallpaper opens between
+        // the pane and the chrome sliding away from it (ADR 0003, amended).
+        com.termux.app.wall.PaneWallPage arriving =
+            com.termux.app.place.PlaceChromeTravel.arriving(frame, mLastWallPage);
+        if (!mTravelContentPreRolled && arriving != null) {
+            int givenBack = travelRoomChangePx(arriving);
+            if (givenBack > 0) preRollTravelContent(givenBack);
+        }
         int keyboardPx = travelKeyboardLaidOutPx();
         int dockPx = travelDockLaidOutPx(keyboardPx);
         float translation = com.termux.app.place.PlaceChromeTravel.stackTranslationPx(frame,
@@ -15786,6 +15814,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyAccessoryStackTranslation();
         // A keyboard up on both places crosses from one material to the other with the wall.
         syncKeyboardMaterialTravel(frame);
+        // The terminal's rows are drawn where the settle's resize is going to put them.
+        if (mTravelHoldsContent) syncTerminalTravelDisplacement(frame, arriving);
         // A minimal place's strip has no content to show, and gets it back at settle; a normal
         // place's content fades as the strip it is heading for comes closer. The bars minimal mode
         // takes away from the sides and the top fade with the dock.
@@ -15846,13 +15876,115 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTravelKeyboardPlace = target;
         mQuietKeyboardChange = true;
         try {
-            mInAppKeyboard.show(target == com.termux.app.wall.PaneWallPage.TERMINAL
+            // The place keeps the system IME until the wall lands: the flag change that takes it
+            // back relayouts the whole window, and the settle's applyPlaceSystemImeOwner makes it.
+            mInAppKeyboard.showForTravel(target == com.termux.app.wall.PaneWallPage.TERMINAL
                 ? com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TERMINAL_TAP
                 : com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason
                     .KEYBOARD_ACTION);
         } finally {
             mQuietKeyboardChange = false;
             Trace.endSection();
+        }
+    }
+
+    /**
+     * How much more room the content has at {@code arriving} than at the place the chrome is
+     * committed to: positive is room given back on the way there, negative is room the arriving
+     * place's chrome takes. Both places are read off one model of a stack at rest
+     * ({@link KeyboardOverlayPolicy#restReservationPx}), so the difference is exact where the
+     * model is — the keyboard's room, the margin under the stack — and the settle's own pass finds
+     * nothing left to move. The terminal's dock padding is known only for the place on screen and
+     * is a fraction of a row; arriving on the terminal, the settle takes it as it always has.
+     */
+    private int travelRoomChangePx(@NonNull com.termux.app.wall.PaneWallPage arriving) {
+        if (arriving == mTravelRoomArriving) return mTravelRoomChangePx;
+        boolean toolbarShown = buildChromeSpec().toolbarShown;
+        mTravelRoomArriving = arriving;
+        mTravelRoomChangePx = travelRestReservationPx(mLastWallPage, toolbarShown)
+            - travelRestReservationPx(arriving, toolbarShown);
+        return mTravelRoomChangePx;
+    }
+
+    /** The room a place's chrome leaves the content at rest, from the stack as it stands. */
+    private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
+                                        boolean toolbarShown) {
+        boolean keyboardShown = chromeRestOf(place).keyboardReveal() > 0f;
+        int flushPadding = place == com.termux.app.wall.PaneWallPage.TERMINAL
+            && place == mLastWallPage && !keyboardShown ? mAppliedTerminalFlushPaddingPx : 0;
+        return KeyboardOverlayPolicy.restReservationPx(mAppliedDockContentHeightPx, flushPadding,
+            keyboardShown, KeyboardOverlayPolicy.overlays(place, currentPlaceLayout()),
+            Math.max(0, mKeyboardGeometry.desiredHeightPx()),
+            resolveAccessoryStackBottomMarginPx(toolbarShown, keyboardShown));
+    }
+
+    /**
+     * Gives the content the arriving place's roomier room for the rest of the slide, in the frame
+     * the slide starts: the hold's reservation drops by the room given back, and the geometry pass
+     * lets the content reach under the chrome by exactly that. The terminal's grid is paused
+     * under the change so the PTY hears one size, at settle; the other pages take their room now,
+     * which for the display is the slide's whole length for the X server to repaint in.
+     */
+    private void preRollTravelContent(int roomGivenBackPx) {
+        Trace.beginSection("Wall.preRollContent");
+        try {
+            beginTravelHold();
+            mTravelContentPreRolled = true;
+            mTravelHeldReservationPx = Math.max(0, mTravelHeldReservationPx - roomGivenBackPx);
+            if (mPaneController != null) mPaneController.beginHostSurfaceResize();
+            applyAccessoryGeometryIfNeeded(true, "wall:preroll-content");
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * The settle's counterpart: after the settle's layout the paused panes each send the PTY
+     * their one size, anchored at the bottom the way the status bar's fold does. Posted, so it
+     * runs after the traversal that applies the settle's geometry.
+     */
+    private void finishTravelContentResizeAfterLayout() {
+        View stack = findViewById(R.id.accessory_stack_container);
+        Runnable finish = () -> {
+            if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
+        };
+        if (stack != null) stack.post(finish);
+        else finish.run();
+    }
+
+    /**
+     * One frame of the terminal's rows travelling toward where the settle's resize will put them
+     * (TerminalView#setTravelDisplacement): the one tiled pane, whose bottom edge is the room's.
+     * A split's tiles each take a share of the change the tiling knows and this does not; they
+     * land under the frost instead. The displacement is measured from the height the travel began
+     * at, so it is the same arithmetic whether the room was given back in the first frame or is
+     * taken at settle.
+     */
+    private void syncTerminalTravelDisplacement(
+            @NonNull com.termux.app.place.PlaceChromeTravel.Frame frame,
+            @Nullable com.termux.app.wall.PaneWallPage arriving) {
+        if (mPaneController == null) return;
+        com.termux.view.TerminalView view = mPaneController.soleTiledPaneView();
+        if (view == null) return;
+        if (arriving == null) {
+            view.setTravelDisplacement(0, 0f);
+            return;
+        }
+        view.setTravelDisplacement(travelRoomChangePx(arriving),
+            com.termux.app.place.PlaceChromeTravel.progressToward(frame, arriving));
+    }
+
+    /**
+     * The slide landed: every pane's travel ends on the resize it was drawn toward, or now. The
+     * reflow is frosted only where it can be seen, on the terminal, and not under lazy mode or
+     * reduced motion, which stop every animation.
+     */
+    private void settleTerminalTravelDisplacement() {
+        if (mPaneController == null) return;
+        boolean frost = !isReducedMotionEnabled() && !isLazyModeEnabled()
+            && mPaneWallController != null && mPaneWallController.isTerminalShowing();
+        for (com.termux.view.TerminalView view : mPaneController.getVisiblePaneViews()) {
+            view.settleTravelDisplacement(frost);
         }
     }
 
@@ -15940,6 +16072,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean leavingKeyboardUp = committedKeyboardVisible();
         boolean keyboardPreRolled = mTravelKeyboardPreRolled;
         boolean dockPreRolled = mTravelDockPreRolled;
+        boolean contentPreRolled = mTravelContentPreRolled;
         boolean held = mTravelHoldsContent;
         boolean moved = mChromeTravelMoved;
         com.termux.app.wall.PaneWallPage left = mLastWallPage;
@@ -15947,6 +16080,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTravelKeyboardPreRolled = false;
         mTravelKeyboardPlace = null;
         mTravelDockPreRolled = false;
+        mTravelContentPreRolled = false;
+        mTravelRoomArriving = null;
         mChromeTravelMoved = false;
         mDockTravelTranslationPx = 0f;
         // The material blend, if one ran, has landed on the arriving place's material; the pass
@@ -15981,8 +16116,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // back even though the minimal state never changed.
         if (dockPreRolled && isChromeMinimal()) syncChromeArrangement(true);
         // The hold is over: one geometry pass gives the content the room the place it landed on
-        // leaves it, which is the terminal's one resize for the whole slide.
+        // leaves it, which is the terminal's one resize for the whole slide. A slide that gave
+        // the room back in its first frame finds it already right, and only the grid's resize
+        // is left; the rows are drawn where it lands until it does.
         if (held) applyAccessoryGeometryIfNeeded(true, "wall:settle");
+        if (contentPreRolled) finishTravelContentResizeAfterLayout();
+        if (held) settleTerminalTravelDisplacement();
         // The crops were cut where the stack was laid out; one pass re-cuts any a frame of the
         // slide drew somewhere else.
         if (moved || held) mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);

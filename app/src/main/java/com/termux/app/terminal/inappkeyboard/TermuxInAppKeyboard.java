@@ -428,6 +428,30 @@ public final class TermuxInAppKeyboard {
         }
     }
 
+    /**
+     * {@link #show}, for the wall's slide bringing the keyboard up below the screen ahead of the
+     * place that wants it (TermuxActivity#preRollTravelKeyboard). Nothing can be typed on a
+     * keyboard that has not been revealed yet, so the place keeps the system IME until the wall
+     * lands and settles who owns it ({@link #setPlaceOwnsSystemIme}): changing the window's IME
+     * flags relayouts the whole window, which the first frame of a slide cannot afford.
+     */
+    public void showForTravel(ShowReason reason) {
+        if (!mEnabled || mDestroyed)
+            return;
+        if (mPreferences.isKeyboardTurnedOff())
+            return;
+        Trace.beginSection("Keyboard.showForTravel");
+        try {
+            boolean wasVisible = mVisible;
+            mLastShowReason = Objects.requireNonNull(reason, "reason");
+            mVisible = true;
+            showInternal();
+            if (!wasVisible && reason != ShowReason.FOCUS) notifyVisibilityChanged(true);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
     public void hide(HideReason reason) {
         if (!mEnabled || mDestroyed)
             return;

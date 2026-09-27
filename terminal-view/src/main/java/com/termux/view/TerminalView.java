@@ -2805,9 +2805,13 @@ public final class TerminalView extends View {
                 - scrollOffset;
             computeEdgeColorsIfEnabled();
             final boolean paintingPaddingFill = mPaddingFillEnabled && mEdgeColorsColumns > 0;
-            final boolean canvasTranslated = drawOffset != 0f || paintingPaddingFill;
+            final boolean canvasTranslated = drawOffset != 0f || paintingPaddingFill
+                || mTravelActive;
             if (canvasTranslated) {
                 canvas.save();
+                // Rows displaced past this view's edges stay inside it: the pane frame around
+                // this view lets its children draw outside their bounds on purpose.
+                if (mTravelActive) canvas.clipRect(0, 0, getWidth(), getHeight());
                 canvas.translate(0f, drawOffset);
             }
             if (paintingPaddingFill)

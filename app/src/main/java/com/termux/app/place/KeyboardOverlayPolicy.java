@@ -61,6 +61,22 @@ public final class KeyboardOverlayPolicy {
             - Math.max(0, contentOverlapPx));
     }
 
+    /**
+     * The room a place's chrome takes from the content at rest, built from the stack's parts the
+     * way the geometry pass builds it: the dock's rows, the terminal's dock padding and the
+     * keyboard when it is up, the margin under all of that, less what an overlaying keyboard hands
+     * back. Two places' reservations from one model differ by exactly what differs between them,
+     * which is how the wall's slide knows how much room the content gets back or loses on the way.
+     */
+    public static int restReservationPx(int dockContentPx, int flushPaddingPx,
+                                        boolean keyboardShown, boolean keyboardOverlays,
+                                        int keyboardPx, int bottomMarginPx) {
+        int keyboard = keyboardShown ? Math.max(0, keyboardPx) : 0;
+        int stackPx = Math.max(0, dockContentPx) + Math.max(0, flushPaddingPx) + keyboard;
+        return contentReservationPx(stackPx, bottomMarginPx,
+            contentOverlapPx(keyboardOverlays, keyboardShown, keyboardPx));
+    }
+
     /** The content root's height for one arrangement: what the window leaves, less the reservation. */
     public static int contentHeightPx(int availableHeightPx, int contentReservationPx) {
         return Math.max(0, availableHeightPx - Math.max(0, contentReservationPx));

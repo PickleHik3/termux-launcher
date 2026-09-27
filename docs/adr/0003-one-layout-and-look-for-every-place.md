@@ -31,3 +31,30 @@ Consequences: the Layout editor and the Appearance editor lose their place picke
 look keys (`PlaceLookPreferences.SCOPABLE`) and per-place layout entries in `PlaceLayoutStore`
 need a versioned migration. The place-change handlers stop re-applying layout and look, and move
 the remaining work to settle.
+
+## Amended 2026-09-27: the content's room during a slide
+
+"The terminal resizes once, at settle" stands, but the settle no longer changes the content's
+room. Measured on pong (2026-09-27), holding the content at the room of the place being left left
+a band of sharp wallpaper between the pane and the dock for the whole slide whenever the keyboard
+retracted, and the settle then grew the pane, re-cut the widget grid and resized the X screen in
+one frame — black, then grey, until the X server repainted.
+
+The content is now laid out at the roomier of the two places from the slide's first frame
+(`TermuxActivity#preRollTravelContent`): leaving a place whose chrome takes room from the content
+— the terminal's keyboard, its dock padding — for one whose chrome does not, the room is given
+back at once, under the keyboard the slide is about to move away. The terminal's grid and the
+X screen keep their size until the settle, as before; the settle's geometry pass finds the room
+already right, and what is left for it is the grid's one resize. Arriving somewhere that takes
+room, the content is held at the roomier place as it always was and shrinks at settle.
+
+While the wall travels, the terminal's rows are drawn where that resize is going to put them
+(`TerminalView#setTravelDisplacement`, from `TerminalEmulator#predictRowsOnlyResizeShift`), so
+the resize lands on rows that are already there, and the reflow is drawn under a brief frost that
+thaws to the sharp rows — M1's frost-on-reflow, in the default mode.
+
+The wall lays out only the pages on screen (`PaneWallLayout`): a page parked off screen keeps
+its last layout and is laid out again in the frame that brings it back. Because Home's room never
+changes while Home is on screen, the widget grid is no longer re-cut by the terminal's keyboard;
+because the Display page is only ever laid out at the room it rests with, the X screen is no
+longer resized by a slide to or from it.

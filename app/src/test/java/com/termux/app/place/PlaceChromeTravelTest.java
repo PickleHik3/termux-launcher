@@ -2,6 +2,7 @@ package com.termux.app.place;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
@@ -229,5 +230,42 @@ public class PlaceChromeTravelTest {
         int overlap = PlaceChromeTravel.heldOverlapPx(DOCK + KEYBOARD, 16, held);
         assertEquals(held, KeyboardOverlayPolicy.contentReservationPx(DOCK + KEYBOARD, 16,
             overlap));
+    }
+
+    @Test
+    public void theArrivingPlaceIsWhicheverSideOfTheFrameIsNotBeingLeft() {
+        PlaceChromeTravel.States s = states(true, false);
+        // Leaving the terminal toward Home on the left: the frame reads Home -> Terminal.
+        Frame left = at(PaneWallPage.TERMINAL, 300f, s);
+        assertSame(PaneWallPage.WIDGETS, PlaceChromeTravel.arriving(left, PaneWallPage.TERMINAL));
+        // And toward the display on the right, where the terminal is the near side.
+        Frame right = at(PaneWallPage.TERMINAL, -300f, s);
+        assertSame(PaneWallPage.DISPLAY, PlaceChromeTravel.arriving(right, PaneWallPage.TERMINAL));
+        // Past the commit the wall's page moved on, but the chrome is still the terminal's.
+        Frame committed = at(PaneWallPage.WIDGETS, -700f, s);
+        assertSame(PaneWallPage.WIDGETS, PlaceChromeTravel.arriving(committed, PaneWallPage.TERMINAL));
+        // At rest, or pressed into a line's edge, nothing is arriving.
+        assertNull(PlaceChromeTravel.arriving(at(PaneWallPage.TERMINAL, 0f, s), PaneWallPage.TERMINAL));
+        Frame edge = PlaceChromeTravel.at(LINE, PaneWallPage.TERMINAL, 200f, WIDTH, s);
+        assertNull(PlaceChromeTravel.arriving(edge, PaneWallPage.TERMINAL));
+    }
+
+    @Test
+    public void progressTowardAPlaceReadsTheSameWhicheverSideItIsOn() {
+        PlaceChromeTravel.States s = states(true, false);
+        // Home is the near side of a leftward frame: three tenths of the way there.
+        Frame left = at(PaneWallPage.TERMINAL, 300f, s);
+        assertEquals(0.3f, PlaceChromeTravel.progressToward(left, PaneWallPage.WIDGETS), EPSILON);
+        assertEquals(0.7f, PlaceChromeTravel.progressToward(left, PaneWallPage.TERMINAL), EPSILON);
+        // The display is the far side of a rightward one.
+        Frame right = at(PaneWallPage.TERMINAL, -300f, s);
+        assertEquals(0.3f, PlaceChromeTravel.progressToward(right, PaneWallPage.DISPLAY), EPSILON);
+        // A place the frame does not touch, and a frame at rest, are at 0.
+        assertEquals(0f, PlaceChromeTravel.progressToward(right, PaneWallPage.WIDGETS), EPSILON);
+        assertEquals(0f, PlaceChromeTravel.progressToward(at(PaneWallPage.TERMINAL, 0f, s),
+            PaneWallPage.TERMINAL), EPSILON);
+        // Springing back reads down through the same number.
+        assertEquals(0.05f, PlaceChromeTravel.progressToward(at(PaneWallPage.TERMINAL, 50f, s),
+            PaneWallPage.WIDGETS), EPSILON);
     }
 }

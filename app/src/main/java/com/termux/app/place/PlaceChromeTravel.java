@@ -1,6 +1,7 @@
 package com.termux.app.place;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.PaneWallPolicy;
@@ -197,6 +198,29 @@ public final class PlaceChromeTravel {
                                     int heldReservationPx) {
         return Math.max(0, Math.max(0, stackHeightPx) + Math.max(0, stackBottomMarginPx)
             - Math.max(0, heldReservationPx));
+    }
+
+    /**
+     * The place a frame is travelling toward, seen from the place the chrome is committed to:
+     * whichever side of the frame is not {@code leaving}. Null while the frame blends the leaving
+     * place with itself — at rest, or pressed into an outer edge's resistance.
+     */
+    @Nullable
+    public static PaneWallPage arriving(@NonNull Frame frame, @NonNull PaneWallPage leaving) {
+        if (frame.toward != leaving) return frame.toward == frame.from ? null : frame.toward;
+        return frame.from == leaving ? null : frame.from;
+    }
+
+    /**
+     * How far, 0 to 1, a frame has travelled toward {@code place}: its fraction when the place is
+     * the frame's far side, the rest of it when the place is the near side, and 0 for a place the
+     * frame does not touch. A drag that springs back reads back down to 0 through the same number.
+     */
+    public static float progressToward(@NonNull Frame frame, @NonNull PaneWallPage place) {
+        if (frame.toward == frame.from) return 0f;
+        if (place == frame.toward) return clamp01(frame.fraction);
+        if (place == frame.from) return clamp01(1f - frame.fraction);
+        return 0f;
     }
 
     private static float lerp(float a, float b, float t) {
