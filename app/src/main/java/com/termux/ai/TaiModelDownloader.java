@@ -1066,13 +1066,31 @@ public final class TaiModelDownloader {
         public final String url;
         public final boolean authRequired;
         public final JSONArray candidates;
+        /** {@link TaiHuggingFace#modelFacts}: what the repository declares (pipeline tag, tags, license). */
+        @NonNull public final JSONObject facts;
+        /** The model card's text at the resolved commit, or "" when it was not asked for or not there. */
+        @NonNull public final String readme;
         HfResolve(String url, boolean authRequired, JSONArray candidates) {
+            this(url, authRequired, candidates, new JSONObject(), "");
+        }
+        HfResolve(String url, boolean authRequired, JSONArray candidates, @NonNull JSONObject facts, @NonNull String readme) {
             this.url = url; this.authRequired = authRequired; this.candidates = candidates;
+            this.facts = facts; this.readme = readme;
         }
     }
 
     /** Never chooses silently between different exports; every candidate uses the resolved commit. */
     public HfResolve resolveHuggingFaceEntry(String url, String authToken) {
+        return resolveHuggingFaceEntry(url, authToken, false);
+    }
+
+    /**
+     * The same, and with {@code withCard} also the repository's README at the resolved commit, so
+     * the import flow can quote what the publisher says about each file instead of describing the
+     * files itself. The card is best effort: a missing, oversized or slow README is left out and
+     * the resolution still succeeds.
+     */
+    public HfResolve resolveHuggingFaceEntry(String url, String authToken, boolean withCard) {
         TaiHuggingFace source = TaiHuggingFace.parse(url);
         if (source == null) return new HfResolve("", false, new JSONArray());
         HttpURLConnection connection = null;
@@ -1086,12 +1104,52 @@ public final class TaiModelDownloader {
                 metadata = new JSONObject(readSmallUtf8(input, 2L * 1024L * 1024L));
             }
             JSONArray candidates = source.candidates(metadata);
+            JSONObject facts = TaiHuggingFace.modelFacts(metadata);
             String selected = candidates.length() == 1 ? candidates.getJSONObject(0).getString("url") : "";
             if (!selected.isEmpty() && requiresAuth(selected, authToken))
-                return new HfResolve("", true, candidates);
-            return new HfResolve(selected, false, candidates);
+                return new HfResolve("", true, candidates, facts, "");
+            String readme = withCard && candidates.length() > 0 && TaiHuggingFace.hasReadme(metadata)
+                ? fetchModelCard(source.readmeUrl(metadata.optString("sha", "")), authToken) : "";
+            return new HfResolve(selected, false, candidates, facts, readme);
         } catch (Exception ignored) {
             return new HfResolve("", false, new JSONArray());
+        } finally {
+            if (connection != null) connection.disconnect();
+        }
+    }
+
+    /** A model card larger than this is not read at all; the facts it would give are optional. */
+    static final int MODEL_CARD_MAX_BYTES = 256 * 1024;
+    private static final int MODEL_CARD_CONNECT_TIMEOUT_MS = 8_000;
+    private static final int MODEL_CARD_READ_TIMEOUT_MS = 10_000;
+
+    /**
+     * The README behind {@code url}, fetched through {@link #open} so the token follows the same
+     * per-hop rules as the metadata call, with shorter timeouts than a model file gets: the card
+     * only adds quotes to a picker the user is waiting on. Returns "" on any failure.
+     */
+    @NonNull
+    private String fetchModelCard(@NonNull String url, @Nullable String authToken) {
+        HttpURLConnection connection = null;
+        try {
+            connection = open(url, authToken, 0, MODEL_CARD_CONNECT_TIMEOUT_MS, MODEL_CARD_READ_TIMEOUT_MS);
+            int code = connection.getResponseCode();
+            if (code < 200 || code >= 300) return "";
+            long declared = connection.getContentLength();
+            if (declared > MODEL_CARD_MAX_BYTES) return "";
+            try (InputStream input = connection.getInputStream()) {
+                java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    if (bytes.size() + read > MODEL_CARD_MAX_BYTES) return "";
+                    bytes.write(buffer, 0, read);
+                }
+                // Decoded once at the end, so a multi-byte character is never split across reads.
+                return new String(bytes.toByteArray(), StandardCharsets.UTF_8);
+            }
+        } catch (Exception ignored) {
+            return "";
         } finally {
             if (connection != null) connection.disconnect();
         }
@@ -1232,11 +1290,16 @@ public final class TaiModelDownloader {
      * a failure, not a wait.
      */
     private HttpURLConnection open(String url, @Nullable String authToken, long offset) throws Exception {
+        return open(url, authToken, offset, 15_000, 30_000);
+    }
+
+    private HttpURLConnection open(String url, @Nullable String authToken, long offset,
+                                   int connectTimeoutMs, int readTimeoutMs) throws Exception {
         String currentUrl = url;
         for (int redirect = 0; redirect < MAX_REDIRECTS; redirect++) {
             HttpURLConnection connection = (HttpURLConnection) new URL(currentUrl).openConnection();
-            connection.setConnectTimeout(15_000);
-            connection.setReadTimeout(30_000);
+            connection.setConnectTimeout(connectTimeoutMs);
+            connection.setReadTimeout(readTimeoutMs);
             connection.setInstanceFollowRedirects(false);
             if (offset > 0L) connection.setRequestProperty("Range", "bytes=" + offset + "-");
             if (shouldAttachBearerToken(currentUrl, authToken)) connection.setRequestProperty("Authorization", "Bearer " + authToken.trim());

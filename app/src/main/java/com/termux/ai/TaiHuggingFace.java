@@ -58,6 +58,55 @@ public final class TaiHuggingFace {
         return "https://huggingface.co/" + repository + "/resolve/" + encode(commit) + "/" + path;
     }
 
+    /**
+     * The model card at the resolved commit, so what the importer quotes from it is the card of
+     * the exact files it offers, not of whatever the branch holds later.
+     */
+    public String readmeUrl(String commit) {
+        return fileUrl(commit, "README.md");
+    }
+
+    /** Whether the repository lists a top-level README.md, so a missing card costs no request. */
+    public static boolean hasReadme(JSONObject metadata) {
+        JSONArray siblings = metadata == null ? null : metadata.optJSONArray("siblings");
+        for (int i = 0; siblings != null && i < siblings.length(); i++) {
+            JSONObject item = siblings.optJSONObject(i);
+            if (item != null && "README.md".equals(item.optString("rfilename"))) return true;
+        }
+        return false;
+    }
+
+    /**
+     * What the repository itself declares about the model, for the importer to show as facts:
+     * the card's {@code pipeline_tag}, its tags, the license in the card's front matter and the
+     * base model. Only fields Hugging Face returns are copied; nothing is inferred here.
+     */
+    public static JSONObject modelFacts(JSONObject metadata) throws Exception {
+        JSONObject facts = new JSONObject();
+        if (metadata == null) return facts;
+        JSONObject card = metadata.optJSONObject("cardData");
+        String pipeline = metadata.optString("pipeline_tag", "");
+        if (pipeline.isEmpty() && card != null) pipeline = card.optString("pipeline_tag", "");
+        if (!pipeline.isEmpty()) facts.put("pipelineTag", pipeline);
+        JSONArray tags = new JSONArray();
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+        JSONArray repoTags = metadata.optJSONArray("tags");
+        for (int i = 0; repoTags != null && i < repoTags.length(); i++) {
+            String tag = repoTags.optString(i, "");
+            if (!tag.isEmpty() && seen.add(tag)) tags.put(tag);
+        }
+        facts.put("tags", tags);
+        if (card != null) {
+            String license = card.optString("license", "");
+            if (!license.isEmpty()) facts.put("license", license);
+            Object base = card.opt("base_model");
+            String baseModel = base instanceof JSONArray ? ((JSONArray) base).optString(0, "")
+                : base instanceof String ? (String) base : "";
+            if (!baseModel.isEmpty()) facts.put("baseModel", baseModel);
+        }
+        return facts;
+    }
+
     public JSONArray candidates(JSONObject metadata) throws Exception {
         JSONArray siblings = metadata.optJSONArray("siblings");
         LinkedHashSet<String> files = new LinkedHashSet<>();

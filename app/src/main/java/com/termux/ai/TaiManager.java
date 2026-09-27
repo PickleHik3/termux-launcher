@@ -348,7 +348,10 @@ public final class TaiManager {
         // Accept a bare repo URL: auto-detect the backend and resolve to the package entry file
         // (config.json / .litertlm) so the user never picks a backend or hunts the HF file list.
         if (TaiHuggingFace.parse(url) != null) {
-            TaiModelDownloader.HfResolve resolved = modelDownloader.resolveHuggingFaceEntry(url, token);
+            boolean previewOnly = request.optBoolean("previewOnly", false);
+            // The card is only read for a preview: it feeds the import flow's picker and summary,
+            // and a real download (or an API client) has no use for it.
+            TaiModelDownloader.HfResolve resolved = modelDownloader.resolveHuggingFaceEntry(url, token, previewOnly);
             if (resolved.authRequired) {
                 JSONObject gated = error(403, "gated_model_requires_auth",
                     "This Hugging Face repo is gated or private. Save your Hugging Face access token "
@@ -356,10 +359,11 @@ public final class TaiManager {
                 gated.put("huggingFaceTokenBundled", false);
                 return gated;
             }
-            if (resolved.candidates.length() > 1 || request.optBoolean("previewOnly", false)
-                && resolved.candidates.length() > 0) {
+            if (resolved.candidates.length() > 1 || previewOnly && resolved.candidates.length() > 0) {
                 JSONObject choices = error(409, "artifact_selection_required", "Choose a model file to download.");
                 choices.put("candidates", resolved.candidates);
+                choices.put("modelFacts", resolved.facts);
+                if (!resolved.readme.isEmpty()) choices.put("modelCard", resolved.readme);
                 return choices;
             }
             if (resolved.url.isEmpty()) {

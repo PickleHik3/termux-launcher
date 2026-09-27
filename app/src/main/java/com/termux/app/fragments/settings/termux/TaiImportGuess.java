@@ -14,8 +14,10 @@ import java.util.Locale;
 
 /**
  * What a model can do and where it runs, read off its name. These are the importer's long-standing
- * guesses from known LiteRT and MNN publications; the flow shows them as read-only chips and lets
- * Advanced correct them, instead of asking the user to declare them first.
+ * guesses from known LiteRT and MNN publications. They are still stored, because the runtime acts
+ * on them (an image-input model gets the attach button), but they are guesses: the summary card
+ * shows as plain facts only what {@link TaiImportFacts#groundedCapabilities} can source, and lists
+ * anything that came from here alone as "unverified, guessed from the name". Advanced corrects them.
  */
 final class TaiImportGuess {
     private TaiImportGuess() {

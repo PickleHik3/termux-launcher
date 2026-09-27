@@ -1,10 +1,10 @@
 package com.termux.app.fragments.settings.termux;
 
-import com.termux.R;
-
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class TaiImportNamesTest {
 
@@ -38,15 +38,12 @@ public class TaiImportNamesTest {
     }
 
     @Test
-    public void variantHintsReadBuildTokensBetweenSeparators() {
-        assertEquals(R.string.termux_ai_import_variant_smallest, TaiImportNames.variantHint("gemma-3-1b-it_q4_ekv2048.litertlm"));
-        assertEquals(R.string.termux_ai_import_variant_compact, TaiImportNames.variantHint("model_q8_ekv4096.litertlm"));
-        assertEquals(R.string.termux_ai_import_variant_full,
-            TaiImportNames.variantHint("Qwen2.5-0.5B-Instruct_multi-prefill-seq_f32_ekv1280.task"));
-        assertEquals(R.string.termux_ai_import_variant_half, TaiImportNames.variantHint("model_fp16.task"));
-        assertEquals(R.string.termux_ai_import_variant_web, TaiImportNames.variantHint("gemma-3n-E2B-it-web.litertlm"));
-        assertEquals(0, TaiImportNames.variantHint("model_seq4096.litertlm"));
-        assertEquals(0, TaiImportNames.variantHint(null));
+    public void fullPrecisionIsReadFromBuildTokensBetweenSeparators() {
+        // Only the default choice reads this; the picker's words come from TaiImportFacts.
+        assertTrue(TaiImportNames.isFullPrecision("Qwen2.5-0.5B-Instruct_multi-prefill-seq_f32_ekv1280.task"));
+        assertFalse(TaiImportNames.isFullPrecision("model_fp16.task"));
+        assertFalse(TaiImportNames.isFullPrecision("model_seq4096.litertlm"));
+        assertFalse(TaiImportNames.isFullPrecision(null));
     }
 
     @Test

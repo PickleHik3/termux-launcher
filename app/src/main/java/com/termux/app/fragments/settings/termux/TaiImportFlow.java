@@ -55,7 +55,8 @@ import java.util.concurrent.ExecutorService;
 
 /**
  * Adding a model, as five short steps: where is it (a link or a file), the app works it out, one
- * card that says what it can do and whether it will run on this phone, progress that means
+ * card that states what the file name, the Hugging Face metadata and the model card say about it
+ * next to this phone's measured memory (no claim the app cannot source), progress that means
  * something, and a "ready" screen with Try it and Use as default. Everything the app can detect it
  * detects; the checkboxes, processor choice, format settings and internal name sit under
  * Advanced, collapsed. The fragment only launches the flow, forwards its picker results and
@@ -102,6 +103,23 @@ final class TaiImportFlow {
         /** An explicit internal name from Advanced; empty means derive it from the display name. */
         String internalName = "";
         final LinkedHashSet<String> capabilities = new LinkedHashSet<>();
+        /**
+         * The capabilities something other than the name vouches for, each with the string naming
+         * its source ({@link TaiImportFacts#groundedCapabilities}). Anything in
+         * {@link #capabilities} that is neither here nor ticked by the user is a name guess and
+         * the card says so.
+         */
+        final java.util.LinkedHashMap<String, Integer> groundedCapabilities = new java.util.LinkedHashMap<>();
+        /** Capabilities the user ticked under Advanced: their own statement, not a guess. */
+        final LinkedHashSet<String> userCapabilities = new LinkedHashSet<>();
+        /** The repository's name in words, before a file of it was chosen; "" for a file or folder. */
+        String repositoryName = "";
+        /** {@link TaiHuggingFace#modelFacts} for a Hugging Face link; {@code null} otherwise. */
+        @Nullable JSONObject modelFacts;
+        /** How many files the repository offered, after pruning; repository-wide tags only speak for a sole file. */
+        int candidateCount;
+        /** What the model card says about the chosen file, quoted ({@link TaiImportCard}); "" when nothing. */
+        String cardQuote = "";
         Processor processor = Processor.AUTO;
         TaiModelProfile customProfile;
 
@@ -114,6 +132,29 @@ final class TaiImportFlow {
         boolean embeddingOnly() {
             return capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
                 && !capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        }
+
+        /** The chosen file's name as the facts read it: the repository file, or the picked document's name. */
+        @NonNull
+        String factFileName() {
+            if (!fileName.isEmpty()) return fileName;
+            return metadata == null ? "" : metadata.displayName;
+        }
+
+        /**
+         * Fills {@link #capabilities} from what can be vouched for plus the long-standing name
+         * guesses. The guesses stay stored (Gemma 4 E2B keeps its image and audio input, which the
+         * runtime acts on) but the card marks them unverified, and Advanced corrects them.
+         */
+        void detectCapabilities(@NonNull String guessIdentity) {
+            groundedCapabilities.clear();
+            groundedCapabilities.putAll(TaiImportFacts.groundedCapabilities(identity(), factFileName(), modelFacts,
+                candidateCount <= 1));
+            capabilities.clear();
+            capabilities.addAll(groundedCapabilities.keySet());
+            LinkedHashSet<String> guessed = TaiImportGuess.capabilities(guessIdentity);
+            // A bare .tflite is served by the embedding runtime only; no chat guess survives it.
+            if (!isEmbeddingFile(factFileName())) capabilities.addAll(guessed);
         }
     }
 
@@ -215,8 +256,15 @@ final class TaiImportFlow {
      * four times the memory of a compact one and runs slower, for little gain on a phone. So does
      * a build tied to one chip's NPU or named for the GPU ({@code _gpu_ekv2048}, {@code _gpu_opt}),
      * which TAI cannot run, or which fails to load on a GPU that cannot take it.
+     *
+     * <p>Before any of that, a portable file the model card recommends outright ({@code
+     * cardRecommends}, from {@link TaiImportCard#annotate}) wins, as long as it fits or its size is
+     * not listed: litert-community's Granite card says "On phones we recommend int8", and the
+     * largest-that-fits rule alone would pick its fp16 file.
      */
     static int preselect(@NonNull JSONArray candidates, long deviceMemoryBytes) {
+        int recommended = cardPick(candidates, deviceMemoryBytes);
+        if (recommended >= 0) return recommended;
         int best = -1;
         int bestRank = Integer.MAX_VALUE;
         long bestSize = -1L;
@@ -224,11 +272,7 @@ final class TaiImportFlow {
             JSONObject candidate = candidates.optJSONObject(i);
             if (candidate == null) continue;
             long size = candidate.optLong("sizeBytes", -1L);
-            TaiImportFit fit = TaiImportFit.check(size, deviceMemoryBytes, isEmbeddingFile(candidate.optString("file", "")));
-            int rank = (fit.verdict == TaiImportFit.Verdict.YES ? 0 : fit.verdict == TaiImportFit.Verdict.UNKNOWN ? 1
-                : fit.verdict == TaiImportFit.Verdict.SLOW ? 2 : 3) * 2
-                + (TaiImportNames.isFullPrecision(candidate.optString("file", ""))
-                    || TaiImportProfiles.deprioritised(candidate.optString("file", "")) ? 1 : 0);
+            int rank = rank(candidate, deviceMemoryBytes);
             // Among files that fit, prefer the largest (the more accurate build); otherwise the smallest.
             boolean better = rank < bestRank
                 || rank == bestRank && (rank / 2 == 0 ? size > bestSize : size >= 0L && (bestSize < 0L || size < bestSize));
@@ -239,6 +283,46 @@ final class TaiImportFlow {
             }
         }
         return Math.max(0, best);
+    }
+
+    /**
+     * A candidate's place in the default order: twice its fit (0 fits, 1 size unknown, 2 one RAM
+     * class short, 3 more), plus one for a full-precision, GPU-named or chip-bound build.
+     */
+    private static int rank(@NonNull JSONObject candidate, long deviceMemoryBytes) {
+        String file = candidate.optString("file", "");
+        TaiImportFit fit = TaiImportFit.check(candidate.optLong("sizeBytes", -1L), deviceMemoryBytes, isEmbeddingFile(file));
+        int tier = fit.verdict == TaiImportFit.Verdict.YES ? 0 : fit.verdict == TaiImportFit.Verdict.UNKNOWN ? 1
+            : fit.verdict == TaiImportFit.Verdict.SLOW ? 2 : 3;
+        return tier * 2 + (TaiImportNames.isFullPrecision(file) || TaiImportProfiles.deprioritised(file) ? 1 : 0);
+    }
+
+    /** The first portable file the card recommends that fits or has no listed size, or {@code -1}. */
+    private static int cardPick(@NonNull JSONArray candidates, long deviceMemoryBytes) {
+        for (int i = 0; i < candidates.length(); i++) {
+            JSONObject candidate = candidates.optJSONObject(i);
+            if (candidate == null || !candidate.optBoolean("cardRecommends", false)) continue;
+            int rank = rank(candidate, deviceMemoryBytes);
+            if (rank == 0 || rank == 2) return i;
+        }
+        return -1;
+    }
+
+    /**
+     * Why {@link #preselect} chose {@code index}, as the string the picker shows next to it:
+     * the card's recommendation, or which of its size rules decided.
+     */
+    static int preselectReason(@NonNull JSONArray candidates, long deviceMemoryBytes, int index) {
+        if (index == cardPick(candidates, deviceMemoryBytes)) return R.string.termux_ai_import_selected_card;
+        JSONObject candidate = candidates.optJSONObject(index);
+        int rank = candidate == null ? 2 : rank(candidate, deviceMemoryBytes);
+        switch (rank) {
+            case 0: return R.string.termux_ai_import_selected_largest;
+            case 1: return R.string.termux_ai_import_selected_largest_any;
+            case 2:
+            case 3: return R.string.termux_ai_import_selected_unknown;
+            default: return R.string.termux_ai_import_selected_smallest;
+        }
     }
 
     /** A failed load or answer the graphics chip had a hand in: the CPU is the retry to offer. */
@@ -309,7 +393,8 @@ final class TaiImportFlow {
         draft.source = Source.LINK;
         draft.url = url;
         draft.displayName = TaiImportNames.displayName(url);
-        draft.capabilities.addAll(TaiImportGuess.capabilities(url));
+        draft.repositoryName = draft.displayName;
+        draft.detectCapabilities(url);
         if (TaiHuggingFace.parse(url) != null) preview();
         else showSummary();
         return null;
@@ -338,9 +423,18 @@ final class TaiImportFlow {
             } catch (JSONException | RuntimeException ignored) {
             }
             JSONObject finalResult = pruneCandidates(result);
+            if (finalResult != null) {
+                // The card is read here, off the main thread: it can be a few hundred KB of text.
+                TaiImportCard.annotate(finalResult.optJSONArray("candidates"), finalResult.optString("modelCard", ""));
+            }
             host.handler().post(() -> {
                 waiting.dialog.dismiss();
                 if (abandoned[0] || host.context() == null) return;
+                if (finalResult != null) {
+                    draft.modelFacts = finalResult.optJSONObject("modelFacts");
+                    JSONArray offered = finalResult.optJSONArray("candidates");
+                    draft.candidateCount = offered == null ? 0 : offered.length();
+                }
                 switch (outcomeOf(finalResult)) {
                     case NEED_TOKEN:
                         showGated();
@@ -349,7 +443,7 @@ final class TaiImportFlow {
                         showChooseFile(finalResult.optJSONArray("candidates"));
                         break;
                     case SUMMARY:
-                        applyCandidate(finalResult.optJSONArray("candidates").optJSONObject(0));
+                        applyCandidate(finalResult.optJSONArray("candidates").optJSONObject(0), true);
                         showSummary();
                         break;
                     case DOWNLOAD_STARTED:
@@ -383,59 +477,80 @@ final class TaiImportFlow {
     private void showChooseFile(@Nullable JSONArray candidates) {
         Context context = host.context();
         if (context == null || candidates == null || candidates.length() == 0) return;
-        int selected = preselect(candidates, deviceMemoryBytes(context));
+        long ram = deviceMemoryBytes(context);
+        int selected = preselect(candidates, ram);
         CharSequence[] labels = new CharSequence[candidates.length()];
-        // A repository can publish two builds that share a quantisation, e.g. litert-community's
-        // Qwen3.5-2B ships a vision (VL) and a text-only int8 file. The build hint alone then reads
-        // "Compact" twice, so where two hints collide each title leads with its file's own name.
-        java.util.Map<String, Integer> hintCounts = new java.util.HashMap<>();
-        for (int i = 0; i < candidates.length(); i++) {
-            JSONObject candidate = candidates.optJSONObject(i);
-            String key = String.valueOf(TaiImportNames.variantHint(candidate == null ? "" : candidate.optString("file", "")));
-            hintCounts.merge(key, 1, Integer::sum);
-        }
+        String[] titles = variantTitles(context::getString, draft.repositoryName, candidates);
         for (int i = 0; i < candidates.length(); i++) {
             JSONObject candidate = candidates.optJSONObject(i);
             String file = candidate == null ? "" : candidate.optString("file", "");
             long size = candidate == null ? -1L : candidate.optLong("sizeBytes", -1L);
-            List<String> notes = new ArrayList<>();
-            notes.add(size > 0L ? TaiImportMessages.formatBytes(size) : context.getString(R.string.termux_ai_import_size_unknown));
-            TaiImportFit fit = TaiImportFit.check(size, deviceMemoryBytes(context), isEmbeddingFile(file));
-            if (i == selected) notes.add(context.getString(R.string.termux_ai_import_variant_recommended));
-            else if (fit.verdict == TaiImportFit.Verdict.SLOW) notes.add(context.getString(R.string.termux_ai_import_variant_slow));
-            else if (fit.verdict == TaiImportFit.Verdict.TOO_BIG) notes.add(context.getString(R.string.termux_ai_import_variant_too_big));
-            notes.add(file);
-            int titleRes = TaiImportNames.variantHint(file);
-            String title = titleRes != 0 ? capitalize(context.getString(titleRes))
-                : context.getString(R.string.termux_ai_import_variant_standard);
-            Integer sameHint = hintCounts.get(String.valueOf(titleRes));
-            if (sameHint != null && sameHint > 1) title = TaiImportNames.displayName(file) + " · " + title;
-            // Two builds can share both the model name and the quantisation and differ only in the
-            // target, e.g. granite-4.0-h-350m_int8 and _int8_gpu: say which one is which.
-            String chip = com.termux.ai.TaiImportProfiles.socTarget(file);
-            if (chip != null) title = title + " · " + context.getString(R.string.termux_ai_import_variant_chip_build, chip);
-            else if (com.termux.ai.TaiImportProfiles.gpuBuild(file)) title = title + " · " + context.getString(R.string.termux_ai_import_variant_gpu_build);
-            labels[i] = twoLines(context, title, join(notes));
+            // Each line is something the row can point at: the listed size and file name, the one
+            // measurement worth a warning, the card's own words, and why the default is the default.
+            List<String> facts = new ArrayList<>();
+            facts.add(size > 0L ? TaiImportMessages.formatBytes(size) : context.getString(R.string.termux_ai_import_size_unknown));
+            facts.add(file);
+            if (TaiImportFacts.largerThanRam(size, ram)) {
+                facts.add(context.getString(R.string.termux_ai_import_variant_larger_than_ram, TaiImportFacts.ramGb(ram)));
+            }
+            StringBuilder hint = new StringBuilder(join(facts));
+            String quote = candidate == null ? "" : candidate.optString("cardQuote", "");
+            if (!quote.isEmpty()) hint.append('\n').append(context.getString(R.string.termux_ai_import_card_quote, quote));
+            if (i == selected && candidates.length() > 1) {
+                hint.append('\n').append(context.getString(preselectReason(candidates, ram, selected)));
+            }
+            labels[i] = twoLines(context, titles[i], hint.toString());
         }
         int[] choice = {selected};
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_import_choose_variant_title)
             .setSingleChoiceItems(labels, selected, (d, which) -> choice[0] = which)
             .setPositiveButton(R.string.termux_ai_import_link_next, (d, w) -> {
-                applyCandidate(candidates.optJSONObject(choice[0]));
+                applyCandidate(candidates.optJSONObject(choice[0]), true);
                 showSummary();
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
     }
 
-    private void applyCandidate(@Nullable JSONObject candidate) {
+    /**
+     * The picker's titles, one per candidate ({@link TaiImportFacts#variantTitle}). Two files the
+     * name cannot tell apart, such as Gemma 4 E2B's {@code -web.litertlm} and {@code -web.task},
+     * get their format added, which is the one word left that differs.
+     */
+    @NonNull
+    static String[] variantTitles(@NonNull TaiImportFacts.Words words, @Nullable String repositoryName,
+                                  @NonNull JSONArray candidates) {
+        String[] titles = new String[candidates.length()];
+        java.util.Map<String, Integer> counts = new java.util.HashMap<>();
+        for (int i = 0; i < candidates.length(); i++) {
+            JSONObject candidate = candidates.optJSONObject(i);
+            titles[i] = TaiImportFacts.variantTitle(words, repositoryName, candidate == null ? "" : candidate.optString("file", ""));
+            counts.merge(titles[i], 1, Integer::sum);
+        }
+        for (int i = 0; i < titles.length; i++) {
+            Integer same = counts.get(titles[i]);
+            JSONObject candidate = candidates.optJSONObject(i);
+            String extension = TaiImportFacts.parse(candidate == null ? "" : candidate.optString("file", "")).extension;
+            if (same != null && same > 1 && !extension.isEmpty()) titles[i] = titles[i] + " · ." + extension;
+        }
+        return titles;
+    }
+
+    private void applyCandidate(@Nullable JSONObject candidate, boolean rename) {
         if (candidate == null) return;
         draft.url = candidate.optString("url", draft.url);
         draft.fileName = candidate.optString("file", "");
         draft.sizeBytes = candidate.optLong("sizeBytes", -1L);
-        draft.capabilities.clear();
-        draft.capabilities.addAll(TaiImportGuess.capabilities(draft.identity()));
+        draft.cardQuote = candidate.optString("cardQuote", "");
+        // The name the file itself carries when it says more than the repository's: the VL file of
+        // litert-community/Qwen3.5-2B is added as "Qwen3.5 2B VL", its text file as "Qwen3.5 2B".
+        // Not on the way to the download, where the name is the one the user confirmed.
+        if (rename && !draft.repositoryName.isEmpty()) {
+            String name = TaiImportFacts.modelName(draft.repositoryName, draft.fileName);
+            if (!name.isEmpty()) draft.displayName = name;
+        }
+        draft.detectCapabilities(draft.identity());
     }
 
     // ---- picker results ----
@@ -456,7 +571,7 @@ final class TaiImportFlow {
         draft.metadata = metadata;
         draft.sizeBytes = metadata.sizeBytes;
         draft.displayName = TaiImportNames.displayName(metadata.displayName);
-        draft.capabilities.addAll(TaiImportGuess.capabilities(metadata.displayName));
+        draft.detectCapabilities(metadata.displayName);
         showSummary();
     }
 
@@ -475,7 +590,7 @@ final class TaiImportFlow {
         }
         String folderName = draft.metadata == null ? "" : draft.metadata.displayName;
         draft.displayName = TaiImportNames.displayName(folderName);
-        draft.capabilities.addAll(TaiImportGuess.capabilities(folderName + " config.json"));
+        draft.detectCapabilities(folderName + " config.json");
         // A folder's size is not known until its config names the files; the fit is checked
         // after the copy by the load itself.
         showSummary();
@@ -498,20 +613,36 @@ final class TaiImportFlow {
 
         layout.addView(label(context, R.string.termux_ai_import_can_do_label));
         TextView chips = new TextView(context);
-        chips.setText(chipLine(context, draft.capabilities));
+        TextView unverified = new TextView(context);
+        unverified.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        unverified.setTextColor(resolveAttrColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
+        showCapabilities(context, chips, unverified);
         layout.addView(chips);
+        layout.addView(unverified);
 
+        // Facts with their source in the words: size from the listing or the file, the window from
+        // the file name or the card, the license from the card's front matter, and whatever the
+        // card says about this file. A fact nobody states is left out rather than filled in.
         TextView size = new TextView(context);
         size.setPadding(0, Math.round(12 * density), 0, 0);
-        size.setText(context.getString(R.string.termux_ai_import_size_label,
+        List<String> lines = new ArrayList<>();
+        lines.add(context.getString(R.string.termux_ai_import_size_label,
             draft.sizeBytes > 0L ? TaiImportMessages.formatBytes(draft.sizeBytes) : context.getString(R.string.termux_ai_import_size_unknown)));
+        int[] window = TaiImportFacts.contextWindow(draft.identity(), draft.factFileName());
+        if (window != null) {
+            lines.add(context.getString(R.string.termux_ai_import_context_fact, window[0], context.getString(window[1])));
+        }
+        String license = draft.modelFacts == null ? "" : draft.modelFacts.optString("license", "");
+        if (!license.isEmpty()) lines.add(context.getString(R.string.termux_ai_import_license_fact, license));
+        if (!draft.cardQuote.isEmpty()) lines.add(context.getString(R.string.termux_ai_import_card_fact, draft.cardQuote));
+        size.setText(android.text.TextUtils.join("\n", lines));
         layout.addView(size);
 
         layout.addView(label(context, R.string.termux_ai_import_fit_label));
         TextView fitView = new TextView(context);
-        TaiImportFit fit = TaiImportFit.check(draft.sizeBytes, deviceMemoryBytes(context), draft.embeddingOnly());
-        fitView.setText(fitText(context, fit));
-        fitView.setTypeface(Typeface.DEFAULT_BOLD);
+        long ram = deviceMemoryBytes(context);
+        TaiImportFit fit = TaiImportFit.check(draft.sizeBytes, ram, draft.embeddingOnly());
+        fitView.setText(TaiImportFacts.fitLine(context::getString, draft.sizeBytes, ram, freeMemoryBytes(context)));
         if (fit.verdict == TaiImportFit.Verdict.TOO_BIG) {
             fitView.setTextColor(resolveAttrColor(context, com.termux.shared.R.attr.termuxColorError));
         }
@@ -550,8 +681,11 @@ final class TaiImportFlow {
                 box.setEnabled(false);
             }
             box.setOnCheckedChangeListener((button, checked) -> {
+                String key = (String) button.getTag();
+                if (checked) draft.userCapabilities.add(key);
+                else draft.userCapabilities.remove(key);
                 captureCapabilities(boxes);
-                chips.setText(chipLine(context, draft.capabilities));
+                showCapabilities(context, chips, unverified);
             });
             boxes.add(box);
             advanced.addView(box);
@@ -611,12 +745,46 @@ final class TaiImportFlow {
         dialog.show();
     }
 
+    /**
+     * The card's capability lines: what a source vouches for (or the user ticked) as plain chips,
+     * and the name-only guesses on a second, dimmer line that says they are guesses.
+     */
+    private void showCapabilities(@NonNull Context context, @NonNull TextView chips, @NonNull TextView unverified) {
+        java.util.Set<String>[] split = splitCapabilities(draft.capabilities, draft.groundedCapabilities.keySet(),
+            draft.userCapabilities);
+        chips.setText(chipLine(context, split[0]));
+        String guessed = chipLine(context, split[1]);
+        unverified.setText(guessed.isEmpty() ? "" : context.getString(R.string.termux_ai_import_unverified, guessed));
+        unverified.setVisibility(guessed.isEmpty() ? View.GONE : View.VISIBLE);
+    }
+
+    /**
+     * {@code capabilities} split into those a source vouches for or the user ticked, and the rest,
+     * which only the name suggests.
+     */
+    @NonNull
+    @SuppressWarnings("unchecked")
+    static java.util.Set<String>[] splitCapabilities(@NonNull java.util.Set<String> capabilities,
+                                                     @NonNull java.util.Set<String> grounded,
+                                                     @NonNull java.util.Set<String> user) {
+        LinkedHashSet<String> known = new LinkedHashSet<>();
+        LinkedHashSet<String> guessed = new LinkedHashSet<>();
+        for (String capability : capabilities) {
+            if (grounded.contains(capability) || user.contains(capability)) known.add(capability);
+            else guessed.add(capability);
+        }
+        return new java.util.Set[]{known, guessed};
+    }
+
     private void confirmTooBig() {
         Context context = host.context();
         if (context == null) return;
+        long ram = deviceMemoryBytes(context);
+        String measured = TaiImportFacts.fitLine(context::getString, draft.sizeBytes, ram, freeMemoryBytes(context));
+        int tier = TaiImportFit.recommendedRamGb(draft.sizeBytes, draft.embeddingOnly());
         new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.termux_ai_import_too_big_confirm_title)
-            .setMessage(R.string.termux_ai_import_too_big_confirm_message)
+            .setMessage(context.getString(R.string.termux_ai_import_too_big_confirm_message, capitalize(measured), tier))
             .setPositiveButton(R.string.termux_ai_import_add_anyway, (d, w) -> startAdding())
             .setNegativeButton(android.R.string.cancel, null)
             .show();
@@ -683,6 +851,10 @@ final class TaiImportFlow {
         for (String capability : draft.capabilities) capabilities.put(capability);
         request.put("capabilities", capabilities);
         request.put("runtimeProfile", runtimeProfile().toJson());
+        // The card's own license id, so the stored model says "apache-2.0" rather than the
+        // manager's "User accepted provider terms externally" placeholder.
+        String license = draft.modelFacts == null ? "" : draft.modelFacts.optString("license", "");
+        if (!license.isEmpty()) request.put("license", license);
         return request;
     }
 
@@ -757,7 +929,7 @@ final class TaiImportFlow {
                                 break;
                             case CHOOSE_FILE:
                             case SUMMARY:
-                                applyCandidate(finalResult.optJSONArray("candidates").optJSONObject(0));
+                                applyCandidate(finalResult.optJSONArray("candidates").optJSONObject(0), false);
                                 startAdding();
                                 break;
                             default:
@@ -1076,14 +1248,16 @@ final class TaiImportFlow {
         return deviceMemoryBytes;
     }
 
-    @NonNull
-    private static String fitText(@NonNull Context context, @NonNull TaiImportFit fit) {
-        switch (fit.verdict) {
-            case YES: return context.getString(R.string.termux_ai_import_fit_yes);
-            case SLOW: return context.getString(R.string.termux_ai_import_fit_slow, fit.neededGb, fit.deviceGb);
-            case TOO_BIG: return context.getString(R.string.termux_ai_import_fit_too_big, fit.neededGb, fit.deviceGb);
-            default: return context.getString(R.string.termux_ai_import_fit_unknown);
-        }
+    /**
+     * Android's available memory right now, read fresh each time the card or the warning is shown
+     * (unlike the RAM class, it changes as apps come and go); {@code 0} when it cannot be read.
+     */
+    private static long freeMemoryBytes(@NonNull Context context) {
+        android.app.ActivityManager manager = (android.app.ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
+        if (manager == null) return 0L;
+        android.app.ActivityManager.MemoryInfo info = new android.app.ActivityManager.MemoryInfo();
+        manager.getMemoryInfo(info);
+        return Math.max(0L, info.availMem);
     }
 
     @NonNull
@@ -1100,7 +1274,7 @@ final class TaiImportFlow {
             R.string.termux_ai_import_cap_code, R.string.termux_ai_import_cap_reasoning, R.string.termux_ai_import_cap_multilingual};
     }
 
-    /** "Chat · Understands images": the guessed capabilities in plain words. */
+    /** "Chat · Image input": capabilities in plain words, in the Advanced list's order. */
     @NonNull
     static String chipLine(@NonNull Context context, @NonNull java.util.Set<String> capabilities) {
         String[] keys = capabilityKeys();
