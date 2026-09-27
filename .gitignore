@@ -94,3 +94,6 @@ __pycache__/
 
 # Local notes, never committed
 project-docs/plans/TODO-voice-command-words.md
+
+# voice-eval harness output and caches (segments, transcripts, alignments; never audio in git)
+scripts/voice-eval/out/
