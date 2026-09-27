@@ -5456,7 +5456,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             KeyboardOverlayPolicy.overlays(frame.from, layout),
             KeyboardOverlayPolicy.overlays(frame.toward, layout),
             chromeRestOf(frame.from).keyboardReveal() > 0f,
-            chromeRestOf(frame.toward).keyboardReveal() > 0f, frame.fraction);
+            chromeRestOf(frame.toward).keyboardReveal() > 0f, frame.chromeFraction);
         if (solidness == mKeyboardTravelSolidness) return;
         boolean wasTravelling = mKeyboardTravelSolidness != KeyboardMaterialPolicy.NO_TRAVEL;
         mKeyboardTravelSolidness = solidness;
