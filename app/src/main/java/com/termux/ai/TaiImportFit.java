@@ -8,8 +8,12 @@ import androidx.annotation.NonNull;
  * recommended RAM tier per package, compared against {@link TaiDeviceCapabilities#memoryBytes}.
  * The tiers reproduce the catalog's (chat packages up to 2 GB are 6GB+, Gemma 4 E2B at 2.4 GB is
  * 8GB+, E4B at 3.7 GB is 12GB+, embedding models are 4GB+) and continue upward for bigger files.
- * A phone one RAM class under the tier gets "probably slow": the CPU path maps the weights and
- * usually loads, with the launcher evicted around it. Two classes under is "too big".
+ * A phone one RAM class under the tier is {@link Verdict#SLOW}: the CPU path maps the weights and
+ * usually loads, with the launcher evicted around it. Two classes under is {@link Verdict#TOO_BIG}.
+ *
+ * <p>The verdict orders the import picker's default choice and decides whether adding asks for a
+ * confirmation. It is never shown as a judgement: the import flow states the measured numbers
+ * (file size, this phone's RAM and free memory) and, when it asks, the catalog tier it compared.
  */
 public final class TaiImportFit {
     public enum Verdict { YES, SLOW, TOO_BIG, UNKNOWN }

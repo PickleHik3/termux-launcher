@@ -3,7 +3,6 @@ package com.termux.app.fragments.settings.termux;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.R;
 import com.termux.ai.TaiHuggingFace;
 import com.termux.ai.TaiModelImporter;
 
@@ -61,32 +60,16 @@ final class TaiImportNames {
     }
 
     /**
-     * What one of a repository's several files is, in plain words, or {@code 0} when its name
-     * does not say: {@code f32} builds are full size (slowest, most memory), {@code fp16} half
-     * size, {@code int8}/{@code q8} compact, {@code int4}/{@code q4} the smallest and a bit less
-     * accurate, {@code web} builds are for browsers. Absolute, not "smaller than the other one":
-     * a q8 file is the small one next to f32 and the large one next to q4.
+     * A full-precision ({@code f32}) build. Only the picker's default choice reads this: it
+     * passes over such a file while another build exists, because an f32 file holds four bytes per
+     * weight against one for int8. The picker never labels a build by it; the file name's own
+     * words are what the row shows (see {@link TaiImportFacts#variantTitle}).
      */
-    static int variantHint(@Nullable String fileName) {
-        String lower = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
-        if (WEB.matcher(lower).find()) return R.string.termux_ai_import_variant_web;
-        if (SMALLEST.matcher(lower).find()) return R.string.termux_ai_import_variant_smallest;
-        if (COMPACT.matcher(lower).find()) return R.string.termux_ai_import_variant_compact;
-        if (HALF.matcher(lower).find()) return R.string.termux_ai_import_variant_half;
-        if (FULL.matcher(lower).find()) return R.string.termux_ai_import_variant_full;
-        return 0;
-    }
-
-    /** A full-precision build: several times the memory of a compact one, for little gain on a phone. */
     static boolean isFullPrecision(@Nullable String fileName) {
         return fileName != null && FULL.matcher(fileName.toLowerCase(Locale.ROOT)).find();
     }
 
-    // Build tokens sit between separators; "seq4096" must not read as a q4 build.
-    private static final Pattern WEB = Pattern.compile("(^|[-_.])web(?=[-_.]|$)");
-    private static final Pattern SMALLEST = Pattern.compile("(^|[-_.])(q4|int4|4bit)(?=[-_.]|$)");
-    private static final Pattern COMPACT = Pattern.compile("(^|[-_.])(q8|int8|8bit|i8)(?=[-_.]|$)");
-    private static final Pattern HALF = Pattern.compile("(^|[-_.])(fp16|f16|bf16)(?=[-_.]|$)");
+    // Build tokens sit between separators; "seq4096" must not read as a build word.
     private static final Pattern FULL = Pattern.compile("(^|[-_.])(f32|fp32|float32)(?=[-_.]|$)");
 
     /** The web page for a Hugging Face link, so a gated model's terms are one tap away; else the link itself. */

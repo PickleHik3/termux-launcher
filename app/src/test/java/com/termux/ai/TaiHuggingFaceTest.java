@@ -29,6 +29,29 @@ public class TaiHuggingFaceTest {
         assertEquals(20, result.getJSONObject(0).getLong("sizeBytes"));
     }
 
+    @Test public void modelFactsCopyOnlyWhatTheRepositoryDeclares() throws Exception {
+        // Shaped like litert-community/gemma-4-E2B-it-litert-lm: no pipeline tag, base_model a list.
+        JSONObject metadata = metadata("gemma-4-E2B-it.litertlm", "README.md")
+            .put("tags", new JSONArray().put("litert-lm").put("license:apache-2.0"))
+            .put("cardData", new JSONObject().put("license", "apache-2.0")
+                .put("base_model", new JSONArray().put("google/gemma-4-E2B-it")));
+        JSONObject facts = TaiHuggingFace.modelFacts(metadata);
+        assertFalse(facts.has("pipelineTag"));
+        assertEquals("apache-2.0", facts.getString("license"));
+        assertEquals("google/gemma-4-E2B-it", facts.getString("baseModel"));
+        assertEquals(2, facts.getJSONArray("tags").length());
+        assertTrue(TaiHuggingFace.hasReadme(metadata));
+        assertFalse(TaiHuggingFace.hasReadme(metadata("model.litertlm")));
+
+        // Shaped like litert-community/granite-4.0-h-350m: the pipeline tag is declared.
+        JSONObject granite = metadata("granite-4.0-h-350m_int8.litertlm").put("pipeline_tag", "text-generation");
+        assertEquals("text-generation", TaiHuggingFace.modelFacts(granite).getString("pipelineTag"));
+
+        TaiHuggingFace source = TaiHuggingFace.parse("https://huggingface.co/litert-community/granite-4.0-h-350m");
+        assertEquals("https://huggingface.co/litert-community/granite-4.0-h-350m/resolve/" + SHA + "/README.md",
+            source.readmeUrl(SHA));
+    }
+
     @Test public void emptyRepoAndConfigWithoutGraphAreNotInstallable() throws Exception {
         TaiHuggingFace source = TaiHuggingFace.parse("https://huggingface.co/org/model");
         assertEquals(0, source.candidates(metadata(".gitattributes", "config.json")).length());
