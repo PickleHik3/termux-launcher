@@ -273,6 +273,15 @@ public final class VoiceInputSession {
     // ------------------------------------------------------------------ capture thread
 
     private void capture(@NonNull AudioRecord recorder) {
+        // Silero decides what is speech; without its model (or LiteRT) the energy detector does,
+        // as it always used to. Built here rather than in start() so the main thread never reads
+        // the 1.2 MB model; the recorder is already running, but the load takes tens of
+        // milliseconds against a buffer of at least 240 ms, and the first 180 ms are the start
+        // tone's lead-in, which is dropped anyway.
+        long speechLoadStart = System.nanoTime();
+        SileroVoiceDecider speech = SileroVad.openDecider(appContext);
+        Logger.logDebug(LOG_TAG, String.format(Locale.ROOT, "voiced decision: %s (%d ms to load)",
+            speech != null ? "silero" : "energy", (System.nanoTime() - speechLoadStart) / 1_000_000));
         VoiceActivityDetector detector = new VoiceActivityDetector(new VoiceActivityDetector.Listener() {
             // One debug line per second of what the detector saw, for tuning it on a device.
             private int statFrames, statVoiced;
@@ -310,7 +319,7 @@ public final class VoiceInputSession {
             public void onSilenceTimeout() {
                 stop(EndReason.SILENCE);
             }
-        }, config.pauseMs, config.windowSeconds, config.silenceTimeoutMs);
+        }, config.pauseMs, config.windowSeconds, config.silenceTimeoutMs, speech);
         // In front of the detector, not inside it: frames dropped here never reach the pre-roll.
         VoiceLeadInDiscard leadIn = new VoiceLeadInDiscard(
             feedback.playsTones() ? VoiceLeadInDiscard.START_TONE_MS : 0, VoiceActivityDetector.SAMPLE_RATE);
@@ -332,6 +341,7 @@ public final class VoiceInputSession {
             // A tap in the middle of a phrase still sends what was said.
             if (!failed.get()) detector.finish();
         } finally {
+            if (speech != null) speech.close();
             if (sessionRecording != null) {
                 try {
                     sessionRecording.close();

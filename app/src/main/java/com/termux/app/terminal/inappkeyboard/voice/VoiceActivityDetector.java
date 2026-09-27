@@ -1,12 +1,21 @@
 package com.termux.app.terminal.inappkeyboard.voice;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 
 /**
- * Streaming energy VAD over 30 ms frames of 16 kHz mono PCM16: the live counterpart of the
+ * Streaming VAD over 30 ms frames of 16 kHz mono PCM16. Whether a frame is speech comes from
+ * Silero VAD v5 when a {@link SileroVoiceDecider} is given (the voice key's normal case, see
+ * {@code project-docs/plans/voice-vad-eval-2026-09-27.md}), and from frame energy otherwise; the
+ * energy decision is also where a session lands if the model fails to load or fails mid-stream.
+ * Everything else below — pre-roll, pause close, minimum voiced time, window cut, silence timeout —
+ * is the same for both, and the energy level and noise floor are always measured, because the
+ * level meter and the quietest-frame window cut use them whichever decision is in charge.
+ *
+ * <p>The energy decision is the live counterpart of the
  * runtime's offline {@code WhisperSegmenter}, with the same constants. It turns the microphone
  * stream into the segments the Whisper graph decodes:
  * <ul>
@@ -63,7 +72,10 @@ public final class VoiceActivityDetector {
      * narrows that by ~5 dB while a syllable (~200 ms) keeps its level.
      */
     static final int SMOOTH_FRAMES = 3;
-    /** Frames needed before the floor means anything; until then nothing is voiced. */
+    /**
+     * Frames needed before the floor means anything; until then nothing is voiced by energy. The
+     * Silero decision has no such warm-up, which is why it does not clip a word spoken at once.
+     */
     private static final int FLOOR_MIN_FRAMES = 8;
     /** The window cut is searched for within the last second of the segment. */
     private static final int CUT_SEARCH_FRAMES = 1000 / FRAME_MS;
@@ -92,6 +104,8 @@ public final class VoiceActivityDetector {
     /** Rounded up so the timeout is never early; {@link Integer#MAX_VALUE} disables it ("Until tap"). */
     private final int silenceTimeoutFrames;
     private final int maxSegmentFrames;
+    /** Silero's voiced decision, or null for energy only; ignored once it has {@link SileroVoiceDecider#failed()}. */
+    @Nullable private final SileroVoiceDecider speech;
 
     /** Frames not yet emitted: the pre-roll ring while idle, the whole segment while in speech. */
     private final ArrayList<short[]> frames = new ArrayList<>();
@@ -127,7 +141,17 @@ public final class VoiceActivityDetector {
      */
     public VoiceActivityDetector(@NonNull Listener listener, int pauseMs, int windowSeconds,
                                  int sessionSilenceMs) {
+        this(listener, pauseMs, windowSeconds, sessionSilenceMs, null);
+    }
+
+    /**
+     * As {@link #VoiceActivityDetector(Listener, int, int, int)}, with {@code speech} deciding which
+     * frames are voiced; null keeps the energy decision. The detector does not close it.
+     */
+    public VoiceActivityDetector(@NonNull Listener listener, int pauseMs, int windowSeconds,
+                                 int sessionSilenceMs, @Nullable SileroVoiceDecider speech) {
         this.listener = listener;
+        this.speech = speech;
         this.pauseFrames = Math.max(1, pauseMs / FRAME_MS);
         int windowFrames = Math.max(2, windowSeconds) * 1000 / FRAME_MS;
         this.maxSegmentFrames = Math.max(CUT_SEARCH_FRAMES + 1, windowFrames - 2 * padFrames);
@@ -160,6 +184,11 @@ public final class VoiceActivityDetector {
         if (inSpeech) closeSegment();
     }
 
+    /** Whether frames are currently judged by Silero rather than by energy. */
+    boolean decidesBySilero() {
+        return speech != null && !speech.failed();
+    }
+
     /** The current noise floor, for tests and the level meter. */
     float noiseFloor() {
         return noiseFloor;
@@ -169,9 +198,18 @@ public final class VoiceActivityDetector {
         float rms = rms(frame);
         float smoothed = smooth(rms);
         updateNoiseFloor(smoothed);
-        float overFloor = inSpeech ? HOLD_OVER_FLOOR : VOICE_OVER_FLOOR;
-        boolean voiced = floorCount >= FLOOR_MIN_FRAMES
-            && smoothed > Math.max(noiseFloor * overFloor, ABSOLUTE_FLOOR);
+        boolean voiced = false;
+        boolean bySilero = decidesBySilero();
+        if (bySilero) {
+            voiced = speech.decide(frame, inSpeech);
+            // A model that has just thrown decides nothing; this frame falls to energy like the rest.
+            bySilero = !speech.failed();
+        }
+        if (!bySilero) {
+            float overFloor = inSpeech ? HOLD_OVER_FLOOR : VOICE_OVER_FLOOR;
+            voiced = floorCount >= FLOOR_MIN_FRAMES
+                && smoothed > Math.max(noiseFloor * overFloor, ABSOLUTE_FLOOR);
+        }
         listener.onLevel(rms, voiced, noiseFloor);
         frames.add(frame);
         voicedFlags.add(voiced);
