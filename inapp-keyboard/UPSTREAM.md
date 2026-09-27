@@ -36,7 +36,15 @@ emoji, clipboard history, voice switching, direct-boot state, fold/window
 tracking, layout editor UI, numeric-editor inference,
 split/landscape modifiers, panes, and their resources. It also excludes
 `res/layout/keyboard.xml`, `res/xml/split_middle_column.xml`, and
-settings/method resources.
+settings/method resources. Upstream's clipboard pane stays excluded, but its
+key is live: `switch_clipboard` / `switch_back_clipboard` (`Event.SWITCH_CLIPBOARD`,
+`SWITCH_BACK_CLIPBOARD`) are dispatched by the launcher's
+`TerminalKeyEventHandler` to its own clipboard panel
+(`app/.../terminal/inappkeyboard/ClipboardPanelView`), which stands over the
+keys in the host the way the mouse-mode touchpad does. The module itself is
+unchanged for this; the bundled `termux_launcher_qwerty.xml` already carried
+the key as a `loc` slot on Ctrl, and the launcher's extra-keys catalogue now
+enables it by default.
 
 ## Generated layout catalogue
 

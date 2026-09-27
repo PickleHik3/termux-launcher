@@ -525,6 +525,14 @@ public interface TerminalHost extends SoftKeyboardPolicy {
         return false;
     }
 
+    /**
+     * Flips the in-app keyboard's clipboard panel, answering whether it is now up. False when
+     * there is no keyboard on screen to stand it over.
+     */
+    default boolean toggleKeyboardClipboard() {
+        return false;
+    }
+
     /** Toggles the key inspector, answering whether it is now open. */
     boolean toggleKeyInspector();
 

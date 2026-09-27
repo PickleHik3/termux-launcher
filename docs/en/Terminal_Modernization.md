@@ -505,6 +505,8 @@ map ctrl+alt+k keyboard.show                            # and keyboard.hide
 On a keyboard key the cycle is `tool:keyboard.cycle_form` in any slot, and **Next keyboard type**
 is offered in Settings ▸ Keyboard ▸ Extra keys and in the extra-keys row editor, off until you
 pick it. The palette's Keyboard section lists the three types with the one in use marked.
+`keyboard.clipboard` opens or closes the keyboard's clipboard history over the keys — the same
+panel the Ctrl key's clipboard corner opens — and is `tool:keyboard.clipboard` in a key slot.
 `keyboard.show` and `keyboard.hide` take `source=manual` or `source=focus`, which is how a script
 that watches for text focus says the keyboard is opening on its own rather than because someone
 asked; both need the launcher on screen.

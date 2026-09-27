@@ -68,6 +68,7 @@ public class TerminalActionDispatcherTest {
             "pane.next_layout", "pane.toggle_float",
             "keyboard.cycle_layout", "keyboard.select_layout",
             "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide",
+            "keyboard.clipboard",
             "pane.open", "pane.list", "pane.focus", "pane.close", "pane.write", "pane.read", "pane.split"};
         for (String name : handled) {
             assertTrue(name, TerminalActionDispatcher.handles(name));
@@ -115,7 +116,8 @@ public class TerminalActionDispatcherTest {
             "workspace.save", "workspace.load", "workspace.list", "workspace.delete",
             "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge",
             "pane.next_layout", "pane.toggle_float",
-            "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide"};
+            "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide",
+            "keyboard.clipboard"};
         for (String name : tools) {
             JSONObject result = dispatcher.execute(name, new JSONObject());
             assertFalse(name, result.getBoolean("ok"));

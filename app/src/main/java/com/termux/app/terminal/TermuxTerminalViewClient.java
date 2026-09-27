@@ -1262,6 +1262,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             sheet.dismiss();
             ShareUtils.copyTextToClipboard(mContext, uri,
                 mContext.getString(R.string.msg_select_url_copied_to_clipboard));
+            ClipboardHistory.get(mContext).record(uri);
         });
         if (openable) {
             addHyperlinkStripAction(strip, mContext.getString(R.string.action_hyperlink_open),
@@ -1340,6 +1341,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 sheet.dismiss();
                 ShareUtils.copyTextToClipboard(mContext, url,
                     mContext.getString(R.string.msg_select_url_copied_to_clipboard));
+                ClipboardHistory.get(mContext).record(url);
             });
             row.setOnLongClickListener(view -> {
                 sheet.dismiss();

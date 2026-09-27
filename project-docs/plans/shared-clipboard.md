@@ -37,6 +37,14 @@ every side reads and writes it.
 ## Decisions
 
 1. **Android's clipboard is the bus.** No launcher-side clipboard mirror, no history pane.
+   *Revised 2026-09-27 (branch `feat/keyboard-clipboard`):* the bus part stands — every side
+   still reads and writes the Android clipboard, and the keyboard's paste key pastes whatever it
+   holds. The "no history pane" part is withdrawn: the in-app keyboard now has a clipboard panel
+   (`app/terminal/ClipboardHistory`, `inappkeyboard/ClipboardPanelView` + `Controller`) fed only
+   by copies made inside the launcher (`ShellSignals.clipboardWrite`, the keyboard's copy/cut,
+   `clipboard.copy_selected`, link/hint copies, find-mode yanks). It never reads the Android
+   clipboard and registers no clip-changed listener, so it is a record of the launcher's own
+   copies, not a mirror of the bus. Recents are in memory; only pins are written to disk.
 2. **The display side is armed by the page, not by window focus.** Sync is active exactly while
    the display view is attached, connected and `clipboardEnable` is on; arming runs a check so a
    copy made on another page is announced to X the moment the Display page settles.

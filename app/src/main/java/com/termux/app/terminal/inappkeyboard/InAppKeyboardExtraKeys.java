@@ -30,6 +30,13 @@ public final class InAppKeyboardExtraKeys {
      */
     public static final String KEY_CYCLE_KEYBOARD_FORM = "tool:keyboard.cycle_form";
 
+    /**
+     * Upstream's clipboard-pane key, which opens the launcher's own clipboard panel here. The
+     * bundled layout carries it as a {@code loc} slot on the Ctrl key; enabled by default so a
+     * fresh install finds it, and placed beside Ctrl on a layout that has no slot for it.
+     */
+    public static final String KEY_CLIPBOARD = "switch_clipboard";
+
     /** Key names selectable by the user, in settings-display order. */
     private static final String[] EXTRA_KEYS = {
         "tab",
@@ -43,6 +50,7 @@ public final class InAppKeyboardExtraKeys {
         "copy",
         "paste",
         "cut",
+        KEY_CLIPBOARD,
         "selectAll",
         "undo",
         "redo",
@@ -102,6 +110,7 @@ public final class InAppKeyboardExtraKeys {
             case "copy":
             case "paste":
             case "cut":
+            case KEY_CLIPBOARD:
             case "alt":
                 return true;
             default:
@@ -127,6 +136,7 @@ public final class InAppKeyboardExtraKeys {
             case "f12_placeholder": return "F12";
             // A tool key's own glyph says nothing about which tool it is.
             case KEY_CYCLE_KEYBOARD_FORM: return "Keyboard type";
+            case KEY_CLIPBOARD: return "Clipboard";
         }
         KeyValue kv = KeyValue.getKeyByName(name);
         String label = kv == null ? null : kv.getString();
@@ -199,6 +209,7 @@ public final class InAppKeyboardExtraKeys {
             case "f12_placeholder": return mkPreferredPos("0", 0, 9, false);
             case "delete_word": return mkPreferredPos("backspace", -1, -1, false);
             case "forward_delete_word": return mkPreferredPos("backspace", -1, -1, true);
+            case KEY_CLIPBOARD: return mkPreferredPos("ctrl", -1, -1, false);
         }
         return KeyboardData.PreferredPos.DEFAULT;
     }

@@ -422,6 +422,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_KEYBOARD_SET_FORM = "keyboard.set_form";
     public static final String TOOL_KEYBOARD_SHOW = "keyboard.show";
     public static final String TOOL_KEYBOARD_HIDE = "keyboard.hide";
+    /** The keyboard's clipboard panel: the history of what was copied inside the launcher. */
+    public static final String TOOL_KEYBOARD_CLIPBOARD = "keyboard.clipboard";
     public static final String TOOL_TERMINAL_TOGGLE_TOOLBAR = "terminal.toggle_toolbar";
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
@@ -859,6 +861,12 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_KEYBOARD, R.string.tool_keyboard_hide, R.string.tool_desc_keyboard_hide,
             null, REQUIRES_IN_APP_KEYBOARD);
+        addUi(map, TOOL_KEYBOARD_CLIPBOARD,
+            "Open or close the keyboard's clipboard history: the text copied inside the launcher.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_clipboard,
+            R.string.tool_desc_keyboard_clipboard, null, REQUIRES_IN_APP_KEYBOARD);
         addUi(map, TOOL_TERMINAL_TOGGLE_TOOLBAR,
             "Show or hide the dock.",
             schemaEmpty(),

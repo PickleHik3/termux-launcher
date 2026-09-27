@@ -119,6 +119,37 @@ public class InAppKeyboardExtraKeysTest {
             InAppKeyboardExtraKeys.displayName(InAppKeyboardExtraKeys.KEY_CYCLE_KEYBOARD_FORM));
     }
 
+    /**
+     * The clipboard key is on by default and keeps the bundled layout's own slot for it — the
+     * Ctrl key's south-west corner — so a fresh install finds the panel where the layout put it.
+     */
+    @Test
+    public void theClipboardKeyIsOnByDefaultAndKeepsItsSlotOnTheBundledLayout() {
+        assertTrue(java.util.Arrays.asList(InAppKeyboardExtraKeys.catalog())
+            .contains(InAppKeyboardExtraKeys.KEY_CLIPBOARD));
+        assertTrue(InAppKeyboardExtraKeys.defaultEnabled(InAppKeyboardExtraKeys.KEY_CLIPBOARD));
+        assertTrue(InAppKeyboardExtraKeys.defaultStoredValue()
+            .contains(InAppKeyboardExtraKeys.KEY_CLIPBOARD));
+        assertEquals("Clipboard", InAppKeyboardExtraKeys.displayName(InAppKeyboardExtraKeys.KEY_CLIPBOARD));
+
+        KeyValue key = KeyValue.getKeyByName(InAppKeyboardExtraKeys.KEY_CLIPBOARD);
+        assertNotNull(key);
+        assertEquals(KeyValue.Event.SWITCH_CLIPBOARD, key.getEvent());
+
+        KeyboardData bundled = KeyboardData.load(resources,
+            juloo.keyboard2.R.xml.termux_launcher_qwerty);
+        assertNotNull(bundled);
+        KeyboardData withDefaults = LayoutModifier.modify(bundled,
+            options(InAppKeyboardExtraKeys.defaultStoredValue()), resources);
+        KeyboardData.Row bottom = withDefaults.rows.get(withDefaults.rows.size() - 1);
+        // Slot 3 is the south-west corner; the Ctrl key is the row's first.
+        assertEquals(key, bottom.keys.get(0).getKeyValue(3));
+
+        // Off, the loc slot goes with it.
+        KeyboardData without = LayoutModifier.modify(bundled, options("copy"), resources);
+        assertFalse(without.getKeys().containsKey(key));
+    }
+
     /** Picked, it merges into the layout like any other catalogue key. */
     @Test
     public void theKeyboardTypeKeyMergesIntoTheLayoutWhenPicked() {

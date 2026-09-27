@@ -318,9 +318,13 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
                 break;
             case SWITCH_EMOJI:
             case SWITCH_BACK_EMOJI:
-            case SWITCH_CLIPBOARD:
-            case SWITCH_BACK_CLIPBOARD:
                 mHostActions.debugLog("Unsupported in-app keyboard pane event: " + event);
+                break;
+            case SWITCH_CLIPBOARD:
+                mHostActions.showClipboardPanel();
+                break;
+            case SWITCH_BACK_CLIPBOARD:
+                mHostActions.hideClipboardPanel();
                 break;
             case SWITCH_VOICE_TYPING:
                 mHostActions.requestVoiceTyping(false);
