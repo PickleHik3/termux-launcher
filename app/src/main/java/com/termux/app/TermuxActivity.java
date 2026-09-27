@@ -32,7 +32,6 @@ import android.graphics.RuntimeShader;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
@@ -88,7 +87,6 @@ import com.termux.app.notice.AppNoticeItem;
 import com.termux.app.notice.TerminalDress;
 import com.termux.R;
 import com.termux.app.api.file.FileReceiverActivity;
-import com.termux.app.chrome.BitmapCrossfadeAnimator;
 import com.termux.app.chrome.ChromeInk;
 import com.termux.app.chrome.ChromePolicy;
 import com.termux.app.chrome.ChromeRenderer;
@@ -1047,8 +1045,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull private final int[] mManagedWallpaperSize = new int[2];
     /** The frost views that follow the parallax, looked up once; see {@link #syncWallpaperParallax}. */
     @Nullable private View[] mParallaxFrostViews;
-    /** The keyboard crop's width less the parallax spare cut beyond it; see {@link #mInAppKeyboardBackdropBitmap}. */
-    private int mInAppKeyboardBackdropWindowWidth;
+    /**
+     * The screen rect {@link #mInAppKeyboardBackdropBitmap} was captured for, so a frame held
+     * across a cache clear is kept only while it still describes the screen.
+     */
+    @NonNull private final Rect mInAppKeyboardBackdropFrameRect = new Rect();
+    /**
+     * The one transform the launcher itself puts on the accessory stack — the wall's travel and
+     * the system IME's lift — which the dock's and the keyboard's glass sample the wallpaper
+     * through; see {@link com.termux.app.chrome.GlassAnchor#layout}. The plank's press is
+     * deliberately not in it.
+     */
+    @NonNull private final com.termux.app.chrome.GlassAnchor.Lift mAccessoryStackLift =
+        () -> mDockTravelTranslationPx - mDockImeLiftPx;
+    /**
+     * How solid the docked keyboard's host is while the wall travels between a place that paints
+     * it as glass and one that paints it as the opaque panel, or
+     * {@link KeyboardMaterialPolicy#NO_TRAVEL} at rest; see {@link #syncKeyboardMaterialTravel}.
+     */
+    private float mKeyboardTravelSolidness = KeyboardMaterialPolicy.NO_TRAVEL;
+    /** The panel layer that travel fades, so a frame of the slide sets one alpha and rebuilds nothing. */
+    @Nullable private GradientDrawable mKeyboardTravelSolidFill;
     /**
      * The colour the wall's ground was last painted with — what shows between and around the
      * panes — so a page that paints its own corners (the display) paints them with the same.
@@ -1277,10 +1294,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @NonNull @Override public com.termux.app.chrome.WallpaperParallax wallpaperParallax() {
             return mWallpaperParallax;
-        }
-
-        @Override public int wallpaperParallaxSparePx() {
-            return mWallpaperParallaxSparePx;
         }
 
         @Override public boolean useManagedWallpaperSource() {
@@ -3094,6 +3107,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         for (View frost : mParallaxFrostViews) {
             if (frost != null && frost.getVisibility() == View.VISIBLE) frost.invalidate();
         }
+        // The under-pill strip lives in the decor, built after the views above are looked up.
+        View strip = mDecorNavBarBlurBackdrop;
+        if (strip != null && strip.getVisibility() == View.VISIBLE) strip.invalidate();
     }
 
     /**
@@ -4839,17 +4855,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return inAppKeyboardMaterial() != KeyboardMaterialPolicy.Material.GLASS;
     }
 
-    /** Readiness of the keyboard-local (non-unified) blurred backdrop for the current target. */
+    /**
+     * Readiness of the keyboard-local (non-unified) blurred backdrop: the host draws a frame, and
+     * nothing has asked for it to be rebuilt since. Geometry no longer enters into it — the frame
+     * is sampled at the host's live position, so a host that moved is still showing the right
+     * wallpaper.
+     */
     private boolean isInAppKeyboardLocalBackdropReady(@NonNull ChromeSpec state) {
         // No backdrop is ever produced for these, so the reveal gate would wait for a bitmap that
         // never arrives and hand the home screen to its 160 ms backstop on every open.
         if (paintsNoInAppKeyboardBackdrop()) return true;
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
         if (surfaceHost == null) return true;
-        if (mInAppKeyboardBackdropBitmap == null
-            || mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD)) return false;
-        Rect targetRect = buildInAppKeyboardBackdropTargetRect(state, surfaceHost);
-        return targetRect == null || mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD, targetRect);
+        return mInAppKeyboardBackdropBitmap != null
+            && !mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
     }
 
     private void ensureDecorNavBarSurfaceOverlay() {
@@ -5347,10 +5366,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             clearInAppKeyboardBackdrop();
             return;
         }
+        // Mid-slide between a place that paints the keyboard as glass and one that paints it as
+        // the panel, the host wears both and the panel's alpha follows the wall; at rest the two
+        // ends of that blend are exactly the materials painted below, so the settle repaints
+        // nothing the eye can see. See syncKeyboardMaterialTravel.
+        if (mKeyboardTravelSolidness != KeyboardMaterialPolicy.NO_TRAVEL) {
+            applyInAppKeyboardMaterialTravel(state, surfaceHost, capsule, glassTheme,
+                cornerRadiusPx);
+            return;
+        }
+        mKeyboardTravelSolidFill = null;
         // A keyboard that overlays its place is one opaque panel in the overlay surface role: no
-        // wallpaper crop, no frost, no glass slice, no rim, and the Keyboard surface's opacity
-        // and scheme background colour are ignored, because both say how much of the wallpaper
-        // shows through a material that is no longer there. The dock underneath keeps its glass.
+        // wallpaper frost, no glass slice, no rim, and the Keyboard surface's opacity and scheme
+        // background colour are ignored, because both say how much of the wallpaper shows through
+        // a material that is no longer there. The dock underneath keeps its glass.
         if (material == KeyboardMaterialPolicy.Material.SOLID) {
             surfaceHost.setBackground(buildInAppKeyboardSolidSurface(
                 KeyboardMaterialPolicy.solidFillIsRounded(form, overlays, capsule)
@@ -5360,31 +5389,81 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
             // Once accessory_surface_host has actually laid out at the expanded height — and, when
-            // there is a frame to blur, its matching crop is installed — the transparent keyboard
-            // exposes that one unified material. Until then, keep a keyboard-local glass background
-            // in place: changing the RelativeLayout rules above only requests layout, so clearing
+            // there is a frame to blur, its backdrop shows it — the transparent keyboard exposes
+            // that one unified material. Until then, keep a keyboard-local glass background in
+            // place: changing the RelativeLayout rules above only requests layout, so clearing
             // this background here would expose sharp wallpaper for a frame (or the whole IME
             // transition). It must come off the moment the shared surface is there, though: the
             // expanded surface already paints this glass under the keyboard, and a local coat left
             // on top is the same translucent material twice — a keyboard visibly darker than the
-            // band above it.
+            // band above it. Both sample the one shared frame at the host's own position, so the
+            // wallpaper under the keys is the same picture on either side of the handoff.
             if (isUnifiedAccessoryBackdropReady(state)) {
                 surfaceHost.setBackground(null);
                 clearInAppKeyboardBackdrop();
             } else {
-                Bitmap previousBackdrop = mInAppKeyboardBackdropBitmap;
-                Drawable background = buildInAppKeyboardSurfaceBackground(
-                    state, surfaceHost, false, glassTheme, 0f);
-                surfaceHost.setBackground(background);
-                recycleSupersededInAppKeyboardBackdrop(previousBackdrop, surfaceHost.getBackground());
+                surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
+                    state, surfaceHost, false, glassTheme, 0f));
             }
             return;
         }
-        Bitmap previousBackdrop = mInAppKeyboardBackdropBitmap;
-        Drawable background = buildInAppKeyboardSurfaceBackground(
-            state, surfaceHost, capsule, glassTheme, cornerRadiusPx);
-        surfaceHost.setBackground(background);
-        recycleSupersededInAppKeyboardBackdrop(previousBackdrop, surfaceHost.getBackground());
+        surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
+            state, surfaceHost, capsule, glassTheme, cornerRadiusPx));
+    }
+
+    /**
+     * The docked keyboard's host while the wall travels between glass and panel: the panel at the
+     * travel's alpha over the glass. The glass is the unified dock surface where that is already
+     * the material under the keys (leaving the terminal), and a keyboard-local coat of the same
+     * glass otherwise (arriving at it), so the blend never stacks two coats. The fill is kept so
+     * the frames that follow set its alpha and rebuild nothing.
+     */
+    private void applyInAppKeyboardMaterialTravel(@NonNull ChromeSpec state,
+                                                  @NonNull View surfaceHost, boolean capsule,
+                                                  boolean glassTheme, float cornerRadiusPx) {
+        GradientDrawable fill = buildInAppKeyboardSolidSurface(capsule ? cornerRadiusPx : 0f);
+        fill.setAlpha(Math.round(255f * mKeyboardTravelSolidness));
+        mKeyboardTravelSolidFill = fill;
+        Drawable glass = isUnifiedAccessoryBackdropReady(state) ? null
+            : buildInAppKeyboardSurfaceBackground(state, surfaceHost, capsule, glassTheme,
+                cornerRadiusPx);
+        Drawable material = glass == null ? fill
+            : new LayerDrawable(new Drawable[] {glass, fill});
+        surfaceHost.setBackground(new LayoutNeutralDrawable(material));
+    }
+
+    /**
+     * One frame of the keyboard's material travel (PlaceChromeTravel): with the keyboard up on
+     * both places of a slide and the two painting it differently, the panel's alpha follows the
+     * wall rather than swapping whole at settle. The first frame of a blend builds the host's
+     * layers; every later frame writes one alpha. {@link #settlePlaceChrome} ends it, and the
+     * place's own repaint then finds the material the blend already landed on.
+     */
+    private void syncKeyboardMaterialTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
+        PlaceLayout layout = currentPlaceLayout();
+        float solidness = KeyboardMaterialPolicy.travelSolidness(inAppKeyboardForm(),
+            KeyboardOverlayPolicy.overlays(frame.from, layout),
+            KeyboardOverlayPolicy.overlays(frame.toward, layout),
+            chromeRestOf(frame.from).keyboardReveal() > 0f,
+            chromeRestOf(frame.toward).keyboardReveal() > 0f, frame.fraction);
+        if (solidness == mKeyboardTravelSolidness) return;
+        boolean wasTravelling = mKeyboardTravelSolidness != KeyboardMaterialPolicy.NO_TRAVEL;
+        mKeyboardTravelSolidness = solidness;
+        // The settle has a repaint owed either way: to take the blend's layers off, or to leave
+        // the host in the material the blend landed on.
+        mChromeTravelMoved = true;
+        if (solidness == KeyboardMaterialPolicy.NO_TRAVEL) {
+            // The frame moved on to a pair of places that paint alike (past an outer page): the
+            // host goes back to the committed material now rather than at settle.
+            if (wasTravelling) mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+            return;
+        }
+        GradientDrawable fill = mKeyboardTravelSolidFill;
+        if (wasTravelling && fill != null) {
+            fill.setAlpha(Math.round(255f * solidness));
+            return;
+        }
+        applyInAppKeyboardSurfaceState(buildChromeSpec());
     }
 
     /** Rounded clip for the capsule keyboard; rectangular bounds clip for the default style. */
@@ -5410,7 +5489,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * capsule's cap or square, whichever the surface shape already clipped the host to.
      */
     @NonNull
-    private Drawable buildInAppKeyboardSolidSurface(float cornerRadiusPx) {
+    private GradientDrawable buildInAppKeyboardSolidSurface(float cornerRadiusPx) {
         GradientDrawable fill = new GradientDrawable();
         fill.setColor(getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
             R.color.termux_surface_panel_high));
@@ -5438,13 +5517,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean keyboardBlurEnabled = ChromePolicy.dockBlurEnabled(getEffectiveInAppKeyboardBlurRadius());
         if (glassTheme) {
             if (keyboardBlurEnabled) {
-                Bitmap blurredBackdrop = obtainInAppKeyboardBackdropBitmap(state, surfaceHost);
-                if (blurredBackdrop != null) {
-                    BitmapDrawable backdrop = frostDrawable(blurredBackdrop,
-                        mInAppKeyboardBackdropWindowWidth);
+                Bitmap frame = obtainInAppKeyboardBackdropFrame(state, surfaceHost);
+                if (frame != null) {
+                    // The shared frame, sampled at the host's own position on every draw — through
+                    // the stack's travel, so a rising keyboard shows the wallpaper it is over.
+                    com.termux.app.chrome.SharedFrameDrawable backdrop =
+                        new com.termux.app.chrome.SharedFrameDrawable(frame,
+                            mInAppKeyboardBackdropFrameRect, mWallpaperParallax,
+                            com.termux.app.chrome.GlassAnchor.layout(surfaceHost, mAccessoryStackLift));
                     // Same content-aware light scatter the dock backdrop uses — one material.
                     backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
-                    backdrop.setAlpha(255);
                     layers.add(backdrop);
                 }
             }
@@ -5491,110 +5573,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int stackOpacityPercent = getInAppKeyboardBackdropOpacityPercent();
         if (stackOpacityPercent < 100)
             material.setAlpha(Math.round(255f * stackOpacityPercent / 100f));
-        // A BitmapDrawable reports its captured bitmap dimensions as its minimum size. Since this
-        // drawable is installed on a wrap-content host, exposing that intrinsic size feeds the old
-        // backdrop height back into layout and creates a blank band below a subsequently shorter
-        // keyboard layout. Decoration must follow content geometry, never define it.
+        // The drawable reports no intrinsic size. This background is installed on a wrap-content
+        // host, and an intrinsic size would feed itself back into layout as a blank band below a
+        // subsequently shorter keyboard. Decoration must follow content geometry, never define it.
         return new LayoutNeutralDrawable(material);
     }
 
+    /**
+     * Lets go of the frame the keyboard host was drawing. The frame is the blur cache's own and is
+     * never recycled here: several surfaces may still be showing it, and the cache's in-use scan
+     * decides what may go.
+     */
     private void clearInAppKeyboardBackdrop() {
-        Bitmap previousBackdrop = mInAppKeyboardBackdropBitmap;
         mInAppKeyboardBackdropBitmap = null;
+        mInAppKeyboardBackdropFrameRect.setEmpty();
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
-        recycleSupersededInAppKeyboardBackdrop(previousBackdrop, null);
-    }
-
-    private void recycleSupersededInAppKeyboardBackdrop(@Nullable Bitmap previousBackdrop,
-                                                         @Nullable Drawable installedBackground) {
-        if (previousBackdrop == null || previousBackdrop == mInAppKeyboardBackdropBitmap
-            || mChrome.blurCache().containsFrame(previousBackdrop)
-            || previousBackdrop.isRecycled()
-            || drawableReferencesBitmap(installedBackground, previousBackdrop)) {
-            return;
-        }
-        previousBackdrop.recycle();
-    }
-
-    private boolean drawableReferencesBitmap(@Nullable Drawable drawable, @NonNull Bitmap bitmap) {
-        if (drawable instanceof BitmapDrawable) {
-            return ((BitmapDrawable) drawable).getBitmap() == bitmap;
-        }
-        if (drawable instanceof LayoutNeutralDrawable) {
-            return drawableReferencesBitmap(((LayoutNeutralDrawable) drawable).mSource, bitmap);
-        }
-        if (drawable instanceof LayerDrawable) {
-            LayerDrawable layers = (LayerDrawable) drawable;
-            for (int i = 0; i < layers.getNumberOfLayers(); i++) {
-                if (drawableReferencesBitmap(layers.getDrawable(i), bitmap)) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     /**
-     * Blurred wallpaper crop behind the keyboard, cached until its geometry, blur radius, or
-     * wallpaper source changes. Returns the last good bitmap while a recapture is unavailable.
+     * The shared pre-blurred frame the keyboard host draws, at the keyboard's own radius. The host
+     * samples it at its live position, so no geometry is cut here; the ledger only notes the
+     * radius and source a rebuild was asked for. While a blur is in flight the frame already held
+     * stays, as long as it still describes the screen it was captured for.
      */
     @Nullable
-    private Bitmap obtainInAppKeyboardBackdropBitmap(@NonNull ChromeSpec state,
-                                                     @NonNull View surfaceHost) {
+    private Bitmap obtainInAppKeyboardBackdropFrame(@NonNull ChromeSpec state,
+                                                    @NonNull View surfaceHost) {
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        if (wallpaperFrame == null) {
-            return mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD) ? null : mInAppKeyboardBackdropBitmap;
-        }
-
-        Rect targetRect = buildInAppKeyboardBackdropTargetRect(state, surfaceHost);
+        Rect targetRect = wallpaperFrame == null ? null
+            : buildInAppKeyboardBackdropTargetRect(state, surfaceHost);
         if (targetRect == null) {
             return mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD) ? null : mInAppKeyboardBackdropBitmap;
         }
-        // Cut wider by the parallax's whole travel, so a slide shifts the crop and never re-cuts
-        // it; the ledger keys on the widened rect, so a change in the travel re-cuts once.
-        int windowWidth = targetRect.width();
-        targetRect = com.termux.app.chrome.ParallaxFrostDrawable.overscan(targetRect,
-            mWallpaperParallaxSparePx);
         // The keyboard's own radius, not the dock's state.blurRadiusDp it used to share outright —
         // falls back to it while the keyboard's is still the -1 "follow" sentinel.
         int keyboardBlurRadiusDp = getEffectiveInAppKeyboardBlurRadius();
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
-        if (!mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD) &&
-            mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD) == keyboardBlurRadiusDp &&
-            mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD) == usingManagedWallpaperSource &&
-            mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD, targetRect) &&
-            mInAppKeyboardBackdropBitmap != null) {
-            return mInAppKeyboardBackdropBitmap;
+        Bitmap frame = mChrome.blurCache().obtain(keyboardBlurRadiusDp, wallpaperFrame);
+        Rect frameRect = mChrome.blurCache().frameRectRef();
+        if (frame == null) {
+            return mInAppKeyboardBackdropFrameRect.equals(frameRect) ? mInAppKeyboardBackdropBitmap : null;
         }
-
-        Bitmap blurredBackdrop = mChrome.blurCache().crop(keyboardBlurRadiusDp, targetRect, wallpaperFrame);
-        if (blurredBackdrop == null) {
-            // A previous-geometry crop is worse than tint-only glass: BitmapDrawable would scale it
-            // into the new keyboard height and briefly sample the wrong wallpaper region.
-            return mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD, targetRect)
-                ? mInAppKeyboardBackdropBitmap : null;
-        }
-        mInAppKeyboardBackdropBitmap = blurredBackdrop;
-        mInAppKeyboardBackdropWindowWidth = windowWidth;
+        mInAppKeyboardBackdropBitmap = frame;
+        mInAppKeyboardBackdropFrameRect.set(frameRect);
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD, keyboardBlurRadiusDp,
             usingManagedWallpaperSource, targetRect);
-        return mInAppKeyboardBackdropBitmap;
-    }
-
-    /**
-     * A frost crop as a drawable: plain while nothing pans, exactly as before, or wrapped so it
-     * draws shifted by the shared parallax offset while the wallpaper can pan. Both are
-     * {@link BitmapDrawable}s, so everything that scans a drawable for its bitmap keeps working.
-     *
-     * @param windowWidth the crop's width less the parallax spare cut beyond it: the surface's own
-     */
-    @NonNull
-    private BitmapDrawable frostDrawable(@NonNull Bitmap crop, int windowWidth) {
-        if (windowWidth <= 0 || windowWidth >= crop.getWidth()) {
-            return new BitmapDrawable(getResources(), crop);
-        }
-        return new com.termux.app.chrome.ParallaxFrostDrawable(getResources(), crop, windowWidth,
-            mWallpaperParallax);
+        return frame;
     }
 
     /**
@@ -5673,7 +5697,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return surfaceHost.getHeight() > state.keyboardHeight;
     }
 
-    /** The expanded surface's blurred crop: installed, sized to the surface, and current. */
+    /**
+     * The expanded surface's backdrop: showing the shared frame, laid out at the surface's size,
+     * and aimed for this geometry. Both this and the pass that records the geometry build the
+     * same, unwidened rect; when the pass recorded a rect widened for the parallax the two never
+     * matched while the wallpaper could pan, so the keyboard-local coat never came off and the
+     * keyboard's reveal fell to its backstop on every open.
+     */
     private boolean isUnifiedAccessoryCropInstalled(@NonNull ChromeSpec state) {
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
         View surfaceHost = findViewById(R.id.accessory_surface_host);
@@ -5756,18 +5786,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        Bitmap wallpaperBackdrop = mChrome.blurCache().crop(state.blurRadiusDp, targetRect, wallpaperFrame);
-        if (wallpaperBackdrop == null) {
-            if (backdrop.getDrawable() != null) {
+        com.termux.app.chrome.SharedFrameDrawable installed =
+            com.termux.app.chrome.SharedFrameDrawable.of(backdrop.getDrawable());
+        Bitmap frame = mChrome.blurCache().obtain(state.blurRadiusDp, wallpaperFrame);
+        Rect frameRect = mChrome.blurCache().frameRectRef();
+        if (frame == null) {
+            // A blur in flight: the frame already up stays while it still describes this screen.
+            if (installed != null && installed.frameRect().equals(frameRect)) {
                 backdrop.setVisibility(View.VISIBLE);
             } else {
                 clearDecorNavBarBackdrop();
             }
             return;
         }
+        // The shared frame at the strip's own position — the strip lives in the decor, which
+        // nothing transforms — fading in over the frame a wallpaper change displaced, as the dock
+        // it abuts does, so the seam never shows two pictures.
+        if (installed != null) {
+            installed.setFrame(frame, frameRect, mChrome.blurCache().isCrossfadedRadius(state.blurRadiusDp)
+                && !ReducedMotion.isEnabled(this));
+        } else {
+            backdrop.setImageDrawable(new com.termux.app.chrome.SharedFrameDrawable(frame, frameRect,
+                mWallpaperParallax, com.termux.app.chrome.GlassAnchor.screen(backdrop)));
+        }
+        backdrop.invalidate();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            backdrop.setImageBitmap(wallpaperBackdrop);
             // Use the SAME AGSL glass refraction the content dock/keyboard backdrop uses (API 33+),
             // not a plain blur, so this decor surface reads as the same material in both states: the
             // keyboard-off dock+nav overlay and the keyboard-on under-pill strip now match the
@@ -5776,8 +5820,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             RenderEffect glass = buildGlassRefractionEffect(0f, 0f, 0f,
                 Math.max(1, targetRect.width()), Math.max(1, targetRect.height()), 0f);
             backdrop.setRenderEffect(glass);
-        } else {
-            backdrop.setImageBitmap(wallpaperBackdrop);
         }
 
         // Same content-aware light scatter the dock and keyboard backdrops apply, so the
@@ -6194,18 +6236,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // and keeps the one it is fading out of for as long as that crossfade is still on screen.
             return true;
         }
+        // Every surface that samples the shared frame directly, the frame a crossfade is still
+        // fading out of included: the frosts, the dock's backdrop, the under-pill strip and the
+        // keyboard host's background.
         int[] frostIds = {R.id.command_palette_wallpaper_backdrop, R.id.terminal_sheet_wallpaper_backdrop,
             R.id.app_drawer_wallpaper_backdrop, R.id.terminal_window_bar_wallpaper_backdrop,
-            R.id.terminal_status_bar_wallpaper_backdrop};
+            R.id.terminal_status_bar_wallpaper_backdrop, R.id.accessory_blur_backdrop};
         for (int frostId : frostIds) {
             ImageView frost = findViewById(frostId);
-            Drawable drawable = frost != null ? frost.getDrawable() : null;
-            if (drawable instanceof BitmapDrawable
-                && ((BitmapDrawable) drawable).getBitmap() == frame) {
-                return true;
-            }
+            if (frost != null && drawableShowsFrame(frost.getDrawable(), frame)) return true;
         }
-        return false;
+        ImageView strip = mDecorNavBarBlurBackdrop;
+        if (strip != null && drawableShowsFrame(strip.getDrawable(), frame)) return true;
+        View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
+        return keyboardHost != null && drawableShowsFrame(keyboardHost.getBackground(), frame);
+    }
+
+    /** True while {@code drawable} — a shared-frame drawable, or a stack holding one — shows {@code frame}. */
+    private static boolean drawableShowsFrame(@Nullable Drawable drawable, @NonNull Bitmap frame) {
+        if (drawable instanceof LayoutNeutralDrawable) drawable = ((LayoutNeutralDrawable) drawable).source();
+        com.termux.app.chrome.SharedFrameDrawable shared = com.termux.app.chrome.SharedFrameDrawable.of(drawable);
+        return shared != null && shared.shows(frame);
     }
 
 
@@ -6226,7 +6277,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (backdrop == null || surfaceHost == null || accessoryContainer == null || wallpaperFrame == null ||
             accessoryContainer.getWidth() <= 0 || accessoryContainer.getHeight() <= 0) {
             if (backdrop != null && shouldUseAccessoryRenderEffectBlur(state)
-                && isAccessoryBackdropCropHeightCompatible(backdrop, backdrop.getHeight())) {
+                && com.termux.app.chrome.SharedFrameDrawable.of(backdrop.getDrawable()) != null) {
                 backdrop.setVisibility(View.VISIBLE);
             } else {
                 clearAccessoryRenderEffectBackdrop();
@@ -6239,35 +6290,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
         // When the under-pill decor strip abuts the dock/keyboard bottom (default dock only), overscan
-        // the bitmap downward past that seam so the refraction edge band lands below it — the strip
+        // the view downward past that seam so the refraction edge band lands below it — the strip
         // overscans upward by the same amount, so the two surfaces' blurred wallpaper meets seamlessly.
         int seamOverscanPx = !isRoundedDockStyle() && shouldShowDecorNavBarSurface(state)
             ? horizontalOverscanPx : 0;
         applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx, seamOverscanPx);
-        // The dock's own overscan is what the ImageView is sized to; the parallax spare beyond it
-        // is cut into the same bitmap so a slide shifts the crop rather than re-cutting it.
+        // The dock's own overscan is what the ImageView is sized to. The drawable inside samples
+        // the shared frame at the view's live position, so the rect only says where the shader's
+        // capsule sits and whether the surface has moved since the last pass.
         Rect backdropTargetRect = buildAccessoryBackdropTargetRect(surfaceHost, horizontalOverscanPx,
             seamOverscanPx);
-        int backdropWindowWidth = backdropTargetRect.width();
-        backdropTargetRect = com.termux.app.chrome.ParallaxFrostDrawable.overscan(backdropTargetRect,
-            mWallpaperParallaxSparePx);
+        com.termux.app.chrome.SharedFrameDrawable installed =
+            com.termux.app.chrome.SharedFrameDrawable.of(backdrop.getDrawable());
         if (!mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY) &&
             mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.ACCESSORY) == state.blurRadiusDp &&
             mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.ACCESSORY) == usingManagedWallpaperSource &&
             mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.ACCESSORY, backdropTargetRect) &&
-            isAccessoryBackdropCropHeightCompatible(backdrop, backdropTargetRect.height())) {
+            installed != null) {
             backdrop.setVisibility(View.VISIBLE);
             return;
         }
-        Bitmap wallpaperBackdrop = mChrome.blurCache().crop(
-            state.blurRadiusDp, backdropTargetRect, wallpaperFrame);
-        if (wallpaperBackdrop == null) {
-            if (isAccessoryBackdropCropHeightCompatible(backdrop, backdropTargetRect.height())) {
+        Bitmap frame = mChrome.blurCache().obtain(state.blurRadiusDp, wallpaperFrame);
+        Rect frameRect = mChrome.blurCache().frameRectRef();
+        if (frame == null) {
+            if (installed != null && installed.frameRect().equals(frameRect)) {
+                // A blur in flight: the frame already up still describes this screen, and it is
+                // sampled where the view is now, so a moved dock shows the right wallpaper.
+                backdrop.invalidate();
                 backdrop.setVisibility(View.VISIBLE);
             } else {
-                // Never scale the keyboard-era crop into dock-only bounds on close. A subsequent
-                // recovery pass can restore blur; this frame keeps the tint layer without stale
-                // wallpaper brightness.
+                // Nothing that describes this screen. A subsequent recovery pass can restore blur;
+                // this frame keeps the tint layer without stale wallpaper brightness.
                 backdrop.setImageDrawable(null);
                 backdrop.setVisibility(View.GONE);
                 mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
@@ -6275,8 +6328,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        installAccessoryBackdropBitmap(backdrop, wallpaperBackdrop, state.blurRadiusDp,
-            backdropWindowWidth);
+        installAccessoryBackdropFrame(backdrop, installed, frame, frameRect, state.blurRadiusDp);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // The capsule sits inside the (horizontally overscanned) backdrop bitmap: left/right are
             // inset by the overscan, top/bottom span the full height. Hand that rect to the shader so
@@ -6305,9 +6357,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         backdrop.setVisibility(View.VISIBLE);
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, state.blurRadiusDp,
             usingManagedWallpaperSource, backdropTargetRect);
-        // The keyboard-local cover is deliberately retained until this expanded crop is ready.
-        // Remove it now so dock and keyboard switch atomically to the unified material.
-        if (isUnifiedAccessoryBackdropReady(state)) {
+        // The keyboard-local cover is deliberately retained until this expanded surface is ready.
+        // Remove it now so dock and keyboard switch atomically to the unified material — unless
+        // the keyboard is mid-way between materials, when its own pass owns what it wears.
+        if (mKeyboardTravelSolidness == KeyboardMaterialPolicy.NO_TRAVEL
+            && isUnifiedAccessoryBackdropReady(state)) {
             View keyboardSurfaceHost = findViewById(R.id.inapp_keyboard_view_host);
             if (keyboardSurfaceHost != null) {
                 keyboardSurfaceHost.setBackground(null);
@@ -6317,37 +6371,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Puts {@code crop} on the dock's backdrop, on the settle curve rather than outright when the
-     * cache says this radius's frame arrived to replace one a wallpaper change displaced — see
+     * Points the dock's backdrop at {@code frame}, on the settle curve rather than outright when
+     * the cache says this radius's frame arrived to replace one a wallpaper change displaced — see
      * {@link com.termux.app.chrome.WallpaperBlurCache#isCrossfadedRadius}. A rotation or a radius
-     * change never sets that flag, so those keep landing the way they always have.
+     * change never sets that flag, so those keep landing the way they always have. The drawable
+     * samples the frame at the view's laid-out position plus the stack's own travel, so the dock
+     * shows the wallpaper it is over while it slides between two places' states and rides the
+     * plank's press exactly as it always has.
      */
-    private void installAccessoryBackdropBitmap(@NonNull ImageView backdrop, @NonNull Bitmap crop,
-                                                 int blurRadiusDp, int windowWidth) {
-        Drawable previous = backdrop.getDrawable();
-        Bitmap previousBitmap = previous instanceof BitmapDrawable
-            ? ((BitmapDrawable) previous).getBitmap() : null;
-        boolean crossfade = previousBitmap != null && previousBitmap != crop
-            && !previousBitmap.isRecycled()
-            && mChrome.blurCache().isCrossfadedRadius(blurRadiusDp);
-        if (!crossfade) {
-            backdrop.setImageDrawable(frostDrawable(crop, windowWidth));
-            return;
+    private void installAccessoryBackdropFrame(@NonNull ImageView backdrop,
+                                               @Nullable com.termux.app.chrome.SharedFrameDrawable installed,
+                                               @NonNull Bitmap frame, @NonNull Rect frameRect,
+                                               int blurRadiusDp) {
+        if (installed != null) {
+            boolean crossfade = installed.frame() != frame
+                && mChrome.blurCache().isCrossfadedRadius(blurRadiusDp)
+                && !ReducedMotion.isEnabled(this);
+            installed.setFrame(frame, frameRect, crossfade);
+        } else {
+            backdrop.setImageDrawable(new com.termux.app.chrome.SharedFrameDrawable(frame, frameRect,
+                mWallpaperParallax, com.termux.app.chrome.GlassAnchor.layout(backdrop, mAccessoryStackLift)));
         }
-        BitmapCrossfadeAnimator.run(backdrop, previousBitmap, crop,
-            ReducedMotion.isEnabled(this),
-            (frame, finished) -> backdrop.setImageDrawable(frostDrawable(frame, windowWidth)));
-    }
-
-    private boolean isAccessoryBackdropCropHeightCompatible(@NonNull ImageView backdrop,
-                                                             int destinationHeight) {
-        Drawable drawable = backdrop.getDrawable();
-        if (!(drawable instanceof BitmapDrawable) || destinationHeight <= 0)
-            return false;
-        Bitmap bitmap = ((BitmapDrawable) drawable).getBitmap();
-        return bitmap != null && !bitmap.isRecycled()
-            && bitmap.getHeight() == destinationHeight
-            && backdrop.getHeight() == destinationHeight;
+        // The surface moved or the geometry changed, or this would not have run: re-aim now, since
+        // a view whose ancestor moved is not redrawn on its own.
+        backdrop.invalidate();
     }
 
     @Nullable
@@ -6643,21 +6690,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         });
 
+    /**
+     * Whether the dock's backdrop may keep drawing through the keyboard's close. It used to hold a
+     * crop cut for the keyboard-era height, which scaled into the dock-only bounds would have shown
+     * the wrong wallpaper for a frame; the shared frame is sampled at the view's live bounds, so
+     * whatever the dock is laid out to next, it shows the wallpaper behind it.
+     */
     private boolean isDockBackdropSafeForCurrentDestination(@NonNull ChromeSpec state) {
-        if (!shouldUseAccessoryRenderEffectBlur(state))
-            return true;
-        ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
-        View surfaceHost = findViewById(R.id.accessory_surface_host);
-        if (backdrop == null || surfaceHost == null || backdrop.getDrawable() == null
-            || backdrop.getVisibility() != View.VISIBLE) {
-            return true;
-        }
-        int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
-        int seamOverscanPx = !isRoundedDockStyle() && shouldShowDecorNavBarSurface(state)
-            ? horizontalOverscanPx : 0;
-        Rect target = buildAccessoryBackdropTargetRect(
-            surfaceHost, horizontalOverscanPx, seamOverscanPx);
-        return isAccessoryBackdropCropHeightCompatible(backdrop, target.height());
+        return true;
     }
 
     private void applyRealtimeBlurRadius(View blurView, int blurRadiusDp) {
@@ -6888,6 +6928,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float translationY = mDockTravelTranslationPx - mDockImeLiftPx;
         if (accessoryContainer.getTranslationY() != translationY) {
             accessoryContainer.setTranslationY(translationY);
+            // The dock's and the keyboard's glass sample the wallpaper through this translation
+            // (mAccessoryStackLift); a transform alone redraws nothing, so they are re-aimed here.
+            View backdrop = findViewById(R.id.accessory_blur_backdrop);
+            if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
+            View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
+            if (keyboardHost != null && keyboardHost.getBackground() != null) keyboardHost.invalidate();
         }
         int travel = Math.round(Math.max(0f, mDockTravelTranslationPx));
         if (travel <= 0) {
@@ -15727,6 +15773,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (translation != 0f || mDockTravelTranslationPx != 0f) mChromeTravelMoved = true;
         mDockTravelTranslationPx = translation;
         applyAccessoryStackTranslation();
+        // A keyboard up on both places crosses from one material to the other with the wall.
+        syncKeyboardMaterialTravel(frame);
         // A minimal place's strip has no content to show, and gets it back at settle; a normal
         // place's content fades as the strip it is heading for comes closer. The bars minimal mode
         // takes away from the sides and the top fade with the dock.
@@ -15874,6 +15922,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTravelDockPreRolled = false;
         mChromeTravelMoved = false;
         mDockTravelTranslationPx = 0f;
+        // The material blend, if one ran, has landed on the arriving place's material; the pass
+        // below paints that material plainly, and the blend's layers go with it.
+        mKeyboardTravelSolidness = KeyboardMaterialPolicy.NO_TRAVEL;
+        mKeyboardTravelSolidFill = null;
         applyAccessoryStackTranslation();
         applyChromeTravelAlpha(1f, 1f);
         // A keyboard pre-rolled for a place the wall did not stay on goes away quietly, as it came:
@@ -21702,6 +21754,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         LayoutNeutralDrawable(@NonNull Drawable source) {
             mSource = source;
+        }
+
+        /** The material this stands in for, for whoever scans a background for what it draws. */
+        @NonNull
+        Drawable source() {
+            return mSource;
         }
 
         @Override

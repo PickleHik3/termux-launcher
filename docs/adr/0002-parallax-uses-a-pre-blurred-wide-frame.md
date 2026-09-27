@@ -1,6 +1,7 @@
 ---
 status: accepted
 date: 2026-09-26
+amended-by: 0004 (every surface samples the shared frame through a shader; the frame is held at blur resolution)
 ---
 
 # Wallpaper parallax reads from a pre-blurred wide frame, not a real-time blur
@@ -30,3 +31,6 @@ by the pan's whole travel and draw them shifted by the shared offset (`ParallaxF
 those crops as `BitmapDrawable`s in several places — the in-use scan that guards recycling, the
 dock's height check, the wallpaper-change crossfade — and keeping the type keeps all of it true.
 The effect is the same: nothing is re-cut during a slide, only the draw offset moves.
+
+Superseded (2026-09-27, ADR 0004): the crops are gone; every surface samples the frame through
+`SharedFrameDrawable`, and the frame is held at blur resolution.

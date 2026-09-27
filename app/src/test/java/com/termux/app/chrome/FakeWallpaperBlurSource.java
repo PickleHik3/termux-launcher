@@ -26,6 +26,8 @@ final class FakeWallpaperBlurSource implements WallpaperBlurCache.Source {
     int clearedCount;
     /** Frames the outside world claims to be drawing, so the cache must not recycle them. */
     @NonNull final List<Bitmap> inUse = new ArrayList<>();
+    /** How much smaller than the capture a blurred frame comes back, as the real renderer's does. */
+    int blurScale = 1;
 
     @NonNull
     @Override
@@ -69,7 +71,10 @@ final class FakeWallpaperBlurSource implements WallpaperBlurCache.Source {
     public Bitmap preBlur(@NonNull Bitmap sourceBitmap, int blurRadiusDp) {
         // The real renderer returns the source itself at radius 0 and a new bitmap otherwise; the
         // cache's recycling bookkeeping differs between those, so mirror both.
-        return blurRadiusDp <= 0 ? sourceBitmap : sourceBitmap.copy(Bitmap.Config.ARGB_8888, false);
+        if (blurRadiusDp <= 0) return sourceBitmap;
+        if (blurScale <= 1) return sourceBitmap.copy(Bitmap.Config.ARGB_8888, false);
+        return Bitmap.createBitmap(Math.max(1, sourceBitmap.getWidth() / blurScale),
+            Math.max(1, sourceBitmap.getHeight() / blurScale), Bitmap.Config.ARGB_8888);
     }
 
     @Override
