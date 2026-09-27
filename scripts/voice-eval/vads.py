@@ -257,6 +257,32 @@ class Segmenter:
         return segs, voiced_flags, levels
 
 
+class HybridDecider(SileroDecider):
+    """Silero says whether a frame is speech; loudness says whether it is the person holding the
+    phone. A near speaker is far louder than a TV or a room conversation, so a voiced frame only
+    counts while its smoothed RMS is within GATE_DB of the loudest speech heard so far. That peak
+    decays slowly (about 6 dB over 10 s at 30 ms frames) so a speaker who moves away is not lost
+    for good. Background speech that Silero keeps on its own falls under the gate."""
+
+    name = "hybrid"
+    GATE_DB = 12.0
+    DECAY = 10 ** (-6.0 / 20 / (10_000 / FRAME_MS))
+
+    def __init__(self, model, onset=0.5, hold=0.35):
+        super().__init__(model, onset, hold)
+        self.energy = EnergyDecider()
+        self.peak = 0.0
+
+    def decide(self, frame_index, pcm_frame, in_speech):
+        speech, rms = super().decide(frame_index, pcm_frame, in_speech)
+        smoothed = float(self.energy.smooth(rms))
+        self.peak *= self.DECAY
+        if speech and smoothed > self.peak:
+            self.peak = smoothed
+        gate = self.peak * 10 ** (-self.GATE_DB / 20)
+        return bool(speech and smoothed >= gate), rms
+
+
 def make_vads(names, silero_path=None, silero_onset=0.5, silero_hold=0.35, threads=1):
     """name -> zero-arg factory of a fresh decider (deciders carry per-clip state)."""
     out = {}
@@ -266,6 +292,9 @@ def make_vads(names, silero_path=None, silero_onset=0.5, silero_hold=0.35, threa
         elif name == "silero":
             model = SileroModel(silero_path or default_silero_path(), threads)
             out[name] = lambda m=model: SileroDecider(m, silero_onset, silero_hold)
+        elif name == "hybrid":
+            model = SileroModel(silero_path or default_silero_path(), threads)
+            out[name] = lambda m=model: HybridDecider(m, silero_onset, silero_hold)
         else:
             raise ValueError("unknown VAD " + name)
     return out
