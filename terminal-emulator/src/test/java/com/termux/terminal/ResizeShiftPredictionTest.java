@@ -94,10 +94,10 @@ public class ResizeShiftPredictionTest extends TerminalTestCase {
         assertPredictionHolds(5, true);
     }
 
-    public void testShrinkingTheAlternateScreenFollowsTheSameRule() {
+    public void testTheAlternateScreenPredictsNoShift() {
         withTerminalSized(COLS, 5).enterString("\033[?1049h").enterString("abc\r\ndef\r\nghi\r\njkl\r\nmno");
-        assertEquals(-2, mTerminal.predictRowsOnlyResizeShift(3, true));
-        assertPredictionHolds(3, true);
+        assertEquals(0, mTerminal.predictRowsOnlyResizeShift(3, true));
+        assertEquals(0, mTerminal.predictRowsOnlyResizeShift(7, true));
     }
 
     public void testTheSameRowCountMovesNothing() {
