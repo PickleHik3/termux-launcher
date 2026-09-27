@@ -20,7 +20,24 @@ Run the memory watchdog for any model session.
    - d. While it's off, open the height editor in Settings. The keyboard shows for editing and goes down afterwards.
 3. **`tai speak` first-sound time** (2c5c3584): the reported time to first sound matches when audio is
    actually heard.
-4. **Voice redesign**: the list gets added here when the build is merged.
+4. **Voice redesign** (ddebbf92). Watch logcat tags `VoiceSessionCleanup` (`cleanup: … outcome=`),
+   `VoiceTextPolisher` and `VoiceInputSession`.
+   - a. The pill sits top-right of the pane area and is 36 dp. The Warming up chip shows until speech is
+      ready, and its ring is a sensible size.
+   - b. The waveform scrolls and stays flat in a quiet room. It rises only with speech, and the floor re-learns
+      after about 1.5 s of quiet.
+   - c. The 4-line panel keeps the whole session and stays scrolled to the bottom. Typewriter reveal, and a
+      shimmer while phrases are transcribing. With reduced motion, text appears at once.
+   - d. × and the voice key deliver the phrases still waiting. Swiping the card discards them.
+   - e. The cleanup pass at session end (Polished, then Light) swaps an untouched line in place in bash,
+      fish, Claude Code and codex. Watch that the erase and retype don't garble the line.
+   - f. Type something after dictating, then end the session. The panel should offer Replace/Copy.
+      **Known risk:** Replace erases the counted characters and retypes, so it may eat what you typed.
+   - g. Refusal guard: dictate a question ("what is the capital of France"). It is kept as dictated, not
+      answered.
+   - h. Command rule: "ls -la" is treated as a command. A sentence that only contains a command word
+      somewhere in the middle is not.
+   - i. Without Gemma E2B installed, "Kept as heard" appears. A session under 4 words closes at once.
 
 ## Carried over (already installed, never verified)
 5. Read aloud on a terminal selection.
