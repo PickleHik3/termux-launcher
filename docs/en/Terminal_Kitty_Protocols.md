@@ -115,6 +115,28 @@ the normal Termux key encoder.
 The Kitty multiple-cursors protocol supports point and rectangular cursors, cursor shape, and color.
 This is independent of the launcher's animated input cursor trail.
 
+## Cursor trail
+
+The animated cursor trail is a line-for-line port of kitty's own `cursor_trail.c`: one quad whose
+four corners chase the cursor's shape rect at rates kitty derives from how much each corner leads
+the direction of travel, so the leading edge arrives first and the shape shears rather than
+sliding as a rigid copy. The same trail follows a cursor jumping inside one pane and a pane switch
+— both are just its target changing.
+
+Three of kitty's own `kitty.conf` directives tune it, read from `~/.config/kitty/kitty.conf`:
+
+- `cursor_trail <ms>` — a positive value sets the delay before a cursor move is picked up as a new
+  target (kitty's own use of `0` to disable the trail entirely is not this app's on/off switch,
+  which is the separate `terminal_cursor_trail` preference below);
+- `cursor_trail_decay <fast> <slow>` — the fastest and slowest per-corner decay times, in seconds;
+- `cursor_trail_start_threshold <x> [y]` — how many cells a move must cross before the trail
+  animates at all, rather than snapping;
+- `cursor_trail_color <color>|none` — `none` (the default) uses the cursor's own colour.
+
+Turning the trail on or off is the `terminal_cursor_trail` preference, further gated on power-save
+mode and on the pane layer's own reduce-motion setting: off means no trail at all, for a cursor
+move inside a pane or a switch between panes alike.
+
 ## Kitty graphics Tier 2
 
 The terminal supports:

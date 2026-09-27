@@ -81,40 +81,43 @@ Both are preserved by the same paths: `setChar`, `copyInterval`, reflow inside
   Linked cells are underlined when they have no underline of their own, since touch has no
   hover to reveal them on.
 
-- **Slice 4 — cursor trail (done).** `CursorTrail` draws a streak that shrinks and fades from
-  the cursor's old cell to its new one. It reads the cursor position and draws over the
-  finished frame; it knows nothing about cells or protocols, and requests a frame only while
-  a streak is in flight, so a still cursor costs nothing.
+- **Slice 4 — cursor trail (done, redesigned).** Originally a hand-rolled convex-hull streak
+  (`CursorTrail`) for an in-pane move, separate from a hand-rolled kitty-law smear
+  (`PaneMotionOverlayView.flyCursor`) for a pane switch. Replaced with a single, line-for-line
+  port of kitty's own `kitty/cursor_trail.c`: `terminal-view`'s `KittyCursorTrail` is the
+  engine — pixels and floats only, no Android types, JVM-tested in `KittyCursorTrailTest` — and
+  `PaneMotionOverlayView` is its one instance for the whole terminal place. To the engine a pane
+  switch is no different from a cursor jumping across one pane: both are just its target rect
+  changing, pulled fresh every animated frame from the focused pane's cursor shape (block/hollow
+  the full cell, beam the left quarter, underline the bottom quarter — whatever
+  `TerminalRenderer` actually draws).
 
-  It remembers the cursor in **emulator** row coordinates, not view coordinates, so scrolling
-  the view does not read as cursor movement. Jumps of more than 8 rows are treated as a screen
-  change and not animated. Reset on session switch and on reflow, where the remembered cell no
-  longer means anything.
+  The engine's own law, ported rather than approximated: four corners, each easing toward its
+  own target corner at a rate kitty derives from how much that corner leads the direction of
+  travel (`dot` product, min-max normalised across the four, `decay_fast` for the leader,
+  `decay_slow` for the trailer); `cursor_trail`'s delay before a new target is picked up at all;
+  `cursor_trail_start_threshold` to skip a move too small to be worth animating; opacity that
+  rises and falls with DECTCEM on `decay_slow`; and `needs_render` staying true for one extra
+  frame after every corner has actually settled. `TerminalEmulator.getCursorPositionChangedAtMillis()`
+  is the new timestamp `append()` stamps only when a call actually moved the cursor, which is what
+  the delay gates on.
 
-  **Fixed after the first device pass, from a report that it worked inside tmux but not at a raw
-  prompt.** Four defects, in order of how much they mattered:
+  Read from `~/.config/kitty/kitty.conf` as tunables, not as the on/off switch: `cursor_trail`
+  (a positive value only — kitty's own 0-disables use of it is not this app's switch, which stays
+  the preference below), `cursor_trail_decay`, `cursor_trail_start_threshold` and
+  `cursor_trail_color` (`none` falls back to the cursor's own colour). Parsed by
+  `TerminalFontConfig` alongside the font directives it already reads from the same file, and
+  applied to `PaneMotionOverlayView` wherever the font config is reloaded.
 
-  - *It gated on whether the cursor was being drawn this frame.* With a blinking cursor the remembered
-    cell was cleared on every blink-off frame, so a streak could never start. That is the tmux
-    difference: `DECSCUSR` with an odd parameter turns blinking on, fish sets exactly that on startup,
-    and tmux normalizes it to a steady cursor. It now tracks `isCursorEnabled()` — has the program
-    hidden the cursor — and is indifferent to the blink phase.
-  - *The streak was the rectangle bounding the two cells.* On a diagonal move that is a block covering
-    every cell between them: the reported screenshot showed a nine-by-five block tinting 45 cells of
-    an editor. It is now the convex hull of the two cursor cells, a band one cell wide along the
-    direction of travel, built by a monotone chain over the eight corners — cheaper than case analysis
-    for eight directions and unable to get one of them wrong. `CursorTrailHullTest` pins the shape.
-  - *Too heavy and too slow.* Peak alpha 0.55 to 0.3, duration 70-160ms to 60-120ms, and both the
-    tail's catch-up and the fade now ease out, so the streak is mostly gone early instead of lingering
-    long enough to be caught in a screenshot.
-  - *No minimum distance.* Typing advances one column per keystroke, which drew a two-cell blob on
-    every letter. Moves shorter than two cells are no longer animated.
-
-  On or off is decided in `app` by `TermuxTerminalViewClient.applyCursorTrailPolicy`: the new
-  `terminal_cursor_trail` preference (default on) and `PowerManager.isPowerSaveMode()`,
-  re-read on resume because the user can change either while the activity is stopped.
+  On or off is still decided in `app` by `TermuxTerminalViewClient.applyCursorTrailPolicy`: the
+  `terminal_cursor_trail` preference (default on), `PowerManager.isPowerSaveMode()`, and now also
+  the pane layer's own reduce-motion check — off means no trail at all, for either kind of move.
   `appearance.toggle_cursor_trail` flips the preference and reports the value it moved to;
-  `terminal.state` reports it.
+  `terminal.state` reports it. `TerminalView` no longer draws anything itself: it only reports,
+  through the `TerminalView.CursorTrailListener` its pane controller installs, that its cursor may
+  have moved or hit a discontinuity (session switch, resize/reflow, scroll/prompt jump, entering
+  text selection) — the trail itself is drawn once, above every pane, by the layer that already
+  draws the closing-pane ghost.
 
 - **Slice 5 — OSC 133 shell integration (done).** A row carries one mark
   (`TerminalRow.MARK_{PROMPT,COMMAND,OUTPUT}_START`), stored on the row so it follows it
