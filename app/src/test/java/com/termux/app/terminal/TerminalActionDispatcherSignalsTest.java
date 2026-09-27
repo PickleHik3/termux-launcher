@@ -11,6 +11,7 @@ import androidx.annotation.Nullable;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalSession;
+import com.termux.terminal.TerminalSessionClient;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -24,6 +25,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.util.ReflectionHelpers;
 
 import java.io.IOException;
+import java.lang.reflect.Proxy;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -237,6 +239,17 @@ public class TerminalActionDispatcherSignalsTest {
         return text == null ? null : text.toString();
     }
 
+    /** A session client that answers every callback with nothing, so an emulator can run unattached. */
+    private static final TerminalSessionClient SILENT_CLIENT = (TerminalSessionClient) Proxy.newProxyInstance(
+        TerminalSessionClient.class.getClassLoader(), new Class<?>[] {TerminalSessionClient.class},
+        (proxy, method, args) -> {
+            Class<?> type = method.getReturnType();
+            if (type == boolean.class) return false;
+            if (type == int.class || type == long.class || type == short.class || type == byte.class) return 0;
+            if (type == float.class || type == double.class) return 0.0;
+            return null;
+        });
+
     /** A host with shells that have emulators, looked up by handle, and a count of chip repaints. */
     private static final class SignalHost extends FakeTerminalHost {
         final Map<String, TerminalSession> panes = new LinkedHashMap<>();
@@ -247,7 +260,7 @@ public class TerminalActionDispatcherSignalsTest {
         }
 
         @NonNull TerminalSession addPane() {
-            TerminalSession session = new TerminalSession("/bin/sh", "/", new String[0], new String[0], 2000, null);
+            TerminalSession session = new TerminalSession("/bin/sh", "/", new String[0], new String[0], 2000, SILENT_CLIENT);
             ReflectionHelpers.setField(session, "mEmulator",
                 new TerminalEmulator(session, false, 20, 5, 8, 16, 10, null));
             panes.put(session.mHandle, session);
