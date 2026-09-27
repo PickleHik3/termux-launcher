@@ -78,7 +78,27 @@ public final class TaiModelDownloadService extends Service implements TaiDownloa
         startForeground(SUMMARY_ID, summaryNotification(getString(R.string.termux_ai_download_notification_preparing), true));
         engine = TaiDownloadEngine.getInstance(this);
         hub = engine.hub();
+        clearStaleChildren();
         hub.addListener(this);
+    }
+
+    /**
+     * A per-download notice outlives the process that posted it, and a new service starts with no
+     * memory of it. Builds before the fix below left one for every model ever downloaded; anything
+     * not for a live or paused download is cleared once, as the service comes up.
+     */
+    private void clearStaleChildren() {
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        if (manager == null) return;
+        Set<String> keep = new HashSet<>();
+        for (TaiDownloadHub.Snapshot item : hub.snapshot()) {
+            if (item.isLive() || item.isPaused()) keep.add(item.modelId);
+        }
+        for (android.service.notification.StatusBarNotification posted : manager.getActiveNotifications()) {
+            if (posted.getId() == CHILD_ID && posted.getTag() != null && !keep.contains(posted.getTag())) {
+                manager.cancel(posted.getTag(), CHILD_ID);
+            }
+        }
     }
 
     @Override
@@ -165,11 +185,17 @@ public final class TaiModelDownloadService extends Service implements TaiDownloa
         }
     }
 
-    /** Cancelled and unknown-state records have nothing to say; everything else gets a child. */
-    private static boolean showsChild(@NonNull TaiDownloadHub.Snapshot item) {
-        return item.isLive() || item.isPaused()
-            || TaiModelStore.STATE_FAILED.equals(item.status)
+    /**
+     * Live and paused items get a child, since both have something to act on. A finished item
+     * (installed or failed) gets one only if this service was showing it while it ran: the store
+     * keeps every record it ever had, so showing all installed and failed records posted a
+     * notification for every model ever downloaded each time one download started.
+     */
+    private boolean showsChild(@NonNull TaiDownloadHub.Snapshot item) {
+        if (item.isLive() || item.isPaused()) return true;
+        boolean finished = TaiModelStore.STATE_FAILED.equals(item.status)
             || TaiModelStore.STATE_INSTALLED.equals(item.status);
+        return finished && childStatus.containsKey(item.modelId);
     }
 
     @NonNull
