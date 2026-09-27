@@ -36,8 +36,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * One press of the voice key with the on-device engine: the microphone is read on a capture
- * thread, {@link VoiceActivityDetector} cuts the stream into segments, each segment is written
+ * One dictation (the voice key, or the Dictate key) with the on-device engine: the microphone is
+ * read on a capture thread, {@link VoiceActivityDetector} cuts the stream into segments, each segment is written
  * under {@code cacheDir/tai-ipc} and sent through {@link TaiManager#transcribe} on a single
  * {@code voice-stt} thread — in order, so results come back in order — and every result reaches
  * the {@link Host} on the main thread. {@code sttWarm} goes out as the microphone opens so the
@@ -46,10 +46,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * dropped so the start blip is never transcribed.
  *
  * <p>The session ends on the configured silence timeout ({@link VoiceSilenceTimeout}, or never for
- * "Until tap"), a second tap, the pill's ×, the keyboard going down, the activity
- * pausing, or the first failure; {@link #stop} releases the microphone at once and lets segments
- * already captured finish, {@link #cancel} (a swipe of the pill, the activity going away) drops
- * them too. Every phrase is delivered as heard; the optional cleanup is one pass over the whole
+ * "Until tap"), a second tap (the voice key or the Dictate key), the pill's ×, a press of ✓ or
+ * Copy, the keyboard that started it going down, the activity pausing, or the first failure;
+ * {@link #stop} releases the microphone at once and lets segments already captured finish,
+ * {@link #cancel} (the panel's bin, a swipe of the card, the activity going away) drops them too.
+ * Every phrase is delivered as heard; the optional cleanup is one pass over the whole
  * session once it has ended, owned by the host ({@link VoiceSessionCleanup}). The activity never
  * blocks on it: the only main-thread work is the callbacks.
  */
@@ -246,10 +247,10 @@ public final class VoiceInputSession {
 
     /**
      * Releases the microphone and drops every result still in flight — the undelivered segments
-     * finish transcribing (or time out) on their own but are never typed. Ends the session at once
-     * even when {@link #stop} has already been called and is only waiting on those segments. Only
-     * a swipe of the pill and the activity going away do this; the × and the voice key stop and
-     * deliver.
+     * finish transcribing (or time out) on their own but are never delivered. Ends the session at
+     * once even when {@link #stop} has already been called and is only waiting on those segments.
+     * Only the panel's bin, a swipe of the card and the activity going away do this; the ×, the
+     * voice key and the Dictate key stop and deliver.
      */
     public void cancel(@NonNull EndReason reason) {
         cancelled = true;
@@ -426,7 +427,7 @@ public final class VoiceInputSession {
             }
             String text = result.optString("text", "");
             logPhrase(segmentMs, voicedMs, transcribeMs, result, text.length(), outcomeFor(text));
-            // Typed as heard: any cleanup is one pass over the whole session once it has ended
+            // Delivered as heard: any cleanup is one pass over the whole session once it has ended
             // (VoiceSessionCleanup), so no phrase ever waits for a chat model.
             deliver(sequence, text);
         } catch (IOException | JSONException | RuntimeException e) {

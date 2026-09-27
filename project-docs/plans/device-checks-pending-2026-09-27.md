@@ -20,24 +20,43 @@ Run the memory watchdog for any model session.
    - d. While it's off, open the height editor in Settings. The keyboard shows for editing and goes down afterwards.
 3. **`tai speak` first-sound time** (2c5c3584): the reported time to first sound matches when audio is
    actually heard.
-4. **Voice redesign** (ddebbf92). Watch logcat tags `VoiceSessionCleanup` (`cleanup: … outcome=`),
-   `VoiceTextPolisher` and `VoiceInputSession`.
+4. **Voice redesign** (ddebbf92, then the panel flow and the Dictate key on top). Watch logcat tags
+   `VoiceSessionCleanup` (`cleanup: … outcome=`), `VoiceTextPolisher` and `VoiceInputSession`.
    - a. The pill sits top-right of the pane area and is 36 dp. The Warming up chip shows until speech is
       ready, and its ring is a sensible size.
    - b. The waveform scrolls and stays flat in a quiet room. It rises only with speech, and the floor re-learns
       after about 1.5 s of quiet.
-   - c. The 4-line panel keeps the whole session and stays scrolled to the bottom. Typewriter reveal, and a
-      shimmer while phrases are transcribing. With reduced motion, text appears at once.
-   - d. × and the voice key deliver the phrases still waiting. Swiping the card discards them.
-   - e. The cleanup pass at session end (Polished, then Light) swaps an untouched line in place in bash,
-      fish, Claude Code and codex. Watch that the erase and retype don't garble the line.
-   - f. Type something after dictating, then end the session. The panel should offer Replace/Copy.
-      **Known risk:** Replace erases the counted characters and retypes, so it may eat what you typed.
+   - c. The panel grows downward and shows up to 7 lines. Older lines scroll off the top, and the newest
+      line stays visible at the bottom. Typewriter reveal, and a shimmer while phrases are transcribing.
+      With reduced motion, text appears at once. In landscape with the keyboard up, the panel shrinks
+      so it doesn't cover the keyboard.
+   - d. Nothing reaches the terminal while you dictate: the shell line stays empty in bash, fish,
+      Claude Code and codex. The pill's × (or the voice key) stops listening. Phrases still
+      transcribing arrive, and the text waits in the panel. The × then disappears.
+   - e. With cleanup on (Polished, then Light), stopping runs one pass. The panel marks what changed,
+      and the text waits; it is never inserted on its own. Long-press toggles raw/cleaned. With cleanup
+      off, the text waits as heard, with the status Ready.
+   - f. Buttons: ✓ types the text once at the cursor and doesn't press Enter. Check in bash and in a TUI
+      prompt (Claude Code, codex). Copy puts it on the clipboard. The bin discards it, and so does swiping
+      the card. Press ✓ or Copy while still listening: listening stops, the cleanup runs, and then the
+      button acts on the cleaned text.
+   - f2. Tap the voice key again while text is waiting. The new dictation continues the same text, and
+      the cleanup at the end covers all of it.
+   - f3. **Dictate key**: put `tool:voice.dictate` on the extra-keys row. It shows a microphone cap and
+      toggles dictation on each place, with the pill in the same corner:
+      - Home: with the drawer search or palette open, ✓ types into it. With a widget text field focused,
+        ✓ types into the field. Otherwise ✓ copies and shows "Nothing here takes typing…".
+      - Terminal: with the keyboard down or Android's keyboard selected, ✓ types into the focused shell.
+        With the palette open, ✓ types into the palette.
+      - Display: with a display running, ✓ types into the focused X window (built-in keyboard and Android's).
+        With no display server, ✓ copies; nothing goes into the terminal behind.
+      - Leaving the app while dictating stops the mic, and the text is still waiting when you come back.
    - g. Refusal guard: dictate a question ("what is the capital of France"). It is kept as dictated, not
       answered.
-   - h. Command rule: "ls -la" is treated as a command. A sentence that only contains a command word
+   - h. Command rule: "ls -la" is treated as a command, and ✓ inserts it with no added capital or full stop. A sentence that only contains a command word
       somewhere in the middle is not.
-   - i. Without Gemma E2B installed, "Kept as heard" appears. A session under 4 words closes at once.
+   - i. Without Gemma E2B installed, "Kept as heard" appears. A session under 4 words skips the cleanup and
+      waits as heard (Ready). A session where nothing was heard closes at once.
 
 ## Carried over (already installed, never verified)
 5. Read aloud on a terminal selection.

@@ -1732,6 +1732,8 @@
     <string name="tool_keyboard_hide">Hide keyboard</string>
     <string name="tool_keyboard_clipboard">Clipboard history</string>
     <string name="tool_keyboard_toggle_enabled">Keyboard on/off</string>
+    <string name="tool_voice_dictate">Dictate</string>
+    <string name="tool_desc_voice_dictate">Start dictating, or stop. The text waits in the panel until you insert or copy it.</string>
     <string name="tool_desc_keyboard_clipboard">Open or close the list of things you copied.</string>
     <string name="tool_desc_keyboard_toggle_enabled">Turn the keyboard off so tapping the terminal leaves it closed, or turn it back on.</string>
     <string name="tool_keyboard_cycle_layout">Cycle keyboard layout</string>
@@ -1907,7 +1909,7 @@
     <string name="settings_keyboard_voice_language_title">Voice language</string>
     <string name="settings_keyboard_voice_language_auto">Auto</string>
     <string name="settings_keyboard_voice_polish_title">Polish dictation with local model</string>
-    <string name="settings_keyboard_voice_polish_summary">Phrases are typed as heard. When you stop, a local chat model cleans up the whole dictation in one pass and swaps the line if you have not touched it; short commands stay as heard. Needs a model installed</string>
+    <string name="settings_keyboard_voice_polish_summary">When you stop dictating, a local chat model cleans up the whole text in one pass and the panel marks what changed before you insert or copy it; short commands stay as heard. Off: the text waits exactly as heard. Needs a model installed</string>
     <string name="settings_keyboard_voice_polish_model_title">Cleanup model</string>
     <string name="settings_keyboard_voice_polish_level_title">Cleanup level</string>
     <string name="settings_keyboard_voice_polish_level_light">Light: punctuation, capitals and fillers</string>
@@ -1974,13 +1976,15 @@
     <string name="voice_input_warming_up">Warming up</string>
     <string name="voice_input_cleaning_up">Cleaning up…</string>
     <string name="voice_input_cleaned_up">Cleaned up</string>
-    <string name="voice_input_cleaned_up_not_swapped">Cleaned up · line changed</string>
     <string name="voice_input_kept_as_heard">Kept as heard</string>
-    <string name="voice_input_cleanup_replace">Replace</string>
     <string name="voice_input_cleanup_copy">Copy</string>
-    <string name="voice_input_cleanup_replaced">Replaced</string>
     <string name="voice_input_cleanup_copied">Copied</string>
-    <string name="voice_input_cleanup_clip_label">Cleaned dictation</string>
+    <string name="voice_input_cleanup_clip_label">Dictation</string>
+    <string name="voice_input_ready">Ready</string>
+    <string name="voice_input_discard">Discard</string>
+    <string name="voice_input_insert">Insert at the cursor</string>
+    <string name="voice_input_inserted">Inserted</string>
+    <string name="voice_input_no_target_copied">Nothing here takes typing, so the dictation was copied instead</string>
     <string name="voice_input_close">Stop voice input</string>
     <string name="voice_input_no_model">No speech model installed — using the Android recognizer</string>
     <string name="voice_input_fallback">%1$s — using the Android recognizer</string>
@@ -1988,7 +1992,7 @@
     <string name="voice_input_mic_unavailable">Microphone unavailable</string>
     <string name="voice_input_permission_denied">Microphone access denied</string>
     <string name="voice_input_permission_title">Microphone for voice input</string>
-    <string name="voice_input_permission_message">On-device voice input listens through the microphone only while the keyboard\'s voice key is active. Nothing leaves the phone.</string>
+    <string name="voice_input_permission_message">On-device voice input listens through the microphone only while dictation is on, from the voice key or the Dictate key until it stops. Nothing leaves the phone.</string>
     <string name="voice_input_permission_allow">Allow</string>
     <string name="voice_input_permission_dismiss">Not now</string>
     <string name="voice_input_language_fallback">No speech language known for this keyboard layout — using English</string>

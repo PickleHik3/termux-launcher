@@ -83,6 +83,13 @@ public class ExtraKeyEligibilityTest {
     }
 
     @Test
+    public void theDictateKeyWorksOnEveryPlace() {
+        for (PaneWallPage place : PaneWallPage.values())
+            assertTrue(place.name(), ExtraKeyEligibility.isUsable(
+                key(LauncherToolRegistry.TOOL_VOICE_DICTATE), place));
+    }
+
+    @Test
     public void theDisplayKeepsEverythingButMultiplexingAndSessions() {
         assertFalse(ExtraKeyEligibility.isUsable(
             key(LauncherToolRegistry.TOOL_PANE_SPLIT), PaneWallPage.DISPLAY));
@@ -220,9 +227,9 @@ public class ExtraKeyEligibilityTest {
             Band band = ExtraKeyEligibility.bandOfTool(tool);
             counts.put(band, counts.get(band) + 1);
         }
-        assertEquals(92, declared);
+        assertEquals(93, declared);
         assertEquals(Integer.valueOf(0), counts.get(Band.TERMINAL_INPUT));
-        assertEquals(Integer.valueOf(27), counts.get(Band.LAUNCHER));
+        assertEquals(Integer.valueOf(28), counts.get(Band.LAUNCHER));
         assertEquals(Integer.valueOf(4), counts.get(Band.SESSION_OVERLAY));
         assertEquals(Integer.valueOf(41), counts.get(Band.MULTIPLEX));
         assertEquals(Integer.valueOf(20), counts.get(Band.TERMINAL_TOOL));

@@ -183,14 +183,15 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
         return label.append(key).toString();
     }
 
-    /** Tools whose effect is its own readout: the wall's places and mouse mode, which chips itself. */
+    /** Tools whose effect is its own readout: the wall's places, mouse mode, which chips itself, and dictation's pill. */
     private static boolean announcesItself(@NonNull String key) {
         if (!key.startsWith(LAUNCHER_TOOL_KEY_PREFIX)) return false;
         String spec = key.substring(LAUNCHER_TOOL_KEY_PREFIX.length());
         int colon = spec.indexOf(':');
         String toolName = colon > 0 ? spec.substring(0, colon) : spec;
         return toolName.startsWith("wall.")
-            || com.termux.launcherctl.LauncherToolRegistry.TOOL_MOUSE_TOGGLE.equals(toolName);
+            || com.termux.launcherctl.LauncherToolRegistry.TOOL_MOUSE_TOGGLE.equals(toolName)
+            || com.termux.launcherctl.LauncherToolRegistry.TOOL_VOICE_DICTATE.equals(toolName);
     }
 
     /**

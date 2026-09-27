@@ -318,6 +318,16 @@ While the keyboard is off, taps and text fields no longer open it, and it stays 
 restart. Press the keyboard key or run **Keyboard on/off** again to turn it back on. This works
 with the built-in keyboard and with Android's.
 
+Dictation (the keyboard's voice key with on-device voice input) collects what you say in a panel
+under the pill at the top right; nothing is typed while you speak. When you stop (the pill's ×, the
+voice key again, or the silence timeout), the optional cleanup runs once and marks what it changed.
+Then press **✓** to type the text once at the cursor, without Enter; **Copy** to put it on the
+clipboard; or the bin to discard it. Swiping the card away also discards it. To dictate on Home
+or Display, where the keyboard is usually down, put `tool:voice.dictate` (**Dictate**) on the
+extra-keys row. It starts and stops dictation on any place. ✓ types into whatever takes typing
+there: the palette or a search that is open, a widget's text field, the display, or the terminal.
+If nothing takes typing, ✓ copies the text and tells you.
+
 The extra keys editor gives the **Display label** and **Swipe-up label** fields a glyph picker
 (the `Ω` button) with a searchable catalogue of arrows, box drawing, blocks, shapes, Powerline
 separators, technical key symbols, and terminal marks. Key caps are drawn with the user-interface
