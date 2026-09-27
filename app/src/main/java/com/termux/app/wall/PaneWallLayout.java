@@ -33,7 +33,10 @@ import java.util.Map;
  * Three children, one offset and one spring is the whole mechanism.
  *
  * <p>Every page is laid out at the host's size and moved with {@code translationX}, so a page
- * change and a whole drag cost no layout work.
+ * change and a whole drag cost no layout work. Only the pages on screen are laid out at all: a
+ * page parked off screen keeps its last layout — the widget grid is not re-cut, the display's
+ * surface not resized, for a change to the frame it cannot be seen in — and is laid out again in
+ * the frame that brings it back (see {@link #applyPagePositions}).
  *
  * <p>The terminal page's margins are every page's margins. The activity lays the pane host out
  * inside the frame insets the surface editor decides — the dock's side gap, the border's air —
@@ -455,7 +458,12 @@ public final class PaneWallLayout extends ViewGroup {
                     mListener.onTerminalOffScreenChanged(offScreen);
                 }
             } else {
+                boolean wasOnScreen = view.getVisibility() == VISIBLE;
                 view.setVisibility(onScreen ? VISIBLE : INVISIBLE);
+                // A page coming back was skipped by every layout pass while it was parked, so
+                // the frame may have moved under it: it is laid out again before it is drawn.
+                // Inside a layout pass, onLayout lays it out itself once the positions are set.
+                if (onScreen && !wasOnScreen && !isInLayout()) view.requestLayout();
             }
         }
         if (mListener != null) mListener.onWallOffsetChanged(mOffsetPx);
@@ -487,13 +495,20 @@ public final class PaneWallLayout extends ViewGroup {
             - getPaddingBottom() - margins.topMargin - margins.bottomMargin), MeasureSpec.EXACTLY);
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
-            if (child.getVisibility() == GONE) continue;
+            // A page parked off screen (INVISIBLE, see applyPagePositions) keeps its layout.
+            if (child.getVisibility() != VISIBLE) continue;
             child.measure(childWidth, childHeight);
         }
     }
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        // Positions first, so the pages this pass lays out are the ones on screen once the wall
+        // has put them where the offset says. A slide cut short (the wall left the window
+        // mid-way) leaves the pages displaced and the record ahead of them; the layout puts both
+        // right and says so.
+        if (isRestingOffPage()) settleImmediately();
+        else applyPagePositions();
         MarginLayoutParams margins = pageMargins();
         int left = getPaddingLeft() + margins.leftMargin;
         int top = getPaddingTop() + margins.topMargin;
@@ -501,13 +516,14 @@ public final class PaneWallLayout extends ViewGroup {
         int bottom = Math.max(top, b - t - getPaddingBottom() - margins.bottomMargin);
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
-            if (child.getVisibility() == GONE) continue;
+            if (child.getVisibility() != VISIBLE) continue;
+            // A page that came on screen during this pass was not measured by it.
+            if (child.getMeasuredWidth() != right - left || child.getMeasuredHeight() != bottom - top) {
+                child.measure(MeasureSpec.makeMeasureSpec(right - left, MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(bottom - top, MeasureSpec.EXACTLY));
+            }
             child.layout(left, top, right, bottom);
         }
-        // A slide cut short (the wall left the window mid-way) leaves the pages displaced and the
-        // record ahead of them; the next layout puts both right and says so.
-        if (isRestingOffPage()) settleImmediately();
-        else applyPagePositions();
     }
 
     // The activity sets the terminal page's frame by writing margins into its layout params and
