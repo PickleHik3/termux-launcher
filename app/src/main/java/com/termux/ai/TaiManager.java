@@ -553,9 +553,12 @@ public final class TaiManager {
         }
         TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
         if (preflight.blocked) {
-            // Free memory running short is a moment, not a verdict on the accelerator: recording it
-            // would demote the GPU for good over one crowded afternoon.
-            if (!preflight.errorCode.startsWith("low_available_memory")) {
+            // Only a refusal that says something about the accelerator belongs in its history. Free
+            // memory running short is a moment, a missing or unreadable file is the download not
+            // being done yet, and a known failure is the record itself: writing any of them down
+            // locked the GPU out for good (a load tried mid-download left "failed on gpu: Download
+            // or import this model" behind, and automatic loads were refused from then on).
+            if (TaiRuntimeHistory.isAcceleratorVerdict(preflight.errorCode)) {
                 TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend,
                     preflight.effectiveAccelerator, preflight.message);
             }

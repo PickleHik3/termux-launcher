@@ -85,6 +85,27 @@ public final class TaiRuntimeHistory {
         return entry != null && !entry.optBoolean("success", false);
     }
 
+    /**
+     * Whether a preflight refusal with this code is a verdict on the model/accelerator pair, and so
+     * worth recording as its failure. See the caller in TaiManager for why the rest are not.
+     */
+    public static boolean isAcceleratorVerdict(@Nullable String errorCode) {
+        if (errorCode == null || errorCode.isEmpty()) return false;
+        return !errorCode.startsWith("low_available_memory")
+            && !errorCode.startsWith("model_file_")
+            && !"known_failed_accelerator".equals(errorCode);
+    }
+
+    /**
+     * Records written before {@link #isAcceleratorVerdict} existed, by a load tried while the model
+     * file was still missing. They say nothing about the accelerator, so they are not treated as
+     * failures; this is what un-sticks a phone that already has one.
+     */
+    static boolean isStaleFileMissingRecord(@NonNull JSONObject entry) {
+        String reason = entry.optString("reason", "");
+        return reason.startsWith("Download or import this model");
+    }
+
     @Nullable
     public static JSONObject failedEntry(
         @NonNull Context context,
@@ -94,6 +115,7 @@ public final class TaiRuntimeHistory {
     ) {
         JSONObject entry = entry(context, model, device, accelerator);
         if (entry == null || entry.optBoolean("success", false)) return null;
+        if (isStaleFileMissingRecord(entry)) return null;
         return entry;
     }
 
