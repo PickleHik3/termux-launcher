@@ -38,6 +38,23 @@ final class ParakeetFeatures {
 
     private static final double[] WINDOW = hann();
     private static final float[][] FILTERS = filters();
+    /**
+     * Each Slaney filter is a triangle over a few bins; the rest of its row is exact zeros. The
+     * dense 128 x 257 multiply spent about 98% of the front end's time multiplying by them, so the
+     * sum runs over [BAND_START, BAND_END) only. Skipping exact zeros leaves the sum bit-identical.
+     */
+    private static final int[] BAND_START = new int[N_MELS];
+    private static final int[] BAND_END = new int[N_MELS];
+    static {
+        for (int m = 0; m < N_MELS; m++) {
+            int start = 0;
+            while (start < N_FREQS && FILTERS[m][start] == 0f) start++;
+            int end = N_FREQS;
+            while (end > start && FILTERS[m][end - 1] == 0f) end--;
+            BAND_START[m] = start;
+            BAND_END[m] = end;
+        }
+    }
     private static final Fft512 FFT = new Fft512();
 
     private ParakeetFeatures() {
@@ -70,17 +87,7 @@ final class ParakeetFeatures {
         double[] frame = new double[N_FFT];
         double[] power = new double[N_FREQS];
         double[][] mel = new double[N_MELS][FRAMES];
-        for (int t = 0; t < FRAMES; t++) {
-            int base = t * HOP;
-            for (int j = 0; j < N_FFT; j++) frame[j] = padded[base + j] * WINDOW[j];
-            FFT.powerSpectrum(frame, power);
-            for (int m = 0; m < N_MELS; m++) {
-                float[] filter = FILTERS[m];
-                double sum = 0.0;
-                for (int k = 0; k < N_FREQS; k++) sum += power[k] * filter[k];
-                mel[m][t] = Math.log(sum + LOG_GUARD);
-            }
-        }
+        for (int t = 0; t < FRAMES; t++) melFrame(t, padded, frame, power, mel);
         float[][] out = new float[N_MELS][FRAMES];
         for (int m = 0; m < N_MELS; m++) {
             double mean = 0.0;
@@ -95,6 +102,24 @@ final class ParakeetFeatures {
             for (int t = 0; t < FRAMES; t++) out[m][t] = (float) ((mel[m][t] - mean) / (std + NORMALISE_GUARD));
         }
         return out;
+    }
+
+    /**
+     * One frame's log-mel column. Kept out of {@link #features} on purpose: that method runs once
+     * per 5 s piece, so a loop inside it may never be compiled (ART on a debuggable build does no
+     * on-stack replacement), while this runs 500 times per piece and is compiled early.
+     */
+    private static void melFrame(int t, @NonNull double[] padded, @NonNull double[] frame,
+                                 @NonNull double[] power, @NonNull double[][] mel) {
+        int base = t * HOP;
+        for (int j = 0; j < N_FFT; j++) frame[j] = padded[base + j] * WINDOW[j];
+        FFT.powerSpectrum(frame, power);
+        for (int m = 0; m < N_MELS; m++) {
+            float[] filter = FILTERS[m];
+            double sum = 0.0;
+            for (int k = BAND_START[m], end = BAND_END[m]; k < end; k++) sum += power[k] * filter[k];
+            mel[m][t] = Math.log(sum + LOG_GUARD);
+        }
     }
 
     /** {@code torch.hann_window(400, periodic=False)}, zero-padded to the 512-point frame, centred. */
