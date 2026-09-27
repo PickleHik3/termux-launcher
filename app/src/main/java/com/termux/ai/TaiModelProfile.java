@@ -24,6 +24,26 @@ public final class TaiModelProfile {
     public static final String THINKING_NONE = "none";
     public static final String THINKING_TOGGLEABLE = "toggleable";
     public static final String THINKING_ALWAYS = "always";
+    /**
+     * How a chat template is told to think. The default sends {@code enable_thinking} as the
+     * string "true" when thinking is on and leaves the key out when it is off, because LiteRT-LM
+     * hands a string to Jinja and any non-empty string, "false" included, reads as true there.
+     * That only switches thinking off for templates that treat a missing key as off (Gemma 4).
+     */
+    public static final String THINKING_SWITCH_TEMPLATE_KEY = "template_key";
+    /**
+     * {@code enable_thinking} as a real JSON boolean, on and off. LiteRT-LM's Kotlin
+     * {@code JsonConvertersKt.toJsonElement} turns a {@link Boolean} into a JSON boolean (and a
+     * {@link String} into a JSON string), so a template that tests {@code enable_thinking is false}
+     * (MiniCPM5) sees an actual false instead of a truthy string.
+     */
+    public static final String THINKING_SWITCH_TEMPLATE_BOOLEAN = "template_boolean";
+    /**
+     * The family's own flag in the system prompt. SmolLM3 reads {@code /no_think} there (upstream
+     * card: "provide the /think and /no_think flags through the system prompt"), and its LiteRT
+     * templates carry no {@code enable_thinking} at all.
+     */
+    public static final String THINKING_SWITCH_SYSTEM_FLAG = "system_flag";
 
     public final List<String> compatibleAccelerators;
     public final int defaultMaxTokens;
@@ -36,6 +56,7 @@ public final class TaiModelProfile {
     public final int maxContextTokens;
     @Nullable public final String thinkingChannelStart;
     @Nullable public final String thinkingChannelEnd;
+    public final String thinkingSwitch;
 
     public TaiModelProfile(
         @NonNull List<String> compatibleAccelerators,
@@ -69,6 +90,16 @@ public final class TaiModelProfile {
     public TaiModelProfile(List<String> compatibleAccelerators, int defaultMaxTokens, int defaultTopK,
             double defaultTopP, double defaultTemperature, Integer minDeviceMemoryInGb, String source,
             String thinkingMode, String thinkingChannelStart, String thinkingChannelEnd, int maxContextTokens) {
+        this(compatibleAccelerators, defaultMaxTokens, defaultTopK, defaultTopP, defaultTemperature,
+            minDeviceMemoryInGb, source, thinkingMode, thinkingChannelStart, thinkingChannelEnd, maxContextTokens,
+            THINKING_SWITCH_TEMPLATE_KEY);
+    }
+
+    public TaiModelProfile(List<String> compatibleAccelerators, int defaultMaxTokens, int defaultTopK,
+            double defaultTopP, double defaultTemperature, Integer minDeviceMemoryInGb, String source,
+            String thinkingMode, String thinkingChannelStart, String thinkingChannelEnd, int maxContextTokens,
+            String thinkingSwitch) {
+        this.thinkingSwitch = normalizeThinkingSwitch(thinkingSwitch);
         this.maxContextTokens = Math.max(0, maxContextTokens);
         ArrayList<String> normalized = new ArrayList<>();
         for (String accelerator : compatibleAccelerators) {
@@ -154,6 +185,14 @@ public final class TaiModelProfile {
             return edgeGalleryProfile(Arrays.asList("gpu", "cpu"), 1024, 1.0d, 6, 1024);
         }
 
+        // A litert-community publication the importer keeps a family table for (SmolLM3, Qwen3.5,
+        // MiniCPM5, MedGemma, FunctionGemma, EmbeddingGemma): an import that arrived without a
+        // runtime profile (the HTTP and CLI path) still gets its card's defaults.
+        if (!modelSpec.builtInCatalogEntry) {
+            TaiImportProfiles.Match family = TaiImportProfiles.match(modelSpec.id + " " + path);
+            if (family != null) return family.profile;
+        }
+
         // litert-community files that carry an `_ekvNNNN` token (e.g. `..._ekv4096.litertlm`)
         // use that number as Gallery's own maxTokens for every allowlisted file that has it
         // (AL: `_ekv4096` -> 4096, `_ekv1024` -> 1024). Treat it as a default context window for
@@ -180,7 +219,7 @@ public final class TaiModelProfile {
     }
 
     /** {@code min(1024, context/4)}: a default output cap that always leaves room for a prompt. */
-    private static int sensibleOutputCap(int contextTokens) {
+    static int sensibleOutputCap(int contextTokens) {
         return Math.max(1, Math.min(1024, contextTokens / 4));
     }
 
@@ -219,7 +258,8 @@ public final class TaiModelProfile {
             profile.optString("thinkingMode", fallback.thinkingMode),
             nullableString(profile, "thinkingChannelStart", fallback.thinkingChannelStart),
             nullableString(profile, "thinkingChannelEnd", fallback.thinkingChannelEnd),
-            profile.optInt("maxContextTokens", fallback.maxContextTokens)
+            profile.optInt("maxContextTokens", fallback.maxContextTokens),
+            profile.optString("thinkingSwitch", fallback.thinkingSwitch)
         );
     }
 
@@ -236,7 +276,8 @@ public final class TaiModelProfile {
             json.optString("thinkingMode", THINKING_NONE),
             nullableString(json, "thinkingChannelStart", null),
             nullableString(json, "thinkingChannelEnd", null),
-            json.optInt("maxContextTokens", 0)
+            json.optInt("maxContextTokens", 0),
+            json.optString("thinkingSwitch", THINKING_SWITCH_TEMPLATE_KEY)
         );
     }
 
@@ -261,6 +302,7 @@ public final class TaiModelProfile {
         json.put("maxContextTokens", maxContextTokens);
         json.put("thinkingChannelStart", thinkingChannelStart == null ? JSONObject.NULL : thinkingChannelStart);
         json.put("thinkingChannelEnd", thinkingChannelEnd == null ? JSONObject.NULL : thinkingChannelEnd);
+        json.put("thinkingSwitch", thinkingSwitch);
         return json;
     }
 
@@ -312,6 +354,12 @@ public final class TaiModelProfile {
     private static String normalizeThinkingMode(@Nullable String value) {
         if (THINKING_ALWAYS.equals(value) || THINKING_TOGGLEABLE.equals(value)) return value;
         return THINKING_NONE;
+    }
+
+    @NonNull
+    private static String normalizeThinkingSwitch(@Nullable String value) {
+        if (THINKING_SWITCH_TEMPLATE_BOOLEAN.equals(value) || THINKING_SWITCH_SYSTEM_FLAG.equals(value)) return value;
+        return THINKING_SWITCH_TEMPLATE_KEY;
     }
 
     @Nullable

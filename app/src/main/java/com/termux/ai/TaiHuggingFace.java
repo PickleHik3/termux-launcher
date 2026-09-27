@@ -92,9 +92,12 @@ public final class TaiHuggingFace {
                 candidate.put("sizeBytes", sibling.optLong("size", lfs == null ? -1 : lfs.optLong("size", -1)));
                 if (lfs != null) candidate.put("sha256", lfs.optString("sha256", ""));
             }
-            // Publisher-specific contract, not a family-name capability guess. See the research report.
-            if (repository.equals("litert-community/Qwen3.5-2B") && name.endsWith(".litertlm"))
-                candidate.put("minimumRuntimeVersion", "0.15.0");
+            // Publisher-specific contract, not a family-name capability guess: the runtime floor a
+            // litert-community card states for its files (Qwen3.5 0.15, MiniCPM5-2B 0.16).
+            TaiImportProfiles.Match family = repository.startsWith("litert-community/") && name.endsWith(".litertlm")
+                ? TaiImportProfiles.match(repository, name) : null;
+            if (family != null && family.minimumRuntimeVersion != null)
+                candidate.put("minimumRuntimeVersion", family.minimumRuntimeVersion);
             result.put(candidate);
         }
         return result;
