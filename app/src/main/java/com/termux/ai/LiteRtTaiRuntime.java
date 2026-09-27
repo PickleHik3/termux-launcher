@@ -1069,8 +1069,12 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         HashMap<String, Object> context = new HashMap<>();
         if (TaiModelProfile.THINKING_ALWAYS.equals(profile.thinkingMode)) {
             context.put("enable_thinking", "true");
-        } else if (options.thinkingEnabled != null) {
-            context.put("enable_thinking", options.thinkingEnabled.toString());
+        } else if (Boolean.TRUE.equals(options.thinkingEnabled)) {
+            // Only ever "true": the value reaches the chat template as a string, and Jinja reads
+            // any non-empty string, "false" included, as true. Sending "false" switched thinking
+            // ON (measured on pong: 246 chars of thought and no answer, against a 0.37 s first
+            // token with the key left out), so "off" is expressed by leaving the key out.
+            context.put("enable_thinking", "true");
         }
         return context;
     }
