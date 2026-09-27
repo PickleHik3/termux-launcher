@@ -98,7 +98,39 @@ launcherctl agent install-hooks   # wires Claude Code hooks into ~/.claude/setti
 
 Reports for `$TERMUX_LAUNCHER_PANE` (every shell has it) unless `--pane` says otherwise. If you
 are Claude Code and hooks are installed, this already happens for you — don't also call it by
-hand mid-turn unless you have a specific reason to.
+hand mid-turn unless you have a specific reason to. opencode 2's tool service has no
+`TERMUX_LAUNCHER_PANE`, so there `agent` needs an explicit `--pane` (get ids from `pane list`).
+
+## Notify, progress, clipboard
+
+```sh
+launcherctl notify [--title T] [--id ID] [--urgency low|normal|critical] [--pane ID] <body>
+launcherctl notify --title Report < report.txt          # body from stdin when no argument
+launcherctl progress <0-100|clear|error [PCT]|indeterminate|paused [PCT]> [--pane ID]
+launcherctl clipboard copy [<text>]                      # stdin when no text
+launcherctl clipboard paste
+```
+
+These are the escape sequences OSC 99 (shade notification), OSC 9;4 (progress ring) and OSC 52
+(clipboard) as HTTP routes, running the same code inside the app — for a process that has no
+terminal to write an escape into. They need **no pane id**: with `$TERMUX_LAUNCHER_PANE` set
+they go to your pane, `--pane` picks another, and with neither (opencode's tool service) they go
+to the current pane. They only need the launcher *running*, not on screen — except the clipboard.
+
+- `notify`: `--id` names the message so a later one with the same name replaces it; `--urgency
+  low` is silent, `critical` uses the urgent channel. Answers `{"ok":true,"pane":…,"id":…,
+  "shown":bool}`. 60/min.
+- `progress`: a bare number is a normal report; `error`/`paused` keep the last percentage unless
+  one follows. Answers the state and the ring's percent. 600/min. `pane_not_ready` (409) means
+  that pane's terminal hasn't started.
+- `clipboard copy`/`paste`: the Android clipboard, shared with the in-app keyboard's paste key and
+  every app. Both refuse with 409 `launcher_not_visible` when the launcher isn't on screen (a
+  background process doesn't get to replace what the user just copied elsewhere), and `paste`
+  is 403 `clipboard_read_disabled` when **Settings → Terminal → Let programs read the clipboard**
+  is off — the same two rules OSC 52 follows. 60/min each.
+
+Both `notify` and `progress` answer 409 `no_session` when there is no shell at all, and 404
+`pane_not_found` for a stale `--pane`.
 
 ## Keyboard
 
@@ -135,6 +167,8 @@ eval "$(launcherctl x11 gpu --env)"
   compatibility mode on.
 - `pane_not_found` (404): stale id — the user closed your pane; `pane list` to resync.
 - `not_owned` (403): that pane/window isn't one you opened.
+- `launcher_not_visible` (409): the clipboard routes only work with the launcher on screen;
+  `clipboard_read_disabled` (403): the user turned clipboard reads off. Say so, don't retry.
 - `launcherctl: missing ~/.launcherctl/...`: the app hasn't started its local API yet.
 - `429` with `Retry-After`: back off; limits are per-route.
 

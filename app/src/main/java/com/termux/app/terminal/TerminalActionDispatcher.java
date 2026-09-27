@@ -107,6 +107,16 @@ public final class TerminalActionDispatcher {
      */
     public static final String TOOL_WINDOW_OPEN = "window.open";
     public static final String TOOL_AGENT_STATUS = "agent.status";
+    /**
+     * The signals a program sends around the terminal — a shade notification, the progress ring,
+     * the clipboard — offered over the local API for processes that have no terminal to write the
+     * escape into. Each runs the same {@link ShellSignals} method its escape does. They take an
+     * optional {@code pane} to attribute to; without one, the current pane.
+     */
+    public static final String TOOL_SHELL_NOTIFY = "shell.notify";
+    public static final String TOOL_SHELL_PROGRESS = "shell.progress";
+    public static final String TOOL_CLIPBOARD_WRITE = "clipboard.write";
+    public static final String TOOL_CLIPBOARD_READ = "clipboard.read";
     /** Most transcript lines one pane.read returns; enough to see a screen and its recent past. */
     static final int PANE_READ_MAX_LINES = 500;
     static final int PANE_READ_DEFAULT_LINES = 60;
@@ -245,6 +255,14 @@ public final class TerminalActionDispatcher {
             case TOOL_PANE_WRITE:
             case TOOL_PANE_READ:
             case TOOL_WINDOW_OPEN:
+            // The signals decide for themselves what a stopped launcher may do: a notification
+            // goes to the shade precisely when nobody is looking, a progress report is state on
+            // the shell for the chip to read when the terminal is next seen, and the clipboard
+            // refuses with its own code rather than the generic one.
+            case TOOL_SHELL_NOTIFY:
+            case TOOL_SHELL_PROGRESS:
+            case TOOL_CLIPBOARD_WRITE:
+            case TOOL_CLIPBOARD_READ:
                 return true;
             default:
                 return false;
@@ -348,6 +366,10 @@ public final class TerminalActionDispatcher {
             case TOOL_CLIPBOARD_COPY_SELECTED:
             case TOOL_FONTS_PICK:
             case TOOL_FONTS_INSTALL:
+            case TOOL_SHELL_NOTIFY:
+            case TOOL_SHELL_PROGRESS:
+            case TOOL_CLIPBOARD_WRITE:
+            case TOOL_CLIPBOARD_READ:
                 return true;
             default:
                 return false;
@@ -806,6 +828,84 @@ public final class TerminalActionDispatcher {
                     host.reportAgentStatus(target, agent.isEmpty() ? null : agent, state);
                     return ok().put("id", target.mHandle)
                         .put("state", clear ? "clear" : raw.toLowerCase(java.util.Locale.ROOT));
+                }
+                case TOOL_SHELL_NOTIFY: {
+                    TermuxTerminalSessionActivityClient client = host.sessionClient();
+                    if (client == null) return error(503, "unavailable", "Terminal session client is not ready");
+                    TerminalSession target = signalTarget(host, arguments);
+                    if (target == null) return signalTargetMissing(host, arguments, toolName);
+                    String title = arguments.optString("title", "");
+                    String body = arguments.optString("body", "");
+                    if (title.trim().isEmpty() && body.trim().isEmpty()) {
+                        return error(400, "bad_request", "Missing 'body' (or 'title')");
+                    }
+                    Integer urgency = parseUrgency(arguments.opt("urgency"));
+                    if (urgency == null) {
+                        return error(400, "bad_request", "'urgency' must be low, normal or critical");
+                    }
+                    com.termux.terminal.KittyNotification notification =
+                        com.termux.terminal.KittyNotification.plain(
+                            arguments.optString("id", ""), title, body, urgency);
+                    boolean shown = client.signals().notify(target, notification);
+                    return ok().put("pane", target.mHandle)
+                        .put("id", notification.getId())
+                        .put("shown", shown);
+                }
+                case TOOL_SHELL_PROGRESS: {
+                    TermuxTerminalSessionActivityClient client = host.sessionClient();
+                    if (client == null) return error(503, "unavailable", "Terminal session client is not ready");
+                    TerminalSession target = signalTarget(host, arguments);
+                    if (target == null) return signalTargetMissing(host, arguments, toolName);
+                    int percent = -1;
+                    if (arguments.has("percent")) {
+                        percent = arguments.optInt("percent", Integer.MIN_VALUE);
+                        if (percent < 0 || percent > 100) {
+                            return error(400, "bad_request", "'percent' must be 0-100");
+                        }
+                    }
+                    // A bare percentage is a normal report; "clear" is state 0 by another name.
+                    Object rawState = arguments.opt("state");
+                    Integer state = rawState == null
+                        ? (percent >= 0 ? (Integer) com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NORMAL : null)
+                        : parseProgressState(rawState);
+                    if (state == null) {
+                        return error(400, "bad_request",
+                            "'state' must be one of clear, normal, error, indeterminate, paused (or a percent)");
+                    }
+                    if (!client.signals().progress(target, state, percent)) {
+                        return error(409, "pane_not_ready", "That pane has no terminal to report on yet");
+                    }
+                    com.termux.terminal.TerminalEmulator emulator = target.getEmulator();
+                    return ok().put("pane", target.mHandle)
+                        .put("state", progressStateName(state))
+                        .put("percent", emulator == null ? 0 : emulator.getProgressValue());
+                }
+                case TOOL_CLIPBOARD_WRITE: {
+                    TermuxTerminalSessionActivityClient client = host.sessionClient();
+                    if (client == null) return error(503, "unavailable", "Terminal session client is not ready");
+                    if (!arguments.has("text") || arguments.isNull("text")) {
+                        return error(400, "bad_request", "Missing 'text'");
+                    }
+                    String text = arguments.optString("text", "");
+                    if (!client.signals().clipboardWrite(text)) {
+                        return error(409, ShellSignals.REFUSAL_NOT_VISIBLE,
+                            "The launcher is not on screen, so the clipboard was left alone");
+                    }
+                    return ok().put("length", text.length());
+                }
+                case TOOL_CLIPBOARD_READ: {
+                    TermuxTerminalSessionActivityClient client = host.sessionClient();
+                    if (client == null) return error(503, "unavailable", "Terminal session client is not ready");
+                    String refusal = client.signals().clipboardReadRefusal();
+                    if (ShellSignals.REFUSAL_READ_DISABLED.equals(refusal)) {
+                        return error(403, refusal,
+                            "Reading the clipboard is switched off in Settings > Terminal > Let programs read the clipboard");
+                    }
+                    if (refusal != null) {
+                        return error(409, refusal, "The launcher is not on screen, so the clipboard cannot be read");
+                    }
+                    String text = client.signals().clipboardRead();
+                    return ok().put("text", text == null ? "" : text);
                 }
                 case TOOL_PANE_EQUALIZE:
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();
@@ -1480,6 +1580,76 @@ public final class TerminalActionDispatcher {
     private static TerminalSession paneArgument(@NonNull TerminalHost host, @NonNull JSONObject arguments) {
         String id = arguments.optString("id", "").trim();
         return id.isEmpty() ? null : host.findPaneById(id);
+    }
+
+    /**
+     * The shell a signal is attributed to: the pane named by {@code pane}, or the current pane
+     * when none is named — the case for a process with no terminal, which has no
+     * {@code TERMUX_LAUNCHER_PANE} to pass along. Null when the named pane does not exist, or
+     * nothing is named and there is no current session.
+     */
+    @Nullable
+    private static TerminalSession signalTarget(@NonNull TerminalHost host, @NonNull JSONObject arguments) {
+        String id = arguments.optString("pane", "").trim();
+        return id.isEmpty() ? host.currentSession() : host.findPaneById(id);
+    }
+
+    @NonNull
+    private static JSONObject signalTargetMissing(@NonNull TerminalHost host, @NonNull JSONObject arguments,
+                                                  @NonNull String toolName) {
+        String id = arguments.optString("pane", "").trim();
+        if (id.isEmpty()) return noSession(toolName);
+        return error(404, "pane_not_found", "No pane with id " + id);
+    }
+
+    /**
+     * {@code low}, {@code normal}, {@code critical} or the protocol's 0-2; absent is unset. Null
+     * for anything else.
+     */
+    @Nullable
+    static Integer parseUrgency(@Nullable Object raw) {
+        if (raw == null || JSONObject.NULL.equals(raw)) return com.termux.terminal.KittyNotification.URGENCY_UNSET;
+        if (raw instanceof Number) {
+            int value = ((Number) raw).intValue();
+            return value >= com.termux.terminal.KittyNotification.URGENCY_LOW
+                && value <= com.termux.terminal.KittyNotification.URGENCY_CRITICAL ? value : null;
+        }
+        switch (String.valueOf(raw).trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "": return com.termux.terminal.KittyNotification.URGENCY_UNSET;
+            case "low": case "0": return com.termux.terminal.KittyNotification.URGENCY_LOW;
+            case "normal": case "1": return com.termux.terminal.KittyNotification.URGENCY_NORMAL;
+            case "critical": case "2": return com.termux.terminal.KittyNotification.URGENCY_CRITICAL;
+            default: return null;
+        }
+    }
+
+    /** The OSC 9;4 state a name or number stands for, or null for one this terminal has no ring for. */
+    @Nullable
+    static Integer parseProgressState(@NonNull Object raw) {
+        if (raw instanceof Number) {
+            int value = ((Number) raw).intValue();
+            return progressStateName(value) == null ? null : value;
+        }
+        switch (String.valueOf(raw).trim().toLowerCase(java.util.Locale.ROOT)) {
+            case "clear": case "none": case "0": return com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NONE;
+            case "normal": case "1": return com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NORMAL;
+            case "error": case "2": return com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR;
+            case "indeterminate": case "3": return com.termux.terminal.TerminalEmulator.PROGRESS_STATE_INDETERMINATE;
+            case "paused": case "4": return com.termux.terminal.TerminalEmulator.PROGRESS_STATE_PAUSED;
+            default: return null;
+        }
+    }
+
+    @Nullable
+    static String progressStateName(int state) {
+        switch (state) {
+            case com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NONE: return "clear";
+            case com.termux.terminal.TerminalEmulator.PROGRESS_STATE_NORMAL: return "normal";
+            case com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR: return "error";
+            case com.termux.terminal.TerminalEmulator.PROGRESS_STATE_INDETERMINATE: return "indeterminate";
+            case com.termux.terminal.TerminalEmulator.PROGRESS_STATE_PAUSED: return "paused";
+            default: return null;
+        }
     }
 
     @NonNull

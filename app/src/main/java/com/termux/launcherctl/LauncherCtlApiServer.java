@@ -564,6 +564,8 @@ public class LauncherCtlApiServer {
                 return jsonResponse(runWindowOpenRequest(request));
             } else if (request.path.startsWith("/v1/keyboard/")) {
                 return jsonResponse(runKeyboardRequest(request));
+            } else if (signalToolFor(request.method, request.path) != null) {
+                return jsonResponse(runSignalRequest(request));
             } else if ("GET".equals(request.method) && "/v1/x11/gpu".equals(request.path)) {
                 // Off the request thread's main-thread worries already: this is the server's own
                 // worker, and the probe builds a throwaway GL context the first time.
@@ -981,6 +983,68 @@ public class LauncherCtlApiServer {
             return error;
         }
         return dispatcher.execute(toolName, arguments);
+    }
+
+    /**
+     * The signal routes: {@code POST /v1/notify}, {@code POST /v1/progress}, {@code POST} and
+     * {@code GET /v1/clipboard}. Each is the local-API way in to the one {@code ShellSignals}
+     * method the matching escape sequence (OSC 99, OSC 9;4, OSC 52) already runs, for a process
+     * that has no terminal to write an escape into — a coding agent's tool runner, say. No pane
+     * id is needed: the body's optional {@code pane} attributes the signal to a specific pane,
+     * and without one it goes to the current pane. Background-safe like the pane routes, so
+     * {@code activity_not_running} again means the launcher is not running at all; the clipboard
+     * routes answer with their own codes when the launcher is merely off screen.
+     */
+    private JSONObject runSignalRequest(HttpRequest request) throws JSONException {
+        String toolName = signalToolFor(request.method, request.path);
+        if (toolName == null) {
+            JSONObject error = jsonError("not_found", "Unknown endpoint");
+            error.put("_statusCode", 404);
+            return error;
+        }
+        JSONObject arguments;
+        if (request.body == null || request.body.trim().isEmpty()) {
+            arguments = new JSONObject();
+        } else {
+            try {
+                arguments = new JSONObject(request.body);
+            } catch (JSONException e) {
+                JSONObject error = jsonError("bad_request", "Request body must be a JSON object");
+                error.put("_statusCode", 400);
+                return error;
+            }
+        }
+        for (Map.Entry<String, String> parameter : queryParameters(request.query).entrySet()) {
+            if (!arguments.has(parameter.getKey())) {
+                arguments.put(parameter.getKey(), parameter.getValue());
+            }
+        }
+        com.termux.app.terminal.TerminalActionDispatcher dispatcher =
+            com.termux.app.terminal.TerminalActionDispatcher.getInstance();
+        if (!dispatcher.isAttached()) {
+            JSONObject error = jsonError("activity_not_running",
+                "The launcher is not running right now, so there is nobody to signal");
+            error.put("_statusCode", 409);
+            return error;
+        }
+        return dispatcher.execute(toolName, arguments);
+    }
+
+    /** The terminal action a signal route maps to, or null for anything else. */
+    @Nullable
+    static String signalToolFor(@NonNull String method, @NonNull String path) {
+        switch (path) {
+            case "/v1/notify":
+                return "POST".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_SHELL_NOTIFY : null;
+            case "/v1/progress":
+                return "POST".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_SHELL_PROGRESS : null;
+            case "/v1/clipboard":
+                if ("POST".equals(method)) return com.termux.app.terminal.TerminalActionDispatcher.TOOL_CLIPBOARD_WRITE;
+                if ("GET".equals(method)) return com.termux.app.terminal.TerminalActionDispatcher.TOOL_CLIPBOARD_READ;
+                return null;
+            default:
+                return null;
+        }
     }
 
     /** The terminal action a keyboard route maps to, or null for anything else. */
@@ -1541,6 +1605,13 @@ public class LauncherCtlApiServer {
         // A focus script calls these once per field the user touches.
         rateLimiters.put("POST:/v1/keyboard/show", new SimpleRateLimiter(240, 60_000));
         rateLimiters.put("POST:/v1/keyboard/hide", new SimpleRateLimiter(240, 60_000));
+        // A progress ring is updated as often as a build prints a percentage, so it sits with
+        // the agent hooks; a notification a second is already more than a shade can show, and
+        // the clipboard is a thing a person copies, not a channel.
+        rateLimiters.put("POST:/v1/notify", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/v1/progress", new SimpleRateLimiter(600, 60_000));
+        rateLimiters.put("POST:/v1/clipboard", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("GET:/v1/clipboard", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("GET:/v1/ai/status", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/runtime", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/models", new SimpleRateLimiter(120, 60_000));
@@ -2046,6 +2117,10 @@ public class LauncherCtlApiServer {
             "  launcherctl window open [--title NAME] [--no-focus] [--] CMD ARGS...\n" +
             "  launcherctl agent working|blocked|idle|clear [--agent NAME] [--pane ID]\n" +
             "  launcherctl agent install-hooks\n" +
+            "  launcherctl notify [--title T] [--id ID] [--urgency low|normal|critical] [--pane ID] <body> | ... < file\n" +
+            "  launcherctl progress <0-100|clear|error [PCT]|indeterminate|paused [PCT]> [--pane ID]\n" +
+            "  launcherctl clipboard copy [<text>] | launcherctl clipboard copy < file\n" +
+            "  launcherctl clipboard paste\n" +
             "  launcherctl keyboard show|hide [--source manual|focus] [--hold]\n" +
             "  launcherctl x11 gpu [--env]\n" +
             "\n" +
@@ -2055,6 +2130,9 @@ public class LauncherCtlApiServer {
             "  launcherctl pane write \"$id\" --enter 'make test'\n" +
             "  launcherctl pane read \"$id\" --lines 40\n" +
             "  id=$(launcherctl window open --title tlstore --no-focus -- tlstore | sed -n 's/.*\"id\":\"\\([^\"]*\\)\".*/\\1/p')\n" +
+            "  launcherctl notify --title Build '42 tests passed'   # the phone's notification shade\n" +
+            "  launcherctl progress 42; launcherctl progress clear  # the ring on this window's chip\n" +
+            "  git diff | launcherctl clipboard copy               # onto the Android clipboard\n" +
             "  launcherctl keyboard show --source focus   # a text field took focus\n" +
             "  launcherctl keyboard hide --hold            # keep it down until this asks again\n" +
             "\n" +
@@ -2069,6 +2147,12 @@ public class LauncherCtlApiServer {
             "it reports for $TERMUX_LAUNCHER_PANE unless --pane says otherwise, and\n" +
             "`launcherctl agent install-hooks` wires the four Claude Code hooks that send it into\n" +
             "~/.claude/settings.json, leaving every hook already there alone.\n" +
+            "\n" +
+            "notify, progress and clipboard do exactly what the OSC 99, OSC 9;4 and OSC 52 escapes\n" +
+            "do, for a process that has no terminal to write them into (an agent's tool runner).\n" +
+            "They go to $TERMUX_LAUNCHER_PANE when it is set, to --pane when given, and to the\n" +
+            "current pane otherwise. clipboard paste is only answered while the launcher is on\n" +
+            "screen and Settings > Terminal > Let programs read the clipboard is on.\n" +
             "For local AI, use: tai --help\n" +
             "EOF\n" +
             "}\n" +
@@ -2224,6 +2308,80 @@ public class LauncherCtlApiServer {
             "      ;;\n" +
             "  esac\n" +
             "}\n" +
+            "notify_cmd() {\n" +
+            "  usage='usage: launcherctl notify [--title T] [--id ID] [--urgency low|normal|critical] [--pane ID] <body>'\n" +
+            "  title= id= urgency= pane=\"${TERMUX_LAUNCHER_PANE:-}\"\n" +
+            "  while [ \"$#\" -gt 0 ]; do\n" +
+            "    case \"$1\" in\n" +
+            "      --title) title=\"${2:-}\"; shift 2 ;;\n" +
+            "      --id) id=\"${2:-}\"; shift 2 ;;\n" +
+            "      --urgency) urgency=\"${2:-}\"; shift 2 ;;\n" +
+            "      --pane) pane=\"${2:-}\"; shift 2 ;;\n" +
+            "      --) shift; break ;;\n" +
+            "      -*) echo \"launcherctl notify: unknown option $1\" >&2; exit 2 ;;\n" +
+            "      *) break ;;\n" +
+            "    esac\n" +
+            "  done\n" +
+            "  case \"$urgency\" in\n" +
+            "    ''|low|normal|critical) ;;\n" +
+            "    *) echo \"launcherctl notify: --urgency must be low, normal or critical\" >&2; exit 2 ;;\n" +
+            "  esac\n" +
+            "  # The body is the arguments, or stdin when there are none (a file, a pipe).\n" +
+            "  if [ \"$#\" -gt 0 ]; then body=$(printf '%s' \"$*\" | json_str); else body=$(json_str); fi\n" +
+            "  if [ \"$body\" = '\"\"' ] && [ -z \"$title\" ]; then echo \"$usage\" >&2; exit 2; fi\n" +
+            "  req=\"{\\\"body\\\":$body\"\n" +
+            "  [ -n \"$title\" ] && req=\"$req,\\\"title\\\":$(printf '%s' \"$title\" | json_str)\"\n" +
+            "  [ -n \"$id\" ] && req=\"$req,\\\"id\\\":$(printf '%s' \"$id\" | json_str)\"\n" +
+            "  [ -n \"$urgency\" ] && req=\"$req,\\\"urgency\\\":\\\"$urgency\\\"\"\n" +
+            "  [ -n \"$pane\" ] && req=\"$req,\\\"pane\\\":$(printf '%s' \"$pane\" | json_str)\"\n" +
+            "  api POST /v1/notify \"$req}\"\n" +
+            "}\n" +
+            "progress_cmd() {\n" +
+            "  usage='usage: launcherctl progress <0-100|clear|error [PCT]|indeterminate|paused [PCT]> [--pane ID]'\n" +
+            "  arg=\"${1:-}\"\n" +
+            "  [ -n \"$arg\" ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "  shift\n" +
+            "  pane=\"${TERMUX_LAUNCHER_PANE:-}\" state= pct=\n" +
+            "  case \"$arg\" in\n" +
+            "    clear|indeterminate) state=\"$arg\" ;;\n" +
+            "    error|paused)\n" +
+            "      state=\"$arg\"\n" +
+            "      # An optional percentage may follow; without one the ring keeps its last value.\n" +
+            "      case \"${1:-}\" in ''|-*) ;; *) pct=\"$1\"; shift ;; esac\n" +
+            "      ;;\n" +
+            "    *[!0-9]*) echo \"$usage\" >&2; exit 2 ;;\n" +
+            "    *) state=normal; pct=\"$arg\" ;;\n" +
+            "  esac\n" +
+            "  while [ \"$#\" -gt 0 ]; do\n" +
+            "    case \"$1\" in\n" +
+            "      --pane) pane=\"${2:-}\"; shift 2 ;;\n" +
+            "      *) echo \"launcherctl progress: unknown option $1\" >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "  done\n" +
+            "  if [ -n \"$pct\" ]; then\n" +
+            "    case \"$pct\" in *[!0-9]*) echo \"launcherctl progress: percent must be 0-100, got: $pct\" >&2; exit 2 ;; esac\n" +
+            "    [ \"$pct\" -le 100 ] || { echo \"launcherctl progress: percent must be 0-100, got: $pct\" >&2; exit 2; }\n" +
+            "  fi\n" +
+            "  req=\"{\\\"state\\\":\\\"$state\\\"\"\n" +
+            "  [ -n \"$pct\" ] && req=\"$req,\\\"percent\\\":$pct\"\n" +
+            "  [ -n \"$pane\" ] && req=\"$req,\\\"pane\\\":$(printf '%s' \"$pane\" | json_str)\"\n" +
+            "  api POST /v1/progress \"$req}\"\n" +
+            "}\n" +
+            "clipboard_cmd() {\n" +
+            "  usage='usage: launcherctl clipboard copy [<text>] | launcherctl clipboard paste'\n" +
+            "  sub=\"${1:-}\"\n" +
+            "  [ -n \"$sub\" ] && shift || { echo \"$usage\" >&2; exit 2; }\n" +
+            "  case \"$sub\" in\n" +
+            "    copy)\n" +
+            "      if [ \"$#\" -gt 0 ]; then text=$(printf '%s' \"$*\" | json_str); else text=$(json_str); fi\n" +
+            "      api POST /v1/clipboard \"{\\\"text\\\":$text}\"\n" +
+            "      ;;\n" +
+            "    paste)\n" +
+            "      api GET /v1/clipboard\n" +
+            "      ;;\n" +
+            "    *) echo \"$usage\" >&2; exit 2 ;;\n" +
+            "  esac\n" +
+            "}\n" +
             "cmd=\"${1:-help}\"\n" +
             "case \"$cmd\" in\n" +
             "  -h|--help|help)\n" +
@@ -2249,6 +2407,18 @@ public class LauncherCtlApiServer {
             "  agent)\n" +
             "    shift || true\n" +
             "    agent_cmd \"$@\"\n" +
+            "    ;;\n" +
+            "  notify)\n" +
+            "    shift || true\n" +
+            "    notify_cmd \"$@\"\n" +
+            "    ;;\n" +
+            "  progress)\n" +
+            "    shift || true\n" +
+            "    progress_cmd \"$@\"\n" +
+            "    ;;\n" +
+            "  clipboard)\n" +
+            "    shift || true\n" +
+            "    clipboard_cmd \"$@\"\n" +
             "    ;;\n" +
             "  keyboard)\n" +
             "    shift || true\n" +
@@ -2283,7 +2453,7 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane, agent, keyboard, x11. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, keyboard, x11. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";

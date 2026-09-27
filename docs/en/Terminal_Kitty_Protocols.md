@@ -224,6 +224,18 @@ What a program can rely on:
 Full-screen programs redraw on resize anyway; the narrow-pane rule matters only for text already in
 the scrollback.
 
+## Desktop notifications (OSC 99), progress (OSC 9;4) and the clipboard (OSC 52) without a terminal
+
+Each of these escapes has exactly one implementation in the app, and it is shared with the
+launcher's local API: `launcherctl notify` posts the same shade notification an `OSC 99` request
+does (named, replaceable, urgency; no icons or buttons), `launcherctl progress` sets the same ring
+`OSC 9;4;state;pct` sets on the window chip, and `launcherctl clipboard copy|paste` writes and
+reads the Android clipboard under the same rules an `OSC 52` write and `?` query follow (launcher on
+screen; reading also needs *Settings → Terminal → Let programs read the clipboard*). The commands
+exist for a process that has no terminal to write an escape into — a coding agent's tool runner —
+and need no pane id: they attribute to the current pane unless `--pane` says otherwise. See
+[LauncherCtl API](LauncherCtl_API.md#notifications-the-progress-ring-and-the-clipboard).
+
 ## Current boundaries
 
 - File (`t=f`) and temporary-file (`t=t`) transmissions are accepted; a `t=t` file is deleted only when its path carries `tty-graphics-protocol` and sits in a temporary directory. Shared-memory (`t=s`) transmission is not implemented: Android has no `shm_open`.
