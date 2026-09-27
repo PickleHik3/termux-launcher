@@ -967,7 +967,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     /** Load the configured faces and apply them to every pane that has a renderer. */
     public void applyTerminalFonts() {
         try {
-            TerminalFontLoader.Faces faces = TerminalFontLoader.load(TerminalFontConfig.load());
+            TerminalFontConfig.Result config = TerminalFontConfig.load();
+            TerminalFontLoader.Faces faces = TerminalFontLoader.load(config);
             reportFontErrors(faces.errors);
             for (com.termux.view.TerminalView v : mHost.paneViews()) {
                 if (v.isFontInitialized())
@@ -977,6 +978,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                         faces.boxDrawingPolicy, fallbackTypefaces(faces),
                         faces.symbolExpansion);
             }
+            // kitty.conf's cursor_trail* directives are read from the same file, at the same time.
+            if (mHost.paneController() != null)
+                mHost.paneController().applyCursorTrailKittyConfig(config);
             mHost.requestFlushDockGeometryUpdate();
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalFonts()", e);

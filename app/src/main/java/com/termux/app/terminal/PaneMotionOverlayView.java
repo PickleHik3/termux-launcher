@@ -20,23 +20,29 @@ import android.view.animation.PathInterpolator;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.terminal.TerminalEmulator;
+import com.termux.view.KittyCursorTrail;
+
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * The pane layer's transient motion, drawn above every pane and float: a contracting ghost where a
- * pane just closed, and the cursor's smear when focus moves from one pane to another.
+ * pane just closed, and the one cursor trail every pane's own view used to draw for itself.
  *
  * <p>Neither belongs to a pane. A closing pane cannot animate itself — by the time layout knows it
- * is gone its view is detached — and the smear spans two panes, so it cannot live inside either.
+ * is gone its view is detached — and the trail can target any pane, including one that is not the
+ * view it is drawn over while focus is settling, so it cannot live inside any one of them either.
  *
- * <p>The smear is kitty's and neovide's shape, not a trail of copies: <em>one</em> quad whose four
- * corners chase the cursor at different rates, so the leading edge arrives first and the shape
- * shears along the direction of travel. The rates come from kitty's first-order law
- * ({@link PaneMotionMath#step}), which carries no velocity and therefore cannot overshoot when a
- * frame is dropped; it runs until every corner has caught up rather than for a fixed duration,
- * which is why it is driven from a {@link Choreographer} callback instead of a
- * {@link ValueAnimator}.
+ * <p>The trail is a single line-for-line port of kitty's own ({@link KittyCursorTrail}): a quad
+ * whose four corners chase the cursor's shape rect at different rates, so the leading edge arrives
+ * first and the shape shears along the direction of travel. To this engine a pane switch is no
+ * different from a cursor jumping across one pane — both are just the target rect changing — so a
+ * focus change animates through exactly the same law as an in-pane move; see
+ * {@link TerminalPaneController#focusSession}. The engine carries no velocity and therefore cannot
+ * overshoot when a frame is dropped; it runs until every corner has caught up rather than for a
+ * fixed duration, which is why the whole layer is driven from a {@link Choreographer} callback
+ * instead of a {@link ValueAnimator}.
  */
 public final class PaneMotionOverlayView extends View {
 
@@ -45,13 +51,6 @@ public final class PaneMotionOverlayView extends View {
     private static final float GHOST_END_SCALE = 0.82f;
     /** More ghosts than this on screen at once is a burst nobody can read; drop the oldest. */
     private static final int MAX_GHOSTS = 4;
-
-    /** Corner order around the quad. Any other winding makes the path self-intersect. */
-    private static final int TOP_LEFT = 0;
-    private static final int TOP_RIGHT = 1;
-    private static final int BOTTOM_RIGHT = 2;
-    private static final int BOTTOM_LEFT = 3;
-    private static final int CORNERS = 4;
 
     /**
      * Two curves for the whole layer, built once (PathInterpolator bakes a lookup table, and these
@@ -70,19 +69,41 @@ public final class PaneMotionOverlayView extends View {
     private final Rect mDirty = new Rect();
     private final List<Ghost> mGhosts = new ArrayList<>();
 
-    // The smear's live state: where each corner is, and where it is heading.
-    private final float[] mCornerX = new float[CORNERS];
-    private final float[] mCornerY = new float[CORNERS];
-    private final float[] mDecay = new float[CORNERS];
-    private final float[] mSettleProbe = new float[CORNERS * 2];
-    private final RectF mCursorTarget = new RectF();
-    private int mCursorColor;
-    private boolean mSmearActive;
-    private long mLastFrameNanos;
-    private boolean mFrameScheduled;
-    @Nullable private Runnable mOnSmearFinished;
+    /** kitty's own cursor-trail law; see the class doc. */
+    private final KittyCursorTrail mCursorTrail = new KittyCursorTrail();
+    private KittyCursorTrail.Config mCursorTrailConfig = DEFAULT_TRAIL_CONFIG;
+    private boolean mCursorTrailEnabled = true;
+    @Nullable private CursorTargetProvider mCursorTargetProvider;
+    /** The last target the provider gave, kept so {@link #onDraw} can mask the live cursor cell. */
+    private final CursorTarget mCursorTarget = new CursorTarget();
+    private boolean mCursorTargetValid;
+    private boolean mCursorFrameScheduled;
 
     private final Choreographer.FrameCallback mFrameCallback = this::onFrame;
+
+    /** App defaults, per the design brief: delay 10ms, decay 0.1/0.4s, threshold 2/2 cells. */
+    private static final KittyCursorTrail.Config DEFAULT_TRAIL_CONFIG =
+        new KittyCursorTrail.Config(10L, 0.10f, 0.40f, 2, 2);
+
+    /**
+     * Fills in the focused pane's current cursor target, in this overlay's own pixel coordinates.
+     * Pulled fresh every animated frame rather than pushed, since the trail must keep tracking a
+     * cursor that is still moving (or a blink state that changed) without every pane view having to
+     * notify on every one of those; see {@code TerminalView.CursorTrailListener} for what does push.
+     */
+    public interface CursorTargetProvider {
+        /** @return false when there is no pane to track right now (no focus, or it left the screen). */
+        boolean provideCursorTarget(@NonNull CursorTarget out);
+    }
+
+    /** One frame's worth of the focused pane's cursor, in overlay pixel coordinates. */
+    public static final class CursorTarget {
+        public float left, top, right, bottom;
+        public float cellWidthPx, cellHeightPx;
+        public boolean dectcemOn;
+        public long positionChangedAtMillis;
+        public int color;
+    }
 
     private static final class Ghost {
         final RectF bounds = new RectF();
@@ -142,108 +163,99 @@ public final class PaneMotionOverlayView extends View {
         animator.start();
     }
 
-    /**
-     * Smear the cursor from one pane's cursor cell to another's.
-     *
-     * @param cellWidthPx target pane's cell size, for the travel threshold and the settle test
-     * @param onFinished  run when the smear settles or is cancelled — the caller restores whatever
-     *                    it suppressed for the flight
-     */
-    public void flyCursor(@NonNull RectF from, @NonNull RectF to, int color,
-                          float cellWidthPx, float cellHeightPx, @Nullable Runnable onFinished) {
-        float distance = (float) Math.hypot(to.centerX() - from.centerX(),
-            to.centerY() - from.centerY());
-        if (from.isEmpty() || to.isEmpty()
-            || !PaneMotionMath.isTravelWorthAnimating(distance, cellWidthPx)) {
-            if (onFinished != null) onFinished.run();
-            return;
-        }
-        finishSmear();
-        mCursorTarget.set(to);
-        mCursorColor = color;
-        mOnSmearFinished = onFinished;
-        for (int i = 0; i < CORNERS; i++) {
-            mCornerX[i] = cornerX(from, i);
-            mCornerY[i] = cornerY(from, i);
-        }
-        computeCornerDecays(from, to);
-        mSmearActive = true;
-        mLastFrameNanos = 0L;
-        scheduleFrame();
+    /** Sets the tunables read from {@code kitty.conf}, or the app defaults when it names none. */
+    public void setCursorTrailConfig(@NonNull KittyCursorTrail.Config config) {
+        mCursorTrailConfig = config;
     }
 
     /**
-     * How much each corner leads the travel, normalised across the four, then mapped to a decay
-     * time. The leading corners get the fast decay and arrive first; the trailing ones drag, and
-     * that difference is the whole smear — the quad shears rather than sliding rigidly.
+     * The single on/off switch for the whole trail: the preference, power save and reduce-motion
+     * folded together by the caller. Off means no trail at all, for either kind of move.
      */
-    private void computeCornerDecays(@NonNull RectF from, @NonNull RectF to) {
-        float travelX = to.centerX() - from.centerX();
-        float travelY = to.centerY() - from.centerY();
-        float travelLength = (float) Math.hypot(travelX, travelY);
-        float[] alignments = new float[CORNERS];
-        for (int i = 0; i < CORNERS; i++) {
-            // The corner's outward radial direction from the rect's centre.
-            float radialX = cornerX(from, i) - from.centerX();
-            float radialY = cornerY(from, i) - from.centerY();
-            float radialLength = (float) Math.hypot(radialX, radialY);
-            alignments[i] = travelLength <= 0f || radialLength <= 0f
-                ? 0f : (radialX * travelX + radialY * travelY) / (radialLength * travelLength);
+    public void setCursorTrailEnabled(boolean enabled) {
+        if (mCursorTrailEnabled == enabled) return;
+        mCursorTrailEnabled = enabled;
+        if (!enabled) {
+            mCursorTrail.reset();
+            mCursorTargetValid = false;
+            stopCursorTrailFrames();
+            invalidate();
+        } else {
+            requestCursorTrailFrame();
         }
-        PaneMotionMath.normaliseAlignments(alignments);
-        for (int i = 0; i < CORNERS; i++) mDecay[i] = PaneMotionMath.cornerDecay(alignments[i]);
     }
 
-    private void onFrame(long frameTimeNanos) {
-        mFrameScheduled = false;
-        if (!mSmearActive) return;
-        float dt = mLastFrameNanos == 0L
-            ? 1f / 60f : (frameTimeNanos - mLastFrameNanos) / 1_000_000_000f;
-        mLastFrameNanos = frameTimeNanos;
-        // A long gap (the view was off screen, the app was paused) would otherwise be integrated as
-        // one huge step; the law is stable there, but the smear would visibly teleport.
-        dt = Math.min(dt, 1f / 20f);
-        RectF previous = new RectF(smearBounds());
-        for (int i = 0; i < CORNERS; i++) {
-            float step = PaneMotionMath.step(dt, mDecay[i]);
-            mCornerX[i] += (cornerX(mCursorTarget, i) - mCornerX[i]) * step;
-            mCornerY[i] += (cornerY(mCursorTarget, i) - mCornerY[i]) * step;
-            mSettleProbe[i * 2] = cornerX(mCursorTarget, i) - mCornerX[i];
-            mSettleProbe[i * 2 + 1] = cornerY(mCursorTarget, i) - mCornerY[i];
-        }
-        RectF current = smearBounds();
-        previous.union(current);
-        invalidateRect(previous);
-        if (PaneMotionMath.hasSettled(mSettleProbe, mCursorTarget.height())) {
-            finishSmear();
-            return;
-        }
-        scheduleFrame();
+    /** Where the engine pulls this frame's cursor target from; see {@link CursorTargetProvider}. */
+    public void setCursorTargetProvider(@Nullable CursorTargetProvider provider) {
+        mCursorTargetProvider = provider;
     }
 
-    private void scheduleFrame() {
-        if (mFrameScheduled || !mSmearActive) return;
-        mFrameScheduled = true;
+    /** Scratch for {@link #onFrame}, so the per-frame path allocates nothing. */
+    private final RectF mPreviousTrailBounds = new RectF();
+
+    /**
+     * The cursor may have moved (an in-pane jump), or focus may have moved to another pane — to the
+     * engine these are the same event, since both just change what {@link #mCursorTargetProvider}
+     * returns. Idempotent and cheap to call every frame: it only arms the {@link Choreographer}
+     * loop, which decides for itself whether anything needs to keep animating.
+     */
+    public void requestCursorTrailFrame() {
+        if (!mCursorTrailEnabled || mCursorFrameScheduled) return;
+        mCursorFrameScheduled = true;
         Choreographer.getInstance().postFrameCallback(mFrameCallback);
     }
 
-    /** Settle the smear and hand control back to whoever suppressed the real cursors. */
-    private void finishSmear() {
-        boolean wasActive = mSmearActive;
-        mSmearActive = false;
-        if (mFrameScheduled) {
+    /**
+     * A discontinuity the trail must not be smeared across — kitty's own example is a live resize;
+     * ours adds a whole-window switch, where {@link TerminalPaneController} already snaps the panes
+     * themselves rather than sliding them. The next target change snaps instead of animating; the
+     * trail keeps its opacity and keeps following, unlike {@link #clearMotion()}.
+     */
+    public void snapCursorTrailOnNextFrame() {
+        mCursorTrail.requestSnapOnNextUpdate();
+        requestCursorTrailFrame();
+    }
+
+    private void stopCursorTrailFrames() {
+        if (mCursorFrameScheduled) {
             Choreographer.getInstance().removeFrameCallback(mFrameCallback);
-            mFrameScheduled = false;
+            mCursorFrameScheduled = false;
         }
-        Runnable finished = mOnSmearFinished;
-        mOnSmearFinished = null;
-        if (wasActive) invalidate();
-        if (finished != null) finished.run();
+    }
+
+    private void onFrame(long frameTimeNanos) {
+        mCursorFrameScheduled = false;
+        if (!mCursorTrailEnabled) return;
+        CursorTargetProvider provider = mCursorTargetProvider;
+        boolean hasTarget = provider != null && provider.provideCursorTarget(mCursorTarget);
+        if (!hasTarget) {
+            // Nothing to track (no focused pane on screen): let the trail sit wherever it was:
+            // resuming later finds a stale target invalid rather than smearing in from it.
+            if (mCursorTargetValid) invalidate();
+            mCursorTargetValid = false;
+            return;
+        }
+        mCursorTargetValid = true;
+        RectF previous = mPreviousTrailBounds;
+        previous.set(cursorTrailBounds());
+        // The emulator's own clock, not the Choreographer frame time: it stamps
+        // TerminalEmulator#getCursorPositionChangedAtMillis() on that clock, and comparing two
+        // different clocks' epochs against each other would make the delay gate meaningless.
+        long now = TerminalEmulator.monotonicMillis();
+        boolean needsFrame = mCursorTrail.update(now, mCursorTarget.left, mCursorTarget.top,
+            mCursorTarget.right, mCursorTarget.bottom, mCursorTarget.dectcemOn,
+            mCursorTarget.positionChangedAtMillis, false, mCursorTarget.cellWidthPx,
+            mCursorTarget.cellHeightPx, mCursorTrailConfig);
+        previous.union(cursorTrailBounds());
+        invalidateRect(previous);
+        if (needsFrame) requestCursorTrailFrame();
     }
 
     /** Drop everything in flight, for a re-render that invalidates the coordinates we captured. */
     public void clearMotion() {
-        finishSmear();
+        stopCursorTrailFrames();
+        mCursorTrail.reset();
+        mCursorTargetValid = false;
         for (Ghost ghost : new ArrayList<>(mGhosts)) {
             if (ghost.animator != null) ghost.animator.cancel();
         }
@@ -253,8 +265,7 @@ public final class PaneMotionOverlayView extends View {
 
     @Override
     protected void onDetachedFromWindow() {
-        // The frame callback outlives the view otherwise, and so does the suppression the smear's
-        // completion is supposed to lift.
+        // The frame callback outlives the view otherwise.
         clearMotion();
         super.onDetachedFromWindow();
     }
@@ -262,7 +273,7 @@ public final class PaneMotionOverlayView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         for (int i = 0; i < mGhosts.size(); i++) drawGhost(canvas, mGhosts.get(i));
-        if (mSmearActive) drawSmear(canvas);
+        if (mCursorTargetValid && mCursorTrail.opacity() > 0f) drawCursorTrail(canvas);
     }
 
     private void drawGhost(@NonNull Canvas canvas, @NonNull Ghost ghost) {
@@ -288,26 +299,47 @@ public final class PaneMotionOverlayView extends View {
         mPaint.setStyle(Paint.Style.FILL);
     }
 
-    /** One filled quad through the four corners — the same primitive kitty and neovide draw. */
-    private void drawSmear(@NonNull Canvas canvas) {
+    /**
+     * One filled quad through the trail's four corners — the same primitive kitty draws. The live
+     * cursor cell is clipped out first, exactly as kitty masks its own trail: without it the streak
+     * paints a second, dimmer cursor on top of whichever pane is now focused.
+     */
+    private void drawCursorTrail(@NonNull Canvas canvas) {
+        boolean didClip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+        if (didClip) {
+            canvas.save();
+            canvas.clipOutRect(mCursorTarget.left, mCursorTarget.top,
+                mCursorTarget.right, mCursorTarget.bottom);
+        }
         mSmearPath.reset();
-        mSmearPath.moveTo(mCornerX[TOP_LEFT], mCornerY[TOP_LEFT]);
-        mSmearPath.lineTo(mCornerX[TOP_RIGHT], mCornerY[TOP_RIGHT]);
-        mSmearPath.lineTo(mCornerX[BOTTOM_RIGHT], mCornerY[BOTTOM_RIGHT]);
-        mSmearPath.lineTo(mCornerX[BOTTOM_LEFT], mCornerY[BOTTOM_LEFT]);
+        mSmearPath.moveTo(mCursorTrail.cornerX(0), mCursorTrail.cornerY(0));
+        mSmearPath.lineTo(mCursorTrail.cornerX(1), mCursorTrail.cornerY(1));
+        mSmearPath.lineTo(mCursorTrail.cornerX(2), mCursorTrail.cornerY(2));
+        mSmearPath.lineTo(mCursorTrail.cornerX(3), mCursorTrail.cornerY(3));
         mSmearPath.close();
+        int color = mCursorTrailConfig.hasColor ? mCursorTrailConfig.color : mCursorTarget.color;
         mPaint.setStyle(Paint.Style.FILL);
-        mPaint.setColor(mCursorColor);
-        mPaint.setAlpha(215);
+        mPaint.setColor(color);
+        int baseAlpha = Color.alpha(color) > 0 ? Color.alpha(color) : 255;
+        mPaint.setAlpha(Math.round(baseAlpha * clamp01(mCursorTrail.opacity())));
         canvas.drawPath(mSmearPath, mPaint);
+        if (didClip) canvas.restore();
+    }
+
+    private static float clamp01(float value) {
+        return value < 0f ? 0f : (value > 1f ? 1f : value);
     }
 
     @NonNull
-    private RectF smearBounds() {
-        float left = Math.min(Math.min(mCornerX[0], mCornerX[1]), Math.min(mCornerX[2], mCornerX[3]));
-        float right = Math.max(Math.max(mCornerX[0], mCornerX[1]), Math.max(mCornerX[2], mCornerX[3]));
-        float top = Math.min(Math.min(mCornerY[0], mCornerY[1]), Math.min(mCornerY[2], mCornerY[3]));
-        float bottom = Math.max(Math.max(mCornerY[0], mCornerY[1]), Math.max(mCornerY[2], mCornerY[3]));
+    private RectF cursorTrailBounds() {
+        float c0x = mCursorTrail.cornerX(0), c1x = mCursorTrail.cornerX(1);
+        float c2x = mCursorTrail.cornerX(2), c3x = mCursorTrail.cornerX(3);
+        float c0y = mCursorTrail.cornerY(0), c1y = mCursorTrail.cornerY(1);
+        float c2y = mCursorTrail.cornerY(2), c3y = mCursorTrail.cornerY(3);
+        float left = Math.min(Math.min(c0x, c1x), Math.min(c2x, c3x));
+        float right = Math.max(Math.max(c0x, c1x), Math.max(c2x, c3x));
+        float top = Math.min(Math.min(c0y, c1y), Math.min(c2y, c3y));
+        float bottom = Math.max(Math.max(c0y, c1y), Math.max(c2y, c3y));
         mScratch.set(left, top, right, bottom);
         return mScratch;
     }
@@ -318,14 +350,6 @@ public final class PaneMotionOverlayView extends View {
         mDirty.set((int) Math.floor(rect.left - slack), (int) Math.floor(rect.top - slack),
             (int) Math.ceil(rect.right + slack), (int) Math.ceil(rect.bottom + slack));
         invalidate(mDirty);
-    }
-
-    private static float cornerX(@NonNull RectF rect, int corner) {
-        return corner == TOP_LEFT || corner == BOTTOM_LEFT ? rect.left : rect.right;
-    }
-
-    private static float cornerY(@NonNull RectF rect, int corner) {
-        return corner == TOP_LEFT || corner == TOP_RIGHT ? rect.top : rect.bottom;
     }
 
     private static Interpolator interpolator(float x1, float y1, float x2, float y2,

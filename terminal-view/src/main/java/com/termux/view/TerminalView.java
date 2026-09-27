@@ -76,8 +76,21 @@ public final class TerminalView extends View {
 
     public TerminalRenderer mRenderer;
 
-    /** Draws the streak between the cursor's old and new cell. Purely visual. */
-    private final CursorTrail mCursorTrail = new CursorTrail();
+    /**
+     * Whether this pane's cursor trail listener is turned on: the preference and the device's
+     * power state, folded together by whoever installed the listener. Kept here rather than only
+     * forwarded, so a listener installed after the policy already ran (a pane created mid-session)
+     * still learns the current state instead of defaulting to on.
+     */
+    private boolean mCursorTrailEnabled = true;
+
+    /**
+     * Told about this pane's cursor every frame it might have moved, and about the discontinuities
+     * — session switch, resize, scroll or prompt jump — that must not be smeared across. Owned by
+     * whoever composes the panes, since the trail itself is drawn above all of them, not by any one
+     * view; see {@link com.termux.view.TerminalView.CursorTrailListener}.
+     */
+    @Nullable private CursorTrailListener mCursorTrailListener;
 
     /** Per-pane timing counters; recording uses only primitive fields and fixed arrays. */
     private final TerminalRenderMetrics mRenderMetrics = new TerminalRenderMetrics();
@@ -646,7 +659,7 @@ public final class TerminalView extends View {
         updateKittyAnimationVisibility();
         mCombiningAccent = 0;
         // A different session's cursor is somewhere else entirely; do not streak across the switch.
-        mCursorTrail.reset();
+        notifyCursorTrailSnap();
         updateSize();
         // Wait with enabling the scrollbar until we have a terminal to get scroll position from.
         setVerticalScrollBarEnabled(true);
@@ -2551,7 +2564,7 @@ public final class TerminalView extends View {
             clearScrollOffset();
             scrollTo(0, 0);
             // Reflow moved every cell, so the remembered cursor cell no longer means anything.
-            mCursorTrail.reset();
+            notifyCursorTrailSnap();
             invalidate();
         }
     }
@@ -2632,12 +2645,14 @@ public final class TerminalView extends View {
                 mRenderer.renderFindOverlay(mEmulator, canvas, mTopRow, mFindOverlay,
                     getHorizontalContentOffset(), scrollOffset != 0f ? 1 : 0);
             }
-            if (mCursorTrail.isEnabled() && !isSelectingText()) {
-                boolean needsAnotherFrame = mCursorTrail.draw(canvas, mEmulator.getCursorCol(), mEmulator.getCursorRow(), mTopRow,
-                    mRenderer.mFontWidth, mRenderer.mFontLineSpacing, getHorizontalContentOffset(), mRenderer.mFontLineSpacingAndAscent,
-                    mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR], mEmulator.isCursorEnabled());
-                if (needsAnotherFrame)
-                    postInvalidateOnAnimation();
+            // The trail itself is drawn by whoever composes the panes (it spans all of them, not
+            // just this view); this pane only reports that its cursor may have moved, or — while
+            // selecting text — that it should be hidden and not smeared into.
+            if (mCursorTrailListener != null) {
+                if (isSelectingText())
+                    mCursorTrailListener.onCursorTrailSnap(this);
+                else
+                    mCursorTrailListener.onCursorMayHaveMoved(this);
             }
             if (canvasTranslated)
                 canvas.restore();
@@ -2676,12 +2691,56 @@ public final class TerminalView extends View {
     /**
      * Whether the cursor animates between cells. Off by policy - power save, or the user's preference -
      * rather than by the view's own judgement.
+     * <p>
+     * The trail itself is owned by whoever composes the panes, not by this view, so this only
+     * remembers the flag and forwards it — see {@link CursorTrailListener#onCursorTrailEnabledChanged}.
      */
     public void setCursorTrailEnabled(boolean enabled) {
-        if (mCursorTrail.isEnabled() == enabled)
+        if (mCursorTrailEnabled == enabled)
             return;
-        mCursorTrail.setEnabled(enabled);
-        invalidate();
+        mCursorTrailEnabled = enabled;
+        if (mCursorTrailListener != null)
+            mCursorTrailListener.onCursorTrailEnabledChanged(this, enabled);
+    }
+
+    public boolean isCursorTrailEnabled() {
+        return mCursorTrailEnabled;
+    }
+
+    /**
+     * Installs the composer's cursor trail listener. Replays the current enabled state and, when a
+     * pane is being attached fresh, asks for a snap rather than letting a stale cell smear in.
+     */
+    public void setCursorTrailListener(@Nullable CursorTrailListener listener) {
+        mCursorTrailListener = listener;
+        if (listener != null) listener.onCursorTrailEnabledChanged(this, mCursorTrailEnabled);
+    }
+
+    /**
+     * Notifies the installed {@link CursorTrailListener}, if any, that this pane hit a
+     * discontinuity — a session switch, a resize/reflow, or a scroll/prompt jump — across which the
+     * trail must not smear.
+     */
+    private void notifyCursorTrailSnap() {
+        if (mCursorTrailListener != null) mCursorTrailListener.onCursorTrailSnap(this);
+    }
+
+    /**
+     * The pane composer's window onto one pane's cursor: whether it may have moved this frame, a
+     * discontinuity it must not be smeared across, and the enabled policy — the app's
+     * {@code TermuxTerminalViewClient#applyCursorTrailPolicy} — applied to it. The unified trail
+     * itself lives above every pane, not inside any one {@link TerminalView}, which is why this is
+     * a callback rather than something the view draws for itself.
+     */
+    public interface CursorTrailListener {
+        /** This pane's cursor cell, shape or visibility may have changed since the last frame. */
+        void onCursorMayHaveMoved(@NonNull TerminalView view);
+
+        /** A discontinuity: forget any in-flight trail and snap to the current cell next frame. */
+        void onCursorTrailSnap(@NonNull TerminalView view);
+
+        /** The policy — preference and power state — changed for this pane. */
+        void onCursorTrailEnabledChanged(@NonNull TerminalView view, boolean enabled);
     }
 
     public void setUseTransparentFrameClear(boolean useTransparentFrameClear) {
@@ -3072,7 +3131,7 @@ public final class TerminalView extends View {
         if (target == mTopRow) return false;
         mTopRow = target;
         clearScrollOffset();
-        mCursorTrail.reset();
+        notifyCursorTrailSnap();
         invalidate();
         return true;
     }
@@ -3084,7 +3143,7 @@ public final class TerminalView extends View {
         if (newTopRow == mTopRow) return false;
         mTopRow = newTopRow;
         clearScrollOffset();
-        mCursorTrail.reset();
+        notifyCursorTrailSnap();
         if (isSelectingText()) stopTextSelectionMode();
         invalidate();
         return true;
@@ -3112,7 +3171,7 @@ public final class TerminalView extends View {
         mTopRow = newTopRow;
         clearScrollOffset();
         // A jump is a discontinuity, so do not streak the cursor across it.
-        mCursorTrail.reset();
+        notifyCursorTrailSnap();
         if (isSelectingText())
             stopTextSelectionMode();
         invalidate();

@@ -1183,6 +1183,13 @@ public final class TerminalEmulator {
      * @param length the number of bytes in the array to process
      */
     public void append(byte[] buffer, int length) {
+        int startRow = mCursorRow, startCol = mCursorCol;
+        appendInternal(buffer, length);
+        if (mCursorRow != startRow || mCursorCol != startCol)
+            mCursorPositionChangedAtMillis = mClock.nowMillis();
+    }
+
+    private void appendInternal(byte[] buffer, int length) {
         // The app pushes a new palette by resetting the emulator's colors directly rather than
         // through an escape sequence, so a mode 2031 report can fall due between two sequences.
         // Noticing it here costs a flag test per pty read while the mode is off, which it usually is.
@@ -1203,6 +1210,35 @@ public final class TerminalEmulator {
             processByte(buffer[i++]);
         }
     }
+
+    /** A clock the cursor-trail timestamp reads, injectable so a JVM test can control time. */
+    public interface Clock {
+        long nowMillis();
+    }
+
+    /** Monotonic, so a wall-clock change cannot open or shut the trail's delay gate. */
+    public static long monotonicMillis() {
+        return System.nanoTime() / 1_000_000L;
+    }
+
+    private Clock mClock = TerminalEmulator::monotonicMillis;
+
+    /** For tests only: makes {@link #getCursorPositionChangedAtMillis()} deterministic. */
+    void setClockForTests(Clock clock) {
+        mClock = clock;
+    }
+
+    /**
+     * When the client program last actually moved the cursor, on {@link Clock#nowMillis()}. Kitty's
+     * cursor trail only picks up a new target once this many milliseconds have passed
+     * ({@code cursor_trail}'s delay), so a burst of redraws that leave the cursor where it was does
+     * not retrigger the trail on every one of them.
+     */
+    public long getCursorPositionChangedAtMillis() {
+        return mCursorPositionChangedAtMillis;
+    }
+
+    private long mCursorPositionChangedAtMillis;
 
     private void processByte(byte byteToProcess) {
         if (mUtf8ToFollow > 0) {

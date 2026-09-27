@@ -204,6 +204,20 @@ public final class TerminalFontConfig {
         @NonNull public final BoxDrawingMode boxDrawing;
         @NonNull public final BoxDrawingScale boxDrawingScale;
         @NonNull public final PowerlineMode powerlineSymbols;
+        /**
+         * {@code cursor_trail}'s delay in milliseconds, or 0 when the file named none (kitty's own
+         * default is also 0, i.e. off; but this app's cursor trail has its own on/off preference, so
+         * a 0 here just means "keep the app's own default delay" rather than "disabled").
+         */
+        public final long cursorTrailDelayMs;
+        /** {@code cursor_trail_decay}'s fast/slow seconds, or null when the file named neither. */
+        @Nullable public final Float cursorTrailDecayFast;
+        @Nullable public final Float cursorTrailDecaySlow;
+        /** {@code cursor_trail_start_threshold}'s cell counts, or null when the file named none. */
+        @Nullable public final Integer cursorTrailThresholdX;
+        @Nullable public final Integer cursorTrailThresholdY;
+        /** {@code cursor_trail_color}, ARGB with the alpha byte forced opaque; null for "none". */
+        @Nullable public final Integer cursorTrailColor;
         @NonNull public final List<String> errors;
 
         private Result(boolean filePresent, @NonNull Map<Face, FaceSpec> faces,
@@ -219,7 +233,19 @@ public final class TerminalFontConfig {
                        @NonNull BoxDrawingMode boxDrawing,
                        @NonNull BoxDrawingScale boxDrawingScale,
                        @NonNull PowerlineMode powerlineSymbols,
+                       long cursorTrailDelayMs,
+                       @Nullable Float cursorTrailDecayFast,
+                       @Nullable Float cursorTrailDecaySlow,
+                       @Nullable Integer cursorTrailThresholdX,
+                       @Nullable Integer cursorTrailThresholdY,
+                       @Nullable Integer cursorTrailColor,
                        @NonNull List<String> errors) {
+            this.cursorTrailDelayMs = cursorTrailDelayMs;
+            this.cursorTrailDecayFast = cursorTrailDecayFast;
+            this.cursorTrailDecaySlow = cursorTrailDecaySlow;
+            this.cursorTrailThresholdX = cursorTrailThresholdX;
+            this.cursorTrailThresholdY = cursorTrailThresholdY;
+            this.cursorTrailColor = cursorTrailColor;
             this.filePresent = filePresent;
             EnumMap<Face, FaceSpec> faceCopy = new EnumMap<>(Face.class);
             faceCopy.putAll(faces);
@@ -335,6 +361,12 @@ public final class TerminalFontConfig {
         // Kitty renders the Powerline separators itself, and geometry is the only way their edges
         // sit flush with the cell-aligned background rectangles; a font glyph never fills the cell.
         PowerlineMode powerlineSymbols = PowerlineMode.SYNTHESIZE;
+        long cursorTrailDelayMs;
+        @Nullable Float cursorTrailDecayFast;
+        @Nullable Float cursorTrailDecaySlow;
+        @Nullable Integer cursorTrailThresholdX;
+        @Nullable Integer cursorTrailThresholdY;
+        @Nullable Integer cursorTrailColor;
         int symbolRangeCount;
         boolean filePresent;
         long includeBudget = MAX_INCLUDE_TOTAL_BYTES;
@@ -766,6 +798,76 @@ public final class TerminalFontConfig {
                 if (fallback != null) accumulator.fallbackFonts.add(fallback);
                 continue;
             }
+            if ("cursor_trail".equals(directive)) {
+                // kitty's own on/off switch (0 disables); this app has a separate preference for
+                // that, so here only a positive value means anything: it tunes the trail's delay.
+                if (words.size() != 2) {
+                    errors.add(where + ": expected cursor_trail milliseconds");
+                    continue;
+                }
+                try {
+                    long ms = Long.parseLong(words.get(1));
+                    if (ms > 0) accumulator.cursorTrailDelayMs = ms;
+                    else if (ms < 0) errors.add(where + ": cursor_trail must not be negative");
+                } catch (NumberFormatException e) {
+                    errors.add(where + ": cursor_trail must be a whole number of milliseconds");
+                }
+                continue;
+            }
+            if ("cursor_trail_decay".equals(directive)) {
+                if (words.size() != 3) {
+                    errors.add(where + ": expected cursor_trail_decay fast slow, in seconds");
+                    continue;
+                }
+                try {
+                    float fast = Float.parseFloat(words.get(1));
+                    float slow = Float.parseFloat(words.get(2));
+                    if (fast <= 0f || slow <= 0f || slow < fast) {
+                        errors.add(where + ": cursor_trail_decay values must be positive,"
+                            + " slow at least as large as fast");
+                    } else {
+                        accumulator.cursorTrailDecayFast = fast;
+                        accumulator.cursorTrailDecaySlow = slow;
+                    }
+                } catch (NumberFormatException e) {
+                    errors.add(where + ": cursor_trail_decay values must be numbers");
+                }
+                continue;
+            }
+            if ("cursor_trail_start_threshold".equals(directive)) {
+                if (words.size() < 2 || words.size() > 3) {
+                    errors.add(where + ": expected cursor_trail_start_threshold and an optional"
+                        + " second value");
+                    continue;
+                }
+                try {
+                    int x = Integer.parseInt(words.get(1));
+                    int y = words.size() == 3 ? Integer.parseInt(words.get(2)) : x;
+                    if (x < 0 || y < 0) {
+                        errors.add(where + ": cursor_trail_start_threshold must not be negative");
+                    } else {
+                        accumulator.cursorTrailThresholdX = x;
+                        accumulator.cursorTrailThresholdY = y;
+                    }
+                } catch (NumberFormatException e) {
+                    errors.add(where + ": cursor_trail_start_threshold must be whole numbers");
+                }
+                continue;
+            }
+            if ("cursor_trail_color".equals(directive)) {
+                if (words.size() != 2) {
+                    errors.add(where + ": expected cursor_trail_color or none");
+                    continue;
+                }
+                if ("none".equalsIgnoreCase(words.get(1))) {
+                    accumulator.cursorTrailColor = null;
+                    continue;
+                }
+                Integer color = parseColor(words.get(1));
+                if (color == null) errors.add(where + ": unrecognised colour '" + words.get(1) + "'");
+                else accumulator.cursorTrailColor = color;
+                continue;
+            }
             Face face = face(directive);
             if (face != null) {
                 parseFace(accumulator, face, words, where);
@@ -967,6 +1069,9 @@ public final class TerminalFontConfig {
             accumulator.fallbackFonts, accumulator.ligaturePolicy, accumulator.fontFeatures,
             accumulator.fontVariations, namedFeatures, namedVariations, accumulator.metrics,
             accumulator.boxDrawing, accumulator.boxDrawingScale, accumulator.powerlineSymbols,
+            accumulator.cursorTrailDelayMs, accumulator.cursorTrailDecayFast,
+            accumulator.cursorTrailDecaySlow, accumulator.cursorTrailThresholdX,
+            accumulator.cursorTrailThresholdY, accumulator.cursorTrailColor,
             accumulator.errors);
     }
 
@@ -1302,6 +1407,47 @@ public final class TerminalFontConfig {
             return Integer.parseInt(value.substring(2), 16);
         } catch (NumberFormatException e) {
             return -1;
+        }
+    }
+
+    /**
+     * A minimal reading of kitty's colour syntax: {@code #rgb}, {@code #rrggbb}, and the handful of
+     * CSS names kitty's own sample config actually uses for this directive. Anything else is
+     * reported rather than guessed at, same as a malformed font directive.
+     */
+    @Nullable
+    private static Integer parseColor(@NonNull String value) {
+        String v = value.trim();
+        if (v.startsWith("#")) {
+            String hex = v.substring(1);
+            try {
+                if (hex.length() == 3) {
+                    int r = Integer.parseInt(hex.substring(0, 1), 16) * 0x11;
+                    int g = Integer.parseInt(hex.substring(1, 2), 16) * 0x11;
+                    int b = Integer.parseInt(hex.substring(2, 3), 16) * 0x11;
+                    return 0xFF000000 | (r << 16) | (g << 8) | b;
+                }
+                if (hex.length() == 6) {
+                    return (int) (0xFF000000 | Long.parseLong(hex, 16));
+                }
+            } catch (NumberFormatException e) {
+                return null;
+            }
+            return null;
+        }
+        switch (v.toLowerCase(Locale.US)) {
+            case "black": return 0xFF000000;
+            case "white": return 0xFFFFFFFF;
+            case "red": return 0xFFFF0000;
+            case "green": return 0xFF008000;
+            case "blue": return 0xFF0000FF;
+            case "yellow": return 0xFFFFFF00;
+            case "cyan": return 0xFF00FFFF;
+            case "magenta": return 0xFFFF00FF;
+            case "orange": return 0xFFFFA500;
+            case "gray":
+            case "grey": return 0xFF808080;
+            default: return null;
         }
     }
 

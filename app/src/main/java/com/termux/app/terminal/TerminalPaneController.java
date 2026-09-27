@@ -50,6 +50,7 @@ import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TextStyle;
 import com.termux.view.HoldTiming;
+import com.termux.view.KittyCursorTrail;
 import com.termux.view.TerminalView;
 
 import java.util.ArrayList;
@@ -339,6 +340,29 @@ public class TerminalPaneController {
     /** Fallback gap between tiled panes when no surface style is attached. */
     private static final int DIVIDER_DP = 1;
 
+    /**
+     * The one cursor-trail listener every pane view is given; see {@link TerminalView.CursorTrailListener}.
+     * Shared rather than one per view since only the focused pane's cursor is ever the trail's
+     * target — the listener's job is just telling the overlay when to re-check that.
+     */
+    private final TerminalView.CursorTrailListener mCursorTrailListener =
+        new TerminalView.CursorTrailListener() {
+            @Override public void onCursorMayHaveMoved(@NonNull TerminalView view) {
+                if (view == getActivePaneView()) mMotionOverlay.requestCursorTrailFrame();
+            }
+
+            @Override public void onCursorTrailSnap(@NonNull TerminalView view) {
+                if (view == getActivePaneView()) mMotionOverlay.snapCursorTrailOnNextFrame();
+            }
+
+            @Override public void onCursorTrailEnabledChanged(@NonNull TerminalView view, boolean enabled) {
+                mMotionOverlay.setCursorTrailEnabled(enabled && arePaneAnimationsEnabled());
+            }
+        };
+
+    /** Reused by {@link #provideCursorTarget}, so the animated pull runs no arrays of its own. */
+    private final int[] mCursorViewLocationScratch = new int[2];
+    private final int[] mCursorOverlayLocationScratch = new int[2];
 
     public TerminalPaneController(Host host, FrameLayout hostView, LayoutInflater inflater) {
         mHost = host;
@@ -346,6 +370,7 @@ public class TerminalPaneController {
         mInflater = inflater;
         mInteractionOverlay = new PaneInteractionOverlay();
         mMotionOverlay = new PaneMotionOverlayView(hostView.getContext());
+        mMotionOverlay.setCursorTargetProvider(this::provideCursorTarget);
         // Fractional float bounds only become pixels against the live host size, so a rotation or
         // keyboard resize must re-lay every float; the clamp keeps each drag handle reachable.
         mHostView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
@@ -354,6 +379,78 @@ public class TerminalPaneController {
                     applyFloatBounds(entry.getKey(), entry.getValue());
             }
         });
+    }
+
+    /**
+     * {@link PaneMotionOverlayView.CursorTargetProvider}: the focused pane's cursor shape rect, in
+     * the overlay's own pixel coordinates, pulled fresh on every animated frame. The shape rect
+     * matches what {@code TerminalRenderer} actually draws for each cursor style — see
+     * {@code TextBlockGeometry#cursorRect} — so the trail's target is exactly the pixels the live
+     * cursor occupies, not just its cell.
+     */
+    private boolean provideCursorTarget(@NonNull PaneMotionOverlayView.CursorTarget out) {
+        TerminalView view = getActivePaneView();
+        if (!canAnimateView(view)) return false;
+        TerminalEmulator emulator = view.mEmulator;
+        if (emulator == null) return false;
+        int row = emulator.getCursorRow() - view.getTopRow();
+        if (row < 0 || row >= emulator.mRows) return false;
+        float cellWidth = view.getTerminalCellWidthPixels();
+        float cellHeight = view.getTerminalCellHeightPixels();
+        if (cellWidth <= 0f || cellHeight <= 0f) return false;
+        view.getLocationOnScreen(mCursorViewLocationScratch);
+        mMotionOverlay.getLocationOnScreen(mCursorOverlayLocationScratch);
+        float cellLeft = mCursorViewLocationScratch[0] - mCursorOverlayLocationScratch[0]
+            + view.getPointX(emulator.getCursorCol());
+        float cellTop = mCursorViewLocationScratch[1] - mCursorOverlayLocationScratch[1]
+            + row * cellHeight;
+        out.left = cellLeft;
+        out.top = cellTop;
+        out.right = cellLeft + cellWidth;
+        out.bottom = cellTop + cellHeight;
+        int shape = emulator.getCursorStyle();
+        if (shape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR) {
+            out.right = cellLeft + cellWidth / 4f;
+        } else if (shape == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE) {
+            out.top = cellTop + cellHeight * 3f / 4f;
+        }
+        out.cellWidthPx = cellWidth;
+        out.cellHeightPx = cellHeight;
+        out.dectcemOn = emulator.isCursorEnabled();
+        out.positionChangedAtMillis = emulator.getCursorPositionChangedAtMillis();
+        out.color = cursorColorOf(view);
+        return true;
+    }
+
+    /** App defaults for the tunables {@code kitty.conf} may override; see the class's design brief. */
+    private static final long DEFAULT_CURSOR_TRAIL_DELAY_MS = 10L;
+    private static final float DEFAULT_CURSOR_TRAIL_DECAY_FAST = 0.10f;
+    private static final float DEFAULT_CURSOR_TRAIL_DECAY_SLOW = 0.40f;
+    private static final int DEFAULT_CURSOR_TRAIL_THRESHOLD = 2;
+
+    /**
+     * Feeds the trail's tunables from a freshly (re)loaded {@code kitty.conf}: {@code cursor_trail}
+     * (a positive value only — kitty's own on/off use of 0 is not this app's switch, which stays the
+     * separate {@code terminal_cursor_trail} preference {@link TerminalView.CursorTrailListener}
+     * carries in), {@code cursor_trail_decay}, {@code cursor_trail_start_threshold} and
+     * {@code cursor_trail_color}. Called wherever the font config is (re)loaded, since kitty.conf is
+     * read once for both.
+     */
+    public void applyCursorTrailKittyConfig(@NonNull TerminalFontConfig.Result config) {
+        long delayMs = config.cursorTrailDelayMs > 0
+            ? config.cursorTrailDelayMs : DEFAULT_CURSOR_TRAIL_DELAY_MS;
+        float decayFast = config.cursorTrailDecayFast != null
+            ? config.cursorTrailDecayFast : DEFAULT_CURSOR_TRAIL_DECAY_FAST;
+        float decaySlow = config.cursorTrailDecaySlow != null
+            ? config.cursorTrailDecaySlow : DEFAULT_CURSOR_TRAIL_DECAY_SLOW;
+        int thresholdX = config.cursorTrailThresholdX != null
+            ? config.cursorTrailThresholdX : DEFAULT_CURSOR_TRAIL_THRESHOLD;
+        int thresholdY = config.cursorTrailThresholdY != null
+            ? config.cursorTrailThresholdY : DEFAULT_CURSOR_TRAIL_THRESHOLD;
+        boolean hasColor = config.cursorTrailColor != null;
+        int color = hasColor ? config.cursorTrailColor : 0;
+        mMotionOverlay.setCursorTrailConfig(new KittyCursorTrail.Config(
+            delayMs, decayFast, decaySlow, thresholdX, thresholdY, hasColor, color));
     }
 
     /**
@@ -2688,31 +2785,28 @@ public class TerminalPaneController {
     }
 
     /**
-     * The cursor's flight between panes, the way neovide and kitty smear a cursor across a jump.
-     * Only for a real change of pane: a focus call that lands on the pane already focused, or on a
-     * pane whose cursor is scrolled out of view, has nothing to travel between.
+     * The cursor trail's flight between panes: to {@code com.termux.view.KittyCursorTrail} a pane switch is no
+     * different from a cursor jumping across one pane, since both are just its target rect changing
+     * — see {@link PaneMotionOverlayView}'s class doc. This only decides whether that change should
+     * animate at all, and hands ownership of the live (non-trail) cursor to the new pane right away
+     * rather than waiting for the trail to settle, since nothing suppresses it for the flight any
+     * more; the trail masks the live cursor cell it is currently over instead (kitty does the same).
      */
     private void flyCursorBetweenPanes(@Nullable TerminalSession from, @Nullable TerminalSession to) {
+        // Not applyCursorOwnership(): this runs before the caller (focusSession) assigns the new
+        // leaf, so getActiveSession() would still answer with the pane being left. "to" is what
+        // the caller is committed to making active the instant this call returns.
+        applyCursorOwnership(to);
         if (from == null || to == null || from == to) return;
         if (mSuppressNextCursorFlight) {
             mSuppressNextCursorFlight = false;
+            // A window switch is a discontinuity, not a cursor move: snap rather than smear across
+            // it, the same way a resize or a scroll jump already resets the in-pane trail.
+            mMotionOverlay.snapCursorTrailOnNextFrame();
             return;
         }
         if (!arePaneAnimationsEnabled() || !canAnimateView(mMotionOverlay)) return;
-        TerminalView source = mPaneViews.get(from);
-        TerminalView target = mPaneViews.get(to);
-        RectF fromRect = cursorRectInOverlay(source);
-        RectF toRect = cursorRectInOverlay(target);
-        if (fromRect == null || toRect == null) return;
-        // Both ends go dark for the flight: the smear IS the cursor while it travels, and a smear
-        // drawn between two cursors that stay lit reads as decoration flying between them rather
-        // than as one cursor moving. kitty masks the live cursor cell out of its trail to the same
-        // end. updateActiveBorders() restores the focused pane when the smear settles.
-        source.setCursorSuppressed(true);
-        target.setCursorSuppressed(true);
-        mMotionOverlay.flyCursor(fromRect, toRect, cursorColorOf(target),
-            target.getTerminalCellWidthPixels(), target.getTerminalCellHeightPixels(),
-            this::applyCursorOwnership);
+        mMotionOverlay.requestCursorTrailFrame();
     }
 
     /**
@@ -2724,7 +2818,11 @@ public class TerminalPaneController {
      * independently.
      */
     private void applyCursorOwnership() {
-        TerminalSession active = getActiveSession();
+        applyCursorOwnership(getActiveSession());
+    }
+
+    /** As {@link #applyCursorOwnership()}, against an explicit session rather than the read of it. */
+    private void applyCursorOwnership(@Nullable TerminalSession active) {
         for (Map.Entry<TerminalSession, TerminalView> entry : mPaneViews.entrySet()) {
             TerminalView view = entry.getValue();
             if (view == null) continue;
@@ -2743,26 +2841,6 @@ public class TerminalPaneController {
     private boolean canAnimateView(@Nullable View view) {
         return view != null && PaneMotionMath.canAnimate(view.isAttachedToWindow(), view.isShown(),
             view.getWidth(), view.getHeight());
-    }
-
-    /** One pane's cursor cell, in the motion overlay's coordinates, or null when it is not visible. */
-    @Nullable
-    private RectF cursorRectInOverlay(@Nullable TerminalView view) {
-        if (!canAnimateView(view)) return null;
-        TerminalEmulator emulator = view.mEmulator;
-        if (emulator == null) return null;
-        int row = emulator.getCursorRow() - view.getTopRow();
-        if (row < 0 || row >= emulator.mRows) return null;
-        float cellWidth = view.getTerminalCellWidthPixels();
-        float cellHeight = view.getTerminalCellHeightPixels();
-        if (cellWidth <= 0f || cellHeight <= 0f) return null;
-        int[] viewLocation = new int[2];
-        int[] overlayLocation = new int[2];
-        view.getLocationOnScreen(viewLocation);
-        mMotionOverlay.getLocationOnScreen(overlayLocation);
-        float left = viewLocation[0] - overlayLocation[0] + view.getPointX(emulator.getCursorCol());
-        float top = viewLocation[1] - overlayLocation[1] + row * cellHeight;
-        return new RectF(left, top, left + cellWidth, top + cellHeight);
     }
 
     private int cursorColorOf(@Nullable TerminalView view) {
@@ -3103,6 +3181,7 @@ public class TerminalPaneController {
                 return false;
             });
             view.attachSession(session);
+            view.setCursorTrailListener(mCursorTrailListener);
             mHost.configureAttachedPaneView(view, session);
             mPaneFrames.put(session, frame);
             mPaneViews.put(session, view);
