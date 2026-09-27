@@ -278,6 +278,8 @@ Display place it goes through the same rules a tap there does — see
 [The keyboard follows text fields](X11_Display.md#the-keyboard-follows-text-fields) — and
 elsewhere it simply opens or closes the keyboard. Both put something on a screen, so a stopped
 launcher answers 409 `activity_not_running`; 409 `unavailable` means the in-app keyboard is off.
+If the user has switched the keyboard off with `keyboard.toggle_enabled`, a `manual` show turns it
+back on, while a `focus` show is ignored and answers 409 `unavailable`.
 Rate limit: 240 a minute each.
 
 `hide` also takes `{"hold": true}`: the calling session keeps the keyboard down until it calls

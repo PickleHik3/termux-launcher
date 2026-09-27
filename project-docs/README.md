@@ -32,6 +32,7 @@ task-oriented guide is [`../docs/en/Terminal_Modernization.md`](../docs/en/Termi
 | [`plans/action-registry-terminal-actions.md`](plans/action-registry-terminal-actions.md) | The terminal action registry, command palette, chords and user bindings. |
 | [`plans/kitty-protocol-features.md`](plans/kitty-protocol-features.md) | Kitty graphics, keyboard protocol, OSC 8/133, underlines, cursor trail, parser hardening. |
 | [`plans/fonts-and-shaping.md`](plans/fonts-and-shaping.md) | `fonts.conf`, the four faces, fixed-cell shaping, symbol maps, geometric drawing, the font picker. |
+| [`keyboard-off/SPEC.md`](keyboard-off/SPEC.md) | Keyboard on/off: switching the keyboard off so a tap no longer raises it, and what turns it back on. |
 | [`inapp-keyboard-design.md`](inapp-keyboard-design.md) | The `:inapp-keyboard` module and its launcher host. Paired with [`../inapp-keyboard/UPSTREAM.md`](../inapp-keyboard/UPSTREAM.md), which owns the vendored deviations. |
 | [`plans/launcherctl-agent-platform.md`](plans/launcherctl-agent-platform.md) | The LauncherCtl agent platform: tool registry, agent APIs, event storage, MCP bridge. |
 
