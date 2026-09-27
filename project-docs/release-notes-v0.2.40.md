@@ -62,6 +62,7 @@
 - The key under your finger lifts clear of the row while you hold it, with its other characters around it in the directions you swipe for them, so you can see what will be typed before you let go. Settings ▸ Keyboard ▸ Feedback ▸ Key popup turns it off.
 - On the Display place, tapping a text field brings the keyboard up and tapping elsewhere puts it away. Turn it off in Settings ▸ Display if you would rather not.
 - The settings key on the keyboard opens the launcher's settings.
+- The keyboard has a clipboard history: swipe down-left on Ctrl and the things you copied in the launcher — in the terminal, with the copy and cut keys, from a link or a hint, or by a program — are listed over the keys, pinned ones first. Tap one to paste it again; pin what you want to keep across restarts. It never collects what you copy in other apps.
 - The default keyboard theme follows Material 3 now: letter keys sit on the lightest surface, the function keys one tone lower, Enter in your accent colour, and a held modifier in the accent's container tone. No key borders, rounder keys. Imported colour schemes get the same function-key tier.
 
 ### Extra keys

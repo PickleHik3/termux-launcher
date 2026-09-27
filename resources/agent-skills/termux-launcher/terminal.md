@@ -87,9 +87,11 @@ launcherctl clipboard paste                # {"ok":true,"text":"…"}
 ```
 
 `copy` is what an OSC 52 write does — the Android clipboard, which the in-app keyboard's paste
-key, the terminal and every other app share. Both directions only work while the launcher is on
-screen (409 `launcher_not_visible` otherwise), and `paste` also needs **Settings → Terminal →
-Let programs read the clipboard** on (403 `clipboard_read_disabled`). Don't rely on reading it.
+key, the terminal and every other app share — and it also lands in the keyboard's clipboard
+history, where the user can pin it or paste it again later. Both directions only work while the
+launcher is on screen (409 `launcher_not_visible` otherwise), and `paste` also needs **Settings →
+Terminal → Let programs read the clipboard** on (403 `clipboard_read_disabled`). Don't rely on
+reading it.
 
 ## Graphics
 

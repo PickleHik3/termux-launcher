@@ -277,9 +277,13 @@ public class TerminalKeyEventHandlerTest {
                     break;
                 case SWITCH_EMOJI:
                 case SWITCH_BACK_EMOJI:
+                    assertEquals(logs + 1, mHost.logs.size());
+                    break;
                 case SWITCH_CLIPBOARD:
                 case SWITCH_BACK_CLIPBOARD:
-                    assertEquals(logs + 1, mHost.logs.size());
+                    // The clipboard key is the launcher's own panel now, not a stripped pane.
+                    assertEquals(logs, mHost.logs.size());
+                    assertEquals(hostActions + 1, mHost.totalActions());
                     break;
                 case SWITCH_VOICE_TYPING:
                 case SWITCH_VOICE_TYPING_CHOOSER:
@@ -713,6 +717,7 @@ public class TerminalKeyEventHandlerTest {
         private int previousLayouts;
         private int settings;
         private int hides;
+        private int clipboardPanels;
         private int capsLocks;
         private int voiceRequests;
         private final List<Boolean> composeStates = new ArrayList<>();
@@ -782,6 +787,16 @@ public class TerminalKeyEventHandlerTest {
         }
 
         @Override
+        public void showClipboardPanel() {
+            clipboardPanels++;
+        }
+
+        @Override
+        public void hideClipboardPanel() {
+            clipboardPanels++;
+        }
+
+        @Override
         public void requestVoiceTyping(boolean chooser) {
             voiceRequests++;
         }
@@ -808,7 +823,7 @@ public class TerminalKeyEventHandlerTest {
 
         private int totalActions() {
             return pastes + copies + textLayouts + numericLayouts + greekLayouts + nextLayouts +
-                previousLayouts + settings + hides + capsLocks + voiceRequests;
+                previousLayouts + settings + hides + clipboardPanels + capsLocks + voiceRequests;
         }
     }
 }

@@ -157,6 +157,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_KEYBOARD_SET_FORM = "keyboard.set_form";
     public static final String TOOL_KEYBOARD_SHOW = "keyboard.show";
     public static final String TOOL_KEYBOARD_HIDE = "keyboard.hide";
+    public static final String TOOL_KEYBOARD_CLIPBOARD = "keyboard.clipboard";
     public static final String TOOL_APPEARANCE_SET_WALLPAPER = "appearance.set_wallpaper";
     public static final String TOOL_APPEARANCE_TOGGLE_WALLPAPER = "appearance.toggle_wallpaper";
     public static final String TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT = "terminal.jump_previous_prompt";
@@ -325,6 +326,7 @@ public final class TerminalActionDispatcher {
             case TOOL_KEYBOARD_SET_FORM:
             case TOOL_KEYBOARD_SHOW:
             case TOOL_KEYBOARD_HIDE:
+            case TOOL_KEYBOARD_CLIPBOARD:
             case TOOL_TERMINAL_TOGGLE_TOOLBAR:
             case TOOL_TERMINAL_FONT_SIZE_INCREASE:
             case TOOL_TERMINAL_FONT_SIZE_DECREASE:
@@ -1166,7 +1168,8 @@ public final class TerminalActionDispatcher {
                         if (shareClient == null) return error(503, "unavailable", "Terminal view client is not ready");
                         shareClient.shareSelectedText();
                     } else {
-                        com.termux.shared.interact.ShareUtils.copyTextToClipboard(host.context(), selected);
+                        // A copy made inside the launcher: the clipboard and the keyboard's history.
+                        ClipboardHistory.copy(host.context(), selected);
                     }
                     return ok().put("characters", selected.length());
                 }
@@ -1313,6 +1316,14 @@ public final class TerminalActionDispatcher {
                     if (!host.setKeyboardForm(form))
                         return error(503, "unavailable", "The place on screen is not settled yet");
                     return ok().put("form", form.storageValue());
+                }
+                case TOOL_KEYBOARD_CLIPBOARD: {
+                    if (!host.isInAppKeyboardEnabled())
+                        return error(409, "unavailable", "The in-app keyboard is not enabled");
+                    // Flip; a false answer with the keyboard down means there was nothing to
+                    // stand the panel over, which the caller can fix with keyboard.show first.
+                    boolean shown = host.toggleKeyboardClipboard();
+                    return ok().put("shown", shown);
                 }
                 case TOOL_KEYBOARD_SHOW:
                 case TOOL_KEYBOARD_HIDE: {

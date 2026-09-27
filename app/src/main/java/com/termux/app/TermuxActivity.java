@@ -144,6 +144,9 @@ import com.termux.app.terminal.PaneShape;
 import com.termux.app.terminal.TerminalFrameMetricsMonitor;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
+import com.termux.app.terminal.ClipboardHistory;
+import com.termux.app.terminal.inappkeyboard.ClipboardPanelController;
+import com.termux.app.terminal.inappkeyboard.ClipboardPanelView;
 import com.termux.app.terminal.inappkeyboard.FloatingKeyboardController;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardHost;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
@@ -9925,6 +9928,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ViewParent parent = keyboardView.getParent();
             if (parent instanceof ViewGroup)
                 ((ViewGroup) parent).removeView(keyboardView);
+            // The clipboard panel stood over the old keys; a fresh keyboard comes up as keys.
+            if (mClipboardPanel != null) mClipboardPanel.drop();
             host.removeAllViews();
             host.addView(keyboardView, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -9943,6 +9948,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void detachKeyboardView() {
+            if (mClipboardPanel != null) mClipboardPanel.drop();
             FrameLayout host = findViewById(R.id.inapp_keyboard_view_host);
             if (host != null)
                 host.removeAllViews();
@@ -10030,8 +10036,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             String selectedText = mTerminalView.getSelectedText();
             if (DataUtils.isNullOrEmpty(selectedText))
                 selectedText = mTerminalView.getStoredSelectedText();
+            // The keyboard's own copy key: a copy made inside the launcher, so it goes into
+            // the keyboard's clipboard history beside the Android clipboard.
             if (!DataUtils.isNullOrEmpty(selectedText))
-                ShareUtils.copyTextToClipboard(TermuxActivity.this, selectedText);
+                ClipboardHistory.copy(TermuxActivity.this, selectedText);
         }
 
         @Override
@@ -10049,13 +10057,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (DataUtils.isNullOrEmpty(selectedText))
                 selectedText = mTerminalView.getStoredSelectedText();
             if (!DataUtils.isNullOrEmpty(selectedText)) {
-                ShareUtils.copyTextToClipboard(TermuxActivity.this, selectedText);
+                ClipboardHistory.copy(TermuxActivity.this, selectedText);
                 mTerminalView.stopTextSelectionMode();
                 return false;
             }
             String currentInput = mTerminalView.getCurrentInput();
             if (!DataUtils.isNullOrEmpty(currentInput))
-                ShareUtils.copyTextToClipboard(TermuxActivity.this, currentInput);
+                ClipboardHistory.copy(TermuxActivity.this, currentInput);
             // Ctrl+U is the terminal-native cut for the current prompt line. Sending it even when
             // the heuristic input reader returns empty also clears shells with custom prompts.
             return true;
@@ -10104,6 +10112,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (applyDisplayFrameKeyboard(false)) return;
             if (mInAppKeyboard != null)
                 mInAppKeyboard.hide(TermuxInAppKeyboard.HideReason.USER_EVENT);
+        }
+
+        @Override
+        public void showClipboardPanel() {
+            clipboardPanel().show();
+        }
+
+        @Override
+        public void hideClipboardPanel() {
+            if (mClipboardPanel != null) mClipboardPanel.hide();
         }
 
         @Override
@@ -13439,10 +13457,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void copyToClipboard(@NonNull String text) {
-            android.content.ClipboardManager clipboard =
-                (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
-            if (clipboard != null)
-                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("", text));
+            // A yank in find mode is a copy made inside the launcher: clipboard and history.
+            ClipboardHistory.copy(TermuxActivity.this, text);
         }
 
         @Override
@@ -16798,6 +16814,56 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Set while the frame the touchpad stands in is being raised or lowered for the pad's sake. */
     private boolean mRaisingDisplayFrameKeyboard;
     @Nullable private com.termux.app.x11.DisplayTouchpadView mDisplayTouchpad;
+    /** The keyboard's clipboard panel, over the keys the way the touchpad is; built on first use. */
+    @Nullable private ClipboardPanelController mClipboardPanel;
+
+    @NonNull
+    private ClipboardPanelController clipboardPanel() {
+        if (mClipboardPanel != null) return mClipboardPanel;
+        mClipboardPanel = new ClipboardPanelController(new ClipboardPanelController.Host() {
+            @Override @Nullable public FrameLayout keyboardViewHost() {
+                return findViewById(R.id.inapp_keyboard_view_host);
+            }
+
+            @Override @Nullable public View keyboardView() {
+                return mAttachedInAppKeyboardView;
+            }
+
+            @Override public boolean isCard() {
+                return isInAppKeyboardCapsule();
+            }
+
+            @Override public boolean isReducedMotionEnabled() {
+                return TermuxActivity.this.isReducedMotionEnabled();
+            }
+
+            @Override @NonNull public ClipboardPanelView.Palette palette() {
+                // The touchpad's roles: the overlay surface the drawer and the popups use, its
+                // on-surface pair, and the terminal place's accent for the pill and the pins.
+                return new ClipboardPanelView.Palette(
+                    getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+                        R.color.termux_surface_panel_high),
+                    getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+                        R.color.termux_on_surface),
+                    getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                        R.color.termux_on_surface_variant),
+                    com.termux.app.statusbar.StatusBarLensView.accentFor(TermuxActivity.this,
+                        com.termux.app.wall.PaneWallPage.TERMINAL));
+            }
+
+            @Override public void pasteFromHistory(@NonNull String text) {
+                // Onto the Android clipboard first — the one clipboard every paste reads — and
+                // then through the keyboard's own paste route, so the Display place or an
+                // overlay takes it exactly as it takes the paste key. Pasting is not copying:
+                // the history is left as it stands.
+                ShareUtils.copyTextToClipboard(TermuxActivity.this, text);
+                if (mInAppKeyboard != null && mInAppKeyboard.pasteThroughKeyboard()) return;
+                if (mTermuxTerminalSessionActivityClient != null)
+                    mTermuxTerminalSessionActivityClient.onPasteTextFromClipboard(getCurrentSession());
+            }
+        }, ClipboardHistory.get(this));
+        return mClipboardPanel;
+    }
     /** The keyboard layout the pad follows, held so a second attach does not stack another. */
     @Nullable private View.OnLayoutChangeListener mDisplayTouchpadFollower;
     /** Set while the pad is waiting out a keyboard layout before it is attached. */
@@ -17063,6 +17129,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long duration = com.termux.app.terminal.Motion.FLOAT_DEPTH_MS;
         android.view.animation.Interpolator settle = com.termux.app.terminal.Motion.settle();
         boolean reduced = isReducedMotionEnabled();
+        // The pad and the clipboard panel stand in the same frame; the pad's arrival puts the
+        // panel away first, so the two never stack.
+        if (wanted && mClipboardPanel != null) mClipboardPanel.hide();
         // The keyboard is the frame both contents stand in: it has to be up for either to have a
         // size, and it stays up across a swap so the X screen is never resized to make room.
         if (ours && !mInAppKeyboard.isVisible()) {
@@ -20352,6 +20421,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean toggleDisplayFrameKeyboard() {
             return TermuxActivity.this.toggleDisplayFrameKeyboard();
+        }
+
+        @Override public boolean toggleKeyboardClipboard() {
+            // The panel has no size of its own: it needs keys on screen to stand over.
+            if (mInAppKeyboard == null || !mInAppKeyboard.isVisible()) return false;
+            ClipboardPanelController panel = clipboardPanel();
+            panel.toggle();
+            return panel.isShowing();
         }
 
         @Override public boolean displayTakesSystemKeyboard() {

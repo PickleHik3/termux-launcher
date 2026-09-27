@@ -420,6 +420,8 @@ public final class TermuxInAppKeyboard {
         mLastHideReason = Objects.requireNonNull(reason, "reason");
         mVisible = false;
         resetInputPipeline();
+        // The panel stands over the keys, so it goes down with them; the next show is the keys.
+        mHost.hideClipboardPanel();
         setContainerVisible(false);
         mHost.requestAccessoryGeometrySync();
         // Down on a place that has its own fields, the IME goes back to the place.

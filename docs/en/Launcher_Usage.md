@@ -329,6 +329,25 @@ The keyboard height is stored independently for portrait and landscape. In lands
 dock becomes a vertical rail at the left and the keyboard uses a lower height ceiling so the terminal
 keeps usable rows.
 
+### Clipboard history
+
+Swipe down-left on the Ctrl key (the clipboard corner) to open the keyboard's clipboard history
+in place of the keys. It lists the things you copied **in the launcher** — a selection copied in
+the terminal, the keyboard's copy and cut keys, a link or a hint copied from a sheet, a yank in
+find mode, and text a program copies with `launcherctl clipboard copy` or an OSC 52 escape. What
+you copy in other apps is not collected; the paste key still pastes whatever the phone's clipboard
+holds, as it always did.
+
+Tap an item to paste it into the terminal and put it back on the clipboard. Pin an item to keep
+it above the rest and across restarts; recent items are kept in memory only, about thirty of them,
+and the panel keeps up to twenty pins. Very long copies (over 16 KB) still reach the clipboard but
+are not listed. **Clear** asks for a second tap and never touches pins; the keyboard pill in the
+panel's corner brings the keys back.
+
+The clipboard key is one of the extra keys in Settings → Keyboard, on by default, so it can be
+turned off or placed on a custom layout; `tool:keyboard.clipboard` on any key, chord or palette
+entry opens the same panel.
+
 ## Personalize the launcher
 
 Long-press a surface to reach its editor, or start from Settings:

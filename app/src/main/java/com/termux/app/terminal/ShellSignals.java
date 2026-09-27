@@ -52,10 +52,18 @@ public final class ShellSignals {
 
     @NonNull private final Notices mNotices;
 
+    @NonNull private final ClipboardHistory mHistory;
+
     public ShellSignals(@NonNull Context context, @NonNull TerminalHost host, @NonNull Notices notices) {
+        this(context, host, notices, ClipboardHistory.get(context));
+    }
+
+    public ShellSignals(@NonNull Context context, @NonNull TerminalHost host, @NonNull Notices notices,
+                        @NonNull ClipboardHistory history) {
         mContext = context;
         mHost = host;
         mNotices = notices;
+        mHistory = history;
     }
 
     // --- Notifications ---
@@ -135,12 +143,17 @@ public final class ShellSignals {
      * display, and every other app. Only while the launcher is on screen — a program in a shell
      * nobody is looking at does not get to replace what the user just copied elsewhere.
      *
+     * <p>A write that lands is also a copy made inside the launcher, so it goes into the
+     * keyboard's {@link ClipboardHistory} beside it — the one path the escape, the local API and
+     * the terminal's own selection copy share.
+     *
      * @return false when the launcher is not on screen and nothing was written
      */
     public boolean clipboardWrite(@NonNull String text) {
         if (!mHost.isVisible())
             return false;
         ShareUtils.copyTextToClipboard(mContext, text);
+        mHistory.record(text);
         return true;
     }
 

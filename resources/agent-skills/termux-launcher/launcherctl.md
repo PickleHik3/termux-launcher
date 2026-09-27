@@ -127,7 +127,9 @@ to the current pane. They only need the launcher *running*, not on screen — ex
   every app. Both refuse with 409 `launcher_not_visible` when the launcher isn't on screen (a
   background process doesn't get to replace what the user just copied elsewhere), and `paste`
   is 403 `clipboard_read_disabled` when **Settings → Terminal → Let programs read the clipboard**
-  is off — the same two rules OSC 52 follows. 60/min each.
+  is off — the same two rules OSC 52 follows. 60/min each. A `copy` that lands also appears in
+  the in-app keyboard's clipboard history (the clipboard corner of the Ctrl key), so the user can
+  paste it again later; `paste` reads the Android clipboard, never that history.
 
 Both `notify` and `progress` answer 409 `no_session` when there is no shell at all, and 404
 `pane_not_found` for a stale `--pane`.

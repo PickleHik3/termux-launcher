@@ -980,6 +980,27 @@
                     <item>dark</item>
                 </string-array>
                 <string name="termux_in_app_keyboard_haptics_summary">Gentle haptic tick for every key.</string>
+
+                <!-- The keyboard's clipboard panel -->
+                <string name="clipboard_panel_title">Clipboard</string>
+                <plurals name="clipboard_panel_count">
+                    <item quantity="one">%1$d item</item>
+                    <item quantity="other">%1$d items</item>
+                </plurals>
+                <string name="clipboard_panel_back_to_keys">Back to the keys</string>
+                <string name="clipboard_panel_clear">Clear</string>
+                <string name="clipboard_panel_clear_description">Clear recent items; pinned items stay</string>
+                <string name="clipboard_panel_clear_confirm">Tap again to clear</string>
+                <string name="clipboard_panel_clear_confirm_description">Tap again to clear recent items</string>
+                <string name="clipboard_panel_section_pinned">Pinned</string>
+                <string name="clipboard_panel_section_recent">Recent</string>
+                <string name="clipboard_panel_pin">Pin</string>
+                <string name="clipboard_panel_unpin">Unpin</string>
+                <string name="clipboard_panel_remove">Remove</string>
+                <string name="clipboard_panel_paste_item">Paste %1$s</string>
+                <string name="clipboard_panel_pins_full">Up to %1$d pins. Unpin one to pin another.</string>
+                <string name="clipboard_panel_empty_title">Nothing copied yet</string>
+                <string name="clipboard_panel_empty_body">Things you copy in the launcher show up here, ready to paste again. Pinned items stay until you remove them.</string>
                 <string name="termux_in_app_keyboard_key_sound_summary">Uses the system touch-sound volume.</string>
                 <string name="termux_in_app_keyboard_key_popup_summary">Shows the key you\'re pressing above your finger.</string>
                 <string name="termux_in_app_keyboard_font_title">Font</string>
@@ -1698,6 +1719,8 @@
     <string name="tool_keyboard_set_form">Keyboard type</string>
     <string name="tool_keyboard_show">Show keyboard</string>
     <string name="tool_keyboard_hide">Hide keyboard</string>
+    <string name="tool_keyboard_clipboard">Clipboard history</string>
+    <string name="tool_desc_keyboard_clipboard">Open or close the list of things you copied.</string>
     <string name="tool_keyboard_cycle_layout">Cycle keyboard layout</string>
     <string name="tool_keyboard_select_layout">Switch keyboard layout</string>
     <string name="tool_terminal_toggle_toolbar">Toggle dock</string>
