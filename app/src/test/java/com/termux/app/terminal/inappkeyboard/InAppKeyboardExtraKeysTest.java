@@ -82,7 +82,7 @@ public class InAppKeyboardExtraKeysTest {
     public void defaultsMatchTheTerminalFirstSelection() {
         Map<KeyValue, KeyboardData.PreferredPos> defaults =
             InAppKeyboardExtraKeys.resolve(InAppKeyboardExtraKeys.defaultStoredValue());
-        String[] expected = { "tab", "esc", "capslock", "copy", "paste", "cut", "alt" };
+        String[] expected = { "tab", "esc", "capslock", "copy", "paste", "cut", "alt", "switch_clipboard" };
         for (String name : expected)
             assertTrue(name + " should be enabled by default",
                 defaults.containsKey(KeyValue.getKeyByName(name)));

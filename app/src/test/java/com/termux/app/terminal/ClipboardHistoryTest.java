@@ -4,9 +4,15 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import android.app.Application;
+import android.os.Build;
+
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -17,6 +23,9 @@ import java.util.Collections;
 import java.util.List;
 
 /** The keyboard's clipboard history: its bounds, its ordering, and what survives a restart. */
+/** Robolectric only because the file store logs through android.util.Log. */
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class ClipboardHistoryTest {
 
     @Rule public TemporaryFolder folder = new TemporaryFolder();

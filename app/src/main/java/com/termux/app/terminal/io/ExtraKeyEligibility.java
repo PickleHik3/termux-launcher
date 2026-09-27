@@ -120,6 +120,7 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_KEYBOARD_SELECT_LAYOUT, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_KEYBOARD_CYCLE_FORM, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_KEYBOARD_SET_FORM, Band.LAUNCHER);
+        tools.put(LauncherToolRegistry.TOOL_KEYBOARD_CLIPBOARD, Band.LAUNCHER);
         // The dock and the key row are chrome every place wears.
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_TOOLBAR, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_EXTRA_KEYS_EDIT, Band.LAUNCHER);
