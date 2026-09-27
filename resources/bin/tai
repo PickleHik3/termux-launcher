@@ -132,7 +132,8 @@ case "$cmd" in
   delete)
     [ "$#" -gt 0 ] || { echo "usage: tai delete <model-id>" >&2; exit 2; }
     model=$(json_escape "$1")
-    post_json /v1/ai/models/delete "{\"modelId\":\"$model\"}"
+    # Typing the command is the confirmation; the endpoint refuses a delete without it.
+    post_json /v1/ai/models/delete "{\"modelId\":\"$model\",\"confirm\":true}"
     ;;
   preflight)
     model=""

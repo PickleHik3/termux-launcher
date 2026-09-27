@@ -1891,7 +1891,7 @@ public class LauncherCtlApiServer {
             "  delete)\n" +
             "    [ \"$#\" -gt 0 ] || { echo \"usage: tai delete <model-id>\" >&2; exit 2; }\n" +
             "    model=$(json_escape \"$1\")\n" +
-            "    post_json /v1/ai/models/delete \"{\\\"modelId\\\":\\\"$model\\\"}\"\n" +
+            "    post_json /v1/ai/models/delete \"{\\\"modelId\\\":\\\"$model\\\",\\\"confirm\\\":true}\"\n" +
             "    ;;\n" +
             "  preflight)\n" +
             "    model=\"\"\n" +
