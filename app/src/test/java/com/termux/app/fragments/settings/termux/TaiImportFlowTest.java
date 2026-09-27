@@ -71,6 +71,47 @@ public class TaiImportFlowTest {
     }
 
     @Test
+    public void buildsForAnotherChipAreDroppedAndGpuBuildsAreNotPreselected() throws Exception {
+        // litert-community/embeddinggemma-300m's seq512 files as the API listed them on 2026-09-27.
+        String[] files = {
+            "embeddinggemma-300M_seq512_mixed-precision.google.tensor_g5.tflite",
+            "embeddinggemma-300M_seq512_mixed-precision.google.tensor_g6.tflite",
+            "embeddinggemma-300M_seq512_mixed-precision.mediatek.mt6991.tflite",
+            "embeddinggemma-300M_seq512_mixed-precision.qualcomm.sm8650.tflite",
+            "embeddinggemma-300M_seq512_mixed-precision.tflite",
+        };
+        JSONArray candidates = new JSONArray();
+        for (String file : files) candidates.put(new JSONObject().put("file", file).put("sizeBytes", 190_000_000L));
+        JSONArray elsewhere = TaiImportFlow.pruneCandidates(new JSONObject().put("candidates", candidates), "SM8750")
+            .getJSONArray("candidates");
+        assertEquals(1, elsewhere.length());
+        assertEquals("embeddinggemma-300M_seq512_mixed-precision.tflite", elsewhere.getJSONObject(0).getString("file"));
+
+        JSONArray again = new JSONArray();
+        for (String file : files) again.put(new JSONObject().put("file", file).put("sizeBytes", 190_000_000L));
+        JSONArray onSm8650 = TaiImportFlow.pruneCandidates(new JSONObject().put("candidates", again), "SM8650")
+            .getJSONArray("candidates");
+        assertEquals(2, onSm8650.length());
+        // Even on its own chip the NPU build is not the one pre-selected: TAI runs the CPU and GPU.
+        assertEquals("embeddinggemma-300M_seq512_mixed-precision.tflite",
+            onSm8650.getJSONObject(TaiImportFlow.preselect(onSm8650, 8L * GIB)).getString("file"));
+
+        // litert-community/functiongemma-270m-ft-mobile-actions: the portable build survives alone.
+        JSONObject function = new JSONObject().put("candidates", new JSONArray()
+            .put(new JSONObject().put("file", "functiongemma-270m-ft-mobile-actions_Google_Tensor_G5.litertlm").put("sizeBytes", 573_936_705L))
+            .put(new JSONObject().put("file", "functiongemma-270m-ft-mobile-actions_Google_Tensor_G6.litertlm").put("sizeBytes", 569_545_793L))
+            .put(new JSONObject().put("file", "mobile_actions_q8_ekv1024.litertlm").put("sizeBytes", 288_964_608L)));
+        assertEquals(1, TaiImportFlow.pruneCandidates(function, "").getJSONArray("candidates").length());
+
+        // litert-community/MedGemma-1.5-4B-IT: the larger _gpu build fits a 16 GB phone but loses.
+        JSONArray medGemma = new JSONArray()
+            .put(new JSONObject().put("file", "medgemma-1.5-4b-it_q4_block32_ekv2048.litertlm").put("sizeBytes", 2_583_871_056L))
+            .put(new JSONObject().put("file", "medgemma-1.5-4b-it_q4_block32_vision_ekv2048.litertlm").put("sizeBytes", 3_023_069_488L))
+            .put(new JSONObject().put("file", "medgemma-1.5-4b-it_q8_gpu_ekv2048.litertlm").put("sizeBytes", 4_652_024_016L));
+        assertEquals(1, TaiImportFlow.preselect(medGemma, 16L * GIB));
+    }
+
+    @Test
     public void gpuFailuresOfferTheProcessor() throws Exception {
         assertTrue(TaiImportFlow.gpuFailure(new JSONObject().put("error", "accelerator_not_supported_by_device")
             .put("message", "GPU delegate could not initialise")));

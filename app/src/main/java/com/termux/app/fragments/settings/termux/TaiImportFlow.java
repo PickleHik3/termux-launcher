@@ -32,6 +32,7 @@ import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiHuggingFace;
 import com.termux.ai.TaiImportFit;
+import com.termux.ai.TaiImportProfiles;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelImporter;
 import com.termux.ai.TaiModelProfile;
@@ -138,24 +139,59 @@ final class TaiImportFlow {
      */
     @Nullable
     static JSONObject pruneCandidates(@Nullable JSONObject result) {
+        return pruneCandidates(result, deviceSoc());
+    }
+
+    /**
+     * The same, for a phone whose chip is {@code deviceSoc} ({@code Build.SOC_MODEL}): a build
+     * compiled for another chip's NPU (EmbeddingGemma's {@code .qualcomm.sm8650.tflite},
+     * FunctionGemma's {@code _Google_Tensor_G5.litertlm}) cannot run here, so it is dropped
+     * whenever a portable build of the repository is on offer.
+     */
+    @Nullable
+    static JSONObject pruneCandidates(@Nullable JSONObject result, @Nullable String deviceSoc) {
         JSONArray candidates = result == null ? null : result.optJSONArray("candidates");
         if (candidates == null) return result;
         boolean packaged = false;
+        boolean portable = false;
         for (int i = 0; i < candidates.length(); i++) {
             JSONObject candidate = candidates.optJSONObject(i);
-            if (candidate != null && !isEmbeddingFile(candidate.optString("file", ""))) packaged = true;
+            if (candidate == null) continue;
+            String file = candidate.optString("file", "");
+            if (!isEmbeddingFile(file)) packaged = true;
+            if (TaiImportProfiles.socTarget(file) == null) portable = true;
         }
-        if (!packaged) return result;
+        if (!packaged && !portable) return result;
         JSONArray kept = new JSONArray();
         for (int i = 0; i < candidates.length(); i++) {
             JSONObject candidate = candidates.optJSONObject(i);
-            if (candidate != null && !isEmbeddingFile(candidate.optString("file", ""))) kept.put(candidate);
+            if (candidate == null) continue;
+            String file = candidate.optString("file", "");
+            if (packaged && isEmbeddingFile(file)) continue;
+            if (portable && !TaiImportProfiles.socMatches(TaiImportProfiles.socTarget(file), deviceSoc)) continue;
+            kept.put(candidate);
         }
+        // Never prune a repository down to nothing: an all-foreign list is shown as it is.
+        if (kept.length() == 0) return result;
         try {
             result.put("candidates", kept);
         } catch (JSONException ignored) {
         }
         return result;
+    }
+
+    /** This phone's chip as Android names it, or "" before Android 12 and under unit tests. */
+    @NonNull
+    private static String deviceSoc() {
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
+                && android.os.Build.SOC_MODEL != null) {
+                return android.os.Build.SOC_MODEL;
+            }
+        } catch (Throwable ignored) {
+            // The unit-test android.jar has no real Build; no chip is then known.
+        }
+        return "";
     }
 
     @NonNull
@@ -176,7 +212,9 @@ final class TaiImportFlow {
      * The file to pre-select from a repository's runnable files: the largest that fits this phone
      * outright, else one of unknown size, else the smallest that would be slow, else the smallest.
      * Within the same fit, a full-precision ({@code f32}) build loses to any other: it needs about
-     * four times the memory of a compact one and runs slower, for little gain on a phone.
+     * four times the memory of a compact one and runs slower, for little gain on a phone. So does
+     * a build tied to one chip's NPU or named for the GPU ({@code _gpu_ekv2048}, {@code _gpu_opt}),
+     * which TAI cannot run, or which fails to load on a GPU that cannot take it.
      */
     static int preselect(@NonNull JSONArray candidates, long deviceMemoryBytes) {
         int best = -1;
@@ -189,7 +227,8 @@ final class TaiImportFlow {
             TaiImportFit fit = TaiImportFit.check(size, deviceMemoryBytes, isEmbeddingFile(candidate.optString("file", "")));
             int rank = (fit.verdict == TaiImportFit.Verdict.YES ? 0 : fit.verdict == TaiImportFit.Verdict.UNKNOWN ? 1
                 : fit.verdict == TaiImportFit.Verdict.SLOW ? 2 : 3) * 2
-                + (TaiImportNames.isFullPrecision(candidate.optString("file", "")) ? 1 : 0);
+                + (TaiImportNames.isFullPrecision(candidate.optString("file", ""))
+                    || TaiImportProfiles.deprioritised(candidate.optString("file", "")) ? 1 : 0);
             // Among files that fit, prefer the largest (the more accurate build); otherwise the smallest.
             boolean better = rank < bestRank
                 || rank == bestRank && (rank / 2 == 0 ? size > bestSize : size >= 0L && (bestSize < 0L || size < bestSize));
@@ -609,16 +648,20 @@ final class TaiImportFlow {
         }
         TaiModelProfile defaults = new TaiModelProfile(Collections.singletonList("cpu"),
             1024, 64, 0.95d, 1.0d, null, "edge-gallery-import-default");
+        TaiImportProfiles.Match family = TaiImportProfiles.match(draft.identity());
         if (TaiImportGuess.qwenThinking(draft.identity())) {
             defaults = new TaiModelProfile(Arrays.asList("gpu", "cpu"), 2048, 64,
                 0.95d, 1.0d, 3, TaiModelProfile.SOURCE_LITERT_COMMUNITY,
                 TaiModelProfile.THINKING_ALWAYS, "<think>", "</think>");
+        } else if (family != null) {
+            defaults = family.profile;
         }
         if (draft.customProfile != null) defaults = draft.customProfile;
         return new TaiModelProfile(accelerators, defaults.defaultMaxTokens, defaults.defaultTopK,
             defaults.defaultTopP, defaults.defaultTemperature, defaults.minDeviceMemoryInGb,
             draft.customProfile == null ? "import-dialog-selection" : "user-artifact-profile",
-            defaults.thinkingMode, defaults.thinkingChannelStart, defaults.thinkingChannelEnd, defaults.maxContextTokens);
+            defaults.thinkingMode, defaults.thinkingChannelStart, defaults.thinkingChannelEnd, defaults.maxContextTokens,
+            defaults.thinkingSwitch);
     }
 
     @NonNull

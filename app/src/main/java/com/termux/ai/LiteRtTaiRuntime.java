@@ -801,7 +801,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         closeConversationLocked();
         conversationTranscript = requestTranscript == null ? null : Collections.unmodifiableList(requestTranscript);
         // A blank prompt must be null: LiteRT-LM adds a system turn for any non-null instruction.
-        Contents systemContents = request.systemPrompt.trim().isEmpty() ? null : contents(request.systemPrompt);
+        String systemPrompt = thinkingSystemPrompt(request.systemPrompt, options, loadedProfile);
+        Contents systemContents = systemPrompt.trim().isEmpty() ? null : contents(systemPrompt);
         ConversationConfig conversationConfig = conversationConfig(systemContents, request, options);
         synchronized (EXPERIMENTAL_FLAGS_LOCK) {
             ExperimentalFlags.INSTANCE.setConvertCamelToSnakeCaseInToolDescription(false);
@@ -1066,10 +1067,22 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         if (profile == null || TaiModelProfile.THINKING_NONE.equals(profile.thinkingMode)) {
             return Collections.emptyMap();
         }
+        boolean thinking = thinkingOn(options, profile);
         HashMap<String, Object> context = new HashMap<>();
-        if (TaiModelProfile.THINKING_ALWAYS.equals(profile.thinkingMode)) {
-            context.put("enable_thinking", "true");
-        } else if (Boolean.TRUE.equals(options.thinkingEnabled)) {
+        if (TaiModelProfile.THINKING_SWITCH_SYSTEM_FLAG.equals(profile.thinkingSwitch)) {
+            // The switch lives in the system prompt (thinkingSystemPrompt); the template has no key.
+            return context;
+        }
+        if (TaiModelProfile.THINKING_SWITCH_TEMPLATE_BOOLEAN.equals(profile.thinkingSwitch)) {
+            // A Boolean, not a String: LiteRT-LM's JsonConvertersKt.toJsonElement serialises it as a
+            // JSON true/false (checked in litertlm-android's JsonConvertersKt bytecode), so templates
+            // that test "enable_thinking is false" (MiniCPM5) really see false. Off is sent
+            // explicitly because MiniCPM5-2B's int4 template lets the model decide, and it thinks,
+            // when the key is missing.
+            context.put("enable_thinking", thinking ? Boolean.TRUE : Boolean.FALSE);
+            return context;
+        }
+        if (thinking) {
             // Only ever "true": the value reaches the chat template as a string, and Jinja reads
             // any non-empty string, "false" included, as true. Sending "false" switched thinking
             // ON (measured on pong: 246 chars of thought and no answer, against a 0.37 s first
@@ -1077,6 +1090,36 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             context.put("enable_thinking", "true");
         }
         return context;
+    }
+
+    /**
+     * The system prompt a conversation starts with, carrying SmolLM3's {@code /no_think} when the
+     * profile switches thinking in the system prompt and thinking is off. Upstream's own example
+     * is a system message of exactly "/no_think"; the full-size LiteRT bundle strips the flag and
+     * renders "Reasoning Mode: /no_think" with an empty think block, and the q4 bundle passes the
+     * system message through to the model, which was trained on the flag. Thinking on changes
+     * nothing: both templates default to {@code /think}. A prompt that already carries either
+     * flag is the caller's choice and is left alone, as upstream lets the flag override the kwarg.
+     */
+    @NonNull
+    static String thinkingSystemPrompt(
+        @NonNull String systemPrompt,
+        @Nullable TaiRuntimeOptions options,
+        @Nullable TaiModelProfile profile
+    ) {
+        if (profile == null || TaiModelProfile.THINKING_NONE.equals(profile.thinkingMode)
+            || !TaiModelProfile.THINKING_SWITCH_SYSTEM_FLAG.equals(profile.thinkingSwitch)
+            || thinkingOn(options, profile)
+            || systemPrompt.contains("/no_think") || systemPrompt.contains("/think")) {
+            return systemPrompt;
+        }
+        String trimmed = systemPrompt.trim();
+        return trimmed.isEmpty() ? "/no_think" : trimmed + "\n\n/no_think";
+    }
+
+    private static boolean thinkingOn(@Nullable TaiRuntimeOptions options, @NonNull TaiModelProfile profile) {
+        return TaiModelProfile.THINKING_ALWAYS.equals(profile.thinkingMode)
+            || options != null && Boolean.TRUE.equals(options.thinkingEnabled);
     }
 
     @Nullable

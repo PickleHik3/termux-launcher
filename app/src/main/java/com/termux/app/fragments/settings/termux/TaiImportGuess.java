@@ -3,6 +3,7 @@ package com.termux.app.fragments.settings.termux;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.TaiImportProfiles;
 import com.termux.ai.TaiModelSpec;
 
 import java.util.Arrays;
@@ -22,6 +23,10 @@ final class TaiImportGuess {
 
     @NonNull
     static LinkedHashSet<String> capabilities(@Nullable String source) {
+        // A family whose card the importer has read says exactly what it does, e.g. EmbeddingGemma
+        // is embeddings only and FunctionGemma is chat with tool use.
+        TaiImportProfiles.Match family = TaiImportProfiles.match(source);
+        if (family != null) return new LinkedHashSet<>(family.capabilities);
         LinkedHashSet<String> capabilities = new LinkedHashSet<>();
         String value = source == null ? "" : source.toLowerCase(Locale.ROOT);
         boolean embedding = value.endsWith(".tflite")
@@ -69,6 +74,8 @@ final class TaiImportGuess {
      */
     @NonNull
     static List<String> accelerators(@Nullable String source) {
+        TaiImportProfiles.Match family = TaiImportProfiles.match(source);
+        if (family != null) return family.profile.compatibleAccelerators;
         String value = source == null ? "" : source.toLowerCase(Locale.ROOT);
         boolean mnn = value.contains("-mnn") || value.contains("_mnn") || value.endsWith("config.json");
         boolean knownGpu = !mnn && (qwenThinking(value)
