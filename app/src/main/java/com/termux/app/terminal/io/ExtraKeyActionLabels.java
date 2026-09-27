@@ -58,7 +58,7 @@ public final class ExtraKeyActionLabels {
 
     /**
      * The glyph a tool's key cap draws when the tool has one worth a cap: the wall's places wear
-     * the marks the status bar gives them. Null for everything else, where the title seeds the cap.
+     * the marks the status bar gives them, and the Dictate key a microphone. Null for everything else, where the title seeds the cap.
      */
     @Nullable
     public static String defaultCapGlyph(@NonNull String toolName) {
@@ -68,6 +68,7 @@ public final class ExtraKeyActionLabels {
             case LauncherToolRegistry.TOOL_WALL_DISPLAY: return "\uf108";
             case LauncherToolRegistry.TOOL_MOUSE_TOGGLE: return "\uDB80\uDF7D"; // nf-md-mouse
             case LauncherToolRegistry.TOOL_KEYBOARD_CYCLE_FORM: return "\uf11c";
+            case LauncherToolRegistry.TOOL_VOICE_DICTATE: return "\uf130"; // nf-fa-microphone
             default: return null;
         }
     }

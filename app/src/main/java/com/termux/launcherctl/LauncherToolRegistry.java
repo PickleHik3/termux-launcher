@@ -267,7 +267,9 @@ public final class LauncherToolRegistry {
                 TOOL_PANE_FOCUS_DIRECTION,
                 TOOL_WINDOW_NEW, TOOL_WINDOW_CLOSE, TOOL_WINDOW_NEXT, TOOL_WINDOW_PREVIOUS,
                 TOOL_SESSION_NEW, TOOL_SESSION_NEXT, TOOL_SESSION_PREVIOUS,
-                TOOL_SESSION_CLOSE_CURRENT));
+                TOOL_SESSION_CLOSE_CURRENT,
+                // The pill says it: listening, then what became of the text.
+                TOOL_VOICE_DICTATE));
 
         /** Agent-only tool: no UI metadata. */
         public ToolMetadata(
@@ -426,6 +428,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_KEYBOARD_CLIPBOARD = "keyboard.clipboard";
     /** Switches the keyboard off, so a tap no longer raises it, or back on. */
     public static final String TOOL_KEYBOARD_TOGGLE_ENABLED = "keyboard.toggle_enabled";
+    /** Starts or stops a dictation on any place; the text waits in the panel for ✓ or Copy. */
+    public static final String TOOL_VOICE_DICTATE = "voice.dictate";
     public static final String TOOL_TERMINAL_TOGGLE_TOOLBAR = "terminal.toggle_toolbar";
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
@@ -877,6 +881,14 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_KEYBOARD, R.string.tool_keyboard_toggle_enabled,
             R.string.tool_desc_keyboard_toggle_enabled, null);
+        // The voice key's dictation for places and setups without it: Home and Display, where the
+        // keyboard is usually down, or Android's keyboard. No keyboard needed, launcher's or not.
+        addUi(map, TOOL_VOICE_DICTATE,
+            "Start dictating, or stop. The text waits in the dictation panel until the user inserts or copies it.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_voice_dictate,
+            R.string.tool_desc_voice_dictate, null);
         addUi(map, TOOL_TERMINAL_TOGGLE_TOOLBAR,
             "Show or hide the dock.",
             schemaEmpty(),

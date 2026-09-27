@@ -31,34 +31,42 @@ import com.termux.R;
 
 /**
  * The dictation pill (agreed design, 2026-09-27): top right, under the status bar, 36 dp tall
- * with 6 dp above and below its contents, and a panel that grows down from it over the pane's
- * right side. It lives in the window's content frame rather than the accessory stack, so it never
- * takes part in the keyboard's geometry passes; its position is re-read from the pane area
- * ({@code terminal_surface_host}) on every level update, which is cheap and follows bars that move.
+ * with 6 dp above and below its contents, and a panel that grows down from it, toward the thumb,
+ * over the pane's right side. It lives in the window's content frame rather than the accessory
+ * stack, so it never takes part in the keyboard's geometry passes; its position is re-read from
+ * the place viewport ({@code terminal_surface_host}, the frame the pane wall slides inside, so the
+ * same corner on Home, Terminal and Display — ADR 0003) on every level update, which is cheap and
+ * follows bars that move.
  *
  * <p>The pill row holds the scrolling waveform ({@link VoiceWaveformView}), the state
- * ("Listening…", "Transcribing…", "Cleaning up…"), a "Warming up" chip with a ring while the
- * speech model, the voiced decision or the cleanup model is still loading — recording has already
- * started — and the ×. The panel ({@link VoiceTranscriptPanel}) holds the whole session's text.
+ * ("Listening…", "Transcribing…", "Cleaning up…", then what became of the text), a "Warming up"
+ * chip with a ring while the speech model, the voiced decision or the cleanup model is still
+ * loading — recording has already started — and, while listening, the ×. The panel
+ * ({@link VoiceTranscriptPanel}) holds the whole dictation's text and its Copy, bin and ✓.
  *
- * <p>× stops listening and still delivers every phrase waiting to transcribe; swiping the pill
- * sideways discards them. Both are the host's to act on through {@link Callbacks}.
+ * <p>The pill's × only stops listening: every phrase still transcribing arrives and the text
+ * waits in the panel; with nothing left to stop, it goes. Discarding is the panel's bin, drawn as
+ * a bin so the two never read alike, or a sideways swipe of the card. All of them are the host's
+ * to act on through {@link Callbacks}.
  */
 public final class VoiceListeningIndicator {
 
     /** Main thread. */
     public interface Callbacks {
-        /** The ×: stop listening, deliver what is waiting (or close a finished pill). */
-        void onClose();
+        /** The pill's ×: close the microphone; the text stays in the panel. */
+        void onStop();
 
-        /** Swiped away: discard what has not been delivered, close at once. */
+        /** Swiped away: the same as the panel's bin. */
         void onSwipedAway();
 
-        /** The panel's Replace, offered when the cleanup could not swap the line itself. */
-        void onReplace();
-
-        /** The panel's Copy. */
+        /** The panel's Copy: the text to the clipboard (stopping first when still listening). */
         void onCopy();
+
+        /** The panel's bin: discard the dictation and close. */
+        void onDiscard();
+
+        /** The panel's ✓: insert the text at the cursor, once (stopping first when still listening). */
+        void onInsert();
     }
 
     private static final int PILL_HEIGHT_DP = 36;
@@ -66,11 +74,12 @@ public final class VoiceListeningIndicator {
     private static final int GAP_DP = 8;
 
     private final Activity activity;
-    /** The pane area: the pill sits at its top right, under whatever bars are above it. */
+    /** The place viewport: the pill sits at its top right, under whatever bars are above it, on every place. */
     private final View anchor;
     @Nullable private SwipeCard card;
     @Nullable private TextView status;
     @Nullable private View chip;
+    @Nullable private View stop;
     @Nullable private VoiceWaveformView wave;
     @Nullable private VoiceTranscriptPanel panel;
     private int lastTop = -1;
@@ -78,15 +87,27 @@ public final class VoiceListeningIndicator {
     /** Captured segments still transcribing; the shimmer line shows while any are. */
     private int pending;
     private boolean cleaningUp;
+    /** Keeps the card in place once the level ticks have stopped and the text waits: the keyboard, the bars. */
+    private final View.OnLayoutChangeListener anchorMoved =
+        (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> v.post(this::reposition);
 
     public VoiceListeningIndicator(@NonNull Activity activity, @NonNull View anchor) {
         this.activity = activity;
         this.anchor = anchor;
     }
 
-    /** @param dimRaw whether a cleanup pass will follow, so the raw text shows dim until it lands. */
-    public void show(@NonNull Callbacks callbacks, boolean dimRaw) {
-        if (card != null) return;
+    /**
+     * Puts the pill up listening; a pill already up (its text waiting) goes back to listening
+     * and carries on from {@code base}.
+     *
+     * @param dimRaw whether a cleanup pass will follow, so the raw text shows dim until it lands
+     * @param base the text the dictation carries on from, {@code ""} for a fresh one
+     */
+    public void show(@NonNull Callbacks callbacks, boolean dimRaw, @NonNull String base) {
+        if (card != null) {
+            resume(dimRaw, base);
+            return;
+        }
         ViewGroup content = activity.findViewById(android.R.id.content);
         if (content == null) return;
         Context context = activity;
@@ -128,35 +149,43 @@ public final class VoiceListeningIndicator {
         chipParams.setMarginStart(dp(6));
         row.addView(warming, chipParams);
 
-        // The pill's full height as the tap target around an 18 dp glyph.
-        ImageView close = new ImageView(context);
-        close.setImageResource(R.drawable.ic_symbol_close);
-        close.setColorFilter(onSurface, PorterDuff.Mode.SRC_IN);
-        close.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        close.setContentDescription(context.getString(R.string.voice_input_close));
-        close.setPadding(dp(9), dp(9), dp(9), dp(9));
+        // The pill's full height as the tap target around an 18 dp glyph. Gone once the
+        // microphone has closed; the row's end padding keeps the label off the edge then.
+        ImageView stopButton = new ImageView(context);
+        stopButton.setImageResource(R.drawable.ic_symbol_close);
+        stopButton.setColorFilter(onSurface, PorterDuff.Mode.SRC_IN);
+        stopButton.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        stopButton.setContentDescription(context.getString(R.string.voice_input_close));
+        stopButton.setPadding(dp(9), dp(9), dp(9), dp(9));
         TypedValue ripple = new TypedValue();
         if (context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true)) {
-            close.setBackgroundResource(ripple.resourceId);
+            stopButton.setBackgroundResource(ripple.resourceId);
         }
-        close.setOnClickListener(v -> callbacks.onClose());
-        row.addView(close, new LinearLayout.LayoutParams(dp(PILL_HEIGHT_DP), dp(PILL_HEIGHT_DP)));
+        stopButton.setOnClickListener(v -> callbacks.onStop());
+        row.addView(stopButton, new LinearLayout.LayoutParams(dp(PILL_HEIGHT_DP), dp(PILL_HEIGHT_DP)));
+        row.setPaddingRelative(dp(12), 0, dp(4), 0);
 
         view.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(PILL_HEIGHT_DP)));
 
         VoiceTranscriptPanel transcript = new VoiceTranscriptPanel(context, onSurface, accent,
             new VoiceTranscriptPanel.Actions() {
                 @Override
-                public void onReplace() {
-                    callbacks.onReplace();
-                }
-
-                @Override
                 public void onCopy() {
                     callbacks.onCopy();
                 }
+
+                @Override
+                public void onDiscard() {
+                    callbacks.onDiscard();
+                }
+
+                @Override
+                public void onInsert() {
+                    callbacks.onInsert();
+                }
             });
         transcript.setDimRaw(dimRaw);
+        if (!base.isEmpty()) transcript.resetTo(base);
         transcript.setPaddingRelative(dp(14), 0, dp(12), dp(10));
         transcript.setVisibility(View.GONE);
         view.addView(transcript, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -170,21 +199,41 @@ public final class VoiceListeningIndicator {
         lastTop = place[0];
         lastEnd = place[1];
         content.addView(view, params);
+        anchor.addOnLayoutChangeListener(anchorMoved);
         card = view;
         status = label;
         chip = warming;
+        stop = stopButton;
         wave = levels;
         panel = transcript;
         pending = 0;
         cleaningUp = false;
+        updatePanelVisibility();
+        fitPanel();
+    }
+
+    /** The pill was up with its text waiting, and a new dictation carries on from it. */
+    private void resume(boolean dimRaw, @NonNull String base) {
+        pending = 0;
+        cleaningUp = false;
+        setStatus(R.string.voice_input_listening);
+        if (stop != null) stop.setVisibility(View.VISIBLE);
+        VoiceTranscriptPanel view = panel;
+        if (view != null) {
+            view.setDimRaw(dimRaw);
+            view.resetTo(base);
+        }
+        updateShimmer();
     }
 
     public void hide() {
+        anchor.removeOnLayoutChangeListener(anchorMoved);
         SwipeCard view = card;
         if (panel != null) panel.release();
         card = null;
         status = null;
         chip = null;
+        stop = null;
         wave = null;
         panel = null;
         lastTop = -1;
@@ -221,7 +270,14 @@ public final class VoiceListeningIndicator {
 
     /** The mic has closed but a captured segment is still transcribing: "Listening…" no longer fits. */
     public void setTranscribing() {
+        onMicrophoneClosed();
         setStatus(R.string.voice_input_transcribing);
+    }
+
+    /** Nothing more to stop: the × goes. */
+    public void onMicrophoneClosed() {
+        View view = stop;
+        if (view != null) view.setVisibility(View.GONE);
     }
 
     public void setStatus(@StringRes int text) {
@@ -241,7 +297,7 @@ public final class VoiceListeningIndicator {
         updateShimmer();
     }
 
-    /** One phrase, exactly as typed, into the panel. */
+    /** One phrase, as it joins on, into the panel. */
     public void appendTranscript(@NonNull String typed) {
         VoiceTranscriptPanel view = panel;
         if (view == null) return;
@@ -252,33 +308,37 @@ public final class VoiceListeningIndicator {
     /** The session has ended and the one cleanup pass is running. */
     public void setCleaningUp() {
         cleaningUp = true;
+        onMicrophoneClosed();
         setWarmingUp(false);
         setStatus(R.string.voice_input_cleaning_up);
         updateShimmer();
     }
 
-    /**
-     * The cleanup has landed; see {@link VoiceTranscriptPanel#showCleaned}.
-     *
-     * @param swapped whether the line in the terminal was already swapped for {@code cleaned}
-     */
-    public void showCleaned(@NonNull String cleaned, boolean swapped, boolean canReplace) {
+    /** The cleanup has landed and waits with its changes marked; see {@link VoiceTranscriptPanel#showCleaned}. */
+    public void showCleaned(@NonNull String cleaned) {
         cleaningUp = false;
+        onMicrophoneClosed();
         updateShimmer();
-        setStatus(swapped ? R.string.voice_input_cleaned_up : R.string.voice_input_cleaned_up_not_swapped);
+        setStatus(R.string.voice_input_cleaned_up);
         VoiceTranscriptPanel view = panel;
-        if (view != null) view.showCleaned(cleaned, !swapped, canReplace);
+        if (view != null) view.showCleaned(cleaned);
         updatePanelVisibility();
     }
 
-    /** The cleanup came back with nothing better (or failed): the text stays as heard. */
-    public void showKeptAsHeard() {
+    /**
+     * The text is final as heard and waits: no cleanup was asked for ("Ready"), or it came back
+     * with nothing better or failed ("Kept as heard").
+     */
+    public void showAsHeard(@StringRes int text) {
         cleaningUp = false;
+        onMicrophoneClosed();
         updateShimmer();
-        setStatus(R.string.voice_input_kept_as_heard);
+        setStatus(text);
+        VoiceTranscriptPanel view = panel;
+        if (view != null) view.showFinalRaw();
     }
 
-    /** Replace or Copy was used: the actions go and the state says what happened. */
+    /** ✓ or Copy has used the text: the buttons go and the state says what happened. */
     public void onActionDone(@StringRes int text) {
         VoiceTranscriptPanel view = panel;
         if (view != null) view.hideActions();
@@ -299,6 +359,29 @@ public final class VoiceListeningIndicator {
         if (view.getVisibility() != visibility) view.setVisibility(visibility);
     }
 
+    /**
+     * Seven lines where they fit; where the pane area under the pill is short (landscape, the
+     * keyboard up) the panel keeps as many as fit above its bottom edge, and the top truncates.
+     */
+    private void fitPanel() {
+        VoiceTranscriptPanel view = panel;
+        SwipeCard pill = card;
+        if (view == null || pill == null) return;
+        int line = view.lineHeightPx();
+        ViewGroup content = (ViewGroup) pill.getParent();
+        if (line <= 0 || content == null || !anchor.isShown() || anchor.getHeight() <= 0) {
+            view.setMaxVisibleLines(VoiceTranscriptPanel.VISIBLE_LINES);
+            return;
+        }
+        int[] panes = new int[2];
+        int[] frame = new int[2];
+        anchor.getLocationInWindow(panes);
+        content.getLocationInWindow(frame);
+        int bottom = panes[1] - frame[1] + anchor.getHeight() - dp(GAP_DP);
+        int room = bottom - lastTop - dp(PILL_HEIGHT_DP) - view.chromeHeightPx();
+        view.setMaxVisibleLines(room / line);
+    }
+
     // ------------------------------------------------------------------ placement
 
     private void reposition() {
@@ -307,19 +390,22 @@ public final class VoiceListeningIndicator {
         ViewGroup content = (ViewGroup) view.getParent();
         if (content == null) return;
         int[] place = place(content);
-        if (place[0] == lastTop && place[1] == lastEnd) return;
-        lastTop = place[0];
-        lastEnd = place[1];
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
-        params.topMargin = place[0];
-        params.setMarginEnd(place[1]);
-        view.setLayoutParams(params);
+        if (place[0] != lastTop || place[1] != lastEnd) {
+            lastTop = place[0];
+            lastEnd = place[1];
+            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) view.getLayoutParams();
+            params.topMargin = place[0];
+            params.setMarginEnd(place[1]);
+            view.setLayoutParams(params);
+        }
+        // The keyboard coming up shortens the pane area without moving its top.
+        fitPanel();
     }
 
     /**
-     * {top margin, end margin} in the content frame: just inside the pane area's top right
-     * corner, which is under the status bar and whatever top bars the layout puts above the panes;
-     * under the system status bar when the pane area is not laid out.
+     * {top margin, end margin} in the content frame: just inside the place viewport's top right
+     * corner, which is under the status bar and whatever top bars the layout puts above the panes
+     * on every place alike; under the system status bar when the viewport is not laid out.
      */
     @NonNull
     private int[] place(@NonNull ViewGroup content) {

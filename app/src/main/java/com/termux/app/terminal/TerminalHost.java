@@ -533,6 +533,15 @@ public interface TerminalHost extends SoftKeyboardPolicy {
         return false;
     }
 
+    /**
+     * Starts a dictation when none is listening, on whichever place is on screen, or stops the
+     * one that is; the text waits in the dictation panel either way. Answers whether a dictation
+     * is listening now.
+     */
+    default boolean toggleVoiceDictation() {
+        return false;
+    }
+
     /** Toggles the key inspector, answering whether it is now open. */
     boolean toggleKeyInspector();
 

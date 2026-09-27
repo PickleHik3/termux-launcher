@@ -152,14 +152,13 @@ import com.termux.app.terminal.inappkeyboard.InAppKeyboardHost;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceDictation;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceInputSession;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceLanguage;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceListeningIndicator;
-import com.termux.app.terminal.inappkeyboard.voice.VoicePacedSwap;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceSessionCleanup;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceTextPolisher;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceTextSanitizer;
-import com.termux.app.terminal.inappkeyboard.voice.VoiceTypedLine;
 import com.termux.app.terminal.io.ExtraKeysDefaultOffer;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
 import com.termux.shared.activities.ReportActivity;
@@ -686,18 +685,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The on-device voice input in progress, from the voice key to its end; null between. */
     @Nullable private VoiceInputSession mVoiceInput;
     @Nullable private VoiceListeningIndicator mVoiceIndicator;
-    /** The shell the running voice session types into when nothing has claimed typing. */
-    @Nullable private TerminalSession mVoiceInputTargetSession;
-    /** Whether the last thing the running session inserted was text (the next text gets a space). */
-    private boolean mVoiceInputLastWasText;
-    /** What the voice session typed, for the cleanup's in-place swap at the end. */
-    private final VoiceTypedLine mVoiceTypedLine = new VoiceTypedLine();
+    /** The dictation in the panel: what has been heard, and the ✓ or Copy waiting for it to settle. */
+    private final VoiceDictation mVoiceDictation = new VoiceDictation();
+    /**
+     * Whether the running dictation was started from the in-app keyboard's voice key, and so
+     * stops when that keyboard goes down; the Dictate key's runs on with no keyboard at all.
+     */
+    private boolean mVoiceTiedToKeyboard;
     /** The one cleanup pass of the current dictation, from the mic opening until it lands; null with cleanup off. */
     @Nullable private VoiceSessionCleanup mVoiceCleanup;
-    /** The shell the finished dictation went to, kept while its cleanup runs or is offered. */
-    @Nullable private TerminalSession mVoiceCleanupTarget;
-    /** The cleaned text the panel offers with Replace and Copy. */
-    @Nullable private String mVoiceCleanedText;
     /** The speech model's warm-up or the voiced decision's load is still running. */
     private boolean mVoiceSpeechWarming;
     private final Runnable mVoicePillAutoClose = this::closeVoicePill;
@@ -705,6 +701,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mVoiceLanguageFallbackNoticed;
     private boolean mVoiceEnglishOnlyNoticed;
     private boolean mVoiceMicrophonePromptShowing;
+    /** Whether the microphone was asked for from the voice key rather than the Dictate key. */
+    private boolean mVoiceMicrophoneAskedFromKeyboard;
     /** Visible sessions = service sessions minus secondary panes. Backs the window bar and browser. */
     private final java.util.List<com.termux.shared.termux.shell.command.runner.terminal.TermuxSession> mDrawerSessions = new java.util.ArrayList<>();
 
@@ -2411,10 +2409,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onPause() {
         dismissHelpOverlay();
-        // The microphone is only ever open while this activity is the one on screen, and a
-        // finished dictation's cleanup never swaps a line nobody is looking at.
-        if (mVoiceInput != null) endVoiceInput(VoiceInputSession.EndReason.PAUSED);
-        else closeVoicePill();
+        // The microphone is only ever open while this activity is the one on screen; what was
+        // said stays in the panel, waiting for the user to come back to it.
+        endVoiceInput(VoiceInputSession.EndReason.PAUSED);
         // Nothing is typed into a display nobody is looking at.
         hideDisplaySystemKeyboard();
         // Rename owns the in-app-keyboard interceptor only while this activity is visible.
@@ -9335,9 +9332,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // policy - the dock button, the keyboard's hide key, a tool, the wall paging, a
         // preference - is the user's doing to that policy, and reaches it from here alone.
         mInAppKeyboard.setVisibilityListener(shown -> {
-            // Voice input belongs to the keyboard that started it: down goes the keyboard, off
-            // goes the microphone. (Focus hides are caught by the session's own level tick.)
-            if (!shown) endVoiceInput(VoiceInputSession.EndReason.HIDDEN);
+            // A dictation from the voice key belongs to the keyboard that started it: down goes the
+            // keyboard, off goes the microphone, and the text waits in the panel. (Focus hides are
+            // caught by the session's own level tick.) The Dictate key's runs on without one.
+            if (!shown && mVoiceTiedToKeyboard) endVoiceInput(VoiceInputSession.EndReason.HIDDEN);
             // The keyboard mouse mode's touchpad stands in is the pad's frame, raised by the pad
             // itself: nobody asked for a keyboard there, so it must not pin the policy off.
             if (mRaisingDisplayFrameKeyboard) return;
@@ -10145,8 +10143,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Long-press keeps the system chooser; a tap takes the engine the settings name, and
             // a tap while the on-device engine is listening is how a session is ended by hand.
             // Like the pill's ×, it never throws away what was said: once the mic has closed, a
-            // further tap lets the captured phrases finish (each has its own deadline); only a
-            // swipe of the pill discards them.
+            // further tap lets the captured phrases finish (each has its own deadline), and the
+            // text waits in the panel; only its bin or a swipe of the card discards it.
             if (chooser || !mPreferences.isInAppKeyboardVoiceOnDevice()) {
                 launchVoiceTyping(chooser);
                 return;
@@ -10155,7 +10153,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (!mVoiceInput.isStopRequested()) mVoiceInput.stop(VoiceInputSession.EndReason.USER);
                 return;
             }
-            startOnDeviceVoiceInput();
+            startOnDeviceVoiceInput(true);
         }
 
         @Override
@@ -13926,10 +13924,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             for (String result : results) {
                 if (result != null && !result.trim().isEmpty()) {
                     // Spoken text goes where typing goes: into the display or an overlay when
-                    // one has claimed it, into the shell it was started from otherwise.
-                    if (!offerToInAppKeyboardInterceptor(
-                            juloo.keyboard2.KeyValue.makeStringKey(result), false, false, false))
+                    // one has claimed it, into the shell it was started from otherwise. Off the
+                    // Terminal place (the Dictate key on Home or Display) there is no shell in
+                    // front, so it goes where ✓ would, or to the clipboard.
+                    if (currentWallPage() != com.termux.app.wall.PaneWallPage.TERMINAL) {
+                        String text = VoiceTextSanitizer.clean(result);
+                        if (!text.isEmpty() && !typeVoiceText(text) && copyVoiceText(text))
+                            AppNotice.show(this, R.string.voice_input_no_target_copied, false);
+                    } else if (!offerToInAppKeyboardInterceptor(
+                            juloo.keyboard2.KeyValue.makeStringKey(result), false, false, false)) {
                         target.write(result);
+                    }
                     break;
                 }
             }
@@ -13960,18 +13965,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // ------------------------------------------------------------------ on-device voice input
 
     /**
-     * The voice key with the on-device engine: opens the microphone for a {@link VoiceInputSession}
-     * that types each spoken phrase where the keyboard's own keys would. Every way it cannot —
-     * no speech model, no microphone permission, a runtime refusal — falls back to the Android
-     * recognizer ({@link #launchVoiceTyping}) with a one-line notice, so the key always does
-     * something.
+     * Starts a dictation with the on-device engine: opens the microphone for a
+     * {@link VoiceInputSession} whose phrases collect in the pill's panel, never in the terminal,
+     * until the panel's ✓ or Copy uses them. Every way it cannot — no speech model, no microphone
+     * permission, a runtime refusal — falls back to the Android recognizer
+     * ({@link #launchVoiceTyping}) with a one-line notice, so the key always does something.
+     *
+     * @param fromKeyboard started from the in-app keyboard's voice key, which needs that keyboard
+     *     up and stops the dictation when it goes down; the Dictate key needs neither
      */
-    private void startOnDeviceVoiceInput() {
-        if (mVoiceInput != null || mInAppKeyboard == null || !mInAppKeyboard.isVisible()) return;
-        TerminalSession target = getCurrentSession();
-        if (target == null) return;
-        // A finished dictation's pill (its cleanup running or on offer) gives way; its raw text stays.
-        closeVoicePill();
+    private void startOnDeviceVoiceInput(boolean fromKeyboard) {
+        if (mVoiceInput != null) return;
+        if (fromKeyboard && (mInAppKeyboard == null || !mInAppKeyboard.isVisible())) return;
         com.termux.ai.TaiSettings tai = new com.termux.ai.TaiSettings(this);
         // The settings' choice, or another installed speech model when that one's files are gone.
         com.termux.ai.TaiModelSpec model = com.termux.ai.TaiSpeechModels.resolveActive(this);
@@ -13988,6 +13993,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (androidx.core.content.ContextCompat.checkSelfPermission(this,
                 android.Manifest.permission.RECORD_AUDIO)
             != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            mVoiceMicrophoneAskedFromKeyboard = fromKeyboard;
             requestVoiceInputMicrophone();
             return;
         }
@@ -13998,22 +14004,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.isInAppKeyboardVoiceSoundsEnabled(),
             mPreferences.isInAppKeyboardHapticsEnabled());
         VoiceInputSession session = new VoiceInputSession(this, config, mVoiceInputHost);
-        mVoiceInputTargetSession = target;
-        mVoiceInputLastWasText = false;
-        mVoiceTypedLine.reset();
         mVoiceSpeechWarming = true;
         if (!session.start()) {
-            mVoiceInputTargetSession = null;
             mVoiceSpeechWarming = false;
             AppNotice.show(this, getString(R.string.voice_input_fallback,
                 getString(R.string.voice_input_mic_unavailable)), false);
             launchVoiceTyping(false);
             return;
         }
+        // Text still waiting in the panel is carried on from rather than lost, a cleanup still
+        // running on it included (the new dictation's pass covers the whole text); a pill that is
+        // only saying what became of used text gives way.
+        String base = mVoiceDictation.carryOver();
+        if (base.isEmpty()) {
+            closeVoicePill();
+        } else {
+            VoiceSessionCleanup previous = mVoiceCleanup;
+            mVoiceCleanup = null;
+            if (previous != null) previous.cancel();
+            getWindow().getDecorView().removeCallbacks(mVoicePillAutoClose);
+        }
         mVoiceInput = session;
-        // Every phrase is typed as heard; with cleanup on, the chat model resolves and loads on its
-        // own thread while the user speaks, and one pass cleans the whole dictation at the end.
-        // With no Gemma installed that pass hands the raw text back and nothing changes.
+        mVoiceTiedToKeyboard = fromKeyboard;
+        mVoiceDictation.start(base);
+        // Phrases collect as heard; with cleanup on, the chat model resolves and loads on its own
+        // thread while the user speaks, and one pass cleans the whole dictation at the end. With
+        // no Gemma installed that pass hands the raw text back and nothing changes.
         if (mPreferences.isInAppKeyboardVoicePolishEnabled()) {
             VoiceTextPolisher polisher = new LocalTaiVoiceTextPolisher(this,
                 mPreferences.getInAppKeyboardVoicePolishLevel());
@@ -14021,6 +14037,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mVoiceCleanup = cleanup;
             cleanup.warm(this::refreshVoiceWarmUp);
         }
+    }
+
+    /**
+     * {@code voice.dictate}, the Dictate key: starts a dictation when none is listening — on any
+     * place, the keyboard up or down, or no launcher keyboard at all — and stops the one that is.
+     * Either way the text waits in the panel. With the Android recognizer chosen in Settings, that
+     * recognizer opens instead.
+     *
+     * @return whether a dictation is listening now
+     */
+    boolean toggleVoiceDictation() {
+        VoiceInputSession session = mVoiceInput;
+        if (session != null) {
+            // Like the voice key: once the mic has closed, the captured phrases finish on their own.
+            if (!session.isStopRequested()) session.stop(VoiceInputSession.EndReason.USER);
+            return false;
+        }
+        if (mPreferences == null) return false;
+        if (!mPreferences.isInAppKeyboardVoiceOnDevice()) {
+            launchVoiceTyping(false);
+            return false;
+        }
+        startOnDeviceVoiceInput(false);
+        return mVoiceInput != null;
     }
 
     /**
@@ -14090,16 +14130,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void showVoiceIndicator() {
-        // The pane area anchors the pill at its top right, under the status bar and the top bars.
+        // The place viewport — the frame the pane wall slides inside — anchors the pill at its top
+        // right, under the status bar and the top bars, the same on Home, Terminal and Display.
         View panes = findViewById(R.id.terminal_surface_host);
         if (panes == null) return;
         if (mVoiceIndicator == null) mVoiceIndicator = new VoiceListeningIndicator(this, panes);
-        mVoiceIndicator.show(mVoicePillCallbacks, mVoiceCleanup != null);
+        mVoiceIndicator.show(mVoicePillCallbacks, mVoiceCleanup != null, mVoiceDictation.raw());
         refreshVoiceWarmUp();
         // Talking is not touching, so the phone's screen timeout would dim and then lock mid-sentence.
-        // The window flag holds the screen on only while the pill is up (listening, phrases
-        // waiting, or the cleanup running); the terminal's own keep-screen-on setting is a view
-        // flag and is untouched by this.
+        // The window flag holds the screen on while the dictation is listening, transcribing or
+        // cleaning up, and lets go once the text waits; the terminal's own keep-screen-on setting
+        // is a view flag and is untouched by this.
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
@@ -14112,15 +14153,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Closes the pill however far it got: a cleanup still running is dropped (the raw text is
-     * already in the terminal and stays), the keep-screen-on flag clears. No-op when it is down.
+     * Closes the pill however far it got, and its text goes with it: a cleanup still running is
+     * dropped, the keep-screen-on flag clears. Nothing ever reached the terminal, so nothing there
+     * changes. No-op when it is down.
      */
     private void closeVoicePill() {
         VoiceSessionCleanup cleanup = mVoiceCleanup;
         mVoiceCleanup = null;
         if (cleanup != null) cleanup.cancel();
-        mVoiceCleanupTarget = null;
-        mVoiceCleanedText = null;
+        mVoiceDictation.clear();
         getWindow().getDecorView().removeCallbacks(mVoicePillAutoClose);
         if (mVoiceIndicator != null) mVoiceIndicator.hide();
         if (mInAppKeyboard != null) mInAppKeyboard.setVoiceTypingActive(false);
@@ -14133,111 +14174,177 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         decor.postDelayed(mVoicePillAutoClose, delayMs);
     }
 
-    /** How long the pill stays once the dictation is done: after a swap, as heard, with Replace/Copy, after one of them. */
-    private static final long VOICE_PILL_AFTER_SWAP_MS = 4_000L;
-    private static final long VOICE_PILL_KEPT_MS = 1_500L;
-    private static final long VOICE_PILL_OFFER_MS = 30_000L;
+    /**
+     * How long the pill stays once ✓ or Copy has used the text: a moment to say so, and long
+     * enough to see the cleanup's marks when the press was made early and ran as they landed.
+     */
     private static final long VOICE_PILL_ACTION_DONE_MS = 1_500L;
+    private static final long VOICE_PILL_ACTION_ON_CLEANED_MS = 2_500L;
 
     /**
-     * The pill's ×, swipe and panel actions. The × stops listening but still delivers every phrase
-     * waiting to transcribe (and then runs the cleanup); once the dictation is over it closes the
-     * pill. A swipe discards what has not been delivered and closes at once. Neither ever erases
-     * text that already reached the terminal.
+     * The pill's × and the card's swipe, and the panel's Copy, bin and ✓. The × only stops
+     * listening: every phrase still transcribing arrives and the text waits. The bin and the
+     * swipe discard the dictation and close at once. Copy and ✓ use the text once it is final,
+     * stopping first when pressed while listening. None of them ever erases or retypes anything
+     * in the terminal.
      */
     private final VoiceListeningIndicator.Callbacks mVoicePillCallbacks = new VoiceListeningIndicator.Callbacks() {
         @Override
-        public void onClose() {
-            VoiceInputSession session = mVoiceInput;
-            if (session != null && !session.isStopRequested()) {
-                session.stop(VoiceInputSession.EndReason.USER);
-                return;
-            }
-            // Already draining: let it finish; the cleanup (if any) will follow. Once over, close.
-            if (session == null) closeVoicePill();
+        public void onStop() {
+            endVoiceInput(VoiceInputSession.EndReason.USER);
         }
 
         @Override
         public void onSwipedAway() {
-            VoiceInputSession session = mVoiceInput;
-            if (session != null) session.cancel(VoiceInputSession.EndReason.USER);
-            closeVoicePill();
-        }
-
-        @Override
-        public void onReplace() {
-            String cleaned = mVoiceCleanedText;
-            TerminalSession target = mVoiceCleanupTarget;
-            if (cleaned == null || target == null || !target.isRunning() || mVoiceTypedLine.wentOffTerminal()) return;
-            // Asked for by hand, having seen the line changed: erase what the dictation typed,
-            // counted, and type the cleaned text in its place.
-            swapVoiceLine(target, cleaned);
-            mVoiceCleanedText = null;
-            if (mVoiceIndicator != null) mVoiceIndicator.onActionDone(R.string.voice_input_cleanup_replaced);
-            closeVoicePillAfter(VOICE_PILL_ACTION_DONE_MS);
+            discardVoiceDictation();
         }
 
         @Override
         public void onCopy() {
-            String cleaned = mVoiceCleanedText;
-            if (cleaned == null) return;
-            android.content.ClipboardManager clipboard =
-                (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
-            if (clipboard == null) return;
-            clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
-                getString(R.string.voice_input_cleanup_clip_label), cleaned));
-            if (mVoiceIndicator != null) mVoiceIndicator.onActionDone(R.string.voice_input_cleanup_copied);
-            closeVoicePillAfter(VOICE_PILL_ACTION_DONE_MS);
+            useVoiceDictation(VoiceDictation.Use.COPY);
+        }
+
+        @Override
+        public void onDiscard() {
+            discardVoiceDictation();
+        }
+
+        @Override
+        public void onInsert() {
+            useVoiceDictation(VoiceDictation.Use.INSERT);
         }
     };
 
-    /**
-     * One transcribed phrase, sanitised and inserted where the keyboard's keys go: the
-     * interceptor first, the shell the session started from otherwise. What went where is
-     * recorded for the cleanup's swap at the end.
-     */
-    private void insertVoiceTranscript(@NonNull String transcript) {
-        if (mInAppKeyboard == null) return;
-        String text = VoiceTextSanitizer.join(mVoiceInputLastWasText, VoiceTextSanitizer.clean(transcript.trim()));
-        if (text.isEmpty()) return;
-        boolean toTerminal = false;
-        long writeMark = 0L;
-        if (!offerToInAppKeyboardInterceptor(juloo.keyboard2.KeyValue.makeStringKey(text),
-                false, false, false)) {
-            TerminalSession target = mVoiceInputTargetSession;
-            if (target != null) {
-                target.write(text);
-                toTerminal = true;
-                writeMark = target.getLastWriteUptimeMs();
-            }
-        }
-        mVoiceTypedLine.onTyped(text, toTerminal, writeMark);
-        mVoiceInputLastWasText = true;
-        if (mVoiceIndicator != null) mVoiceIndicator.appendTranscript(text);
+    /** The bin, or a swipe: whatever is still transcribing is dropped with the text. */
+    private void discardVoiceDictation() {
+        VoiceInputSession session = mVoiceInput;
+        if (session != null) session.cancel(VoiceInputSession.EndReason.USER);
+        closeVoicePill();
     }
 
     /**
-     * The dictation is over (mic released, every phrase delivered): with cleanup on and something
-     * worth cleaning, the pill stays for the one pass; otherwise it closes.
+     * ✓ or Copy. With the text final it is used now; pressed early, the press waits for the text
+     * to settle (the phrases still transcribing, the one cleanup pass) and listening stops so it
+     * can.
      */
-    private void finishVoiceSession(@NonNull VoiceInputSession.EndReason reason) {
-        VoiceSessionCleanup cleanup = mVoiceCleanup;
-        boolean byChoice = reason == VoiceInputSession.EndReason.SILENCE
-            || reason == VoiceInputSession.EndReason.USER || reason == VoiceInputSession.EndReason.HIDDEN;
-        boolean worthIt = !mVoiceTypedLine.isEmpty() && VoiceSessionCleanup.skipReason(mVoiceTypedLine.text()) == null;
-        if (cleanup == null || !byChoice || !worthIt || mVoiceIndicator == null || !mVoiceIndicator.isShowing()) {
+    private void useVoiceDictation(@NonNull VoiceDictation.Use use) {
+        if (mVoiceDictation.press(use)) {
+            carryOutVoiceUse(use, mVoiceDictation.result(), false);
+            return;
+        }
+        if (mVoiceDictation.pending() != null) endVoiceInput(VoiceInputSession.EndReason.USER);
+    }
+
+    /**
+     * Copies {@code text}, or for ✓ types it once where the keyboard types ({@link #typeVoiceText});
+     * with nothing there to take it, ✓ copies it instead and says so.
+     *
+     * @param onCleaned the press was made early and runs as the cleaned text lands
+     */
+    private void carryOutVoiceUse(@NonNull VoiceDictation.Use use, @Nullable String text, boolean onCleaned) {
+        if (text == null || text.isEmpty()) {
             closeVoicePill();
             return;
         }
-        mVoiceIndicator.setCleaningUp();
-        cleanup.run(mVoiceTypedLine.text(), this::onVoiceCleaned);
-        cleanup.close();
+        int said;
+        if (use == VoiceDictation.Use.INSERT && typeVoiceText(text)) {
+            said = R.string.voice_input_inserted;
+        } else {
+            if (!copyVoiceText(text)) {
+                closeVoicePill();
+                return;
+            }
+            if (use == VoiceDictation.Use.INSERT) AppNotice.show(this, R.string.voice_input_no_target_copied, false);
+            said = R.string.voice_input_cleanup_copied;
+        }
+        if (mVoiceIndicator != null) mVoiceIndicator.onActionDone(said);
+        closeVoicePillAfter(onCleaned ? VOICE_PILL_ACTION_ON_CLEANED_MS : VOICE_PILL_ACTION_DONE_MS);
+    }
+
+    private boolean copyVoiceText(@NonNull String text) {
+        android.content.ClipboardManager clipboard =
+            (android.content.ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (clipboard == null) return false;
+        clipboard.setPrimaryClip(android.content.ClipData.newPlainText(
+            getString(R.string.voice_input_cleanup_clip_label), text));
+        return true;
     }
 
     /**
-     * The one pass has landed. Anything but a real change keeps the text as heard. A line nothing
-     * has touched since the last phrase is swapped in place; otherwise the cleaned text waits in
-     * the panel with Replace and Copy.
+     * Types {@code text} once where the keyboard would type right now on the place on screen, and
+     * never with an Enter (the text has no line breaks, {@link VoiceDictation}): first whatever
+     * has claimed the launcher keyboard's typing — the palette, the drawer's search, a rename, a
+     * sheet, or on the Display place the display itself; then, on the Display place without a
+     * launcher keyboard, the display through the same bridge; then a focused text field of the
+     * launcher's own (a widget's editor, typed into by the phone's keyboard); and on the Terminal
+     * place the shell in front. Home has no shell in front of it and a display with no server has
+     * nobody listening, so false there, and the caller copies instead.
+     */
+    private boolean typeVoiceText(@NonNull String text) {
+        juloo.keyboard2.KeyValue value = juloo.keyboard2.KeyValue.makeStringKey(text);
+        if (offerToInAppKeyboardInterceptor(value, false, false, false)) return true;
+        com.termux.app.wall.PaneWallPage page = currentWallPage();
+        if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
+            // The bridge answers false with no server connected; the terminal behind is never the
+            // fallback for text meant for the display.
+            return x11KeyboardBridge().interceptKeyValue(value, false, false, false);
+        }
+        View focus = getCurrentFocus();
+        if (focus instanceof EditText) {
+            EditText field = (EditText) focus;
+            android.text.Editable editable = field.getText();
+            if (editable != null) {
+                int start = Math.max(0, Math.min(field.getSelectionStart(), field.getSelectionEnd()));
+                int end = Math.max(start, Math.max(field.getSelectionStart(), field.getSelectionEnd()));
+                editable.replace(start, end, text);
+                return true;
+            }
+        }
+        if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return false;
+        TerminalSession session = getCurrentSession();
+        if (session == null || !session.isRunning()) return false;
+        session.write(text);
+        return true;
+    }
+
+    /** One transcribed phrase into the panel, as heard; nothing reaches the terminal. */
+    private void appendVoicePhrase(@NonNull String transcript) {
+        String piece = mVoiceDictation.append(transcript);
+        if (!piece.isEmpty() && mVoiceIndicator != null) mVoiceIndicator.appendTranscript(piece);
+    }
+
+    /**
+     * The microphone is released and every phrase delivered. Nothing heard closes the pill; with
+     * cleanup on and something worth cleaning, the one pass runs; otherwise the text waits as heard.
+     */
+    private void finishVoiceSession(@NonNull VoiceInputSession.EndReason reason) {
+        mVoiceDictation.onStopped();
+        VoiceListeningIndicator indicator = mVoiceIndicator;
+        String raw = mVoiceDictation.raw().trim();
+        if (indicator == null || !indicator.isShowing() || raw.isEmpty()
+            || mVoiceDictation.phase() != VoiceDictation.Phase.FINISHING) {
+            closeVoicePill();
+            return;
+        }
+        VoiceSessionCleanup cleanup = mVoiceCleanup;
+        // A failure is often the runtime short of memory: no second model on top of it.
+        boolean cleanable = reason != VoiceInputSession.EndReason.FAILED
+            && VoiceSessionCleanup.skipReason(raw) == null;
+        if (cleanup != null && cleanable) {
+            indicator.setCleaningUp();
+            cleanup.run(raw, this::onVoiceCleaned);
+            cleanup.close();
+            return;
+        }
+        mVoiceCleanup = null;
+        if (cleanup != null) cleanup.cancel();
+        indicator.showAsHeard(R.string.voice_input_ready);
+        settleVoiceDictation(raw, false);
+    }
+
+    /**
+     * The one pass has landed. Anything but a real change keeps the text as heard; a change shows
+     * with its words marked. Either way the text now waits for the panel's buttons.
      */
     private void onVoiceCleaned(@NonNull String raw, @NonNull VoiceTextPolisher.Result result) {
         mVoiceCleanup = null;
@@ -14245,32 +14352,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (indicator == null || !indicator.isShowing()) return;
         String cleaned = result.isPolished() ? VoiceTextSanitizer.clean(result.text) : "";
         if (cleaned.isEmpty() || cleaned.equals(raw.trim())) {
-            indicator.showKeptAsHeard();
-            closeVoicePillAfter(VOICE_PILL_KEPT_MS);
+            indicator.showAsHeard(R.string.voice_input_kept_as_heard);
+            settleVoiceDictation(raw.trim(), false);
             return;
         }
-        TerminalSession target = mVoiceCleanupTarget;
-        boolean running = target != null && target.isRunning();
-        if (running && mVoiceTypedLine.isUntouched(target.getLastWriteUptimeMs(), true)) {
-            swapVoiceLine(target, cleaned);
-            indicator.showCleaned(cleaned, true, false);
-            closeVoicePillAfter(VOICE_PILL_AFTER_SWAP_MS);
-            return;
-        }
-        mVoiceCleanedText = cleaned;
-        indicator.showCleaned(cleaned, false, running && !mVoiceTypedLine.wentOffTerminal());
-        closeVoicePillAfter(VOICE_PILL_OFFER_MS);
+        indicator.showCleaned(cleaned);
+        settleVoiceDictation(cleaned, true);
     }
 
-    /**
-     * Erases what the dictation typed and types {@code cleaned} in its place, the erases paced
-     * one keystroke apart ({@link VoicePacedSwap}) so a TUI prompt reads each as a backspace.
-     * The line is not swapped a second time, so its write mark is left unset.
-     */
-    private void swapVoiceLine(@NonNull TerminalSession target, @NonNull String cleaned) {
-        int erases = mVoiceTypedLine.eraseCount();
-        mVoiceTypedLine.onSwapped(cleaned, 0L);
-        new VoicePacedSwap(erases, cleaned, target::write, () -> { }).start();
+    /** The text is final: it waits, or an early ✓ or Copy uses it now. */
+    private void settleVoiceDictation(@NonNull String text, boolean cleaned) {
+        // Waiting is not talking: the screen may time out again.
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        VoiceDictation.Use early = mVoiceDictation.onSettled(text);
+        if (early != null) carryOutVoiceUse(early, text, cleaned);
     }
 
     private final VoiceInputSession.Host mVoiceInputHost = new VoiceInputSession.Host() {
@@ -14298,9 +14393,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void onLevel(float rms, boolean voiced, float noiseFloor) {
-            // The keyboard can go down without telling the visibility listener (a focus hide);
-            // the level tick, some 30 times a second, is where that is noticed.
-            if (mInAppKeyboard == null || !mInAppKeyboard.isVisible()) {
+            // A dictation from the voice key belongs to the keyboard that started it, and the
+            // keyboard can go down without telling the visibility listener (a focus hide); the
+            // level tick, some 30 times a second, is where that is noticed.
+            if (mVoiceTiedToKeyboard && (mInAppKeyboard == null || !mInAppKeyboard.isVisible())) {
                 endVoiceInput(VoiceInputSession.EndReason.HIDDEN);
                 return;
             }
@@ -14309,7 +14405,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void onTranscript(@NonNull String text) {
-            insertVoiceTranscript(text);
+            appendVoicePhrase(text);
         }
 
         @Override
@@ -14321,8 +14417,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override
         public void onFailure(@NonNull String code, @NonNull String message, boolean anyTranscriptDelivered) {
             String detail = message.isEmpty() ? code : message;
-            if (anyTranscriptDelivered || mInAppKeyboard == null || !mInAppKeyboard.isVisible()) {
-                // Text already went through, or there is nothing to fall back for: just say why.
+            if (anyTranscriptDelivered || !mVoiceTiedToKeyboard
+                || mInAppKeyboard == null || !mInAppKeyboard.isVisible()) {
+                // Text already came through, or nothing to fall back for (the recognizer types
+                // where the keyboard does, which the Dictate key may not have): just say why.
                 AppNotice.show(TermuxActivity.this, getString(R.string.voice_input_stopped, detail), true);
                 return;
             }
@@ -14334,9 +14432,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public void onEnded(@NonNull VoiceInputSession.EndReason reason) {
             mVoiceInput = null;
             mVoiceSpeechWarming = false;
-            mVoiceCleanupTarget = mVoiceInputTargetSession;
-            mVoiceInputTargetSession = null;
-            // The voice key un-presses now; the pill may stay a little longer for the cleanup.
+            // The voice key un-presses now; the pill stays with the text.
             if (mInAppKeyboard != null) mInAppKeyboard.setVoiceTypingActive(false);
             refreshVoiceWarmUp();
             finishVoiceSession(reason);
@@ -14375,7 +14471,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else if (requestCode == REQUEST_CODE_VOICE_INPUT_MICROPHONE) {
             if (grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                startOnDeviceVoiceInput();
+                startOnDeviceVoiceInput(mVoiceMicrophoneAskedFromKeyboard);
             } else {
                 // Refused: the system recognizer asks for the microphone itself.
                 AppNotice.show(this, getString(R.string.voice_input_fallback,
@@ -20611,6 +20707,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean toggleDisplayFrameKeyboard() {
             return TermuxActivity.this.toggleDisplayFrameKeyboard();
+        }
+
+        @Override public boolean toggleVoiceDictation() {
+            return TermuxActivity.this.toggleVoiceDictation();
         }
 
         @Override public boolean toggleKeyboardClipboard() {

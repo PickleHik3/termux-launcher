@@ -8,6 +8,7 @@ import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.PorterDuff;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.text.Layout;
@@ -20,6 +21,7 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -31,8 +33,10 @@ import com.termux.R;
 import java.util.List;
 
 /**
- * The panel the pill grows into: the whole session's text, the last {@link #VISIBLE_LINES} lines
- * visible and older ones fading out under the pill as they scroll up (agreed design, "Panel").
+ * The panel the pill grows into, downward toward the thumb: the whole dictation's text, the last
+ * {@link #VISIBLE_LINES} lines visible (fewer where the pane area is short) and older ones fading
+ * out at the top as they scroll up, the newest line always at the bottom (agreed design, "Panel").
+ * The panel is where the text waits: nothing is typed while the user speaks.
  *
  * <p>Phrases arrive whole, so the panel does not pretend otherwise: a shimmer line stands in for a
  * phrase while it transcribes, then its words type out over {@link #TYPE_MS} — laid out at once
@@ -42,18 +46,24 @@ import java.util.List;
  * <p>With cleanup on, the raw text shows dim. Once the one pass has landed, the cleaned text
  * replaces it with the changes marked from {@link VoiceWordDiff}: changed and added words in the
  * accent colour, removed words struck through, held for {@link #MARK_HOLD_MS} and then faded into
- * the plain cleaned text. A long press toggles the raw text back. When the line could not be
- * swapped in place, Replace and Copy sit under the text.
+ * the plain cleaned text. A long press toggles the raw text back.
+ *
+ * <p>Under the text sit Copy, the bin (discard) and ✓ (insert at the cursor, once). Both Copy and ✓ may
+ * be pressed early; the host stops listening and carries the press out once the text settles.
  */
 final class VoiceTranscriptPanel extends LinearLayout {
 
     interface Actions {
-        void onReplace();
-
         void onCopy();
+
+        void onDiscard();
+
+        void onInsert();
     }
 
-    static final int VISIBLE_LINES = 4;
+    static final int VISIBLE_LINES = 7;
+    /** The fewest lines the panel shrinks to where the pane area is short (landscape, keyboard up). */
+    static final int MIN_VISIBLE_LINES = 2;
     static final long TYPE_MS = 300L;
     static final long MARK_HOLD_MS = 1500L;
     static final long MARK_FADE_MS = 400L;
@@ -61,13 +71,12 @@ final class VoiceTranscriptPanel extends LinearLayout {
     private final TextView text;
     private final ShimmerBar shimmer;
     private final LinearLayout actions;
-    private final TextView replace;
     private final int onSurface;
     private final int dimText;
     private final int accent;
     private final ForegroundColorSpan hidden = new ForegroundColorSpan(Color.TRANSPARENT);
 
-    /** Everything the session typed, as typed. */
+    /** Everything the dictation has heard, as heard (and the text it carried on from). */
     private final StringBuilder raw = new StringBuilder();
     private boolean dimRaw;
     private int revealed;
@@ -106,16 +115,42 @@ final class VoiceTranscriptPanel extends LinearLayout {
         shimmer.setVisibility(GONE);
         addView(shimmer, shimmerParams);
 
+        // Copy on its own at the start; the bin and ✓ together at the end, ✓ nearest the edge the pill
+        // hangs from.
         actions = new LinearLayout(context);
         actions.setOrientation(HORIZONTAL);
-        actions.setGravity(Gravity.END);
-        replace = actionButton(context, R.string.voice_input_cleanup_replace, v -> callbacks.onReplace());
-        actions.addView(replace);
+        actions.setGravity(Gravity.CENTER_VERTICAL);
         actions.addView(actionButton(context, R.string.voice_input_cleanup_copy, v -> callbacks.onCopy()));
+        actions.addView(new View(context), new LayoutParams(0, 1, 1f));
+        actions.addView(iconButton(context, R.drawable.ic_symbol_delete, onSurface,
+            R.string.voice_input_discard, v -> callbacks.onDiscard()));
+        actions.addView(iconButton(context, R.drawable.ic_symbol_check, accent,
+            R.string.voice_input_insert, v -> callbacks.onInsert()));
         actions.setVisibility(GONE);
         LayoutParams actionParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        actionParams.topMargin = dp(4);
+        actionParams.topMargin = dp(2);
         addView(actions, actionParams);
+    }
+
+    /**
+     * How many lines of text show at most: {@link #VISIBLE_LINES}, fewer when the pane area below
+     * the pill has no room for them, never under {@link #MIN_VISIBLE_LINES}.
+     */
+    void setMaxVisibleLines(int lines) {
+        int clamped = Math.max(MIN_VISIBLE_LINES, Math.min(VISIBLE_LINES, lines));
+        if (text.getMaxLines() == clamped) return;
+        text.setMaxLines(clamped);
+        scrollToEnd();
+    }
+
+    /** One line of text's height in pixels, for {@link #setMaxVisibleLines}. */
+    int lineHeightPx() {
+        return text.getLineHeight();
+    }
+
+    /** The height of everything but the text: padding, the shimmer line's room and the buttons. */
+    int chromeHeightPx() {
+        return getPaddingTop() + getPaddingBottom() + dp(12) + dp(40);
     }
 
     /** Whether raw text shows dim, waiting for the cleanup pass at the end. */
@@ -132,11 +167,12 @@ final class VoiceTranscriptPanel extends LinearLayout {
         return raw.length() > 0 || shimmer.getVisibility() == VISIBLE;
     }
 
-    /** One phrase, exactly as typed (a leading space after an earlier one), typed out over {@link #TYPE_MS}. */
+    /** One phrase as it joins on (a leading space after an earlier one), typed out over {@link #TYPE_MS}. */
     void append(@NonNull String typed) {
         if (typed.isEmpty()) return;
         finishTyping();
         clearCleanup();
+        actions.setVisibility(VISIBLE);
         int from = raw.length();
         raw.append(typed);
         revealed = from;
@@ -154,24 +190,39 @@ final class VoiceTranscriptPanel extends LinearLayout {
     }
 
     /**
-     * The cleanup has landed: {@code cleaned} replaces the raw text with its changes marked.
-     *
-     * @param offerActions show Replace and Copy (the line could not be swapped in place)
-     * @param canReplace whether Replace is among them (never for text that went off the terminal)
+     * A new dictation carries on from {@code base}, the text that was waiting: it shows plain,
+     * the earlier cleanup's marks gone, and the next phrase joins onto it.
      */
-    void showCleaned(@NonNull String cleaned, boolean offerActions, boolean canReplace) {
+    void resetTo(@NonNull String base) {
+        finishTyping();
+        clearCleanup();
+        raw.setLength(0);
+        raw.append(base);
+        revealed = raw.length();
+        renderRaw();
+        actions.setVisibility(raw.length() > 0 ? VISIBLE : GONE);
+    }
+
+    /** The cleanup has landed: {@code cleaned} replaces the raw text with its changes marked. */
+    void showCleaned(@NonNull String cleaned) {
         finishTyping();
         removeCallbacks(fadeMarks);
         ops = VoiceWordDiff.diff(raw.toString(), cleaned);
         showingRaw = false;
         text.setLongClickable(true);
         renderCleaned(true, 0f);
-        actions.setVisibility(offerActions ? VISIBLE : GONE);
-        replace.setVisibility(canReplace ? VISIBLE : GONE);
         postDelayed(fadeMarks, MARK_HOLD_MS);
     }
 
-    /** Replace or Copy has been used: the actions go, the cleaned text stays. */
+    /** The text is final as heard (no cleanup, or nothing better came back): no longer dim. */
+    void showFinalRaw() {
+        finishTyping();
+        if (!dimRaw) return;
+        dimRaw = false;
+        renderRaw();
+    }
+
+    /** ✓ or Copy has used the text: the buttons go, the text stays while the pill says so. */
     void hideActions() {
         actions.setVisibility(GONE);
     }
@@ -231,7 +282,6 @@ final class VoiceTranscriptPanel extends LinearLayout {
             markFade.cancel();
             markFade = null;
         }
-        actions.setVisibility(GONE);
     }
 
     private void fadeMarks() {
@@ -321,6 +371,25 @@ final class VoiceTranscriptPanel extends LinearLayout {
             int box = text.getHeight() - text.getCompoundPaddingTop() - text.getCompoundPaddingBottom();
             text.scrollTo(0, Math.max(0, layout.getHeight() - box));
         });
+    }
+
+    /** A 40 dp square around a 20 dp glyph, tinted {@code tint}. */
+    @NonNull
+    private ImageView iconButton(@NonNull Context context, int icon, int tint, int description,
+                                 @NonNull OnClickListener listener) {
+        ImageView button = new ImageView(context);
+        button.setImageResource(icon);
+        button.setColorFilter(tint, PorterDuff.Mode.SRC_IN);
+        button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        button.setContentDescription(context.getString(description));
+        button.setPadding(dp(10), dp(10), dp(10), dp(10));
+        TypedValue ripple = new TypedValue();
+        if (context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true)) {
+            button.setBackgroundResource(ripple.resourceId);
+        }
+        button.setOnClickListener(listener);
+        button.setLayoutParams(new LayoutParams(dp(40), dp(40)));
+        return button;
     }
 
     @NonNull

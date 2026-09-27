@@ -15,8 +15,9 @@ import java.util.concurrent.RejectedExecutionException;
 
 /**
  * The one cleanup pass of a dictation session (spec D5): the model warms on its own
- * {@code voice-cleanup} thread as the microphone opens, every phrase is typed as heard meanwhile,
- * and once the session has ended the whole text goes through the {@link VoiceTextPolisher} once.
+ * {@code voice-cleanup} thread as the microphone opens, every phrase collects in the panel as heard
+ * meanwhile, and once the session has ended the whole text goes through the
+ * {@link VoiceTextPolisher} once, before ✓ or Copy uses it.
  * The warm-up is queued ahead of the pass on the same thread, so the pass waits for the load
  * instead of racing it. Callbacks come back on the main thread and never after {@link #cancel}.
  */

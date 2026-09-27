@@ -6,7 +6,7 @@ import androidx.annotation.NonNull;
  * Rewrites a dictation session's text — punctuation, casing, obvious mis-hearings, filler words —
  * without changing what was said. {@link VoiceSessionCleanup} calls it on its own
  * {@code voice-cleanup} thread, once per session that {@link VoicePolishRules} lets through, after
- * every phrase has already been typed as heard. An implementation never throws and never blocks
+ * every phrase has reached the panel as heard. An implementation never throws and never blocks
  * past the deadline it is given: on any trouble it hands the raw text back with the reason, and
  * the raw text stays.
  *
