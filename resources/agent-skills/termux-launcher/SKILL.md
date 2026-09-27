@@ -27,9 +27,9 @@ set. `$TERMUX_APP__PACKAGE_NAME` names the edition (`com.termux`, `com.termux.la
 2. **Draw in your own pane, never in the one you're running in.** Anything that puts pixels or
    sized text on the grid (an image, `kitten icat`, OSC 66) belongs in a pane you open with
    `launcherctl pane open`. Writing it into your own pane corrupts whatever your shell or a TUI is
-   showing there. Out-of-band signals that don't draw (a notification, the progress ring) are
-   fine to send to your own pane's tty — see `terminal.md` for exactly why the difference matters
-   and how (your shell tool's stdout is a pipe, not the terminal).
+   showing there — and your shell tool's stdout is a pipe anyway, not the terminal. Things that
+   don't draw (a notification, the progress ring, the clipboard) aren't escapes for you at all:
+   `launcherctl notify|progress|clipboard` does them over the local API from any process.
 3. **Never relaunch the app** with `am start -n com.termux/.app.TermuxActivity` — it spins up a
    second instance that fights the running one. Use `launcherctl launch` or `pane focus` instead.
 
@@ -38,10 +38,11 @@ set. `$TERMUX_APP__PACKAGE_NAME` names the edition (`com.termux`, `com.termux.la
 | You want to... | Read | Or just run |
 | --- | --- | --- |
 | Open/drive a pane or window, launch an app, report agent status, show/hide keyboard | `launcherctl.md` | `launcherctl pane open --no-focus -- <cmd>` |
-| Notify the user | `terminal.md` | `sh "<skill dir>/scripts/notify.sh" [--title T] "body"` |
-| Show progress | `terminal.md` | `sh "<skill dir>/scripts/progress.sh" 42` (or `clear`, `error`) |
+| Notify the user | `launcherctl.md` | `launcherctl notify [--title T] "body"` (or `scripts/notify.sh`) |
+| Show progress | `launcherctl.md` | `launcherctl progress 42` (or `clear`, `error`; `scripts/progress.sh`) |
+| Put text on the clipboard | `launcherctl.md` | `launcherctl clipboard copy "text"` / `cmd \| launcherctl clipboard copy` |
 | Show an image | `terminal.md` | `sh "<skill dir>/scripts/show.sh" out.png` |
-| Use kitty graphics/text-sizing/links/clipboard directly | `terminal.md` | — |
+| Use kitty graphics/text-sizing/links directly | `terminal.md` | — |
 | Open a browser or Linux app on the display | `display.md` | `launcherctl launch firefox` |
 
 `<skill dir>` is wherever this skill is installed (typically `~/.claude/skills/termux-launcher/`).
@@ -56,9 +57,16 @@ launcherctl launch <app>
 launcherctl pane open|list|write|read|focus|close ...
 launcherctl window open ...
 launcherctl agent working|blocked|idle|clear
+launcherctl notify [--title T] [--id ID] [--urgency low|normal|critical] <body>
+launcherctl progress <0-100|clear|error|indeterminate> [--pane ID]
+launcherctl clipboard copy [<text>] | paste
 launcherctl keyboard show|hide
 launcherctl x11 gpu
 ```
+
+`notify`, `progress` and `clipboard` work from any process — no terminal, no tty, no
+`TERMUX_LAUNCHER_PANE` needed (they fall back to the current pane). They are the same code the
+OSC 99 / OSC 9;4 / OSC 52 escapes run, just reachable over HTTP.
 
 Full syntax, exact flags, error codes and rate limits: `launcherctl.md`.
 

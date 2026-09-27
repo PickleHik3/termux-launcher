@@ -9,16 +9,14 @@ Your shell tool captures stdout/stderr into a pipe — it does **not** write to 
 terminal device. A bare `printf '\033]99;...'` from a tool call goes nowhere. Two different
 answers follow, depending on what the escape does:
 
-- **Out-of-band** escapes (a notification, the progress ring, an OSC 52 clipboard write) don't
-  draw anything on the grid — they're safe to send straight to *your own pane's* tty device.
-  `scripts/tty.sh` finds it (walks up the process tree from `$$` for the first ancestor whose
-  fd 0/1/2 points at `/dev/pts/*`, falling back to `/dev/tty`); `notify.sh` and `progress.sh` use
-  it already, so prefer those over hand-rolling the escape.
-  **This only works when your tools run under your pane.** Claude Code's do. opencode 2 runs
-  its tools in a background service (`opencode serve --service`, parent PID 1, stdin
-  `/dev/null`) that belongs to no pane, so no tty is found and both scripts exit 1 with a
-  message. Tell the user in your reply instead. `TERMUX_LAUNCHER_PANE` is also missing there,
-  so `launcherctl agent` needs an explicit `--pane`. Checked on a device, 2026-09-27.
+- **Things that don't draw** — a notification, the progress ring, the clipboard — are not
+  escapes for you at all. `launcherctl notify`, `launcherctl progress` and
+  `launcherctl clipboard copy` run the very same code OSC 99, OSC 9;4 and OSC 52 run inside the
+  app, over the local HTTP API, so they work from **any** process: Claude Code's tools, opencode
+  2's background tool service (parent PID 1, stdin `/dev/null`, no tty, no
+  `TERMUX_LAUNCHER_PANE`), a pipe, a cron job. Without a pane id they attribute to the current
+  pane; `--pane ID` picks another. See `launcherctl.md`. (`launcherctl agent` still wants
+  `--pane` in opencode, since a status belongs to a specific pane.)
 - **Anything that draws** (an image, OSC 66 sized text, styled TUI output) must **never** go to
   your own pane — even if you could reach its tty, you'd scribble over whatever your own output
   or a TUI is showing there. Draw in a pane you open for the purpose:
@@ -54,26 +52,44 @@ remote control — none of those work).
 ## Notifications
 
 ```sh
-sh "<skill dir>/scripts/notify.sh" [--title "Build"] "42 tests passed"
+launcherctl notify --title "Build" "42 tests passed"       # or: sh "<skill dir>/scripts/notify.sh" ...
+launcherctl notify --id build --urgency critical "needs your approval"   # same --id replaces
 ```
 
-This sends Android-level notifications (OSC 99): title, body, chunked. They land in the system
-notification shade with no icons or buttons, whether or not the launcher is visible. Prefer this
-script over `printf` — it targets the right tty for you.
+Android-level notifications — exactly what OSC 99 posts (title, body, named/replaceable, urgency;
+no icons or buttons), landing in the system shade whether or not the launcher is visible, and
+tapping one returns to the pane it belongs to. From a program that *has* a terminal, the escape
+(`printf '\033]99;i=1:d=1:p=body;%s\033\\' "$body"`) does the identical thing; from a tool call
+use the command.
 
 There is no separate "toast" route worth reaching for by hand: OSC 9 and OSC 777 are one-line
-in-app toasts, shown only while the launcher is visible, and are strictly weaker than OSC 99.
+in-app notices, shown only while the launcher is visible, and are strictly weaker than OSC 99.
 
 ## Progress ring
 
 ```sh
-sh "<skill dir>/scripts/progress.sh" 42          # 0-100, on the window chip
-sh "<skill dir>/scripts/progress.sh" error 87    # PCT optional, defaults to 0
-sh "<skill dir>/scripts/progress.sh" clear       # done — always clear when you're finished
+launcherctl progress 42            # 0-100, on the window chip (or scripts/progress.sh 42)
+launcherctl progress error         # keeps the last percentage; `error 87` sets one
+launcherctl progress indeterminate
+launcherctl progress clear         # done — always clear when you're finished
+launcherctl progress 70 --pane ID  # another window's chip
 ```
 
-ConEmu-style `OSC 9;4;state;pct`. Clear it yourself when the task ends; a killed or forgotten
-process otherwise leaves the ring spinning for work that's actually over.
+The same ring ConEmu-style `OSC 9;4;state;pct` sets. Clear it yourself when the task ends; a
+killed or forgotten process otherwise leaves the ring spinning for work that's actually over
+(the shell's own prompt mark, OSC 133;D, also clears it when a command finishes).
+
+## Clipboard
+
+```sh
+launcherctl clipboard copy "text"          # or: git diff | launcherctl clipboard copy
+launcherctl clipboard paste                # {"ok":true,"text":"…"}
+```
+
+`copy` is what an OSC 52 write does — the Android clipboard, which the in-app keyboard's paste
+key, the terminal and every other app share. Both directions only work while the launcher is on
+screen (409 `launcher_not_visible` otherwise), and `paste` also needs **Settings → Terminal →
+Let programs read the clipboard** on (403 `clipboard_read_disabled`). Don't rely on reading it.
 
 ## Graphics
 
@@ -106,9 +122,8 @@ a pane you opened, never your own. Full syntax: `Terminal_Kitty_Protocols.md#tex
 - **OSC 8 hyperlinks**: only `http`, `https`, `mailto`, `tel`, `sms`, `geo`, `ftp`, `ftps` open on
   tap; other schemes (including `file://`) are copy-only. Emitting one from your own pane is
   safe — it's a link, not a drawn block.
-- **OSC 52 clipboard**: writing always works; reading only works when the launcher is visible and
-  the user has left **Settings → Terminal → Let programs read the clipboard** on. Don't rely on
-  reading it.
+- **OSC 52 clipboard**: the escape form of `launcherctl clipboard` above — same rules (launcher
+  on screen; reading also needs the setting). From a tool call use the command.
 - **OSC 133 / OSC 7**: prompt marks and cwd reporting, for shell integration — not something you
   need to emit yourself.
 
