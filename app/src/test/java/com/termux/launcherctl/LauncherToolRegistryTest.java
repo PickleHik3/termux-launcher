@@ -66,8 +66,9 @@ public class LauncherToolRegistryTest {
         // keyboard-visibility tools, and finally by pane.layout, pane.move_to_edge and wall.go,
         // whose one enum argument the palette and the extra-keys picker both offer as a row per
         // value rather than as a prompt, and by app.open_help, the command palette's door to help,
-        // and by keyboard.clipboard, the keyboard's clipboard panel on a key or a chord.
-        assertEquals(81, registry.getUiTools().size());
+        // and by keyboard.clipboard, the keyboard's clipboard panel on a key or a chord, and by
+        // keyboard.toggle_enabled, which turns the keyboard off so a tap no longer raises it.
+        assertEquals(82, registry.getUiTools().size());
     }
 
     @Test

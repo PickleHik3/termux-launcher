@@ -424,6 +424,8 @@ public final class LauncherToolRegistry {
     public static final String TOOL_KEYBOARD_HIDE = "keyboard.hide";
     /** The keyboard's clipboard panel: the history of what was copied inside the launcher. */
     public static final String TOOL_KEYBOARD_CLIPBOARD = "keyboard.clipboard";
+    /** Switches the keyboard off, so a tap no longer raises it, or back on. */
+    public static final String TOOL_KEYBOARD_TOGGLE_ENABLED = "keyboard.toggle_enabled";
     public static final String TOOL_TERMINAL_TOGGLE_TOOLBAR = "terminal.toggle_toolbar";
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
@@ -867,6 +869,14 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_KEYBOARD, R.string.tool_keyboard_clipboard,
             R.string.tool_desc_keyboard_clipboard, null, REQUIRES_IN_APP_KEYBOARD);
+        // Off and on, as opposed to hide and show: hidden, the next tap on the terminal brings the
+        // keyboard back; off, only this action or the keyboard key does. Either input method.
+        addUi(map, TOOL_KEYBOARD_TOGGLE_ENABLED,
+            "Turn the keyboard off, so tapping the terminal no longer opens it, or back on.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_toggle_enabled,
+            R.string.tool_desc_keyboard_toggle_enabled, null);
         addUi(map, TOOL_TERMINAL_TOGGLE_TOOLBAR,
             "Show or hide the dock.",
             schemaEmpty(),
