@@ -1345,6 +1345,68 @@ public class PaneWallLayoutTest {
         assertTrue(keyboardSwipes.isEmpty());
     }
 
+    // ---- The grabber on the bottom border ----------------------------------------------------
+
+    @Test
+    public void theGrabberIsDrawnOnlyWhileTheKeyboardSwipeIsOn() {
+        buildWithContent();
+        assertFalse("the default listener has no keyboard swipe", wall.isGrabberShown());
+        listenForKeyboardSwipes();
+        assertTrue(wall.isGrabberShown());
+        wall.setGesturesEnabled(false);
+        assertFalse(wall.isGrabberShown());
+        wall.setGesturesEnabled(true);
+        assertTrue(wall.isGrabberShown());
+    }
+
+    @Test
+    public void theGrabberLightsUnderAFingerOnTheBandAndRestsAfter() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        listenForKeyboardSwipes();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        // Inside the hold time: the finger is still only on the band.
+        idle(200L);
+        assertEquals(1f, wall.grabber().emphasis(), EPS);
+        // The swipe draws it a little way after the finger.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 204f, 50L));
+        assertTrue(wall.grabber().trackOffsetPx() < 0f);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 204f, 80L));
+        idle(300L);
+        assertEquals(0f, wall.grabber().emphasis(), EPS);
+        assertEquals(0f, wall.grabber().trackOffsetPx(), EPS);
+
+        // A finger on the top border is not on the band.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f,
+            1000L));
+        idle(100L);
+        assertEquals(0f, wall.grabber().emphasis(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, 4f, 1100L));
+    }
+
+    @Test
+    public void underReducedMotionTheGrabberStaysStill() {
+        buildWithContent();
+        listenForKeyboardSwipes();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        idle(200L);
+        assertEquals(0f, wall.grabber().emphasis(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 204f, 50L));
+        assertEquals(0f, wall.grabber().trackOffsetPx(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 204f, 80L));
+    }
+
+    private static void idle(long ms) {
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(ms));
+    }
+
     @Test
     public void aPageChangeWithoutAFingerNeverTips() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);

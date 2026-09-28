@@ -178,6 +178,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;
+        // The grabber wears the rims' accent; a re-dress is where a scheme change arrives.
+        mWall.refreshGrabberColor();
         if (mWidgetsPage != null) mWidgetsPage.applyStyle(style);
         if (mDisplayPage != null) mDisplayPage.applyStyle(style);
     }

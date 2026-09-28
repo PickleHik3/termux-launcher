@@ -44,7 +44,8 @@ import java.util.Map;
  * ({@link BorderDrag}): a press held on the current page's border, then dragged sideways, which
  * is how a finger pages the wall on every place and in every mode — and, on the bottom border, a
  * vertical swipe without the hold, which carries the keyboard up or down under the finger
- * ({@link KeyboardReveal}). The window strip's overswipe drives the same drag from outside.
+ * ({@link KeyboardReveal}) and is marked by a small grabber ({@link KeyboardGrabber}). The window
+ * strip's overswipe drives the same drag from outside.
  *
  * <p>Every page is laid out at the host's size and moved with {@code translationX}, so a page
  * change and a whole drag cost no layout work. Only the pages on screen are laid out at all: a
@@ -116,7 +117,8 @@ public final class PaneWallLayout extends ViewGroup {
         default boolean isPlankTiltEnabled(@NonNull PaneWallPage page) { return false; }
         /**
          * Whether a vertical swipe off the current page's bottom border is the keyboard's
-         * ({@link BorderDrag#KEYBOARD_REACH_DP}); asked as each finger lands.
+         * ({@link BorderDrag#KEYBOARD_REACH_DP}); asked as each finger lands, and by the grabber
+         * that marks the border ({@link KeyboardGrabber}), which is drawn only while it is.
          */
         default boolean isBorderKeyboardSwipeEnabled() { return false; }
         /**
@@ -206,6 +208,11 @@ public final class PaneWallLayout extends ViewGroup {
      */
     @Nullable private View mWeightPage;
     private float mWeightOffsetPx;
+    /** The keyboard swipe's grabber on the current page's bottom border. */
+    @NonNull private final KeyboardGrabber mGrabber;
+    /** The wall offset and sink the grabber was last drawn for, so a still wall redraws nothing. */
+    private float mGrabberDrawnOffsetPx = Float.NaN;
+    private float mGrabberDrawnSink = Float.NaN;
     /**
      * The keyboard's height the finger drives the reveal over ({@link KeyboardReveal}), from a
      * keyboard swipe the listener took ({@link Listener#onKeyboardRevealBegin}) until the settle
@@ -252,6 +259,7 @@ public final class PaneWallLayout extends ViewGroup {
         super(context, attrs);
         setClipChildren(false);
         setClipToPadding(false);
+        mGrabber = new KeyboardGrabber(this);
     }
 
     public void setListener(@Nullable Listener listener) {
@@ -403,7 +411,10 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** Off while another surface owns the gesture (the surface editor, for one). */
     public void setGesturesEnabled(boolean enabled) {
+        boolean changed = enabled != mGesturesEnabled;
         mGesturesEnabled = enabled;
+        // The grabber marks a gesture that is on: it goes and comes back with it.
+        if (changed) invalidate();
         // A keyboard swipe under way asks for nothing once another surface owns the gesture, and
         // a keyboard it was carrying lands at once where it was going.
         if (!enabled && mBorderDrag.isKeyboardSwipe()) mBorderDrag.abandon();
@@ -570,6 +581,13 @@ public final class PaneWallLayout extends ViewGroup {
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (mCancellingChild) return super.dispatchTouchEvent(event);
+        boolean handled = dispatchBorderTouch(event);
+        // The grabber answers whatever the event made of the finger on the band.
+        syncGrabberPress(event);
+        return handled;
+    }
+
+    private boolean dispatchBorderTouch(@NonNull MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 armBorderDrag(event);
@@ -701,6 +719,8 @@ public final class PaneWallLayout extends ViewGroup {
         cancelChildGesture();
         performHapticFeedback(HapticFeedbackConstants.GESTURE_START);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+        // The hold made the finger the wall's, not the keyboard's: the grabber goes back to rest.
+        mGrabber.setPressed(false, 0f, mReducedMotion);
         mBorderVelocity = VelocityTracker.obtain();
         beginDrag(true, mBorderDownX);
         engageSink(mBorderDrag.border());
@@ -920,6 +940,70 @@ public final class PaneWallLayout extends ViewGroup {
         return mReveal;
     }
 
+    // ---- The grabber -------------------------------------------------------------------------
+
+    /**
+     * Whether the grabber is drawn: while the keyboard swipe is on and the wall's gestures are
+     * its own.
+     */
+    boolean isGrabberShown() {
+        return mGesturesEnabled && mListener != null && mListener.isBorderKeyboardSwipeEnabled();
+    }
+
+    /**
+     * A finger on the keyboard swipe's band — pending there or holding the swipe — lights the
+     * grabber and draws it a little way along; anything else puts it back at rest.
+     */
+    private void syncGrabberPress(@NonNull MotionEvent event) {
+        boolean pressed = mBorderDrag.isKeyboardSwipe()
+            || (mBorderDrag.claim() == BorderDrag.Claim.PENDING && mBorderDrag.isKeyboardEligible());
+        float dy = pressed && mBorderDrag.isKeyboardSwipe() ? event.getY() - mBorderDownY : 0f;
+        mGrabber.setPressed(pressed && isGrabberShown(), dy, mReducedMotion);
+    }
+
+    /** Re-read the grabber's accent, after a theme or scheme change. */
+    public void refreshGrabberColor() {
+        mGrabber.refreshColor();
+    }
+
+    /** The grabber, for tests. */
+    @NonNull
+    KeyboardGrabber grabber() {
+        return mGrabber;
+    }
+
+    /**
+     * The pages first, then the grabber over the bottom border of each page on screen: faded with
+     * the page's own outline as it leaves its rest, so a slide shows one, and scaled with a sunk
+     * page about its centre, so it stays on the edge it marks.
+     */
+    @Override
+    protected void dispatchDraw(android.graphics.Canvas canvas) {
+        super.dispatchDraw(canvas);
+        mGrabberDrawnOffsetPx = mOffsetPx;
+        mGrabberDrawnSink = mSink;
+        if (!isGrabberShown()) return;
+        int width = getWidth();
+        for (PaneWallPage place : mPages) {
+            View page = mPageViews.get(place);
+            if (page == null || page.getVisibility() != VISIBLE || page.getWidth() <= 0) continue;
+            float visibility = PaneWallPolicy.pageOutlineAlpha(page.getTranslationX(), width);
+            if (!(visibility > 0f)) continue;
+            float centreX = page.getLeft() + page.getTranslationX() + page.getPivotX()
+                + (page.getWidth() / 2f - page.getPivotX()) * page.getScaleX();
+            float bottomY = page.getTop() + page.getTranslationY() + page.getPivotY()
+                + (page.getHeight() - page.getPivotY()) * page.getScaleY();
+            mGrabber.draw(canvas, centreX, bottomY, page.getScaleY(), visibility);
+        }
+    }
+
+    /** The grabber follows its page: a frame that moved the wall or sank the page redraws it. */
+    private void invalidateGrabberIfMoved() {
+        if (!isGrabberShown()) return;
+        if (mOffsetPx == mGrabberDrawnOffsetPx && mSink == mGrabberDrawnSink) return;
+        invalidate();
+    }
+
     private void releaseBorderDrag() {
         mHoldHandler.removeCallbacks(mHoldElapsed);
         mBorderDrag.reset();
@@ -1115,6 +1199,7 @@ public final class PaneWallLayout extends ViewGroup {
         page.setScaleY(scale);
         if (mSinkLayered) applySinkDim(page, sink);
         if (mTiltPages.contains(page)) applyPlanks();
+        invalidateGrabberIfMoved();
         if (mListener != null && mSinkPlace != null) mListener.onPageSinkChanged(mSinkPlace, scale);
     }
 
@@ -1164,6 +1249,7 @@ public final class PaneWallLayout extends ViewGroup {
         // The press lies down with the sink; the travel's own tip stays where the wall is.
         if (tipping) applyPlanks();
         if (layered || tipping) syncPageLayer(page);
+        invalidateGrabberIfMoved();
         if (mListener != null && place != null) mListener.onPageSinkChanged(place, 1f);
         if (!isMoving()) releasePlank();
     }
@@ -1322,6 +1408,7 @@ public final class PaneWallLayout extends ViewGroup {
         // plus the held side's press, while the page is sunk. After every page has moved, since
         // each leans toward the weight on the page the finger held.
         applyPlanks();
+        invalidateGrabberIfMoved();
         if (mListener != null) mListener.onWallOffsetChanged(mOffsetPx);
     }
 
@@ -1424,5 +1511,6 @@ public final class PaneWallLayout extends ViewGroup {
         releaseBorderDrag();
         finishSink();
         releasePlank();
+        mGrabber.reset();
     }
 }

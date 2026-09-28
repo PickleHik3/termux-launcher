@@ -330,6 +330,20 @@ public class BorderDragTest {
     }
 
     @Test
+    public void theKeyboardsBandIsKnownFromTheDownToTheLift() {
+        // What the grabber lights for: a finger in the band, before it has gone anywhere.
+        BorderDrag drag = keyboardArmed(550f, BOTTOM - 10f, true);
+        assertTrue(drag.isKeyboardEligible());
+        drag.move(550f, BOTTOM - 200f);
+        assertTrue(drag.isKeyboardEligible());
+        drag.reset();
+        assertFalse(drag.isKeyboardEligible());
+        // Above the reach, or on another border, it is not the keyboard's band.
+        assertFalse(keyboardArmed(550f, BOTTOM - REACH - 1f, true).isKeyboardEligible());
+        assertFalse(keyboardArmed(550f, TOP + 10f, true).isKeyboardEligible());
+    }
+
+    @Test
     public void theCornersStayTheCornerTabsForTheKeyboardToo() {
         BorderDrag left = keyboardArmed(LEFT + 10f, BOTTOM - 10f, true);
         assertFalse(left.isArmed());

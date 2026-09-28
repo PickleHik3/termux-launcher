@@ -233,6 +233,14 @@ public final class BorderDrag {
     }
 
     /**
+     * True from a DOWN in the keyboard swipe's band — the bottom border, within
+     * {@link #KEYBOARD_REACH_DP} inside the line — until the lift, whichever way the claim went.
+     */
+    public boolean isKeyboardEligible() {
+        return mKeyboardEligible;
+    }
+
+    /**
      * What the wall is dragged by for a finger now at {@code x}: its sideways travel since the
      * DOWN, positive to the right, on every border alike. The wall only ever moves sideways, so a
      * drag along a side border still pages by how far it went across, and a finger that pulls
