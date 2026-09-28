@@ -57,6 +57,10 @@ public class TaiBenchHomeFragmentTest {
         context.getSharedPreferences("termux_ai_model_store", Context.MODE_PRIVATE).edit().clear().commit();
         File store = new File(new File(context.getFilesDir(), "tai"), "benchmarks.json");
         if (store.isFile()) assertTrue(store.delete());
+        // TaiManager is a singleton that keeps the first test's application, and so its files dir.
+        java.lang.reflect.Field instance = com.termux.ai.TaiManager.class.getDeclaredField("instance");
+        instance.setAccessible(true);
+        instance.set(null, null);
     }
 
     private TaiBenchHomeFragment launch() throws Exception {
