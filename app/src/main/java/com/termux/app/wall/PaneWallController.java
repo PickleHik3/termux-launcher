@@ -51,6 +51,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          * Glass on, with the phone animating. Asked as the drag claims the finger.
          */
         default boolean isPlankTiltEnabled() { return false; }
+        /**
+         * A vertical swipe off the page's bottom border asked for the keyboard: {@code open} up,
+         * closed down. On every place and in every mode, and it turns a keyboard switched off
+         * back on, as the keyboard key does: it is the one way back that is always there.
+         */
+        default void onBorderKeyboardSwipe(boolean open) { }
     }
 
     /** Saved-instance-state key for the page the wall is showing. */
@@ -339,6 +345,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onTerminalOffScreenChanged(boolean offScreen) {
         mHost.onTerminalOffScreenChanged(offScreen);
+    }
+
+    @Override
+    public boolean isBorderKeyboardSwipeEnabled() {
+        return true;
+    }
+
+    @Override
+    public void onBorderKeyboardSwipe(boolean open) {
+        mHost.onBorderKeyboardSwipe(open);
     }
 
     @Override

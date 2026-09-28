@@ -38,20 +38,30 @@ the extra keys and the keyboard go away, and the widgets, the pane or the displa
 either orientation. One mode for every place, not a state of one: turned on and off only from the
 corner tab's minimal button, which every place carries, and remembered until turned off; paging
 never leaves it. It is a preset of the layout's own element model — every element but the status
-bar put away — never a layout of its own. The keyboard can still be raised while it is on. Paging
-is the border drag, as everywhere.
+bar put away — never a layout of its own. The keyboard can still be raised while it is on, by the
+keyboard swipe or a tap. Paging is the border drag, as everywhere.
 _Avoid_: full screen, focus mode, zen mode, zen view
 
 **Border drag**:
 The one finger gesture that pages the wall, on every place and in every mode: a press held on the
 current page's border — the frame line on any of its four sides, less the corner squares — for the
-same hold a corner takes, then dragged sideways. A tap, a swipe without the hold, a drag that sets
-off before it and a second finger all stay the content's. The border is always drawn while the
+same hold a corner takes, then dragged sideways. A tap, a sideways swipe without the hold, a drag
+that sets off before it and a second finger all stay the content's; a vertical swipe off the
+bottom border is the keyboard swipe. The border is always drawn while the
 border preference is on (the slab's rim on glass, the plain stroke otherwise), on the terminal,
 the Widgets page and the Display page alike, so the gesture has a line to find. Under Fancier
 Glass the page tips like a plank as it goes; the Display place slides flat. The status bar does
 not page; its own drag is the fold across it.
 _Avoid_: edge swipe, status bar swipe, page swipe
+
+**Keyboard swipe**:
+The one way to the keyboard every place and every mode shares: a swipe that sets off up or down
+from the current page's bottom border — the frame line or just below it, less the corner squares
+— before the border drag's hold. Up opens the keyboard, down closes it; opening turns a keyboard
+that was switched off back on, as the keyboard key does. It is claimed as soon as it moves, so the
+content under the line is told its touch is over; a sideways start and a hold stay as they were.
+The keyboard itself carries no swipe of its own.
+_Avoid_: pull-up, keyboard gesture, hide swipe (the retired swipe on the keyboard's top edge)
 
 **Managed wallpaper**:
 A wallpaper set through the launcher's own picker, of which the launcher keeps its own copy.

@@ -41,8 +41,9 @@ import java.util.Map;
  * {@code requestDisallowInterceptTouchEvent} traffic. Three children, one offset and one spring
  * is the whole mechanism. The one touch the wall reads for itself is the border drag
  * ({@link BorderDrag}): a press held on the current page's border, then dragged sideways, which
- * is how a finger pages the wall on every place and in every mode. The window strip's overswipe
- * drives the same drag from outside.
+ * is how a finger pages the wall on every place and in every mode — and, on the bottom border, a
+ * vertical swipe without the hold, which opens and closes the keyboard. The window strip's
+ * overswipe drives the same drag from outside.
  *
  * <p>Every page is laid out at the host's size and moved with {@code translationX}, so a page
  * change and a whole drag cost no layout work. Only the pages on screen are laid out at all: a
@@ -103,6 +104,13 @@ public final class PaneWallLayout extends ViewGroup {
          * wall rests on.
          */
         default boolean isPlankTiltEnabled(@NonNull PaneWallPage page) { return false; }
+        /**
+         * Whether a vertical swipe off the current page's bottom border is the keyboard's
+         * ({@link BorderDrag#KEYBOARD_REACH_DP}); asked as each finger lands.
+         */
+        default boolean isBorderKeyboardSwipeEnabled() { return false; }
+        /** A swipe off the bottom border asked for the keyboard: up to open, down to close. */
+        default void onBorderKeyboardSwipe(boolean open) { }
     }
 
     private final Map<PaneWallPage, View> mPageViews = new EnumMap<>(PaneWallPage.class);
@@ -305,6 +313,8 @@ public final class PaneWallLayout extends ViewGroup {
     /** Off while another surface owns the gesture (the surface editor, for one). */
     public void setGesturesEnabled(boolean enabled) {
         mGesturesEnabled = enabled;
+        // A keyboard swipe under way asks for nothing once another surface owns the gesture.
+        if (!enabled && mBorderDrag.isKeyboardSwipe()) mBorderDrag.abandon();
         if (enabled || !mDragging) return;
         // The claimant is told to let go, and the wall goes back to rest on its own — nothing
         // else is going to release this drag now.
@@ -435,6 +445,10 @@ public final class PaneWallLayout extends ViewGroup {
      * <p>Once claimed, the stream is the wall's: the child was told to forget it
      * ({@link #cancelChildGesture}), so the terminal has released whatever mouse button or hold
      * it had begun, and every later event is read here and goes no further.
+     *
+     * <p>The keyboard swipe is claimed the same way, by the move rather than by the timer: a
+     * finger that sets off up or down from the bottom border before the hold is the keyboard's
+     * ({@link BorderDrag#move}), and its lift asks the listener to open or close it.
      */
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
@@ -449,20 +463,33 @@ public final class PaneWallLayout extends ViewGroup {
                     dragTo(mBorderDrag.travel(event.getX()));
                     return true;
                 }
-                if (mBorderDrag.move(event.getX(), event.getY()) == BorderDrag.Claim.ABANDONED) {
+                if (mBorderDrag.isKeyboardSwipe()) {
+                    if (mBorderVelocity != null) mBorderVelocity.addMovement(event);
+                    return true;
+                }
+                BorderDrag.Claim claim = mBorderDrag.move(event.getX(), event.getY());
+                if (claim == BorderDrag.Claim.KEYBOARD) {
+                    claimKeyboardSwipe(event);
+                    return true;
+                }
+                if (claim == BorderDrag.Claim.ABANDONED) {
                     mHoldHandler.removeCallbacks(mHoldElapsed);
                 }
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                if (mBorderDrag.isPaging()) return true;
+                if (mBorderDrag.isPaging() || mBorderDrag.isKeyboardSwipe()) return true;
                 if (mBorderDrag.secondPointer() == BorderDrag.Claim.ABANDONED) {
                     mHoldHandler.removeCallbacks(mHoldElapsed);
                 }
                 break;
             case MotionEvent.ACTION_POINTER_UP:
-                if (mBorderDrag.isPaging()) return true;
+                if (mBorderDrag.isPaging() || mBorderDrag.isKeyboardSwipe()) return true;
                 break;
             case MotionEvent.ACTION_UP:
+                if (mBorderDrag.isKeyboardSwipe()) {
+                    releaseKeyboardSwipe(event);
+                    return true;
+                }
                 if (mBorderDrag.isPaging()) {
                     float velocity = 0f;
                     if (mBorderVelocity != null) {
@@ -479,6 +506,11 @@ public final class PaneWallLayout extends ViewGroup {
                 if (mBorderDrag.isPaging()) {
                     releaseBorderDrag();
                     cancelDrag();
+                    return true;
+                }
+                if (mBorderDrag.isKeyboardSwipe()) {
+                    // Cancelled from above: the keyboard stays as it was.
+                    releaseBorderDrag();
                     return true;
                 }
                 break;
@@ -505,19 +537,28 @@ public final class PaneWallLayout extends ViewGroup {
         return mBorderDrag.isArmed();
     }
 
+    /**
+     * A finger landed. It arms the border drag when the wall has another place to go, and the
+     * keyboard swipe when the listener wants it — on a wall of one place too, since the keyboard
+     * has to be reachable from every place in every mode.
+     */
     private void armBorderDrag(@NonNull MotionEvent event) {
         releaseBorderDrag();
-        if (!mGesturesEnabled || mPages.size() <= 1) return;
+        if (!mGesturesEnabled) return;
+        boolean canPage = mPages.size() > 1;
+        float density = getResources().getDisplayMetrics().density;
+        float keyboardReach = mListener != null && mListener.isBorderKeyboardSwipeEnabled()
+            ? BorderDrag.KEYBOARD_REACH_DP * density : 0f;
+        if (!canPage && keyboardReach <= 0f) return;
         View page = mPageViews.get(mCurrent);
         if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
-        float density = getResources().getDisplayMetrics().density;
         float left = page.getLeft() + page.getTranslationX();
         float top = page.getTop();
         boolean armed = mBorderDrag.down(event.getX(), event.getY(),
             left, top, left + page.getWidth(), top + page.getHeight(),
             BorderDrag.BAND_DP * density,
             CornerZones.clampSize(CornerZones.paneSizePx(density), page.getWidth(), page.getHeight()),
-            ViewConfiguration.get(getContext()).getScaledTouchSlop());
+            ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardReach);
         if (!armed) return;
         mBorderDownX = event.getX();
         mBorderDownY = event.getY();
@@ -563,6 +604,37 @@ public final class PaneWallLayout extends ViewGroup {
         } finally {
             mCancellingChild = false;
             cancel.recycle();
+        }
+    }
+
+    /**
+     * A finger set off up or down from the bottom border before the hold: the content is told its
+     * touch is over, exactly as for the border drag, and the rest of the stream is read here for
+     * its release. Nothing moves under it; the keyboard animates on its own once asked.
+     */
+    private void claimKeyboardSwipe(@NonNull MotionEvent event) {
+        mHoldHandler.removeCallbacks(mHoldElapsed);
+        cancelChildGesture();
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+        mBorderVelocity = VelocityTracker.obtain();
+        mBorderVelocity.addMovement(event);
+    }
+
+    /** The keyboard swipe's finger lifted: up opens the keyboard, down closes it, short is nothing. */
+    private void releaseKeyboardSwipe(@NonNull MotionEvent event) {
+        float velocity = 0f;
+        if (mBorderVelocity != null) {
+            mBorderVelocity.addMovement(event);
+            mBorderVelocity.computeCurrentVelocity(1000);
+            velocity = mBorderVelocity.getYVelocity();
+        }
+        float density = getResources().getDisplayMetrics().density;
+        BorderDrag.KeyboardSwipe swipe = mBorderDrag.keyboardRelease(event.getY(), velocity,
+            BorderDrag.KEYBOARD_COMMIT_DP * density,
+            BorderDrag.KEYBOARD_FLING_DP_PER_SEC * density);
+        releaseBorderDrag();
+        if (swipe != BorderDrag.KeyboardSwipe.NONE && mListener != null) {
+            mListener.onBorderKeyboardSwipe(swipe == BorderDrag.KeyboardSwipe.OPEN);
         }
     }
 

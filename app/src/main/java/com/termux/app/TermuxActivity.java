@@ -16723,6 +16723,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The swipe off the pane's bottom border: the keyboard up ({@code open}) or down, on whichever
+     * place is showing and in every mode. It is a person asking by hand, so it takes the path
+     * {@code keyboard.show} and {@code keyboard.hide} take — the Display place's own routes (the
+     * phone's keyboard, mouse mode's frame) included — and opening turns a keyboard that was
+     * switched off back on, as the keyboard key does: this is the way back that is always there.
+     * With Android's keyboard chosen in Settings it is the keyboard key's own toggle, pressed only
+     * when that goes the way the swipe asked.
+     */
+    private void applyBorderKeyboardSwipe(boolean open) {
+        com.termux.app.terminal.TerminalHost host = terminalHost();
+        if (open ? host.showInAppKeyboard(false) : host.hideInAppKeyboard(false)) return;
+        TermuxTerminalViewClient client = mTermuxTerminalViewClient;
+        if (client == null) return;
+        boolean up = isImeVisible();
+        if (open ? (client.isKeyboardTurnedOff() || !up) : up) client.onToggleSoftKeyboardRequest();
+    }
+
+    /**
      * Wire the pane wall around the terminal's pane host. The terminal is its middle page and is
      * handed over untouched; the other places register themselves as the install gains them.
      */
@@ -16748,6 +16766,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean isPlankTiltEnabled() {
                     return mFancierGlassLook != null
                         && !isReducedMotionEnabled() && !isLazyModeEnabled();
+                }
+                @Override public void onBorderKeyboardSwipe(boolean open) {
+                    applyBorderKeyboardSwipe(open);
                 }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {

@@ -89,11 +89,16 @@ the other two are one step away, one to each side. To move, hold the page's bord
 line around the terminal, the widgets or the display, on any of its four sides — until you feel
 the tick, then drag sideways: the places slide with your finger, and a short drag springs back
 while a longer one, or a quick flick, lands on the next place. The corners are not the border;
-they hold the corner tab. A tap or a swipe on the border without the hold is the page's own — a
-program's mouse drag, a scroll, a text selection — so nothing under it changes. The same gesture
-works in every mode, minimal mode included, and with Fancier Glass on the page tips like a plank
-under your finger as it goes, then lies flat on the place that arrives; the Display place slides
-without the tip.
+they hold the corner tab. A tap, or a sideways swipe on the border without the hold, is the page's
+own — a program's mouse drag, a scroll, a text selection — so nothing under it changes. The same
+gesture works in every mode, minimal mode included, and with Fancier Glass on the page tips like a
+plank under your finger as it goes, then lies flat on the place that arrives; the Display place
+slides without the tip.
+
+The bottom border also opens and closes the keyboard: swipe up from it to bring the keyboard up,
+and down from it to put the keyboard away. No hold, just a short swipe that starts on the line or
+just below it. It works on every place and in every mode, minimal mode included, and it turns the
+keyboard back on if you switched it off, so there is always a way back to it.
 
 The status bar shows where you are. The icon beside the clock names the place you are on — a
 house for Widgets, a prompt for Terminal, a screen for Display — and the other two peek in from
@@ -139,8 +144,9 @@ is one mode for the whole launcher, not a setting of one place: turn it on from 
 terminal and the display are minimal too, and moving between places never turns it off. Hold a
 corner and tap the four outward corners to turn it on; the same button, now pointing inward, turns
 it off, and nothing else does. It stays on until you turn it off, across restarts, and the keyboard
-comes back as each place last had it. You can still bring the keyboard up while it is on: a tap on
-the terminal raises it as usual, and it goes down again when you move to another place.
+comes back as each place last had it. You can still bring the keyboard up while it is on: a swipe
+up from the bottom border or a tap on the terminal raises it as usual, and it goes down again when
+you move to another place.
 
 Moving to another place while minimal is the same hold-and-drag on the page's border as anywhere
 else; the border stays drawn in minimal mode so there is a line to find.
@@ -337,11 +343,13 @@ Open **Settings → Keyboard** to change input method, layouts, typing, feedback
 `~/.termux/keyboard/layout.xml` support; its look — theme, colors, and typeface — is on **Settings →
 Look** now.
 
-A hidden keyboard comes back the next time you tap the terminal. To keep it shut, run **Keyboard
+Swipe up from the bottom border of the terminal, the widgets or the display to open the keyboard,
+and swipe down from it to put the keyboard away. A hidden keyboard also comes back the next time
+you tap the terminal. To keep it shut, run **Keyboard
 on/off** from the command palette, or put `tool:keyboard.toggle_enabled` on the extra-keys row.
 While the keyboard is off, taps and text fields no longer open it, and it stays off after a
-restart. Press the keyboard key or run **Keyboard on/off** again to turn it back on. This works
-with the built-in keyboard and with Android's.
+restart. Swipe up from the bottom border, press the keyboard key, or run **Keyboard on/off** again
+to turn it back on. This works with the built-in keyboard and with Android's.
 
 Swipe up on Enter to dictate. With on-device voice input, what you say collects in a panel under
 the pill at the top right, and nothing is typed while you speak. When it stops (the pill's pause,
