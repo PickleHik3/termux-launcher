@@ -90,4 +90,28 @@ public class MinimalModeTest {
         assertEquals(36, MinimalMode.stripThicknessPx(3f));
         assertEquals(1, MinimalMode.stripThicknessPx(0f));
     }
+
+    /**
+     * The strip lies over the pane's edge rather than beside it: the stack it stands in gives the
+     * strip's thickness back, and no other stack gives anything.
+     */
+    @Test
+    public void theStripsStackGivesItsThicknessBackToThePane() {
+        assertEquals(36, MinimalMode.stripOverlapPx(true, Edge.TOP, Edge.TOP, 36));
+        assertEquals(36, MinimalMode.stripOverlapPx(true, Edge.LEFT, Edge.LEFT, 36));
+        assertEquals(36, MinimalMode.stripOverlapPx(true, Edge.RIGHT, Edge.RIGHT, 36));
+        assertEquals("another stack reserves what it did",
+            0, MinimalMode.stripOverlapPx(true, Edge.TOP, Edge.LEFT, 36));
+        assertEquals("the bar moved edge: the stack it left gives nothing back",
+            0, MinimalMode.stripOverlapPx(true, Edge.LEFT, Edge.TOP, 36));
+    }
+
+    @Test
+    public void theStripGivesNothingBackOffMinimalModeOrAlongTheBottom() {
+        assertEquals(0, MinimalMode.stripOverlapPx(false, Edge.TOP, Edge.TOP, 36));
+        // A bottom bar is a band of the dock's stack, whose height is the accessory geometry's
+        // arithmetic rather than the layout's; it keeps its band.
+        assertEquals(0, MinimalMode.stripOverlapPx(true, Edge.BOTTOM, Edge.BOTTOM, 36));
+        assertEquals(0, MinimalMode.stripOverlapPx(true, Edge.TOP, Edge.TOP, -5));
+    }
 }
