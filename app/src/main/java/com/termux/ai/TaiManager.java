@@ -1847,35 +1847,7 @@ public final class TaiManager {
         }
         installed.put("models", models);
         JSONObject response = applyAudioHistoryGates(openAiModelsFromTaiModels(installed), device);
-        applyEmbeddingThrottleState(response);
         return response;
-    }
-
-    /**
-     * Dawn brief item 5: tells dawn which embedder entries are running throttled right now (a chat
-     * generation is active) and how, so it can pause its own background indexing instead of
-     * guessing from latency. Read live off the runtime, so it is skipped when there is none to ask
-     * (the delegating app process, or a runtime that has not started).
-     */
-    private void applyEmbeddingThrottleState(@NonNull JSONObject response) throws JSONException {
-        // /v1/models answers from local catalog state without an IPC round trip to :tai_runtime, so
-        // this is only knowable when this call is already running in that process; from the app
-        // process it is left out rather than paying a status round trip on every models list.
-        if (!(runtime instanceof MultiBackendTaiRuntime)) return;
-        MultiBackendTaiRuntime local = (MultiBackendTaiRuntime) runtime;
-        JSONArray data = response.optJSONArray("data");
-        if (data == null) return;
-        LinkedHashMap<String, TaiModelSpec> availableModels = new LinkedHashMap<>();
-        availableModels.putAll(modelStore.getDownloadedReadableModels());
-        availableModels.putAll(modelStore.getInstalledUserModels());
-        for (int i = 0; i < data.length(); i++) {
-            JSONObject item = data.optJSONObject(i);
-            if (item == null || !contains(item.optJSONArray("_capabilities"), TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) continue;
-            TaiModelSpec spec = availableModels.get(item.optString("id", ""));
-            if (spec == null) continue;
-            String reason = local.embeddingThrottleReason(spec);
-            if (reason != null) item.put("_endpoint_throttled_while_generating", reason);
-        }
     }
 
     @NonNull
@@ -1998,11 +1970,14 @@ public final class TaiManager {
      * dimensions, the Matryoshka sizes {@code dimensions} may truncate to, a stable revision so
      * dawn knows when to rebuild its index, that vectors are L2-normalised, and the largest batch
      * {@code /v1/embeddings} accepts (item 4). Context window is already covered by the existing
-     * {@code _endpoint_context_window} (the file's {@code seqNNNN}, via {@link TaiImportProfiles}).
+     * {@code _endpoint_context_window}, overridden here by the file's {@code seqNNNN} because a
+     * catalogue install records the catalogue's window rather than the graph's.
      */
     private static void putEmbedderFields(@NonNull JSONObject item, @NonNull JSONObject model) throws JSONException {
         String id = model.optString("id", "");
         String localPath = model.isNull("localPath") ? null : model.optString("localPath", null);
+        int seqWindow = localPath == null ? 0 : TaiImportProfiles.sequenceWindowOf(new File(localPath).getName());
+        if (seqWindow > 0) item.put("_endpoint_context_window", seqWindow);
         int dimensions = TaiModelSpec.embeddingDimensionsFor(id, localPath);
         if (dimensions > 0) item.put("_endpoint_dimensions", dimensions);
         int[] matryoshka = TaiModelSpec.embeddingMatryoshkaDimsFor(id, localPath);
@@ -2015,6 +1990,9 @@ public final class TaiManager {
         if (revision != null) item.put("_revision", revision);
         item.put("_endpoint_normalized", true);
         item.put("_endpoint_max_batch", EMBEDDINGS_MAX_BATCH);
+        // Item 5: the policy, not the live state. While /v1/ai/runtime reports
+        // runtime.activeGeneration, embedding runs at background thread priority.
+        item.put("_endpoint_throttle_while_generating", "priority");
     }
 
     @NonNull

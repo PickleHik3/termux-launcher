@@ -386,6 +386,7 @@ public class EmbeddingsEndpointTest {
         assertTrue(entry.has("_revision"));
         assertTrue(entry.getBoolean("_endpoint_normalized"));
         assertEquals(64, entry.getInt("_endpoint_max_batch"));
+        assertEquals("priority", entry.getString("_endpoint_throttle_while_generating"));
     }
 
     @Test
@@ -404,6 +405,7 @@ public class EmbeddingsEndpointTest {
         JSONObject entry = findModel(response, "embeddinggemma-300m");
         assertTrue("embeddinggemma entry must be present", entry != null);
         assertEquals(768, entry.getInt("_endpoint_dimensions"));
+        assertEquals("the graph's seqNNNN is the window", 512, entry.getInt("_endpoint_context_window"));
         JSONArray dims = entry.getJSONArray("_endpoint_matryoshka_dims");
         assertEquals(768, dims.getInt(0));
         assertEquals(128, dims.getInt(dims.length() - 1));

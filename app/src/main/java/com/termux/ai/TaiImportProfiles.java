@@ -265,6 +265,16 @@ public final class TaiImportProfiles {
         return new Match(FAMILY_EMBEDDINGGEMMA, profile, caps(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS), null);
     }
 
+    /**
+     * The {@code seqNNNN} window in an embedding graph's file name, or 0. The file fixes the
+     * input length, so this beats whatever window a catalogue entry declared.
+     */
+    static int sequenceWindowOf(@Nullable String fileName) {
+        if (fileName == null) return 0;
+        Integer seq = firstNumber(SEQ_TOKEN, fileName.toLowerCase(java.util.Locale.ROOT));
+        return seq == null ? 0 : seq;
+    }
+
     // ---- builds tied to one chip ----
 
     // "google.tensor_g5", "_Google_Tensor_G5", "qualcomm.sm8650", "mediatek.mt6991": builds compiled
