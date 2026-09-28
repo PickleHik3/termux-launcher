@@ -882,11 +882,17 @@ public final class TourOverlayView extends FrameLayout {
         button.setText(R.string.tour_copied_commands);
     }
 
-    /** The card's buttons, rebuilt only when the set actually changed. */
+    /**
+     * The card's buttons, rebuilt only when the set actually changed. Two answers share a row;
+     * three — the usage card's, each a phrase — stand one under another, or the row would run
+     * off the card on a phone.
+     */
     private void applyActions(@NonNull List<TourAction> actions) {
         if (!mActions.equals(actions)) {
             mActions.clear();
             mActions.addAll(actions);
+            boolean stacked = mActions.size() > 2;
+            mButtonRow.setOrientation(stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
             mButtonRow.removeAllViews();
             addDocsLink();
             mActionButtons.clear();
@@ -896,7 +902,12 @@ public final class TourOverlayView extends FrameLayout {
                 button.setContentDescription(getContext().getString(action.labelRes));
                 LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                params.leftMargin = dp(8f);
+                if (stacked) {
+                    params.gravity = Gravity.END;
+                    params.topMargin = dp(4f);
+                } else {
+                    params.leftMargin = dp(8f);
+                }
                 mButtonRow.addView(button, params);
                 mActionButtons.add(button);
             }

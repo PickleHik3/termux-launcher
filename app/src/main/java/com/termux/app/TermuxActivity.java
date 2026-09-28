@@ -2398,6 +2398,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean isLauncherHomeApp() { return isDefaultHomeApp(); }
                 @Override public void openHomeAppChooser() { openHomeLauncherChooser(); }
             });
+            // The usage card asks the same question the settings row asks, and its answer takes
+            // the same path: the preset, then a recreate the run survives on its stored card.
+            mFirstBootTour.setUsageModeHost(new FirstBootTour.UsageModeHost() {
+                @Override public boolean isDisplayOffered() {
+                    return com.termux.BuildConfig.X11_SERVER;
+                }
+                @Override public boolean isTerminalOnly() {
+                    return mPreferences != null
+                        && com.termux.app.launcher.LauncherUseCaseMode.isTerminalOnly(mPreferences);
+                }
+                @Override public void applyUsageMode(@NonNull String mode) {
+                    TermuxActivity.this.applyUsageMode(mode);
+                }
+            });
             // The key-row card asks the one person it is a question for, inside the run, so the
             // dialog below only ever reaches someone who turned the run down.
             mFirstBootTour.setKeyRowHost(new FirstBootTour.KeyRowHost() {

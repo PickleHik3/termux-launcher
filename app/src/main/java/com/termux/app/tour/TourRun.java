@@ -7,7 +7,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The run, as data: five lessons, two questions and the closing card.
+ * The run, as data: five lessons, three questions and the closing card.
  *
  * <p>The lessons teach the five things a newcomer cannot look up without them — where help is, how
  * to put their own apps in the dock, how to reach the rest of their Android apps, how to get the
@@ -35,6 +35,8 @@ public final class TourRun {
     public static final String KEYBOARD = "keyboard";
     /** Find an action: the command palette, and something to find in it. */
     public static final String FIND_ACTION = "find_action";
+    /** The usage question: the terminal alone, with the home screen, or with the display too. */
+    public static final String USAGE_MODE = "usage_mode";
     /** The home-screen question, which is answered with a button and not a gesture. */
     public static final String HOME_CHOICE = "home_choice";
     /** The last card. */
@@ -65,14 +67,27 @@ public final class TourRun {
          */
         public final boolean hasOwnKeyRow;
 
+        /**
+         * Whether this build carries the Linux display, which is what decides whether the usage
+         * card offers it. On unless said otherwise: every edition but the ones built without the
+         * server has it.
+         */
+        public final boolean displayOffered;
+
         public RunContext(boolean launcherIsHome, boolean keyboardShown) {
             this(launcherIsHome, keyboardShown, false);
         }
 
         public RunContext(boolean launcherIsHome, boolean keyboardShown, boolean hasOwnKeyRow) {
+            this(launcherIsHome, keyboardShown, hasOwnKeyRow, true);
+        }
+
+        public RunContext(boolean launcherIsHome, boolean keyboardShown, boolean hasOwnKeyRow,
+                          boolean displayOffered) {
             this.launcherIsHome = launcherIsHome;
             this.keyboardShown = keyboardShown;
             this.hasOwnKeyRow = hasOwnKeyRow;
+            this.displayOffered = displayOffered;
         }
     }
 
@@ -92,7 +107,7 @@ public final class TourRun {
     public static List<TourStep> steps(RunContext context) {
         return Collections.unmodifiableList(Arrays.asList(
             findHelp(), pinApps(), findApps(context), keyRow(context), keyboard(context),
-            findAction(), homeChoice(context), closing()));
+            findAction(), usageMode(context), homeChoice(context), closing()));
     }
 
     /** The lessons, in order: what practice and Back may name, and the migration maps to. */
@@ -218,6 +233,26 @@ public final class TourRun {
             new String[] {TourSignals.PALETTE_OPENED, TourSignals.PALETTE_CLOSED},
             new TourGesture[] {TourGesture.SWIPE_UP, TourGesture.TAP}, false, false,
             TourStep.Placement.ABOVE);
+    }
+
+    /**
+     * The usage question, asked once the lessons are over and before the home-screen one, since
+     * the answer decides whether that one is worth asking: the terminal alone has no home screen
+     * to be the phone's. One answer per button, the same three the settings row offers, and
+     * only two in a build without the display. The answer is applied by the launcher, which
+     * rebuilds itself around it; the run carries on from its stored card.
+     */
+    private static TourStep usageMode(RunContext context) {
+        return new TourStep(USAGE_MODE, TourStep.Kind.CHOICE,
+            new int[] {context.displayOffered
+                ? R.string.tour_card_usage_mode
+                : R.string.tour_card_usage_mode_no_display},
+            new String[] {TourTargets.NONE}, new String[] {},
+            new TourGesture[] {TourGesture.NONE}, false, false,
+            context.displayOffered
+                ? new TourAction[] {TourAction.USE_TERMINAL, TourAction.USE_HOME,
+                    TourAction.USE_DISPLAY}
+                : new TourAction[] {TourAction.USE_TERMINAL, TourAction.USE_HOME});
     }
 
     /**

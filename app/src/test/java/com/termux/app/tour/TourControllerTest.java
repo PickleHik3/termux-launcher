@@ -386,13 +386,15 @@ public class TourControllerTest {
     }
 
     @Test
-    public void endTourLeavesTheLessonsButStillAsksAboutTheHomeScreen() {
+    public void endTourLeavesTheLessonsButStillAsksTheTwoQuestions() {
         startTheLessons();
         controller.endTour();
         assertTrue(controller.isRunning());
-        assertEquals(TourRun.HOME_CHOICE, controller.currentStep().id);
+        assertEquals(TourRun.USAGE_MODE, controller.currentStep().id);
         assertTrue(prefs.skipped);
         assertTrue(listener.finished.isEmpty());
+        controller.choose(TourController.Choice.USE_HOME);
+        assertEquals(TourRun.HOME_CHOICE, controller.currentStep().id);
         controller.choose(TourController.Choice.KEEP_TRYING);
         assertEquals(TourRun.CLOSING, controller.currentStep().id);
         controller.finish();
@@ -545,6 +547,10 @@ public class TourControllerTest {
         thePhoneIsAlreadyOurHome();
         controller.startAt(TourRun.FIND_ACTION);
         clearTheCard();
+        // The usage question is still asked; the home-screen one after it is walked past.
+        assertEquals(TourRun.USAGE_MODE, controller.currentStep().id);
+        controller.choose(TourController.Choice.USE_HOME);
+        listener.chosen.clear();
         assertEquals(TourRun.CLOSING, controller.currentStep().id);
         // The card the run walked past is never written down as the card the user is on.
         assertEquals(cardNumber(TourRun.CLOSING), prefs.stepIndex);
@@ -554,13 +560,15 @@ public class TourControllerTest {
     }
 
     @Test
-    public void backFromTheClosingCardOnSuchAPhoneLandsOnTheLastLesson() {
+    public void backFromTheClosingCardOnSuchAPhoneSkipsTheHomeQuestion() {
         thePhoneIsAlreadyOurHome();
         controller.startAt(TourRun.CLOSING);
         controller.back();
-        assertEquals(TourRun.FIND_ACTION, controller.currentStep().id);
+        assertEquals(TourRun.USAGE_MODE, controller.currentStep().id);
         assertEquals(0, controller.currentStage());
-        assertEquals(cardNumber(TourRun.FIND_ACTION), prefs.stepIndex);
+        assertEquals(cardNumber(TourRun.USAGE_MODE), prefs.stepIndex);
+        controller.back();
+        assertEquals(TourRun.FIND_ACTION, controller.currentStep().id);
     }
 
     @Test
@@ -569,8 +577,40 @@ public class TourControllerTest {
         controller.startAt(TourRun.FIND_HELP);
         controller.endTour();
         assertTrue(controller.isRunning());
+        assertEquals(TourRun.USAGE_MODE, controller.currentStep().id);
+        controller.choose(TourController.Choice.USE_DISPLAY);
         assertEquals(TourRun.CLOSING, controller.currentStep().id);
         assertTrue(prefs.skipped);
+    }
+
+    // The usage question.
+
+    @Test
+    public void theUsageQuestionIsAskedAfterTheLastLessonAndAnsweredToTheLauncher() {
+        controller.startAt(TourRun.FIND_ACTION);
+        clearTheCard();
+        assertEquals(TourRun.USAGE_MODE, controller.currentStep().id);
+        assertEquals(Arrays.asList(TourAction.USE_TERMINAL, TourAction.USE_HOME,
+            TourAction.USE_DISPLAY), controller.currentActions());
+        controller.choose(TourController.Choice.USE_DISPLAY);
+        assertEquals(Arrays.asList(TourController.Choice.USE_DISPLAY), listener.chosen);
+        assertEquals(TourRun.HOME_CHOICE, controller.currentStep().id);
+    }
+
+    @Test
+    public void theTerminalAloneTakesTheHomeQuestionOutOfTheRun() {
+        listener.dropsHomeOnTerminal = controller;
+        controller.startAt(TourRun.USAGE_MODE);
+        controller.choose(TourController.Choice.USE_TERMINAL);
+        // No home screen, nothing to make the phone's: straight to the closing card, and Back
+        // from there passes the question over too.
+        assertEquals(TourRun.CLOSING, controller.currentStep().id);
+        assertFalse(listener.shown.contains(TourRun.HOME_CHOICE + ":0"));
+        controller.back();
+        assertEquals(TourRun.USAGE_MODE, controller.currentStep().id);
+        // A home screen after all: the question is back.
+        controller.choose(TourController.Choice.USE_HOME);
+        assertEquals(TourRun.HOME_CHOICE, controller.currentStep().id);
     }
 
     @Test
@@ -590,6 +630,7 @@ public class TourControllerTest {
     public void aPhoneThatIsNotOurHomeIsStillAsked() {
         controller.startAt(TourRun.FIND_ACTION);
         clearTheCard();
+        controller.choose(TourController.Choice.USE_HOME);
         assertEquals(TourRun.HOME_CHOICE, controller.currentStep().id);
         assertEquals(Arrays.asList(TourAction.USE_AS_HOME, TourAction.KEEP_TRYING),
             controller.currentActions());
@@ -1009,6 +1050,32 @@ public class TourControllerTest {
     }
 
     @Test
+    public void aRunInterruptedBeforeTheUsageCardComesBackOnTheCardItStoppedOn() {
+        // The usage card went in before the home-screen question, so that question and the
+        // closing card are one number along; the stored number is read by the card it meant.
+        prefs.runVersion = TourController.VERSION_BEFORE_THE_USAGE_CARD;
+        prefs.stepIndex = 6;
+        prefs.stage = 0;
+        assertTrue(controller.resumeIfInProgress());
+        assertEquals(TourRun.HOME_CHOICE, controller.currentStep().id);
+        assertEquals(cardNumber(TourRun.HOME_CHOICE), prefs.stepIndex);
+        assertEquals(TourController.RUN_VERSION, prefs.runVersion);
+        assertEquals(0, listener.resumeOrRestartAsked);
+    }
+
+    @Test
+    public void everyCardOfTheRunBeforeTheUsageCardMeansItself() {
+        String[] cards = {TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEY_ROW,
+            TourRun.KEYBOARD, TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING};
+        for (int i = 0; i < cards.length; i++) {
+            assertEquals("card " + i, cards[i], TourController.versionFourCardFor(i));
+            assertTrue("card " + i + " is gone", cardNumber(cards[i]) >= 0);
+        }
+        for (int outside : new int[] {-1, cards.length, 99})
+            assertNull("card " + outside, TourController.versionFourCardFor(outside));
+    }
+
+    @Test
     public void suchARunIsNeverDroppedPastFindHelp() {
         prefs.runVersion = 2;
         prefs.stepIndex = 0;
@@ -1164,6 +1231,11 @@ public class TourControllerTest {
          * kept row with no keyboard key on it takes the keyboard lesson out of the run.
          */
         private TourController dropsKeyboardOnKeep;
+        /**
+         * The controller, when this listener should do what the launcher does with the usage
+         * card: the terminal alone takes the home-screen question out, any home screen keeps it.
+         */
+        private TourController dropsHomeOnTerminal;
 
         void clear() {
             shown.clear();
@@ -1192,6 +1264,15 @@ public class TourControllerTest {
             chosen.add(choice);
             if (choice == TourController.Choice.KEEP_KEY_ROW && dropsKeyboardOnKeep != null)
                 dropsKeyboardOnKeep.dropStep(TourRun.KEYBOARD);
+        }
+
+        @Override
+        public void onTourUsageModeChoice(TourController.Choice choice) {
+            chosen.add(choice);
+            if (dropsHomeOnTerminal == null) return;
+            if (choice == TourController.Choice.USE_TERMINAL)
+                dropsHomeOnTerminal.dropStep(TourRun.HOME_CHOICE);
+            else dropsHomeOnTerminal.keepStep(TourRun.HOME_CHOICE);
         }
 
         @Override

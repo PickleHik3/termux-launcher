@@ -26,7 +26,14 @@ import java.util.List;
 public final class TourController {
 
     /** Bumped when the run changes enough that a run in progress has to be mapped onto the new one. */
-    public static final int RUN_VERSION = 4;
+    public static final int RUN_VERSION = 5;
+
+    /**
+     * The run before the usage card. Every card of it is a card of this one under the same id;
+     * the usage card went in before the home-screen question, so the two cards after it moved
+     * by one and a run in progress from it is mapped by name.
+     */
+    public static final int VERSION_BEFORE_THE_USAGE_CARD = 4;
 
     /**
      * The run before the welcome card. Its lessons are this run's lessons, under the same numbers
@@ -54,6 +61,11 @@ public final class TourController {
     private static final List<String> VERSION_THREE_CARDS = Collections.unmodifiableList(
         Arrays.asList(TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEYBOARD,
             TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING));
+
+    /** The eight cards of the run before the usage card, in the order it showed them. */
+    private static final List<String> VERSION_FOUR_CARDS = Collections.unmodifiableList(
+        Arrays.asList(TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEY_ROW,
+            TourRun.KEYBOARD, TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING));
 
     /** How long a freshly shown card ignores signals. */
     public static final long ARM_DELAY_MS = 400L;
@@ -86,7 +98,13 @@ public final class TourController {
         /** Take this release's row of keys. */
         SWITCH_KEY_ROW,
         /** Keep the row of keys the user already has. */
-        KEEP_KEY_ROW
+        KEEP_KEY_ROW,
+        /** The usage card: the terminal alone. */
+        USE_TERMINAL,
+        /** The usage card: the terminal with the home screen. */
+        USE_HOME,
+        /** The usage card: the terminal, the home screen and the Linux display. */
+        USE_DISPLAY
     }
 
     /**
@@ -128,6 +146,15 @@ public final class TourController {
             default:
                 return null;
         }
+    }
+
+    /**
+     * The card {@code stepIndex} meant in the run before the usage card, or null when that run
+     * had no such card. Mapped by name, since the two cards after the new one moved.
+     */
+    public static String versionFourCardFor(int stepIndex) {
+        return stepIndex >= 0 && stepIndex < VERSION_FOUR_CARDS.size()
+            ? VERSION_FOUR_CARDS.get(stepIndex) : null;
     }
 
     /**
@@ -212,6 +239,13 @@ public final class TourController {
          * remembering that the question has been put, is the part only the launcher can do.
          */
         default void onTourKeyRowChoice(Choice choice) {}
+
+        /**
+         * The user answered the usage card. The run moves on either way; applying the mode is
+         * the launcher's, and so is taking the home-screen question out of the run when the
+         * answer was the terminal alone ({@link #dropStep}).
+         */
+        default void onTourUsageModeChoice(Choice choice) {}
 
         /**
          * A run from an older version of the tour was interrupted somewhere this run has no
@@ -449,6 +483,12 @@ public final class TourController {
     }
 
     private boolean resumeOlderRun(int storedStepIndex) {
+        if (mPrefs.getTourRunVersion() >= VERSION_BEFORE_THE_USAGE_CARD) {
+            // The run the usage card was added to: every card is still here under its name, and
+            // the two after the new one are one number along.
+            int index = indexOf(versionFourCardFor(storedStepIndex));
+            return index >= 0 && resumeAt(index, mPrefs.getTourStepStage());
+        }
         if (mPrefs.getTourRunVersion() >= VERSION_BEFORE_THE_WELCOME_CARD) {
             // The run the welcome card was added to: same lessons, same numbers, so the card the
             // user stopped on is picked back up and the welcome card is not put in their way.
@@ -537,9 +577,18 @@ public final class TourController {
         if (step == null || !step.isChoiceCard() || choice == null) return;
         if (mListener != null) {
             if (TourRun.KEY_ROW.equals(step.id)) mListener.onTourKeyRowChoice(choice);
+            else if (TourRun.USAGE_MODE.equals(step.id)) mListener.onTourUsageModeChoice(choice);
             else mListener.onTourHomeChoice(choice);
         }
         advance();
+    }
+
+    /**
+     * Puts a card dropped by {@link #dropStep} back into the rest of this run: the home-screen
+     * question comes back when the usage card is answered with a home screen after all.
+     */
+    public void keepStep(String stepId) {
+        if (stepId != null) mDropped.remove(stepId);
     }
 
     /**
@@ -575,8 +624,9 @@ public final class TourController {
 
     /**
      * The End tour button: the lessons are not wanted and the run counts as skipped, but the way
-     * out still passes the home-screen question and the closing card, so leaving early never
-     * costs the one card an experienced user came for. A run with no choice card left ahead ends.
+     * out still passes the usage question, the home-screen question and the closing card, so
+     * leaving early never costs the cards an experienced user came for. A run with no choice
+     * card left ahead ends.
      */
     public void endTour() {
         if (!mRunning || mShowingWelcome) return;
@@ -585,7 +635,8 @@ public final class TourController {
             return;
         }
         mPrefs.setTourSkipped(true);
-        int choice = indexOf(TourRun.HOME_CHOICE);
+        int choice = indexOf(TourRun.USAGE_MODE);
+        if (choice < 0) choice = indexOf(TourRun.HOME_CHOICE);
         int target = choice >= 0 ? shownFrom(choice) : mSteps.size();
         if (target > mStepIndex && target < mSteps.size()) {
             moveTo(target);
