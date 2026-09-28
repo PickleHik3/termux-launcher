@@ -844,6 +844,11 @@ public final class X11PaneFrame extends PaneContentFrame {
         if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
     }
 
+    /** How much of the page's rim the wall's slide leaves showing; see PaneWallPolicy#outlineAlpha. */
+    public void setOutlineTravelAlpha(float alpha) {
+        mRim.setTravelAlpha(alpha);
+    }
+
     /**
      * Dress the page from the surface style — the same values the panes beside it read, so the
      * Display page follows the Canvas surface with the rest of the wall.

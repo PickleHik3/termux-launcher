@@ -16411,6 +16411,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         view.setWallPageOffScreen(offScreen);
                     }
                 }
+                @Override public void onWallOutlineAlphaChanged(float alpha) {
+                    // The terminal page's outline is its panes' rims; they fade with the other
+                    // pages' so one edge shows while the wall moves.
+                    if (mPaneController != null) mPaneController.setRimTravelAlpha(alpha);
+                }
                 @Override public void onWallDragInterrupted() {
                     // A tile tap, wall.go or Home moved the wall under a finger that was dragging
                     // it; both surfaces that can drive a drag let go of that finger.
