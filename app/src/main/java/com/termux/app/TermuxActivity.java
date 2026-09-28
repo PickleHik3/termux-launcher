@@ -16816,14 +16816,84 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyStatsClusterArrangement();
     }
 
-    /** Shifts the cluster so its content's centre is the status row's centre. */
+    /** Between the centred cluster and the end widgets (AI, mouse) when they show. */
+    private static final float STATS_CLUSTER_END_GAP_DP = 6f;
+
+    /**
+     * The span of the row the centred cluster's content may use, as {@code {low, high}} in the
+     * row's coordinates: after the place strip's lens, and short of the end widgets (the AI glyph,
+     * the mouse) when they show, so it is never drawn over them. The second value says whether
+     * those widgets are at the high end (left to right) or the low one.
+     */
+    @Nullable
+    private float[] statsClusterBounds() {
+        View row = findViewById(R.id.terminal_status_row);
+        View strip = findViewById(R.id.terminal_status_place_content);
+        View widgets = findViewById(R.id.terminal_status_widgets);
+        if (row == null || row.getWidth() == 0) return null;
+        boolean rtl = row.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+        boolean widgetsShown = widgets != null && widgets.getVisibility() == View.VISIBLE
+            && widgets.getWidth() > 0;
+        float gap = dpToPx(STATS_CLUSTER_END_GAP_DP);
+        float low;
+        float high;
+        if (!rtl) {
+            low = strip != null ? strip.getLeft() + strip.getPaddingLeft() : row.getPaddingLeft();
+            high = widgetsShown ? widgets.getLeft() - gap : row.getWidth() - row.getPaddingRight();
+        } else {
+            low = widgetsShown ? widgets.getRight() + gap : row.getPaddingLeft();
+            high = strip != null ? strip.getRight() - strip.getPaddingRight()
+                : row.getWidth() - row.getPaddingRight();
+        }
+        return new float[] {low, high, rtl ? 0f : 1f};
+    }
+
+    /**
+     * Shifts the cluster so its content's centre is the status row's centre, pulled in off-centre
+     * only if that would run it into the end widgets.
+     */
     private void centerStatsClusterOnRow(@NonNull ViewGroup cluster) {
         View row = findViewById(R.id.terminal_status_row);
-        if (row == null || row.getWidth() == 0 || cluster.getWidth() == 0) return;
+        float[] bounds = statsClusterBounds();
+        if (row == null || bounds == null || cluster.getWidth() == 0) return;
         float contentLeft = cluster.getLeft() + cluster.getPaddingStart();
         float contentWidth = cluster.getWidth() - cluster.getPaddingStart() - cluster.getPaddingEnd();
-        float shift = row.getWidth() / 2f - (contentLeft + contentWidth / 2f);
+        float start = com.termux.app.statusbar.StatusStatsClusterPolicy.clusterStart(
+            row.getWidth() / 2f, contentWidth, bounds[0], bounds[1], bounds[2] > 0f);
+        float shift = start - contentLeft;
         if (Math.abs(cluster.getTranslationX() - shift) >= 0.5f) cluster.setTranslationX(shift);
+    }
+
+    /**
+     * On the Widgets place, the longest of {@link #mWeatherForms} the centred cluster has room
+     * for: the temperature, the sky and the place; then the temperature and the sky; then the
+     * temperature alone. It follows the room, not what took it, so the AI glyph, the mouse, a
+     * narrow phone or a large font all shorten it the same way. {@code fade} for a change the
+     * user did not make (something arrived at the row's end), so the text does not jump.
+     */
+    private void fitWeatherToRow(boolean fade) {
+        String[] forms = mWeatherForms;
+        com.termux.app.statusbar.StatusBarWidgetView widget =
+            findViewById(R.id.terminal_status_widget_weather);
+        ViewGroup cluster = findViewById(R.id.terminal_status_stats_cluster);
+        View row = findViewById(R.id.terminal_status_row);
+        if (forms == null || widget == null || cluster == null || row == null) return;
+        float[] bounds = statsClusterBounds();
+        if (bounds == null || widget.getWidth() == 0) {
+            // Not laid out yet: the whole of it, and the next layout pass fits it.
+            widget.setValue(forms[0]);
+            return;
+        }
+        float[] widths = new float[forms.length];
+        for (int i = 0; i < forms.length; i++) widths[i] = widget.valueWidthOf(forms[i]);
+        float others = cluster.getWidth() - cluster.getPaddingStart() - cluster.getPaddingEnd()
+            - widget.getWidth();
+        int form = com.termux.app.statusbar.StatusStatsClusterPolicy.weatherFormThatFits(widths,
+            others, widget.widthWithoutValue(), widget.getMinimumWidth(),
+            com.termux.app.statusbar.StatusStatsClusterPolicy.centeredRoom(
+                row.getWidth() / 2f, bounds[0], bounds[1]));
+        if (fade) widget.setValueFading(forms[form]);
+        else widget.setValue(forms[form]);
     }
 
     /**
@@ -16848,11 +16918,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             cluster.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                 if (!isStatusBarVertical() && com.termux.app.statusbar.StatusStatsClusterPolicy
                         .centeredReversed(currentWallPage())) {
+                    fitWeatherToRow(true);
                     centerStatsClusterOnRow((ViewGroup) v);
                 } else if (v.getTranslationX() != 0f) {
                     v.setTranslationX(0f);
                 }
             });
+            // The AI glyph or the mouse arriving at the row's end takes room from the cluster
+            // without moving it, so their own layout re-fits it too.
+            View endWidgets = findViewById(R.id.terminal_status_widgets);
+            if (endWidgets != null) {
+                endWidgets.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                    if (l == ol && r == or) return;
+                    if (isStatusBarVertical() || !com.termux.app.statusbar.StatusStatsClusterPolicy
+                            .centeredReversed(currentWallPage())) return;
+                    fitWeatherToRow(true);
+                    centerStatsClusterOnRow(cluster);
+                });
+            }
         }
         // A column's cluster centres itself by weight; there is no leftover width to correct for.
         if (!reversed || isStatusBarVertical()) cluster.setTranslationX(0f);
@@ -19852,6 +19935,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Two arrival signals can land together (restart plus a HOME intent); one replay is enough. */
     private static final long WEATHER_GREETING_MIN_GAP_MS = 2_000L;
     private long mLastWeatherGreetingAt;
+    /**
+     * The Widgets place's weather, longest first: temperature · sky · place, temperature · sky,
+     * temperature. Null everywhere else, where the weather is the temperature alone.
+     */
+    @Nullable private String[] mWeatherForms;
 
     /**
      * Runs the weather icon for a few seconds when the user arrives — unlocking the phone, or
@@ -19880,9 +19968,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     weather.currentCode, weather.currentIsDay));
                 boolean fahrenheit = mPreferences != null
                     && mPreferences.isStatusWidgetWeatherFahrenheit();
-                // The Widgets place has room and nothing else in its row, so the weather says
-                // the whole of it there: the temperature, the sky, and where that is — with the
-                // degree glyph. A side bar's chip has room for the number alone.
+                // The Widgets place has room, so the weather says as much of it as fits there:
+                // the temperature, the sky, and where that is, with the degree glyph; the AI
+                // glyph or the mouse at the row's end shortens it (fitWeatherToRow). A side
+                // bar's chip has room for the number alone.
                 boolean widgetsPage = isWidgetsPageShowing();
                 boolean bare = isStatusBarVertical() && !widgetsPage;
                 String temp = bare
@@ -19891,15 +19980,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : com.termux.app.statusbar.WeatherController.formatTemp(
                         weather.currentC, fahrenheit);
                 if (widgetsPage) {
-                    StringBuilder full = new StringBuilder(temp);
+                    java.util.LinkedHashSet<String> forms = new java.util.LinkedHashSet<>();
                     String sky = com.termux.app.statusbar.WeatherController.describe(weather.currentCode);
-                    if (!sky.isEmpty()) full.append(" · ").append(sky);
-                    if (!weather.locationName.isEmpty()) full.append(" · ").append(weather.locationName);
-                    widget.setValue(full);
+                    String withSky = sky.isEmpty() ? temp : temp + " · " + sky;
+                    forms.add(weather.locationName.isEmpty() ? withSky
+                        : withSky + " · " + weather.locationName);
+                    forms.add(withSky);
+                    forms.add(temp);
+                    mWeatherForms = forms.toArray(new String[0]);
+                    fitWeatherToRow(false);
                 } else {
+                    mWeatherForms = null;
                     widget.setValue(temp);
                 }
             } else {
+                mWeatherForms = null;
                 widget.setValue(isStatusBarVertical() && !isWidgetsPageShowing() ? "--" : "--°");
             }
         }

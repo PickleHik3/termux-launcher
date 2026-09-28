@@ -53,6 +53,7 @@ public final class StatusBarWidgetView extends LinearLayout {
     @Nullable private Integer mMutedInk;
     /** The stats share a floor so a value ticking between widths does not shift its neighbours. */
     private static final int MIN_WIDTH_WITH_VALUE_DP = 34;
+    private static final long VALUE_FADE_MS = 120L;
 
     public StatusBarWidgetView(Context context) {
         this(context, null);
@@ -220,6 +221,33 @@ public final class StatusBarWidgetView extends LinearLayout {
         setMinimumWidth(empty ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP));
         if (android.text.TextUtils.equals(mValue.getText(), value)) return;
         mValue.setText(value);
+    }
+
+    /**
+     * {@link #setValue}, with the old text fading out and the new one in, for a change the user
+     * did not ask for (the weather shortening to make room), so it does not jump.
+     */
+    public void setValueFading(@NonNull CharSequence value) {
+        if (android.text.TextUtils.equals(mValue.getText(), value)
+                || !isAttachedToWindow() || !android.animation.ValueAnimator.areAnimatorsEnabled()) {
+            setValue(value);
+            return;
+        }
+        mValue.animate().cancel();
+        mValue.animate().alpha(0f).setDuration(VALUE_FADE_MS).withEndAction(() -> {
+            setValue(value);
+            mValue.animate().alpha(1f).setDuration(VALUE_FADE_MS).start();
+        }).start();
+    }
+
+    /** How wide {@code value} draws in the value's text. */
+    public float valueWidthOf(@NonNull CharSequence value) {
+        return mValue.getPaint().measureText(value, 0, value.length());
+    }
+
+    /** The widget less its text: the icon and the gap after it. */
+    public int widthWithoutValue() {
+        return mValue.getVisibility() == VISIBLE ? getWidth() - mValue.getWidth() : getWidth();
     }
 
     /** Gives CPU, memory and weather distinct wallpaper-derived Material roles. */
