@@ -88,6 +88,16 @@ palette's **Keyboard on/off** flips (`keyboard_turned_off`), shared by both orie
 place; the last write wins, whichever door it came through.
 _Avoid_: bar (for the keyboard), widget, slot (the store's word for where an element stands)
 
+**Minimised A–Z index**:
+The A–Z index's third form beside On and Off, chosen per orientation in the Layout editor: a
+small glass **pull tab** on the index's edge, at its leading end past the corner square, laid over
+the content and claiming no band. A finger on the tab is the index's from its first touch — the
+border drag and the corner tab never see it — and sliding brings the letters out over the content
+and scrubs them in the same gesture, with the matches on the floating strip as for any index that
+stands without the pinned apps row. Release launches what it picked, if anything, and the letters
+tuck back behind the tab. Minimal mode puts the tab away with everything else.
+_Avoid_: collapsed index, hidden index (hidden is Off), drawer handle
+
 **Miniature**:
 The scaled model of a place's layout that the user drags elements around on. The same miniature
 is the Layout editor's canvas everywhere; there is no second one.

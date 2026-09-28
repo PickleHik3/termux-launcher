@@ -35,6 +35,11 @@ Done and Discard let you keep or throw away everything you changed in that visit
   the same grip, so it comes back the same way it went. Dropping a bar between two others on the
   same edge sets the order they stack in. The A–Z index rides the pinned apps row while the two
   share an edge; dropped on another edge it stands on a bar of its own.
+- **A–Z index: On / Minimised / Off.** Minimised folds the index into a small pull tab on its edge,
+  laid over the content and taking no room; sliding a thumb along the tab brings the letters out
+  and scrubs them in the same movement, and the miniature shows the tab over the pane. The
+  Position choice still says which edge the tab stands on, and the tab can be dragged by its grip
+  like any bar. Each orientation keeps its own choice.
 
 The status bar can be hidden like the rest, which is how a full-screen layout is built by hand:
 with it away the clock, the weather and the window pills go with it, the content takes its band,
