@@ -52,4 +52,17 @@ public class TaiMnnPackageTest {
         Files.write(dir.resolve("vision.mnn"), new byte[]{1});
         TaiMnnPackage.validate(dir.resolve("config.json").toFile());
     }
+
+    @Test public void embeddingFileIsRequiredOnlyWhereItExists() throws Exception {
+        JSONObject config = new JSONObject().put("embedding_file", "embeddings_int4.bin");
+        assertFalse(TaiMnnPackage.files(config, new LinkedHashSet<>(Arrays.asList(
+            "llm.mnn", "llm.mnn.weight", "tokenizer.txt"))).contains("embeddings_int4.bin"));
+        assertTrue(TaiMnnPackage.files(config, new LinkedHashSet<>(Arrays.asList(
+            "llm.mnn", "llm.mnn.weight", "tokenizer.txt", "embeddings_int4.bin"))).contains("embeddings_int4.bin"));
+
+        Path dir = temporary.newFolder().toPath();
+        Files.write(dir.resolve("config.json"), "{\"embedding_file\":\"embeddings_int4.bin\"}".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        for (String name : Arrays.asList("llm.mnn", "llm.mnn.weight", "tokenizer.txt")) Files.write(dir.resolve(name), new byte[]{1});
+        TaiMnnPackage.validate(dir.resolve("config.json").toFile());
+    }
 }

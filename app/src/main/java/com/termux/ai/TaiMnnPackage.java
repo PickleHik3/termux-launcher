@@ -11,6 +11,8 @@ import org.json.JSONObject;
 
 /** Package dependencies are relative to the selected config, never the whole HF repository. */
 final class TaiMnnPackage {
+    private static final String EMBEDDING_FILE = "embedding_file";
+
     static LinkedHashSet<String> files(JSONObject config, Set<String> available) throws Exception {
         LinkedHashSet<String> result = new LinkedHashSet<>();
         result.add("config.json");
@@ -20,6 +22,11 @@ final class TaiMnnPackage {
         if (tokenizer.isEmpty()) tokenizer = available.contains("tokenizer.mtok") ? "tokenizer.mtok" : "tokenizer.txt";
         add(result, tokenizer);
         references(config, result);
+        // embedding_file is optional: with tie_embeddings in llm_config.json MNN reads the embeddings
+        // from the weights and never opens it (taobao-mnn/Qwen3-VL-2B-Instruct-MNN names a file it
+        // does not ship). references() skips the key; the file is required only where it exists.
+        String embedding = config.optString(EMBEDDING_FILE, "");
+        if (!embedding.isEmpty() && available.contains(embedding)) add(result, embedding);
         // MNN also consumes these conventional sidecars without naming them in config.json.
         for (String name : available) {
             if (name.indexOf('/') < 0 && (name.equals("llm_config.json") || name.equals("llm.mnn.json")
@@ -41,7 +48,10 @@ final class TaiMnnPackage {
         if (value instanceof JSONObject) {
             JSONObject json = (JSONObject) value;
             java.util.Iterator<String> keys = json.keys();
-            while (keys.hasNext()) references(json.get(keys.next()), result);
+            while (keys.hasNext()) {
+                String key = keys.next();
+                if (!EMBEDDING_FILE.equals(key)) references(json.get(key), result);
+            }
         } else if (value instanceof JSONArray) {
             JSONArray array = (JSONArray) value;
             for (int i = 0; i < array.length(); i++) references(array.get(i), result);

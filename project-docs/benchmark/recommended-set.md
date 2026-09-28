@@ -35,6 +35,8 @@ a `CatalogEntry` only carries one `artifactPath`. This already works without any
 `TaiModelDownloaderStateTest`/`TaiModelDownloaderKeepTest` also untouched — there was nothing new
 to unit test.
 
+> **Fixed on `feat/mnn-tai` (TaiMnnPackage):** `embedding_file` is now required only when the file exists in the listing or folder. With `tie_embeddings` in `llm_config.json` (as here) MNN 3.6.1 reads the embeddings from `llm.mnn.weight` (`diskembedding.cpp`) and never opens it. The note below is kept for history; the catalogue download still needs its device check.
+
 **One real risk found, not fixed (out of the file scope for this pass):** `TaiMnnPackage.references`
 treats *any* string in `config.json` (recursively) that looks like a package filename as a
 **required** dependency, even if it isn't declared as required anywhere and doesn't actually exist
