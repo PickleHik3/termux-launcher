@@ -113,14 +113,24 @@ public class TaiBenchSuiteTest {
         assertEquals("cpu", entries.get(2).accelerator);
     }
 
+    /** An asked-for processor is planned even where unsupported: the load's refusal is the answer. */
     @Test
-    public void anExplicitProcessorListOverridesThePresetButNotTheModelsSupport() {
+    public void anExplicitProcessorListOverridesThePreset() {
         List<TaiBenchSuite.EntryPlan> gpuOnly = TaiBenchSuite.expand(
             Arrays.asList(LITERT_GPU_BEST, MNN_CPU_ONLY), TaiBenchSuite.Preset.STANDARD,
             Collections.singletonList("GPU"), false);
-        assertEquals(1, gpuOnly.size());
+        assertEquals(2, gpuOnly.size());
         assertEquals("gemma-4-e2b", gpuOnly.get(0).modelId);
         assertEquals("gpu", gpuOnly.get(0).accelerator);
+        assertEquals("qwen3-vl-2b-instruct-mnn", gpuOnly.get(1).modelId);
+        assertEquals("gpu", gpuOnly.get(1).accelerator);
+
+        List<TaiBenchSuite.EntryPlan> both = TaiBenchSuite.expand(
+            Collections.singletonList(LITERT_GPU_BEST), TaiBenchSuite.Preset.QUICK,
+            Arrays.asList("cpu", "gpu", "cpu"), false);
+        assertEquals(2, both.size());
+        assertEquals("cpu", both.get(0).accelerator);
+        assertEquals("gpu", both.get(1).accelerator);
 
         List<TaiBenchSuite.EntryPlan> unknownProcessor = TaiBenchSuite.expand(
             Collections.singletonList(LITERT_GPU_BEST), TaiBenchSuite.Preset.QUICK,

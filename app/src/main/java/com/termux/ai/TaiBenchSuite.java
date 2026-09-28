@@ -194,10 +194,12 @@ final class TaiBenchSuite {
 
     /**
      * Expands models × processors into the entries a run does, in request order. With
-     * {@code processors} given (the CLI's {@code --cpu}/{@code --gpu}) those are used, GPU only
-     * where the model supports it; otherwise the preset decides: Standard and Thorough take the
-     * CPU and the GPU where supported, Quick takes only the processor an automatic load would.
-     * {@code eagle} turns the draft model on for every model that has one; the others ignore it.
+     * {@code processors} given (the CLI's {@code --cpu}/{@code --gpu}) every model gets exactly
+     * those, supported or not: the load's preflight then refuses the ones the phone cannot do,
+     * and the run says why instead of silently leaving them out. Otherwise the preset decides:
+     * Standard and Thorough take the CPU and the GPU where supported, Quick takes only the
+     * processor an automatic load would. {@code eagle} turns the draft model on for every model
+     * that has one; the others ignore it.
      */
     @NonNull
     static List<EntryPlan> expand(@NonNull List<ModelInput> models, @NonNull Preset preset,
@@ -208,7 +210,6 @@ final class TaiBenchSuite {
             if (processors != null && !processors.isEmpty()) {
                 for (String processor : processors) {
                     String normalized = processor.trim().toLowerCase(Locale.ROOT);
-                    if (ACCELERATOR_GPU.equals(normalized) && !model.gpuSupported) continue;
                     if (!ACCELERATOR_CPU.equals(normalized) && !ACCELERATOR_GPU.equals(normalized)) continue;
                     if (!accelerators.contains(normalized)) accelerators.add(normalized);
                 }
