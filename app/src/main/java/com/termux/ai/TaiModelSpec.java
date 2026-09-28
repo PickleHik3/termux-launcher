@@ -480,7 +480,11 @@ public final class TaiModelSpec {
 
     private static boolean hasMnnHint(@Nullable String path) {
         String value = path == null ? "" : path.toLowerCase(Locale.ROOT);
-        return value.contains("mnn") || value.endsWith("config.json") || value.endsWith("llm.mnn");
+        // A LiteRT file is LiteRT wherever it lives, and only the last segment names the package:
+        // a ".../qwen-mnn-test/model.litertlm" path is not an MNN package.
+        if (value.endsWith(".litertlm") || value.endsWith(".task") || value.endsWith(".tflite")) return false;
+        String name = value.substring(value.lastIndexOf('/') + 1);
+        return name.contains("mnn") || name.equals("config.json");
     }
 
     private static boolean hasKnownUnsupportedWeightHint(@Nullable String path) {
