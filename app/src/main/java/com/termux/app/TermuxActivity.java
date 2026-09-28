@@ -5471,10 +5471,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int innerPadding = capsule ? Math.round(dpToPx(6)) : 0;
         int innerTopPadding = floating ? Math.round(dpToPx(4)) : innerPadding;
         // The user's own chin allowance, from Settings, and it lands in a different place per shape:
-        // padding inside the docked slab, a taller gap under the floating capsule.
+        // padding inside the docked slab, a taller gap under the floating capsule. In the stack the
+        // capsule's gap is not this host's to carry: the stack's own bottom margin is the one edge
+        // gap the dock and the keyboard share (ChromePolicy.bottomEdgeGapPx), so the keyboard
+        // coming or going never moves the dock's landing. A keyboard floating in its own frame
+        // still keeps the card's gap under its keys.
         int chinPaddingPx = resolveInAppKeyboardBottomPaddingPx();
         int bottomMargin = ChromePolicy.keyboardChinBottomMarginPx(
-            capsule, getDockLayout().capsuleBottomGapPx, chinPaddingPx);
+            capsule, floating ? getDockLayout().capsuleBottomGapPx : 0, chinPaddingPx);
         int innerBottomPadding = ChromePolicy.keyboardChinBottomPaddingPx(
             capsule, innerPadding, chinPaddingPx);
         ViewGroup.LayoutParams layoutParams = surfaceHost.getLayoutParams();
@@ -11832,7 +11836,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             keyboardOverlapPx = com.termux.app.place.PlaceChromeTravel.heldOverlapPx(
                 combinedHeight, accessoryBottomMarginPx, mTravelHeldReservationPx);
         }
-        boolean overlapChanged = applyContentKeyboardOverlap(keyboardOverlapPx);
+        // With the stack away the content is the surface on the bottom edge, and it keeps the
+        // same gap from it the dock would (ChromePolicy.bottomEdgeGapPx): a gone stack's margin
+        // positions nothing, so the content carries the gap itself. The reservation below counts
+        // the margin either way, so it is the room the layout really gives.
+        boolean stackShown = shouldShowAccessoryStack(state.toolbarShown, state.keyboardShown,
+            statusBandPx > 0);
+        int contentEdgeGapPx = stackShown ? 0 : accessoryBottomMarginPx;
+        boolean overlapChanged = applyContentBottomMargin(contentEdgeGapPx, keyboardOverlapPx);
         int contentReservationPx = KeyboardOverlayPolicy.contentReservationPx(
             combinedHeight, accessoryBottomMarginPx, keyboardOverlapPx);
         boolean contentReservationChanged = contentReservationPx != mAppliedContentReservationPx;
@@ -11890,15 +11901,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Lets the content root reach past the accessory stack's top by {@code overlapPx}, as a negative
      * bottom margin against the {@code layout_above} rule that otherwise couples the two. The stack
-     * is the later sibling, so it draws over what the content keeps.
+     * is the later sibling, so it draws over what the content keeps. {@code edgeGapPx} is the gap
+     * the content keeps from the screen's bottom edge while the stack is away and it is the
+     * surface standing there; 0 whenever the stack is on screen and the gap is the stack's.
      */
-    private boolean applyContentKeyboardOverlap(int overlapPx) {
+    private boolean applyContentBottomMargin(int edgeGapPx, int overlapPx) {
         View content = findViewById(R.id.terminal_content_column);
         if (content == null) return false;
         ViewGroup.LayoutParams layoutParams = content.getLayoutParams();
         if (!(layoutParams instanceof ViewGroup.MarginLayoutParams)) return false;
         ViewGroup.MarginLayoutParams marginParams = (ViewGroup.MarginLayoutParams) layoutParams;
-        int bottomMargin = -Math.max(0, overlapPx);
+        int bottomMargin = Math.max(0, edgeGapPx) - Math.max(0, overlapPx);
         if (marginParams.bottomMargin == bottomMargin) return false;
         marginParams.bottomMargin = bottomMargin;
         content.setLayoutParams(marginParams);
@@ -11968,23 +11981,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveAccessoryStackBottomMarginPx(@NonNull ChromeSpec state) {
-        return resolveAccessoryStackBottomMarginPx(state.toolbarShown, state.keyboardShown);
+        return resolveAccessoryStackBottomMarginPx(state.toolbarShown, state.keyboardShown,
+            isChromeMinimal());
     }
 
-    /** The same, for a stack other than the one on screen: the arriving place's, mid-slide. */
-    private int resolveAccessoryStackBottomMarginPx(boolean toolbarShown, boolean keyboardShown) {
-        if (!toolbarShown && !keyboardShown)
-            return 0;
-        // The embedded keyboard is an ordinary bottom child. Root/decor inset policy already keeps
-        // it above navigation bars, so a floating-dock gap must not be inserted beneath it.
-        if (keyboardShown)
-            return mImeLiftPx;
-        // The capsule floats, so it keeps its bottom gap even when the keyboard is up — otherwise it
-        // sits flush against the keyboard. Non-capsule styles stay flush.
-        if (!isRoundedDockStyle()) {
-            return mImeLiftPx;
-        }
-        return mImeLiftPx + getDockLayout().capsuleBottomGapPx;
+    /**
+     * The margin under the accessory stack: the shared bottom edge gap
+     * ({@link ChromePolicy#bottomEdgeGapPx}) whatever the stack holds — the dock's rows, the
+     * keyboard, both — plus the system IME's lift while it stands under the dock. The same number
+     * with the keyboard up and down, so a slide that brings the keyboard in or puts it away lands
+     * the dock where the slide left it. Root/decor inset policy keeps the whole stack above the
+     * navigation bar; nothing here is for that. Also read for a stack other than the one on
+     * screen: the arriving place's, mid-slide, which is why the minimal state is a parameter.
+     */
+    private int resolveAccessoryStackBottomMarginPx(boolean toolbarShown, boolean keyboardShown,
+                                                    boolean minimal) {
+        int lift = toolbarShown || keyboardShown ? mImeLiftPx : 0;
+        return lift + ChromePolicy.bottomEdgeGapPx(minimal, isRoundedDockStyle(),
+            getDockLayout().capsuleBottomGapPx);
     }
 
     // Kept for test compatibility and to preserve existing RelativeLayout params in-place.
@@ -16166,13 +16180,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The room a place's chrome leaves the content at rest, from the stack as it stands. */
     private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
                                         boolean toolbarShown) {
-        boolean keyboardShown = chromeRestOf(place).keyboardReveal() > 0f;
+        com.termux.app.place.PlaceChromeTravel.Rest rest = chromeRestOf(place);
+        boolean keyboardShown = rest.keyboardReveal() > 0f;
         int flushPadding = place == com.termux.app.wall.PaneWallPage.TERMINAL
             && place == mLastWallPage && !keyboardShown ? mAppliedTerminalFlushPaddingPx : 0;
         return KeyboardOverlayPolicy.restReservationPx(mAppliedDockContentHeightPx, flushPadding,
             keyboardShown, KeyboardOverlayPolicy.overlays(place, currentPlaceLayout()),
             Math.max(0, mKeyboardGeometry.desiredHeightPx()),
-            resolveAccessoryStackBottomMarginPx(toolbarShown, keyboardShown));
+            resolveAccessoryStackBottomMarginPx(toolbarShown, keyboardShown, rest.minimal));
     }
 
     /**

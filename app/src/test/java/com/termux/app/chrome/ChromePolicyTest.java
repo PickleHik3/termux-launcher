@@ -32,16 +32,34 @@ public class ChromePolicyTest {
 
     @Test
     public void testKeyboardChinLiftsTheCapsuleAndPadsTheDockedSlab() {
-        // Floating: the allowance rides on the capsule's own gap, so the glass still wraps the keys.
+        // Floating in its own frame: the allowance rides on the card's own gap, so the glass
+        // still wraps the keys.
         Assert.assertEquals(6, ChromePolicy.keyboardChinBottomMarginPx(true, 6, 0));
         Assert.assertEquals(30, ChromePolicy.keyboardChinBottomMarginPx(true, 6, 24));
         Assert.assertEquals(6, ChromePolicy.keyboardChinBottomPaddingPx(true, 6, 24));
+        // A capsule standing in the stack carries no gap of its own — the stack's margin is the
+        // shared edge gap — so only the allowance is under it.
+        Assert.assertEquals(24, ChromePolicy.keyboardChinBottomMarginPx(true, 0, 24));
+        Assert.assertEquals(0, ChromePolicy.keyboardChinBottomMarginPx(true, 0, 0));
         // Docked: no gap under a slab that reaches the screen edge; the keys move up inside it.
         Assert.assertEquals(0, ChromePolicy.keyboardChinBottomMarginPx(false, 6, 24));
         Assert.assertEquals(24, ChromePolicy.keyboardChinBottomPaddingPx(false, 0, 24));
-        // A negative allowance can only come from a bad read; it must not eat the capsule's gap.
+        // A negative allowance can only come from a bad read; it must not eat the card's gap.
         Assert.assertEquals(6, ChromePolicy.keyboardChinBottomMarginPx(true, 6, -10));
         Assert.assertEquals(0, ChromePolicy.keyboardChinBottomPaddingPx(false, 0, -10));
+    }
+
+    @Test
+    public void testOneBottomEdgeGapForWhateverStandsOnTheEdge() {
+        // Floating keeps its card's gap under the dock, the keyboard and the pane alike.
+        Assert.assertEquals(6, ChromePolicy.bottomEdgeGapPx(false, true, 6));
+        // Docked is flush.
+        Assert.assertEquals(0, ChromePolicy.bottomEdgeGapPx(false, false, 6));
+        // A minimal place is maximised and keeps nothing, whichever the style.
+        Assert.assertEquals(0, ChromePolicy.bottomEdgeGapPx(true, true, 6));
+        Assert.assertEquals(0, ChromePolicy.bottomEdgeGapPx(true, false, 6));
+        // A bad gap reads as none rather than as a pull below the edge.
+        Assert.assertEquals(0, ChromePolicy.bottomEdgeGapPx(false, true, -4));
     }
 
     @Test
