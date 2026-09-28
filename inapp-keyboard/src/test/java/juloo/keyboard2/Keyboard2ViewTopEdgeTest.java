@@ -20,6 +20,7 @@ import org.robolectric.RuntimeEnvironment;
 /**
  * The top-edge hook: a press in the strip above the first row is offered to the host and, taken,
  * owns its stream; a press on a key is never offered, so key gestures are exactly what they were.
+ * A press that hit no key and lifted in place is reported as a background tap.
  */
 @RunWith(RobolectricTestRunner.class)
 @org.robolectric.annotation.Config(sdk = 28)
@@ -116,6 +117,35 @@ public class Keyboard2ViewTopEdgeTest
   }
 
   @Test
+  public void aDeclinedPressInTheStripReleasedInPlaceIsABackgroundTap()
+  {
+    delegate.take = false;
+    touch(MotionEvent.ACTION_DOWN, 50f, 5f);
+    touch(MotionEvent.ACTION_UP, 52f, 6f);
+    assertEquals(Arrays.asList("down:5.0:10.0:10.75", "tap:52.0:6.0"), delegate.log);
+    assertTrue(handler.keyEvents().isEmpty());
+  }
+
+  @Test
+  public void aBackgroundPressThatMovedIsNoTap()
+  {
+    delegate.take = false;
+    touch(MotionEvent.ACTION_DOWN, 50f, 5f);
+    touch(MotionEvent.ACTION_MOVE, 50f, 40f);
+    touch(MotionEvent.ACTION_UP, 50f, 40f);
+    assertEquals(Arrays.asList("down:5.0:10.0:10.75"), delegate.log);
+  }
+
+  @Test
+  public void aCancelledBackgroundPressIsNoTap()
+  {
+    delegate.take = false;
+    touch(MotionEvent.ACTION_DOWN, 50f, 5f);
+    touch(MotionEvent.ACTION_CANCEL, 50f, 5f);
+    assertEquals(Arrays.asList("down:5.0:10.0:10.75"), delegate.log);
+  }
+
+  @Test
   public void withoutADelegateTheStripIsInert()
   {
     view.setTopEdgeTouchDelegate(null);
@@ -167,6 +197,12 @@ public class Keyboard2ViewTopEdgeTest
         case MotionEvent.ACTION_CANCEL: log.add("cancel"); break;
         default: log.add("other"); break;
       }
+    }
+
+    @Override
+    public void onBackgroundTap(float x, float y)
+    {
+      log.add("tap:" + x + ":" + y);
     }
   }
 

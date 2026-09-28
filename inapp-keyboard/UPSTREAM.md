@@ -215,8 +215,15 @@ fails when the catalogue has gone stale.
   where the caps are drawn; taken, the rest of that stream goes to the
   delegate and never reaches `Pointers`, declined, it continues exactly as
   upstream (no key above the slop, the first row inside it). A press on a key
-  is never offered, so key swipes are unchanged. The launcher uses it for the
-  swipe-down that hides the keyboard
+  is never offered, so key swipes are unchanged. The same delegate is also told,
+  through its default `onBackgroundTap`, when a lone press that hit no key (the
+  gap between keys, the margins, a declined press in the strip) lifted inside
+  the touch slop: the private `releaseBackgroundPress` and the
+  `_backgroundPointerId` bookkeeping in `onTouch`. That stream still goes to
+  `Pointers` exactly as upstream's would, where a keyless press moves nothing,
+  so the report is a cue and nothing more; a finger lifting while another is
+  down is never reported. The launcher uses the hook for the swipe-down that
+  hides the keyboard and the tap that hints at it
   (`app/.../terminal/inappkeyboard/KeyboardHideSwipeGesture`); the module
   holds no gesture policy.
 - Pressed-key popup hook (local addition): `Pointers.IPointerPreview` plus

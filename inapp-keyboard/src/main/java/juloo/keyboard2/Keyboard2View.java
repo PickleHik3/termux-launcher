@@ -20,6 +20,7 @@ import android.util.AttributeSet;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.animation.LinearInterpolator;
 import java.util.Objects;
 import java.util.ArrayList;
@@ -149,10 +150,24 @@ public class Keyboard2View extends View
 
     /** Every later event of a taken stream, up to and including UP or CANCEL. */
     void onTopEdgeTouchEvent(MotionEvent event);
+
+    /**
+     * A lone press that hit no key — the gap between keys, the side margins, the
+     * strip above the first row when [onTopEdgeTouchDown] declined it — was
+     * released where it landed, inside the touch slop. The stream itself went
+     * to [Pointers] exactly as upstream's would (where it moves nothing), so
+     * this is only the host's cue; [x] and [y] are view coordinates.
+     */
+    default void onBackgroundTap(float x, float y) {}
   }
 
   private TopEdgeTouchDelegate _topEdgeDelegate;
   private boolean _topEdgeOwnsStream;
+  /** The one pointer resting on no key, for [TopEdgeTouchDelegate.onBackgroundTap]; -1 for none. */
+  private int _backgroundPointerId = -1;
+  private float _backgroundDownX;
+  private float _backgroundDownY;
+  private float _backgroundTapSlopPx;
 
   private static final long PRESS_RAMP_MS = 60L;
   private static final long RELEASE_FADE_MS = 150L;
@@ -210,6 +225,7 @@ public class Keyboard2View extends View
   private void initialize()
   {
     setOnTouchListener(this);
+    _backgroundTapSlopPx = ViewConfiguration.get(getContext()).getScaledTouchSlop();
     _trailPaint.setStyle(Paint.Style.STROKE);
     _trailPaint.setStrokeCap(Paint.Cap.ROUND);
     _fxFillPaint.setStyle(Paint.Style.FILL);
@@ -672,6 +688,7 @@ public class Keyboard2View extends View
     requireMainThread();
     _topEdgeDelegate = delegate;
     _topEdgeOwnsStream = false;
+    _backgroundPointerId = -1;
   }
 
   /** Where upstream's key slop begins: above this y no key is hit. */
@@ -1542,6 +1559,7 @@ public class Keyboard2View extends View
       case MotionEvent.ACTION_UP:
       case MotionEvent.ACTION_POINTER_UP:
         p = event.getActionIndex();
+        releaseBackgroundPress(event, p);
         observeTap(_touchFx.get(event.getPointerId(p)));
         finishTouchFx(event.getPointerId(p));
         _pointers.onTouchUp(event.getPointerId(p));
@@ -1569,6 +1587,12 @@ public class Keyboard2View extends View
           if (_config.swipeTrailEnabled)
             _trails.put(event.getPointerId(p), new Trail(tx, ty));
         }
+        else if (_topEdgeDelegate != null)
+        {
+          _backgroundPointerId = event.getPointerId(p);
+          _backgroundDownX = tx;
+          _backgroundDownY = ty;
+        }
         break;
       case MotionEvent.ACTION_MOVE:
         for (p = 0; p < event.getPointerCount(); p++)
@@ -1581,6 +1605,7 @@ public class Keyboard2View extends View
         }
         break;
       case MotionEvent.ACTION_CANCEL:
+        _backgroundPointerId = -1;
         finishAllTouchFx();
         _pointers.onTouchCancelCommit();
         _trails.clear();
@@ -1591,6 +1616,25 @@ public class Keyboard2View extends View
     }
     postInvalidateOnAnimation();
     return (true);
+  }
+
+  /**
+   * The pointer at [index] lifted: a background press that was the only finger
+   * down and never left the slop is reported to the delegate as a tap. One
+   * lifting while another finger types is not — the host's hint moves the
+   * keys, and a finger on a key should not see them move.
+   */
+  private void releaseBackgroundPress(MotionEvent event, int index)
+  {
+    if (_backgroundPointerId < 0 || event.getPointerId(index) != _backgroundPointerId)
+      return;
+    _backgroundPointerId = -1;
+    if (event.getActionMasked() != MotionEvent.ACTION_UP || _topEdgeDelegate == null)
+      return;
+    float x = event.getX(index);
+    float y = event.getY(index);
+    if (Math.hypot(x - _backgroundDownX, y - _backgroundDownY) <= _backgroundTapSlopPx)
+      _topEdgeDelegate.onBackgroundTap(x, y);
   }
 
   private void startTouchFx(int pointerId, KeyboardData.Key key,

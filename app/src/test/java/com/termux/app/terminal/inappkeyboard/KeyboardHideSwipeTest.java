@@ -38,11 +38,22 @@ public class KeyboardHideSwipeTest {
     }
 
     @Test
-    public void bandContainsIsHalfOpenAndNeverAboveTheView() {
-        assertTrue(KeyboardHideSwipe.bandContains(0f, 3f, 40f, 12f));
-        assertTrue(KeyboardHideSwipe.bandContains(11.9f, 3f, 40f, 12f));
-        assertFalse(KeyboardHideSwipe.bandContains(12f, 3f, 40f, 12f));
-        assertFalse(KeyboardHideSwipe.bandContains(-1f, 3f, 40f, 12f));
+    public void bandContainsIsHalfOpenAtTheBottom() {
+        assertTrue(KeyboardHideSwipe.bandContains(0f, 3f, 40f, 12f, 0f));
+        assertTrue(KeyboardHideSwipe.bandContains(11.9f, 3f, 40f, 12f, 0f));
+        assertFalse(KeyboardHideSwipe.bandContains(12f, 3f, 40f, 12f, 0f));
+    }
+
+    @Test
+    public void bandReachesAboveTheKeyboardByTheReachAndNoFurther() {
+        // No reach: the keyboard's top edge is the band's.
+        assertFalse(KeyboardHideSwipe.bandContains(-1f, 3f, 40f, 12f, 0f));
+        // With one, the space above counts, closed at the reach.
+        assertTrue(KeyboardHideSwipe.bandContains(-1f, 3f, 40f, 12f, 24f));
+        assertTrue(KeyboardHideSwipe.bandContains(-24f, 3f, 40f, 12f, 24f));
+        assertFalse(KeyboardHideSwipe.bandContains(-24.1f, 3f, 40f, 12f, 24f));
+        // A negative reach is no reach.
+        assertFalse(KeyboardHideSwipe.bandContains(-1f, 3f, 40f, 12f, -5f));
     }
 
     // Direction
@@ -79,9 +90,24 @@ public class KeyboardHideSwipeTest {
     }
 
     @Test
-    public void aTapOnTheBandDoesNothing() {
+    public void aTapOnTheBandIsReportedAsOne() {
         swipe.begin(0f, 0f, 0L);
-        assertEquals(Outcome.NONE, swipe.release(0f, 0f, 80L));
+        assertEquals(Outcome.TAP, swipe.release(0f, 0f, 80L));
+        assertEquals(Phase.IDLE, swipe.phase());
+    }
+
+    @Test
+    public void aReleaseInsideTheSlopIsStillATapHoweverLongItWasHeld() {
+        swipe.begin(0f, 0f, 0L);
+        assertEquals(Phase.ARMED, swipe.move(4f, 5f, 16L));
+        assertEquals(Outcome.TAP, swipe.release(4f, 5f, 3000L));
+    }
+
+    @Test
+    public void anAbandonedSwipeIsNotATap() {
+        swipe.begin(0f, 0f, 0L);
+        swipe.move(30f, 2f, 16L);
+        assertEquals(Outcome.NONE, swipe.release(30f, 2f, 32L));
     }
 
     // Drag
