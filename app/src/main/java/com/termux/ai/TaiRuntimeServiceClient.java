@@ -108,7 +108,7 @@ public final class TaiRuntimeServiceClient {
         @Nullable TaiManager.OpenAiStreamSink sink
     ) throws JSONException {
         if (ensureConnected() == null) {
-            PendingRequest failed = new PendingRequest(UUID.randomUUID().toString(), stream, sink);
+            PendingRequest failed = new PendingRequest(UUID.randomUUID().toString(), operation, stream, sink);
             failed.result = runtimeUnavailable("tai_runtime_unavailable", "TAI runtime service is not connected.");
             failed.signalEnd();
             failed.done.countDown();
@@ -116,7 +116,7 @@ public final class TaiRuntimeServiceClient {
         }
 
         String requestId = UUID.randomUUID().toString();
-        PendingRequest pendingRequest = new PendingRequest(requestId, stream, sink);
+        PendingRequest pendingRequest = new PendingRequest(requestId, operation, stream, sink);
         TransportBody transportBody;
         try {
             transportBody = transportBody(requestId, body == null ? "" : body);
@@ -250,22 +250,57 @@ public final class TaiRuntimeServiceClient {
         }
     }
 
+    /**
+     * The runtime process died under this binding (a crash, the low-memory killer, a SIGKILL).
+     * Every request it was serving fails here with {@code tai_runtime_crashed}; none is sent again.
+     * The binding is released too: with {@code BIND_AUTO_CREATE} still registered, ActivityManager
+     * would bring the process straight back (about a second after the death, measured on pong
+     * 2026-09-24) with nobody having asked for it — a 330 MB baseline coming up while the GPU
+     * driver is still freeing the dead process's buffers. Released, the process stays down until
+     * the next request binds again ({@link #ensureConnected}), so a model killed mid-load is only
+     * ever loaded again by a new request that asks for it.
+     */
     private void onRuntimeBinderDied() {
         synchronized (connectionLock) {
             service = null;
             binding = false;
             if (connectingLatch != null) connectingLatch.countDown();
+            try {
+                appContext.unbindService(connection);
+            } catch (IllegalArgumentException ignored) {
+                // Not bound from this context's point of view; there is nothing to release.
+            }
         }
-        JSONObject error = runtimeCrashed("tai_runtime_crashed",
-            "AI runtime crashed while loading or running a model. Try CPU or a smaller model.");
         for (PendingRequest request : pending.values()) {
-            request.result = error;
+            request.result = runtimeDied(request.operation);
             // Don't write to the sink here (this runs on the main thread). The stream consumer on
             // the background thread emits the error after it observes the end sentinel.
             request.signalEnd();
             request.done.countDown();
         }
         pending.clear();
+    }
+
+    /** The death of the runtime process as the request it interrupted sees it; nothing is retried. */
+    @NonNull
+    private JSONObject runtimeDied(@NonNull String operation) {
+        String message;
+        if (TaiRuntimeIpc.OP_LOAD_MODEL.equals(operation) || TaiRuntimeIpc.OP_KEEP_WARM.equals(operation)) {
+            message = "AI runtime process died while loading the model; the load was not retried. "
+                + "Load again to try once more, on CPU or with a smaller model.";
+        } else if (TaiRuntimeService.isStatusOperation(operation)) {
+            message = "AI runtime process died while answering a status request.";
+        } else {
+            message = "AI runtime process died while running the model; the request was not retried. "
+                + "Try again, on CPU or with a smaller model.";
+        }
+        JSONObject error = runtimeCrashed("tai_runtime_crashed", message);
+        try {
+            error.put("operation", operation);
+            error.put("retried", false);
+        } catch (JSONException ignored) {
+        }
+        return error;
     }
 
     private final class IncomingHandler extends Handler {
@@ -387,6 +422,8 @@ public final class TaiRuntimeServiceClient {
 
     private static final class PendingRequest {
         final String requestId;
+        /** The {@link TaiRuntimeIpc} operation, named in the error when the runtime dies under it. */
+        final String operation;
         final boolean stream;
         @Nullable final TaiManager.OpenAiStreamSink sink;
         /** Non-null for streaming requests: events are produced on the main-looper Handler and
@@ -395,8 +432,10 @@ public final class TaiRuntimeServiceClient {
         final CountDownLatch done = new CountDownLatch(1);
         @Nullable JSONObject result;
 
-        PendingRequest(@NonNull String requestId, boolean stream, @Nullable TaiManager.OpenAiStreamSink sink) {
+        PendingRequest(@NonNull String requestId, @NonNull String operation, boolean stream,
+                       @Nullable TaiManager.OpenAiStreamSink sink) {
             this.requestId = requestId;
+            this.operation = operation;
             this.stream = stream;
             this.sink = sink;
             this.events = stream ? new LinkedBlockingQueue<>() : null;
