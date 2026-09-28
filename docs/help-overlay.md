@@ -182,7 +182,7 @@ Strings go in `strings.xml` under `help_…`. Titles bold, lines as given.
 | Window chips | `TerminalWindowBar` chip strip | Windows | Tap to pick a window. Tap it again to show its × button. | terminal windows shown |
 | + | `TerminalWindowBar.createWindowButtonView()` | New window | Tap + to open a terminal window. | shown |
 | Stats cluster | `terminal_status_stats_cluster` (box only the visible children) | the visible stats, e.g. CPU · RAM · Weather | Tap one for details. | ≥1 stat visible |
-| Status bar | anchor at a peeking place icon (`StatusBarLensView`) or the bar's end cap | Status bar | Swipe along it to change place. Drag down for the clock and notifications. | always |
+| Status bar | anchor at a peeking place icon (`StatusBarLensView`) or the bar's end cap | Status bar | Hold a page's border and drag to change place. Drag the bar down for the clock and notifications. | always |
 | Pane corner | one corner zone of the active pane (`CornerZones`, 40 dp square) | Pane corners | Hold one for move, maximise, close and this help. (lone pane: Hold one for the pane's controls and this help.) | always |
 | Divider | the split divider view | Divider | Drag to resize the panes. | ≥2 panes |
 | Dock | `apps_bar_viewpager` / `dock_rail_scroll` | Dock | Pull down for the app drawer. (rail: Swipe off the rail for the app drawer.) | shown |
@@ -204,7 +204,7 @@ on the chooser now; this table is still what "Show all" renders.
 |----|-------|---------|--------|--------|
 | `dock` | Everyday | The dock holds your Android apps. | Pull it down for the app drawer. | Show the dock in the Layout editor to see it. |
 | `az` | Everyday | The A–Z row picks an app by its first letter. | Slide along it, then drag up to the app you want. | Show the A–Z row in the Layout editor to see it. |
-| `status` | Everyday | The status bar shows which place you are on. | Swipe along it to change place, or drag it down for the clock. | Show the status bar in the Layout editor to see it. |
+| `status` | Everyday | The status bar shows which place you are on. | Drag it down for the clock; hold a page's border and drag to change place. | Show the status bar in the Layout editor to see it. |
 | `stats` | Everyday | The status widgets show how the phone is doing. | Tap one for details. | Turn a status widget on in Settings to see it. |
 | `corners` | Everyday | Every pane corner holds the controls for that pane, including this help. | Hold a corner, then tap the ? button. | Hold any corner of a pane to see its controls. |
 | `sessions` | Everyday | Sessions group your windows. | Tap the badge to switch. | Show the status bar in the Layout editor to see the badge. |
@@ -221,7 +221,7 @@ on the chooser now; this table is still what "Show all" renders.
 |-----|---------------|-------|-------|-----------|
 | App chips | `TerminalWindowBar` chip strip | Display apps | Tap once to show its × button. | ≥1 chip |
 | Stats cluster | as Terminal | | Tap one for details. | ≥1 stat visible |
-| Status bar | as Terminal | Status bar | Swipe along it to change place. Drag down for the clock and notifications. | always |
+| Status bar | as Terminal | Status bar | Hold a page's border and drag to change place. Drag the bar down for the clock and notifications. | always |
 | Corner tab | the tab that opened the overlay is dismissed; box the corner zone it came from | Corner tab | ⏻ starts or stops the display. ⚙ opens display settings. ? shows this help. | always |
 | Scale rail | `DisplayScaleRailView` | Scale | Drag to resize the display. | shown |
 | Touchpad | `DisplayTouchpadView` | Touchpad | One finger moves and taps. Two fingers scroll, pinch or right-click. Three fingers middle-click or switch windows. | mouse mode on |
@@ -236,7 +236,7 @@ as a topic on Display.
 
 | Id | Group | Purpose | Action | Reveal |
 |----|-------|---------|--------|--------|
-| `status` | Everyday | The status bar shows which place you are on. | Swipe along it to change place, or drag it down for the clock. | Show the status bar in the Layout editor to see it. |
+| `status` | Everyday | The status bar shows which place you are on. | Drag it down for the clock; hold a page's border and drag to change place. | Show the status bar in the Layout editor to see it. |
 | `stats` | Everyday | The status widgets show how the phone is doing. | Tap one for details. | Turn a status widget on in Settings to see it. |
 | `windows` | Everyday | These chips are the apps running on the display. | Tap one to bring it forward, then tap × to close it. | Start the display and open an app to see its chip. |
 | `start` | Everyday | The Linux display runs desktop apps beside your terminal. | Tap to start it. | Stop the display to see this button again. |
@@ -247,7 +247,7 @@ as a topic on Display.
 
 | Box | Measured from | Title | Lines | Only when |
 |-----|---------------|-------|-------|-----------|
-| Status bar | as Terminal | Status bar | Swipe along it to change place. Drag down for the clock and notifications. | always |
+| Status bar | as Terminal | Status bar | Hold a page's border and drag to change place. Drag the bar down for the clock and notifications. | always |
 | Corner tab | as Display | Corner tab | ⚙ opens layout settings. ✎ edits your widgets. ? shows this help. | always |
 | A widget | the first visible widget host in `WidgetGridView` | A widget | Long-press to move or resize it. | ≥1 widget |
 | Empty space | the largest empty cell region of the grid | Empty space | Long-press to add a widget or another page. | any empty cell |
@@ -261,7 +261,7 @@ Empty space → `empty`. Corner tab has no catalogue entry, as on Display. The c
 
 | Id | Group | Purpose | Action | Reveal |
 |----|-------|---------|--------|--------|
-| `status` | Everyday | The status bar shows which place you are on. | Swipe along it to change place, or drag it down for the clock. | Show the status bar in the Layout editor to see it. |
+| `status` | Everyday | The status bar shows which place you are on. | Drag it down for the clock; hold a page's border and drag to change place. | Show the status bar in the Layout editor to see it. |
 | `widget` | Everyday | A widget shows information from an app right on Home. | Long-press it to move or resize it. | Long-press an empty cell to add your first widget. |
 | `empty` | Everyday | Empty space is where a new widget goes. | Long-press it to add a widget or another page. | Move a widget aside to make room. |
 

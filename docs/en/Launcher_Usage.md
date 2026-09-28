@@ -85,22 +85,32 @@ as new attention.
 ## Move between the terminal and the widget grid
 
 The terminal is one of three places in a ring — Widgets, Terminal, Display — so from any of them
-the other two are one step away, one to each side. The status bar is the pager. The icon beside
-the clock names the place you are on — a house for Widgets, a prompt for Terminal, a screen for
-Display — and the other two peek in from the bar's edges on the side each place slides in from.
-Swipe left or right anywhere on the bar and the icons move together: the one arriving takes the
-spot beside the clock as the one that was there leaves. Tap a peeking icon to go there. The Display
-icon reads quieter until a display is running. The row under the clock belongs to the place on
-screen: your session and windows on the terminal, the display's apps on Display, and nothing on
-Widgets, where the widgets speak for themselves. Where the wall rests is where the home screen
-comes back to. **Go to Widgets**, **Go to Terminal** and **Go to Display** are also actions you
-can put on the extra-keys row, on the in-app keyboard, or on a key chord.
+the other two are one step away, one to each side. To move, hold the page's border — the frame
+line around the terminal, the widgets or the display, on any of its four sides — until you feel
+the tick, then drag sideways: the places slide with your finger, and a short drag springs back
+while a longer one, or a quick flick, lands on the next place. The corners are not the border;
+they hold the corner tab. A tap or a swipe on the border without the hold is the page's own — a
+program's mouse drag, a scroll, a text selection — so nothing under it changes. The same gesture
+works in every mode, minimal mode included, and with Fancier Glass on the page tips like a plank
+under your finger as it goes, then lies flat on the place that arrives; the Display place slides
+without the tip.
+
+The status bar shows where you are. The icon beside the clock names the place you are on — a
+house for Widgets, a prompt for Terminal, a screen for Display — and the other two peek in from
+the bar's edges on the side each place slides in from; the icons move with the places as you
+drag. Tap a peeking icon to go there. The Display icon reads quieter until a display is running.
+The row under the clock belongs to the place on screen: your session and windows on the terminal,
+the display's apps on Display, and nothing on Widgets, where the widgets speak for themselves.
+Where the wall rests is where the home screen comes back to. **Go to Widgets**, **Go to
+Terminal** and **Go to Display** are also actions you can put on the extra-keys row, on the
+in-app keyboard, or on a key chord.
 
 Exactly one place is on screen at a time, and the terminal never changes size for the others, so
 nothing reflows in your shells when you move. Your session keeps running while you are away.
 
 A swipe that starts on the window pills scrolls those, and only those. When the pills fit the row,
-or the strip already rests at the end you pull past, the swipe moves the wall instead.
+or the strip already rests at the end you pull past, the swipe moves the wall instead. Swiping
+the rest of the bar sideways does nothing; it folds and unfolds with a drag across it.
 
 The widget grid holds Android home-screen widgets. Long-press an empty spot to add one, long-press
 a widget to move or resize it, and swipe inside the grid to reach its other pages. Drop a widget on
@@ -115,7 +125,8 @@ terminal.
 
 The Display place shows the Linux display. Its keyboard, hardware or on-screen, is the display's
 entirely: every key and every chord reaches the Linux program, and the launcher's shortcuts stay
-out of the way. Leave it by swiping the status bar, tapping a place icon or pressing Home. The
+out of the way. Leave it by holding its border and dragging, tapping a place icon or pressing
+Home. The
 place remembers whether the keyboard was up when you left. [The Linux display](X11_Display.md)
 covers turning it on, its menu, the touchpad and GPU acceleration.
 
@@ -131,13 +142,10 @@ it off, and nothing else does. It stays on until you turn it off, across restart
 comes back as each place last had it. You can still bring the keyboard up while it is on: a tap on
 the terminal raises it as usual, and it goes down again when you move to another place.
 
-To move to another place while minimal, swipe sideways along the page's top or bottom edge. A
-swipe that starts anywhere else, or that turns up or down first, is the page's own — a program's
-mouse drag, a scroll, a text selection — and the corners stay the corner tab's. With Fancier Glass
-on, the terminal pane tips like a plank under your finger as it goes, and lies flat again on the
-place that arrives; the Display place slides without the tip.
+Moving to another place while minimal is the same hold-and-drag on the page's border as anywhere
+else; the border stays drawn in minimal mode so there is a line to find.
 
-Swiping between places moves the dock and the keyboard with the wall: coming from Widgets to a
+Moving between places moves the dock and the keyboard with the wall: coming from Widgets to a
 terminal left with its keyboard up, the keys rise with the slide and the dock rides up on them.
 
 ## Launch Android apps

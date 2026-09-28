@@ -63,7 +63,8 @@ when its setting is on; Display only in an X11 build.
 
 Gestures on the bar, on every place:
 
-- Swipe along the bar: pages the wall. Commits at 35 % of a page or a fast fling. Tour card 1.
+- Swipe along the bar: nothing. The wall is paged by holding a page's border and dragging
+  (`wall/BorderDrag`); it commits at 35 % of a page or a flick of 400 dp/s. Tour card 1.
 - Drag across the bar (down, then up): expands and collapses it. Remembered per place. Tour card 2.
 - Tap a peeking neighbour icon: slides the wall to that place.
 - Tap a stat: one shared detail card drops from the bar's bottom edge, dismissed by an outside tap.
