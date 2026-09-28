@@ -76,8 +76,9 @@ public class TaiBenchGuardRulesTest {
 
     @Test
     public void cooldown_firstEntryNeverWaits() {
-        TaiBenchGuardRules.Snapshot baseline = snapshot(100, false, 1, 0.1f);
-        TaiBenchGuardRules.Snapshot hot = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_MODERATE, 0.9f);
+        // Hotter than the baseline, but below MODERATE: only the cool-down could hold it.
+        TaiBenchGuardRules.Snapshot baseline = snapshot(100, false, 0, 0.1f);
+        TaiBenchGuardRules.Snapshot hot = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.9f);
         TaiBenchGuardRules.Result result = TaiBenchGuardRules.beforePhase(
             TaiBenchSuite.PHASE_LOAD, true, hot, baseline, 0L, 0L, false);
         assertEquals(TaiBenchGuard.CONTINUE, result.decision.action);

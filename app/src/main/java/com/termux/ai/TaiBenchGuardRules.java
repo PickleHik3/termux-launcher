@@ -91,8 +91,8 @@ final class TaiBenchGuardRules {
      * the running battery/thermal rules. A battery stop or a SEVERE+ thermal stop is checked first
      * and wins over a cool-down wait in progress.
      *
-     * @param waitStartedMs when the current wait (cool-down or thermal pause) began, or {@code 0}
-     *                       if this call might start one; {@code 0} reads as "just started" (no
+     * @param waitStartedMs when the current wait (cool-down or thermal pause) began, or a negative value
+     *                       if this call might start one, which reads as "just started" (no
      *                       time has passed yet)
      * @param nowMs          the clock's reading for this call
      */
@@ -105,7 +105,7 @@ final class TaiBenchGuardRules {
         if (now.thermalStatus >= THERMAL_STATUS_SEVERE) {
             return new Result(TaiBenchGuard.Decision.stop("thermal"), false);
         }
-        long elapsedMs = waitStartedMs <= 0L ? 0L : Math.max(0L, nowMs - waitStartedMs);
+        long elapsedMs = waitStartedMs < 0L ? 0L : Math.max(0L, nowMs - waitStartedMs);
         boolean cooldownApplies = TaiBenchSuite.PHASE_LOAD.equals(phase) && !isFirstEntry;
         if (cooldownApplies) {
             // An entirely unknown thermal reading (API < 29, or the baseline snapshot never got

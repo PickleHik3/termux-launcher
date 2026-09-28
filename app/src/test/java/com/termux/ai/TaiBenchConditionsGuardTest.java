@@ -113,12 +113,12 @@ public class TaiBenchConditionsGuardTest {
         TaiBenchSuite.EntryPlan second = entry("m2");
 
         nowMs = 0L;
-        current = new TaiBenchGuardRules.Snapshot(90, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.10f);
+        current = new TaiBenchGuardRules.Snapshot(90, false, 0, 0.10f);
         guard.beforePhase(TaiBenchSuite.PHASE_LOAD, first);
         guard.entryStarted(first);
         guard.entryFinished(first);
 
-        current = new TaiBenchGuardRules.Snapshot(88, false, TaiBenchGuardRules.THERMAL_STATUS_MODERATE, 0.90f);
+        current = new TaiBenchGuardRules.Snapshot(88, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.90f);
         assertEquals(TaiBenchGuard.PAUSE, guard.beforePhase(TaiBenchSuite.PHASE_LOAD, second).action);
         nowMs += 5 * 60_000L; // the cool-down cap, still hot
         TaiBenchGuard.Decision decision = guard.beforePhase(TaiBenchSuite.PHASE_LOAD, second);

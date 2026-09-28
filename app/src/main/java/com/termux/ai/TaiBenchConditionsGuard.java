@@ -22,12 +22,15 @@ import java.util.function.Supplier;
  * key throughout, since {@link TaiBenchSuite.EntryPlan} is reused as-is for a self-heal retry.
  */
 final class TaiBenchConditionsGuard implements TaiBenchGuard {
+    private static final long NO_WAIT = -1L;
+
     @NonNull private final Supplier<TaiBenchGuardRules.Snapshot> reader;
     @NonNull private final LongSupplier clock;
 
     @Nullable private TaiBenchGuardRules.Snapshot baseline;
     @Nullable private TaiBenchSuite.EntryPlan firstEntry;
-    private long waitStartedMs;
+    /** When the current wait began; {@link #NO_WAIT} when none is running (0 is a valid clock reading). */
+    private long waitStartedMs = NO_WAIT;
     private final AtomicBoolean skipRequested = new AtomicBoolean();
     private final Set<TaiBenchSuite.EntryPlan> warmEntries =
         java.util.Collections.newSetFromMap(new IdentityHashMap<>());
@@ -51,14 +54,14 @@ final class TaiBenchConditionsGuard implements TaiBenchGuard {
         boolean isFirst = entry == firstEntry;
         boolean cooldownApplies = TaiBenchSuite.PHASE_LOAD.equals(phase) && !isFirst;
         boolean skip = cooldownApplies && skipRequested.getAndSet(false);
-        long waitStart = waitStartedMs == 0L ? now : waitStartedMs;
+        long waitStart = waitStartedMs == NO_WAIT ? now : waitStartedMs;
         TaiBenchGuardRules.Result result = TaiBenchGuardRules.beforePhase(
             phase, isFirst, snapshot, baseline, waitStart, now, skip);
         if (TaiBenchGuard.PAUSE.equals(result.decision.action)) {
             waitStartedMs = waitStart;
             return withDetail(result.decision, snapshot);
         }
-        waitStartedMs = 0L;
+        waitStartedMs = NO_WAIT;
         if (result.warmStart) warmEntries.add(entry);
         return result.decision;
     }
