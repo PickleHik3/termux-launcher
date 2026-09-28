@@ -404,8 +404,10 @@ public class TerminalPaneController {
         mMotionOverlay.getLocationOnScreen(mCursorOverlayLocationScratch);
         float cellLeft = mCursorViewLocationScratch[0] - mCursorOverlayLocationScratch[0]
             + view.getPointX(emulator.getCursorCol());
+        // The row's painted top, not row * height: the grid is drawn offset (anchored to the
+        // bottom, travelling, smooth-scrolled) and starts its rows an ascent's slack down.
         float cellTop = mCursorViewLocationScratch[1] - mCursorOverlayLocationScratch[1]
-            + row * cellHeight;
+            + view.getRowTopPixels(row);
         out.left = cellLeft;
         out.top = cellTop;
         out.right = cellLeft + cellWidth;

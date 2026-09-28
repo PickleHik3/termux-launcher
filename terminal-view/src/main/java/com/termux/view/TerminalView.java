@@ -2798,11 +2798,7 @@ public final class TerminalView extends View {
                 mTextSelectionCursorController.getSelectors(sel);
             }
             final float scrollOffset = mScrollOffsetPixels;
-            // A travelling grid is drawn from where it stood when the travel began, displaced
-            // toward where the settle's resize will put it (see mTravelActive).
-            final float drawOffset = (mTravelActive
-                ? mTravelAnchorOffsetPx + mTravelDisplacementPx : getVerticalContentOffset())
-                - scrollOffset;
+            final float drawOffset = currentDrawOffset();
             computeEdgeColorsIfEnabled();
             final boolean paintingPaddingFill = mPaddingFillEnabled && mEdgeColorsColumns > 0;
             final boolean canvasTranslated = drawOffset != 0f || paintingPaddingFill
@@ -3247,6 +3243,33 @@ public final class TerminalView extends View {
      * and the leftover returns to the bottom, under the app's last row — anchoring such an app to
      * the bottom would instead float its top border below the pane's arc.
      */
+    /**
+     * How far down the grid is drawn this frame. A travelling grid is drawn from where it stood
+     * when the travel began, displaced toward where the settle's resize will put it (see
+     * mTravelActive); a smooth scroll shifts it by its pixel offset.
+     */
+    private float currentDrawOffset() {
+        return (mTravelActive
+            ? mTravelAnchorOffsetPx + mTravelDisplacementPx : getVerticalContentOffset())
+            - mScrollOffsetPixels;
+    }
+
+    /**
+     * The top of screen row {@code screenRow} (0 is the top visible row) as this frame draws it,
+     * in this view's pixels: with the grid's offset, a travel's displacement, a smooth scroll and
+     * the renderer's ascent slack, so whatever tracks the cursor lands on the painted cell.
+     */
+    public float getRowTopPixels(int screenRow) {
+        if (mRenderer == null) return 0f;
+        return rowTop(currentDrawOffset(), mRenderer.mFontLineSpacingAndAscent,
+            mRenderer.mFontLineSpacing, screenRow);
+    }
+
+    /** The renderer's row top: it starts rows {@code spacingAndAscent} down from the draw offset. */
+    static float rowTop(float drawOffset, int spacingAndAscent, int lineSpacing, int screenRow) {
+        return drawOffset + spacingAndAscent + (float) screenRow * lineSpacing;
+    }
+
     public float getVerticalContentOffset() {
         if (mEmulator == null || mRenderer == null || mEmulator.isAlternateBufferActive()) {
             return 0f;

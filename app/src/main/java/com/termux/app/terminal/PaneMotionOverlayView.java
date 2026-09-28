@@ -20,7 +20,6 @@ import android.view.animation.PathInterpolator;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.terminal.TerminalEmulator;
 import com.termux.view.KittyCursorTrail;
 
 import java.util.ArrayList;
@@ -238,10 +237,11 @@ public final class PaneMotionOverlayView extends View {
         mCursorTargetValid = true;
         RectF previous = mPreviousTrailBounds;
         previous.set(cursorTrailBounds());
-        // The emulator's own clock, not the Choreographer frame time: it stamps
-        // TerminalEmulator#getCursorPositionChangedAtMillis() on that clock, and comparing two
-        // different clocks' epochs against each other would make the delay gate meaningless.
-        long now = TerminalEmulator.monotonicMillis();
+        // The frame's own vsync time, so every step is one even frame interval rather than
+        // whenever this callback happened to run. It is System.nanoTime's clock, the same one
+        // {@code TerminalEmulator#monotonicMillis()} stamps getCursorPositionChangedAtMillis() on, so the
+        // delay gate still compares like with like.
+        long now = frameTimeNanos / 1_000_000L;
         boolean needsFrame = mCursorTrail.update(now, mCursorTarget.left, mCursorTarget.top,
             mCursorTarget.right, mCursorTarget.bottom, mCursorTarget.dectcemOn,
             mCursorTarget.positionChangedAtMillis, false, mCursorTarget.cellWidthPx,
