@@ -140,6 +140,61 @@ public class MnnTaiRuntimeConfigTest {
     }
 
     @Test
+    public void mergedConfig_eagleSpeculativeTypeSurvivesAutoAndIsDroppedOnlyWhenExplicitlyOff() throws Exception {
+        File dir = new File(context.getCacheDir(), "mnn-config-eagle");
+        dir.mkdirs();
+        File config = new File(dir, "config.json");
+        write(config, "{\"llm_model\":\"llm.mnn\",\"llm_weight\":\"llm.mnn.weight\","
+            + "\"tokenizer_file\":\"tokenizer.mtok\",\"speculative_type\":\"eagle\",\"hidden_states\":true,"
+            + "\"jinja\":{\"chat_template\":\"template\"}}");
+        touch(new File(dir, "llm.mnn"));
+        touch(new File(dir, "llm.mnn.weight"));
+        touch(new File(dir, "eagle.mnn"));
+        touch(new File(dir, "tokenizer.mtok"));
+
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        TaiModelSpec spec = model(config);
+
+        // Auto (null): the package's own Eagle setup is untouched.
+        TaiRuntimeOptions auto = new TaiRuntimeOptions(null, null, null, null,
+            null, null, null, null, null, null, null, null);
+        JSONObject autoMerged = new JSONObject((String) invokeMergedConfig(runtime, config, spec, auto));
+        assertEquals("eagle", autoMerged.getString("speculative_type"));
+        assertTrue(autoMerged.getBoolean("hidden_states"));
+
+        // Explicit true on a package that already has it: a no-op, same as auto.
+        TaiRuntimeOptions on = new TaiRuntimeOptions(null, null, null, null,
+            null, null, null, null, null, null, true, null);
+        JSONObject onMerged = new JSONObject((String) invokeMergedConfig(runtime, config, spec, on));
+        assertEquals("eagle", onMerged.getString("speculative_type"));
+
+        // Explicit false: speculative_type is dropped so the engine decodes plainly;
+        // hidden_states is left alone (MNN reads it independently of Eagle).
+        TaiRuntimeOptions off = new TaiRuntimeOptions(null, null, null, null,
+            null, null, null, null, null, null, false, null);
+        JSONObject offMerged = new JSONObject((String) invokeMergedConfig(runtime, config, spec, off));
+        assertFalse(offMerged.has("speculative_type"));
+        assertTrue(offMerged.getBoolean("hidden_states"));
+    }
+
+    @Test
+    public void mergedConfig_explicitTrueOnAPlainPackageIsANoOp() throws Exception {
+        File dir = new File(context.getCacheDir(), "mnn-config-plain-speculative");
+        dir.mkdirs();
+        File config = configFile(dir);
+        touch(new File(dir, "llm.mnn"));
+        touch(new File(dir, "llm.mnn.weight"));
+        touch(new File(dir, "tokenizer.mtok"));
+
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        TaiRuntimeOptions on = new TaiRuntimeOptions(null, null, null, null,
+            null, null, null, null, null, null, true, null);
+        JSONObject merged = new JSONObject((String) invokeMergedConfig(runtime, config, model(config), on));
+
+        assertFalse(merged.has("speculative_type"));
+    }
+
+    @Test
     public void settingsAutoLeavesMnnConfigValuesNull() {
         TaiRuntimeOptions options = new TaiSettings(context).getRuntimeOptions(TaiModelSpec.BACKEND_MNN_LLM, "mnn-auto");
 
@@ -150,6 +205,7 @@ public class MnnTaiRuntimeConfigTest {
         assertNull(options.temperature);
         assertNull(options.topK);
         assertNull(options.topP);
+        assertNull(options.speculativeDecodingEnabled);
     }
 
     @Test

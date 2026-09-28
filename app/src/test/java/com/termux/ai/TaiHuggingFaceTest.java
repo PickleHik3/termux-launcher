@@ -58,6 +58,23 @@ public class TaiHuggingFaceTest {
         assertEquals(1, source.candidates(metadata("quant/config.json", "quant/llm.mnn")).length());
     }
 
+    @Test public void marksAnEagleMnnPackageAndSumsItsFilesInsteadOfConfigJsonAlone() throws Exception {
+        TaiHuggingFace source = TaiHuggingFace.parse("https://huggingface.co/taobao-mnn/Qwen3-VL-2B-Instruct-Eagle3-MNN");
+        JSONArray result = source.candidates(metadata("config.json", "llm.mnn", "llm.mnn.weight",
+            "eagle.mnn", "eagle.mnn.weight", "eagle_fc.mnn", "eagle_fc.mnn.weight", "eagle_d2t.mnn", "tokenizer.txt"));
+        assertEquals(1, result.length());
+        JSONObject candidate = result.getJSONObject(0);
+        assertEquals("eagle", candidate.getString("speculative"));
+        // Nine sibling files at 20 bytes each ("size" in metadata()), not config.json's own 20.
+        assertEquals(180, candidate.getLong("sizeBytes"));
+    }
+
+    @Test public void plainMnnPackageIsNotMarkedSpeculative() throws Exception {
+        TaiHuggingFace source = TaiHuggingFace.parse("https://huggingface.co/org/model");
+        JSONArray result = source.candidates(metadata("config.json", "llm.mnn", "llm.mnn.weight"));
+        assertFalse(result.getJSONObject(0).has("speculative"));
+    }
+
     @Test public void rejectsTraversalAndWrongHosts() {
         assertNull(TaiHuggingFace.parse("https://huggingface.co.evil/org/model"));
         assertNull(TaiHuggingFace.parse("https://huggingface.co/org/model/resolve/main/%2E%2E/config.json"));

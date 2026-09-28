@@ -60,10 +60,12 @@ Common capability names are:
 | `reasoning` | Intended for multi-step reasoning |
 | `multilingual` | Intended for more than one language |
 | `llm_thinking` | Supports the backend's thinking mode |
-| `speculative_decoding` | Supports the LiteRT speculative-decoding option |
+| `speculative_decoding` | Faster replies from the same answers: a LiteRT model with the runtime flag, or an MNN package built around an EAGLE-3 draft head (a `config.json` with `speculative_type` and its `eagle*.mnn` files) |
 | `mobile_actions` | Tuned to choose from compatible Android action tools |
 
 `_capabilities` in `/v1/models` is the important field for apps. `_source_capabilities` describes upstream claims, while `_endpoint_capabilities` describes what this APK can currently provide.
+
+A model with `speculative_decoding` shows a "Speculative decoding" switch in its parameters screen. Left on auto, the model keeps its own setup: a LiteRT model with the flag on, or an MNN EAGLE-3 package decoding with its draft head. Turning it off makes an MNN package fall back to plain decoding (a LiteRT model already turns off with the same flag); turning it on has no effect on a package that never shipped a draft head.
 
 ### Images and audio
 

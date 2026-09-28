@@ -12900,6 +12900,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             })
             .create();
         mTerminalActionDialog = dialog;
+        // A dialog is its own window; in full screen it has to hide the system bars too, or they
+        // come back while it is open and the activity lays out again for insets it then loses.
+        android.view.Window dialogWindow = dialog.getWindow();
+        if (dialogWindow != null && mProperties != null && mProperties.isUsingFullScreen()) {
+            WindowInsetsControllerCompat dialogInsets = WindowCompat.getInsetsController(
+                dialogWindow, dialogWindow.getDecorView());
+            dialogInsets.setSystemBarsBehavior(
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+            dialogInsets.hide(Type.systemBars());
+        }
         dialog.show();
         return true;
     }
@@ -16448,6 +16458,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * lets the strip's swipe — the bar's own expand swipe — through on every edge, since that swipe
      * is the way out of the mode.
      */
+    private static final long MINIMAL_STRIP_FADE_MS = 150L;
+
     private void applyMinimalStatusChrome() {
         boolean minimal = isChromeMinimal();
         View host = findViewById(R.id.terminal_window_bar_host);
@@ -16456,6 +16468,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 (com.termux.app.statusbar.StatusBarSwipeLayout) host;
             swipeHost.setExpansionAllowed(minimal
                 || com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
+        }
+        // The strip stays to be swiped from, but draws nothing: no glass, no pull hint. A view
+        // at alpha 0 still takes touches, so the swipe out of the mode and the wall's paging
+        // from it both keep working.
+        if (host != null) {
+            float alpha = minimal ? 0f : 1f;
+            if (host.getAlpha() != alpha) {
+                host.animate().cancel();
+                host.animate().alpha(alpha).setDuration(MINIMAL_STRIP_FADE_MS).start();
+            }
         }
         int visibility = minimal ? View.INVISIBLE : View.VISIBLE;
         View row = findViewById(R.id.terminal_status_row);

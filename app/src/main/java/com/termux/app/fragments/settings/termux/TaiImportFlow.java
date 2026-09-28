@@ -120,6 +120,8 @@ final class TaiImportFlow {
         int candidateCount;
         /** What the model card says about the chosen file, quoted ({@link TaiImportCard}); "" when nothing. */
         String cardQuote = "";
+        /** "eagle" when the chosen candidate ships an EAGLE-3 draft head beside it; "" otherwise. */
+        String speculative = "";
         Processor processor = Processor.AUTO;
         TaiModelProfile customProfile;
 
@@ -150,6 +152,11 @@ final class TaiImportFlow {
             groundedCapabilities.clear();
             groundedCapabilities.putAll(TaiImportFacts.groundedCapabilities(identity(), factFileName(), modelFacts,
                 candidateCount <= 1));
+            // Speculative decoding is a property of the package (its config.json and the eagle.mnn
+            // beside it), never something the user declares, so it is grounded, not guessed.
+            if ("eagle".equals(speculative)) {
+                groundedCapabilities.put(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING, R.string.termux_ai_import_source_package);
+            }
             capabilities.clear();
             capabilities.addAll(groundedCapabilities.keySet());
             LinkedHashSet<String> guessed = TaiImportGuess.capabilities(guessIdentity);
@@ -496,6 +503,9 @@ final class TaiImportFlow {
             if (com.termux.ai.TaiImportProfiles.artisanBundle(file)) {
                 facts.add(context.getString(R.string.termux_ai_import_variant_artisan));
             }
+            if (candidate != null && "eagle".equals(candidate.optString("speculative", ""))) {
+                facts.add(context.getString(R.string.termux_ai_import_cap_speculative));
+            }
             StringBuilder hint = new StringBuilder(join(facts));
             String quote = candidate == null ? "" : candidate.optString("cardQuote", "");
             if (!quote.isEmpty()) hint.append('\n').append(context.getString(R.string.termux_ai_import_card_quote, quote));
@@ -546,6 +556,7 @@ final class TaiImportFlow {
         draft.fileName = candidate.optString("file", "");
         draft.sizeBytes = candidate.optLong("sizeBytes", -1L);
         draft.cardQuote = candidate.optString("cardQuote", "");
+        draft.speculative = candidate.optString("speculative", "");
         // The name the file itself carries when it says more than the repository's: the VL file of
         // litert-community/Qwen3.5-2B is added as "Qwen3.5 2B VL", its text file as "Qwen3.5 2B".
         // Not on the way to the download, where the name is the one the user confirmed.
@@ -674,6 +685,9 @@ final class TaiImportFlow {
         String[] keys = capabilityKeys();
         int[] titles = capabilityTitles();
         for (int i = 0; i < keys.length; i++) {
+            // Speculative decoding is detected, not declared: it shows only as a chip above,
+            // never as a box the user could tick on a package that does not have it.
+            if (TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING.equals(keys[i])) continue;
             CheckBox box = new CheckBox(context);
             box.setText(titles[i]);
             box.setTag(keys[i]);
@@ -801,6 +815,10 @@ final class TaiImportFlow {
         if (TaiImportGuess.qwenThinking(draft.identity() + " " + modelId())) {
             draft.capabilities.add("reasoning");
             draft.capabilities.add(TaiModelSpec.CAPABILITY_LLM_THINKING);
+        }
+        // No checkbox clears this one; it survives the rebuild exactly when the package still grounds it.
+        if (draft.groundedCapabilities.containsKey(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING)) {
+            draft.capabilities.add(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING);
         }
     }
 
@@ -1267,14 +1285,15 @@ final class TaiImportFlow {
     private static String[] capabilityKeys() {
         return new String[]{TaiModelSpec.CAPABILITY_TEXT_CHAT, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS,
             TaiModelSpec.CAPABILITY_IMAGE_INPUT, TaiModelSpec.CAPABILITY_AUDIO_INPUT, TaiModelSpec.CAPABILITY_TOOL_USE,
-            TaiModelSpec.CAPABILITY_CODE, "reasoning", "multilingual"};
+            TaiModelSpec.CAPABILITY_CODE, "reasoning", "multilingual", TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING};
     }
 
     @NonNull
     private static int[] capabilityTitles() {
         return new int[]{R.string.termux_ai_import_cap_chat, R.string.termux_ai_import_cap_embeddings,
             R.string.termux_ai_import_cap_image, R.string.termux_ai_import_cap_audio, R.string.termux_ai_import_cap_tools,
-            R.string.termux_ai_import_cap_code, R.string.termux_ai_import_cap_reasoning, R.string.termux_ai_import_cap_multilingual};
+            R.string.termux_ai_import_cap_code, R.string.termux_ai_import_cap_reasoning, R.string.termux_ai_import_cap_multilingual,
+            R.string.termux_ai_import_cap_speculative};
     }
 
     /** "Chat · Image input": capabilities in plain words, in the Advanced list's order. */

@@ -64,7 +64,7 @@ public class TaiSettingsParameterTest {
         Map<String, TaiSettings.ParameterSpec> fields = schema.fields();
 
         assertEquals(TaiModelSpec.BACKEND_MNN_LLM, schema.backend);
-        assertEquals(9, fields.size());
+        assertEquals(10, fields.size());
         assertArrayEquals(new String[] {"Auto", "CPU", "OpenCL"}, fields.get(TaiSettings.FIELD_ACCELERATOR).options);
         assertIntegerSpec(fields.get(TaiSettings.FIELD_CONTEXT_WINDOW), "4096", 1024, 32_768);
         assertIntegerSpec(fields.get(TaiSettings.FIELD_THREAD_COUNT), "4", 1, 16);
@@ -74,6 +74,7 @@ public class TaiSettingsParameterTest {
         assertDecimalSpec(fields.get(TaiSettings.FIELD_TEMPERATURE), "0.80", 0.0d, 2.0d);
         assertDecimalSpec(fields.get(TaiSettings.FIELD_TOP_P), "0.90", 0.0d, 1.0d);
         assertIntegerSpec(fields.get(TaiSettings.FIELD_TOP_K), "40", 1, 100);
+        assertBooleanSpec(fields.get(TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING), "false");
 
         TaiRuntimeOptions options = settings.getRuntimeOptions(TaiModelSpec.BACKEND_MNN_LLM, null);
         assertNull(options.accelerator);
