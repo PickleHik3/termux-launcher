@@ -177,6 +177,31 @@ public class TaiBenchLeaderboardTest {
         assertNull(TaiBenchLeaderboard.latestMeasured(benchmarks(stopped), key));
     }
 
+    @Test
+    public void bestSpeedByModelTakesTheFastestRankedRunPerModelAcrossAccelerators() throws JSONException {
+        JSONObject cpuRun = record("qwen", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1000L, 12.4, 200.0, 900L, true, "0.2.40", "3.6.1", null);
+        JSONObject gpuRun = record("qwen", TaiModelSpec.BACKEND_MNN_LLM, "gpu", 2000L, 21.0, 200.0, 900L, true, "0.2.40", "3.6.1", null);
+        JSONObject other = record("phi", TaiModelSpec.BACKEND_LITERT_LM, "cpu", 3000L, 7.49, 200.0, 900L, true, "0.2.40", "0.9.0", null);
+        java.util.Map<String, Double> best = TaiBenchLeaderboard.bestSpeedByModel(benchmarks(cpuRun, gpuRun, other));
+        assertEquals(21.0, best.get("qwen"), 1e-9);
+        assertEquals(7.49, best.get("phi"), 1e-9);
+        assertEquals(2, best.size());
+    }
+
+    @Test
+    public void bestSpeedByModelIsEmptyWithNoBenchmarksOrNoRankedRows() {
+        assertTrue(TaiBenchLeaderboard.bestSpeedByModel(null).isEmpty());
+    }
+
+    @Test
+    public void formatTpsValueRoundsToAnIntegerAtTenAndOneDecimalBelowIt() {
+        assertEquals("21", TaiBenchLeaderboard.formatTpsValue(21.0));
+        assertEquals("10", TaiBenchLeaderboard.formatTpsValue(9.96));
+        assertEquals("7.5", TaiBenchLeaderboard.formatTpsValue(7.49));
+        assertEquals("1", TaiBenchLeaderboard.formatTpsValue(1.0));
+        assertEquals("0.3", TaiBenchLeaderboard.formatTpsValue(0.3));
+    }
+
     private static List<String> ids(List<TaiBenchLeaderboard.Row> rows) {
         String[] ids = new String[rows.size()];
         for (int i = 0; i < rows.size(); i++) ids[i] = rows.get(i).modelId;

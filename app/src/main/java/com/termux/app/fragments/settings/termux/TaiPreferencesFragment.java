@@ -136,6 +136,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         configureOverrides(context);
         configureEndpointPreferences(context);
         configureModelCentreRow();
+        configureBenchmarkRow();
         configureHuggingFaceToken();
         configureAdvancedSection(context);
         configureLanToggle(context);
@@ -203,6 +204,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         if (context != null) {
             refreshTaiPage(context);
             handler.postDelayed(refreshRuntimeRunnable, 2000L);
+            refreshBenchmarkRow(context);
         }
     }
 
@@ -766,6 +768,48 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         centre.setOnPreferenceClickListener(preference -> {
             TaiModelCentreFragment.open(getActivity(), TaiModelCentreFragment.SEGMENT_INSTALLED);
             return true;
+        });
+    }
+
+    private void configureBenchmarkRow() {
+        Preference row = findPreference("tai_benchmark");
+        if (row == null) return;
+        row.setOnPreferenceClickListener(preference -> {
+            TaiBenchHomeFragment.open(getActivity(), null);
+            return true;
+        });
+    }
+
+    /**
+     * Reads the last run and the fastest ranked speed off the main thread and, when there is a
+     * result to show, appends it to the Benchmark row's summary. Cheap enough for {@link #onResume};
+     * left at the plain summary otherwise.
+     */
+    private void refreshBenchmarkRow(@NonNull Context context) {
+        Preference row = findPreference("tai_benchmark");
+        if (row == null) return;
+        Context appContext = context.getApplicationContext();
+        runtimeActionExecutor.execute(() -> {
+            JSONObject benchmarks;
+            try {
+                benchmarks = TaiManager.getInstance(appContext).benchmarks();
+            } catch (JSONException | RuntimeException e) {
+                benchmarks = null;
+            }
+            TaiBenchLeaderboard.Board board = TaiBenchLeaderboard.read(benchmarks, TaiBenchHomeFragment.versions());
+            double bestTps = board.bestTps();
+            long lastRunMs = board.lastRunMs;
+            handler.post(() -> {
+                if (!isAdded()) return;
+                Preference current = findPreference("tai_benchmark");
+                if (current == null) return;
+                if (bestTps > 0.0 && lastRunMs > 0L) {
+                    current.setSummary(getString(R.string.tai_bench_pref_summary_run,
+                        TaiBenchLeaderboard.formatTpsValue(bestTps), TaiBenchViews.ago(lastRunMs)));
+                } else {
+                    current.setSummary(R.string.tai_bench_pref_summary);
+                }
+            });
         });
     }
 

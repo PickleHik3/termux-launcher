@@ -202,5 +202,5 @@ The recommended downloads come from the signed remote catalogue (`TaiRemoteCatal
    - JVM tests for the statistics and the store.
 2. **Guards (S):** battery and thermal reading, the pause and stop rules, the cool-down, per-phase time limits.
 3. **Screens (M):** Home + leaderboard, Choose (with the filter), Check, Run with the live view, Cool-down, Result + history. Built 2026-09-28 (see "Screens as built"); entry points are slice 4.
-4. **Wiring (S):** the On-device AI row, the Model centre menu item and speed pill, the API route.
+4. **Wiring (S):** the On-device AI row, the Model centre menu item and speed pill, the API route. Done: the Models zone's Benchmark row opens Home (with the last run/best tok/s once read); each installed chat row's ⋯ menu gets a Benchmark item that preselects that model; installed chat rows carry a quiet speed pill for their best ranked writing speed, tappable into that model's result. The API route already existed (slice 1).
 5. **Recommended set (S):** verify on pong, then publish through the remote catalogue.
