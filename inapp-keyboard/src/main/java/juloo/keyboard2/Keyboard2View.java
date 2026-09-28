@@ -20,7 +20,6 @@ import android.util.AttributeSet;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewConfiguration;
 import android.view.animation.LinearInterpolator;
 import java.util.Objects;
 import java.util.ArrayList;
@@ -129,46 +128,6 @@ public class Keyboard2View extends View
   private TapResolver _tapResolver;
   private TapGeometry _tapGeometry;
 
-  /**
-   * Host hook for presses that land in the strip above the first row of keys.
-   * Local addition, see UPSTREAM.md. Upstream treats that strip as no key at
-   * all (its slop begins at [Config.marginTopPx]); the host may claim a press
-   * there for a gesture of its own, after which the rest of that pointer's
-   * stream goes to the delegate and never reaches [Pointers]. A press on a key
-   * is never offered, so key swipes are untouched.
-   */
-  public interface TopEdgeTouchDelegate
-  {
-    /**
-     * A primary press landed above the drawn top of the first row's caps.
-     * [nullBandPx] is where upstream's key slop begins (the strip above it
-     * hits no key), [firstCapTopPx] where the first row's caps are drawn; both
-     * are view y coordinates. Return true to take the stream.
-     */
-    boolean onTopEdgeTouchDown(MotionEvent event, float nullBandPx,
-        float firstCapTopPx);
-
-    /** Every later event of a taken stream, up to and including UP or CANCEL. */
-    void onTopEdgeTouchEvent(MotionEvent event);
-
-    /**
-     * A lone press that hit no key — the gap between keys, the side margins, the
-     * strip above the first row when [onTopEdgeTouchDown] declined it — was
-     * released where it landed, inside the touch slop. The stream itself went
-     * to [Pointers] exactly as upstream's would (where it moves nothing), so
-     * this is only the host's cue; [x] and [y] are view coordinates.
-     */
-    default void onBackgroundTap(float x, float y) {}
-  }
-
-  private TopEdgeTouchDelegate _topEdgeDelegate;
-  private boolean _topEdgeOwnsStream;
-  /** The one pointer resting on no key, for [TopEdgeTouchDelegate.onBackgroundTap]; -1 for none. */
-  private int _backgroundPointerId = -1;
-  private float _backgroundDownX;
-  private float _backgroundDownY;
-  private float _backgroundTapSlopPx;
-
   private static final long PRESS_RAMP_MS = 60L;
   private static final long RELEASE_FADE_MS = 150L;
   private static final long LAUNCH_WAVE_TRAVEL_MS = 250L;
@@ -225,7 +184,6 @@ public class Keyboard2View extends View
   private void initialize()
   {
     setOnTouchListener(this);
-    _backgroundTapSlopPx = ViewConfiguration.get(getContext()).getScaledTouchSlop();
     _trailPaint.setStyle(Paint.Style.STROKE);
     _trailPaint.setStrokeCap(Paint.Cap.ROUND);
     _fxFillPaint.setStyle(Paint.Style.FILL);
@@ -680,66 +638,6 @@ public class Keyboard2View extends View
     requireMainThread();
     _tapResolver = resolver;
     _tapGeometry = null;
-  }
-
-  /** Offer presses above the first row to [delegate]; null drops the hook. */
-  public void setTopEdgeTouchDelegate(TopEdgeTouchDelegate delegate)
-  {
-    requireMainThread();
-    _topEdgeDelegate = delegate;
-    _topEdgeOwnsStream = false;
-    _backgroundPointerId = -1;
-  }
-
-  /** Where upstream's key slop begins: above this y no key is hit. */
-  public float topEdgeNullBandPx()
-  {
-    return getPaddingTop() + _config.marginTopPx;
-  }
-
-  /**
-   * The y at which the first row's caps are drawn, mirroring [onDraw]: the
-   * slop between here and [topEdgeNullBandPx] presses the first row while
-   * showing no key. Falls back to the null band before measurement.
-   */
-  public float topEdgeFirstCapTopPx()
-  {
-    if (_keyboard == null || _tc == null || _keyboard.rows.isEmpty())
-      return topEdgeNullBandPx();
-    KeyboardData.Row first = _keyboard.rows.get(0);
-    return getPaddingTop() + _tc.margin_top + first.shift * _tc.row_height;
-  }
-
-  /**
-   * Routes a stream the top-edge delegate owns, or offers a fresh primary
-   * press above the first row's caps. Returns true when the event was the
-   * delegate's; false hands it to the ordinary key path.
-   */
-  private boolean onTopEdgeTouch(MotionEvent event)
-  {
-    if (_topEdgeDelegate == null)
-      return false;
-    int action = event.getActionMasked();
-    if (_topEdgeOwnsStream)
-    {
-      _topEdgeDelegate.onTopEdgeTouchEvent(event);
-      if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
-      {
-        _topEdgeOwnsStream = false;
-        requestDisallowIntercept(false);
-      }
-      return true;
-    }
-    if (action != MotionEvent.ACTION_DOWN)
-      return false;
-    float firstCapTop = topEdgeFirstCapTopPx();
-    if (event.getY() >= firstCapTop)
-      return false;
-    if (!_topEdgeDelegate.onTopEdgeTouchDown(event, topEdgeNullBandPx(), firstCapTop))
-      return false;
-    _topEdgeOwnsStream = true;
-    requestDisallowIntercept(true);
-    return true;
   }
 
   /** Opaque/translucent color used by an activity-owned navigation-inset continuation surface. */
@@ -1551,15 +1449,12 @@ public class Keyboard2View extends View
   {
     if (_keyPaintListener != null)
       return onPaintTouch(event);
-    if (onTopEdgeTouch(event))
-      return true;
     int p;
     switch (event.getActionMasked())
     {
       case MotionEvent.ACTION_UP:
       case MotionEvent.ACTION_POINTER_UP:
         p = event.getActionIndex();
-        releaseBackgroundPress(event, p);
         observeTap(_touchFx.get(event.getPointerId(p)));
         finishTouchFx(event.getPointerId(p));
         _pointers.onTouchUp(event.getPointerId(p));
@@ -1587,12 +1482,6 @@ public class Keyboard2View extends View
           if (_config.swipeTrailEnabled)
             _trails.put(event.getPointerId(p), new Trail(tx, ty));
         }
-        else if (_topEdgeDelegate != null)
-        {
-          _backgroundPointerId = event.getPointerId(p);
-          _backgroundDownX = tx;
-          _backgroundDownY = ty;
-        }
         break;
       case MotionEvent.ACTION_MOVE:
         for (p = 0; p < event.getPointerCount(); p++)
@@ -1605,7 +1494,6 @@ public class Keyboard2View extends View
         }
         break;
       case MotionEvent.ACTION_CANCEL:
-        _backgroundPointerId = -1;
         finishAllTouchFx();
         _pointers.onTouchCancelCommit();
         _trails.clear();
@@ -1616,25 +1504,6 @@ public class Keyboard2View extends View
     }
     postInvalidateOnAnimation();
     return (true);
-  }
-
-  /**
-   * The pointer at [index] lifted: a background press that was the only finger
-   * down and never left the slop is reported to the delegate as a tap. One
-   * lifting while another finger types is not — the host's hint moves the
-   * keys, and a finger on a key should not see them move.
-   */
-  private void releaseBackgroundPress(MotionEvent event, int index)
-  {
-    if (_backgroundPointerId < 0 || event.getPointerId(index) != _backgroundPointerId)
-      return;
-    _backgroundPointerId = -1;
-    if (event.getActionMasked() != MotionEvent.ACTION_UP || _topEdgeDelegate == null)
-      return;
-    float x = event.getX(index);
-    float y = event.getY(index);
-    if (Math.hypot(x - _backgroundDownX, y - _backgroundDownY) <= _backgroundTapSlopPx)
-      _topEdgeDelegate.onBackgroundTap(x, y);
   }
 
   private void startTouchFx(int pointerId, KeyboardData.Key key,
@@ -2216,7 +2085,6 @@ public class Keyboard2View extends View
       _hintPulseWave = 0f;
     }
     resetInputStateInternal(true);
-    _topEdgeOwnsStream = false;
     requestDisallowIntercept(false);
     super.onDetachedFromWindow();
   }

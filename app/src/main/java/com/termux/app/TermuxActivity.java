@@ -10276,13 +10276,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public View getRowsAboveKeyboard() {
-            // The dock's row stack: a press its bars did not take — a band inset, a hairline,
-            // the page ticks — is empty space above a docked keyboard.
-            return findViewById(R.id.accessory_row_stack);
-        }
-
-        @Override
         public void setKeyboardContainerVisible(boolean visible) {
             // Before the choreographer: a floating keyboard is staged in a host that has to be
             // visible for the reveal gate to observe destination layout at all.
