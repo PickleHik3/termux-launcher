@@ -258,15 +258,14 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
 
     /**
      * Whether the embedding path is running throttled right now (dawn brief item 5), and how:
-     * {@code "threads"} for the LiteRT backend (fewer interpreter threads), {@code "priority"} for
-     * MNN (background thread priority), or {@code null} when nothing is throttling it. Read for
+     * {@code "priority"} (background thread priority, both LiteRT and MNN), or {@code null} when
+     * nothing is throttling it. Read for
      * {@code /v1/models} and {@code /v1/ai/runtime} so dawn knows whether to pause its own indexing.
      */
     @Nullable
     public String embeddingThrottleReason(@NonNull TaiModelSpec model) {
         if (!activeAssistant.getState().activeGeneration) return null;
-        if (isLiteRtEmbeddingFlatbuffer(model)) return "threads";
-        if (isMnnEmbeddingModel(model)) return "priority";
+        if (isLiteRtEmbeddingFlatbuffer(model) || isMnnEmbeddingModel(model)) return "priority";
         return null;
     }
 

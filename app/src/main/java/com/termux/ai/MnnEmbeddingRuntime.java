@@ -180,7 +180,7 @@ final class MnnEmbeddingRuntime implements AutoCloseable {
      * running elsewhere in the process, so an embedding batch does not starve it of CPU (dawn
      * brief item 5). Returns the priority to restore afterward.
      */
-    private static int lowerThreadPriority() {
+    static int lowerThreadPriority() {
         int prior = android.os.Process.getThreadPriority(android.os.Process.myTid());
         try {
             android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_BACKGROUND);
@@ -190,7 +190,7 @@ final class MnnEmbeddingRuntime implements AutoCloseable {
         return prior;
     }
 
-    private static void restoreThreadPriority(int priorPriority) {
+    static void restoreThreadPriority(int priorPriority) {
         try {
             android.os.Process.setThreadPriority(priorPriority);
         } catch (Throwable ignored) {

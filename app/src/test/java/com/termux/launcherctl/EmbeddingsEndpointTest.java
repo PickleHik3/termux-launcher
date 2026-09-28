@@ -370,7 +370,7 @@ public class EmbeddingsEndpointTest {
 
     @Test
     public void models_embedderEntry_carriesTheDawnMetadataFields() throws Exception {
-        File tempFile = File.createTempFile("embed-model", ".mnn");
+        File tempFile = File.createTempFile("embed-model", ".tflite");
         tempFile.deleteOnExit();
         manager.importModel(new JSONObject()
             .put("path", tempFile.getAbsolutePath())
@@ -530,7 +530,7 @@ public class EmbeddingsEndpointTest {
 
         @Override
         public JSONObject embed(String modelId, String input) throws org.json.JSONException {
-            return embeddingResponse(modelId, java.util.Collections.singletonList(input), 768);
+            return embeddingResponse(modelId, java.util.Collections.singletonList(input), 768, "document", null);
         }
 
         @Override

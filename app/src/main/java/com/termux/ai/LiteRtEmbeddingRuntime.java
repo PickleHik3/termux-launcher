@@ -26,11 +26,8 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
     private static final String QUERY_PREFIX = "task: search result | query: ";
     private static final String DOCUMENT_PREFIX_FORMAT = "title: %s | text: ";
 
-    /** Threads for a request that runs while a chat generation is not active. */
+    /** Interpreter threads; fixed at build time (TFLite cannot change them on a live interpreter). */
     private static final int DEFAULT_THREADS = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
-    /** Threads for a request that shares the CPU with an active chat generation; see item 5 of the
-     *  dawn embedding brief: don't slow a live reply. */
-    private static final int THROTTLED_THREADS = 1;
 
     private final TaiResidency residency;
     /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
@@ -63,8 +60,8 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
      * @param title     an optional document heading, folded into the document prefix in place of
      *                  {@code none}; ignored for {@code input_type: "query"}.
      * @param throttled true while a chat generation is running elsewhere in this process: runs the
-     *                  interpreter at {@link #THROTTLED_THREADS} instead of {@link #DEFAULT_THREADS}
-     *                  so embedding batches don't slow the live reply (dawn brief item 5).
+     *                  calling thread at background priority so embedding batches don't slow the
+     *                  live reply (dawn brief item 5).
      */
     @NonNull
     synchronized JSONObject embed(@NonNull TaiModelSpec spec, @NonNull List<String> inputs, int dimensions,
@@ -94,7 +91,7 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
             JSONArray data = new JSONArray();
             int promptTokens = 0;
             residency.setBusy(TaiResidency.Kind.EMBEDDING, spec.id, true);
-            if (interpreter != null) interpreter.setNumThreads(throttled ? THROTTLED_THREADS : DEFAULT_THREADS);
+            int priorPriority = throttled ? MnnEmbeddingRuntime.lowerThreadPriority() : Integer.MIN_VALUE;
             try {
                 for (int i = 0; i < inputs.size(); i++) {
                     Embedding embedding = embedOne(inputs.get(i), effectiveDimensions, inputType, title);
@@ -113,7 +110,7 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
                 }
             } finally {
                 residency.setBusy(TaiResidency.Kind.EMBEDDING, spec.id, false);
-                if (interpreter != null) interpreter.setNumThreads(DEFAULT_THREADS);
+                if (throttled) MnnEmbeddingRuntime.restoreThreadPriority(priorPriority);
             }
             JSONObject usage = new JSONObject();
             usage.put("prompt_tokens", promptTokens);

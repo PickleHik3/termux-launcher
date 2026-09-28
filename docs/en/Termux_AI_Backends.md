@@ -49,8 +49,8 @@ installs missing the sidecar return `embedding_tokenizer_missing`.
 
 `input_type: "query"` or `"document"` (default) selects EmbeddingGemma's trained task prefix,
 applied on the server and counted inside the model's window; an optional `title` folds into the
-document prefix. While a chat generation is running, embeddings run throttled (fewer LiteRT
-threads or background MNN thread priority) so they never slow the live reply, and a load that does
+document prefix. While a chat generation is running, embeddings run throttled (background
+thread priority) so they never slow the live reply, and a load that does
 not fit in memory returns `503` with `Retry-After` and `code: "embedding_memory"` rather than the
 chat path's `409`. `/v1/tokenize` (`{model, input}` → `{tokens: n}`) uses the same tokenizer with
 no prefix, for splitting text on real token counts.
