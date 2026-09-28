@@ -1,16 +1,23 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
+import android.os.Build;
 import android.os.Bundle;
 
 import androidx.annotation.Keep;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
+import androidx.preference.SwitchPreferenceCompat;
 
 import com.termux.R;
+import com.termux.app.chrome.FancierGlassPolicy;
+import com.termux.app.chrome.WallpaperPictureReader;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
  * The terminal's own page: panes and their tmux-style controls, lazy mode, full screen, system
@@ -29,7 +36,29 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         PreferenceManager manager = getPreferenceManager();
         manager.setPreferenceDataStore(new TerminalPreferencesDataStore(context));
         setPreferencesFromResource(R.xml.terminal_preferences, rootKey);
+        gateFancierGlass(context);
         SettingsLayoutUtils.applyScreenLayout(this);
+    }
+
+    /**
+     * Fancier Glass is offered only where it can run: hidden below Android 13, and shown but
+     * disabled — with the hint saying why — until the wallpaper on screen is one set from inside
+     * the launcher. The stored switch is left alone either way; a wallpaper picked later turns it
+     * live without another visit here.
+     */
+    private void gateFancierGlass(@NonNull Context context) {
+        PreferenceCategory header = findPreference("fancier_glass_header");
+        SwitchPreferenceCompat toggle = findPreference("fancier_glass");
+        if (header == null || toggle == null) return;
+        if (!FancierGlassPolicy.offered(Build.VERSION.SDK_INT)) {
+            getPreferenceScreen().removePreference(header);
+            return;
+        }
+        boolean managed = WallpaperPictureReader.managedPictureOnScreen(context,
+            TermuxAppSharedPreferences.build(context, false));
+        boolean flippable = FancierGlassPolicy.flippable(Build.VERSION.SDK_INT, managed);
+        toggle.setEnabled(flippable);
+        if (!flippable) toggle.setSummary(R.string.settings_fancier_glass_hint);
     }
 
     @Override

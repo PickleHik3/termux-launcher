@@ -69,6 +69,7 @@ public final class PaneGlass {
             style.paneGlassGrainStrength(), radiusPx, style.paneGlassFrostFilter(),
             style.paneGlassCrossfade());
         backdrop.setParallax(style.wallpaperParallax());
+        backdrop.setRefraction(style.paneGlassRefraction());
         backdrop.setVisibility(View.VISIBLE);
         return true;
     }

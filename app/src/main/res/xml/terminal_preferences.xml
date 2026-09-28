@@ -78,4 +78,16 @@
             app:defaultValue="false" />
     </PreferenceCategory>
 
+    <!-- Hidden below Android 13 and disabled without a wallpaper set from inside the launcher;
+         TerminalPreferencesFragment decides both. -->
+    <PreferenceCategory
+        app:key="fancier_glass_header"
+        app:title="@string/settings_fancier_glass_header">
+        <SwitchPreferenceCompat
+            app:key="fancier_glass"
+            app:title="@string/settings_fancier_glass_title"
+            app:summary="@string/settings_fancier_glass_summary"
+            app:defaultValue="false" />
+    </PreferenceCategory>
+
 </PreferenceScreen>

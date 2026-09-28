@@ -1122,6 +1122,39 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_LAZY_MODE = false;
 
         /**
+         * Fancier Glass: every glass surface bends the wallpaper at its rim and catches a light
+         * along its edge, on top of the frost it already wears. Off by default. Needs Android 13
+         * and a wallpaper set from inside the launcher; anywhere else the switch is offered
+         * disabled, or not at all, and the glass is the default look.
+         */
+        public static final String KEY_FANCIER_GLASS = "fancier_glass";
+        public static final boolean DEFAULT_VALUE_FANCIER_GLASS = false;
+
+        /**
+         * How far the wallpaper is bent under a glass rim, in dp of displacement. The three
+         * refraction knobs are global: one look for every glass surface, never per surface. Their
+         * defaults are exactly the numbers the dock's refraction always used, so switching Fancier
+         * Glass on changes nothing about the dock and only lends the same rim to the other
+         * surfaces.
+         */
+        public static final String KEY_FANCIER_GLASS_BEND = "fancier_glass_bend";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_BEND = 9;
+        public static final int MIN_FANCIER_GLASS_BEND = 0;
+        public static final int MAX_FANCIER_GLASS_BEND = 30;
+
+        /** How far in from the rim the bend reaches, in dp. */
+        public static final String KEY_FANCIER_GLASS_EDGE_WIDTH = "fancier_glass_edge_width";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_EDGE_WIDTH = 20;
+        public static final int MIN_FANCIER_GLASS_EDGE_WIDTH = 1;
+        public static final int MAX_FANCIER_GLASS_EDGE_WIDTH = 60;
+
+        /** How bright the hairline along the rim is, as a percentage of the brightest it can be. */
+        public static final String KEY_FANCIER_GLASS_EDGE_LIGHT = "fancier_glass_edge_light";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_EDGE_LIGHT = 32;
+        public static final int MIN_FANCIER_GLASS_EDGE_LIGHT = 0;
+        public static final int MAX_FANCIER_GLASS_EDGE_LIGHT = 100;
+
+        /**
          * Whether holding a keybind prefix (Ctrl+Alt) automatically shows the key-hint strip.
          * When off, nothing appears on its own: the {@code ?} cap lights up under the prefix and
          * pressing it opens the full table on demand.

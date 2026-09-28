@@ -70,4 +70,11 @@ public interface PaneSurfaceStyle {
      * off the picture.
      */
     @Nullable default com.termux.app.chrome.WallpaperParallax wallpaperParallax() { return null; }
+
+    /**
+     * Fancier Glass: the refraction every slab draws the frame through — bent under its rim and
+     * lit along it — or null for the plain frost, which is the default mode and every phone
+     * below API 33. One look for every surface; a slab only applies it at its own corner radius.
+     */
+    @Nullable default com.termux.app.chrome.GlassRefraction.Look paneGlassRefraction() { return null; }
 }

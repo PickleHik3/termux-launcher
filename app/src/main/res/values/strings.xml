@@ -624,6 +624,12 @@
     <string name="settings_lazy_mode_header">Battery</string>
     <string name="settings_lazy_mode_title">Lazy mode</string>
     <string name="settings_lazy_mode_summary">Stop the idle animation: the clock swaps its digits instead of folding them, a working window\'s tab changes colour instead of spinning a ring, the CPU/memory readings sample three times less often, and the weather icon rests on its last frame. Nothing repaints while you are only looking at the screen.\n\nWorth turning on — this is planned to become the default, so please report anything that looks stuck or stale with it.</string>
+    <string name="settings_fancier_glass_header">Fancier Glass</string>
+    <string name="settings_fancier_glass_title">Fancier Glass</string>
+    <string name="settings_fancier_glass_summary">Every glass surface bends the wallpaper at its edge and catches a light along its rim. Tune it in the Appearance editor.</string>
+    <!-- Shown as the summary while the switch is disabled: only a wallpaper picked from inside the
+         launcher can be read exactly enough to bend. -->
+    <string name="settings_fancier_glass_hint">Needs a wallpaper set from inside termux-launcher.</string>
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
     <!-- Brief confirmation of the binding that just ran: stroke, then the action's name. -->
     <string name="terminal_key_binding_ran">%1$s · %2$s</string>
@@ -1492,6 +1498,12 @@
                 <!-- Two more section names, one word each, naming the thing being changed. -->
                 <string name="termux_surface_editor_section_keys">Keys</string>
                 <string name="termux_surface_editor_section_indicator">Indicator</string>
+                <!-- Fancier Glass's own section on the shared layer, shown only while it is on;
+                     three rows, each naming what it changes about the glass edge. -->
+                <string name="termux_surface_editor_section_refraction">Fancier Glass</string>
+                <string name="termux_surface_editor_bend">Bend</string>
+                <string name="termux_surface_editor_edge_width">Edge width</string>
+                <string name="termux_surface_editor_edge_light">Edge light</string>
                 <string name="termux_surface_tuning_material_solid">Solid</string>
                 <string name="termux_surface_tuning_material_glass">Glass</string>
                 <string name="termux_surface_tuning_material_frost">Frost</string>

@@ -72,9 +72,12 @@ public final class WallpaperFrostPainter {
         // to bail out for the whole style, which left the capsule with no blur at all — its live
         // blur view is as blind to the wallpaper as every other RealtimeBlurView here.
         boolean capsule = mSurfaces.roundedDockStyle();
+        // The band and the bar are one sheet of glass in the docked style, so neither takes a rim
+        // along the edge they share; the capsule stands alone and rounds by its own corner.
         boolean statusApplied = !capsule && applyFrost(statusFrost,
             mSurfaces.findChromeView(R.id.terminal_status_bar_background), blurRadiusDp,
-            SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS, SurfaceDirtyLedger.FrostRadius.TOP_PANE);
+            SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS, SurfaceDirtyLedger.FrostRadius.TOP_PANE,
+            0f, GlassRefraction.SEAM_BOTTOM);
         if (capsule) hide(statusFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS);
         // A bar standing between the dock's own rows is on the dock's sheet, which already carries
         // this frost: a frost of its own here would draw the same blurred wallpaper a second time,
@@ -82,7 +85,9 @@ public final class WallpaperFrostPainter {
         boolean onPlank = mSurfaces.statusBarOnDockPlank();
         boolean paneApplied = !onPlank && applyFrost(paneFrost,
             mSurfaces.findChromeView(R.id.terminal_window_bar_host), blurRadiusDp,
-            SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR, SurfaceDirtyLedger.FrostRadius.TOP_PANE);
+            SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR, SurfaceDirtyLedger.FrostRadius.TOP_PANE,
+            capsule ? mSurfaces.statusBarRimCornerRadiusPx() : 0f,
+            statusApplied ? GlassRefraction.SEAM_TOP : 0);
         if (onPlank) hide(paneFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
         View statusBlur = mSurfaces.findChromeView(R.id.terminal_status_bar_glass_blur);
         View paneBlur = mSurfaces.findChromeView(R.id.terminal_window_bar_blur);
@@ -117,7 +122,7 @@ public final class WallpaperFrostPainter {
     public boolean applyCommandPalette(@NonNull ImageView frost) {
         return applyFrost(frost, glassOf(frost, null), topGlassFrostRadiusDp(),
             SurfaceDirtyLedger.FrostRect.COMMAND_PALETTE,
-            SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE);
+            SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE, mSurfaces.planeGlassCornerRadiusPx(), 0);
     }
 
     /**
@@ -131,7 +136,7 @@ public final class WallpaperFrostPainter {
         return applyFrost(frost, glassOf(frost, mSurfaces.findChromeView(R.id.terminal_sheet_host)),
             topGlassFrostRadiusDp(),
             SurfaceDirtyLedger.FrostRect.TERMINAL_SHEET,
-            SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE);
+            SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE, mSurfaces.planeGlassCornerRadiusPx(), 0);
     }
 
     /**
@@ -147,7 +152,7 @@ public final class WallpaperFrostPainter {
     public boolean applyAppDrawer(@NonNull ImageView frost) {
         return applyFrost(frost, glassOf(frost, null), mSurfaces.effectiveDockBlurRadiusDp(),
             SurfaceDirtyLedger.FrostRect.APP_DRAWER,
-            SurfaceDirtyLedger.FrostRadius.APP_DRAWER);
+            SurfaceDirtyLedger.FrostRadius.APP_DRAWER, mSurfaces.planeGlassCornerRadiusPx(), 0);
     }
 
     /** The plane a full-pane frost fills: the view named, or the frost's own parent. */
@@ -167,10 +172,18 @@ public final class WallpaperFrostPainter {
      * screen is a closer match than nothing, so it stays right where it is until the next pass has
      * a frame to replace it with. It goes only when the frame it was captured for no longer
      * describes the screen (a rotation), where a stale frame would show as a shifted picture.</p>
+     *
+     * <p>Fancier Glass is restated on every pass, whether or not the frame moved: the look is one
+     * compare on the drawable, and a knob the editor just turned reaches the frost on the very
+     * pass it asks for rather than waiting for a frame change.</p>
+     *
+     * @param cornerRadiusPx the rounded rect the rim follows: the surface's own corner
+     * @param seams          edges another glass surface continues past; see {@link GlassRefraction#rimRect}
      */
     private boolean applyFrost(@NonNull ImageView frost, @Nullable View boundsView, int blurRadiusDp,
                                @NonNull SurfaceDirtyLedger.FrostRect rectKey,
-                               @NonNull SurfaceDirtyLedger.FrostRadius radiusKey) {
+                               @NonNull SurfaceDirtyLedger.FrostRadius radiusKey,
+                               float cornerRadiusPx, int seams) {
         View wallpaperFrame = mSurfaces.findChromeView(R.id.activity_termux_root_view);
         if (!mSurfaces.wallpaperPassthroughEnabled() || blurRadiusDp <= 0 || wallpaperFrame == null
             || boundsView == null || boundsView.getVisibility() != View.VISIBLE
@@ -182,6 +195,7 @@ public final class WallpaperFrostPainter {
         Rect targetRect = new Rect(mTmpViewLocation[0], mTmpViewLocation[1],
             mTmpViewLocation[0] + boundsView.getWidth(), mTmpViewLocation[1] + boundsView.getHeight());
         SharedFrameDrawable installed = SharedFrameDrawable.of(frost.getDrawable());
+        if (installed != null) refract(installed, cornerRadiusPx, seams);
         Bitmap frame = mBlurCache.obtain(blurRadiusDp, wallpaperFrame);
         Rect frameRect = mBlurCache.frameRectRef();
         if (frame == null) {
@@ -206,13 +220,21 @@ public final class WallpaperFrostPainter {
         if (installed != null) {
             installed.setFrame(frame, frameRect, crossfade);
         } else {
-            frost.setImageDrawable(new SharedFrameDrawable(frame, frameRect,
-                mSurfaces.wallpaperParallax(), GlassAnchor.screen(frost)));
+            installed = new SharedFrameDrawable(frame, frameRect,
+                mSurfaces.wallpaperParallax(), GlassAnchor.screen(frost));
+            refract(installed, cornerRadiusPx, seams);
+            frost.setImageDrawable(installed);
         }
         frost.setColorFilter(GlassFilters.frost());
         mLedger.setFrostRadiusDp(radiusKey, blurRadiusDp);
         show(frost, rectKey, targetRect);
         return true;
+    }
+
+    /** Fancier Glass on one frost, or the plain frost while the look is null. */
+    private void refract(@NonNull SharedFrameDrawable frost, float cornerRadiusPx, int seams) {
+        frost.setRefraction(mSurfaces.fancierGlassLook(),
+            mSurfaces.context().getResources().getDisplayMetrics().density, cornerRadiusPx, seams);
     }
 
     /**
