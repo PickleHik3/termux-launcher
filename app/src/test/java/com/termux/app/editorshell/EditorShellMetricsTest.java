@@ -1,13 +1,11 @@
 package com.termux.app.editorshell;
 
-import com.termux.app.editorshell.EditorShellMetrics.BodyCap;
 import com.termux.app.editorshell.EditorShellMetrics.PaneSplit;
 import com.termux.app.editorshell.EditorShellMetrics.RowMetrics;
 
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -253,177 +251,6 @@ public class EditorShellMetricsTest {
             EditorShellMetrics.px(280, SHORT_DENSITY), SHORT_DENSITY), SHORT_DENSITY), 1f);
     }
 
-    @Test
-    public void theChooserUnpinsOnlyWhereItsChromeWouldCostRows() {
-        assertTrue(EditorShellMetrics.chooserPinned(
-            EditorShellMetrics.px(200, WIDE_DENSITY), WIDE_DENSITY));
-        assertFalse(EditorShellMetrics.chooserPinned(
-            EditorShellMetrics.px(199, SHORT_DENSITY), SHORT_DENSITY));
-    }
-
-    // ----------------------------------------------------------------------------- the overflow
-
-    @Test
-    public void theCutLandsAPeekIntoARowAndNeverThroughItsGlyphs() {
-        int pitch = EditorShellMetrics.px(EditorShellMetrics.ROW_MIN_HEIGHT_DP, WIDE_DENSITY);
-        int peek = EditorShellMetrics.px(EditorShellMetrics.PEEK_DP, WIDE_DENSITY);
-        for (int available = pitch; available < 40 * pitch; available++) {
-            BodyCap cap = EditorShellMetrics.bodyCap(available, 100 * pitch, pitch, peek);
-            assertTrue(cap.overflows);
-            assertTrue(cap.capPx <= available);
-            if (cap.capPx == available)
-                continue;
-            assertEquals("the cut must land a peek into a whole number of rows",
-                cap.wholeRows * pitch + peek, cap.capPx);
-        }
-    }
-
-    @Test
-    public void aBodyThatFitsIsNotQuantisedAndDoesNotClaimMoreBelow() {
-        int pitch = EditorShellMetrics.px(48, WIDE_DENSITY);
-        int peek = EditorShellMetrics.px(EditorShellMetrics.PEEK_DP, WIDE_DENSITY);
-        BodyCap cap = EditorShellMetrics.bodyCap(10 * pitch, 3 * pitch, pitch, peek);
-        assertFalse(cap.overflows);
-        assertEquals(3, cap.wholeRows);
-    }
-
-    @Test
-    public void theShortDeviceReportsWholeRowsAndSaysThereIsMoreBelow() {
-        // 200 dp of body, a row measured at 48 dp, a 16 dp peek: three whole rows and a sliver of
-        // the fourth. DESIGN.md's two worked examples (2 rows in section 5, 4 in section 6.4) are
-        // both wrong; this is the arithmetic they describe.
-        int available = EditorShellMetrics.px(200, SHORT_DENSITY);
-        int pitch = EditorShellMetrics.px(48, SHORT_DENSITY);
-        int peek = EditorShellMetrics.px(EditorShellMetrics.PEEK_DP, SHORT_DENSITY);
-        BodyCap cap = EditorShellMetrics.bodyCap(available, EditorShellMetrics.px(456,
-            SHORT_DENSITY), pitch, peek);
-        assertEquals(3, cap.wholeRows);
-        assertTrue(cap.overflows);
-        assertEquals(3 * pitch + peek, cap.capPx);
-    }
-
-    @Test
-    public void aLargerFontScaleMovesTheCutByTheMeasuredPitchRatherThanTheNominalOne() {
-        int available = EditorShellMetrics.px(200, SHORT_DENSITY);
-        int peek = EditorShellMetrics.px(EditorShellMetrics.PEEK_DP, SHORT_DENSITY);
-        int nominal = EditorShellMetrics.px(48, SHORT_DENSITY);
-        // A 1.3x scale on a tall locale grows the measured row; the cap follows the measurement.
-        int measured = EditorShellMetrics.px(62, SHORT_DENSITY);
-        assertEquals(3, EditorShellMetrics.bodyCap(available, 10 * nominal, nominal, peek)
-            .wholeRows);
-        assertEquals(2, EditorShellMetrics.bodyCap(available, 10 * measured, measured, peek)
-            .wholeRows);
-    }
-
-    // ------------------------------------------------ the cut, taken from the rows themselves
-
-    /** pong: 1080x2412 at 420dpi. */
-    private static final float PONG_DENSITY = 2.625f;
-    private static final int PONG_HEIGHT_PX = 2412;
-
-    /**
-     * The room the Layout editor's rows have on pong, in portrait, on the Terminal place, worked
-     * out the way {@code LayoutEditorController.applyCanvasHeight} works it out.
-     */
-    private static int pongRowsRoomPx() {
-        int header = EditorShellMetrics.headerHeightPx(PONG_HEIGHT_PX, PONG_DENSITY);
-        int chooser = EditorShellMetrics.px(EditorShellMetrics.CHOOSER_DP, PONG_DENSITY);
-        // The card's own bottom padding, the sheet's handle, and the gaps around the canvas. No
-        // notice lines: the Terminal place in portrait has nothing to say about its arrangement.
-        int padding = EditorShellMetrics.px(10, PONG_DENSITY);
-        int handleAndGaps = EditorShellMetrics.px(18 + 10, PONG_DENSITY);
-        int chrome = header + chooser + padding + handleAndGaps;
-        // The portrait frame at 42% of the screen, plus the hide tray's 48dp under it.
-        int miniature = Math.round(0.42f * PONG_HEIGHT_PX)
-            + EditorShellMetrics.px(48, PONG_DENSITY);
-        int floor = EditorShellMetrics.px(96, PONG_DENSITY);
-        // The sheet stands in four fifths of the screen; the fifth above it is the live place.
-        int budget = Math.round(0.80f * PONG_HEIGHT_PX);
-        return Math.max(floor, budget - miniature - chrome);
-    }
-
-    /**
-     * The rows standing under the miniature on pong: the "Keyboard" heading, a pick row — which is
-     * the segment's own 48dp slot and no more — and two number rows, each the 48dp floor inside the
-     * row's 6dp of air. Three shapes, which is the whole reason one pitch cannot describe them.
-     */
-    private static int[] pongRowsPx() {
-        int heading = EditorShellMetrics.px(EditorShellMetrics.SECTION_MIN_HEIGHT_DP, PONG_DENSITY)
-            + EditorShellMetrics.px(EditorShellMetrics.SECTION_BOTTOM_MARGIN_DP, PONG_DENSITY);
-        int pick = EditorShellMetrics.px(EditorShellMetrics.SEGMENT_HEIGHT_DP, PONG_DENSITY);
-        int number = EditorShellMetrics.px(EditorShellMetrics.ROW_MIN_HEIGHT_DP, PONG_DENSITY)
-            + (2 * EditorShellMetrics.px(EditorShellMetrics.ROW_VERTICAL_PADDING_DP, PONG_DENSITY));
-        return new int[] {heading, pick, number, number};
-    }
-
-    @Test
-    public void theRoomPongLeavesTheRowsCutsThroughARow() {
-        // The reproduction: the room the card has is not a whole number of anything the body is
-        // made of, so a body simply given that room ends inside a row's glyphs.
-        int room = pongRowsRoomPx();
-        int[] rows = pongRowsPx();
-        int bottom = 0;
-        boolean landsOnARow = false;
-        for (int height : rows) {
-            int top = bottom;
-            bottom += height;
-            if (room > top && room < bottom)
-                landsOnARow = true;
-        }
-        assertTrue("pong's room should fall inside a row, or this is not the bug", landsOnARow);
-    }
-
-    @Test
-    public void theCutTakenFromTheRowsThemselvesLandsAPeekPastAWholeRow() {
-        int room = pongRowsRoomPx();
-        int[] rows = pongRowsPx();
-        int peek = EditorShellMetrics.px(EditorShellMetrics.PEEK_DP, PONG_DENSITY);
-        BodyCap cap = EditorShellMetrics.bodyCap(room, rows, peek);
-        assertTrue(cap.overflows);
-        assertTrue("the cut never takes more than the room there is", cap.capPx <= room);
-        int bottom = 0;
-        for (int index = 0; index < cap.wholeRows; index++)
-            bottom += rows[index];
-        assertEquals("the cut lands a peek past the last whole row", bottom + peek, cap.capPx);
-        assertEquals("the heading and two rows, with a sliver of the last", 3, cap.wholeRows);
-    }
-
-    @Test
-    public void everyRoomCutsAtARowBoundaryWhateverTheRowsAreMadeOf() {
-        // Mixed heights are the point: a heading is half a row, a row with a note under it is
-        // taller than one without, and one pitch cannot describe any of that.
-        int[] rows = {74, 158, 126, 126, 190, 126};
-        int peek = 42;
-        for (int room = 1; room <= 1200; room++) {
-            BodyCap cap = EditorShellMetrics.bodyCap(room, rows, peek);
-            assertTrue(cap.capPx <= room);
-            if (!cap.overflows || cap.wholeRows == 0)
-                continue;
-            int bottom = 0;
-            for (int index = 0; index < cap.wholeRows; index++)
-                bottom += rows[index];
-            assertEquals("room " + room, bottom + peek, cap.capPx);
-        }
-    }
-
-    @Test
-    public void aBodyThatFitsIsNotCutAtAll() {
-        int[] rows = {74, 158, 126};
-        BodyCap cap = EditorShellMetrics.bodyCap(1000, rows, 42);
-        assertFalse(cap.overflows);
-        assertEquals(1000, cap.capPx);
-        assertEquals(3, cap.wholeRows);
-    }
-
-    @Test
-    public void aRoomTooShortForTheFirstRowStillReportsTheRoomItHas() {
-        int[] rows = {158, 158};
-        BodyCap cap = EditorShellMetrics.bodyCap(100, rows, 42);
-        assertTrue(cap.overflows);
-        assertEquals(100, cap.capPx);
-        assertEquals(0, cap.wholeRows);
-    }
-
     // ------------------------------------------------------------------------- the segment slot
 
     @Test
@@ -435,16 +262,6 @@ public class EditorShellMetricsTest {
             EditorShellMetrics.SEGMENT_INSET_DP);
         assertEquals(EditorShellMetrics.SEGMENT_HEIGHT_DP,
             EditorShellMetrics.SEGMENT_VISUAL_HEIGHT_DP + (2 * EditorShellMetrics.SEGMENT_INSET_DP));
-    }
-
-    @Test
-    public void aRoomTooShortForOneRowStillReportsTheRoomItHas() {
-        int pitch = EditorShellMetrics.px(48, WIDE_DENSITY);
-        int peek = EditorShellMetrics.px(EditorShellMetrics.PEEK_DP, WIDE_DENSITY);
-        BodyCap cap = EditorShellMetrics.bodyCap(pitch / 2, 10 * pitch, pitch, peek);
-        assertEquals(pitch / 2, cap.capPx);
-        assertTrue(cap.overflows);
-        assertEquals(1, cap.wholeRows);
     }
 
     // ------------------------------------------------------------------- filling the two panes

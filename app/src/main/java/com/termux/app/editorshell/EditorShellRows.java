@@ -107,14 +107,12 @@ public final class EditorShellRows {
     }
 
     /**
-     * The two things that make a capped body legible about what is below it.
+     * The two things that make the card's list legible about what is past its edge: the fade at
+     * the edge the list continues under, and the mark down the side that says where in the list
+     * the rows on screen are.
      *
-     * <p>Cutting the body at a whole row ({@link #wholeRowCapPx}) is the fix for a body cut through
-     * the middle of a row's glyphs; these are what make the cut readable as a list that continues.
-     * The fade covers the peek and the top of the row behind it, and the mark down the edge says
-     * where in the list the rows on screen are.
-     *
-     * @return the context to build the scroller with, carrying the shell's scrollbar ink
+     * @return the context to build a scroller with in code, carrying the shell's scrollbar ink;
+     *     the cards' own list declares the same overlay in its layout
      */
     @NonNull
     public static Context scrollerContext(@NonNull Context context) {
@@ -158,44 +156,6 @@ public final class EditorShellRows {
         int inset = EditorShellMetrics.px(2, density);
         scroller.setPadding(scroller.getPaddingLeft(), scroller.getPaddingTop(), inset,
             scroller.getPaddingBottom());
-    }
-
-    /**
-     * The height a body scroller may actually take, ending on a whole row.
-     *
-     * <p>Called from the scroller's own {@code onMeasure}, after one pass at {@code availablePx},
-     * and the answer re-measured at. That is the only moment the rows' real heights are known: the
-     * cap used to be worked out while the card was being restated, from heights left over from the
-     * <em>last</em> layout — and on the first open there was no last layout, so no cut was taken at
-     * all and the body ended wherever the arithmetic landed, which was through the middle of a row.
-     *
-     * @param scroller the body scroller, whose one child is the column of rows
-     */
-    public static int wholeRowCapPx(@NonNull ViewGroup scroller, int availablePx, float density) {
-        if (scroller.getChildCount() == 0)
-            return availablePx;
-        View child = scroller.getChildAt(0);
-        if (!(child instanceof ViewGroup))
-            return availablePx;
-        ViewGroup column = (ViewGroup) child;
-        int count = column.getChildCount();
-        if (count == 0)
-            return availablePx;
-        int[] heights = new int[count];
-        for (int index = 0; index < count; index++) {
-            View row = column.getChildAt(index);
-            if (row.getVisibility() == View.GONE)
-                continue;
-            int height = row.getMeasuredHeight();
-            ViewGroup.LayoutParams params = row.getLayoutParams();
-            if (params instanceof ViewGroup.MarginLayoutParams) {
-                ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
-                height += margins.topMargin + margins.bottomMargin;
-            }
-            heights[index] = height;
-        }
-        return EditorShellMetrics.bodyCap(availablePx, heights,
-            EditorShellMetrics.px(EditorShellMetrics.PEEK_DP, density)).capPx;
     }
 
     /** Grows a small view's touch target inside its parent, up to the row's own height. */

@@ -13,12 +13,12 @@ import androidx.annotation.StringRes;
 import com.termux.R;
 
 /**
- * The shared header's sizes, and the one rule about the chooser row under it.
+ * The shared header's sizes and its fixed parts.
  *
  * <p>Both editors include {@code editor_shell_header.xml} and fill the slots they have. What lives
  * here is what neither editor should be deciding for itself: how tall the bar stands at the height
- * the card has, that every action keeps a platform-sized target whichever height that is, and
- * whether the row under the header can afford to stay pinned.
+ * the card has, and that every action keeps a platform-sized target whichever height that is. The
+ * header is the one row that stays put while the card's list scrolls under it.
  */
 public final class EditorShellHeader {
 
@@ -94,32 +94,5 @@ public final class EditorShellHeader {
         tick.setTint(ink);
         tick.setBounds(0, 0, size, size);
         done.setCompoundDrawablesRelative(tick, null, null, null);
-    }
-
-    /**
-     * Moves the chooser between the header's pinned slot and the top of the scrolling body.
-     *
-     * <p>Pinned chrome is paid for in rows, and the rows are the controls. On a short landscape
-     * screen a 60dp chooser is nearly a third of everything the body has, so below the threshold
-     * the chooser becomes the body's first row and scrolls away with it.
-     *
-     * @param pinnedSlot where the chooser stands while it is pinned
-     * @param body       the scrolling column it joins when it is not
-     */
-    public static void applyChooserPin(@Nullable View chooser, @Nullable ViewGroup pinnedSlot,
-                                       @Nullable ViewGroup body, boolean pinned) {
-        if (chooser == null || pinnedSlot == null || body == null)
-            return;
-        ViewGroup wanted = pinned ? pinnedSlot : body;
-        ViewGroup parent = chooser.getParent() instanceof ViewGroup
-            ? (ViewGroup) chooser.getParent() : null;
-        if (parent == wanted && (pinned || body.indexOfChild(chooser) == 0))
-            return;
-        if (parent != null)
-            parent.removeView(chooser);
-        if (pinned)
-            pinnedSlot.addView(chooser);
-        else
-            body.addView(chooser, 0);
     }
 }

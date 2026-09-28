@@ -123,14 +123,10 @@ public final class EditorShellMetrics {
      * rather than to the card, so the pill stays the same compact thing on a phone and a tablet.
      */
     public static final int CHOOSER_SEGMENT_DP = 104;
-    /** Below this much body the chooser unpins and scrolls with the rows. */
-    public static final int CHOOSER_PIN_MIN_BODY_DP = 200;
 
     // ---------------------------------------------------------------------------- the overflow
 
-    /** How much of the next row stays visible under the cut, so the cut never lands on glyphs. */
-    public static final int PEEK_DP = 16;
-    /** Long enough to cover the peek and the top of the row behind it. */
+    /** The fade at either end of the card's list, which is what says there is more past it. */
     public static final int FADE_DP = 24;
 
     // ----------------------------------------------------------------------------- the section
@@ -302,15 +298,6 @@ public final class EditorShellMetrics {
     }
 
     /**
-     * Whether the chooser row stays pinned under the header. On a short landscape screen 60 dp of
-     * pinned chrome is nearly a third of the body, so below the threshold it unpins and becomes the
-     * body's first row instead of costing rows that are the controls.
-     */
-    public static boolean chooserPinned(int bodyHeightPx, float density) {
-        return bodyHeightPx >= px(CHOOSER_PIN_MIN_BODY_DP, density);
-    }
-
-    /**
      * How many of the leading sections go in the leading pane.
      *
      * <p>Panes are filled section-major and a section never straddles the gutter: related rows
@@ -339,79 +326,5 @@ public final class EditorShellMetrics {
             }
         }
         return best;
-    }
-
-    /** How tall the body stands, in whole rows, and whether there is more below. */
-    public static final class BodyCap {
-        public final int capPx;
-        public final int wholeRows;
-        public final boolean overflows;
-
-        BodyCap(int capPx, int wholeRows, boolean overflows) {
-            this.capPx = capPx;
-            this.wholeRows = wholeRows;
-            this.overflows = overflows;
-        }
-    }
-
-    /**
-     * The body's height, rounded down to whole rows plus a peek.
-     *
-     * <p>A cap taken as raw arithmetic cuts wherever it lands, which in practice is through the
-     * middle of a row's glyphs — and a row sliced in half reads as a rendering fault rather than as
-     * "there is more below". Quantising to the measured row pitch puts the cut a fixed
-     * {@value #PEEK_DP} dp into the next row instead: a sliver of a label, which is legible as a
-     * list that continues.
-     *
-     * @param rowPitchPx the <em>measured</em> height of a row, not the nominal 48 dp, so a large
-     *     font scale or a tall locale stays in step
-     */
-    @NonNull
-    public static BodyCap bodyCap(int availablePx, int contentPx, int rowPitchPx, int peekPx) {
-        int available = Math.max(0, availablePx);
-        int pitch = Math.max(1, rowPitchPx);
-        int peek = Math.max(0, peekPx);
-        if (contentPx <= available)
-            return new BodyCap(available, (contentPx + pitch - 1) / pitch, false);
-        int wholeRows = Math.max(1, (available - peek) / pitch);
-        int quantised = (wholeRows * pitch) + peek;
-        // Where the room cannot hold one whole row and the peek, the honest answer is the room.
-        return new BodyCap(Math.min(available, quantised), wholeRows, true);
-    }
-
-    /**
-     * The same cut, taken from the rows as they actually measured rather than from one pitch.
-     *
-     * <p>A body is not a stack of identical rows: a section heading is half the height of a row, a
-     * slider row and a segment row differ by the segment's own inset, and a note under a row adds a
-     * second line to that one row alone. Quantising all of it to a single pitch therefore lands the
-     * cut wherever the arithmetic falls — which is the middle of a row's glyphs about as often as
-     * anywhere else. Walking the children instead puts the cut at the bottom of the last one that
-     * wholly fits, plus the same {@value #PEEK_DP} dp peek of the one after it.
-     *
-     * @param childHeightsPx each child of the rows column, top to bottom, margins included
-     */
-    @NonNull
-    public static BodyCap bodyCap(int availablePx, @NonNull int[] childHeightsPx, int peekPx) {
-        int available = Math.max(0, availablePx);
-        int peek = Math.max(0, peekPx);
-        int content = 0;
-        for (int height : childHeightsPx)
-            content += Math.max(0, height);
-        if (content <= available)
-            return new BodyCap(available, childHeightsPx.length, false);
-        int bottom = 0;
-        int whole = 0;
-        int cut = 0;
-        for (int height : childHeightsPx) {
-            int next = bottom + Math.max(0, height);
-            if (next + peek > available)
-                break;
-            bottom = next;
-            whole++;
-            cut = next + peek;
-        }
-        // Where the room cannot hold even the first row and the peek, the honest answer is the room.
-        return new BodyCap(cut > 0 ? Math.min(available, cut) : available, whole, true);
     }
 }
