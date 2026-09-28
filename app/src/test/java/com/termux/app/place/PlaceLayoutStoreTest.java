@@ -56,6 +56,27 @@ public class PlaceLayoutStoreTest {
         return new PlaceLayoutStore(launcher);
     }
 
+    // ------------------------------------------------------------------ the dictation pill
+
+    @Test
+    public void theDictationPillsPlaceIsKeptPerOrientationAndForgottenOutsideItsRange() {
+        PlaceLayoutStore store = store();
+        assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET, store.voicePillX(PlaceOrientation.PORTRAIT), 0f);
+        assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET, store.voicePillY(PlaceOrientation.PORTRAIT), 0f);
+
+        store.setVoicePillPosition(PlaceOrientation.PORTRAIT, 0.25f, 0.8f);
+        assertEquals(0.25f, store().voicePillX(PlaceOrientation.PORTRAIT), 0f);
+        assertEquals(0.8f, store().voicePillY(PlaceOrientation.PORTRAIT), 0f);
+        // The other orientation has a place of its own, and the floating keyboard's is untouched.
+        assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET, store.voicePillX(PlaceOrientation.LANDSCAPE), 0f);
+        assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET, store.floatingKeyboardX(PlaceOrientation.PORTRAIT), 0f);
+
+        // The handle's double tap forgets it.
+        store.setVoicePillPosition(PlaceOrientation.PORTRAIT, -1f, -1f);
+        assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET, store.voicePillX(PlaceOrientation.PORTRAIT), 0f);
+        assertEquals(PlaceLayoutStore.FLOAT_POSITION_UNSET, store.voicePillY(PlaceOrientation.PORTRAIT), 0f);
+    }
+
     // ------------------------------------------------------------------ defaults
 
     @Test

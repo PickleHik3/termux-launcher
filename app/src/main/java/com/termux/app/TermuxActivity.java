@@ -727,6 +727,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 getWindow().getDecorView().removeCallbacks(task);
             }
         });
+    /**
+     * Where the pill was dragged by its handle, per orientation, in the layout store beside the
+     * floating keyboard's place; unset until the first drag and after a double tap on the handle.
+     */
+    private final VoiceListeningIndicator.PositionMemory mVoicePillPlace = new VoiceListeningIndicator.PositionMemory() {
+        @Override
+        public float x() {
+            PlaceLayoutStore store = placeLayoutStore();
+            return store == null ? PlaceLayoutStore.FLOAT_POSITION_UNSET : store.voicePillX(currentPlaceOrientation());
+        }
+
+        @Override
+        public float y() {
+            PlaceLayoutStore store = placeLayoutStore();
+            return store == null ? PlaceLayoutStore.FLOAT_POSITION_UNSET : store.voicePillY(currentPlaceOrientation());
+        }
+
+        @Override
+        public void set(float x, float y) {
+            PlaceLayoutStore store = placeLayoutStore();
+            if (store != null) store.setVoicePillPosition(currentPlaceOrientation(), x, y);
+        }
+    };
     /** Between onResume and onPause: the only time the pill may hold the screen on. */
     private boolean mVoiceScreenMayHold;
     /** The one-time language notices, once per process. */
@@ -14243,7 +14266,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // right, under the status bar and the top bars, the same on Home, Terminal and Display.
         View panes = findViewById(R.id.terminal_surface_host);
         if (panes == null) return;
-        if (mVoiceIndicator == null) mVoiceIndicator = new VoiceListeningIndicator(this, panes);
+        if (mVoiceIndicator == null) mVoiceIndicator = new VoiceListeningIndicator(this, panes, mVoicePillPlace);
         mVoiceIndicator.show(mVoicePillCallbacks, mVoiceCleanup != null, mVoiceDictation.raw());
         refreshVoiceWarmUp();
         // Talking is not touching, so the phone's screen timeout would dim and then lock mid-sentence.
