@@ -91,6 +91,16 @@ interface TaiBenchGuard {
     default void skipCooldown() {
     }
 
+    /**
+     * Whether the in-app screen that owns this run has left the foreground: while held, {@link
+     * #beforePhase} pauses with reason {@code "left"} (checked after the battery/SEVERE stop
+     * rules, before cool-down/thermal pauses) and stops the run past {@code
+     * TaiBenchGuardRules#HELD_TIMEOUT_MS}. Never held for a {@code tai benchmark} run from the
+     * terminal.
+     */
+    default void setHeld(boolean held) {
+    }
+
     /** A guard that lets everything through; what slice 1 ran with, and what tests reach for. */
     TaiBenchGuard ALWAYS_CONTINUE = (phase, entry) -> Decision.proceed();
 }

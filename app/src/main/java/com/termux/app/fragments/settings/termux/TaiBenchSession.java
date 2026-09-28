@@ -211,6 +211,22 @@ public final class TaiBenchSession {
         });
     }
 
+    /**
+     * "Leaving pauses at the end of the current step; Resume on return" (spec Safety table): holds
+     * or releases the active run's guard. The Run screen calls this from its own lifecycle
+     * ({@code onStart}/{@code onStop}), off the main thread. A no-op while nothing is running.
+     */
+    public void hold(@NonNull Context context, boolean held) {
+        if (!running.get()) return;
+        Context app = context.getApplicationContext();
+        control.execute(() -> {
+            try {
+                TaiManager.getInstance(app).holdBench(new JSONObject().put("held", held).toString());
+            } catch (JSONException | RuntimeException ignored) {
+            }
+        });
+    }
+
     // ---- the worker ------------------------------------------------------------------------
 
     private void run(@NonNull Context app, @NonNull Plan plan) {
@@ -244,6 +260,12 @@ public final class TaiBenchSession {
                 }
             }
             TaiDownloadHub.get(app).refresh();
+        }
+        // The run is over (finished or stopped): nothing left to hold, so clear it rather than
+        // leave it set for whatever runs next.
+        try {
+            manager.holdBench(new JSONObject().put("held", false).toString());
+        } catch (JSONException | RuntimeException ignored) {
         }
     }
 

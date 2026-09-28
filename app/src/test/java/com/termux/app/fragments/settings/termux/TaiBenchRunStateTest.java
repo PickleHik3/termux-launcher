@@ -261,6 +261,23 @@ public class TaiBenchRunStateTest {
         assertEquals("writing", state.wait.phase);
     }
 
+    @Test
+    public void aHeldPauseIsVisibleAsLeftTheScreenAndTheNextPhaseClearsIt() throws JSONException {
+        entryStart(0, 1, QWEN, "cpu", 2_000L);
+        state.apply(event("paused", 5_000L).put("phase", "writing").put("ms", 1_000L).put("reason", "left"));
+        assertEquals(TaiBenchRunState.Phase.WAITING, state.phase);
+        TaiBenchRunState.Wait wait = state.wait;
+        assertNotNull(wait);
+        assertTrue(wait.left());
+        assertFalse(wait.cooldown());
+        assertEquals(TaiBenchGuardRules.HELD_TIMEOUT_MS, wait.capMs());
+        assertEquals("writing", wait.phase);
+        // Back on screen: the next phase_start clears the wait.
+        state.apply(event("phase_start", 6_000L).put("phase", "writing").put("runs", 1).put("prompt", "Write."));
+        assertNull(state.wait);
+        assertEquals(TaiBenchRunState.Phase.RUNNING, state.phase);
+    }
+
     // ---- leaderboard, skipped, stop, error ----
 
     @Test

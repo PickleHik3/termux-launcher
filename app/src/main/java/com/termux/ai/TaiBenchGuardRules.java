@@ -36,6 +36,11 @@ public final class TaiBenchGuardRules {
     /** Cool-down: the headroom is "recovered" within this much of the baseline's. */
     static final float HEADROOM_TOLERANCE = 0.05f;
 
+    /** How often a "left the screen" hold pause asks again. */
+    static final long HELD_POLL_MS = 1_000L;
+    /** A hold held this long in total stops the run. */
+    public static final long HELD_TIMEOUT_MS = 30 * 60_000L;
+
     private TaiBenchGuardRules() {
     }
 
@@ -89,16 +94,19 @@ public final class TaiBenchGuardRules {
      * and baseline (run-start) snapshots, and the clock. Cool-down applies only to
      * {@link TaiBenchSuite#PHASE_LOAD} of an entry after the first; every other call only weighs
      * the running battery/thermal rules. A battery stop or a SEVERE+ thermal stop is checked first
-     * and wins over a cool-down wait in progress.
+     * and wins over a cool-down wait or a "left the screen" hold in progress; {@code held} is
+     * checked next, before cool-down/thermal pauses, so the screen going away pre-empts them.
      *
-     * @param waitStartedMs when the current wait (cool-down or thermal pause) began, or a negative value
-     *                       if this call might start one, which reads as "just started" (no
-     *                       time has passed yet)
+     * @param waitStartedMs when the current wait (cool-down, thermal or held pause) began, or a
+     *                       negative value if this call might start one, which reads as "just
+     *                       started" (no time has passed yet)
      * @param nowMs          the clock's reading for this call
+     * @param held           whether the in-app screen that owns this run has left the foreground
      */
     @NonNull
     static Result beforePhase(@NonNull String phase, boolean isFirstEntry, @NonNull Snapshot now,
-                               @Nullable Snapshot baseline, long waitStartedMs, long nowMs, boolean skipRequested) {
+                               @Nullable Snapshot baseline, long waitStartedMs, long nowMs, boolean skipRequested,
+                               boolean held) {
         if (now.batteryPercent >= 0 && now.batteryPercent < RUNNING_BATTERY_STOP_PERCENT && !now.charging) {
             return new Result(TaiBenchGuard.Decision.stop("battery_low"), false);
         }
@@ -106,6 +114,12 @@ public final class TaiBenchGuardRules {
             return new Result(TaiBenchGuard.Decision.stop("thermal"), false);
         }
         long elapsedMs = waitStartedMs < 0L ? 0L : Math.max(0L, nowMs - waitStartedMs);
+        if (held) {
+            if (elapsedMs >= HELD_TIMEOUT_MS) {
+                return new Result(TaiBenchGuard.Decision.stop("left"), false);
+            }
+            return new Result(TaiBenchGuard.Decision.pause(HELD_POLL_MS, "left"), false);
+        }
         boolean cooldownApplies = TaiBenchSuite.PHASE_LOAD.equals(phase) && !isFirstEntry;
         if (cooldownApplies) {
             // An entirely unknown thermal reading (API < 29, or the baseline snapshot never got
