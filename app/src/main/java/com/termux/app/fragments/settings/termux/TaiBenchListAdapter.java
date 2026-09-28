@@ -100,7 +100,13 @@ final class TaiBenchListAdapter extends RecyclerView.Adapter<TaiBenchListAdapter
     @NonNull
     @Override
     public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        return new Holder(factory.create(parent, viewType));
+        View view = factory.create(parent, viewType);
+        // Rows are built in code without layout params; the list's default would be wrap-content
+        // wide, and every row here spans the list.
+        if (view.getLayoutParams() == null) {
+            view.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        return new Holder(view);
     }
 
     @Override
