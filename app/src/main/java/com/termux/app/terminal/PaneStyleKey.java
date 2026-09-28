@@ -20,6 +20,7 @@ import java.util.Objects;
 public final class PaneStyleKey {
 
     private final boolean mGlass;
+    private final boolean mBorder;
     @Nullable private final Bitmap mFrame;
     @NonNull private final Rect mFrameRect;
     @Nullable private final ColorFilter mFrostFilter;
@@ -34,6 +35,7 @@ public final class PaneStyleKey {
 
     private PaneStyleKey(@NonNull PaneSurfaceStyle style) {
         mGlass = style.isPaneGlassActive();
+        mBorder = style.paneBorderEnabled();
         mFrame = style.paneGlassBlurFrame();
         mFrameRect = new Rect(style.paneGlassBlurFrameRect());
         mFrostFilter = style.paneGlassFrostFilter();
@@ -58,6 +60,7 @@ public final class PaneStyleKey {
         if (!(other instanceof PaneStyleKey)) return false;
         PaneStyleKey that = (PaneStyleKey) other;
         return mGlass == that.mGlass
+            && mBorder == that.mBorder
             && mFrame == that.mFrame
             && mFrameRect.equals(that.mFrameRect)
             && mFrostFilter == that.mFrostFilter
@@ -73,7 +76,7 @@ public final class PaneStyleKey {
 
     @Override
     public int hashCode() {
-        return Objects.hash(mGlass, System.identityHashCode(mFrame), mFrameRect,
+        return Objects.hash(mGlass, mBorder, System.identityHashCode(mFrame), mFrameRect,
             System.identityHashCode(mFrostFilter), mTint, mGrainStrength, mCornerRadiusPx,
             mCornerRadiusDp, mGapDp, System.identityHashCode(mWallBehind), mWallBehindColor,
             mRefraction);

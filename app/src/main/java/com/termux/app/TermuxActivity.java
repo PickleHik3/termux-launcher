@@ -3043,6 +3043,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return isTerminalPaneGlassActive();
             }
 
+            @Override public boolean paneBorderEnabled() {
+                return mPreferences != null && mPreferences.isTerminalBorderEnabled();
+            }
+
             @Override @Nullable public Bitmap paneGlassBlurFrame() {
                 return obtainTerminalPaneGlassFrame();
             }
@@ -16681,6 +16685,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                         Trace.setCounter("Wall.offsetPx", Math.round(offsetPx));
                     syncPlaceBarOffset(offsetPx);
+                    // The terminal's own frame line stays put while its page leaves: it fades.
+                    syncTerminalFrameLineTravel();
                     // The dock, the keyboard and the status bar's content travel with the wall
                     // between the two places' states, as transforms only.
                     syncChromeTravel(offsetPx);
@@ -16779,6 +16785,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAppliedChromeMinimal = isChromeMinimal();
             applyMinimalStatusChrome();
         }
+    }
+
+    /** The share of the terminal's frame line last drawn; 1 at rest on the terminal. */
+    private float mTerminalFrameLineAlpha = 1f;
+
+    /**
+     * The terminal's own frame line ({@code terminal_border_overlay}, the plain border around a
+     * lone pane) is chrome laid over the wall rather than a rim the page carries, so it cannot
+     * move with the page: it fades as the terminal page leaves its rest, over the same stretch the
+     * pages' rims fade, and stays away while another place rests in the frame — the Widgets and
+     * Display pages wear a line of their own ({@code PaneWallPolicy.pageOutlineAlpha}). Per frame
+     * of a slide, so nothing here but a comparison and an alpha.
+     */
+    private void syncTerminalFrameLineTravel() {
+        if (mPaneWallController == null) return;
+        View borderView = findViewById(R.id.terminal_border_overlay);
+        View paneHost = findViewById(R.id.terminal_pane_host);
+        if (borderView == null || paneHost == null) return;
+        float alpha = com.termux.app.wall.PaneWallPolicy.pageOutlineAlpha(
+            paneHost.getTranslationX(), mPaneWallController.wall().getWidth());
+        if (alpha == mTerminalFrameLineAlpha) return;
+        mTerminalFrameLineAlpha = alpha;
+        borderView.setAlpha(alpha);
     }
 
     /**
