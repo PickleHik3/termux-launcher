@@ -398,6 +398,7 @@ launcherctl clipboard paste        # {"ok":true,"text":"…"}
 | POST | `/v1/responses` | Stateless OpenAI Responses adapter (text/image input, function calls/results) |
 | POST | `/v1/completions` | Legacy text completions, SSE streaming |
 | POST | `/v1/embeddings` | Embeddings for models advertising `text_embeddings` |
+| POST | `/v1/tokenize` | `{model, input}` in, `{tokens: n}` out, using the model's own tokenizer |
 | POST | `/v1/audio/transcriptions` | Speech to text with the voice input speech model: multipart `file` (WAV or raw 16 kHz PCM16), `model`, `language`, `prompt`, `response_format` `json`\|`text`\|`verbose_json`; see [Voice input](Voice_Input.md) |
 | POST | `/v1/audio/speech` | Speech output with the voice model (KittenTTS): `wav` whole, `pcm` streamed per sentence; see [Text to speech](Text_To_Speech.md) |
 | POST | `/v1/ai/speak` | `tai speak`: plays the text on the phone (JSON or plain-text body; `?voice=&speed=`; `?format=wav` returns audio instead) |
@@ -419,9 +420,25 @@ Each entry in the standard OpenAI-shaped `data` array includes TAI-specific meta
 
 #### `POST /v1/embeddings`
 
-OpenAI-compatible embeddings endpoint. Only models that advertise `text_embeddings` in their `/v1/models` `_capabilities` array are accepted; others return `capability_not_supported`. `input` may be a string or an array of strings, and the response returns one OpenAI `embedding` item per input in the same order. Local output is float vectors only; `encoding_format:"base64"` is rejected with `unsupported_encoding_format`.
+OpenAI-compatible embeddings endpoint. Only models that advertise `text_embeddings` in their `/v1/models` `_capabilities` array are accepted; others return `capability_not_supported`. `input` may be a string or an array of strings (at most `_endpoint_max_batch` entries, currently 64; a larger batch returns `413 batch_too_large` naming the limit, never a silent drop), and the response returns one OpenAI `embedding` item per input in the same order.
+
+Request fields beyond the OpenAI basics (`model`, `input`, `dimensions`):
+
+- `input_type`: `"query"` or `"document"` (default `"document"`). EmbeddingGemma was trained with a task prefix on every input; the server adds it, counted inside the model's window: `task: search result | query: ` for a query, `title: <title or none> | text: ` for a document. Other embedding families ignore this field.
+- `title`: an optional document heading (for example a note's title), folded into the document prefix in place of `none`. Ignored for `input_type: "query"`.
+- `encoding_format`: `"float"` (default) or `"base64"` (standard base64 of the vector's little-endian float32 bytes, OpenAI's shape).
+
+Each `data[i]` also reports `tokens` (the token count before any truncation; body and prefix combined, BOS/EOS excluded) and `truncated` (whether the body had to be cut to fit the model's window — the prefix itself is never the part that is cut). A long input is trimmed, never a 500.
+
+Dawn brief items 5 and 6, useful for a client that indexes in the background: while a chat generation is running elsewhere in the process, embeddings run throttled (fewer interpreter threads for LiteRT, background thread priority for MNN) so they do not slow the live reply; the embedder's `/v1/models` entry then carries `_endpoint_throttled_while_generating` (`"threads"` or `"priority"`) when this call itself answers from the runtime process. A load that cannot fit in memory returns `503` with a `Retry-After` header and `code: "embedding_memory"`, distinct from the `429`/`Retry-After` a request over the 60/minute rate limit gets.
 
 LiteRT EmbeddingGemma `.tflite` installs require `sentencepiece.model` in the same model directory. New downloads fetch that sidecar automatically. Older installs that only contain the `.tflite` return `embedding_tokenizer_missing` until the model is re-downloaded or the sidecar is added.
+
+The embedder's `/v1/models` entry additionally carries `_endpoint_dimensions` (the model's native output width; recognised families only), `_endpoint_matryoshka_dims` (the sizes `dimensions` may truncate to, largest first), `_endpoint_normalized` (`true`: every vector is L2-normalised), `_endpoint_max_batch`, and a stable `_revision` (a cheap hash of the model file's name/size/mtime, never its bytes) a client can use to know when to rebuild its index.
+
+#### `POST /v1/tokenize`
+
+`{model, input}` in, `{tokens: n}` out: the installed embedding model's own tokenizer, with no task prefix and no BOS/EOS framing added — just the raw count, so a client can split long text on real token counts instead of estimating from characters. Only the LiteRT/EmbeddingGemma path exposes a tokenizer today; other backends return `capability_not_supported`.
 
 ### Ollama-compatible
 
