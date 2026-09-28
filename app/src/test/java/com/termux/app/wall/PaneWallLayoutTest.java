@@ -826,7 +826,9 @@ public class PaneWallLayoutTest {
     @Test
     public void theDisplayPageSinksWithoutALayer() {
         buildWithContent();
-        assertTrue(wall.goTo(PaneWallPage.DISPLAY, false));
+        // Parked off screen at the first layout, the Display page is laid out once it is shown.
+        showAndLayOut(PaneWallPage.DISPLAY);
+        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
         wall.setReducedMotion(false);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
         letTheHoldElapse();
