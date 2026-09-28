@@ -15,6 +15,7 @@ import android.widget.RelativeLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.chrome.GrabHandle;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
@@ -114,11 +115,11 @@ public class FloatingKeyboardFrameTest {
 
     @Test
     public void thePillNeverThinsBelowTwoPixels() {
-        assertEquals(10, FloatingKeyboardFrame.pillHeightPx(3f));
-        assertEquals(3, FloatingKeyboardFrame.pillHeightPx(1f));
+        assertEquals(10, GrabHandle.pillHeightPx(3f));
+        assertEquals(3, GrabHandle.pillHeightPx(1f));
         // Under a density of 0.625 the rounded pill would be a hairline, so the floor takes over.
-        assertEquals(2, FloatingKeyboardFrame.pillHeightPx(0.625f));
-        assertEquals(2, FloatingKeyboardFrame.pillHeightPx(0.1f));
+        assertEquals(2, GrabHandle.pillHeightPx(0.625f));
+        assertEquals(2, GrabHandle.pillHeightPx(0.1f));
     }
 
     /** A frame with a keyboard inside it, measured and laid out once. */

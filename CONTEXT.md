@@ -142,8 +142,17 @@ _Avoid_: voice typing (the Android recognizer's path), voice session
 
 **Pill**:
 The small bar at the top right of the place viewport while a dictation is up: waveform, state,
-pause/resume and ×. Same corner on every place. The waveform rests (a dim line) while not listening.
+pause/resume and ×, as long as its contents and no longer. Same corner on every place until moved
+by its handle. The waveform rests (a dim line) while not listening. The screen stays on for as long
+as it is up (released after 3 minutes of untouched waiting text, and at once when it closes or the
+app pauses).
 _Avoid_: voice indicator, overlay
+
+**Pill handle**:
+The floating keyboard's grab handle, under the panel: dragged, it moves the pill and panel anywhere
+in the place viewport, remembered per orientation beside the floating keyboard's place; a double tap
+puts it back in the top right corner. Placed low, the panel grows upward.
+_Avoid_: drag bar, grip (the floating keyboard's resize corner)
 
 **Pause / resume**:
 Pause stops listening: the phrases still transcribing arrive, then the cleanup runs on its own.
@@ -157,9 +166,17 @@ of the card is the same. It never means stop.
 _Avoid_: close (on its own), bin (retired)
 
 **Panel**:
-What the pill grows into, downward: the dictation's text (seven lines, the oldest scrolling off the
-top) over three icons: undo, Copy and ✓. It is where the text waits until one of them is used.
+What the pill grows into, downward (upward when placed low): the dictation's text (seven lines, the
+oldest scrolling off the top) over the action pill, one long rounded bar holding undo, Copy and ✓. It
+is where the text waits until one of them is used. Text as heard is italic in the secondary colour;
+cleaned text is upright in the primary one.
 _Avoid_: transcript view, preview
+
+**Mic sensitivity**:
+How readily quiet speech opens a phrase: Normal (the default) or High. It sets how far the audio
+Silero judges is lifted to match the room, and the voiced time a phrase needs. High catches soft
+speech and hears nearby talk and TVs more.
+_Avoid_: gain, VAD threshold, microphone volume
 
 **Cleanup**:
 The one pass a local chat model makes over the whole dictation once it pauses, at the level chosen in

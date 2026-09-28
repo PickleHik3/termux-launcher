@@ -24,8 +24,9 @@ import java.util.Arrays;
  *       the quiet ends of words spoken far from the mic still count; the segment keeps {@link #PAD_MS} of audio before that onset (a pre-roll ring)
  *       and {@link #PAD_MS} after the last voiced frame — tightly cut single words hallucinate;</li>
  *   <li>a pause of {@code pauseMs} without a voiced frame closes the segment;</li>
- *   <li>a segment with less than {@link #MIN_VOICED_MS} of voiced frames is dropped, never sent —
- *       a 0.1 s remainder produced invented text on both models;</li>
+ *   <li>a segment with less than {@link #MIN_VOICED_MS} of voiced frames (the "Mic sensitivity"
+ *       setting's, {@link VoiceMicSensitivity#minVoicedMs}) is dropped, never sent — a 0.1 s
+ *       remainder produced invented text on both models;</li>
  *   <li>a segment that reaches the graph's window is cut at the quietest frame of its last second
  *       and the rest carries on as the next segment;</li>
  *   <li>{@code sessionSilenceMs} without speech tells the listener the session should end — the
@@ -36,8 +37,12 @@ import java.util.Arrays;
  * a piece, capped at {@link #NOISE_FLOOR_CAP} so continuous speech is never taken for noise. It
  * used to follow only non-voiced frames, dropping at once and rising slowly: on pong one quiet
  * frame at mic-open pinned it at −75 dBFS under a −62 dBFS TV, every frame after that counted as
- * speech, so the floor never saw a frame to rise on and pauses never closed a segment. Everything
- * runs on the thread that feeds it; the listener is called on that same thread.
+ * speech, so the floor never saw a frame to rise on and pauses never closed a segment.
+ *
+ * <p>Silero is shown each frame lifted by {@link VoiceMicSensitivity#sileroGain} for the current
+ * noise floor, because its probability sinks with the absolute level and quiet speech on a phone
+ * without AGC sits under its onset; nothing else sees the lifted copy. Everything runs on the
+ * thread that feeds it; the listener is called on that same thread.
  */
 public final class VoiceActivityDetector {
 
@@ -45,6 +50,7 @@ public final class VoiceActivityDetector {
     public static final int FRAME_MS = 30;
     public static final int FRAME_SAMPLES = SAMPLE_RATE * FRAME_MS / 1000;
     public static final int PAD_MS = 300;
+    /** The Normal sensitivity's minimum voiced time; {@link VoiceMicSensitivity#minVoicedMs} is the one in force. */
     public static final int MIN_VOICED_MS = 300;
     /** 9 dB over the floor, as a linear RMS ratio: what opens a segment. */
     static final float VOICE_OVER_FLOOR = 2.8f;
@@ -100,7 +106,9 @@ public final class VoiceActivityDetector {
     private final Listener listener;
     private final int pauseFrames;
     private final int padFrames = PAD_MS / FRAME_MS;
-    private final int minVoicedFrames = MIN_VOICED_MS / FRAME_MS;
+    private final int minVoicedFrames;
+    /** How far Silero's copy of a frame is lifted, and how much voiced time a segment needs. */
+    private final VoiceMicSensitivity sensitivity;
     /** Rounded up so the timeout is never early; {@link Integer#MAX_VALUE} disables it ("Until tap"). */
     private final int silenceTimeoutFrames;
     private final int maxSegmentFrames;
@@ -150,8 +158,17 @@ public final class VoiceActivityDetector {
      */
     public VoiceActivityDetector(@NonNull Listener listener, int pauseMs, int windowSeconds,
                                  int sessionSilenceMs, @Nullable SileroVoiceDecider speech) {
+        this(listener, pauseMs, windowSeconds, sessionSilenceMs, speech, VoiceMicSensitivity.NORMAL);
+    }
+
+    /** As the five-argument constructor, at the given "Mic sensitivity". */
+    public VoiceActivityDetector(@NonNull Listener listener, int pauseMs, int windowSeconds,
+                                 int sessionSilenceMs, @Nullable SileroVoiceDecider speech,
+                                 @NonNull VoiceMicSensitivity sensitivity) {
         this.listener = listener;
         this.speech = speech;
+        this.sensitivity = sensitivity;
+        this.minVoicedFrames = Math.max(1, sensitivity.minVoicedMs / FRAME_MS);
         this.pauseFrames = Math.max(1, pauseMs / FRAME_MS);
         int windowFrames = Math.max(2, windowSeconds) * 1000 / FRAME_MS;
         this.maxSegmentFrames = Math.max(CUT_SEARCH_FRAMES + 1, windowFrames - 2 * padFrames);
@@ -201,7 +218,7 @@ public final class VoiceActivityDetector {
         boolean voiced = false;
         boolean bySilero = decidesBySilero();
         if (bySilero) {
-            voiced = speech.decide(frame, inSpeech);
+            voiced = speech.decide(frame, inSpeech, sensitivity.sileroGain(noiseFloor));
             // A model that has just thrown decides nothing; this frame falls to energy like the rest.
             bySilero = !speech.failed();
         }

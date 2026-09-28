@@ -111,6 +111,20 @@ public class SileroVoiceDeciderTest {
     }
 
     @Test
+    public void theModelsCopyIsLiftedByTheGainAndHeldInsideFullScale() {
+        FakeSource source = new FakeSource(chunk -> 0.0);
+        SileroVoiceDecider decider = new SileroVoiceDecider(source, reporter);
+        for (int i = 0; i < 4; i++) decider.decide(frame(i), false, 4f);
+        float[] window = source.windows.get(0);
+        for (int j = 0; j < CHUNK; j++) {
+            float expected = Math.max(-1f, Math.min(1f, sample(j) * 4f / 32768f));
+            assertEquals("sample " + j, expected, window[CONTEXT + j], 1e-6f);
+        }
+        // The ramp reaches ±10 000, which four times over is past full scale: held at it.
+        assertEquals(-1f, window[CONTEXT], 0f);
+    }
+
+    @Test
     public void aModelThatThrowsFailsTheDeciderAndReportsIt() {
         FakeSource source = new FakeSource(chunk -> 0.9);
         source.throwAtChunk = 2;
@@ -156,6 +170,10 @@ public class SileroVoiceDeciderTest {
     private final List<short[]> segments = new ArrayList<>();
 
     private VoiceActivityDetector detector(SileroVoiceDecider speech) {
+        return detector(speech, VoiceMicSensitivity.NORMAL);
+    }
+
+    private VoiceActivityDetector detector(SileroVoiceDecider speech, VoiceMicSensitivity sensitivity) {
         return new VoiceActivityDetector(new VoiceActivityDetector.Listener() {
             @Override
             public void onLevel(float rms, boolean voiced, float noiseFloor) {
@@ -170,7 +188,7 @@ public class SileroVoiceDeciderTest {
             @Override
             public void onSilenceTimeout() {
             }
-        }, 600, 10, VoiceSilenceTimeout.UNTIL_TAP, speech);
+        }, 600, 10, VoiceSilenceTimeout.UNTIL_TAP, speech, sensitivity);
     }
 
     /** {@code frames} frames of a 440 Hz tone at about −12 dBFS: loud enough for the energy decision. */
@@ -244,6 +262,44 @@ public class SileroVoiceDeciderTest {
         for (int i = 0; i < 6; i++) assertFalse("frame " + i, voicedFlags.get(i));
         assertTrue(voicedFlags.subList(6, 80).contains(true));
         assertEquals(1, segments.size());
+    }
+
+    @Test
+    public void highSensitivityNeedsMoreVoicedTimeBeforeAPhraseIsSent() {
+        // Twelve chunks of speech (6 144 samples) voice 12 or 13 frames: over Normal's 300 ms
+        // (10 frames), under High's 420 ms (14).
+        short[] pcm = quiet(60);
+        VoiceActivityDetector normal = detector(new SileroVoiceDecider(
+            new FakeSource(chunk -> chunk >= 2 && chunk < 14 ? 0.9 : 0.0), reporter));
+        normal.feed(pcm, pcm.length);
+        normal.finish();
+        int voiced = 0;
+        for (boolean flag : voicedFlags) if (flag) voiced++;
+        assertTrue("voiced " + voiced, voiced >= 10 && voiced < 14);
+        assertEquals(1, segments.size());
+
+        segments.clear();
+        VoiceActivityDetector high = detector(new SileroVoiceDecider(
+            new FakeSource(chunk -> chunk >= 2 && chunk < 14 ? 0.9 : 0.0), reporter), VoiceMicSensitivity.HIGH);
+        high.feed(pcm, pcm.length);
+        high.finish();
+        assertTrue(segments.isEmpty());
+    }
+
+    @Test
+    public void theDetectorLiftsSilerosCopyOfAQuietRoom() {
+        // A room at about −75 dBFS is far under both targets, so every window after the first
+        // frame is lifted by the most the setting allows: 4x (12 dB) for High.
+        FakeSource source = new FakeSource(chunk -> 0.0);
+        VoiceActivityDetector vad = detector(new SileroVoiceDecider(source, reporter), VoiceMicSensitivity.HIGH);
+        short[] pcm = quiet(20);
+        vad.feed(pcm, pcm.length);
+        float[] window = source.windows.get(3);
+        float gain = VoiceMicSensitivity.HIGH.sileroGain(0.0001f);
+        assertEquals(12f, (float) (20 * Math.log10(gain)), 0.01f);
+        for (int j = 0; j < CHUNK; j++) {
+            assertEquals("sample " + j, pcm[3 * CHUNK + j] * gain / 32768f, window[CONTEXT + j], 1e-6f);
+        }
     }
 
     @Test

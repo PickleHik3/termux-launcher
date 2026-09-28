@@ -1419,6 +1419,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_POLISH_LEVEL, level, false);
     }
 
+    /** {@code normal} or {@code high}; anything else stored reads as the default, Normal. */
+    public String getInAppKeyboardVoiceMicSensitivity() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY,
+            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY, true);
+        return TERMUX_APP.IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY_HIGH.equals(value)
+            ? TERMUX_APP.IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY_HIGH
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY;
+    }
+
+    public void setInAppKeyboardVoiceMicSensitivity(String value) {
+        String sensitivity = TERMUX_APP.IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY_HIGH.equals(value)
+            ? TERMUX_APP.IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY_HIGH
+            : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY;
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY, sensitivity, false);
+    }
+
     /** One of {@link TERMUX_APP#IN_APP_KEYBOARD_VOICE_PAUSE_MS_CHOICES}; anything else stored reads as the default. */
     public int getInAppKeyboardVoicePauseMs() {
         int value = SharedPreferenceUtils.getInt(mSharedPreferences,

@@ -11,12 +11,15 @@ import android.graphics.Paint;
 import android.graphics.PorterDuff;
 import android.graphics.RectF;
 import android.graphics.Shader;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.text.Layout;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StrikethroughSpan;
+import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
@@ -43,20 +46,26 @@ import java.util.List;
  * and revealed by moving a transparent span, so the lines never reflow while typing. With
  * animations off, a phrase appears at once and the shimmer is still.
  *
- * <p>With cleanup on, the raw text shows dim. Once the one pass has landed (the model's, or the
- * command formatter's), the cleaned text replaces it with the changes marked from
- * {@link VoiceWordDiff}: changed and added words in the accent colour, removed words struck
- * through, held for {@link #MARK_HOLD_MS} and then faded into the plain cleaned text.
+ * <p>The two versions of the text never look alike. As heard — while a cleanup is to come, and
+ * again after undo — it is italic in the secondary text colour ({@code termuxColorOnSurfaceVariant});
+ * cleaned, it is upright in the primary one ({@code termuxColorOnSurface}), so which one is on
+ * screen reads at a glance, before any change mark. Text that is final as heard (cleanup off, or
+ * nothing better came back) has no other version to be told from and shows upright and primary.
+ * Once the one pass has landed (the model's, or the command formatter's), the cleaned text
+ * replaces the as-heard one with the changes marked from {@link VoiceWordDiff}: changed and added
+ * words in the accent colour, removed words struck through, held for {@link #MARK_HOLD_MS} and
+ * then faded into the plain cleaned text.
  *
- * <p>The text only ever moves one way: as heard (dim while a cleanup is to come), then cleaned.
- * What is shown is always {@link #shownText()}; a phrase that arrives after the cleanup joins
- * that, never the as-heard copy behind it, so an older version cannot come back. Only undo
- * shows the as-heard text again, and only on purpose.
+ * <p>The text only ever moves one way: as heard, then cleaned. What is shown is always
+ * {@link #shownText()}; a phrase that arrives after the cleanup joins that, never the as-heard
+ * copy behind it, so an older version cannot come back. Only undo shows the as-heard text again,
+ * and only on purpose, in its as-heard style.
  *
- * <p>Under the text sit three icons: undo (and, once undone, redo; only while there is a cleanup
- * to take back), Copy and ✓ (insert at the cursor, once). Both Copy and ✓ may be pressed early;
- * the host stops listening and carries the press out once the text settles. Discarding is the
- * pill's ×, or a swipe of the card.
+ * <p>Under the text, one long rounded pill ({@code termuxColorSurfacePanelHigh}) the full width of
+ * the panel holds the three controls, spread evenly across it: undo (and, once undone, redo; only
+ * while there is a cleanup to take back), Copy and ✓ (insert at the cursor, once). They never
+ * leave it. Both Copy and ✓ may be pressed early; the host stops listening and carries the press
+ * out once the text settles. Discarding is the pill's ×, or a swipe of the card.
  */
 final class VoiceTranscriptPanel extends LinearLayout {
 
@@ -74,18 +83,24 @@ final class VoiceTranscriptPanel extends LinearLayout {
     static final long TYPE_MS = 300L;
     static final long MARK_HOLD_MS = 1500L;
     static final long MARK_FADE_MS = 400L;
+    /** The action pill's height, and each control's. */
+    static final int ACTION_PILL_DP = 40;
+    /** Between the text (or the shimmer line) and the action pill. */
+    static final int ACTION_PILL_GAP_DP = 8;
 
     private final TextView text;
     private final ShimmerBar shimmer;
     private final LinearLayout actions;
     private final ImageView undo;
     private final int onSurface;
-    private final int dimText;
+    /** The as-heard text's colour, the theme's secondary text colour. */
+    private final int asHeard;
     private final int accent;
     private final ForegroundColorSpan hidden = new ForegroundColorSpan(Color.TRANSPARENT);
 
     /** What goes into the cleanup: the text carried on from, then every phrase as heard. */
     private final StringBuilder raw = new StringBuilder();
+    /** A cleanup is to come, so the raw text shows as heard rather than as final. */
     private boolean dimRaw;
     private int revealed;
     @Nullable private ValueAnimator typing;
@@ -98,11 +113,17 @@ final class VoiceTranscriptPanel extends LinearLayout {
     @Nullable private ValueAnimator markFade;
     private final Runnable fadeMarks = this::fadeMarks;
 
-    VoiceTranscriptPanel(@NonNull Context context, int onSurface, int accent, @NonNull Actions callbacks) {
+    /**
+     * @param onSurface the primary text colour: cleaned and final text, the icons
+     * @param onSurfaceVariant the secondary text colour: text as heard
+     * @param actionSurface the action pill's fill
+     */
+    VoiceTranscriptPanel(@NonNull Context context, int onSurface, int onSurfaceVariant, int accent,
+                         int actionSurface, @NonNull Actions callbacks) {
         super(context);
         this.onSurface = onSurface;
+        this.asHeard = onSurfaceVariant;
         this.accent = accent;
-        this.dimText = (onSurface & 0x00FFFFFF) | 0x99000000;
         setOrientation(VERTICAL);
 
         text = new TextView(context);
@@ -124,23 +145,26 @@ final class VoiceTranscriptPanel extends LinearLayout {
         shimmer.setVisibility(GONE);
         addView(shimmer, shimmerParams);
 
-        // Undo, Copy and ✓ together at the end, ✓ nearest the edge the pill hangs from. Undo is
-        // there only while a cleanup can be taken back.
+        // Undo, Copy and ✓ in one long pill the panel's width, spread evenly, ✓ at the end. Undo
+        // is there only while a cleanup can be taken back; Copy and ✓ share the pill without it.
         actions = new LinearLayout(context);
         actions.setOrientation(HORIZONTAL);
         actions.setGravity(Gravity.CENTER_VERTICAL);
-        actions.addView(new View(context), new LayoutParams(0, 1, 1f));
+        GradientDrawable pill = new GradientDrawable();
+        pill.setColor(actionSurface);
+        pill.setCornerRadius(dp(ACTION_PILL_DP) / 2f);
+        actions.setBackground(pill);
         undo = iconButton(context, R.drawable.ic_symbol_undo, onSurface,
             R.string.voice_input_undo, v -> callbacks.onUndo());
         undo.setVisibility(GONE);
-        actions.addView(undo);
+        actions.addView(undo, actionCell());
         actions.addView(iconButton(context, R.drawable.ic_symbol_content_copy, onSurface,
-            R.string.voice_input_cleanup_copy, v -> callbacks.onCopy()));
+            R.string.voice_input_cleanup_copy, v -> callbacks.onCopy()), actionCell());
         actions.addView(iconButton(context, R.drawable.ic_symbol_check, accent,
-            R.string.voice_input_insert, v -> callbacks.onInsert()));
+            R.string.voice_input_insert, v -> callbacks.onInsert()), actionCell());
         actions.setVisibility(GONE);
-        LayoutParams actionParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        actionParams.topMargin = dp(2);
+        LayoutParams actionParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(ACTION_PILL_DP));
+        actionParams.topMargin = dp(ACTION_PILL_GAP_DP);
         addView(actions, actionParams);
     }
 
@@ -160,12 +184,12 @@ final class VoiceTranscriptPanel extends LinearLayout {
         return text.getLineHeight();
     }
 
-    /** The height of everything but the text: padding, the shimmer line's room and the buttons. */
+    /** The height of everything but the text: padding, the shimmer line's room and the action pill. */
     int chromeHeightPx() {
-        return getPaddingTop() + getPaddingBottom() + dp(12) + dp(40);
+        return getPaddingTop() + getPaddingBottom() + dp(12) + dp(ACTION_PILL_GAP_DP) + dp(ACTION_PILL_DP);
     }
 
-    /** Whether raw text shows dim, waiting for the cleanup pass at the end. */
+    /** Whether raw text shows as heard (italic, secondary), waiting for the cleanup pass at the end. */
     void setDimRaw(boolean dim) {
         dimRaw = dim;
     }
@@ -249,8 +273,8 @@ final class VoiceTranscriptPanel extends LinearLayout {
     }
 
     /**
-     * Undo ({@code true}): the text as it went into the cleanup, plain; redo ({@code false}): the
-     * cleaned text again, plain. No-op without a cleanup.
+     * Undo ({@code true}): the text as it went into the cleanup, in the as-heard style; redo
+     * ({@code false}): the cleaned text again, plain. No-op without a cleanup.
      */
     void setUndone(boolean undoneNow) {
         if (cleaned == null || undone == undoneNow) return;
@@ -258,7 +282,7 @@ final class VoiceTranscriptPanel extends LinearLayout {
         cancelMarks();
         if (undone) {
             SpannableStringBuilder builder = new SpannableStringBuilder(raw);
-            builder.setSpan(new ForegroundColorSpan(onSurface), 0, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            styleAsHeard(builder, true);
             text.setText(builder, TextView.BufferType.SPANNABLE);
             scrollToEnd();
         } else {
@@ -309,13 +333,23 @@ final class VoiceTranscriptPanel extends LinearLayout {
 
     private void renderRaw() {
         SpannableStringBuilder builder = new SpannableStringBuilder(raw);
-        builder.setSpan(new ForegroundColorSpan(dimRaw ? dimText : onSurface), 0, builder.length(),
-            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        styleAsHeard(builder, dimRaw);
         if (revealed < builder.length()) {
             builder.setSpan(hidden, revealed, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         text.setText(builder, TextView.BufferType.SPANNABLE);
         scrollToEnd();
+    }
+
+    /**
+     * The whole of {@code builder} as heard (italic, secondary colour) or as final (upright,
+     * primary). The typing span goes on top of this and is removed on its own.
+     */
+    private void styleAsHeard(@NonNull SpannableStringBuilder builder, boolean heard) {
+        int length = builder.length();
+        builder.setSpan(new ForegroundColorSpan(heard ? asHeard : onSurface), 0, length,
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        if (heard) builder.setSpan(new StyleSpan(Typeface.ITALIC), 0, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
     }
 
     // ------------------------------------------------------------------ cleaned text
@@ -413,7 +447,13 @@ final class VoiceTranscriptPanel extends LinearLayout {
         });
     }
 
-    /** A 40 dp square around a 20 dp glyph, tinted {@code tint}. */
+    /** One control's share of the action pill: an even third (or half, without undo), its full height. */
+    @NonNull
+    private LayoutParams actionCell() {
+        return new LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+    }
+
+    /** A 20 dp glyph centred in its cell, tinted {@code tint}. */
     @NonNull
     private ImageView iconButton(@NonNull Context context, int icon, int tint, int description,
                                  @NonNull OnClickListener listener) {
@@ -428,7 +468,6 @@ final class VoiceTranscriptPanel extends LinearLayout {
             button.setBackgroundResource(ripple.resourceId);
         }
         button.setOnClickListener(listener);
-        button.setLayoutParams(new LayoutParams(dp(40), dp(40)));
         return button;
     }
 

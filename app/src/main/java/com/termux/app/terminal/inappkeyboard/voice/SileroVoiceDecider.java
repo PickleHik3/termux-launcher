@@ -117,12 +117,24 @@ public final class SileroVoiceDecider {
      * false once {@link #failed()}; the detector checks that and decides by energy instead.
      */
     boolean decide(@NonNull short[] frame, boolean inSpeech) {
+        return decide(frame, inSpeech, 1f);
+    }
+
+    /**
+     * As {@link #decide(short[], boolean)}, with the frame's samples scaled by {@code gain} (and
+     * held inside [-1, 1]) before the model sees them: {@link VoiceMicSensitivity#sileroGain}, the
+     * lift that brings quiet speech up to where Silero's probability means something. Only the
+     * model's copy is scaled.
+     */
+    boolean decide(@NonNull short[] frame, boolean inSpeech, float gain) {
         if (failed) return false;
+        float scale = gain / 32768f;
         int offset = 0;
         while (offset < frame.length) {
             int take = Math.min(CHUNK_SAMPLES - chunkFill, frame.length - offset);
             for (int i = 0; i < take; i++) {
-                window[CONTEXT_SAMPLES + chunkFill + i] = frame[offset + i] / 32768f;
+                float value = frame[offset + i] * scale;
+                window[CONTEXT_SAMPLES + chunkFill + i] = value > 1f ? 1f : (value < -1f ? -1f : value);
             }
             chunkFill += take;
             offset += take;

@@ -90,6 +90,9 @@ public final class PlaceLayoutStore {
     private static final String KEY_MINIMAL = "minimal";
     private static final String KEY_KEYBOARD_FLOAT_X = "keyboard_float_x";
     private static final String KEY_KEYBOARD_FLOAT_Y = "keyboard_float_y";
+    /** Where the dictation pill was dragged to, beside the floating keyboard's place. */
+    private static final String KEY_VOICE_PILL_X = "voice_pill_x";
+    private static final String KEY_VOICE_PILL_Y = "voice_pill_y";
 
     /**
      * The per-place choice of how the keyboard came back on entry. Gone with version 6: Home always
@@ -571,6 +574,26 @@ public final class PlaceLayoutStore {
                                             float x, float y) {
         writeFraction(layoutKey(orientation, KEY_KEYBOARD_FLOAT_X), x);
         writeFraction(layoutKey(orientation, KEY_KEYBOARD_FLOAT_Y), y);
+    }
+
+    /**
+     * Where the dictation pill and its panel were dragged to by their handle, as the same kind of
+     * fractions of the room they move in as {@link #floatingKeyboardX}; {@link #FLOAT_POSITION_UNSET}
+     * until the first drag, and again after a double tap on the handle puts the pill back in its
+     * top right corner. Per orientation and shared by every place, for the same reasons.
+     */
+    public float voicePillX(@NonNull PlaceOrientation orientation) {
+        return readFraction(layoutKey(orientation, KEY_VOICE_PILL_X));
+    }
+
+    public float voicePillY(@NonNull PlaceOrientation orientation) {
+        return readFraction(layoutKey(orientation, KEY_VOICE_PILL_Y));
+    }
+
+    /** Remembers a dragged place; either fraction outside 0..1 forgets it instead. */
+    public void setVoicePillPosition(@NonNull PlaceOrientation orientation, float x, float y) {
+        writeFraction(layoutKey(orientation, KEY_VOICE_PILL_X), x);
+        writeFraction(layoutKey(orientation, KEY_VOICE_PILL_Y), y);
     }
 
     private float readFraction(@NonNull String key) {

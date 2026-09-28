@@ -71,6 +71,88 @@ Device checks owed: the load-time log line (tens of milliseconds expected), `voi
 silero` appearing, the first word after the start tone not being clipped, pauses still closing
 segments with a TV or fan on, and the per-chunk CPU cost (should be well under 1 ms).
 
+## Round 3 (2026-09-28): quiet speech in an office, and "Mic sensitivity"
+
+Device report (pong, round 3): speaking quietly in an office is sometimes not picked up.
+
+**Every gate between the microphone and a phrase** (Silero path, `VoiceInputSession.capture`):
+
+| gate | where | before | after |
+|---|---|---|---|
+| lead-in discard | `VoiceLeadInDiscard.START_TONE_MS` | first 180 ms after the mic opens dropped (with voice sounds on) | unchanged: it only ever touches the start tone |
+| energy / level floor | `VoiceActivityDetector` `ABSOLUTE_FLOOR` −70 dBFS, onset 9 dB / hold 6 dB over the 10th-percentile floor | **not applied on the Silero path**; only the fallback decision uses it | unchanged (the fallback is not what the report is about) |
+| Silero level | the raw frame, no gain | Silero saw pong's un-AGC'd −45…−60 dBFS speech as it came | a copy lifted so the noise floor sits at a target, never down, capped (`VoiceMicSensitivity.sileroGain`) |
+| Silero probability | `SileroVoiceDecider.ONSET` / `HOLD` | 0.5 / 0.35 | unchanged |
+| minimum voiced time | `MIN_VOICED_MS` | 300 ms | Normal 300 ms, High 420 ms |
+| pause close | "Pause that ends a phrase" | 600 ms default | unchanged |
+| segment gain | `VoiceGain` | peak to −6 dBFS, at most +40 dB, after the VAD | unchanged: a −60 dBFS peak still lands at −20 dBFS, well inside what Whisper and the runtime take |
+
+**What discriminates.** Silero's probability depends on the absolute level. On the developer's own
+debug captures from pong (`~/.cache/termux-launcher/voice-clips/seg*.wav`, before `VoiceGain`;
+frame RMS p90 −45 to −52 dBFS over a −59 to −64 dBFS room), the share of chunks over 0.5 at the
+clip's own level, 6 dB down and 10 dB down was, for seg7: 75 %, 29 %, 4 %; for seg2: 69 %, 58 %,
+39 %; seg7 lifted +6 dB rose from 75 % to 87 %. Stationary noise does not
+move with level the same way: pink, fan and keyboard clicks gave 0 % of chunks over 0.5 from −66 to
+−36 dBFS, while babble went 6 % → 79 % → 99 % and a TV 23 % → 78 % → 89 % from −66 to −60 to
+−54 dBFS. So the lever for quiet speech is level, not threshold, and its price is background talk.
+
+**Probe** (`scripts/voice-eval/sensitivity_probe.py`, run 2026-09-28): speech is the 7 real phrases
+at 0/−6/−10 dB over a −64 dBFS pink room (the room does not get quieter with the speaker), and 16
+synthetic sentences plus 12 key words at a phrase RMS of −52/−58/−62 dBFS over the same room;
+noise-only is 120 s each. Same Segmenter as the app (600 ms pause, 10 s window). Speech cells are
+"missed clips / share of the phrase inside a segment"; noise cells are false phrases a minute.
+
+```
+speech: missed clips / voiced share of the phrase, by level
+before: no lift, 0.50/0.35, 300 ms     key-52: 0/12 100%  key-58: 0/12 100%  key-62: 5/12  57%  real+0: 0/7  90%  real-10: 4/7  37%  real-6: 0/7  77%  syn-52: 0/16 100%  syn-58: 0/16  99%  syn-62: 3/16  71%
+thresholds 0.40/0.25, 300 ms           key-52: 0/12 100%  key-58: 0/12 100%  key-62: 2/12  81%  real+0: 0/7  91%  real-10: 4/7  38%  real-6: 0/7  82%  syn-52: 0/16 100%  syn-58: 0/16  99%  syn-62: 2/16  80%
+fixed +12 dB                           key-52: 0/12 100%  key-58: 0/12 100%  key-62: 0/12 100%  real+0: 0/7  91%  real-10: 0/7  88%  real-6: 0/7  91%  syn-52: 0/16 100%  syn-58: 0/16 100%  syn-62: 0/16 100%
+Normal: floor->-63, max +6, 300 ms     key-52: 0/12 100%  key-58: 0/12 100%  key-62: 2/12  83%  real+0: 0/7  91%  real-10: 3/7  47%  real-6: 0/7  83%  syn-52: 0/16 100%  syn-58: 0/16 100%  syn-62: 1/16  91%
+floor->-60, max +12, 300 ms            key-52: 0/12 100%  key-58: 0/12 100%  key-62: 1/12  91%  real+0: 0/7  91%  real-10: 0/7  73%  real-6: 0/7  90%  syn-52: 0/16 100%  syn-58: 0/16 100%  syn-62: 0/16  96%
+floor->-58, max +12, 360 ms            key-52: 0/12 100%  key-58: 0/12 100%  key-62: 1/12  91%  real+0: 0/7  91%  real-10: 0/7  81%  real-6: 0/7  90%  syn-52: 0/16 100%  syn-58: 0/16 100%  syn-62: 0/16  99%
+High: floor->-56, max +12, 420 ms      key-52: 0/12 100%  key-58: 0/12 100%  key-62: 0/12 100%  real+0: 0/7  91%  real-10: 0/7  87%  real-6: 0/7  90%  syn-52: 0/16 100%  syn-58: 0/16 100%  syn-62: 0/16  99%
+floor->-52, max +18, 450 ms            key-52: 0/12 100%  key-58: 0/12 100%  key-62: 0/12 100%  real+0: 0/7  91%  real-10: 0/7  89%  real-6: 0/7  91%  syn-52: 0/16 100%  syn-58: 0/16 100%  syn-62: 0/16 100%
+
+noise only: false segments per minute
+before: no lift, 0.50/0.35, 300 ms     room-64: 0.0  bab-70: 0.0  bab-66: 0.0  bab-62: 0.0  tv-70: 0.0  tv-66: 0.0  fan-58: 0.0  clicks: 0.0
+thresholds 0.40/0.25, 300 ms           room-64: 0.0  bab-70: 0.0  bab-66: 0.0  bab-62: 0.0  tv-70: 0.0  tv-66: 0.0  fan-58: 0.0  clicks: 0.0
+fixed +12 dB                           room-64: 0.0  bab-70: 0.0  bab-66: 1.0  bab-62: 7.0  tv-70: 12.0  tv-66: 8.5  fan-58: 0.0  clicks: 0.0
+Normal: floor->-63, max +6, 300 ms     room-64: 0.0  bab-70: 0.0  bab-66: 0.0  bab-62: 0.0  tv-70: 0.0  tv-66: 0.5  fan-58: 0.0  clicks: 0.0
+floor->-60, max +12, 300 ms            room-64: 0.0  bab-70: 0.0  bab-66: 0.0  bab-62: 0.0  tv-70: 0.0  tv-66: 14.5  fan-58: 0.0  clicks: 0.0
+floor->-58, max +12, 360 ms            room-64: 0.0  bab-70: 0.0  bab-66: 0.5  bab-62: 6.5  tv-70: 1.5  tv-66: 12.0  fan-58: 0.0  clicks: 0.0
+High: floor->-56, max +12, 420 ms      room-64: 0.0  bab-70: 0.0  bab-66: 0.5  bab-62: 8.0  tv-70: 4.0  tv-66: 11.0  fan-58: 0.0  clicks: 0.0
+floor->-52, max +18, 450 ms            room-64: 0.0  bab-70: 0.0  bab-66: 0.5  bab-62: 7.5  tv-70: 12.5  tv-66: 8.0  fan-58: 0.0  clicks: 0.0
+```
+
+**Decision.**
+
+- **Normal (default): lift the floor to −63 dBFS, at most +6 dB; 300 ms voiced.** On pong's −60 to
+  −65 dBFS room that is 0 to +2 dB, up to +6 dB in a very quiet room. Quiet speech gets through more
+  often (at −62 dBFS: 1/16 sentences missed rather than 3, 2/12 key words rather than 5; the real
+  phrases 10 dB down: 3/7 rather than 4/7), and the only false phrases in 16 minutes of noise were
+  0.5 a minute with a TV at −66 dBFS. The stronger lifts tried for the default (floor to −60 or
+  −58 dBFS, up to +12 dB) let a TV in at 12–14.5 a minute.
+- **High: lift the floor to −56 dBFS, at most +12 dB; 420 ms voiced.** Nothing quiet was missed (the
+  real phrases 10 dB down: 0/7, 87 % of their audio kept, against 37 % before), at the cost of
+  4–11 false phrases a minute from a TV at −70 to −66 dBFS and 8 from babble at −62. The longer
+  minimum (300 → 420 ms) is there so a short burst of someone else's speech is less likely to open
+  a phrase; in the probe it cost no key word at −62 dBFS. Stronger still (−52 dBFS, +18 dB) kept a
+  further 2 % of phrase audio and tripled the false phrases from a TV at −70 dBFS.
+- **Thresholds stay 0.5 / 0.35.** Lowering them to 0.4 / 0.25 saved key words (5 → 2 missed at
+  −62) but none of the quiet real phrases (4/7 missed 10 dB down, as before): their probabilities
+  sit far under any threshold. They were not re-run over the full 1,024-variant grid above, so they
+  are left as that grid chose them.
+- **No single default serves both** an office where the user speaks softly and one where colleagues
+  talk: the gain that finds the soft voice also finds theirs. Hence the setting, Keyboard → Voice
+  input → **Mic sensitivity** (`keyboard_voice_mic_sensitivity`, `normal` | `high`).
+
+The lift touches only Silero's copy of the frame (`SileroVoiceDecider.decide(frame, inSpeech,
+gain)`); the segment, the level meter and the energy fallback see the audio as captured. The harness
+`vads.py` `SileroDecider` still feeds Silero the raw audio, i.e. the "before" row; the probe's
+`GainedSilero` is the app's current decision.
+
+Device checks owed: round 3, check 4 in `device-checks-pending-2026-09-27.md`.
+
 ---
 
 # Voice VAD × STT evaluation

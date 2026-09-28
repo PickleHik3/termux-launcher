@@ -138,6 +138,13 @@
             app:defaultValue="600"
             app:useSimpleSummaryProvider="true" />
         <ListPreference
+            app:key="keyboard_voice_mic_sensitivity"
+            app:title="@string/settings_keyboard_voice_mic_sensitivity_title"
+            app:entries="@array/settings_keyboard_voice_mic_sensitivity_entries"
+            app:entryValues="@array/settings_keyboard_voice_mic_sensitivity_values"
+            app:defaultValue="normal"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
             app:key="keyboard_voice_silence_timeout_ms"
             app:title="@string/settings_keyboard_voice_silence_timeout_title"
             app:entries="@array/settings_keyboard_voice_silence_timeout_entries"

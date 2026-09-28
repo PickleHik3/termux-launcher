@@ -155,12 +155,14 @@ public class KeyboardPreferencesFragmentTest {
         assertTrue(store.getBoolean("keyboard_voice_sounds", false));
         assertTrue(store.getBoolean("keyboard_voice_polish", false));
         assertEquals("polished", store.getString("keyboard_voice_polish_level", null));
+        assertEquals("normal", store.getString("keyboard_voice_mic_sensitivity", null));
 
         KeyboardPreferencesFragment fragment = launch();
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_engine"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_model"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_level"));
+        assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_mic_sensitivity"));
     }
 
     @Test
@@ -210,5 +212,12 @@ public class KeyboardPreferencesFragmentTest {
         assertEquals("light", store.getString("keyboard_voice_polish_level", null));
         store.putString("keyboard_voice_polish_level", "careful");
         assertEquals("polished", prefs.getInAppKeyboardVoicePolishLevel());
+
+        // Mic sensitivity: normal or high, and anything else reads as Normal.
+        store.putString("keyboard_voice_mic_sensitivity", "high");
+        assertEquals("high", prefs.getInAppKeyboardVoiceMicSensitivity());
+        assertEquals("high", store.getString("keyboard_voice_mic_sensitivity", null));
+        store.putString("keyboard_voice_mic_sensitivity", "max");
+        assertEquals("normal", prefs.getInAppKeyboardVoiceMicSensitivity());
     }
 }
