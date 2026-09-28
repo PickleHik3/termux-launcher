@@ -75,9 +75,8 @@ before making it the default Home app.
 ## 5. Learn the three places and the four surfaces
 
 The home screen is three places side by side: **Widgets** on the left, the **Terminal** in the
-middle and a Linux **Display** on the right. Swipe left or right on the status bar to move between
-them, or tap the place icon peeking in from the bar's edge. The launcher opens on the place you
-left it on.
+middle and a Linux **Display** on the right. To move, hold a press on any pane's border until it
+ticks, then drag sideways. The launcher opens on the place you left it on.
 
 From top to bottom in portrait, on the terminal:
 
@@ -100,8 +99,9 @@ workspaces.
 - At an idle shell prompt, type `%settings` to filter the dock for apps matching “settings”. `%` is
   the default prefix and can be changed under **Settings → Apps → App search prefix**.
 - Tap `+` in the top row to create another terminal window.
-- Swipe right on the status bar for your widgets, left for the Linux display. The display is off
-  until you tap **Turn on** there; [The Linux display](X11_Display.md) takes it from there.
+- Hold a press on the terminal's border until it ticks, then drag right for your widgets, left for
+  the Linux display. The display is off until you tap **Turn on** there; [The Linux
+  display](X11_Display.md) takes it from there.
 - Open the command palette by long-pressing the terminal and choosing **Command palette**. With a
   hardware keyboard, use `Ctrl+Alt+Shift+P`.
 - Search the palette for `split`, `workspace`, `font`, or `settings` instead of memorizing every
@@ -129,8 +129,8 @@ None of these are required for the basic launcher and terminal:
   **Settings → Look → Terminal fonts**.
 - **Shizuku:** optional privileged backend for features such as the Shizuku lock method. Normal
   launching, panes, workspaces, and the terminal do not need it.
-- **TAI / Termux AI:** optional local model host under **Settings → Services & permissions → TAI ·
-  Termux AI**. See the [TAI user guide](Termux_AI.md).
+- **On-device AI:** optional local model host under **Settings → On-device AI**. See the
+  [On-device AI user guide](On_Device_AI.md).
 - **`tlstore`:** the launcher's own tool store. `tlstore shell` installs fish with a wallpaper-matched
   prompt, `eza` and `zoxide`; `tlstore install` opens a picker for everything else — a Neovim colour
   scheme that follows your wallpaper, the showcase binaries (sigye, fastfetch, kitten), and Claude

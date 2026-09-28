@@ -265,7 +265,7 @@ still destructive and should only be used after saving anything important.
 
 Terminal commands share the internal action registry used by the command palette, the action sheet,
 and key bindings. General remote action execution over HTTP was removed together with the agent
-endpoints; the local API serves TAI, the separate `/v1/apps/launch` route, and the pane routes
+endpoints; the local API serves On-device AI, the separate `/v1/apps/launch` route, and the pane routes
 (`/v1/panes`, `launcherctl pane …`) through which a process in a shell can open a pane of its own,
 type into it, read it back and close it — but only panes it opened itself; see
 [LauncherCtl API](LauncherCtl_API.md#panes). Workspace tools (`workspace.save`, `workspace.load`,
@@ -1039,5 +1039,5 @@ Pane and window commands need split panes enabled; enable them in settings and r
 - Kitty graphics Tier 2/3, desktop notification escape sequences, TTY file transfer, Kitty kittens,
   and multiple Android top-level terminal windows are not implemented.
 
-See [LauncherCtl API](LauncherCtl_API) for the authenticated TAI and app-launch routes and
+See [LauncherCtl API](LauncherCtl_API) for the authenticated On-device AI and app-launch routes and
 [Launcher troubleshooting](Launcher_Troubleshooting) for general app diagnostics.

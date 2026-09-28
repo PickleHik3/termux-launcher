@@ -4,14 +4,14 @@ This page keeps the intermediate and high-level details out of the beginner guid
 
 ## Project Shape
 
-Termux Launcher is based on [termux-app](https://github.com/termux/termux-app), with launcher UI, sixel-capable terminal rendering, Material color integration, and the local Termux AI runtime added on top.
+Termux Launcher is based on [termux-app](https://github.com/termux/termux-app), with launcher UI, sixel-capable terminal rendering, Material color integration, and the local On-device AI runtime added on top.
 
 Important local areas:
 
 - `app/src/main/java/com/termux/launcherctl/LauncherCtlApiServer.java`: local OpenAI/Ollama-compatible inference API server and app-launch route; installs the `tai` and launch-only `launcherctl` shell clients.
 - `app/src/main/java/com/termux/launcherctl/LauncherCtlNotificationListener.java`: notification and media cache source for the in-app status bar UI.
-- `app/src/main/java/com/termux/ai/`: TAI settings, model registry, model downloads/imports, and runtime adapters.
-- `resources/bin/tai`: installed TAI shell helper.
+- `app/src/main/java/com/termux/ai/`: On-device AI settings, model registry, model downloads/imports, and runtime adapters (the `tai` internal code prefix throughout).
+- `resources/bin/tai`: installed `tai` shell helper.
 - `docs/en/examples/`: optional shell and Neovim setup scripts, plus the terminal, font, and keyboard config examples.
 
 ## LauncherCtl Internals
@@ -52,7 +52,7 @@ The installed `launcherctl launch <app name, package, or activity>` client is th
 for this route. Agent, MCP, notification, media, resource, event, and restart commands are not
 installed. Local AI commands belong to `tai`.
 
-### TAI Routes
+### On-device AI routes
 
 ```text
 GET  /v1/ai/status
@@ -106,9 +106,9 @@ Remaining considerations:
 - Apps or processes that can read the same Termux home files can read the token.
 - A future Unix-domain socket could tighten local access further.
 
-## Termux AI Runtime Notes
+## On-device AI Runtime Notes
 
-TAI stores user overrides separately from model metadata. Most runtime tunables default to `Auto / Gallery default`:
+The runtime (internal code prefix `tai`) stores user overrides separately from model metadata. Most runtime tunables default to `Auto / Gallery default`:
 
 - max tokens
 - TopK
@@ -133,7 +133,7 @@ Device memory detection follows Gallery behavior:
 - Older Android versions use `totalMem`.
 - Low memory is reported as a warning so the user can still decide whether to proceed.
 
-The LiteRT-LM `Engine` remains loaded after `tai load`. TAI reuses a `Conversation` while the model, prompt mode, system prompt, and sampling options remain compatible. One generation runs at a time.
+The LiteRT-LM `Engine` remains loaded after `tai load`. The runtime reuses a `Conversation` while the model, prompt mode, system prompt, and sampling options remain compatible. One generation runs at a time.
 
 Future runtime work:
 

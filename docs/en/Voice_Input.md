@@ -13,7 +13,7 @@ pick an engine, your choice sticks.
 
 ## Quick start
 
-1. Open **Settings → Services & permissions → TAI · Termux AI → Model centre**, go to **Speech**,
+1. Open **Settings → On-device AI → Model centre**, go to **Speech**,
    and install a speech model (see [Speech models](#speech-models)).
 2. That's it: with a speech model installed, the voice key uses it. (If you picked **Android system**
    earlier, set **Settings → Keyboard → Voice input → Speech engine** back to **On-device**.)
@@ -129,7 +129,7 @@ apply:
 **Automatic** uses Gemma 4 E2B when it is installed, else Gemma 4 E4B. E2B is the recommended
 model: it keeps your words and is about three times faster than E4B. With no chat model installed,
 the text stays as heard. The cleanup model loads while you speak, so the pass at the end does not
-wait for it, and it stays loaded afterwards until TAI's normal idle unload.
+wait for it, and it stays loaded afterwards until On-device AI's normal idle unload.
 
 The text is **Kept as heard** when:
 
@@ -320,5 +320,5 @@ of an upload. Without a speech model installed, the route answers `stt_model_not
   **Polish dictation with local model** is on. Dictations under four words are always
   kept as heard, and commands are formatted by fixed rules rather than the model. See [Cleanup](#cleanup).
 
-For the models themselves and the rest of the local API, see [TAI / Termux AI](Termux_AI.md). To hear
-text read aloud, see [Text to speech](Text_To_Speech.md).
+For the models themselves and the rest of the local API, see [On-device AI](On_Device_AI.md). To
+hear text read aloud, see [Text to speech](Text_To_Speech.md).

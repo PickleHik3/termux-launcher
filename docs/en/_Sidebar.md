@@ -28,8 +28,8 @@
 
 ## Local AI
 
-- [TAI / Termux AI](Termux_AI.md)
-- [AI backends](Termux_AI_Backends.md)
+- [On-device AI](On_Device_AI.md)
+- [On-device AI backends](On_Device_AI_Backends.md)
 - [LauncherCtl API](LauncherCtl_API.md)
 
 ## Project

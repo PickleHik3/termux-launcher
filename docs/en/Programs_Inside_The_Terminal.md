@@ -101,4 +101,4 @@ compatible model endpoints: [LauncherCtl API](LauncherCtl_API.md).
 - **tlstore** is the launcher's own tool store: `tlstore list`, `tlstore install <name>`,
   `tlstore doctor`. It never replaces a config file silently. [Tlstore](Tlstore.md).
 - **Local models.** `tai` and an OpenAI/Ollama compatible endpoint at the same base URL as
-  launcherctl. [Termux AI](Termux_AI.md).
+  launcherctl. [On-device AI](On_Device_AI.md).

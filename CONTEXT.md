@@ -174,13 +174,16 @@ _Avoid_: metadata, facts table
 
 ### Local AI
 
-**TAI**:
+**On-device AI**:
 The launcher's on-device AI: the models it holds and the local endpoint programs in the terminal
-talk to. Programs reach it the way they reach any OpenAI-compatible service.
-_Avoid_: the AI backend, the internal AI, the model server
+talk to. Programs reach it the way they reach any OpenAI-compatible service. `tai` is the
+command-line tool and the internal code prefix (`com.termux.ai`, `:tai_runtime`); "TAI" as a
+product name is retired from prose but survives in the CLI, code identifiers, and a few in-app
+strings that still say it.
+_Avoid_: the AI backend, the internal AI, the model server, TAI (as a product name in prose)
 
 **Default assistant model**:
-The model TAI answers with when a program does not name one, chosen in the launcher's AI settings.
+The model On-device AI answers with when a program does not name one, chosen in the launcher's AI settings.
 _Avoid_: default model, current model, loaded model (a model can be the default without being
 loaded)
 

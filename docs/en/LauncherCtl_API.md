@@ -1,7 +1,7 @@
 # LauncherCtl API (Local AI Endpoint)
 
 ## Overview
-LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compatible inference endpoint, model management for the on-device Termux AI (TAI) runtime, one app-launch route, the pane routes that let a process in a shell open and drive a terminal pane of its own, and the signal routes (a notification, the progress ring, the clipboard) for a process that has no terminal to write the matching escape sequence into. It is not a general device-control or agent bridge.
+LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compatible inference endpoint, model management for the On-device AI runtime (`tai` internal code prefix), one app-launch route, the pane routes that let a process in a shell open and drive a terminal pane of its own, and the signal routes (a notification, the progress ring, the clipboard) for a process that has no terminal to write the matching escape sequence into. It is not a general device-control or agent bridge.
 
 - Server: in app process, isolated from native model work which runs in `:tai_runtime`.
 - Bind mode: `localhost` (default, `127.0.0.1`) or opt-in `lan` (`0.0.0.0`).
@@ -10,7 +10,7 @@ LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compat
 - CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`, `launcherctl pane …`, `launcherctl notify`, `launcherctl progress` and `launcherctl clipboard`. The launcher app installs both when `TermuxActivity` starts.
 - Removed helpers: `launcherctl-mcp` and `launcher-restart` are no longer installed and are deleted on upgrade.
 
-`tai` uses this authenticated server for the local Termux AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
+`tai` uses this authenticated server for the local On-device AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
 
 ## Files and Components
 
@@ -26,7 +26,7 @@ Runtime files under `$HOME/.launcherctl`:
 - `token`: API bearer token.
 - `endpoint`: local base URL (`http://127.0.0.1:<port>`).
 
-TAI model packages live under app-private model storage, not under `~/.launcherctl`.
+On-device AI model packages live under app-private model storage, not under `~/.launcherctl`.
 
 ## Discovery
 
@@ -52,7 +52,7 @@ The token is a startup-generated random secret stored owner-only at `~/.launcher
 
 ### Token-optional toggle (localhost only)
 
-A setting **Require API token** (default **on**) lives under **Settings → Services & permissions → TAI · Termux AI**. When turned **off**, requests from localhost need no token — any placeholder API key (or none) works. This is convenient for local CLI clients that cannot easily read the token file.
+A setting **Require API token** (default **on**) lives under **Settings → On-device AI → Endpoint & access**. When turned **off**, requests from localhost need no token — any placeholder API key (or none) works. This is convenient for local CLI clients that cannot easily read the token file.
 
 - `GET /` and `OPTIONS` never require auth, regardless of the toggle.
 - **LAN bind mode always requires the token**, no matter the toggle state. Anyone who can reach a LAN-exposed endpoint and does not present the token gets `401`.
@@ -76,7 +76,7 @@ remote page points its own hostname at `127.0.0.1` so the browser treats the API
 
 ## Endpoint Reference
 
-The complete route surface is below. Besides the TAI routes there are app launch, the pane and window routes, the on-screen keyboard, and the three signal routes (notification, progress, clipboard). There are no media, resource, event, MCP, restart, or general device-control routes.
+The complete route surface is below. Besides the On-device AI routes there are app launch, the pane and window routes, the on-screen keyboard, and the three signal routes (notification, progress, clipboard). There are no media, resource, event, MCP, restart, or general device-control routes.
 
 ### Health and discovery
 
@@ -392,7 +392,7 @@ launcherctl clipboard paste        # {"ok":true,"text":"…"}
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/v1/models` | List installed, loadable models with TAI metadata |
+| GET | `/v1/models` | List installed, loadable models with On-device AI metadata |
 | GET | `/v1/models/{id}` | Return one model object (filtered from `/v1/models`) |
 | POST | `/v1/chat/completions` | Chat completions: text, image/audio input, tools, SSE streaming |
 | POST | `/v1/responses` | Stateless OpenAI Responses adapter (text/image input, function calls/results) |
@@ -408,13 +408,13 @@ OpenAI `/v1/*` streaming uses Server-Sent Events (`text/event-stream`) and ends 
 
 #### `GET /v1/models` metadata
 
-Each entry in the standard OpenAI-shaped `data` array includes TAI-specific metadata prefixed with an underscore so existing OpenAI clients ignore it:
+Each entry in the standard OpenAI-shaped `data` array includes On-device AI metadata prefixed with an underscore so existing OpenAI clients ignore it:
 
 - `_backend`: backend routing for the model, currently `litert-lm` (default LiteRT-LM runtime) or `mnn-llm` (bundled MNN backend).
 - `_capabilities`: ordered list of endpoint capability strings, for example `text_chat`, `image_input`, `audio_input`, `tool_use`, or `code`. This is what the installed APK can currently serve and is identical to `_endpoint_capabilities`.
 - `_source_capabilities`: informational upstream/package capabilities. Clients should not treat these as enabled endpoint features.
-- `_default_max_output_tokens`, `_endpoint_context_window`, and `_source_context_window`: runtime default, the context window TAI serves on this device, and the model's own limit. The endpoint window grows with device RAM up to the model's limit and follows the **Context window** setting when one is set; see [Termux AI backends](Termux_AI_Backends.md#context-window-sizing).
-- `_tool_mode`: present for tool-capable models. MNN tool support is `prompt_fallback` (the model's own chat template renders the tools when it can, TAI's prompt otherwise); LiteRT tool support is native when advertised.
+- `_default_max_output_tokens`, `_endpoint_context_window`, and `_source_context_window`: runtime default, the context window served on this device, and the model's own limit. The endpoint window grows with device RAM up to the model's limit and follows the **Context window** setting when one is set; see [On-device AI backends](On_Device_AI_Backends.md#context-window-sizing).
+- `_tool_mode`: present for tool-capable models. MNN tool support is `prompt_fallback` (the model's own chat template renders the tools when it can, the server's prompt otherwise); LiteRT tool support is native when advertised.
 
 `GET /v1/models/{id}` returns the single matching object (HTTP 404 if unknown).
 
@@ -464,7 +464,7 @@ These routes are used by the `tai` CLI and the Settings UI. They share the same 
 | --- | --- | --- |
 | GET | `/v1/ai/status` | Overall status, settings, and limitations |
 | GET | `/v1/ai/runtime` | Loaded model and runtime state |
-| GET | `/v1/ai/models` | Detailed TAI model registry |
+| GET | `/v1/ai/models` | Detailed On-device AI model registry |
 | GET | `/v1/ai/models/downloads` | Show download progress/history |
 | POST | `/v1/ai/models/import` | Register a supported local package |
 | POST | `/v1/ai/models/download` | Download a model from a URL |
@@ -523,7 +523,7 @@ Rate-limit errors use `type: "rate_limit_error"` on `/v1/*` and the same flat `e
 
 ## Terminal LLM Client Configuration
 
-TAI exposes OpenAI-compatible HTTP endpoints so terminal clients such as `aichat`, `aider`, `tmuxai`, or any tool that reads `OPENAI_BASE_URL` / `OPENAI_API_KEY` can drive the local model runtime.
+On-device AI exposes OpenAI-compatible HTTP endpoints so terminal clients such as `aichat`, `aider`, `tmuxai`, or any tool that reads `OPENAI_BASE_URL` / `OPENAI_API_KEY` can drive the local model runtime.
 
 Default bind mode is `localhost` (server bound to `127.0.0.1`). With the **Require API token** setting on (default), the bearer token is required for every protected request. Token and endpoint URL are written to:
 
@@ -627,7 +627,7 @@ Inspect `/v1/models` first to confirm both `_backend == "mnn-llm"` and the endpo
 
 ### Token errors (`401`)
 - Read the current token: `cat ~/.launcherctl/token`.
-- Rotate it with `POST /v1/auth/rotate` or from **Settings → Services & permissions → TAI · Termux AI → Recreate API token**, then re-run your command.
+- Rotate it with `POST /v1/auth/rotate` or from **Settings → On-device AI → Endpoint & access → Recreate token**, then re-run your command.
 - If you turned **Require API token** off, confirm you are still on `localhost` bind mode — LAN mode always requires the token.
 
 ### `Connection refused`

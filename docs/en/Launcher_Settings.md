@@ -380,11 +380,16 @@ stand while the display is showing, and everything else about its arrangement, l
 the Layout editor, opened on the display once the switch above is on. To have the phone try every graphics
 profile and keep the best, run `termux-x11-gpu-setup` in a shell.
 
+## On-device AI
+
+**On-device AI**, right after Display in the settings root, opens the local AI service: the
+**Model centre** (chat models, speech models and the voice model), runtime, endpoint, and token
+settings. See [On-device AI](On_Device_AI.md).
+
 ## Services & permissions
 
 This page reports real availability and offers the appropriate fix or manage action:
 
-- **TAI · Termux AI:** local AI service, the **Model centre** (chat models, speech models and the voice model), runtime, endpoint, and token settings.
 - **Shizuku:** optional privileged backend connection. See the [Shizuku guide](Shizuku.md) for
   setup, feature fallbacks, and troubleshooting.
 - **Termux:API:** configuration appears when the matching add-on is installed.

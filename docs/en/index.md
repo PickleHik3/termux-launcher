@@ -62,12 +62,12 @@ access; skip it if command-line tools do not need your shared files.
 
 ## Optional local AI
 
-- [TAI / Termux AI user guide](Termux_AI.md)
-- [Supported AI backends and model formats](Termux_AI_Backends.md)
+- [On-device AI user guide](On_Device_AI.md)
+- [Supported AI backends and model formats](On_Device_AI_Backends.md)
 - [LauncherCtl local API reference](LauncherCtl_API.md)
 
-TAI is optional. Normal terminal and launcher features do not require a model, an API token, or
-Shizuku.
+On-device AI is optional. Normal terminal and launcher features do not require a model, an API
+token, or Shizuku.
 
 ## Project and developer reference
 
