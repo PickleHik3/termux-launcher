@@ -1068,7 +1068,6 @@ public final class TaiModelDownloader {
             + "(looked for sentencepiece.model, tokenizer.model, spiece.model next to the .tflite).");
     }
 
-    @NonNull
     /** A Hugging Face repository's directory listing, kept around for MNN package selection:
      *  which files belong to the package (by name/extension), and, for every file the listing
      *  covers, the size (and, for a Git LFS file, the sha256) the repository declares for it at

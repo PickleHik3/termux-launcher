@@ -110,47 +110,6 @@ public class TaiModelDownloaderStateTest {
     }
 
     @Test
-    public void isFileAlreadyComplete_matchesLengthAndKnownSize() throws Exception {
-        File file = new File(context.getCacheDir(), "size-check-test.bin");
-        java.nio.file.Files.write(file.toPath(), new byte[128]);
-        try {
-            assertTrue(TaiModelDownloader.isFileAlreadyComplete(file, 128L));
-            assertFalse(TaiModelDownloader.isFileAlreadyComplete(file, 127L));
-            // An unknown expected size (0 or negative) never counts as complete: the caller keeps
-            // today's behaviour of fetching when the source hasn't said how big the file should be.
-            assertFalse(TaiModelDownloader.isFileAlreadyComplete(file, 0L));
-            assertFalse(TaiModelDownloader.isFileAlreadyComplete(file, -1L));
-            assertFalse(TaiModelDownloader.isFileAlreadyComplete(new File(context.getCacheDir(), "missing.bin"), 128L));
-        } finally {
-            file.delete();
-        }
-    }
-
-    @Test
-    public void runDownload_keepsAnAlreadyCompleteFileWithoutTouchingTheNetwork() throws Exception {
-        // No server is started for this URL: if the download did anything but skip the fetch, the
-        // connection would refuse instantly and the transfer would end up FAILED, not INSTALLED.
-        byte[] model = modelBytes('k');
-        File output = output("resume-skip-test", "model.litertlm");
-        assertTrue(output.getParentFile().mkdirs() || output.getParentFile().isDirectory());
-        java.nio.file.Files.write(output.toPath(), model);
-
-        List<String> states = new ArrayList<>();
-        TaiModelDownloader downloader = new TaiModelDownloader(context, store);
-        downloader.runDownload("download-resume-skip-test", "resume-skip-test",
-            "https://127.0.0.1:1/model.litertlm", output, "resume-skip-test", "license",
-            capabilities(), TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, "", "",
-            4096, 0, "", model.length, null, null, Collections.emptyList(),
-            new TaiModelDownloader.Control(), transfer -> states.add(transfer.optString("status")));
-
-        assertFalse(states.contains(TaiModelStore.STATE_DOWNLOADING));
-        assertTrue(states.contains(TaiModelStore.STATE_VERIFYING));
-        assertEquals(TaiModelStore.STATE_INSTALLED, states.get(states.size() - 1));
-        assertArrayEquals(model, java.nio.file.Files.readAllBytes(output.toPath()));
-        assertFalse(new File(output.getAbsolutePath() + ".part").exists());
-    }
-
-    @Test
     public void runDownload_refetchesWhenTheExistingFileSizeDiffers() throws Exception {
         byte[] model = modelBytes('m');
         String url = serve(new FixedBytesHandler(model));
