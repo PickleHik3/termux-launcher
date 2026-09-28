@@ -104,6 +104,8 @@ public final class TaiRuntimeService extends Service {
         return thread;
     });
     private final AtomicBoolean pressureActionQueued = new AtomicBoolean();
+    /** A {@link TaiRuntimeIpc#OP_BENCH_RUN} is on the serial lane; see {@link #isRefusedDuringBench}. */
+    private final AtomicBoolean benchRunning = new AtomicBoolean();
     private final Messenger messenger = new Messenger(new IncomingHandler());
     private volatile boolean foreground;
     /** Slow enough to be invisible in battery stats, fast enough for a per-second countdown. */
@@ -217,6 +219,15 @@ public final class TaiRuntimeService extends Service {
                 runRequest(replyTo, requestId, operation, body, bodyFile);
                 return;
             }
+            if (benchRunning.get() && isRefusedDuringBench(operation)) {
+                // Answered here rather than queued: the bench holds the serial lane for minutes,
+                // and a chat request left waiting behind it would only time out on the client.
+                sendResponse(replyTo, requestId, error(409, "benchmark_running",
+                    "A benchmark is running; wait for it to finish or stop it with tai cancel."));
+                deleteBodyFile(bodyFile);
+                inFlight.decrementAndGet();
+                return;
+            }
             if (isConcurrentControlOperation(operation)) {
                 // Generation occupies the serial native-work executor. Control operations need an
                 // independent lane so they can signal it instead of queuing behind it.
@@ -231,13 +242,35 @@ public final class TaiRuntimeService extends Service {
                 ttsExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
                 return;
             }
+            // Raised as the bench is queued, so everything already ahead of it on the serial lane
+            // is still served and everything after it is refused at once rather than left to wait.
+            if (TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)) benchRunning.set(true);
             executor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
         }
     }
 
     static boolean isConcurrentControlOperation(@NonNull String operation) {
         return TaiRuntimeIpc.OP_CANCEL.equals(operation) || TaiRuntimeIpc.OP_UNLOAD_MODEL.equals(operation)
-            || TaiRuntimeIpc.OP_TTS_STOP.equals(operation);
+            || TaiRuntimeIpc.OP_TTS_STOP.equals(operation) || TaiRuntimeIpc.OP_BENCH_SKIP_WAIT.equals(operation);
+    }
+
+    /**
+     * The busy rule for a running bench: everything that would load, generate or embed on the chat
+     * lane is refused with {@code benchmark_running}, a second bench included. Status reads pass;
+     * cancel and unload pass on the control lane and end the bench ({@link TaiManager#cancelRuntime},
+     * {@link TaiManager#unloadModel} stop the harness first); preflight only reads; speech in and
+     * out have lanes and models of their own and are left to the user, who can hear them.
+     */
+    static boolean isRefusedDuringBench(@NonNull String operation) {
+        return TaiRuntimeIpc.OP_LOAD_MODEL.equals(operation)
+            || TaiRuntimeIpc.OP_KEEP_WARM.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_CHAT.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_COMPLETION.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)
+            || TaiRuntimeIpc.OP_EMBEDDINGS.equals(operation)
+            || TaiRuntimeIpc.OP_BENCHMARK.equals(operation)
+            || TaiRuntimeIpc.OP_BENCH_RUN.equals(operation);
     }
 
     /** Speech output runs on {@link #ttsExecutor}; its stop is a control operation, not one of these. */
@@ -264,15 +297,17 @@ public final class TaiRuntimeService extends Service {
         @Nullable String bodyFile
     ) {
         boolean speech = isTtsOperation(operation);
+        boolean bench = TaiRuntimeIpc.OP_BENCH_RUN.equals(operation);
         if (speech) ttsInFlight.incrementAndGet();
         try {
             String payload = body != null ? body : readBodyFile(bodyFile);
             if (isForegroundOperation(operation)) {
-                ensureForeground("TAI runtime", speech ? "Speaking" : "Preparing " + operation);
+                ensureForeground("TAI runtime", speech ? "Speaking" : bench ? "Benchmarking" : "Preparing " + operation);
             }
             if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
                 || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)
-                || TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)) {
+                || TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)
+                || bench) {
                 runStreamRequest(replyTo, requestId, operation, payload);
                 return;
             }
@@ -281,6 +316,7 @@ public final class TaiRuntimeService extends Service {
         } catch (Throwable throwable) {
             sendResponse(replyTo, requestId, error(500, "tai_runtime_service_error", message(throwable)));
         } finally {
+            if (bench) benchRunning.set(false);
             if (speech) ttsInFlight.decrementAndGet();
             deleteBodyFile(bodyFile);
             if (!isStatusOperation(operation)) lastActivityMs = System.currentTimeMillis();
@@ -305,6 +341,8 @@ public final class TaiRuntimeService extends Service {
                 return manager.keepWarmRuntime(body);
             case TaiRuntimeIpc.OP_CANCEL:
                 return manager.cancelRuntime();
+            case TaiRuntimeIpc.OP_BENCH_SKIP_WAIT:
+                return manager.skipBenchCooldown();
             case TaiRuntimeIpc.OP_OPENAI_CHAT:
                 return manager.openAiChatCompletions(body);
             case TaiRuntimeIpc.OP_OPENAI_COMPLETION:
@@ -350,6 +388,8 @@ public final class TaiRuntimeService extends Service {
         };
         if (TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)) {
             manager.synthesizeSpeechToEvents(body, sink);
+        } else if (TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)) {
+            manager.benchRun(body, sink);
         } else if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)) {
             manager.openAiChatCompletionsStream(body, sink);
         } else {
@@ -365,6 +405,7 @@ public final class TaiRuntimeService extends Service {
             || TaiRuntimeIpc.OP_OPENAI_COMPLETION.equals(operation)
             || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)
             || TaiRuntimeIpc.OP_BENCHMARK.equals(operation)
+            || TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)
             // Not only for keep-alive: as a plain bound service this process sits in the OEM's
             // little-core cpuset (pong: nt_foreground = CPUs 0-3), which made Whisper 2.5-3x slower.
             || TaiRuntimeIpc.OP_TRANSCRIBE.equals(operation)

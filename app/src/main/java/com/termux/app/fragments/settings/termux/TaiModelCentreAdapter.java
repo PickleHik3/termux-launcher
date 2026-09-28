@@ -60,6 +60,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
                               @NonNull View source);
         void onInstall(@NonNull ModelRow row, @NonNull View source);
         void onModelMenu(@NonNull ModelRow row, @NonNull View anchor);
+        /** The speed pill was tapped: open that model's benchmark result. */
+        void onModelBenchmark(@NonNull ModelRow row);
         void onBannerAction(@NonNull Banner banner);
         void onBannerDismiss(@NonNull Banner banner);
         void onParallelSelected(int parallel);
@@ -133,6 +135,10 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         @NonNull String pillPrimary = "";
         @NonNull TaiModelCentreRows.Tone tonePrimary = TaiModelCentreRows.Tone.ACCENT;
         @NonNull String pillSecondary = "";
+        /** The row's inference backend ("LiteRT", "MNN"), quieter than pillPrimary/pillSecondary. */
+        @NonNull String pillBackend = "";
+        /** The chat model's best recent writing speed ("21 tok/s"), as quiet as pillBackend; empty with no benchmark result. */
+        @NonNull String pillSpeed = "";
         boolean installable;
         boolean installing;
         @NonNull String note = "";
@@ -151,7 +157,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         @NonNull
         String signature() {
             return title + '|' + subtitle + '|' + pillPrimary + '|' + tonePrimary + '|' + pillSecondary + '|'
-                + installable + '|' + installing + '|' + note + '|' + noteIsError;
+                + pillBackend + '|' + pillSpeed + '|' + installable + '|' + installing + '|' + note + '|' + noteIsError;
         }
     }
 
@@ -324,6 +330,18 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         Context context = pill.getContext();
         pill.setBackgroundTintList(ColorStateList.valueOf(color(context, com.termux.shared.R.attr.termuxColorSurfacePanelHighest)));
         pill.setTextColor(color(context, com.termux.shared.R.attr.termuxColorOnSurface));
+    }
+
+    /** The quietest pill of all: a model's backend name, dimmer than In use / Default. */
+    static void backendPill(@NonNull TextView pill) {
+        Context context = pill.getContext();
+        pill.setBackgroundTintList(ColorStateList.valueOf(color(context, com.termux.shared.R.attr.termuxColorSurfacePanel)));
+        pill.setTextColor(dim(color(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant), 0xA8));
+    }
+
+    /** The given ARGB colour with its alpha channel replaced. */
+    private static int dim(int argb, int alpha) {
+        return (argb & 0x00FFFFFF) | (alpha << 24);
     }
 
     static void roundButton(@NonNull ImageButton button) {
@@ -583,6 +601,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         final ImageView kind;
         final TextView title;
         final TextView subtitle;
+        final TextView pillSpeed;
+        final TextView pillBackend;
         final TextView pillPrimary;
         final TextView pillSecondary;
         final TextView install;
@@ -597,6 +617,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             kind = view.findViewById(R.id.tai_centre_kind_icon);
             title = view.findViewById(R.id.tai_centre_title);
             subtitle = view.findViewById(R.id.tai_centre_subtitle);
+            pillSpeed = view.findViewById(R.id.tai_centre_pill_speed);
+            pillBackend = view.findViewById(R.id.tai_centre_pill_backend);
             pillPrimary = view.findViewById(R.id.tai_centre_pill_primary);
             pillSecondary = view.findViewById(R.id.tai_centre_pill_secondary);
             install = view.findViewById(R.id.tai_centre_install);
@@ -609,6 +631,11 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             goPill(install);
             roundButton(more);
             tonePill(pillSecondary, TaiModelCentreRows.Tone.NEUTRAL);
+            backendPill(pillBackend);
+            backendPill(pillSpeed);
+            pillSpeed.setOnClickListener(v -> {
+                if (row != null) callbacks.onModelBenchmark(row);
+            });
             install.setOnClickListener(v -> {
                 if (row != null) callbacks.onInstall(row, v);
             });
@@ -628,6 +655,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             kind.setImageResource(next.speech ? R.drawable.ic_tai_wave : R.drawable.ic_tai_chat);
             setText(title, next.title);
             setText(subtitle, next.subtitle);
+            setText(pillSpeed, next.pillSpeed);
+            setText(pillBackend, next.pillBackend);
             setText(pillPrimary, next.pillPrimary);
             if (!next.pillPrimary.isEmpty()) tonePill(pillPrimary, next.tonePrimary);
             setText(pillSecondary, next.pillSecondary);

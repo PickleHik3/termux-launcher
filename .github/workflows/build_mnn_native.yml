@@ -1,7 +1,7 @@
 name: Build MNN native (arm64)
 
 # Builds libMNN.so (with the LLM engine bundled) and libmnnllmapp.so for arm64-v8a from
-# alibaba/MNN @ 3.6.0, with Android patches for validated UTF-8 streaming and one-shot
+# alibaba/MNN @ 3.6.1, with Android patches for validated UTF-8 streaming and one-shot
 # response() generation required by Eagle speculative decoding. Artifacts are committed into
 # app/src/main/jniLibs/arm64-v8a/ by hand after a green run.
 #
@@ -19,11 +19,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout MNN @ 3.6.0
+      - name: Checkout MNN @ 3.6.1
         uses: actions/checkout@v6
         with:
           repository: alibaba/MNN
-          ref: '3.6.0'
+          ref: '3.6.1'
           submodules: recursive
           path: mnn
 

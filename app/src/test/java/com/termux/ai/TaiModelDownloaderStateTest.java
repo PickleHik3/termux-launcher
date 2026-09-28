@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -58,6 +59,8 @@ public class TaiModelDownloaderStateTest {
         store.deleteUserModel(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT);
         store.deleteUserModel("Qwen2.5-Coder-1.5B-GGUF");
         store.deleteUserModel("resolvable-test");
+        store.deleteUserModel("resume-skip-test");
+        store.deleteUserModel("resume-mismatch-test");
     }
 
     @Test
@@ -104,6 +107,27 @@ public class TaiModelDownloaderStateTest {
         assertEquals(TaiModelStore.STATE_INSTALLED, states.get(states.size() - 1));
         assertTrue(output.isFile());
         assertFalse(new File(output.getAbsolutePath() + ".part").exists());
+    }
+
+    @Test
+    public void runDownload_refetchesWhenTheExistingFileSizeDiffers() throws Exception {
+        byte[] model = modelBytes('m');
+        String url = serve(new FixedBytesHandler(model));
+        File output = output("resume-mismatch-test", "model.litertlm");
+        assertTrue(output.getParentFile().mkdirs() || output.getParentFile().isDirectory());
+        java.nio.file.Files.write(output.toPath(), new byte[] {1, 2, 3});
+
+        List<String> states = new ArrayList<>();
+        TaiModelDownloader downloader = new TaiModelDownloader(context, store);
+        downloader.runDownload("download-resume-mismatch-test", "resume-mismatch-test", url, output,
+            "resume-mismatch-test", "license", capabilities(), TaiModelSpec.BACKEND_LITERT_LM,
+            TaiModelSpec.FORMAT_LITERTLM, "", "", 4096, 0, "", model.length, null, null,
+            Collections.emptyList(), new TaiModelDownloader.Control(),
+            transfer -> states.add(transfer.optString("status")));
+
+        assertTrue(states.contains(TaiModelStore.STATE_DOWNLOADING));
+        assertEquals(TaiModelStore.STATE_INSTALLED, states.get(states.size() - 1));
+        assertArrayEquals(model, java.nio.file.Files.readAllBytes(output.toPath()));
     }
 
     @Test

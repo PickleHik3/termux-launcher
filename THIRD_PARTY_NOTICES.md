@@ -39,7 +39,7 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   modified by Termux Launcher.
 - **libsuperuser** — Apache-2.0 — Copyright 2012–2019 Jorrit "Chainfire" Jongma.
 - **libcore/ojluni** — GPLv2-only with the Classpath exception — filesystem compatibility classes.
-- **MNN 3.6.0** — Apache-2.0 — Copyright 2018 Alibaba Group. Termux Launcher distributes modified
+- **MNN 3.6.1** — Apache-2.0 — Copyright 2018 Alibaba Group. Termux Launcher distributes modified
   arm64 native builds and a patched UTF-8 stream processor.
 - **nlohmann/json 3.11.2** — MIT — Copyright 2013–2022 Niels Lohmann. It is statically included in
   the MNN Android JNI library.

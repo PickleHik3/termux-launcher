@@ -497,7 +497,7 @@ public class LauncherCtlApiServer {
 
     private static HttpResponse corsPreflightResponse() {
         Map<String, String> headers = new HashMap<>();
-        headers.put("Access-Control-Allow-Methods", "GET, POST, HEAD, OPTIONS");
+        headers.put("Access-Control-Allow-Methods", "GET, POST, DELETE, HEAD, OPTIONS");
         headers.put("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Api-Key, X-Tai-Output, OpenAI-Beta");
         headers.put("Access-Control-Max-Age", "86400");
         return new HttpResponse(200, "text/plain; charset=utf-8", new byte[0], headers);
@@ -615,9 +615,28 @@ public class LauncherCtlApiServer {
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/keep-warm".equals(request.path)) {
                 return maybeTextResponse(request, "keep-warm", TaiManager.getInstance(context).keepWarmRuntime(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/benchmark".equals(request.path)) {
+                // LiteRT-LM's own benchmark(): tai benchmark --native, kept for comparing numbers.
                 return maybeTextResponse(request, "benchmark", TaiManager.getInstance(context).benchmark(request.body));
+            } else if ("POST".equals(request.method) && "/v1/ai/benchmarks/run".equals(request.path)) {
+                // Bench v1. With stream:true the harness's events go out as they happen — SSE, or
+                // one plain line per phase when the CLI asks for text; otherwise the run's summary.
+                TaiManager manager = TaiManager.getInstance(context);
+                if (manager.isStreamRequest(request.body)) {
+                    if ("text".equalsIgnoreCase(request.headers.get("x-tai-output"))) {
+                        return textStreamResponse(output -> writeBenchTextStream(context, request.body, output));
+                    }
+                    return sseResponse(output -> writeBenchStream(context, request.body, output));
+                }
+                return maybeTextResponse(request, "benchmark-run", manager.benchRunCollect(request.body));
+            } else if ("GET".equals(request.method) && "/v1/ai/benchmarks".equals(request.path)) {
+                return maybeTextResponse(request, "benchmarks", TaiManager.getInstance(context).benchmarks());
+            } else if ("DELETE".equals(request.method) && "/v1/ai/benchmarks".equals(request.path)) {
+                return maybeTextResponse(request, "benchmarks-clear", TaiManager.getInstance(context).clearBenchmarks(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/cancel".equals(request.path)) {
                 return maybeTextResponse(request, "cancel", TaiManager.getInstance(context).cancelRuntime());
+            } else if ("POST".equals(request.method) && "/v1/ai/benchmarks/skip-wait".equals(request.path)) {
+                // "Skip the wait" (spec Screen 5): ends the active bench's cool-down at once.
+                return maybeTextResponse(request, "skip-wait", TaiManager.getInstance(context).skipBenchCooldown());
             } else if ("GET".equals(request.method) && "/v1/models".equals(request.path)) {
                 return jsonResponse(TaiManager.getInstance(context).openAiModels());
             } else if ("GET".equals(request.method) && isModelRetrievePath(request.path)) {
@@ -1774,7 +1793,11 @@ public class LauncherCtlApiServer {
         // A benchmark run does real generation for minutes; a request budget generous callers never
         // hit is still a guard against a runaway script hammering it.
         rateLimiters.put("POST:/v1/ai/runtime/benchmark", new SimpleRateLimiter(6, 60_000));
+        rateLimiters.put("POST:/v1/ai/benchmarks/run", new SimpleRateLimiter(6, 60_000));
+        rateLimiters.put("GET:/v1/ai/benchmarks", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("DELETE:/v1/ai/benchmarks", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/ai/runtime/cancel", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/v1/ai/benchmarks/skip-wait", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("GET:/v1/models", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/chat/completions", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/responses", new SimpleRateLimiter(60, 60_000));
@@ -1955,11 +1978,13 @@ public class LauncherCtlApiServer {
             "  tai download-cancel <model-id>\n" +
             "  tai delete <model-id>\n" +
             "  tai preflight [model] [--auto|--cpu|--gpu]\n" +
-            "  tai load [model] [--auto|--cpu|--gpu]\n" +
+            "  tai load [model] [--auto|--cpu|--gpu] [--fresh]\n" +
             "  tai unload\n" +
             "  tai keep-warm [model] [--minutes N] [--auto|--cpu|--gpu]\n" +
             "  tai cancel\n" +
-            "  tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\n" +
+            "  tai benchmark [model...] [--preset quick|standard|thorough] [--cpu|--gpu] [--eagle] [--force]\n" +
+            "  tai benchmark --results | --clear [model] | --skip-wait\n" +
+            "  tai benchmark --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\n" +
             "  tai transcribe <file.wav> [--model id] [--language xx] [--prompt \"words\"]\n" +
             "  tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text]\n" +
             "  tai speak --stop\n" +
@@ -1972,10 +1997,25 @@ public class LauncherCtlApiServer {
             "Auto tries the GPU first and the CPU after a recorded GPU failure. Every load is sized to the memory\n" +
             "free at that moment: the context window shrinks to fit (down to 4096 tokens), and a load that\n" +
             "cannot fit is refused rather than started.\n" +
-            "tai benchmark runs LiteRT-LM's own benchmark() in the runtime process (256 prefill/256 decode\n" +
-            "tokens by default, 3 runs), the same call and defaults Google AI Edge Gallery's Benchmark screen\n" +
-            "uses, so the two are comparable 1:1. It refuses while a chat model is loaded (unload first) and\n" +
-            "checks the same memory budget as tai load unless --force skips it, since Gallery has none.\n" +
+            "--fresh on tai load throws away the model's MNN mmap weight cache before loading, so it is\n" +
+            "rebuilt from scratch instead of reused; use it if a loaded MNN model starts giving degenerate\n" +
+            "replies (repeated characters, whatever the sampling settings).\n" +
+            "tai benchmark runs bench v1 on each model, timed the same way for LiteRT-LM and MNN: a cold\n" +
+            "load, then reading (prompt tok/s over a fixed passage), first word (time to first token),\n" +
+            "writing (decode tok/s over 128 tokens) and three check questions with known answers. Standard\n" +
+            "runs each test three times on the CPU and on the GPU where the model supports it; quick runs\n" +
+            "once on the processor an automatic load would pick; thorough adds a 90 s sustained run. Each\n" +
+            "load goes through the usual preflight and memory budget, and a refusal skips that entry with\n" +
+            "the reason. Results are kept in files/tai/benchmarks.json: --results prints the leaderboard,\n" +
+            "--clear removes them (for one model when named). Chat requests are refused while a benchmark\n" +
+            "runs; tai cancel stops it, keeping the phases that finished. A run refuses to start below 30%\n" +
+            "battery (unless charging) or above LIGHT thermal status; while running, battery below 15% (and\n" +
+            "not charging) or SEVERE+ thermal stops it, and MODERATE thermal pauses it until it recovers.\n" +
+            "--force skips the start check only. A later model waits out a cool-down against the run's\n" +
+            "starting thermal reading before it loads; --skip-wait ends that wait at once and marks the\n" +
+            "next result \"warm start\". --native runs LiteRT-LM's own benchmark() instead (256 prefill/256\n" +
+            "decode tokens, 3 runs; LiteRT-LM models only), the call Google AI Edge Gallery's Benchmark\n" +
+            "screen uses, for comparing numbers with it.\n" +
             "tai transcribe runs the speech model voice input uses (Keyboard settings > Voice input > Speech\n" +
             "model) on a WAV file (16 kHz mono PCM16 preferred; other rates are resampled) or raw PCM16\n" +
             "16 kHz mono, on the CPU in :tai_runtime, never queued behind a chat generation. --prompt\n" +
@@ -2133,19 +2173,25 @@ public class LauncherCtlApiServer {
             "  load)\n" +
             "    model=\"\"\n" +
             "    accelerator=\"\"\n" +
+            "    fresh=\"\"\n" +
             "    while [ \"$#\" -gt 0 ]; do\n" +
             "      case \"$1\" in\n" +
             "        --auto) accelerator=auto ;;\n" +
             "        --cpu) accelerator=cpu ;;\n" +
             "        --gpu) accelerator=gpu ;;\n" +
-            "        --*) echo \"usage: tai load [model] [--auto|--cpu|--gpu]\" >&2; exit 2 ;;\n" +
-            "        *) [ -z \"$model\" ] || { echo \"usage: tai load [model] [--auto|--cpu|--gpu]\" >&2; exit 2; }; model=\"$1\" ;;\n" +
+            "        --fresh) fresh=1 ;;\n" +
+            "        --*) echo \"usage: tai load [model] [--auto|--cpu|--gpu] [--fresh]\" >&2; exit 2 ;;\n" +
+            "        *) [ -z \"$model\" ] || { echo \"usage: tai load [model] [--auto|--cpu|--gpu] [--fresh]\" >&2; exit 2; }; model=\"$1\" ;;\n" +
             "      esac\n" +
             "      shift\n" +
             "    done\n" +
-            "    accel_json=\"\"\n" +
-            "    if [ -n \"$accelerator\" ]; then accel_json=\",\\\"accelerator\\\":\\\"$accelerator\\\"\"; fi\n" +
-            "    if [ -n \"$model\" ]; then model_escaped=$(json_escape \"$model\"); post_json /v1/ai/runtime/load \"{\\\"model\\\":\\\"$model_escaped\\\"$accel_json}\"; elif [ -n \"$accelerator\" ]; then post_json /v1/ai/runtime/load \"{\\\"accelerator\\\":\\\"$accelerator\\\"}\"; else post_json /v1/ai/runtime/load '{}'; fi\n" +
+            "    body=\"{}\"\n" +
+            "    sep=\"\"\n" +
+            "    if [ -n \"$model\" ]; then model_escaped=$(json_escape \"$model\"); body=\"{\\\"model\\\":\\\"$model_escaped\\\"\"; sep=\",\"; fi\n" +
+            "    if [ -n \"$accelerator\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"accelerator\\\":\\\"$accelerator\\\"\"; sep=\",\"; fi\n" +
+            "    if [ -n \"$fresh\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body${sep}\\\"clearCache\\\":true\"; sep=\",\"; fi\n" +
+            "    [ \"$body\" = \"{}\" ] || body=\"$body}\"\n" +
+            "    post_json /v1/ai/runtime/load \"$body\"\n" +
             "    ;;\n" +
             "  unload)\n" +
             "    post_json /v1/ai/runtime/unload '{}'\n" +
@@ -2177,35 +2223,100 @@ public class LauncherCtlApiServer {
             "    post_json /v1/ai/runtime/cancel '{}'\n" +
             "    ;;\n" +
             "  benchmark)\n" +
-            "    model=\"\"\n" +
-            "    accelerator=\"\"\n" +
-            "    prefill=\"\"\n" +
-            "    decode=\"\"\n" +
-            "    runs=\"\"\n" +
+            "    usage_benchmark() { echo \"usage: tai benchmark [model...] [--preset quick|standard|thorough] [--cpu|--gpu] [--eagle] [--force] | --results | --clear [model] | --skip-wait | --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }\n" +
+            "    if [ \"${1:-}\" = \"--native\" ]; then\n" +
+            "      # The old path: LiteRT-LM's own benchmark(), kept so its numbers can be set against bench v1's.\n" +
+            "      shift\n" +
+            "      model=\"\"\n" +
+            "      accelerator=\"\"\n" +
+            "      prefill=\"\"\n" +
+            "      decode=\"\"\n" +
+            "      runs=\"\"\n" +
+            "      force=\"\"\n" +
+            "      while [ \"$#\" -gt 0 ]; do\n" +
+            "        case \"$1\" in\n" +
+            "          --gpu) accelerator=gpu ;;\n" +
+            "          --cpu) accelerator=cpu ;;\n" +
+            "          --prefill) shift; [ \"$#\" -gt 0 ] || usage_benchmark; prefill=\"$1\" ;;\n" +
+            "          --decode) shift; [ \"$#\" -gt 0 ] || usage_benchmark; decode=\"$1\" ;;\n" +
+            "          --runs) shift; [ \"$#\" -gt 0 ] || usage_benchmark; runs=\"$1\" ;;\n" +
+            "          --force) force=true ;;\n" +
+            "          --*) usage_benchmark ;;\n" +
+            "          *) [ -z \"$model\" ] || usage_benchmark; model=\"$1\" ;;\n" +
+            "        esac\n" +
+            "        shift\n" +
+            "      done\n" +
+            "      body=\"{}\"\n" +
+            "      sep=\"\"\n" +
+            "      if [ -n \"$model\" ]; then model_escaped=$(json_escape \"$model\"); body=\"{\\\"model\\\":\\\"$model_escaped\\\"\"; sep=\",\"; fi\n" +
+            "      if [ -n \"$accelerator\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"accelerator\\\":\\\"$accelerator\\\"\"; sep=\",\"; fi\n" +
+            "      if [ -n \"$prefill\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"prefillTokens\\\":$prefill\"; sep=\",\"; fi\n" +
+            "      if [ -n \"$decode\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"decodeTokens\\\":$decode\"; sep=\",\"; fi\n" +
+            "      if [ -n \"$runs\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"runs\\\":$runs\"; sep=\",\"; fi\n" +
+            "      if [ -n \"$force\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"force\\\":true\"; sep=\",\"; fi\n" +
+            "      [ \"$body\" = \"{}\" ] || body=\"$body}\"\n" +
+            "      post_json_long /v1/ai/runtime/benchmark \"$body\"\n" +
+            "      exit $?\n" +
+            "    fi\n" +
+            "    models=\"\"\n" +
+            "    first_model=\"\"\n" +
+            "    preset=\"\"\n" +
+            "    processors=\"\"\n" +
+            "    eagle=\"\"\n" +
             "    force=\"\"\n" +
+            "    results=\"\"\n" +
+            "    clear=\"\"\n" +
+            "    skip_wait=\"\"\n" +
             "    while [ \"$#\" -gt 0 ]; do\n" +
             "      case \"$1\" in\n" +
-            "        --gpu) accelerator=gpu ;;\n" +
-            "        --cpu) accelerator=cpu ;;\n" +
-            "        --prefill) shift; [ \"$#\" -gt 0 ] || { echo \"usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }; prefill=\"$1\" ;;\n" +
-            "        --decode) shift; [ \"$#\" -gt 0 ] || { echo \"usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }; decode=\"$1\" ;;\n" +
-            "        --runs) shift; [ \"$#\" -gt 0 ] || { echo \"usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }; runs=\"$1\" ;;\n" +
+            "        --preset) shift; [ \"$#\" -gt 0 ] || usage_benchmark; preset=\"$1\" ;;\n" +
+            "        --quick|--standard|--thorough) preset=\"${1#--}\" ;;\n" +
+            "        --cpu) processors=\"$processors,\\\"cpu\\\"\" ;;\n" +
+            "        --gpu) processors=\"$processors,\\\"gpu\\\"\" ;;\n" +
+            "        --eagle) eagle=true ;;\n" +
             "        --force) force=true ;;\n" +
-            "        --*) echo \"usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2 ;;\n" +
-            "        *) [ -z \"$model\" ] || { echo \"usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }; model=\"$1\" ;;\n" +
+            "        --results) results=true ;;\n" +
+            "        --clear) clear=true ;;\n" +
+            "        --skip-wait) skip_wait=true ;;\n" +
+            "        --*) usage_benchmark ;;\n" +
+            "        *) model_escaped=$(json_escape \"$1\"); [ -n \"$first_model\" ] || first_model=\"$model_escaped\"; models=\"$models,\\\"$model_escaped\\\"\" ;;\n" +
             "      esac\n" +
             "      shift\n" +
             "    done\n" +
-            "    body=\"{}\"\n" +
-            "    sep=\"\"\n" +
-            "    if [ -n \"$model\" ]; then model_escaped=$(json_escape \"$model\"); body=\"{\\\"model\\\":\\\"$model_escaped\\\"\"; sep=\",\"; fi\n" +
-            "    if [ -n \"$accelerator\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"accelerator\\\":\\\"$accelerator\\\"\"; sep=\",\"; fi\n" +
-            "    if [ -n \"$prefill\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"prefillTokens\\\":$prefill\"; sep=\",\"; fi\n" +
-            "    if [ -n \"$decode\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"decodeTokens\\\":$decode\"; sep=\",\"; fi\n" +
-            "    if [ -n \"$runs\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"runs\\\":$runs\"; sep=\",\"; fi\n" +
-            "    if [ -n \"$force\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"force\\\":true\"; sep=\",\"; fi\n" +
-            "    [ \"$body\" = \"{}\" ] || body=\"$body}\"\n" +
-            "    post_json_long /v1/ai/runtime/benchmark \"$body\"\n" +
+            "    case \"$preset\" in ''|quick|standard|thorough) ;; *) usage_benchmark ;; esac\n" +
+            "    if [ -n \"$results\" ]; then\n" +
+            "      get_json /v1/ai/benchmarks\n" +
+            "      exit $?\n" +
+            "    fi\n" +
+            "    if [ -n \"$clear\" ]; then\n" +
+            "      if [ -n \"$first_model\" ]; then body=\"{\\\"modelId\\\":\\\"$first_model\\\"}\"; else body='{}'; fi\n" +
+            "      if [ \"$OUTPUT_MODE\" = \"text\" ]; then set -- -H \"X-TAI-Output: text\"; else set --; fi\n" +
+            "      curl $CURL_COMMON -X DELETE -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" \"$@\" --data \"$body\" \"$BASE/v1/ai/benchmarks\"\n" +
+            "      exit $?\n" +
+            "    fi\n" +
+            "    if [ -n \"$skip_wait\" ]; then\n" +
+            "      post_json /v1/ai/benchmarks/skip-wait '{}'\n" +
+            "      exit $?\n" +
+            "    fi\n" +
+            "    body=\"{\\\"preset\\\":\\\"${preset:-standard}\\\"\"\n" +
+            "    [ -z \"$models\" ] || body=\"$body,\\\"models\\\":[${models#,}]\"\n" +
+            "    [ -z \"$processors\" ] || body=\"$body,\\\"processors\\\":[${processors#,}]\"\n" +
+            "    [ -z \"$eagle\" ] || body=\"$body,\\\"eagle\\\":true\"\n" +
+            "    [ -z \"$force\" ] || body=\"$body,\\\"force\\\":true\"\n" +
+            "    # A thorough run over several models takes a good part of an hour; the stream keeps the\n" +
+            "    # connection alive with a line per phase. Ctrl-C stops the runtime too, not just this command.\n" +
+            "    CURL_BENCH=\"--fail-with-body -sS --connect-timeout 2 --max-time 14400\"\n" +
+            "    trap 'post_json /v1/ai/runtime/cancel \"{}\" >/dev/null 2>&1; exit 130' INT TERM\n" +
+            "    if [ \"$OUTPUT_MODE\" = \"text\" ]; then\n" +
+            "      body=\"$body,\\\"stream\\\":true}\"\n" +
+            "      set -- -N -H \"X-TAI-Output: text\"\n" +
+            "    else\n" +
+            "      body=\"$body}\"\n" +
+            "      set --\n" +
+            "    fi\n" +
+            "    if curl $CURL_BENCH -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" \"$@\" --data \"$body\" \"$BASE/v1/ai/benchmarks/run\"; then rc=0; else rc=$?; fi\n" +
+            "    trap - INT TERM\n" +
+            "    exit \"$rc\"\n" +
             "    ;;\n" +
             "  transcribe)\n" +
             "    file=\"\"\n" +
@@ -2752,6 +2863,14 @@ public class LauncherCtlApiServer {
         return new HttpResponse(200, "application/x-ndjson; charset=utf-8", bodyWriter, headers);
     }
 
+    /** Plain text written line by line as it happens: what {@code tai benchmark} prints live. */
+    private HttpResponse textStreamResponse(BodyWriter bodyWriter) {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Cache-Control", "no-cache");
+        headers.put("X-Accel-Buffering", "no");
+        return new HttpResponse(200, "text/plain; charset=utf-8", bodyWriter, headers);
+    }
+
     private void writeResponsesStream(Context context, String chatBody, OutputStream output) throws IOException {
         String responseId = "resp_" + System.currentTimeMillis();
         String messageId = "msg_" + System.currentTimeMillis();
@@ -2926,6 +3045,48 @@ public class LauncherCtlApiServer {
         } catch (JSONException e) {
             writeSseJsonError(output, "internal_error", e.getMessage());
             writeSseEvent(output, "[DONE]");
+        }
+    }
+
+    /** Bench v1 events as SSE, one {@code data:} line per event, ended by {@code [DONE]}. */
+    private void writeBenchStream(Context context, String body, OutputStream output) throws IOException {
+        try {
+            TaiManager.getInstance(context).benchRun(body, new TaiManager.OpenAiStreamSink() {
+                @Override
+                public void onEvent(@NonNull JSONObject event) throws IOException {
+                    writeSseEvent(output, event.toString());
+                }
+
+                @Override
+                public void onDone() throws IOException {
+                    writeSseEvent(output, "[DONE]");
+                }
+            });
+        } catch (JSONException e) {
+            writeSseJsonError(output, "internal_error", e.getMessage());
+            writeSseEvent(output, "[DONE]");
+        }
+    }
+
+    /** The same events as the lines {@code tai benchmark} shows; token events are not printed. */
+    private void writeBenchTextStream(Context context, String body, OutputStream output) throws IOException {
+        try {
+            TaiManager.getInstance(context).benchRun(body, new TaiManager.OpenAiStreamSink() {
+                @Override
+                public void onEvent(@NonNull JSONObject event) throws IOException {
+                    String line = TaiCliFormatter.formatBenchEvent(event);
+                    if (line == null) return;
+                    output.write(line.getBytes(StandardCharsets.UTF_8));
+                    output.flush();
+                }
+
+                @Override
+                public void onDone() {
+                }
+            });
+        } catch (JSONException e) {
+            output.write(("  error: " + e.getMessage() + "\n").getBytes(StandardCharsets.UTF_8));
+            output.flush();
         }
     }
 

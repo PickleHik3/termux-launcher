@@ -56,6 +56,13 @@
             app:summary="@string/settings_destination_display_summary"
             app:fragment="com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment" />
 
+        <Preference
+            app:key="on_device_ai"
+            app:icon="@drawable/ic_symbol_smart_toy"
+            app:title="@string/settings_tai_service_title"
+            app:summary="@string/settings_destination_on_device_ai_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TaiPreferencesFragment" />
+
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_root_system_info_header">

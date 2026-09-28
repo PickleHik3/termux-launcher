@@ -18,11 +18,13 @@ Usage:
   tai download-cancel <model-id>
   tai delete <model-id>
   tai preflight [model] [--auto|--cpu|--gpu]
-  tai load [model] [--auto|--cpu|--gpu]
+  tai load [model] [--auto|--cpu|--gpu] [--fresh]
   tai unload
   tai keep-warm [model] [--minutes N] [--auto|--cpu|--gpu]
   tai cancel
-  tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]
+  tai benchmark [model...] [--preset quick|standard|thorough] [--cpu|--gpu] [--eagle] [--force]
+  tai benchmark --results | --clear [model] | --skip-wait
+  tai benchmark --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]
   tai transcribe <file.wav> [--model id] [--language xx] [--prompt "words"]
   tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text]
   tai speak --stop
@@ -35,10 +37,25 @@ GGUF/raw weight files are not supported by this APK.
 Auto tries the GPU first and the CPU after a recorded GPU failure. Every load is sized to the memory
 free at that moment: the context window shrinks to fit (down to 4096 tokens), and a load that
 cannot fit is refused rather than started.
-tai benchmark runs LiteRT-LM's own benchmark() in the runtime process (256 prefill/256 decode
-tokens by default, 3 runs), the same call and defaults Google AI Edge Gallery's Benchmark screen
-uses, so the two are comparable 1:1. It refuses while a chat model is loaded (unload first) and
-checks the same memory budget as tai load unless --force skips it, since Gallery has none.
+--fresh on tai load throws away the model's MNN mmap weight cache before loading, so it is
+rebuilt from scratch instead of reused; use it if a loaded MNN model starts giving degenerate
+replies (repeated characters, whatever the sampling settings).
+tai benchmark runs bench v1 on each model, timed the same way for LiteRT-LM and MNN: a cold
+load, then reading (prompt tok/s over a fixed passage), first word (time to first token),
+writing (decode tok/s over 128 tokens) and three check questions with known answers. Standard
+runs each test three times on the CPU and on the GPU where the model supports it; quick runs
+once on the processor an automatic load would pick; thorough adds a 90 s sustained run. Each
+load goes through the usual preflight and memory budget, and a refusal skips that entry with
+the reason. Results are kept in files/tai/benchmarks.json: --results prints the leaderboard,
+--clear removes them (for one model when named). Chat requests are refused while a benchmark
+runs; tai cancel stops it, keeping the phases that finished. A run refuses to start below 30%
+battery (unless charging) or above LIGHT thermal status; while running, battery below 15% (and
+not charging) or SEVERE+ thermal stops it, and MODERATE thermal pauses it until it recovers.
+--force skips the start check only. A later model waits out a cool-down against the run's
+starting thermal reading before it loads; --skip-wait ends that wait at once and marks the
+next result "warm start". --native runs LiteRT-LM's own benchmark() instead (256 prefill/256
+decode tokens, 3 runs; LiteRT-LM models only), the call Google AI Edge Gallery's Benchmark
+screen uses, for comparing numbers with it.
 tai transcribe runs the speech model voice input uses (Keyboard settings > Voice input > Speech
 model) on a WAV file (16 kHz mono PCM16 preferred; other rates are resampled) or raw PCM16
 16 kHz mono, on the CPU in :tai_runtime, never queued behind a chat generation. --prompt
@@ -194,19 +211,25 @@ case "$cmd" in
   load)
     model=""
     accelerator=""
+    fresh=""
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --auto) accelerator=auto ;;
         --cpu) accelerator=cpu ;;
         --gpu) accelerator=gpu ;;
-        --*) echo "usage: tai load [model] [--auto|--cpu|--gpu]" >&2; exit 2 ;;
-        *) [ -z "$model" ] || { echo "usage: tai load [model] [--auto|--cpu|--gpu]" >&2; exit 2; }; model="$1" ;;
+        --fresh) fresh=1 ;;
+        --*) echo "usage: tai load [model] [--auto|--cpu|--gpu] [--fresh]" >&2; exit 2 ;;
+        *) [ -z "$model" ] || { echo "usage: tai load [model] [--auto|--cpu|--gpu] [--fresh]" >&2; exit 2; }; model="$1" ;;
       esac
       shift
     done
-    accel_json=""
-    if [ -n "$accelerator" ]; then accel_json=",\"accelerator\":\"$accelerator\""; fi
-    if [ -n "$model" ]; then model_escaped=$(json_escape "$model"); post_json /v1/ai/runtime/load "{\"model\":\"$model_escaped\"$accel_json}"; elif [ -n "$accelerator" ]; then post_json /v1/ai/runtime/load "{\"accelerator\":\"$accelerator\"}"; else post_json /v1/ai/runtime/load '{}'; fi
+    body="{}"
+    sep=""
+    if [ -n "$model" ]; then model_escaped=$(json_escape "$model"); body="{\"model\":\"$model_escaped\""; sep=","; fi
+    if [ -n "$accelerator" ]; then [ "$body" = "{}" ] && { body="{"; sep=""; }; body="$body$sep\"accelerator\":\"$accelerator\""; sep=","; fi
+    if [ -n "$fresh" ]; then [ "$body" = "{}" ] && { body="{"; sep=""; }; body="$body${sep}\"clearCache\":true"; sep=","; fi
+    [ "$body" = "{}" ] || body="$body}"
+    post_json /v1/ai/runtime/load "$body"
     ;;
   unload)
     post_json /v1/ai/runtime/unload '{}'
@@ -238,35 +261,100 @@ case "$cmd" in
     post_json /v1/ai/runtime/cancel '{}'
     ;;
   benchmark)
-    model=""
-    accelerator=""
-    prefill=""
-    decode=""
-    runs=""
+    usage_benchmark() { echo "usage: tai benchmark [model...] [--preset quick|standard|thorough] [--cpu|--gpu] [--eagle] [--force] | --results | --clear [model] | --skip-wait | --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]" >&2; exit 2; }
+    if [ "${1:-}" = "--native" ]; then
+      # The old path: LiteRT-LM's own benchmark(), kept so its numbers can be set against bench v1's.
+      shift
+      model=""
+      accelerator=""
+      prefill=""
+      decode=""
+      runs=""
+      force=""
+      while [ "$#" -gt 0 ]; do
+        case "$1" in
+          --gpu) accelerator=gpu ;;
+          --cpu) accelerator=cpu ;;
+          --prefill) shift; [ "$#" -gt 0 ] || usage_benchmark; prefill="$1" ;;
+          --decode) shift; [ "$#" -gt 0 ] || usage_benchmark; decode="$1" ;;
+          --runs) shift; [ "$#" -gt 0 ] || usage_benchmark; runs="$1" ;;
+          --force) force=true ;;
+          --*) usage_benchmark ;;
+          *) [ -z "$model" ] || usage_benchmark; model="$1" ;;
+        esac
+        shift
+      done
+      body="{}"
+      sep=""
+      if [ -n "$model" ]; then model_escaped=$(json_escape "$model"); body="{\"model\":\"$model_escaped\""; sep=","; fi
+      if [ -n "$accelerator" ]; then [ "$body" = "{}" ] && { body="{"; sep=""; }; body="$body$sep\"accelerator\":\"$accelerator\""; sep=","; fi
+      if [ -n "$prefill" ]; then [ "$body" = "{}" ] && { body="{"; sep=""; }; body="$body$sep\"prefillTokens\":$prefill"; sep=","; fi
+      if [ -n "$decode" ]; then [ "$body" = "{}" ] && { body="{"; sep=""; }; body="$body$sep\"decodeTokens\":$decode"; sep=","; fi
+      if [ -n "$runs" ]; then [ "$body" = "{}" ] && { body="{"; sep=""; }; body="$body$sep\"runs\":$runs"; sep=","; fi
+      if [ -n "$force" ]; then [ "$body" = "{}" ] && { body="{"; sep=""; }; body="$body$sep\"force\":true"; sep=","; fi
+      [ "$body" = "{}" ] || body="$body}"
+      post_json_long /v1/ai/runtime/benchmark "$body"
+      exit $?
+    fi
+    models=""
+    first_model=""
+    preset=""
+    processors=""
+    eagle=""
     force=""
+    results=""
+    clear=""
+    skip_wait=""
     while [ "$#" -gt 0 ]; do
       case "$1" in
-        --gpu) accelerator=gpu ;;
-        --cpu) accelerator=cpu ;;
-        --prefill) shift; [ "$#" -gt 0 ] || { echo "usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]" >&2; exit 2; }; prefill="$1" ;;
-        --decode) shift; [ "$#" -gt 0 ] || { echo "usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]" >&2; exit 2; }; decode="$1" ;;
-        --runs) shift; [ "$#" -gt 0 ] || { echo "usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]" >&2; exit 2; }; runs="$1" ;;
+        --preset) shift; [ "$#" -gt 0 ] || usage_benchmark; preset="$1" ;;
+        --quick|--standard|--thorough) preset="${1#--}" ;;
+        --cpu) processors="$processors,\"cpu\"" ;;
+        --gpu) processors="$processors,\"gpu\"" ;;
+        --eagle) eagle=true ;;
         --force) force=true ;;
-        --*) echo "usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]" >&2; exit 2 ;;
-        *) [ -z "$model" ] || { echo "usage: tai benchmark [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]" >&2; exit 2; }; model="$1" ;;
+        --results) results=true ;;
+        --clear) clear=true ;;
+        --skip-wait) skip_wait=true ;;
+        --*) usage_benchmark ;;
+        *) model_escaped=$(json_escape "$1"); [ -n "$first_model" ] || first_model="$model_escaped"; models="$models,\"$model_escaped\"" ;;
       esac
       shift
     done
-    body="{}"
-    sep=""
-    if [ -n "$model" ]; then model_escaped=$(json_escape "$model"); body="{\"model\":\"$model_escaped\""; sep=","; fi
-    if [ -n "$accelerator" ]; then [ "$body" = "{}" ] && { body="{"; sep=""; }; body="$body$sep\"accelerator\":\"$accelerator\""; sep=","; fi
-    if [ -n "$prefill" ]; then [ "$body" = "{}" ] && { body="{"; sep=""; }; body="$body$sep\"prefillTokens\":$prefill"; sep=","; fi
-    if [ -n "$decode" ]; then [ "$body" = "{}" ] && { body="{"; sep=""; }; body="$body$sep\"decodeTokens\":$decode"; sep=","; fi
-    if [ -n "$runs" ]; then [ "$body" = "{}" ] && { body="{"; sep=""; }; body="$body$sep\"runs\":$runs"; sep=","; fi
-    if [ -n "$force" ]; then [ "$body" = "{}" ] && { body="{"; sep=""; }; body="$body$sep\"force\":true"; sep=","; fi
-    [ "$body" = "{}" ] || body="$body}"
-    post_json_long /v1/ai/runtime/benchmark "$body"
+    case "$preset" in ''|quick|standard|thorough) ;; *) usage_benchmark ;; esac
+    if [ -n "$results" ]; then
+      get_json /v1/ai/benchmarks
+      exit $?
+    fi
+    if [ -n "$clear" ]; then
+      if [ -n "$first_model" ]; then body="{\"modelId\":\"$first_model\"}"; else body='{}'; fi
+      if [ "$OUTPUT_MODE" = "text" ]; then set -- -H "X-TAI-Output: text"; else set --; fi
+      curl $CURL_COMMON -X DELETE -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@" --data "$body" "$BASE/v1/ai/benchmarks"
+      exit $?
+    fi
+    if [ -n "$skip_wait" ]; then
+      post_json /v1/ai/benchmarks/skip-wait '{}'
+      exit $?
+    fi
+    body="{\"preset\":\"${preset:-standard}\""
+    [ -z "$models" ] || body="$body,\"models\":[${models#,}]"
+    [ -z "$processors" ] || body="$body,\"processors\":[${processors#,}]"
+    [ -z "$eagle" ] || body="$body,\"eagle\":true"
+    [ -z "$force" ] || body="$body,\"force\":true"
+    # A thorough run over several models takes a good part of an hour; the stream keeps the
+    # connection alive with a line per phase. Ctrl-C stops the runtime too, not just this command.
+    CURL_BENCH="--fail-with-body -sS --connect-timeout 2 --max-time 14400"
+    trap 'post_json /v1/ai/runtime/cancel "{}" >/dev/null 2>&1; exit 130' INT TERM
+    if [ "$OUTPUT_MODE" = "text" ]; then
+      body="$body,\"stream\":true}"
+      set -- -N -H "X-TAI-Output: text"
+    else
+      body="$body}"
+      set --
+    fi
+    if curl $CURL_BENCH -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" "$@" --data "$body" "$BASE/v1/ai/benchmarks/run"; then rc=0; else rc=$?; fi
+    trap - INT TERM
+    exit "$rc"
     ;;
   transcribe)
     file=""

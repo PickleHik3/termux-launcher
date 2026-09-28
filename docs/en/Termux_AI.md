@@ -60,10 +60,12 @@ Common capability names are:
 | `reasoning` | Intended for multi-step reasoning |
 | `multilingual` | Intended for more than one language |
 | `llm_thinking` | Supports the backend's thinking mode |
-| `speculative_decoding` | Supports the LiteRT speculative-decoding option |
+| `speculative_decoding` | A LiteRT model with the runtime flag, or an MNN package built around an EAGLE-3 draft head (a `config.json` with `speculative_type` and its `eagle*.mnn` files) |
 | `mobile_actions` | Tuned to choose from compatible Android action tools |
 
 `_capabilities` in `/v1/models` is the important field for apps. `_source_capabilities` describes upstream claims, while `_endpoint_capabilities` describes what this APK can currently provide.
+
+A model with `speculative_decoding` shows a "Speculative decoding" switch in its parameters screen. For MNN, EAGLE-3 is off by default (auto and explicit off both fall back to plain decoding): measured on a phone it was slower than plain decoding on both CPU and GPU, and its text differed slightly, so it is not worth turning on by default. The switch lets a developer turn it on anyway to try it on an EAGLE-3 package; turning it on has no effect on a package that never shipped a draft head. LiteRT is unaffected by this default: a LiteRT model with the runtime flag keeps its own auto/on/off behaviour.
 
 ### Images and audio
 
@@ -157,6 +159,10 @@ Ollama streaming uses newline-delimited JSON. Ollama registry operations (`pull`
 | POST | `/v1/ai/models/delete` | Delete an installed user model |
 | POST | `/v1/ai/models/load` | Load a model into the registry slot |
 | POST | `/v1/ai/models/unload` | Unload a model from the registry slot |
+| POST | `/v1/ai/benchmarks/run` | Benchmark models ([Benchmark](#benchmark)) |
+| GET | `/v1/ai/benchmarks` | Benchmark records and the leaderboard |
+| DELETE | `/v1/ai/benchmarks` | Clear benchmark records (`{"modelId": …}` for one model) |
+| POST | `/v1/ai/runtime/benchmark` | LiteRT-LM's own `benchmark()` (`tai benchmark --native`) |
 | POST | `/v1/auth/rotate` | Rotate the API token |
 
 ### Auth
@@ -183,6 +189,8 @@ tai load MODEL_ID --gpu
 tai keep-warm MODEL_ID --minutes 30
 tai cancel
 tai unload
+tai benchmark MODEL_ID --preset quick
+tai benchmark --results
 tai transcribe recording.wav
 tai speak "text to read aloud"
 tai speak --stop
@@ -222,7 +230,60 @@ Before loading a model, TAI checks:
 
 Unknown imported models default to CPU. Automatic GPU selection is conservative; you can explicitly test `tai load MODEL_ID --gpu` when the model profile supports it. A native runtime crash is isolated from the launcher, and TAI records fallback guidance for the next attempt.
 
+MNN keeps a converted-weights cache in the app's cache directory, which can grow as large as the model itself. It is rebuilt automatically after an app or runtime update, or after a load with different settings; `tai load MODEL_ID --fresh` throws it away and rebuilds it on demand, if a loaded MNN model ever starts giving degenerate replies.
+
 The active model normally unloads after 10 minutes without use. Change the idle timeout in TAI settings or use `tai keep-warm` when a client needs it available longer.
+
+## Benchmark
+
+`tai benchmark` measures how well a model runs on this phone. LiteRT-LM and MNN models are timed the same way: every token goes through the runtime's generation callback and is stamped as it arrives, so the numbers are comparable across backends.
+
+### What it measures
+
+For each model and processor (its own leaderboard entry):
+
+| Phase | What happens | Figure |
+| --- | --- | --- |
+| Load | Whatever is loaded is unloaded first; the model loads cold through the normal preflight and memory budget | Load time; memory used (MemAvailable before minus its lowest point) |
+| Warm-up | One short reply, discarded | — |
+| Reading | A fixed passage of about 512 tokens, then "summarise in one line" | Prompt tokens per second (prompt tokens over the wait for the first token) |
+| First word | A short chat message | Time to first token |
+| Writing | A fixed long-output prompt, 128 tokens, greedy sampling | Decode tokens per second (from the first token to the last) |
+| Sustained | 90 s of writing (thorough only) | Speed at the end against the start |
+| Check | Three questions with known answers (`17 + 25`, a fixed JSON object, repeat a word) | Pass/fail; a model that fails is **broken**, whatever its speed |
+
+Reading, first word and writing keep the median, minimum and maximum over their runs. A phase that takes three times longer than expected is stopped and the record is marked `timeout`.
+
+### Presets
+
+| Preset | Reading | First word | Writing | Sustained | Processors | Time per model |
+| --- | --- | --- | --- | --- | --- | --- |
+| `quick` | 1 | 1 | 1 | – | The one an automatic load would pick | about 1 min |
+| `standard` (default) | 3 | 3 | 3 | – | CPU, and GPU where the model supports it | about 2 min per processor |
+| `thorough` | 3 | 3 | 5 | 90 s | CPU, and GPU where supported | about 4 min per processor |
+
+`--cpu` or `--gpu` benches exactly that processor; if the model cannot load on it, the entry is skipped with the reason. `--eagle` switches the draft model on for MNN builds that ship one (a separate entry).
+
+```sh
+tai benchmark                                   # the default assistant model, standard preset
+tai benchmark gemma-4-e2b qwen3-vl-2b-instruct-mnn --preset quick
+tai benchmark qwen3-vl-2b-instruct-mnn --thorough --cpu
+tai benchmark --results                         # the leaderboard
+tai benchmark --clear gemma-4-e2b               # forget one model's results (no model: all)
+tai benchmark --native gemma-4-e2b --gpu        # LiteRT-LM's own benchmark(), for comparison with Google AI Edge Gallery
+```
+
+The terminal shows one line per phase as it finishes. Verdicts: **smooth** at 15 tok/s or more, **usable** between 7 and 15, **slow** below 7, **broken** when the check fails. While a benchmark runs, chat and load requests are refused with `benchmark_running`; `tai cancel` stops it and keeps the phases that finished. Speech input and output are not blocked, but using them mid-run will disturb the numbers.
+
+### Where results go
+
+Every entry's record is appended to `files/tai/benchmarks.json` in the app's private storage (the last 20 per model, backend, processor and draft-model combination). A record holds the model (id, size, hash if known), how it ran (backend, processor, draft model, runtime and app version, bench version, preset), the device (SoC, RAM class), the conditions (battery and heat, once the guards land), each phase's figures, the check result and a status: `complete`, `timeout`, `stopped:<reason>` or `skipped:<reason>`. Deleting a model keeps its results; `GET /v1/ai/benchmarks` marks them `installed: false`.
+
+The leaderboard ranks the latest complete record of each entry by median writing speed, ties to the faster first word. Broken entries are listed but not ranked, and results from a different bench version are kept but never ranked against the current one.
+
+### The API
+
+`POST /v1/ai/benchmarks/run` takes `{"models": ["id", …], "preset": "quick|standard|thorough", "processors": ["cpu", "gpu"], "eagle": false, "stream": false}`. With `"stream": true` the response is a server-sent event stream of the harness's events: `entry_start`, `phase_start` (with the prompt), `token` (at most about 20 a second, with the text since the last one and the running tok/s), `phase_done` (metrics and the whole reply), `entry_done` (the record), `skipped`, `error`, `paused`, `done`. Without `stream` the response is the `done` summary with the records and the leaderboard. `GET /v1/ai/benchmarks` returns `{records, leaderboard: {ranked, broken}, benchVersions}`; `DELETE /v1/ai/benchmarks` clears them, or one model's with `{"modelId": "…"}`.
 
 ## Troubleshooting
 

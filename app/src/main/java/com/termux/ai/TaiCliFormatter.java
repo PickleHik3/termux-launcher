@@ -1,6 +1,7 @@
 package com.termux.ai;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -49,12 +50,280 @@ public final class TaiCliFormatter {
                     return formatSpeak(data);
                 case "speak-stop":
                     return data.optBoolean("stopped", false) ? "Stopped.\n" : "Nothing was speaking.\n";
+                case "benchmarks":
+                    return formatBenchmarks(data);
+                case "benchmarks-clear":
+                    return formatBenchmarksCleared(data);
+                case "benchmark-run":
+                    return formatBenchRun(data);
                 default:
                     return formatGeneric(data);
             }
         } catch (Exception e) {
             return data.toString() + "\n";
         }
+    }
+
+    // ---- tai benchmark -------------------------------------------------------------------------
+
+    /**
+     * One line of {@code tai benchmark}'s live output for a harness event, or {@code null} for
+     * the events the terminal does not show (tokens, phase starts). The same lines make up the
+     * non-streaming summary ({@link #formatBenchRun}), so the two read alike.
+     */
+    @Nullable
+    public static String formatBenchEvent(@NonNull JSONObject event) {
+        String name = event.optString("event", "");
+        switch (name) {
+            case "entry_start": {
+                JSONObject entry = event.optJSONObject("entry");
+                return "\n[" + (event.optInt("index", 0) + 1) + "/" + event.optInt("total", 0) + "] " + describeEntry(entry) + "\n";
+            }
+            case "phase_done":
+                return formatPhaseDone(event.optString("phase", ""), event.optJSONObject("metrics"), event.optString("status", "ok"));
+            case "skipped":
+                return "  skipped: " + clean(event.optString("reason", event.optString("code", ""))) + "\n";
+            case "paused":
+                return "  paused " + formatDuration(event.optLong("ms", 0L)) + ": " + clean(event.optString("reason", "")) + "\n";
+            case "error": {
+                String phase = event.optString("phase", "");
+                String prefix = phase.isEmpty() ? "  error" : "  " + phaseLabel(phase).trim() + " error";
+                return prefix + ": " + clean(event.optString("message", event.optString("code", ""))) + "\n";
+            }
+            case "entry_done":
+                return formatRecordVerdict(event.optJSONObject("record"));
+            case "done": {
+                JSONArray skipped = event.optJSONArray("skipped");
+                StringBuilder out = new StringBuilder("\nDone: ").append(event.optInt("entries", 0)).append(" entries");
+                if (skipped != null && skipped.length() > 0) out.append(", ").append(skipped.length()).append(" skipped");
+                if (!event.isNull("stopped") && event.has("stopped")) out.append(", stopped: ").append(clean(event.optString("stopped", "")));
+                out.append(". Results: tai benchmark --results\n");
+                return out.toString();
+            }
+            default:
+                return null;
+        }
+    }
+
+    /** The summary of a run answered in one piece: each record's lines, then the leaderboard. */
+    @NonNull
+    private static String formatBenchRun(@NonNull JSONObject data) {
+        StringBuilder out = new StringBuilder();
+        JSONArray records = data.optJSONArray("records");
+        int count = records == null ? 0 : records.length();
+        for (int i = 0; i < count; i++) {
+            JSONObject record = records.optJSONObject(i);
+            if (record == null) continue;
+            out.append(i == 0 ? "" : "\n").append('[').append(i + 1).append('/').append(count).append("] ")
+                .append(describeEntry(record)).append('\n');
+            JSONObject phases = record.optJSONObject("phases");
+            if (phases != null) {
+                for (String phase : new String[] {"load", "reading", "firstWord", "writing", "sustained"}) {
+                    JSONObject metrics = phases.optJSONObject(phase);
+                    if (metrics != null) out.append(formatPhaseDone(phase, metrics, "ok"));
+                }
+            }
+            JSONObject check = record.optJSONObject("check");
+            if (check != null && check.optInt("total", 0) > 0) out.append(formatPhaseDone("check", check, "ok"));
+            if (record.optString("status", "").startsWith("skipped:")) {
+                out.append("  skipped: ").append(clean(record.optString("skipReason", record.optString("status", "")))).append('\n');
+            }
+            out.append(formatRecordVerdict(record));
+        }
+        JSONObject leaderboard = data.optJSONObject("leaderboard");
+        if (leaderboard != null) {
+            out.append('\n').append(formatLeaderboard(leaderboard));
+        }
+        return out.toString();
+    }
+
+    /** {@code tai benchmark --results}: the leaderboard, then how many records are on file. */
+    @NonNull
+    private static String formatBenchmarks(@NonNull JSONObject data) {
+        StringBuilder out = new StringBuilder();
+        JSONObject leaderboard = data.optJSONObject("leaderboard");
+        if (leaderboard != null) out.append(formatLeaderboard(leaderboard));
+        JSONArray records = data.optJSONArray("records");
+        int count = records == null ? 0 : records.length();
+        out.append('\n').append(count).append(count == 1 ? " record" : " records");
+        JSONArray versions = data.optJSONArray("benchVersions");
+        if (versions != null && versions.length() > 1) out.append(" across ").append(versions.length()).append(" bench versions");
+        out.append(" in ").append(clean(data.optString("file", "benchmarks.json"))).append('\n');
+        return out.toString();
+    }
+
+    @NonNull
+    private static String formatBenchmarksCleared(@NonNull JSONObject data) {
+        int removed = data.optInt("removed", 0);
+        String model = nullable(data, "modelId", "");
+        return "Removed " + removed + (removed == 1 ? " benchmark result" : " benchmark results")
+            + (model.isEmpty() ? "" : " for " + model) + ".\n";
+    }
+
+    /** A ranked table; broken entries (check failed) listed after it. */
+    @NonNull
+    private static String formatLeaderboard(@NonNull JSONObject leaderboard) {
+        StringBuilder out = new StringBuilder();
+        out.append("Leaderboard (").append(clean(leaderboard.optString("benchVersion", ""))).append(")\n");
+        JSONArray ranked = leaderboard.optJSONArray("ranked");
+        if (ranked == null || ranked.length() == 0) {
+            out.append("  No complete results yet. Run: tai benchmark [model] --preset quick\n");
+        } else {
+            out.append(String.format(Locale.US, "  %2s  %-34s %-5s %9s %11s %10s %7s  %s\n",
+                "#", "model", "proc", "writing", "first word", "reading", "load", "verdict"));
+            for (int i = 0; i < ranked.length(); i++) {
+                JSONObject row = ranked.optJSONObject(i);
+                if (row == null) continue;
+                out.append(String.format(Locale.US, "  %2d  %-34s %-5s %9s %11s %10s %7s  %s\n",
+                    row.optInt("rank", i + 1), shorten(row.optString("modelId", ""), 34), processorLabel(row),
+                    tps(row.optDouble("writingTps", 0.0)), millis(row, "firstWordMs"), tps(row.optDouble("readingTps", 0.0)),
+                    row.isNull("loadMs") ? "" : seconds(row.optLong("loadMs", 0L)), clean(row.optString("verdict", ""))));
+            }
+        }
+        JSONArray broken = leaderboard.optJSONArray("broken");
+        if (broken != null && broken.length() > 0) {
+            out.append("Broken (check failed, not ranked):\n");
+            for (int i = 0; i < broken.length(); i++) {
+                JSONObject row = broken.optJSONObject(i);
+                if (row == null) continue;
+                out.append("  ").append(clean(row.optString("modelId", ""))).append(' ').append(processorLabel(row))
+                    .append(' ').append(tps(row.optDouble("writingTps", 0.0))).append('\n');
+            }
+        }
+        return out.toString();
+    }
+
+    @NonNull
+    private static String formatPhaseDone(@NonNull String phase, @Nullable JSONObject metrics, @NonNull String status) {
+        StringBuilder out = new StringBuilder("  ").append(phaseLabel(phase));
+        if (metrics == null) metrics = new JSONObject();
+        switch (phase) {
+            case "load":
+                out.append(seconds(metrics.optLong("ms", 0L)));
+                long mem = metrics.optLong("memBytes", -1L);
+                if (mem >= 0L) out.append(", ").append(formatBytes(mem)).append(" used");
+                break;
+            case "warmup":
+                out.append("done");
+                break;
+            case "reading":
+                out.append(series(metrics, "tok/s"));
+                break;
+            case "firstWord":
+                out.append(series(metrics, "ms"));
+                break;
+            case "writing":
+                out.append(series(metrics, "tok/s"));
+                if (metrics.has("tokens")) out.append(", ").append(metrics.optInt("tokens", 0)).append(" tokens");
+                break;
+            case "sustained":
+                out.append(tps(metrics.optDouble("startTps", 0.0))).append(" -> ").append(tps(metrics.optDouble("endTps", 0.0)))
+                    .append(String.format(Locale.US, " (%.0f%% drop over %.0f s)", metrics.optDouble("dropPct", 0.0), metrics.optDouble("seconds", 0.0)));
+                break;
+            case "check":
+                out.append(metrics.optInt("passed", 0)).append('/').append(metrics.optInt("total", 0));
+                JSONArray details = metrics.optJSONArray("details");
+                if (details != null) {
+                    StringBuilder failed = new StringBuilder();
+                    for (int i = 0; i < details.length(); i++) {
+                        JSONObject detail = details.optJSONObject(i);
+                        if (detail == null || detail.optBoolean("passed", false)) continue;
+                        if (failed.length() > 0) failed.append(", ");
+                        failed.append(detail.optString("name", "")).append(" got \"").append(shorten(detail.optString("reply", "").trim(), 40)).append('"');
+                    }
+                    if (failed.length() > 0) out.append(" (failed: ").append(failed).append(')');
+                }
+                break;
+            default:
+                out.append(metrics.toString());
+                break;
+        }
+        if ("timeout".equals(status)) out.append("  [timed out]");
+        return out.append('\n').toString();
+    }
+
+    /** "  -> smooth (21.3 tok/s)" or the status that stopped the entry. */
+    @NonNull
+    private static String formatRecordVerdict(@Nullable JSONObject record) {
+        if (record == null) return "";
+        String status = record.optString("status", "");
+        if (status.startsWith("skipped:")) return "";
+        JSONObject phases = record.optJSONObject("phases");
+        JSONObject writing = phases == null ? null : phases.optJSONObject("writing");
+        String verdict = nullable(record, "verdict", "");
+        StringBuilder out = new StringBuilder("  -> ");
+        if (!verdict.isEmpty()) {
+            out.append(verdict);
+            if (writing != null) out.append(" (").append(tps(writing.optDouble("med", 0.0))).append(')');
+        } else {
+            out.append(status);
+        }
+        if (!"complete".equals(status) && !verdict.isEmpty()) out.append(", ").append(status);
+        return out.append('\n').toString();
+    }
+
+    @NonNull
+    private static String describeEntry(@Nullable JSONObject entry) {
+        if (entry == null) return "";
+        StringBuilder out = new StringBuilder(clean(entry.optString("modelId", "")));
+        String backend = clean(entry.optString("backend", ""));
+        if (!backend.isEmpty()) out.append(" · ").append(TaiModelSpec.BACKEND_MNN_LLM.equals(backend) ? "MNN" : "LiteRT-LM");
+        out.append(" · ").append(processorLabel(entry));
+        return out.toString();
+    }
+
+    @NonNull
+    private static String processorLabel(@NonNull JSONObject entry) {
+        String label = clean(entry.optString("accelerator", "")).toUpperCase(Locale.ROOT);
+        return entry.optBoolean("speculative", false) ? label + "+draft" : label;
+    }
+
+    @NonNull
+    private static String phaseLabel(@NonNull String phase) {
+        switch (phase) {
+            case "load": return "load        ";
+            case "warmup": return "warm-up     ";
+            case "reading": return "reading     ";
+            case "firstWord": return "first word  ";
+            case "writing": return "writing     ";
+            case "sustained": return "sustained   ";
+            case "check": return "check       ";
+            default: return String.format(Locale.US, "%-12s", phase);
+        }
+    }
+
+    /** "21.3 tok/s (min 19.8, max 22.0)" over a {@code {med, min, max, runs}} object. */
+    @NonNull
+    private static String series(@NonNull JSONObject metrics, @NonNull String unit) {
+        if (!metrics.has("med")) return "not measured";
+        String med = "ms".equals(unit) ? Math.round(metrics.optDouble("med", 0.0)) + " ms" : tps(metrics.optDouble("med", 0.0));
+        if (metrics.optInt("runs", 1) <= 1) return med;
+        if ("ms".equals(unit)) {
+            return med + String.format(Locale.US, " (min %d, max %d)", Math.round(metrics.optDouble("min", 0.0)), Math.round(metrics.optDouble("max", 0.0)));
+        }
+        return med + String.format(Locale.US, " (min %.1f, max %.1f)", metrics.optDouble("min", 0.0), metrics.optDouble("max", 0.0));
+    }
+
+    @NonNull
+    private static String tps(double value) {
+        return String.format(Locale.US, value >= 100.0 ? "%.0f tok/s" : "%.1f tok/s", value);
+    }
+
+    @NonNull
+    private static String millis(@NonNull JSONObject row, @NonNull String key) {
+        if (row.isNull(key) || !row.has(key)) return "";
+        return Math.round(row.optDouble(key, 0.0)) + " ms";
+    }
+
+    @NonNull
+    private static String seconds(long millis) {
+        return String.format(Locale.US, "%.1f s", millis / 1000.0);
+    }
+
+    @NonNull
+    private static String shorten(@NonNull String value, int max) {
+        if (value.length() <= max) return value;
+        return value.substring(0, Math.max(0, max - 1)) + "…";
     }
 
     /** "Spoke 3 sentences (4.2 s) as Jasper; first sound after 0.9 s." or "Stopped after 1 sentence." */

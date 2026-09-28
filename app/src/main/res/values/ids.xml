@@ -7,4 +7,19 @@
     <!-- The corner the preset tile's outline is clipped at, which is the preset's own radius and
          so changes per tile and per render. -->
     <item name="editor_shell_preset_corner" type="id" />
+
+    <!-- The benchmark screens (Home, Choose, Run, Result), built in code: their lists and the
+         views a row binds by id. -->
+    <item name="tai_bench_list" type="id" />
+    <item name="tai_bench_text" type="id" />
+    <item name="tai_bench_title" type="id" />
+    <item name="tai_bench_subtitle" type="id" />
+    <item name="tai_bench_tabs" type="id" />
+    <item name="tai_bench_rank" type="id" />
+    <item name="tai_bench_marks" type="id" />
+    <item name="tai_bench_figure" type="id" />
+    <item name="tai_bench_verdict" type="id" />
+    <item name="tai_bench_action" type="id" />
+    <item name="tai_bench_check" type="id" />
+    <item name="tai_bench_scroll" type="id" />
 </resources>

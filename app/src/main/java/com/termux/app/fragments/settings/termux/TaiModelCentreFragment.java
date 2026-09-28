@@ -128,6 +128,8 @@ public class TaiModelCentreFragment extends Fragment
     @Nullable private String defaultId;
     @Nullable private String voiceId;
     @Nullable private String loadedId;
+    /** Best ranked writing speed per model id, for the quiet speed pill; refreshed on {@link #onStart}. */
+    @NonNull private Map<String, Double> benchmarkSpeeds = Collections.emptyMap();
     private int parallel = TaiDownloadQueue.DEFAULT_PARALLEL;
     private long deviceMemoryBytes = -1L;
 
@@ -208,6 +210,7 @@ public class TaiModelCentreFragment extends Fragment
         rebuild();
         TaiDownloadHub.get(context).addListener(this);
         fetchLoadedModel(context);
+        fetchBenchmarkSpeeds(context);
     }
 
     @Override
@@ -302,6 +305,26 @@ public class TaiModelCentreFragment extends Fragment
             handler.post(() -> {
                 if (!isAdded()) return;
                 loadedId = finalId;
+                rebuild();
+            });
+        });
+    }
+
+    /** The benchmark leaderboard is a blocking read; fetch each chat row's speed pill off the main thread. */
+    private void fetchBenchmarkSpeeds(@NonNull Context context) {
+        if (executor.isShutdown()) return;
+        Context app = context.getApplicationContext();
+        executor.execute(() -> {
+            JSONObject benchmarks;
+            try {
+                benchmarks = TaiManager.getInstance(app).benchmarks();
+            } catch (JSONException | RuntimeException e) {
+                benchmarks = null;
+            }
+            Map<String, Double> speeds = TaiBenchLeaderboard.bestSpeedByModel(benchmarks);
+            handler.post(() -> {
+                if (!isAdded()) return;
+                benchmarkSpeeds = speeds;
                 rebuild();
             });
         });
@@ -441,6 +464,9 @@ public class TaiModelCentreFragment extends Fragment
             row.subtitle = kindLine(context, false, spec.sizeBytes, !TaiModelCatalog.entries().containsKey(spec.id));
             row.pillPrimary = spec.id.equals(loadedId) ? getString(R.string.tai_centre_pill_in_use) : "";
             row.pillSecondary = spec.id.equals(defaultId) ? getString(R.string.tai_centre_pill_default) : "";
+            row.pillBackend = backendPill(spec.backend);
+            Double speed = benchmarkSpeeds.get(spec.id);
+            row.pillSpeed = speed == null ? "" : getString(R.string.tai_bench_tps, TaiBenchLeaderboard.formatTpsValue(speed));
             addModelRow(items, row);
         }
         List<TaiModelSpec> speech = new ArrayList<>(installedSpeech);
@@ -489,6 +515,7 @@ public class TaiModelCentreFragment extends Fragment
                 .append(" · ").append(size);
             if (entry.ramTier != null && !entry.ramTier.isEmpty()) subtitle.append(" · ").append(entry.ramTier);
             row.subtitle = subtitle.toString();
+            if (!speech) row.pillBackend = backendPill(entry.backend);
             row.installable = entry.downloadAvailable;
             row.installing = installing.contains(entry.modelId);
             String error = errors.get(entry.modelId);
@@ -581,6 +608,14 @@ public class TaiModelCentreFragment extends Fragment
         if (!speech) return displayName == null || displayName.isEmpty() ? modelId : displayName;
         String plain = TaiSpeechModels.plainName(modelId, displayName, path);
         return TaiSpeechActions.isWhisper(modelId) ? "Whisper " + plain : plain;
+    }
+
+    /** The row's backend pill text ("LiteRT", "MNN"), or "" for a backend this build does not name. */
+    @NonNull
+    private String backendPill(@Nullable String backend) {
+        if (TaiModelSpec.BACKEND_LITERT_LM.equals(backend)) return getString(R.string.tai_centre_pill_backend_litert);
+        if (TaiModelSpec.BACKEND_MNN_LLM.equals(backend)) return getString(R.string.tai_centre_pill_backend_mnn);
+        return "";
     }
 
     private static long catalogueSize(@NonNull String modelId) {
@@ -865,6 +900,7 @@ public class TaiModelCentreFragment extends Fragment
             if (!loaded) items.add(Menu.NONE, 1, Menu.NONE, R.string.termux_ai_model_load_action);
             if (!spec.id.equals(defaultId)) items.add(Menu.NONE, 2, Menu.NONE, R.string.termux_ai_model_set_active_action);
             items.add(Menu.NONE, 3, Menu.NONE, R.string.termux_ai_model_tune_action);
+            items.add(Menu.NONE, 5, Menu.NONE, R.string.tai_bench_title);
             items.add(Menu.NONE, 4, Menu.NONE, loaded ? R.string.termux_ai_model_delete_action_loaded
                 : R.string.termux_ai_model_delete_action);
             menu.setOnMenuItemClickListener(item -> {
@@ -872,6 +908,7 @@ public class TaiModelCentreFragment extends Fragment
                     case 1: loadModel(context, spec.id); break;
                     case 2: setDefault(context, spec.id); break;
                     case 3: openParameters(spec); break;
+                    case 5: TaiBenchHomeFragment.open(getActivity(), spec.id); break;
                     default:
                         if (loaded) AppNotice.show(context, R.string.termux_ai_model_delete_loaded_warning, true);
                         else confirmDeleteChat(context, spec);
@@ -881,6 +918,11 @@ public class TaiModelCentreFragment extends Fragment
             });
         }
         menu.show();
+    }
+
+    @Override
+    public void onModelBenchmark(@NonNull TaiModelCentreAdapter.ModelRow row) {
+        TaiBenchHomeFragment.open(getActivity(), row.modelId);
     }
 
     @Override

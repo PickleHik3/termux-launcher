@@ -24,8 +24,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.File;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -35,6 +38,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 public final class TaiManager {
@@ -64,6 +68,10 @@ public final class TaiManager {
      * last said ({@link TaiSettings#getSttIdleUnloadMinutes}); the plan's default until told.
      */
     private volatile long sttIdleLimitMs = TaiPressureWatch.STT_IDLE_MS;
+    /** In the runtime process: the benchmark in progress, which cancel and unload stop first. */
+    @Nullable private volatile TaiBenchHarness activeBench;
+    /** In the app process: a benchmark stream in flight; a second request is refused. */
+    private final AtomicBoolean benchStreamActive = new AtomicBoolean();
 
     public interface OpenAiStreamSink {
         void onEvent(@NonNull JSONObject event) throws IOException;
@@ -557,6 +565,12 @@ public final class TaiManager {
         }
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_LOAD_MODEL, delegatedRuntimeBody(body));
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
+        // The reset hook (tai load --fresh, or clearCache on the load routes directly): thrown away
+        // before the load itself picks the fingerprinted directory, so the model always rebuilds
+        // its converted-weight cache from scratch instead of trusting whatever is on disk.
+        if (request.optBoolean("clearCache", false) && TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
+            MnnTaiRuntime.clearMmapCache(appContext, spec.id);
+        }
         if (hasInjectedRuntimeOverride()) {
             JSONObject result = localRuntime().load(spec, options);
             return result;
@@ -586,6 +600,10 @@ public final class TaiManager {
     @NonNull
     public JSONObject unloadModel() throws JSONException {
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_UNLOAD_MODEL, "{}");
+        // An unload under a running benchmark ends the benchmark: its entry is recorded as
+        // stopped and the phases that finished are kept.
+        TaiBenchHarness bench = activeBench;
+        if (bench != null) bench.requestStop("unloaded");
         return localRuntime().unload();
     }
 
@@ -620,7 +638,511 @@ public final class TaiManager {
     @NonNull
     public JSONObject cancelRuntime() throws JSONException {
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_CANCEL, "{}");
+        // tai cancel is how a running benchmark is stopped from outside; see TaiRuntimeService's
+        // busy rule. The harness cancels the generation itself and records the entry as stopped.
+        TaiBenchHarness bench = activeBench;
+        if (bench != null) bench.requestStop("cancelled");
         return localRuntime().cancel();
+    }
+
+    /**
+     * "Skip the wait" (spec Screen 5): ends the active bench's current or next cool-down wait at
+     * once, and that entry's record is marked {@code warmStart}. A no-op, not an error, when
+     * nothing is running.
+     */
+    @NonNull
+    public JSONObject skipBenchCooldown() throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_BENCH_SKIP_WAIT, "{}");
+        TaiBenchHarness bench = activeBench;
+        if (bench != null) bench.skipCooldown();
+        JSONObject result = new JSONObject();
+        result.put("ok", true);
+        result.put("skipped", bench != null);
+        return result;
+    }
+
+    // ---- Benchmark (bench v1) ------------------------------------------------------------------
+
+    /** The results file, {@code files/tai/benchmarks.json}, written by this (the app) process only. */
+    @NonNull
+    private TaiBenchStore benchStore() {
+        return TaiBenchStore.in(appContext.getFilesDir());
+    }
+
+    /**
+     * {@code GET /v1/ai/benchmarks}: every record and the leaderboard for the current bench
+     * version. Deleting a model keeps its results; each record says whether its model is still
+     * installed so a reader can mark it.
+     */
+    @NonNull
+    public JSONObject benchmarks() throws JSONException {
+        JSONObject data = benchStore().toJson(TaiBenchSuite.BENCH_VERSION);
+        JSONArray records = data.optJSONArray("records");
+        if (records != null) {
+            for (int i = 0; i < records.length(); i++) {
+                JSONObject record = records.optJSONObject(i);
+                if (record != null) record.put("installed", resolveModel(record.optString("modelId", "")) != null);
+            }
+        }
+        return data;
+    }
+
+    /** {@code DELETE /v1/ai/benchmarks}: clears every record, or {@code modelId}'s only. */
+    @NonNull
+    public JSONObject clearBenchmarks(@NonNull String body) throws JSONException {
+        JSONObject request = parseBody(body);
+        String modelId = request.optString("modelId", request.optString("model", "")).trim();
+        try {
+            int removed = benchStore().clear(modelId.isEmpty() ? null : modelId);
+            JSONObject data = new JSONObject();
+            data.put("ok", true);
+            data.put("removed", removed);
+            data.put("modelId", modelId.isEmpty() ? JSONObject.NULL : modelId);
+            return data;
+        } catch (IOException e) {
+            return error(500, "benchmarks_clear_failed", "Could not rewrite the benchmark file: " + message(e));
+        }
+    }
+
+    /**
+     * {@code POST /v1/ai/benchmarks/run} without {@code stream}: runs the whole bench and answers
+     * once with the {@code done} summary plus the leaderboard the records landed on.
+     */
+    @NonNull
+    public JSONObject benchRunCollect(@NonNull String body) throws JSONException {
+        AtomicReference<JSONObject> done = new AtomicReference<>();
+        AtomicReference<JSONObject> failure = new AtomicReference<>();
+        try {
+            benchRun(body, new OpenAiStreamSink() {
+                @Override
+                public void onEvent(@NonNull JSONObject event) {
+                    String name = event.optString("event", "");
+                    if ("done".equals(name)) done.set(event);
+                    // An error outside any entry is the run failing to start; entry errors are in the records.
+                    else if ("error".equals(name) && !event.has("entry")) failure.compareAndSet(null, event);
+                }
+
+                @Override
+                public void onDone() {
+                }
+            });
+        } catch (IOException e) {
+            return error(500, "benchmark_failed", message(e));
+        }
+        if (done.get() == null) {
+            JSONObject event = failure.get();
+            if (event == null) return error(500, "benchmark_failed", "The benchmark ended without a result.");
+            return error(event.optInt("status", 500), event.optString("code", "benchmark_failed"),
+                event.optString("message", "The benchmark could not start."));
+        }
+        JSONObject result = new JSONObject(done.get().toString());
+        result.remove("event");
+        result.remove("at");
+        result.put("leaderboard", benchStore().toJson(TaiBenchSuite.BENCH_VERSION).opt("leaderboard"));
+        return result;
+    }
+
+    /** An exception's message, or its class name when it has none (an IOException often does not). */
+    @NonNull
+    private static String message(@NonNull Exception e) {
+        String text = e.getMessage();
+        return text == null || text.isEmpty() ? e.getClass().getSimpleName() : text;
+    }
+
+    /**
+     * Runs bench v1 over {@code models} and streams {@link TaiBenchHarness} events into
+     * {@code sink}. Request: {@code {models: [id…] | model, preset: quick|standard|thorough,
+     * processors: [cpu|gpu…]?, eagle: bool?}}. In the app process the request is resolved
+     * (model specs and the settings' runtime options travel with it, as every runtime request's
+     * do), forwarded to {@code :tai_runtime} as {@link TaiRuntimeIpc#OP_BENCH_RUN}, and each
+     * {@code entry_done} record is appended to the store as it arrives. In the runtime process
+     * the harness runs here, against the local router.
+     */
+    public void benchRun(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        if (shouldDelegateRuntime()) {
+            benchRunDelegated(body, sink);
+            return;
+        }
+        benchRunLocal(body, sink);
+    }
+
+    private void benchRunDelegated(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        if (runtimeClient == null) {
+            emitBenchError(sink, error(503, "tai_runtime_unavailable", "TAI runtime service client is unavailable."));
+            return;
+        }
+        JSONObject prepared = prepareBenchRequest(parseBody(body));
+        if (!prepared.optBoolean("ok", false)) {
+            emitBenchError(sink, prepared);
+            return;
+        }
+        prepared.remove("ok");
+        if (!benchStreamActive.compareAndSet(false, true)) {
+            emitBenchError(sink, error(409, "benchmark_running", "A benchmark is already running; wait for it or stop it with tai cancel."));
+            return;
+        }
+        try {
+            TaiBenchStore store = benchStore();
+            runtimeClient.stream(TaiRuntimeIpc.OP_BENCH_RUN, prepared.toString(), new OpenAiStreamSink() {
+                @Override
+                public void onEvent(@NonNull JSONObject event) throws IOException {
+                    if (!event.has("event") && event.has("error")) {
+                        // The service client's shape for a runtime that died or refused the stream.
+                        try {
+                            sink.onEvent(benchErrorEvent(event.optJSONObject("tai") == null ? event : event.getJSONObject("tai")));
+                        } catch (JSONException e) {
+                            throw new IOException(e);
+                        }
+                        return;
+                    }
+                    if ("entry_done".equals(event.optString("event", ""))) {
+                        JSONObject record = event.optJSONObject("record");
+                        try {
+                            if (record != null) {
+                                store.append(record);
+                                event.put("stored", true);
+                            }
+                        } catch (IOException | JSONException e) {
+                            try {
+                                event.put("stored", false);
+                                event.put("storeError", message(e));
+                            } catch (JSONException ignored) {
+                            }
+                        }
+                    }
+                    sink.onEvent(event);
+                }
+
+                @Override
+                public void onDone() throws IOException {
+                    sink.onDone();
+                }
+            });
+        } finally {
+            benchStreamActive.set(false);
+        }
+    }
+
+    /**
+     * The app-process half of a bench request: every model resolved and checked (a chat model,
+     * installed), the preset and processors validated, the specs and runtime options attached the
+     * way {@link #delegatedRuntimeBody} attaches them for one model. {@code ok:false} is the error
+     * to answer with.
+     */
+    @NonNull
+    private JSONObject prepareBenchRequest(@NonNull JSONObject request) throws JSONException {
+        List<String> ids = new ArrayList<>();
+        JSONArray models = request.optJSONArray("models");
+        if (models != null) {
+            for (int i = 0; i < models.length(); i++) {
+                Object item = models.opt(i);
+                String id = item instanceof JSONObject ? ((JSONObject) item).optString("model", "") : String.valueOf(item);
+                if (!id.trim().isEmpty() && !ids.contains(id.trim())) ids.add(id.trim());
+            }
+        }
+        if (ids.isEmpty()) {
+            String single = request.optString("model", "").trim();
+            ids.add(single.isEmpty() ? settings.getDefaultAssistantModel() : single);
+        }
+        TaiBenchSuite.Preset preset = TaiBenchSuite.Preset.fromId(request.optString("preset", null));
+        if (preset == null) return error(400, "bad_preset", "preset must be quick, standard or thorough.");
+        JSONArray prepared = new JSONArray();
+        for (String id : ids) {
+            TaiModelSpec spec = resolveModel(id);
+            if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + id);
+            if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
+                return error(400, "capability_not_supported", "Model " + id + " is not a chat model.");
+            }
+            if (spec.localPath == null || !new File(spec.localPath).exists()) {
+                return error(404, "model_file_missing", "Download or import " + id + " before benchmarking it.");
+            }
+            JSONObject entry = new JSONObject();
+            entry.put("model", spec.id);
+            entry.put(INTERNAL_MODEL_SPEC, spec.toJson());
+            entry.put(INTERNAL_RUNTIME_OPTIONS, settings.getRuntimeOptions(spec).toJson());
+            prepared.put(entry);
+        }
+        JSONArray processors = null;
+        Object requestedProcessors = request.opt("processors");
+        if (requestedProcessors instanceof JSONArray) {
+            processors = (JSONArray) requestedProcessors;
+        } else if (requestedProcessors instanceof String && !((String) requestedProcessors).trim().isEmpty()) {
+            processors = new JSONArray().put(((String) requestedProcessors).trim());
+        }
+        JSONObject body = new JSONObject();
+        body.put("ok", true);
+        body.put("models", prepared);
+        body.put("preset", preset.id);
+        body.put("processors", processors == null ? JSONObject.NULL : processors);
+        body.put("eagle", request.optBoolean("eagle", false));
+        body.put("force", request.optBoolean("force", false));
+        return body;
+    }
+
+    /** The runtime-process half: the harness against the local router. */
+    private void benchRunLocal(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        JSONObject request = parseBody(body);
+        TaiRuntimeState state = localRuntime().getState();
+        if (state.activeGeneration || "loading".equals(state.state)) {
+            JSONObject busy = error(409, "runtime_busy", "The runtime is " + ("loading".equals(state.state) ? "loading" : "generating")
+                + "; wait for it to finish or cancel it before benchmarking.");
+            if (state.loadedModelId != null) busy.put("loadedModelId", state.loadedModelId);
+            emitBenchError(sink, busy);
+            return;
+        }
+        if (activeBench != null) {
+            emitBenchError(sink, error(409, "benchmark_running", "A benchmark is already running."));
+            return;
+        }
+        TaiBenchSuite.Preset preset = TaiBenchSuite.Preset.fromId(request.optString("preset", null));
+        if (preset == null) {
+            emitBenchError(sink, error(400, "bad_preset", "preset must be quick, standard or thorough."));
+            return;
+        }
+        JSONArray models = request.optJSONArray("models");
+        if (models == null || models.length() == 0) {
+            emitBenchError(sink, error(400, "no_models", "No models to benchmark."));
+            return;
+        }
+        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
+        Map<String, TaiModelSpec> specs = new LinkedHashMap<>();
+        Map<String, TaiRuntimeOptions> baseOptions = new LinkedHashMap<>();
+        List<TaiBenchSuite.ModelInput> inputs = new ArrayList<>();
+        for (int i = 0; i < models.length(); i++) {
+            JSONObject model = models.optJSONObject(i);
+            if (model == null) continue;
+            String id = model.optString("model", "");
+            TaiModelSpec spec = resolveModel(model, id);
+            if (spec == null) {
+                emitBenchError(sink, error(404, "model_not_found", "Unknown TAI model: " + id));
+                return;
+            }
+            TaiRuntimeOptions options = runtimeOptionsFromRequest(model, spec);
+            // The processor an automatic load would take is Quick's pick; the GPU is offered by the
+            // presets only where the phone and this model's preflight allow it. An explicit
+            // --gpu is planned regardless and refused, with the reason, by the load.
+            boolean gpuSupported = device.supportsAccelerator("gpu")
+                && !TaiLoadPreflight.evaluate(appContext, spec, options.withAccelerator("gpu"), false).blocked;
+            String best = TaiLoadPreflight.evaluate(appContext, spec, options.withAccelerator("auto"), false).effectiveAccelerator;
+            best = "gpu".equalsIgnoreCase(best) ? TaiBenchSuite.ACCELERATOR_GPU : TaiBenchSuite.ACCELERATOR_CPU;
+            boolean speculativeCapable = spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING);
+            specs.put(spec.id, spec);
+            baseOptions.put(spec.id, options);
+            inputs.add(new TaiBenchSuite.ModelInput(spec.id, spec.backend, best, gpuSupported, speculativeCapable));
+        }
+        List<String> processors = null;
+        JSONArray requestedProcessors = request.optJSONArray("processors");
+        if (requestedProcessors != null) {
+            processors = new ArrayList<>();
+            for (int i = 0; i < requestedProcessors.length(); i++) processors.add(requestedProcessors.optString(i, ""));
+        }
+        List<TaiBenchSuite.EntryPlan> entries = TaiBenchSuite.expand(inputs, preset, processors, request.optBoolean("eagle", false));
+        if (entries.isEmpty()) {
+            emitBenchError(sink, error(400, "no_entries", "Nothing to run: no model and processor pair to benchmark."));
+            return;
+        }
+        JSONObject deviceJson = new JSONObject();
+        deviceJson.put("soc", device.socModel == null ? JSONObject.NULL : device.socModel);
+        deviceJson.put("ramClassGb", device.memoryBytes > 0L ? Math.round(device.memoryBytes / (double) (1024L * 1024L * 1024L)) : JSONObject.NULL);
+
+        TaiDeviceConditions conditionsReader = new TaiDeviceConditions(appContext);
+        boolean force = request.optBoolean("force", false);
+        if (!force) {
+            TaiBenchGuardRules.Snapshot startSnapshot = conditionsReader.snapshot();
+            String reason = TaiBenchGuardRules.startCheck(startSnapshot);
+            if (reason != null) {
+                JSONObject refusal = error(409, "conditions_not_met", conditionsMessage(reason));
+                refusal.put("reason", reason);
+                refusal.put("batteryPercent", startSnapshot.batteryPercent >= 0 ? startSnapshot.batteryPercent : JSONObject.NULL);
+                refusal.put("charging", startSnapshot.charging);
+                refusal.put("thermalStatus", startSnapshot.thermalStatus >= 0 ? startSnapshot.thermalStatus : JSONObject.NULL);
+                emitBenchError(sink, refusal);
+                return;
+            }
+        }
+
+        TaiBenchGuard guard = new TaiBenchConditionsGuard(conditionsReader::snapshot, System::currentTimeMillis);
+        TaiBenchHarness harness = new TaiBenchHarness(preset, entries, new BenchHost(specs, baseOptions),
+            guard, sink::onEvent, com.termux.BuildConfig.VERSION_NAME, deviceJson);
+        activeBench = harness;
+        conditionsReader.startThermalListener(() -> harness.requestStop("thermal"));
+        try {
+            harness.run();
+        } finally {
+            conditionsReader.stopThermalListener();
+            activeBench = null;
+        }
+        sink.onDone();
+    }
+
+    /** The human message for a {@code conditions_not_met} refusal, by {@link TaiBenchGuardRules#startCheck} reason. */
+    @NonNull
+    private static String conditionsMessage(@NonNull String reason) {
+        switch (reason) {
+            case "battery_low":
+                return "Battery is below " + TaiBenchGuardRules.START_BATTERY_MIN_PERCENT
+                    + "%; plug in or charge before benchmarking, or pass force=true to run anyway.";
+            case "too_hot":
+                return "The phone is already warm; let it cool before benchmarking, or pass force=true to run anyway.";
+            default:
+                return "The phone is not in a state to start a benchmark.";
+        }
+    }
+
+    /** The harness's window on this process: the router, the meter, the passage, the stamps. */
+    private final class BenchHost implements TaiBenchHarness.Host {
+        @NonNull private final Map<String, TaiModelSpec> specs;
+        @NonNull private final Map<String, TaiRuntimeOptions> baseOptions;
+        @Nullable private String passage;
+
+        BenchHost(@NonNull Map<String, TaiModelSpec> specs, @NonNull Map<String, TaiRuntimeOptions> baseOptions) {
+            this.specs = specs;
+            this.baseOptions = baseOptions;
+        }
+
+        @NonNull
+        private TaiModelSpec spec(@NonNull TaiBenchSuite.EntryPlan entry) {
+            TaiModelSpec spec = specs.get(entry.modelId);
+            if (spec == null) throw new IllegalStateException("No spec for " + entry.modelId);
+            return spec;
+        }
+
+        /** The entry's processor and draft-model choice on top of the settings' options; thinking off. */
+        @NonNull
+        private TaiRuntimeOptions options(@NonNull TaiBenchSuite.EntryPlan entry, @Nullable Integer maxTokens, boolean greedy) {
+            TaiRuntimeOptions base = baseOptions.get(entry.modelId);
+            if (base == null) base = settings.getRuntimeOptions(spec(entry));
+            return base.withGenerationOverrides(maxTokens, greedy ? Integer.valueOf(1) : null, null,
+                greedy ? Double.valueOf(0.0) : null, entry.accelerator, null, null, null, null,
+                Boolean.FALSE, entry.speculative);
+        }
+
+        /** The same preflight, budget and history as {@code tai load}; a refusal skips the entry. */
+        @NonNull
+        @Override
+        public JSONObject load(@NonNull TaiBenchSuite.EntryPlan entry) throws JSONException {
+            TaiModelSpec spec = spec(entry);
+            TaiRuntimeOptions options = options(entry, null, false);
+            TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
+            if (preflight.blocked) {
+                if (TaiRuntimeHistory.isAcceleratorVerdict(preflight.errorCode)) {
+                    TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend,
+                        preflight.effectiveAccelerator, preflight.message);
+                }
+                return preflight.blockingError(preflightStatusCode(preflight));
+            }
+            LoadDecision decision = decideLoad(spec, options, preflight);
+            if (decision.refusal != null) return decision.refusal;
+            JSONObject result = localRuntime().load(spec, decision.options);
+            result.put("preflight", preflight.toJson());
+            decision.describe(result);
+            recordRuntimeResult(spec, preflight, result);
+            return result;
+        }
+
+        @NonNull
+        @Override
+        public JSONObject unload() throws JSONException {
+            return localRuntime().unload();
+        }
+
+        @NonNull
+        @Override
+        public JSONObject chat(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull String userPrompt, int maxTokens,
+                               @NonNull TaiGenerationCallback callback) throws JSONException {
+            // Greedy (top_k 1, temperature 0) for every phase: the numbers should not move with
+            // the dice, and the check questions have one right answer.
+            return localRuntime().chat(spec(entry).id, TaiBenchSuite.SYSTEM_PROMPT, userPrompt,
+                options(entry, maxTokens, true), callback);
+        }
+
+        @Override
+        public void cancel() {
+            try {
+                localRuntime().cancel();
+            } catch (JSONException | RuntimeException ignored) {
+            }
+        }
+
+        @NonNull
+        @Override
+        public TaiLoadMeter startMeter() {
+            return TaiLoadMeter.start(appContext);
+        }
+
+        @NonNull
+        @Override
+        public String readingPassage() throws IOException {
+            if (passage != null) return passage;
+            try (InputStream input = appContext.getAssets().open(TaiBenchSuite.READING_ASSET);
+                 ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
+                passage = new String(output.toByteArray(), StandardCharsets.UTF_8);
+            }
+            return passage;
+        }
+
+        @Override
+        public void clearMmapCache(@NonNull TaiBenchSuite.EntryPlan entry) {
+            if (!TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) return;
+            MnnTaiRuntime.clearMmapCache(appContext, spec(entry).id);
+        }
+
+        /** {@code :tai_runtime}'s own PSS (this process, where the model is resident). */
+        @Override
+        public long processPssBytes() {
+            try {
+                long kb = android.os.Debug.getPss();
+                return kb > 0L ? kb * 1024L : -1L;
+            } catch (RuntimeException e) {
+                return -1L;
+            }
+        }
+
+        @NonNull
+        @Override
+        public JSONObject describe(@NonNull TaiBenchSuite.EntryPlan entry) throws JSONException {
+            TaiModelSpec spec = spec(entry);
+            JSONObject json = new JSONObject();
+            json.put("displayName", spec.displayName);
+            // The size the spec knows or the file's; nothing is hashed here — a multi-GB sha256
+            // has no place inside a timed run, so the hash is whatever the download recorded.
+            long bytes = TaiResidency.fileBytes(spec);
+            json.put("sizeBytes", bytes > 0L ? bytes : spec.sizeBytes);
+            json.put("sha256", spec.sha256 == null ? JSONObject.NULL : spec.sha256);
+            json.put("runtimeVersion", TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)
+                ? MnnTaiRuntime.RUNTIME_VERSION : com.termux.BuildConfig.LITERT_LM_VERSION);
+            return json;
+        }
+    }
+
+    /** An {@code error} event in the harness's shape from a manager error object. */
+    @NonNull
+    private static JSONObject benchErrorEvent(@NonNull JSONObject source) throws JSONException {
+        JSONObject event = new JSONObject();
+        event.put("event", "error");
+        event.put("at", System.currentTimeMillis());
+        event.put("code", source.optString("error", "benchmark_failed"));
+        event.put("message", source.optString("message", "The benchmark could not start."));
+        event.put("status", source.optInt("_statusCode", 500));
+        if (source.has("loadedModelId")) event.put("loadedModelId", source.opt("loadedModelId"));
+        // A conditions_not_met refusal attaches reason/batteryPercent/charging/thermalStatus; any
+        // field beyond the standard shape travels through to the caller unchanged.
+        Iterator<String> keys = source.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if ("ok".equals(key) || "error".equals(key) || "message".equals(key)
+                || "_statusCode".equals(key) || "loadedModelId".equals(key)) continue;
+            event.put(key, source.get(key));
+        }
+        return event;
+    }
+
+    private void emitBenchError(@NonNull OpenAiStreamSink sink, @NonNull JSONObject source) throws JSONException, IOException {
+        sink.onEvent(benchErrorEvent(source));
+        sink.onDone();
     }
 
     /** Runs can each spend tens of seconds; the whole {@code tai benchmark} call may take minutes. */

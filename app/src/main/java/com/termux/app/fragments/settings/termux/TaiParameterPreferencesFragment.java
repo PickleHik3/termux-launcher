@@ -372,10 +372,10 @@ public class TaiParameterPreferencesFragment extends MaterialPreferenceFragment 
             return TaiModelProfile.THINKING_TOGGLEABLE.equals(TaiModelProfile.forModel(model).thinkingMode);
         }
         if (TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING.equals(field)) {
-            // LiteRT exposes a runtime flag. MNN's speculative_type is package-fixed metadata,
-            // so showing a switch there would imply an override the upstream engine does not offer.
-            return model != null && TaiModelSpec.BACKEND_LITERT_LM.equals(model.backend)
-                && model.capabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING);
+            // Shown for any endpoint that actually has the capability: a LiteRT package whose
+            // runtime flag TaiModelSpec confirmed, or an MNN EAGLE-3 package (config.json's
+            // speculative_type), where the switch can only turn the package's own draft head off.
+            return model != null && model.capabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING);
         }
         if (modelRows && TaiSettings.FIELD_ACCELERATOR.equals(field)
             && TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M.equals(modelId)) {

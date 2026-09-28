@@ -140,6 +140,61 @@ public class MnnTaiRuntimeConfigTest {
     }
 
     @Test
+    public void mergedConfig_eagleSpeculativeTypeIsOffByDefaultAndOnlyExplicitTrueKeepsIt() throws Exception {
+        File dir = new File(context.getCacheDir(), "mnn-config-eagle");
+        dir.mkdirs();
+        File config = new File(dir, "config.json");
+        write(config, "{\"llm_model\":\"llm.mnn\",\"llm_weight\":\"llm.mnn.weight\","
+            + "\"tokenizer_file\":\"tokenizer.mtok\",\"speculative_type\":\"eagle\",\"hidden_states\":true,"
+            + "\"jinja\":{\"chat_template\":\"template\"}}");
+        touch(new File(dir, "llm.mnn"));
+        touch(new File(dir, "llm.mnn.weight"));
+        touch(new File(dir, "eagle.mnn"));
+        touch(new File(dir, "tokenizer.mtok"));
+
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        TaiModelSpec spec = model(config);
+
+        // Auto (null): off by default, same as explicit false, since Eagle measured slower on-device.
+        TaiRuntimeOptions auto = new TaiRuntimeOptions(null, null, null, null,
+            null, null, null, null, null, null, null, null);
+        JSONObject autoMerged = new JSONObject((String) invokeMergedConfig(runtime, config, spec, auto));
+        assertEquals("", autoMerged.getString("speculative_type"));
+        assertTrue(autoMerged.getBoolean("hidden_states"));
+
+        // Explicit true on a package that already has it: keeps the package's own Eagle setup.
+        TaiRuntimeOptions on = new TaiRuntimeOptions(null, null, null, null,
+            null, null, null, null, null, null, true, null);
+        JSONObject onMerged = new JSONObject((String) invokeMergedConfig(runtime, config, spec, on));
+        assertEquals("eagle", onMerged.getString("speculative_type"));
+
+        // Explicit false: an empty speculative_type, which is what turns Eagle off once MNN merges
+        // this over the package's config.json; hidden_states is left alone.
+        TaiRuntimeOptions off = new TaiRuntimeOptions(null, null, null, null,
+            null, null, null, null, null, null, false, null);
+        JSONObject offMerged = new JSONObject((String) invokeMergedConfig(runtime, config, spec, off));
+        assertEquals("", offMerged.getString("speculative_type"));
+        assertTrue(offMerged.getBoolean("hidden_states"));
+    }
+
+    @Test
+    public void mergedConfig_explicitTrueOnAPlainPackageIsANoOp() throws Exception {
+        File dir = new File(context.getCacheDir(), "mnn-config-plain-speculative");
+        dir.mkdirs();
+        File config = configFile(dir);
+        touch(new File(dir, "llm.mnn"));
+        touch(new File(dir, "llm.mnn.weight"));
+        touch(new File(dir, "tokenizer.mtok"));
+
+        MnnTaiRuntime runtime = new MnnTaiRuntime(context);
+        TaiRuntimeOptions on = new TaiRuntimeOptions(null, null, null, null,
+            null, null, null, null, null, null, true, null);
+        JSONObject merged = new JSONObject((String) invokeMergedConfig(runtime, config, model(config), on));
+
+        assertFalse(merged.has("speculative_type"));
+    }
+
+    @Test
     public void settingsAutoLeavesMnnConfigValuesNull() {
         TaiRuntimeOptions options = new TaiSettings(context).getRuntimeOptions(TaiModelSpec.BACKEND_MNN_LLM, "mnn-auto");
 
@@ -150,6 +205,7 @@ public class MnnTaiRuntimeConfigTest {
         assertNull(options.temperature);
         assertNull(options.topK);
         assertNull(options.topP);
+        assertNull(options.speculativeDecodingEnabled);
     }
 
     @Test
@@ -242,10 +298,10 @@ public class MnnTaiRuntimeConfigTest {
     @Test
     public void extraConfig_enablesPromptCacheWithStatelessHistory() throws Exception {
         MnnTaiRuntime runtime = new MnnTaiRuntime(context);
-        Method method = MnnTaiRuntime.class.getDeclaredMethod("extraConfigJson", TaiModelSpec.class);
+        Method method = MnnTaiRuntime.class.getDeclaredMethod("extraConfigJson", TaiModelSpec.class, JSONObject.class, File.class);
         method.setAccessible(true);
         File config = new File(context.getCacheDir(), "mnn-extra-config/config.json");
-        JSONObject extra = new JSONObject((String) method.invoke(runtime, model(config)));
+        JSONObject extra = new JSONObject((String) method.invoke(runtime, model(config), new JSONObject(), config));
 
         assertFalse(extra.getBoolean("keep_history"));
         assertTrue(extra.getBoolean("prompt_cache"));
@@ -414,7 +470,8 @@ public class MnnTaiRuntimeConfigTest {
     private static Object invokeMergedConfig(MnnTaiRuntime runtime, File config, TaiModelSpec model, TaiRuntimeOptions options) throws Exception {
         Method method = MnnTaiRuntime.class.getDeclaredMethod("mergedConfigJson", File.class, TaiModelSpec.class, TaiRuntimeOptions.class);
         method.setAccessible(true);
-        return method.invoke(runtime, config, model, options);
+        // mergedConfigJson returns the JSONObject (the mmap fingerprint reads it); callers here want its text.
+        return method.invoke(runtime, config, model, options).toString();
     }
 
     private static File configFile(File dir) throws Exception {
