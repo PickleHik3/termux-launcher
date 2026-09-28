@@ -117,6 +117,21 @@ Status compact, keyboard-open memory and floating keyboard position stay unexpos
 status-column tap not raising its card is a separate fix. No new Appearance controls. No change to
 the per-place look override model.
 
+## Amendment: the keyboard as an element (2026-09-28)
+
+The keyboard joins the elements the editor can show or hide, so a minimal-mode arrangement such as
+"terminal + A–Z row + keyboard" can be built by hand and minimal mode reads as a preset of the same
+model (`MinimalMode.apply` hides every element but the status bar and leaves the keyboard's switch
+alone). The Keyboard section gains a first row, **Keyboard on/off** (On / Off), before Type. The
+switch is `keyboard_turned_off` itself — see `../keyboard-off/SPEC.md`, "The Layout editor's
+Keyboard element" — read and written through `PlaceLayoutStore.isKeyboardShown` /
+`setKeyboardShown`, resolved into `PlaceLayout.keyboardShown`, and carried by
+`PlaceArrangeSnapshot` so Discard restores it. It is one switch for both orientations and every
+place: keyboard off is a stance, not an arrangement, and per-orientation storage would make the
+palette's toggle come undone on a rotation. The keyboard has no edge and no order — it stands where
+its type puts it — so it is not a bar on the miniature and not in the hide tray; the miniature does
+not draw the docked keyboard today and this adds no drawing.
+
 ## Build plan
 
 | Phase | Branch | Deliverable | Depends on |

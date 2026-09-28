@@ -51,9 +51,20 @@ public final class PlaceArrangeModel {
     /** One labelled control in the section. */
     public abstract static class Group {
         @StringRes public final int labelRes;
+        /**
+         * Whether a pick here lands on every orientation at once rather than the one on the
+         * miniature — the keyboard's on/off switch — so the live place follows it whichever
+         * orientation the editor is showing.
+         */
+        public final boolean sharedByOrientations;
 
         Group(@StringRes int labelRes) {
+            this(labelRes, false);
+        }
+
+        Group(@StringRes int labelRes, boolean sharedByOrientations) {
             this.labelRes = labelRes;
+            this.sharedByOrientations = sharedByOrientations;
         }
     }
 
@@ -66,7 +77,13 @@ public final class PlaceArrangeModel {
 
         Pills(@StringRes int labelRes, @NonNull String[] values, @NonNull int[] labelResIds,
               @NonNull String selected, @NonNull StringWriter writer) {
-            super(labelRes);
+            this(labelRes, false, values, labelResIds, selected, writer);
+        }
+
+        Pills(@StringRes int labelRes, boolean sharedByOrientations, @NonNull String[] values,
+              @NonNull int[] labelResIds, @NonNull String selected,
+              @NonNull StringWriter writer) {
+            super(labelRes, sharedByOrientations);
             this.values = values;
             this.labelResIds = labelResIds;
             this.selected = selected;
@@ -193,6 +210,13 @@ public final class PlaceArrangeModel {
         R.string.settings_layout_keyboard_mode_resize,
         R.string.settings_layout_keyboard_mode_overlay};
 
+    /** The value the keyboard element's on/off pill stores; the same switch as Keyboard on/off. */
+    private static final String KEYBOARD_ON = "on";
+    private static final String KEYBOARD_OFF = "off";
+    private static final String[] KEYBOARD_VALUES = {KEYBOARD_ON, KEYBOARD_OFF};
+    private static final int[] KEYBOARD_LABELS = {
+        R.string.settings_layout_keyboard_on, R.string.settings_layout_keyboard_off};
+
     /**
      * Everything one element offers in this orientation, as seen from this place, rebuilt whenever
      * a pick lands. Empty for an element the place does not draw.
@@ -238,6 +262,14 @@ public final class PlaceArrangeModel {
                 return groups;
             }
             case KEYBOARD:
+                // The keyboard is an element the user can put away like the bars, only it has no
+                // edge to stand on: on or off is the whole of its placement, and it is one switch
+                // for both orientations and every place — the same one the palette's Keyboard
+                // on/off flips (PlaceLayoutStore#isKeyboardShown).
+                groups.add(new Pills(R.string.settings_layout_keyboard_switch_title, true,
+                    KEYBOARD_VALUES, KEYBOARD_LABELS,
+                    places.isKeyboardShown() ? KEYBOARD_ON : KEYBOARD_OFF,
+                    value -> places.setKeyboardShown(KEYBOARD_ON.equals(value))));
                 groups.add(new Pills(R.string.termux_surface_editor_place_keyboard_type,
                     FORM_VALUES, FORM_LABELS,
                     places.keyboardForm(orientation).storageValue(),

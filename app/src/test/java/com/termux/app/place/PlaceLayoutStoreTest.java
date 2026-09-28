@@ -38,7 +38,7 @@ import org.robolectric.annotation.ConscryptMode;
 public class PlaceLayoutStoreTest {
 
     /** What a migrated store says it has folded. Bumped with {@code MIGRATION_VERSION}. */
-    private static final int MIGRATED = 6;
+    private static final int MIGRATED = 7;
 
     private Application app;
     private SharedPreferences prefs;
@@ -273,36 +273,69 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
-    public void minimalModeIsRememberedPerPlaceBesideTheKeyboardAndNeverForHome() {
+    public void minimalModeIsOneFlagForTheWholeLauncherBesideTheKeyboardMemory() {
         PlaceLayoutStore store = store();
-        for (PaneWallPage place : PaneWallPage.values())
-            assertFalse(place.toString(), store.isMinimal(place));
+        assertFalse(store.isMinimal());
 
         store.setKeyboardOpen(PaneWallPage.TERMINAL, true);
-        store.setMinimal(PaneWallPage.TERMINAL, true);
-        assertTrue(store.isMinimal(PaneWallPage.TERMINAL));
-        assertFalse("the display keeps its own", store.isMinimal(PaneWallPage.DISPLAY));
-        assertTrue("kept beside the keyboard memory", prefs.contains("place.terminal.minimal"));
+        store.setMinimal(true);
+        assertTrue(store.isMinimal());
+        assertTrue("one key, no place's", prefs.contains("place.minimal"));
+        for (PaneWallPage place : PaneWallPage.values())
+            assertFalse(place.toString(), prefs.contains("place." + PlaceLayoutStore.placeKey(place) + ".minimal"));
         // The mode does not overwrite the keyboard the place remembers; it only overrides it.
         assertTrue(store.wasKeyboardOpen(PaneWallPage.TERMINAL));
         assertFalse(MinimalMode.keyboardOnEnter(store.wasKeyboardOpen(PaneWallPage.TERMINAL),
-            store.isMinimal(PaneWallPage.TERMINAL)));
-
-        store.setMinimal(PaneWallPage.DISPLAY, true);
-        store.setMinimal(PaneWallPage.TERMINAL, false);
-        assertFalse(store.isMinimal(PaneWallPage.TERMINAL));
-        assertTrue(store.isMinimal(PaneWallPage.DISPLAY));
-        assertTrue("off again, the keyboard comes back as it was",
-            MinimalMode.keyboardOnEnter(store.wasKeyboardOpen(PaneWallPage.TERMINAL),
-                store.isMinimal(PaneWallPage.TERMINAL)));
+            store.isMinimal()));
 
         // Remembered until it is turned off, across a new store over the same preferences.
-        assertTrue(store().isMinimal(PaneWallPage.DISPLAY));
+        assertTrue(store().isMinimal());
 
-        // Home has no pane to give the screen to: nothing is written, and it never answers yes.
-        store.setMinimal(PaneWallPage.WIDGETS, true);
-        assertFalse(store.isMinimal(PaneWallPage.WIDGETS));
-        assertFalse(prefs.contains("place.home.minimal"));
+        store.setMinimal(false);
+        assertFalse(store.isMinimal());
+        assertTrue("off again, the keyboard comes back as it was",
+            MinimalMode.keyboardOnEnter(store.wasKeyboardOpen(PaneWallPage.TERMINAL),
+                store.isMinimal()));
+    }
+
+    /**
+     * Version 7: the per-place flags fold into the one flag. The terminal's decides; a terminal
+     * that never stored one defers to the display's; and every place's own flag goes.
+     */
+    @Test
+    public void thePerPlaceMinimalFlagsFoldIntoOne() {
+        prefs.edit().putInt("place.migrated", 6)
+            .putBoolean("place.terminal.minimal", true)
+            .putBoolean("place.display.minimal", false)
+            .commit();
+        assertTrue("the terminal's flag decides", store().isMinimal());
+        assertFalse(prefs.contains("place.terminal.minimal"));
+        assertFalse(prefs.contains("place.display.minimal"));
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
+
+        prefs.edit().clear().putInt("place.migrated", 6)
+            .putBoolean("place.terminal.minimal", false)
+            .putBoolean("place.display.minimal", true)
+            .commit();
+        assertFalse("a terminal that said no wins over a display that said yes",
+            store().isMinimal());
+
+        prefs.edit().clear().putInt("place.migrated", 6)
+            .putBoolean("place.display.minimal", true)
+            .commit();
+        assertTrue("with no word from the terminal, the display's flag decides",
+            store().isMinimal());
+
+        prefs.edit().clear().putInt("place.migrated", 6).commit();
+        assertFalse(store().isMinimal());
+        assertFalse("nothing to fold writes nothing", prefs.contains("place.minimal"));
+
+        // An install already on version 7 keeps its flag: the fold does not run again.
+        prefs.edit().clear().putInt("place.migrated", 7)
+            .putBoolean("place.minimal", true)
+            .putBoolean("place.terminal.minimal", false)
+            .commit();
+        assertTrue(store().isMinimal());
     }
 
     @Test

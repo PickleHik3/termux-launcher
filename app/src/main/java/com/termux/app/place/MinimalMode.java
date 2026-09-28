@@ -3,42 +3,28 @@ package com.termux.app.place;
 import androidx.annotation.NonNull;
 
 import com.termux.app.place.PlaceLayout.Edge;
-import com.termux.app.wall.PaneWallPage;
 
 /**
- * Minimal mode (CONTEXT.md): a place shown with only its pane. The status bar shrinks to a thin
- * strip, the apps bar, the alphabets index, the extra keys and the keyboard go away, and the pane
- * takes the room they gave up, in either orientation. It is a state of the place, like whether the
- * keyboard is up, never a layout of its own (ADR 0003): the arrangement underneath stays the one
- * every place shares, and minimal mode is what is taken off it.
+ * Minimal mode (CONTEXT.md): the launcher shown with nothing but the place's own content. The
+ * status bar, the apps bar, the alphabets index and the extra keys go away, the keyboard is put
+ * down, and the content takes the whole screen, in either orientation. It is one mode for the
+ * whole launcher rather than a state of a place: paging to another place never leaves it, and
+ * only the corner tab's minimal button turns it on or off. It is never a layout of its own (ADR
+ * 0003): the arrangement underneath stays the one every place shares, and minimal mode is what is
+ * taken off it.
  *
  * <p>Pure, so what the mode means can be read and tested without a window; the activity only
- * applies it, and {@link PlaceLayoutStore} only remembers which places have it on.
+ * applies it, and {@link PlaceLayoutStore} only remembers whether it is on.
  */
 public final class MinimalMode {
 
     private MinimalMode() {}
 
     /**
-     * How thick the status bar stands while its place is in minimal mode, in dp. Thin enough to
-     * read as an edge rather than a bar, and still wide enough for a thumb to find: the strip is
-     * the place the swipe that leaves minimal mode starts from, and the wall still pages from it.
-     */
-    public static final float STRIP_DP = 12f;
-
-    /**
-     * Whether a place can be minimal at all. Home is a field of widgets laid out against the chrome
-     * around it and has no single pane to give the screen to; the terminal and the display do.
-     */
-    public static boolean available(@NonNull PaneWallPage place) {
-        return place == PaneWallPage.TERMINAL || place == PaneWallPage.DISPLAY;
-    }
-
-    /**
      * The arrangement a minimal place stands in: every element but the status bar put away, on
      * whatever edge it was, so that turning the mode off puts each one back exactly where it stood.
-     * The status bar is never hidden (the wall rides it); it only shrinks, which is the status bar's
-     * own business rather than the arrangement's.
+     * The status bar's slot is never hidden (the model has no hidden status bar); it is drawn at
+     * no thickness instead, which is the status bar's own business rather than the arrangement's.
      */
     @NonNull
     public static PlaceLayout apply(@NonNull PlaceLayout layout) {
@@ -58,6 +44,9 @@ public final class MinimalMode {
      * the slide. A rail or a column on a side, or a bar along the top, would take its room from the
      * pane the moment it was laid out, and the pane must not resize before the wall settles. Those
      * arrive with the rest of the arrangement at settle.
+     *
+     * <p>With the mode shared by every place, a slide never crosses from a minimal place to one
+     * that is not; the pre-roll is kept for the frame that asks for it all the same.
      */
     @NonNull
     public static PlaceLayout bottomOnly(@NonNull PlaceLayout layout) {
@@ -73,33 +62,20 @@ public final class MinimalMode {
 
     /**
      * Whether the keyboard comes up as the wall lands on a place: what the place remembers, unless
-     * it is minimal, which puts the keyboard away. The memory itself is kept untouched underneath,
-     * so leaving minimal mode brings the keyboard back the way the place last had it.
+     * the launcher is minimal, which puts the keyboard away. The memory itself is kept untouched
+     * underneath, so leaving minimal mode brings the keyboard back the way the place last had it.
      */
     public static boolean keyboardOnEnter(boolean remembered, boolean minimal) {
         return remembered && !minimal;
     }
 
-    /** The status bar's thickness while its place is minimal, in pixels. */
-    public static int stripThicknessPx(float density) {
-        return Math.max(1, Math.round(STRIP_DP * density));
-    }
-
     /**
-     * How far the stack the strip stands in reaches back over the pane, in pixels: the strip's
-     * own thickness, given back as a negative margin on the stack's inner side, so the band the
-     * strip stands in reserves nothing and the pane runs to the screen's edge under it. The strip
-     * itself is still laid out at its thickness and still takes the swipe out of the mode; it
-     * lies over the pane's edge instead of beside it. Zero for every stack but the strip's, zero
-     * while the place is not minimal, and zero on the bottom edge, where the bar is a band of the
-     * dock's stack — whose height is arithmetic the accessory geometry owns — rather than a stack
-     * the layout sizes.
-     *
-     * @param stripPx {@link #stripThicknessPx}
+     * The status bar's thickness while the launcher is minimal, in pixels: nothing. The bar used
+     * to stay as a thin strip to swipe out of the mode from; that swipe started under the phone's
+     * own status bar and opened the notification shade instead, so the strip is gone and the mode
+     * reserves nothing along the bar's edge. The corner tab is the way out.
      */
-    public static int stripOverlapPx(boolean minimal, @NonNull Edge stripEdge,
-                                     @NonNull Edge stackEdge, int stripPx) {
-        if (!minimal || stackEdge != stripEdge || stackEdge == Edge.BOTTOM) return 0;
-        return Math.max(0, stripPx);
+    public static int statusBarThicknessPx(boolean minimal, int restingThicknessPx) {
+        return minimal ? 0 : Math.max(0, restingThicknessPx);
     }
 }

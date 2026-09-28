@@ -13,8 +13,8 @@ product model.
 One of the three full-screen pages the launcher swipes between: Home (widgets), Terminal, Display.
 The usage mode decides which places exist: Terminal alone, Terminal with Home, or all three with
 the Display; a place that is off is not built at all. Layout and appearance are shared by all
-places (one layout per orientation). What differs per place is state only: whether the keyboard is
-up, and minimal mode.
+places (one layout per orientation), and so is minimal mode. What differs per place is state only:
+whether the keyboard is up.
 _Avoid_: screen, page, wall page, tab
 
 **Surface**:
@@ -33,12 +33,15 @@ Portrait or landscape. The shared layout has one version per orientation; appear
 per orientation.
 
 **Minimal mode**:
-A place shown with only its pane: the status bar shrinks to a thin strip, the apps bar and keyboard
-go away, and the pane is maximised in either orientation. Available on Display and Terminal, turned
-on from the corner tab and remembered per place until turned off. A sideways swipe along the pane's
-top or bottom edge pages the wall from a minimal place, and under Fancier Glass the pane tips like a
-plank as it goes.
-_Avoid_: full screen, focus mode, zen mode
+The launcher shown with only each place's content: the status bar, the apps bar, the A–Z index,
+the extra keys and the keyboard go away, and the widgets, the pane or the display are maximised in
+either orientation. One mode for every place, not a state of one: turned on and off only from the
+corner tab's minimal button, which every place carries, and remembered until turned off; paging
+never leaves it. It is a preset of the layout's own element model — every element but the status
+bar put away — never a layout of its own. The keyboard can still be raised while it is on. A
+sideways swipe along the page's top or bottom edge pages the wall, and under Fancier Glass the
+terminal pane tips like a plank as it goes.
+_Avoid_: full screen, focus mode, zen mode, zen view
 
 **Managed wallpaper**:
 A wallpaper set through the launcher's own picker, of which the launcher keeps its own copy.
@@ -65,6 +68,14 @@ so a change lands on every place; the miniature shows the place it was opened on
 orientation with a toggle to the other. Entered from the corner tab or
 the long-press menu; Settings has no door to it.
 _Avoid_: arrange mode, surface editor, place editor
+
+**Element**:
+One piece of the arrangement the Layout editor shows or hides: the status bar (never hidden),
+the pinned apps, the A–Z index, the extra keys — each on an edge, in an order — and the keyboard,
+which has no edge and no order, only on or off. The keyboard's on/off is the one switch the
+palette's **Keyboard on/off** flips (`keyboard_turned_off`), shared by both orientations and every
+place; the last write wins, whichever door it came through.
+_Avoid_: bar (for the keyboard), widget, slot (the store's word for where an element stands)
 
 **Miniature**:
 The scaled model of a place's layout that the user drags elements around on. The same miniature

@@ -292,8 +292,10 @@ These were settled deliberately. Raise them if you think they are wrong; do not 
   rely on the live pane — it must draw its own preview in its row.
 - **`SettingsLayoutUtils.applyItemLayout` overwrites every preference's layout.** A preference with
   its own layout must be added to the exemption list or it renders as a plain row.
-- Terminal padding (`getHorizontalContentOffset` centering, `mFontLineSpacingAndAscent` top offset)
-  is intentional. Leave it.
+- Terminal padding is intentional. Leave it: the grid is centred in its view on both axes
+  (`getHorizontalContentOffset`, `getVerticalContentOffset`), so the sub-cell leftover splits
+  evenly and the pane's inner gap is the same on all four sides; the `mFontLineSpacingAndAscent`
+  top offset is the renderer's and the pane frame counts it as clearance the top already has.
 - **`targetSdkVersion` stays 28, on every edition and every companion app.** Android only leaves
   the `untrusted_app_25`/`untrusted_app_27` SELinux domains allowed to execute files under an app's
   own data directory; from sdk 29 the app lands in `untrusted_app` and the kernel denies

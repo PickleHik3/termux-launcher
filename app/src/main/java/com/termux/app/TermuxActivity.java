@@ -4195,9 +4195,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
             int sideMargin = resolveStatusBarHorizontalInsetPx();
             // Extend Rounded away from its own edge without moving the edge it faces the terminal
-            // with, or the terminal content beside it. A minimal place's strip draws nothing and
-            // keeps no air: its band is the strip alone, which is what its stack gives back to
-            // the pane (syncMinimalStripOverlay).
+            // with, or the terminal content beside it. Minimal mode draws no bar and keeps no
+            // air: the band is nothing, so the pane runs to the screen's edge.
             int outerMargin = isChromeMinimal() ? 0 : statusBarColumnOuterMarginPx();
             int targetThickness = targetStatusBarHeightPx(capsule, collapsed);
             boolean vertical = isStatusBarVertical();
@@ -4560,14 +4559,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the width of a column down a side.
      */
     private int targetStatusBarHeightPx(boolean capsule, boolean collapsed) {
-        // A minimal place's bar is its strip, open or folded: every writer of the bar's thickness
-        // asks here, so the strip is one answer rather than a special case at each of them.
-        if (isChromeMinimal()) {
-            return com.termux.app.place.MinimalMode.stripThicknessPx(
-                getResources().getDisplayMetrics().density);
-        }
-        return com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(mStatusBarEdge, capsule,
-            collapsed, getResources().getDisplayMetrics().density);
+        // Minimal mode draws no bar, open or folded: every writer of the bar's thickness asks
+        // here, so the mode is one answer rather than a special case at each of them.
+        return com.termux.app.place.MinimalMode.statusBarThicknessPx(isChromeMinimal(),
+            com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(mStatusBarEdge, capsule,
+                collapsed, getResources().getDisplayMetrics().density));
     }
 
     /** The bar stands in a column rather than a row, so its content runs down the screen. */
@@ -9623,8 +9619,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mInAppKeyboard == null) return;
         com.termux.app.wall.PaneWallPage page = currentWallPage();
         if (page == com.termux.app.wall.PaneWallPage.TERMINAL) {
-            // Unless the terminal is minimal, which comes back with its keyboard put away.
-            if (isPlaceMinimal(page)) applyPlaceKeyboard(page);
+            // Unless the launcher is minimal, which comes back with its keyboard put away.
+            if (isMinimalMode()) applyPlaceKeyboard(page);
             return;
         }
         PlaceLayoutStore store = placeLayoutStore();
@@ -10668,23 +10664,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private PlaceLayout currentPlaceLayout() {
         PlaceLayout layout = placeLayout(currentPlaceOrientation());
         // Minimal mode is a state taken off the shared arrangement, not an arrangement of its own,
-        // so it is folded in here where every piece of chrome reads it. It follows the place the
-        // chrome is committed to, which only changes at settle; the one exception is the slide
-        // away from a minimal place, which lays the bottom rows out again below the screen so the
-        // dock can rise with the wall (MinimalMode#bottomOnly).
+        // so it is folded in here where every piece of chrome reads it. It is one mode for every
+        // place, so a slide never crosses into or out of it; the pre-roll that lays the bottom
+        // rows out again below the screen (MinimalMode#bottomOnly) is kept for the frame that
+        // asks for it all the same.
         if (mTravelDockPreRolled) return com.termux.app.place.MinimalMode.bottomOnly(layout);
         return isChromeMinimal() ? com.termux.app.place.MinimalMode.apply(layout) : layout;
     }
 
     /** Whether the chrome on screen is arranged for minimal mode, a pre-rolled slide aside. */
     private boolean isChromeMinimal() {
-        return !mTravelDockPreRolled && isPlaceMinimal(mLastWallPage);
+        return !mTravelDockPreRolled && isMinimalMode();
     }
 
-    /** Whether {@code place} is in minimal mode (CONTEXT.md), as its memory says. */
-    private boolean isPlaceMinimal(@NonNull com.termux.app.wall.PaneWallPage place) {
+    /** Whether the launcher is in minimal mode (CONTEXT.md), as its memory says. */
+    private boolean isMinimalMode() {
         PlaceLayoutStore store = placeLayoutStore();
-        return store != null && store.isMinimal(place);
+        return store != null && store.isMinimal();
     }
 
     /**
@@ -10697,8 +10693,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
             return true;
         }
-        // A minimal place's strip rests folded; the orientation's own memory is left as it was,
-        // for the bar to open back into when the mode is turned off.
+        // Minimal mode's bar rests folded, at no thickness; the orientation's own memory is left
+        // as it was, for the bar to open back into when the mode is turned off.
         if (isChromeMinimal()) return true;
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && store.isStatusCompact(currentPlaceOrientation());
@@ -11487,8 +11483,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // itself is every place's, so nothing else here depends on where the wall stands.
         boolean sizesMoved = applyPlaceSizes();
         PlaceLayout layout = currentPlaceLayout();
-        boolean arrangementChanged = !layout.equals(mAppliedPlaceLayout);
+        PlaceLayout previous = mAppliedPlaceLayout;
+        boolean arrangementChanged = !layout.equals(previous);
         mAppliedPlaceLayout = layout;
+        // The keyboard element put away in the Layout editor is the keyboard switched off: it
+        // goes down here, on the same pass every other element leaves on. Shown again, it waits
+        // for the next tap rather than rising behind the editor's sheet; the palette's own
+        // Keyboard on/off raises it itself, before this pass ever sees the change.
+        if (previous != null && previous.keyboardShown && !layout.keyboardShown
+            && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .HideReason.KEYBOARD_ACTION);
+        }
         // The keyboard hears the type from here rather than from the tool that wrote it: a
         // rotation moves it too, and this is the one pass both take.
         // Hosting first: the geometry pass the keyboard then asks for has to see the keyboard where
@@ -11618,15 +11624,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
                 (com.termux.app.statusbar.StatusBarSwipeLayout) host;
             swipeHost.setEdge(edge);
-            // On a minimal place the expand swipe is the way out of the mode, on every edge.
-            swipeHost.setExpansionAllowed(isChromeMinimal()
-                || com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(edge));
+            swipeHost.setExpansionAllowed(
+                com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(edge));
         }
         // The bar is not the system status bar's glass anywhere but along the top; everywhere else
         // the terminal simply starts under the system bar, as it does with the bar folded today.
         applyTerminalWindowBarBackdropInsets();
-        // A minimal place's strip overlaps the pane from whichever edge it now stands on.
-        syncMinimalStripOverlay();
         setTopStatusBarCollapsed(isStatusBarCompact(), false);
         refreshTerminalWindowBar();
         // The bar's column is a band on its edge like the rail's; the insets pass re-derives what
@@ -16133,10 +16136,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @NonNull com.termux.app.wall.PaneWallPage place) {
         if (place == mLastWallPage) {
             return new com.termux.app.place.PlaceChromeTravel.Rest(committedKeyboardVisible(),
-                isPlaceMinimal(place));
+                isMinimalMode());
         }
         return new com.termux.app.place.PlaceChromeTravel.Rest(wantsKeyboardOnEnter(place),
-            isPlaceMinimal(place));
+            isMinimalMode());
     }
 
     /**
@@ -16458,55 +16461,52 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // ---- Minimal mode ------------------------------------------------------------------------
 
     /**
-     * Turns minimal mode (CONTEXT.md) on or off for a place, from its corner tab or the strip's
-     * swipe. On, the place's keyboard memory is kept as it was, the keyboard goes away, the chrome
-     * is arranged without the dock and the bars, and the status bar shrinks to its strip; off, all
-     * of that comes back, keyboard included. The terminal shows its tiled panes maximised on the
-     * active one while it is minimal, wherever the wall is.
+     * Turns minimal mode (CONTEXT.md) on or off for the whole launcher, from the corner tab of
+     * whichever place is on screen: the only door in or out, so the mode never ends on its own.
+     * On, the place's keyboard memory is kept as it was, the keyboard goes away, the chrome is
+     * arranged without the dock and the bars, and the status bar goes with them; off, all of that
+     * comes back, keyboard included. The terminal shows its tiled panes maximised on the active
+     * one while the mode is on, wherever the wall is.
      */
-    void setPlaceMinimal(@NonNull com.termux.app.wall.PaneWallPage place, boolean minimal) {
-        if (!com.termux.app.place.MinimalMode.available(place)) return;
+    void setMinimalMode(boolean minimal) {
         PlaceLayoutStore store = placeLayoutStore();
-        if (store == null || store.isMinimal(place) == minimal) return;
-        boolean onScreen = place == mLastWallPage;
-        // Recorded before the mode is on, since a minimal place records nothing.
-        if (minimal && onScreen) rememberPlaceKeyboard(place);
-        store.setMinimal(place, minimal);
+        if (store == null || store.isMinimal() == minimal) return;
+        com.termux.app.wall.PaneWallPage place = mLastWallPage;
+        // Recorded before the mode is on, since minimal mode records nothing.
+        if (minimal) rememberPlaceKeyboard(place);
+        store.setMinimal(minimal);
         syncTerminalMinimalPresentation();
-        if (onScreen) {
-            if (minimal && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
-                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                    .HideReason.KEYBOARD_ACTION);
-            }
-            syncChromeArrangement(false);
-            if (!minimal) applyPlaceKeyboard(place);
+        if (minimal && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .HideReason.KEYBOARD_ACTION);
         }
+        syncChromeArrangement(false);
+        if (!minimal) applyPlaceKeyboard(place);
         invalidateMinimalModeGlyphs();
     }
 
-    /** The terminal's panes follow the terminal place's minimal mode, on screen or not. */
+    /** The terminal's panes follow minimal mode, on screen or not. */
     private void syncTerminalMinimalPresentation() {
-        if (mPaneController != null) {
-            mPaneController.setMinimalPresentation(
-                isPlaceMinimal(com.termux.app.wall.PaneWallPage.TERMINAL));
-        }
+        if (mPaneController != null) mPaneController.setMinimalPresentation(isMinimalMode());
     }
 
     /** The corner tabs draw the glyph from the state, so a change only has to redraw them. */
     private void invalidateMinimalModeGlyphs() {
         if (mPaneWallController != null && mPaneWallController.displayPage() != null)
             mPaneWallController.displayPage().invalidateControls();
+        if (mPaneWallController != null && mPaneWallController.widgetsPage() != null)
+            mPaneWallController.widgetsPage().invalidateControls();
         if (mPaneController != null) mPaneController.invalidateControls();
     }
 
     /**
-     * The status bar as minimal mode has it: a strip with nothing on it. Its thickness is read off
-     * {@link #targetStatusBarHeightPx} wherever the bar is sized, so this re-applies it, hides the
-     * row, the lens and the column clock so nothing on a strip too thin to read can be tapped, and
-     * lets the strip's swipe — the bar's own expand swipe — through on every edge, since that swipe
-     * is the way out of the mode.
+     * The status bar as minimal mode has it: gone. Its thickness is read off
+     * {@link #targetStatusBarHeightPx} wherever the bar is sized, so this re-applies it, and
+     * hides the row, the lens and the column clock so nothing of a bar with no band can be
+     * tapped or drawn. The bar keeps its own expand swipe rule: there is no strip to swipe out
+     * of the mode from any more, and the corner tab is the way out.
      */
-    private static final long MINIMAL_STRIP_FADE_MS = 150L;
+    private static final long MINIMAL_BAR_FADE_MS = 150L;
 
     private void applyMinimalStatusChrome() {
         boolean minimal = isChromeMinimal();
@@ -16514,17 +16514,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
             com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
                 (com.termux.app.statusbar.StatusBarSwipeLayout) host;
-            swipeHost.setExpansionAllowed(minimal
-                || com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
+            swipeHost.setExpansionAllowed(
+                com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
         }
-        // The strip stays to be swiped from, but draws nothing: no glass, no pull hint. A view
-        // at alpha 0 still takes touches, so the swipe out of the mode and the wall's paging
-        // from it both keep working.
+        // The bar's content fades as its band closes, so the mode lands as one motion rather
+        // than a bar that blinks out a frame before it stops taking room.
         if (host != null) {
             float alpha = minimal ? 0f : 1f;
             if (host.getAlpha() != alpha) {
                 host.animate().cancel();
-                host.animate().alpha(alpha).setDuration(MINIMAL_STRIP_FADE_MS).start();
+                host.animate().alpha(alpha).setDuration(MINIMAL_BAR_FADE_MS).start();
             }
         }
         int visibility = minimal ? View.INVISIBLE : View.VISIBLE;
@@ -16536,50 +16535,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View stackedClock = findViewById(R.id.terminal_status_column_clock);
             if (stackedClock != null) stackedClock.setVisibility(View.GONE);
         }
-        // Before the bar is sized: the strip's band and its overlap land in the same layout pass,
-        // under the same lease.
-        syncMinimalStripOverlay();
         // The fold's own path sizes the bar, under the resize lease that gives the panes one
         // row-and-column update for the change instead of one per pass.
         setTopStatusBarCollapsed(isStatusBarCompact(), false);
-    }
-
-    /**
-     * A minimal place's strip lies over the pane's edge rather than beside it
-     * ({@link com.termux.app.place.MinimalMode#stripOverlapPx}): the stack it stands in gives the
-     * strip's thickness back to the canvas as a negative margin on its inner side, so the pane runs
-     * to the screen's edge — the system bar's inset aside, which the padded root keeps only while
-     * that bar shows — and the strip is laid out over its first pixels. The stack is raised in Z
-     * for the same reason: a stack laid out before the canvas is drawn under it and asked for a
-     * finger after it, and the terminal would take the swipe out of the mode. Every side stack is
-     * written, so the one the strip left when the bar moved edge is put back.
-     */
-    private void syncMinimalStripOverlay() {
-        boolean minimal = isChromeMinimal();
-        int stripPx = com.termux.app.place.MinimalMode.stripThicknessPx(
-            getResources().getDisplayMetrics().density);
-        for (PlaceLayout.Edge edge : PlaceLayout.Edge.values()) {
-            if (edge == PlaceLayout.Edge.BOTTOM) continue;
-            View stack = edgeStack(edge);
-            if (stack == null
-                || !(stack.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) continue;
-            int overlap = com.termux.app.place.MinimalMode.stripOverlapPx(
-                minimal, mStatusBarEdge, edge, stripPx);
-            int left = edge == PlaceLayout.Edge.RIGHT ? -overlap : 0;
-            int right = edge == PlaceLayout.Edge.LEFT ? -overlap : 0;
-            int bottom = edge == PlaceLayout.Edge.TOP ? -overlap : 0;
-            ViewGroup.MarginLayoutParams params =
-                (ViewGroup.MarginLayoutParams) stack.getLayoutParams();
-            if (params.leftMargin != left || params.rightMargin != right
-                || params.bottomMargin != bottom) {
-                params.leftMargin = left;
-                params.rightMargin = right;
-                params.bottomMargin = bottom;
-                stack.setLayoutParams(params);
-            }
-            float z = overlap > 0 ? dpToPx(1) : 0f;
-            if (stack.getTranslationZ() != z) stack.setTranslationZ(z);
-        }
     }
 
     /**
@@ -16606,9 +16564,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Before the keyboard exists there is nothing to record: a cold start restoring the wall
         // onto another place would otherwise write the terminal's memory down as closed.
         if (store == null || mInAppKeyboard == null) return;
-        // A minimal place put its keyboard away itself; recording that would lose the keyboard the
+        // Minimal mode put the keyboard away itself; recording that would lose the keyboard the
         // place had before, which is what leaving minimal mode is meant to bring back.
-        if (store.isMinimal(place)) return;
+        if (store.isMinimal()) return;
         store.setKeyboardOpen(place, keyboardUp);
     }
 
@@ -16624,7 +16582,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean wantsKeyboardOnEnter(@NonNull com.termux.app.wall.PaneWallPage place) {
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && com.termux.app.place.MinimalMode.keyboardOnEnter(
-            store.wasKeyboardOpen(place), store.isMinimal(place));
+            store.wasKeyboardOpen(place), store.isMinimal());
     }
 
     /** Whether the wall rests on the Display place. */
@@ -16664,9 +16622,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The Display place is on the wall only while the display is switched on: off,
                 // nothing of it is built, and the wall is the places that are left.
                 @Override public boolean isDisplayEnabled() { return isX11DisplayEnabled(); }
-                // A minimal place's pane is the screen and its bar a strip, so the pane's own
-                // top and bottom edge page the wall (MinimalEdgeSwipe). Every other place keeps
-                // the pane's edges for its content.
+                // In minimal mode the pane is the screen and there is no bar, so the pane's own
+                // top and bottom edge page the wall (MinimalEdgeSwipe). Off the mode, every
+                // place keeps the pane's edges for its content.
                 @Override public boolean isEdgePagingEnabled() { return isChromeMinimal(); }
                 // The plank (PlankTilt) is a Fancier Glass motion: the look as the last apply
                 // resolved it, on a minimal place, with nothing telling the phone to hold still.
@@ -16823,7 +16781,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController.restoreInstanceState(state);
         }
         // Minimal mode is remembered across launches. The arrangement reads it through
-        // currentPlaceLayout on its own; the panes and the strip are told once here, and every
+        // currentPlaceLayout on its own; the panes and the bar are told once here, and every
         // change after this goes through syncChromeArrangement.
         syncTerminalMinimalPresentation();
         if (isChromeMinimal() != mAppliedChromeMinimal) {
@@ -17289,6 +17247,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void openWallpaperPicker() {
                 TermuxActivity.this.openWallpaperPicker();
             }
+            @Override public boolean isMinimalMode() {
+                return TermuxActivity.this.isMinimalMode();
+            }
+            @Override public void toggleMinimalMode() {
+                setMinimalMode(!TermuxActivity.this.isMinimalMode());
+            }
             @Override public void editWidgets() {
                 if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();
             }
@@ -17341,11 +17305,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.DISPLAY);
             }
             @Override public boolean isMinimalMode() {
-                return isPlaceMinimal(com.termux.app.wall.PaneWallPage.DISPLAY);
+                return TermuxActivity.this.isMinimalMode();
             }
             @Override public void toggleMinimalMode() {
-                setPlaceMinimal(com.termux.app.wall.PaneWallPage.DISPLAY,
-                    !isPlaceMinimal(com.termux.app.wall.PaneWallPage.DISPLAY));
+                setMinimalMode(!TermuxActivity.this.isMinimalMode());
             }
             @Override public void openWallpaperPicker() {
                 TermuxActivity.this.openWallpaperPicker();
@@ -18673,27 +18636,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
                 (com.termux.app.statusbar.StatusBarSwipeLayout) statusBarHost;
             swipeHost.setCollapsed(isStatusBarCompact());
-            swipeHost.setExpansionAllowed(isChromeMinimal()
-                || com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
+            swipeHost.setExpansionAllowed(
+                com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
             swipeHost.setListener(new com.termux.app.statusbar.StatusBarSwipeLayout.Listener() {
                 @Override public void onCollapsedStateRequested(boolean collapsed) {
-                    // On a minimal place the strip has nothing to open into: the swipe that would
-                    // open the bar — down, on a bar along the top — leaves minimal mode instead.
-                    if (isChromeMinimal()) {
-                        if (!collapsed) setPlaceMinimal(mLastWallPage, false);
-                        return;
-                    }
+                    // In minimal mode there is no bar to open: the mode is left from the corner
+                    // tab, never from a swipe, so a fold that somehow reaches here does nothing.
+                    if (isChromeMinimal()) return;
                     setTopStatusBarCollapsed(collapsed, true);
                 }
                 @Override public void onCollapsedStateRequested(boolean collapsed,
                                                                 float towardOpenVelocityPxPerSec) {
                     // The fold lands from wherever the finger left the bar, at the speed it let go.
-                    if (isChromeMinimal()) onCollapsedStateRequested(collapsed);
-                    else setTopStatusBarCollapsed(collapsed, true, towardOpenVelocityPxPerSec);
+                    if (isChromeMinimal()) return;
+                    setTopStatusBarCollapsed(collapsed, true, towardOpenVelocityPxPerSec);
                 }
                 @Override public void onFoldDrag(float towardOpenPx) {
-                    // A minimal place's strip does not open under a finger; its release above
-                    // still leaves minimal mode.
                     if (!isChromeMinimal()) dragTopStatusBar(towardOpenPx);
                 }
                 @Override public void onFoldDragCancelled() {
@@ -20937,12 +20895,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean isMinimalMode() {
-            return isPlaceMinimal(com.termux.app.wall.PaneWallPage.TERMINAL);
+            return TermuxActivity.this.isMinimalMode();
         }
 
         @Override public void toggleMinimalMode() {
-            setPlaceMinimal(com.termux.app.wall.PaneWallPage.TERMINAL,
-                !isPlaceMinimal(com.termux.app.wall.PaneWallPage.TERMINAL));
+            setMinimalMode(!TermuxActivity.this.isMinimalMode());
         }
 
         @Override public void onAutoTilingChanged(boolean enabled) {

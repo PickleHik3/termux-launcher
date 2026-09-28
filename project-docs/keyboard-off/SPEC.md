@@ -33,6 +33,34 @@ Off holds whichever input method is chosen in **Settings → Keyboard** and leav
 It is not the Settings "none" input method, which is a permanent configuration rather than a
 toggle you reach from the palette.
 
+## The Layout editor's Keyboard element (2026-09-28)
+
+The Layout editor offers the keyboard as an element like the bars, with one control: **Keyboard
+on/off**, On or Off, under the Keyboard heading. It is **the same setting** as this toggle —
+`PlaceLayoutStore.isKeyboardShown()` reads `keyboard_turned_off` inverted and
+`setKeyboardShown()` writes it — so there is one source of truth and no precedence to settle: the
+last write wins, from the palette, the extra key, the keyboard key or the editor, and every reader
+(the in-app keyboard's `show()` gate, the view client's tap paths, the editor's pill, the resolved
+`PlaceLayout.keyboardShown`) sees the same answer. It is one switch for both orientations and
+every place, unlike the rest of the layout: keyboard off is a stance taken because a hardware
+keyboard is in use, not an arrangement of one orientation.
+
+What differs by door is only what happens to the keyboard on screen at the moment of the flip:
+
+| Door | Off | On |
+|---|---|---|
+| Palette, extra key, keyboard key | puts it down (`setTurnedOff`) | raises it |
+| Layout editor pill | puts it down on the next layout pass (`TermuxActivity.doSyncPlaceLayout`) | leaves it down; the next tap raises it |
+
+The editor's Discard and revert restore the switch with the rest of the arrangement
+(`PlaceArrangeSnapshot`). Minimal mode does not touch it: minimal puts the keyboard down on entry
+and a tap raises it again, so a keyboard switched off stays off in minimal mode and one switched
+on can still be raised there.
+
+Known gap: with Android's keyboard chosen in Settings, a flip from the editor writes the
+preference but does not set the disable-soft-keyboard flags until the next `setSoftKeyboardState`
+(resume); the palette's path sets them at once.
+
 ## Where it lives
 
 - **Action.** `keyboard.toggle_enabled` in `LauncherToolRegistry` (category keyboard, low risk,

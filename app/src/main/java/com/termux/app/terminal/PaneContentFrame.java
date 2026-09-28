@@ -28,9 +28,10 @@ import com.termux.view.TerminalView;
  * arc, which is how a prompt that paints its own background to the very edge came out clipped.
  *
  * <p>So the shape and its clearance are set together, from one radius: the glass keeps filling the
- * whole slab and the terminal is laid out inside the arc's depth. The clearance is spent as the
- * child's margin rather than as this frame's padding, because the frame's other child is the glass
- * backdrop and it must still reach the corners the terminal now stays out of.
+ * whole slab and the terminal is laid out inside the arc's depth, the same distance off every
+ * edge. The clearance is spent as the child's margin rather than as this frame's padding, because
+ * the frame's other child is the glass backdrop and it must still reach the corners the terminal
+ * now stays out of.
  *
  * <p>The rim a pane wears is part of the same geometry. Its stroke is painted just inside the
  * outline, so the band this frame fills behind the terminal stops at the stroke's inner edge — the
@@ -286,7 +287,9 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         // TerminalRenderer#drawCellRect snaps a cell's own left/right edge to, so a band's inner
         // edge meets the grid with no gap and its outer neighbours meet each other the same way;
         // coalescing equal-coloured runs means two same-coloured columns share no internal edge
-        // at all, however that rounding falls.
+        // at all, however that rounding falls. The first run starts at this frame's own edge and
+        // the last ends at it, so the band runs past the terminal's centring slack into the
+        // corner square, in the corner cell's colour.
         int c = 0;
         while (c < columns) {
             int topColor = terminal.getEdgeColumnColorTop(c);
@@ -294,14 +297,20 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             int runEnd = c + 1;
             while (runEnd < columns && terminal.getEdgeColumnColorTop(runEnd) == topColor
                 && terminal.getEdgeColumnColorBottom(runEnd) == bottomColor) runEnd++;
-            float left = contentLeft + terminal.getPaddingColumnLeft(c);
-            float right = contentLeft + terminal.getPaddingColumnLeft(runEnd);
+            float left = c == 0 ? 0f : contentLeft + terminal.getPaddingColumnLeft(c);
+            float right = runEnd == columns
+                ? getWidth() : contentLeft + terminal.getPaddingColumnLeft(runEnd);
             fillRect(canvas, left, 0f, right, contentTop, topColor);
             fillRect(canvas, left, contentBottom, right, getHeight(), bottomColor);
             c = runEnd;
         }
         // Left and right bands: one rect per run of equal-coloured rows, continuing that row's own
         // edge colour out to the view's flush side, with the same run-coalescing and edge-rounding.
+        // The first run starts at this frame's top and the last ends at its bottom, so the band
+        // also covers the margin beside the terminal's own headroom and leftover — the notch
+        // that used to show the glass beside a full-screen program's last row — and meets the
+        // top and bottom bands in the corner square, which both paint in the one colour the
+        // corner cell has.
         int r = 0;
         while (r < rows) {
             int leftColor = terminal.getEdgeRowColorLeft(r);
@@ -309,18 +318,13 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             int runEnd = r + 1;
             while (runEnd < rows && terminal.getEdgeRowColorLeft(runEnd) == leftColor
                 && terminal.getEdgeRowColorRight(runEnd) == rightColor) runEnd++;
-            float top = contentTop + terminal.getPaddingRowTop(r);
-            float bottom = contentTop + terminal.getPaddingRowTop(runEnd);
+            float top = r == 0 ? 0f : contentTop + terminal.getPaddingRowTop(r);
+            float bottom = runEnd == rows
+                ? getHeight() : contentTop + terminal.getPaddingRowTop(runEnd);
             fillRect(canvas, 0f, top, contentLeft, bottom, leftColor);
             fillRect(canvas, contentRight, top, getWidth(), bottom, rightColor);
             r = runEnd;
         }
-        // The four corners: the small squares the row/column bands above do not reach, each taking
-        // the colour of the cell nearest that corner.
-        fillRect(canvas, 0f, 0f, contentLeft, contentTop, terminal.getEdgeColumnColorTop(0));
-        fillRect(canvas, contentRight, 0f, getWidth(), contentTop, terminal.getEdgeColumnColorTop(columns - 1));
-        fillRect(canvas, 0f, contentBottom, contentLeft, getHeight(), terminal.getEdgeColumnColorBottom(0));
-        fillRect(canvas, contentRight, contentBottom, getWidth(), getHeight(), terminal.getEdgeColumnColorBottom(columns - 1));
         canvas.restoreToCount(save);
         return true;
     }
@@ -375,8 +379,8 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     }
 
     /** Where the terminal child's first row of cells starts below its own top edge, if it is one. */
-    private float contentHeadroomPx() {
-        return mContent instanceof TerminalView ? ((TerminalView) mContent).getFirstRowTopPx() : 0f;
+    private int contentHeadroomPx() {
+        return mContent instanceof TerminalView ? ((TerminalView) mContent).getFirstRowTopPx() : 0;
     }
 
     /**
@@ -384,15 +388,16 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      * measured against it — so the pane lays out once at its cleared size and the PTY is told one
      * size, not the flush one and then the inset one.
      *
-     * <p>The sides and the bottom get the arc's full clearance ({@link PaneShape#contentInsetPx}):
-     * the terminal bottom-anchors its grid ({@code TerminalView.getVerticalContentOffset()}), so
-     * its last row ends flush with the view's bottom edge and the last row's cells are what meet
-     * the bottom arcs, just as the first and last columns' cells meet the side arcs at whatever
-     * height the grid's centring leaves them. The top gets less: the first row's cells start a
-     * fixed headroom below the view's top ({@code TerminalView.getFirstRowTopPx()}, the renderer's
-     * ascent allowance), so that much of the top's clearance is already paid, and the margin only
-     * makes up what the arc still needs above it ({@link PaneShape#edgeInsetPx}). The integral-row
-     * leftover on the normal buffer sits above the first row too, and only adds to that.
+     * <p>Every edge gets the same clearance ({@link PaneShape#contentInsetPx}, the arc's), so the
+     * content sits the same distance off all four sides of the frame. The terminal centres its
+     * grid in its view ({@code TerminalView.getVerticalContentOffset()},
+     * {@code getHorizontalContentOffset()}), splitting the sub-cell leftover between opposite
+     * edges, so the grid's own gap from the frame is even too, to within half a cell. The top's
+     * margin is the only one that differs: the first row's cells start a fixed headroom below the
+     * view's top ({@code TerminalView.getFirstRowTopPx()}, the renderer's ascent allowance), so
+     * that much of the top's clearance is already paid and the margin only makes up the rest
+     * ({@link PaneShape#topInsetPx}) — the first cell then sits as far off the top as the last
+     * row's cells sit off the bottom.
      *
      * <p>Along a straight edge none of this is what holds the text off the border — the rim's
      * stroke is, plus a hair — so every margin is floored at that; the floor only ever bites at a
@@ -407,13 +412,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             float edgeFloor = mRimStrokePx > 0f
                 ? mRimStrokePx + EDGE_GAP_DP * getResources().getDisplayMetrics().density : 0f;
             int side = Math.max(PaneShape.contentInsetPx(radius), (int) Math.ceil(edgeFloor));
-            int top = side;
-            if (mContent instanceof TerminalView) {
-                float headroom = contentHeadroomPx();
-                top = Math.max(PaneShape.edgeInsetPx(radius, side, headroom),
-                    (int) Math.ceil(edgeFloor - headroom));
-                top = Math.max(0, top);
-            }
+            int top = PaneShape.topInsetPx(side, contentHeadroomPx());
             MarginLayoutParams params = (MarginLayoutParams) mContent.getLayoutParams();
             if (params.leftMargin != side || params.topMargin != top
                 || params.rightMargin != side || params.bottomMargin != side) {
