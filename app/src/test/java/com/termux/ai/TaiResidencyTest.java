@@ -235,6 +235,25 @@ public class TaiResidencyTest {
         assertEquals(EMBEDDING_GEMMA * 13L / 10L, budget.getLong("estimatedBytes"));
     }
 
+    /**
+     * Dawn brief item 5: the embedding path's own memory refusal is {@code 503}, not the chat
+     * refusal's {@code 409} — a stable {@code embedding_memory} code and a {@code Retry-After} dawn
+     * can read, so it backs off without guessing at a message string.
+     */
+    @Test
+    public void anEmbeddingThatDoesNotFitIsRefusedWith503AndARetryAfter() throws Exception {
+        TaiModelSpec spec = embeddingSpec("emb", TaiModelSpec.BACKEND_LITERT_LM, EMBEDDING_GEMMA);
+        long reserve = TaiLoadBudget.reserveBytes(PONG_TOTAL);
+        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(TaiResidency.embeddingEstimateBytes(spec), "cpu",
+            PONG_TOTAL, reserve + 100_000_000L);
+        assertFalse(plan.fits);
+
+        JSONObject refusal = TaiManager.openAiError(TaiManager.embeddingMemoryRefusal(spec.displayName, plan));
+        assertEquals(503, refusal.getInt("_statusCode"));
+        assertEquals("embedding_memory", refusal.getJSONObject("error").getString("code"));
+        assertEquals("embedding_memory", refusal.getString("code"));
+    }
+
     @Test
     public void theJsonTableCarriesWhatTheDeviceCheckReads() throws Exception {
         TaiResidency residency = new TaiResidency();
