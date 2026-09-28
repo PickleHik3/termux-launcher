@@ -1,6 +1,8 @@
 package com.termux.app.wall;
 
 import android.content.Context;
+import android.graphics.LightingColorFilter;
+import android.graphics.Paint;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -111,6 +113,11 @@ public final class PaneWallLayout extends ViewGroup {
         default boolean isBorderKeyboardSwipeEnabled() { return false; }
         /** A swipe off the bottom border asked for the keyboard: up to open, down to close. */
         default void onBorderKeyboardSwipe(boolean open) { }
+        /**
+         * The page a held border sank ({@link PageSink}) is drawn at {@code scale} about its
+         * centre, 1 once it is back at rest: for chrome drawn outside the page that frames it.
+         */
+        default void onPageSinkChanged(@NonNull PaneWallPage page, float scale) { }
     }
 
     private final Map<PaneWallPage, View> mPageViews = new EnumMap<>(PaneWallPage.class);
@@ -156,6 +163,27 @@ public final class PaneWallLayout extends ViewGroup {
      * {@link #applyPagePositions}, so the tilt and the slide are one motion.
      */
     @Nullable private View mTiltPage;
+    /**
+     * The page a held border sank ({@link PageSink}), from the hold's claim until it has sprung
+     * back to rest after the lift, and its place; null while none is.
+     */
+    @Nullable private View mSinkPage;
+    @Nullable private PaneWallPage mSinkPlace;
+    /** How far {@link #mSinkPage} is down: 0 at rest, 1 fully sunk, a little past either mid-spring. */
+    private float mSink;
+    /** The held side border for the plank's press: -1 left, +1 right, 0 top or bottom. */
+    private int mSinkSide;
+    /**
+     * Whether the sunk page is dimmed, on a hardware layer. Not the Display page: its picture is
+     * a SurfaceView, which follows a scale on its frame but would be stranded by a layer.
+     */
+    private boolean mSinkLayered;
+    @Nullable private ValueAnimator mSinkSpring;
+    /** The sunk page's layer paint; its colour filter is the dim, one cached filter per level. */
+    private final Paint mSinkPaint = new Paint();
+    private static final int SINK_DIM_STEPS = 16;
+    @Nullable private LightingColorFilter[] mSinkDimFilters;
+    private int mSinkDimLevel = -1;
 
     public PaneWallLayout(@NonNull Context context) {
         this(context, null);
@@ -182,6 +210,7 @@ public final class PaneWallLayout extends ViewGroup {
      */
     public void setPageView(@NonNull PaneWallPage page, @Nullable View view) {
         View previous = mPageViews.get(page);
+        if (previous != null && previous == mSinkPage && previous != view) finishSink();
         if (previous != null && previous == mTiltPage && previous != view) releasePlank();
         if (view == null) mPageViews.remove(page);
         else mPageViews.put(page, view);
@@ -343,6 +372,8 @@ public final class PaneWallLayout extends ViewGroup {
         mCurrent = page;
         notifyPageChanged();
         if (!animate || mReducedMotion || getWidth() <= 0) {
+            // A jump lands everything at rest at once, a sunk page included.
+            finishSink();
             settleImmediately();
         } else {
             startSlide();
@@ -398,6 +429,8 @@ public final class PaneWallLayout extends ViewGroup {
     public void endDrag(float velocityPxPerSec) {
         if (!mDragging) return;
         mDragging = false;
+        // The finger let go: a sunk page springs back up as the wall carries it.
+        riseSink();
         int steps = PaneWallPolicy.settle(mOffsetPx, velocityPxPerSec, getWidth(),
             getResources().getDisplayMetrics().density,
             PaneWallPolicy.hasNeighbour(mPages, mCurrent, -1),
@@ -414,6 +447,7 @@ public final class PaneWallLayout extends ViewGroup {
     public void cancelDrag() {
         if (!mDragging) return;
         mDragging = false;
+        riseSink();
         if (mReducedMotion) settleImmediately();
         else startSlide();
     }
@@ -425,6 +459,7 @@ public final class PaneWallLayout extends ViewGroup {
     private void interruptDrag() {
         if (!mDragging) return;
         mDragging = false;
+        riseSink();
         // The wall's own border drag is a claimant like the others: the rest of its finger's
         // travel is swallowed and moves nothing.
         mBorderDrag.abandon();
@@ -570,6 +605,8 @@ public final class PaneWallLayout extends ViewGroup {
      * here: the child is told its touch is over, the hand is told the hold was heard, and the
      * drag begins where the finger stands, so the first move after the hold is the first pixel
      * of travel. The velocity tracker starts here too: the hold's stillness is not the flick's.
+     * And the page sinks under the finger ({@link PageSink}), pushed in on the held side where
+     * the plank is on: the weight is what says the hold was taken.
      */
     private void onBorderHoldElapsed() {
         if (!mBorderDrag.holdElapsed()) return;
@@ -582,6 +619,7 @@ public final class PaneWallLayout extends ViewGroup {
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         mBorderVelocity = VelocityTracker.obtain();
         beginDrag(true);
+        engageSink(mBorderDrag.border());
         dragTo(0f);
     }
 
@@ -663,31 +701,199 @@ public final class PaneWallLayout extends ViewGroup {
      * matrix.
      */
     private void engagePlank() {
-        if (mTiltPage != null || mReducedMotion || getWidth() <= 0) return;
+        if (mReducedMotion || getWidth() <= 0) return;
         if (mListener == null || !mListener.isPlankTiltEnabled(mCurrent)) return;
         View page = mPageViews.get(mCurrent);
         if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
+        if (page == mTiltPage) return;
+        // A plank still lying down on the page the last drag left is laid flat first.
+        releasePlank();
         mTiltPage = page;
         page.setPivotX(page.getWidth() / 2f);
         page.setPivotY(page.getHeight() / 2f);
         page.setCameraDistance(PlankTilt.CAMERA_DISTANCE_DP
             * getResources().getDisplayMetrics().density);
-        page.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        syncPageLayer(page);
     }
 
-    /** The wall is at rest, or the plank's page is going away: flat, and the layer dropped. */
+    /**
+     * The wall is at rest and any sunk page is back up, or the plank's page is going away: flat,
+     * and the layer dropped unless the sink still dims it.
+     */
     private void releasePlank() {
         View page = mTiltPage;
         if (page == null) return;
         mTiltPage = null;
         page.setRotationY(0f);
-        page.setLayerType(View.LAYER_TYPE_NONE, null);
+        syncPageLayer(page);
+    }
+
+    /**
+     * A hardware layer while the page tips or is dimmed, carrying the dim as its paint; none
+     * otherwise. Only ever called for a page the plank or the sink has touched.
+     */
+    private void syncPageLayer(@NonNull View page) {
+        boolean dimmed = page == mSinkPage && mSinkLayered;
+        if (page == mTiltPage || dimmed) {
+            page.setLayerType(View.LAYER_TYPE_HARDWARE, dimmed ? mSinkPaint : null);
+        } else {
+            page.setLayerType(View.LAYER_TYPE_NONE, null);
+        }
     }
 
     /** The page tipping under a drag, for tests; null while none is. */
     @Nullable
     View tiltPage() {
         return mTiltPage;
+    }
+
+    // ---- The sink ----------------------------------------------------------------------------
+
+    /**
+     * The hold claimed the finger on {@code border}: the page the wall rests on sinks
+     * ({@link PageSink}) — smaller about its centre, dimmer where it can be — and, where the plank
+     * is on, is pushed in on a held side border. Every mode has it; reduced motion has none.
+     */
+    private void engageSink(@NonNull BorderDrag.Border border) {
+        // Only under a drag the finger holds: its end is what brings the page back up.
+        if (!mDragging || mReducedMotion || getWidth() <= 0) return;
+        View page = mPageViews.get(mCurrent);
+        if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
+        // The page the last drag left, still rising, lands at rest before this one goes down.
+        if (mSinkPage != null && mSinkPage != page) finishSink();
+        if (mSinkPage == null) {
+            mSinkPage = page;
+            mSinkPlace = mCurrent;
+            mSinkLayered = mCurrent != PaneWallPage.DISPLAY;
+            mSinkDimLevel = -1;
+            page.setPivotX(page.getWidth() / 2f);
+            page.setPivotY(page.getHeight() / 2f);
+            if (mSinkLayered) syncPageLayer(page);
+        }
+        mSinkSide = border == BorderDrag.Border.LEFT ? -1
+            : border == BorderDrag.Border.RIGHT ? 1 : 0;
+        springSinkTo(1f, PageSink.SINK_STIFFNESS, PageSink.SINK_DAMPING);
+    }
+
+    /** The finger let go, or the wall was taken from under it: the sunk page springs back up. */
+    private void riseSink() {
+        if (mSinkPage == null) return;
+        springSinkTo(0f, PageSink.RISE_STIFFNESS, PageSink.RISE_DAMPING);
+    }
+
+    /**
+     * Run the sink from where it stands to {@code target} on a spring. The animator is only the
+     * ticker; the spring's own curve says where the sink is at each frame, and reaching rest
+     * hands the page back ({@link #finishSink}).
+     */
+    private void springSinkTo(final float target, final float stiffness, final float damping) {
+        stopSinkSpring();
+        final float from = mSink;
+        if (from == target) {
+            if (target == 0f) finishSink();
+            return;
+        }
+        final long duration = Math.max(1L, PageSink.durationMs(stiffness, damping));
+        ValueAnimator spring = ValueAnimator.ofFloat(0f, 1f);
+        spring.setDuration(duration);
+        spring.setInterpolator(null);
+        spring.addUpdateListener(animation -> setSink(PageSink.value(from, target,
+            Math.min(duration, animation.getCurrentPlayTime()), stiffness, damping)));
+        spring.addListener(new AnimatorListenerAdapter() {
+            private boolean mCancelled;
+            @Override public void onAnimationCancel(Animator animation) { mCancelled = true; }
+            @Override public void onAnimationEnd(Animator animation) {
+                if (mSinkSpring == animation) mSinkSpring = null;
+                if (mCancelled) return;
+                if (target == 0f) finishSink();
+                else setSink(target);
+            }
+        });
+        mSinkSpring = spring;
+        spring.start();
+    }
+
+    private void stopSinkSpring() {
+        ValueAnimator spring = mSinkSpring;
+        mSinkSpring = null;
+        if (spring != null) spring.cancel();
+    }
+
+    /** Draw the sunk page at {@code sink}: its scale, its dim, and the plank's press on top. */
+    private void setSink(float sink) {
+        View page = mSinkPage;
+        if (page == null) return;
+        mSink = sink;
+        float scale = PageSink.scale(sink);
+        page.setScaleX(scale);
+        page.setScaleY(scale);
+        if (mSinkLayered) applySinkDim(page, sink);
+        if (page == mTiltPage) {
+            page.setRotationY(PlankTilt.angleDeg(page.getTranslationX(), getWidth(), mSinkSide,
+                sink));
+        }
+        if (mListener != null && mSinkPlace != null) mListener.onPageSinkChanged(mSinkPlace, scale);
+    }
+
+    /**
+     * The dim is the layer's colour filter, so a frame of it is a re-composite, never a redraw of
+     * the page. Quantised, so a spring allocates at most one filter per level, once.
+     */
+    private void applySinkDim(@NonNull View page, float sink) {
+        int level = PageSink.dimLevel(sink, SINK_DIM_STEPS);
+        if (level == mSinkDimLevel) return;
+        mSinkDimLevel = level;
+        if (level == 0) {
+            mSinkPaint.setColorFilter(null);
+        } else {
+            if (mSinkDimFilters == null) mSinkDimFilters = new LightingColorFilter[SINK_DIM_STEPS];
+            LightingColorFilter filter = mSinkDimFilters[level];
+            if (filter == null) {
+                filter = new LightingColorFilter(PageSink.dimMultiplier(level, SINK_DIM_STEPS), 0);
+                mSinkDimFilters[level] = filter;
+            }
+            mSinkPaint.setColorFilter(filter);
+        }
+        page.setLayerPaint(mSinkPaint);
+    }
+
+    /**
+     * The sunk page is back at rest, or has to be at once (a jump, the page going away, the wall
+     * leaving the window): full size, undimmed, its layer given back, and the plank laid flat if
+     * the wall has already settled.
+     */
+    private void finishSink() {
+        stopSinkSpring();
+        View page = mSinkPage;
+        if (page == null) return;
+        PaneWallPage place = mSinkPlace;
+        boolean layered = mSinkLayered;
+        mSinkPage = null;
+        mSinkPlace = null;
+        mSinkLayered = false;
+        mSink = 0f;
+        mSinkSide = 0;
+        mSinkDimLevel = -1;
+        mSinkPaint.setColorFilter(null);
+        page.setScaleX(1f);
+        page.setScaleY(1f);
+        if (page == mTiltPage) {
+            page.setRotationY(PlankTilt.angleDeg(page.getTranslationX(), getWidth()));
+        }
+        if (layered || page == mTiltPage) syncPageLayer(page);
+        if (mListener != null && place != null) mListener.onPageSinkChanged(place, 1f);
+        if (!isMoving()) releasePlank();
+    }
+
+    /** The page sunk under a hold, for tests; null while none is. */
+    @Nullable
+    View sinkPage() {
+        return mSinkPage;
+    }
+
+    /** How far the sunk page is down, for tests. */
+    float sink() {
+        return mSink;
     }
 
     // ---- Motion ----------------------------------------------------------------------------
@@ -756,7 +962,9 @@ public final class PaneWallLayout extends ViewGroup {
             stopSlide();
             mOffsetPx = 0f;
             applyPagePositions();
-            releasePlank();
+            // A page still springing up keeps its plank until it lands (finishSink), so its
+            // press lies down with the spring rather than snapping flat here.
+            if (mSinkPage == null) releasePlank();
             if (mListener != null) mListener.onWallPageSettled(mCurrent);
         } finally {
             Trace.endSection();
@@ -803,8 +1011,13 @@ public final class PaneWallLayout extends ViewGroup {
                 + (entry.getKey() == mNudgePage ? mNudgePx : 0f);
             view.setTranslationX(x);
             // The plank's angle is a function of where the page stands, so the drag, the spring
-            // back and the carry-out all read the same number and it is flat wherever it rests.
-            if (view == mTiltPage) view.setRotationY(PlankTilt.angleDeg(x, width));
+            // back and the carry-out all read the same number and it is flat wherever it rests —
+            // plus the held side's press, while the page is sunk.
+            if (view == mTiltPage) {
+                boolean sunk = view == mSinkPage;
+                view.setRotationY(PlankTilt.angleDeg(x, width, sunk ? mSinkSide : 0,
+                    sunk ? mSink : 0f));
+            }
             boolean onScreen = width <= 0 || Math.abs(x) < width;
             if (entry.getKey() == PaneWallPage.TERMINAL) {
                 view.setVisibility(VISIBLE);
@@ -922,6 +1135,7 @@ public final class PaneWallLayout extends ViewGroup {
         stopSlide();
         stopNudge();
         releaseBorderDrag();
+        finishSink();
         releasePlank();
     }
 }

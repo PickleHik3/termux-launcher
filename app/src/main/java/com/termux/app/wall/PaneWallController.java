@@ -57,6 +57,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          * back on, as the keyboard key does: it is the one way back that is always there.
          */
         default void onBorderKeyboardSwipe(boolean open) { }
+        /**
+         * A page sunk under a held border ({@link PageSink}) is drawn at {@code scale} about its
+         * centre; 1 once it is back up. The terminal's frame line is drawn outside its page and
+         * has to follow by hand.
+         */
+        default void onPageSinkChanged(@NonNull PaneWallPage page, float scale) { }
     }
 
     /** Saved-instance-state key for the page the wall is showing. */
@@ -355,6 +361,11 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onBorderKeyboardSwipe(boolean open) {
         mHost.onBorderKeyboardSwipe(open);
+    }
+
+    @Override
+    public void onPageSinkChanged(@NonNull PaneWallPage page, float scale) {
+        mHost.onPageSinkChanged(page, scale);
     }
 
     @Override

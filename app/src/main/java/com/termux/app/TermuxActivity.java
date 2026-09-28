@@ -16770,6 +16770,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void onBorderKeyboardSwipe(boolean open) {
                     applyBorderKeyboardSwipe(open);
                 }
+                @Override public void onPageSinkChanged(
+                        @NonNull com.termux.app.wall.PaneWallPage page, float scale) {
+                    // The terminal's frame line is laid over the wall, not carried by the page
+                    // (syncTerminalFrameLineTravel): it sinks with the page by hand. Its margins
+                    // are the pane host's less the stroke's air on every side, so the two share
+                    // a centre and one scale about it keeps the line where it frames the page.
+                    if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
+                    View borderView = findViewById(R.id.terminal_border_overlay);
+                    if (borderView == null) return;
+                    borderView.setPivotX(borderView.getWidth() / 2f);
+                    borderView.setPivotY(borderView.getHeight() / 2f);
+                    borderView.setScaleX(scale);
+                    borderView.setScaleY(scale);
+                }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
                     Trace.beginSection("Wall.pageSettled");

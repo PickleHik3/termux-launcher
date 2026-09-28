@@ -49,8 +49,10 @@ same hold a corner takes, then dragged sideways. A tap, a sideways swipe without
 that sets off before it and a second finger all stay the content's; a vertical swipe off the
 bottom border is the keyboard swipe. The border is always drawn while the
 border preference is on (the slab's rim on glass, the plain stroke otherwise), on the terminal,
-the Widgets page and the Display page alike, so the gesture has a line to find. Under Fancier
-Glass the page tips like a plank as it goes; the Display place slides flat. The status bar does
+the Widgets page and the Display page alike, so the gesture has a line to find. The hold sinks
+the page away from the user until the finger lets go, in every mode unless motion is reduced;
+under Fancier Glass the page also tips like a plank, pushed in on a held side and leading with
+the side it moves toward; the Display place sinks but slides flat. The status bar does
 not page; its own drag is the fold across it.
 _Avoid_: edge swipe, status bar swipe, page swipe
 

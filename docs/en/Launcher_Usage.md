@@ -87,7 +87,8 @@ as new attention.
 The terminal is one of three places in a ring — Widgets, Terminal, Display — so from any of them
 the other two are one step away, one to each side. To move, hold the page's border — the frame
 line around the terminal, the widgets or the display, on any of its four sides — until you feel
-the tick, then drag sideways: the places slide with your finger, and a short drag springs back
+the tick and the page sinks back under your finger, then drag sideways: the places slide with your
+finger, and the page rises again as you let go. A short drag returns to the place you were on,
 while a longer one, or a quick flick, lands on the next place. The corners are not the border;
 they hold the corner tab. A tap, or a sideways swipe on the border without the hold, is the page's
 own — a program's mouse drag, a scroll, a text selection — so nothing under it changes. The same
