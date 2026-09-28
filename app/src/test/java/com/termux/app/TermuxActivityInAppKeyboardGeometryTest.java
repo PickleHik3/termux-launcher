@@ -382,8 +382,11 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         View keyboardContainer = mActivity.findViewById(R.id.inapp_keyboard_container);
         View toolbarPager = mActivity.findViewById(R.id.terminal_toolbar_view_pager);
         View appsBar = mActivity.findViewById(R.id.apps_bar_viewpager);
+        // Updated with a reason: the apps row's host is its icons and the strip its ticks stand
+        // in, with the letters off the dock as much as on it, so the dock counts both.
+        View appsTicks = mActivity.findViewById(R.id.apps_bar_indicator_band);
         int dockContentHeight = toolbarPager.getLayoutParams().height
-            + appsBar.getLayoutParams().height;
+            + appsBar.getLayoutParams().height + appsTicks.getLayoutParams().height;
         int keyboardHeight = desiredKeyboardHeightPx();
         int[] location = new int[2];
         rootRelativeLayout.getLocationInWindow(location);

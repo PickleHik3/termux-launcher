@@ -6716,7 +6716,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (state.appsRowEnabled && ticksAreTheDocksOwn) {
                 mSuggestionBarView.publishPageIndicator();
             } else {
-                indicatorBand.setVisibility(View.GONE);
+                // A row on the dock keeps its band even before a bar is bound to it: the dock's
+                // height counts it (DockLayout.combinedHeight), so a gone band would be a gap.
+                indicatorBand.setVisibility(state.appsRowEnabled ? View.INVISIBLE : View.GONE);
             }
         }
         if (terminalToolbarViewPager != null) {
