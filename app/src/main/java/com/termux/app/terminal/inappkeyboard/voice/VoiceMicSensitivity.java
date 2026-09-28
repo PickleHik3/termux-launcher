@@ -11,8 +11,8 @@ import androidx.annotation.Nullable;
  * detector at about −45 to −52 dBFS frame RMS over a −60 to −65 dBFS room. Spoken 6–10 dB more
  * quietly — an office voice — the probability sinks under the 0.5 onset: on the developer's own
  * captured phrases, 75 % of one phrase's chunks were voiced at its own level, 29 % 6 dB down and
- * 4 % 10 dB down. Lowering the onset does little (the probabilities are far under any sane
- * threshold); raising the level does. So the detector hands Silero a copy of each frame lifted
+ * 4 % 10 dB down. Lowering the onset to 0.4 saves some short key words but none of those quiet
+ * phrases (their probabilities sit far under any sane threshold); raising the level does. So the detector hands Silero a copy of each frame lifted
  * until the learned noise floor sits at {@link #floorTargetDbfs}, never turned down and never by
  * more than {@link #maxGainDb}. The floor, not the frame, sets the gain, so speech keeps its
  * distance over the room; the segment sent for transcription is untouched (it has

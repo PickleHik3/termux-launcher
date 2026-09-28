@@ -156,6 +156,7 @@ import com.termux.app.terminal.inappkeyboard.voice.VoiceInputSession;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceLanguage;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceListeningIndicator;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceMicSensitivity;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceScreenHold;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceSessionCleanup;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceTextPolisher;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceTextSanitizer;
@@ -706,6 +707,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The speech model's warm-up or the voiced decision's load is still running. */
     private boolean mVoiceSpeechWarming;
     private final Runnable mVoicePillAutoClose = this::closeVoicePill;
+    /**
+     * The keep-screen-on rule while the pill is up ({@link VoiceScreenHold}): the window flag,
+     * never the terminal's own keep-screen-on setting, which is a view flag and untouched by it.
+     */
+    private final VoiceScreenHold mVoiceScreenHold = new VoiceScreenHold(
+        on -> {
+            if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        },
+        new VoiceScreenHold.Timer() {
+            @Override
+            public void schedule(@NonNull Runnable task, long delayMs) {
+                getWindow().getDecorView().postDelayed(task, delayMs);
+            }
+
+            @Override
+            public void cancel(@NonNull Runnable task) {
+                getWindow().getDecorView().removeCallbacks(task);
+            }
+        });
+    /** Between onResume and onPause: the only time the pill may hold the screen on. */
+    private boolean mVoiceScreenMayHold;
     /** The one-time language notices, once per process. */
     private boolean mVoiceLanguageFallbackNoticed;
     private boolean mVoiceEnglishOnlyNoticed;
@@ -2121,6 +2144,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onResume() {
         super.onResume();
         Logger.logVerbose(LOG_TAG, "onResume");
+        // Text left waiting in the pill holds the screen again, its idle release started over.
+        mVoiceScreenMayHold = true;
+        holdVoiceScreen();
         if (mIsInvalidState)
             return;
         // Also here, not only in onStart: a wallpaper picker shown over this activity never stops
@@ -2438,6 +2464,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The microphone is only ever open while this activity is the one on screen; what was
         // said stays in the panel, waiting for the user to come back to it.
         endVoiceInput(VoiceInputSession.EndReason.PAUSED);
+        // Nobody is looking at the pill now; the screen may sleep. onResume takes the hold back.
+        mVoiceScreenMayHold = false;
+        mVoiceScreenHold.release();
         // Nothing is typed into a display nobody is looking at.
         hideDisplaySystemKeyboard();
         // Rename owns the in-app-keyboard interceptor only while this activity is visible.
@@ -14218,10 +14247,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mVoiceIndicator.show(mVoicePillCallbacks, mVoiceCleanup != null, mVoiceDictation.raw());
         refreshVoiceWarmUp();
         // Talking is not touching, so the phone's screen timeout would dim and then lock mid-sentence.
-        // The window flag holds the screen on while the dictation is listening, transcribing or
-        // cleaning up, and lets go once the text waits; the terminal's own keep-screen-on setting
-        // is a view flag and is untouched by this.
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        holdVoiceScreen();
+    }
+
+    /**
+     * Holds the screen on for as long as the pill is up ({@link VoiceScreenHold}): without a limit
+     * while the dictation listens, transcribes or cleans up, and with the idle release running
+     * once the text only waits. No-op with the pill down or the activity paused.
+     */
+    private void holdVoiceScreen() {
+        if (!mVoiceScreenMayHold || mVoiceIndicator == null || !mVoiceIndicator.isShowing()) return;
+        mVoiceScreenHold.hold(mVoiceInput == null && mVoiceCleanup == null);
     }
 
     /** The pill's "Warming up" chip: the speech side or the cleanup model is still loading. */
@@ -14234,7 +14270,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Closes the pill however far it got, and its text goes with it: a cleanup still running is
-     * dropped, the keep-screen-on flag clears. Nothing ever reached the terminal, so nothing there
+     * dropped, the screen hold lets go. Nothing ever reached the terminal, so nothing there
      * changes. No-op when it is down.
      */
     private void closeVoicePill() {
@@ -14245,7 +14281,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         getWindow().getDecorView().removeCallbacks(mVoicePillAutoClose);
         if (mVoiceIndicator != null) mVoiceIndicator.hide();
         if (mInAppKeyboard != null) mInAppKeyboard.setVoiceTypingActive(false);
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        mVoiceScreenHold.release();
     }
 
     private void closeVoicePillAfter(long delayMs) {
@@ -14298,6 +14334,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override
         public void onInsert() {
             useVoiceDictation(VoiceDictation.Use.INSERT);
+        }
+
+        @Override
+        public void onTouched() {
+            // Any touch of the pill is the user still there: the idle release starts over.
+            holdVoiceScreen();
         }
     };
 
@@ -14481,8 +14523,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The text is final: it waits, or an early ✓ or Copy uses it now. */
     private void settleVoiceDictation(@NonNull String text, boolean cleaned) {
-        // Waiting is not talking: the screen may time out again.
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        // The screen stays on while the text waits, until the idle release lets it sleep.
+        holdVoiceScreen();
         VoiceDictation.Use early = cleaned ? mVoiceDictation.onCleaned(text) : mVoiceDictation.onSettled(text);
         if (early != null) carryOutVoiceUse(early, text, cleaned);
     }

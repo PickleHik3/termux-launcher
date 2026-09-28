@@ -72,6 +72,9 @@ public final class VoiceListeningIndicator {
 
         /** The panel's ✓: insert the text at the cursor, once (stopping first when still listening). */
         void onInsert();
+
+        /** A finger has come down anywhere on the pill or its panel: the user is still there. */
+        void onTouched();
     }
 
     private static final int PILL_HEIGHT_DP = 36;
@@ -124,7 +127,7 @@ public final class VoiceListeningIndicator {
         int accent = themeColor(context, com.termux.shared.R.attr.termuxColorPrimary);
         int surface = themeColor(context, com.termux.shared.R.attr.termuxColorSurfaceBase);
 
-        SwipeCard view = new SwipeCard(context, callbacks::onClose);
+        SwipeCard view = new SwipeCard(context, callbacks::onClose, callbacks::onTouched);
         view.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable background = new GradientDrawable();
         background.setColor(surface);
@@ -542,6 +545,7 @@ public final class VoiceListeningIndicator {
         private static final long SETTLE_MS = 180L;
 
         private final Runnable onSwiped;
+        private final Runnable onTouched;
         private final int touchSlop;
         private final int minFling;
         private float downX;
@@ -550,12 +554,20 @@ public final class VoiceListeningIndicator {
         private boolean gone;
         @Nullable private VelocityTracker velocity;
 
-        SwipeCard(@NonNull Context context, @NonNull Runnable onSwiped) {
+        SwipeCard(@NonNull Context context, @NonNull Runnable onSwiped, @NonNull Runnable onTouched) {
             super(context);
             this.onSwiped = onSwiped;
+            this.onTouched = onTouched;
             ViewConfiguration configuration = ViewConfiguration.get(context);
             touchSlop = configuration.getScaledTouchSlop();
             minFling = configuration.getScaledMinimumFlingVelocity() * 4;
+        }
+
+        @Override
+        public boolean dispatchTouchEvent(MotionEvent event) {
+            // Seen before any child takes it: a tap on a button counts as much as one on the text.
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) onTouched.run();
+            return super.dispatchTouchEvent(event);
         }
 
         @Override
