@@ -251,7 +251,8 @@ public final class TaiRuntimeService extends Service {
 
     static boolean isConcurrentControlOperation(@NonNull String operation) {
         return TaiRuntimeIpc.OP_CANCEL.equals(operation) || TaiRuntimeIpc.OP_UNLOAD_MODEL.equals(operation)
-            || TaiRuntimeIpc.OP_TTS_STOP.equals(operation) || TaiRuntimeIpc.OP_BENCH_SKIP_WAIT.equals(operation);
+            || TaiRuntimeIpc.OP_TTS_STOP.equals(operation) || TaiRuntimeIpc.OP_BENCH_SKIP_WAIT.equals(operation)
+            || TaiRuntimeIpc.OP_BENCH_HOLD.equals(operation);
     }
 
     /**
@@ -343,6 +344,8 @@ public final class TaiRuntimeService extends Service {
                 return manager.cancelRuntime();
             case TaiRuntimeIpc.OP_BENCH_SKIP_WAIT:
                 return manager.skipBenchCooldown();
+            case TaiRuntimeIpc.OP_BENCH_HOLD:
+                return manager.holdBench(body);
             case TaiRuntimeIpc.OP_OPENAI_CHAT:
                 return manager.openAiChatCompletions(body);
             case TaiRuntimeIpc.OP_OPENAI_COMPLETION:

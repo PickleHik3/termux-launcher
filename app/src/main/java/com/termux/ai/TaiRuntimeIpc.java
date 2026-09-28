@@ -42,6 +42,13 @@ final class TaiRuntimeIpc {
      * serial lane ({@link TaiRuntimeService#isRefusedDuringBench}).
      */
     static final String OP_BENCH_SKIP_WAIT = "benchSkipWait";
+    /**
+     * Holds or releases the active bench's guard for "Leaving pauses at the end of the current
+     * step; Resume on return" (slice 4's screen/app hold). Body: {@code {"held":true|false}}. Runs
+     * on the control lane like {@link #OP_CANCEL}, never refused while a bench holds the serial
+     * lane ({@link TaiRuntimeService#isRefusedDuringBench}).
+     */
+    static final String OP_BENCH_HOLD = "benchHold";
     /** Speech-to-text; both run on the service's own STT lane, never behind a chat generation. */
     static final String OP_TRANSCRIBE = "transcribe";
     static final String OP_STT_WARM = "sttWarm";

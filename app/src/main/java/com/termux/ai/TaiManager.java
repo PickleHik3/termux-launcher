@@ -661,6 +661,26 @@ public final class TaiManager {
         return result;
     }
 
+    /**
+     * "Leaving pauses at the end of the current step; Resume on return" (spec Safety table,
+     * Screen/app row): holds or releases the active bench's guard. The in-app run screen's only
+     * lever — a {@code tai benchmark} from the terminal is never held. A no-op, not an error, when
+     * nothing is running.
+     */
+    @NonNull
+    public JSONObject holdBench(@NonNull String body) throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_BENCH_HOLD, delegatedRuntimeBody(body));
+        JSONObject request = parseBody(body);
+        boolean held = request.optBoolean("held", false);
+        TaiBenchHarness bench = activeBench;
+        if (bench != null) bench.setHeld(held);
+        JSONObject result = new JSONObject();
+        result.put("ok", true);
+        result.put("held", held);
+        result.put("active", bench != null);
+        return result;
+    }
+
     // ---- Benchmark (bench v1) ------------------------------------------------------------------
 
     /** The results file, {@code files/tai/benchmarks.json}, written by this (the app) process only. */

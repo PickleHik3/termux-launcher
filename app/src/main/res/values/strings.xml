@@ -1503,7 +1503,7 @@
         <string name="tai_bench_check_warm_title">The phone will get warm</string>
         <string name="tai_bench_check_warm_summary">Keep it out of direct sun, not outdoors in the heat, and not in a pocket or under a pillow.</string>
         <string name="tai_bench_check_screen_title">Keep this screen open</string>
-        <string name="tai_bench_check_screen_summary">The screen stays on while the benchmark runs. The run goes on if you leave, but it is measured best undisturbed.</string>
+        <string name="tai_bench_check_screen_summary">The screen stays on while the benchmark runs. If you leave, it pauses at the end of the current step and resumes when you come back.</string>
         <plurals name="tai_bench_check_downloads_title">
             <item quantity="one">%1$d download first</item>
             <item quantity="other">%1$d downloads first</item>
@@ -1525,6 +1525,7 @@
         <string name="tai_bench_stopped_battery">battery low</string>
         <string name="tai_bench_stopped_thermal">too hot</string>
         <string name="tai_bench_stopped_unloaded">the model was unloaded</string>
+        <string name="tai_bench_stopped_left">you left the screen for too long</string>
         <string name="tai_bench_error_battery">The battery is at %1$d%%. Plug in or charge to 30%% first.</string>
         <string name="tai_bench_error_hot">The phone is already warm. Let it cool first.</string>
         <string name="tai_bench_stop">Stop</string>
@@ -1556,6 +1557,7 @@
         <!-- Cool-down -->
         <string name="tai_bench_wait_cooldown_title">Waiting for the phone to cool</string>
         <string name="tai_bench_wait_thermal_title">Paused: the phone is warm</string>
+        <string name="tai_bench_wait_left_title">Paused — you left the screen</string>
         <string name="tai_bench_wait_heat">Heat %1$s</string>
         <string name="tai_bench_wait_headroom">headroom %1$s</string>
         <string name="tai_bench_wait_countdown">Waited %1$s · goes on anyway in %2$s at most</string>

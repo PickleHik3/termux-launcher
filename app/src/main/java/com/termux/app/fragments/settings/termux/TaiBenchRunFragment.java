@@ -241,6 +241,9 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         TaiBenchSession.get().addListener(this);
         drawnVersion = -1L;
         onBenchStateChanged(TaiBenchSession.get().state());
+        // The screen is back in the foreground: release the "left" hold (spec Safety table,
+        // Screen/app row). A no-op while nothing is running.
+        TaiBenchSession.get().hold(requireContext(), false);
     }
 
     @Override
@@ -251,6 +254,12 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
 
     @Override
     public void onStop() {
+        // Leaving the screen (not a rotation) pauses the run at the end of its current step; see
+        // TaiBenchSession#hold and the spec Safety table's Screen/app row.
+        Activity activity = getActivity();
+        if (activity != null && !activity.isChangingConfigurations()) {
+            TaiBenchSession.get().hold(activity, true);
+        }
         TaiBenchSession.get().removeListener(this);
         handler.removeCallbacks(tick);
         keepScreenOn(false);
@@ -336,6 +345,7 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
             case "thermal":
             case "thermal_timeout": return getString(R.string.tai_bench_stopped_thermal);
             case "unloaded": return getString(R.string.tai_bench_stopped_unloaded);
+            case "left": return getString(R.string.tai_bench_stopped_left);
             default: return reason;
         }
     }
@@ -459,7 +469,8 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         long now = System.currentTimeMillis();
         long elapsed = wait.elapsedMs(now);
         long cap = wait.capMs();
-        waitTitle.setText(wait.cooldown() ? getString(R.string.tai_bench_wait_cooldown_title) : getString(R.string.tai_bench_wait_thermal_title));
+        waitTitle.setText(wait.cooldown() ? getString(R.string.tai_bench_wait_cooldown_title)
+            : wait.left() ? getString(R.string.tai_bench_wait_left_title) : getString(R.string.tai_bench_wait_thermal_title));
         StringBuilder facts = new StringBuilder(getString(R.string.tai_bench_wait_heat, TaiBenchViews.heatLabel(context, wait.thermalStatus)));
         if (!Double.isNaN(wait.headroom)) facts.append(" · ").append(getString(R.string.tai_bench_wait_headroom, String.format(java.util.Locale.US, "%.2f", wait.headroom)));
         waitFacts.setText(facts);
