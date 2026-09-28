@@ -434,7 +434,7 @@ Dawn brief items 5 and 6, useful for a client that indexes in the background: wh
 
 LiteRT EmbeddingGemma `.tflite` installs require `sentencepiece.model` in the same model directory. New downloads fetch that sidecar automatically. Older installs that only contain the `.tflite` return `embedding_tokenizer_missing` until the model is re-downloaded or the sidecar is added.
 
-The embedder's `/v1/models` entry additionally carries `_endpoint_dimensions` (the model's native output width; recognised families only), `_endpoint_matryoshka_dims` (the sizes `dimensions` may truncate to, largest first), `_endpoint_normalized` (`true`: every vector is L2-normalised), `_endpoint_max_batch`, and a stable `_revision` (a cheap hash of the model file's name/size/mtime, never its bytes) a client can use to know when to rebuild its index.
+The embedder's `/v1/models` entry additionally carries `_endpoint_dimensions` (the model's native output width; recognised families only), `_endpoint_matryoshka_dims` (the only sizes `dimensions` accepts when listed, largest first; any other size gets `400 invalid_dimensions`), `_endpoint_normalized` (`true`: every vector is L2-normalised), `_endpoint_max_batch`, and a stable `_revision` (a cheap hash of the model file's name/size/mtime, never its bytes) a client can use to know when to rebuild its index.
 
 #### `POST /v1/tokenize`
 

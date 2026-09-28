@@ -247,9 +247,12 @@ public final class TaiManager {
         if (embedding != null) {
             embedder.put("modelId", embedding.optString("id", ""));
             embedder.put("backend", embedding.optString("backend", ""));
-            long bytes = embedding.isNull("measuredBytes") ? embedding.optLong("estimatedBytes", 0L)
-                : embedding.optLong("measuredBytes", 0L);
-            embedder.put("residentMb", bytes / (1024L * 1024L));
+            // The size the model takes loaded, from its file; the load meter reads far less for an
+            // mmapped graph (26 MB for EmbeddingGemma's 183 MB file on pong), so it is reported apart.
+            long estimated = embedding.optLong("estimatedBytes", 0L);
+            long measured = embedding.isNull("measuredBytes") ? 0L : embedding.optLong("measuredBytes", 0L);
+            embedder.put("residentMb", Math.max(estimated, measured) / (1024L * 1024L));
+            if (measured > 0L) embedder.put("measuredLoadMb", measured / (1024L * 1024L));
             embedder.put("busy", embedding.optBoolean("busy", false));
         }
         return embedder;
@@ -2121,6 +2124,12 @@ public final class TaiManager {
             return openAiRequestError(501, "capability_not_supported",
                 "Embeddings are not supported for model '" + modelId + "'.", "model");
         }
+        // Matryoshka quality holds only at the trained sizes, so a model that lists them takes no other.
+        int[] matryoshka = TaiModelSpec.embeddingMatryoshkaDimsFor(spec.id, spec.localPath);
+        if (dimensions > 0 && matryoshka.length > 0 && !contains(matryoshka, dimensions)) {
+            return openAiRequestError(400, "invalid_dimensions",
+                "dimensions must be one of " + java.util.Arrays.toString(matryoshka) + " for this model.", "dimensions");
+        }
         MultiBackendTaiRuntime local = (MultiBackendTaiRuntime) localRuntime();
         if (!local.residency().isResident(TaiResidency.Kind.EMBEDDING, spec.id)) {
             JSONObject refusal = decideEmbeddingLoad(spec, runtimeOptionsFromRequest(request, spec));
@@ -2862,6 +2871,11 @@ public final class TaiManager {
      * {@link com.termux.launcherctl.LauncherCtlApiServer#jsonResponse}), and the stable
      * {@code embedding_memory} code so dawn can back off without guessing at a message string.
      */
+    private static boolean contains(@NonNull int[] values, int value) {
+        for (int v : values) if (v == value) return true;
+        return false;
+    }
+
     @NonNull
     static JSONObject embeddingMemoryRefusal(@NonNull String displayName, @NonNull TaiLoadBudget.Plan plan) throws JSONException {
         JSONObject refusal = insufficientMemory(displayName, plan);
