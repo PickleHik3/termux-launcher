@@ -244,13 +244,14 @@ public final class StatusBarLensMetrics {
     /**
      * Every mark the bar shows, in the order the places sit side by side. A place that has left —
      * dissolved past the end it was travelling towards — is simply absent, and nothing on it can be
-     * drawn or tapped.
+     * drawn or tapped. A wall of one place — terminal mode — shows no marks at all: there is
+     * nowhere to go, so a mark would be a pager for nothing.
      */
     @NonNull
     public static List<Mark> marks(@NonNull Bar bar, @NonNull List<PaneWallPage> pages,
                                    @NonNull PaneWallPage current, float offsetPx, int wallWidthPx,
                                    boolean displayRunning) {
-        if (bar.widthPx <= 0 || bar.heightPx <= 0 || wallWidthPx <= 0 || pages.isEmpty()) {
+        if (bar.widthPx <= 0 || bar.heightPx <= 0 || wallWidthPx <= 0 || pages.size() < 2) {
             return Collections.emptyList();
         }
         // The two axes the lens is laid out in: the places queue along the bar's length, and the

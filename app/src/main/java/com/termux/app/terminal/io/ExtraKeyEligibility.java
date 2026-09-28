@@ -9,6 +9,7 @@ import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -217,6 +218,22 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WINDOW_PREVIOUS, Band.TERMINAL_TOOL);
 
         TOOLS = Collections.unmodifiableMap(tools);
+    }
+
+    /**
+     * Whether the key sending {@code keyValue} can act on {@code place}, on a wall that has
+     * {@code pages}. A place switch is a launcher key and works from every place — but only
+     * towards a place the wall has: the display switch under a home-screen mode, or either side
+     * switch under terminal mode, is drawn dead rather than dropped, the same as every other key
+     * that cannot act. The shipped row drops such keys before they are built
+     * ({@link ExtraKeysDefaultRow}); this is for a row the user wrote.
+     */
+    public static boolean isUsable(@Nullable String keyValue, @NonNull PaneWallPage place,
+                                   @NonNull List<PaneWallPage> pages) {
+        if (!isUsable(keyValue, place)) return false;
+        if (keyValue == null || keyValue.indexOf(' ') >= 0) return true;
+        PaneWallPage target = placeSwitchTarget(keyValue);
+        return target == null || pages.contains(target);
     }
 
     /** Whether the key sending {@code keyValue} can act on {@code place}. */

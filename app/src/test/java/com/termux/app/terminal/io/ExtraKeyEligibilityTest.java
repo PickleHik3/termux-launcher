@@ -185,6 +185,30 @@ public class ExtraKeyEligibilityTest {
         assertNull(ExtraKeyEligibility.placeSwitchTarget(null));
     }
 
+    /** A switch towards a place the wall does not have is dead, wherever the wall stands. */
+    @Test
+    public void aPlaceSwitchIsUsableOnlyTowardsAPlaceTheWallHas() {
+        List<PaneWallPage> homeScreen = com.termux.app.wall.PaneWallPolicy.availablePages(false, true, false);
+        List<PaneWallPage> terminalOnly = com.termux.app.wall.PaneWallPolicy.availablePages(true, false, false);
+        String widgets = key(LauncherToolRegistry.TOOL_WALL_WIDGETS);
+        String display = key(LauncherToolRegistry.TOOL_WALL_DISPLAY);
+        String goDisplay = key(LauncherToolRegistry.TOOL_WALL_GO) + ":place=display";
+
+        assertTrue(ExtraKeyEligibility.isUsable(widgets, PaneWallPage.TERMINAL, homeScreen));
+        assertFalse(ExtraKeyEligibility.isUsable(display, PaneWallPage.TERMINAL, homeScreen));
+        assertFalse(ExtraKeyEligibility.isUsable(goDisplay, PaneWallPage.WIDGETS, homeScreen));
+        assertFalse(ExtraKeyEligibility.isUsable(widgets, PaneWallPage.TERMINAL, terminalOnly));
+        // The switch for the one place the wall has stays live: it is a row the user wrote.
+        assertTrue(ExtraKeyEligibility.isUsable(key(LauncherToolRegistry.TOOL_WALL_TERMINAL),
+            PaneWallPage.TERMINAL, terminalOnly));
+        // Nothing else reads the wall: keys that were usable stay usable, dead ones stay dead.
+        assertTrue(ExtraKeyEligibility.isUsable("ESC", PaneWallPage.TERMINAL, terminalOnly));
+        assertFalse(ExtraKeyEligibility.isUsable("ESC", PaneWallPage.WIDGETS, homeScreen));
+        assertTrue(ExtraKeyEligibility.isUsable(key(LauncherToolRegistry.TOOL_WALL_GO),
+            PaneWallPage.TERMINAL, terminalOnly));
+        assertTrue(ExtraKeyEligibility.isUsable(null, PaneWallPage.TERMINAL, terminalOnly));
+    }
+
     // ------------------------------------------------------------------------ the coverage gate
 
     /**
