@@ -22,6 +22,7 @@ POST /v1/chat/completions
 POST /v1/responses
 POST /v1/completions
 POST /v1/embeddings
+POST /v1/audio/transcriptions
 POST /v1/audio/speech
 ```
 
@@ -31,23 +32,12 @@ Ollama responses use NDJSON streaming while OpenAI responses use SSE. Both adapt
 the same `TaiChatRequest`, runtime options, capability checks, model load lifecycle, and cancellation
 path.
 
-`/v1/audio/speech` speaks with the voice model (KittenTTS nano 0.8, installed from Model centre >
-Speech > Voice output). It takes OpenAI's body: `input` (up to 4096 characters), `voice` (`Bruno`,
-`Hugo`, `Jasper` or `Rosie`; OpenAI names such as `alloy` map onto them), `speed` (0.5 to 2.0) and
-`response_format`: `wav` (the default; the whole file once synthesis ends) or `pcm` (24 kHz, 16-bit
-signed little-endian mono, streamed sentence by sentence). `mp3`, `opus`, `aac` and `flac` are
-refused. `model` may be omitted or be any OpenAI speech model name. Synthesis runs on the CPU in the
-`:tai_runtime` process, never queued behind a chat generation.
-
-```sh
-curl -sS -H "Authorization: Bearer $(cat ~/.launcherctl/token)" -H 'Content-Type: application/json' \
-  -d '{"input":"The build finished.","voice":"Rosie","response_format":"wav"}' \
-  "$(cat ~/.launcherctl/endpoint)/v1/audio/speech" -o hello.wav
-```
-
-On the phone itself, `tai speak "text"` (or text on stdin) reads aloud through the speaker,
-`tai speak --out file.wav` saves instead, and `tai speak --stop` or Ctrl-C stops. Selected terminal
-text has a **Read aloud** action in its toolbar; tapping it again stops the reading.
+Speech runs outside these two runners. `/v1/audio/transcriptions` transcribes with the speech
+model voice input uses (Whisper ACFT or Parakeet, both on LiteRT) and `/v1/audio/speech` speaks
+with the voice model (KittenTTS nano 0.8). Both run on the CPU in the `:tai_runtime` process, load
+on demand beside the chat model, and are never queued behind a chat generation. Their request
+fields, the `tai transcribe` and `tai speak` commands and Read aloud are described in
+[Voice input](Voice_Input.md) and [Text to speech](Text_To_Speech.md).
 
 `/v1/embeddings` accepts a string or an array of strings and returns float
 vectors in OpenAI's `embedding` list shape. Use it only with models whose
@@ -229,7 +219,7 @@ Use OpenAI-style `input_audio` content parts. Audio input requires the `-audio` 
 }
 ```
 
-The runner passes audio bytes to LiteRT-LM. The local API does not implement `/v1/audio/transcriptions` as a separate endpoint; use `/v1/chat/completions` with `input_audio`.
+The runner passes audio bytes to LiteRT-LM, and the model answers whatever the prompt asks about the audio. For plain speech to text, `/v1/audio/transcriptions` is faster and needs no chat model; see [Voice input](Voice_Input.md#the-api-v1audiotranscriptions).
 
 ### MobileActions
 
@@ -375,6 +365,7 @@ Examples:
 - unknown content part type: `unsupported_content_part`
 - chat audio output through `modalities:["audio"]`: `unsupported_audio_output`, HTTP 501
 - `/v1/audio/speech` without a voice model installed: `tts_model_not_installed`, HTTP 400
+- `/v1/audio/transcriptions` without a speech model installed: `stt_model_not_configured`, HTTP 400
 
 This behavior is intentional for OpenAI-compatible CLI tools. Silent media dropping makes prompts misleading.
 

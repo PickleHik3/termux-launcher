@@ -398,7 +398,8 @@ launcherctl clipboard paste        # {"ok":true,"text":"…"}
 | POST | `/v1/responses` | Stateless OpenAI Responses adapter (text/image input, function calls/results) |
 | POST | `/v1/completions` | Legacy text completions, SSE streaming |
 | POST | `/v1/embeddings` | Embeddings for models advertising `text_embeddings` |
-| POST | `/v1/audio/speech` | Speech output with the voice model (KittenTTS): `wav` whole, `pcm` streamed per sentence |
+| POST | `/v1/audio/transcriptions` | Speech to text with the voice input speech model: multipart `file` (WAV or raw 16 kHz PCM16), `model`, `language`, `prompt`, `response_format` `json`\|`text`\|`verbose_json`; see [Voice input](Voice_Input.md) |
+| POST | `/v1/audio/speech` | Speech output with the voice model (KittenTTS): `wav` whole, `pcm` streamed per sentence; see [Text to speech](Text_To_Speech.md) |
 | POST | `/v1/ai/speak` | `tai speak`: plays the text on the phone (JSON or plain-text body; `?voice=&speed=`; `?format=wav` returns audio instead) |
 | POST | `/v1/ai/speak/stop` | Stops whatever the phone is reading aloud |
 

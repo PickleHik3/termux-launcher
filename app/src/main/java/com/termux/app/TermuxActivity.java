@@ -10206,7 +10206,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // further tap lets the captured phrases finish (each has its own deadline), and the
             // text waits in the panel, where the next tap resumes on it; only the pill's × or a
             // swipe of the card discards it.
-            if (chooser || !mPreferences.isInAppKeyboardVoiceOnDevice()) {
+            if (chooser || !voiceUsesOnDevice()) {
                 launchVoiceTyping(chooser);
                 return;
             }
@@ -14124,7 +14124,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return false;
         }
         if (mPreferences == null) return false;
-        if (!mPreferences.isInAppKeyboardVoiceOnDevice()) {
+        if (!voiceUsesOnDevice()) {
             launchVoiceTyping(false);
             return false;
         }
@@ -14196,6 +14196,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mVoiceInput = null;
         if (session != null) session.cancel(VoiceInputSession.EndReason.DESTROYED);
         closeVoicePill();
+    }
+
+    /**
+     * The speech engine in use: the one picked in Keyboard settings, or, never picked, on-device as
+     * soon as a speech model is installed and Android's recognizer before that.
+     */
+    private boolean voiceUsesOnDevice() {
+        if (mPreferences.isInAppKeyboardVoiceEngineChosen()) return mPreferences.isInAppKeyboardVoiceOnDevice();
+        return com.termux.ai.TaiSpeechModels.resolveActive(this) != null;
     }
 
     private void showVoiceIndicator() {

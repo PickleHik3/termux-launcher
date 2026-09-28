@@ -607,6 +607,11 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case KeyboardPreferencesFragment.KEY_KEYBOARD_FORM:
                 return keyboardForm();
             case "keyboard_voice_engine":
+                // Never picked: show what the voice key will use (on-device once a speech model is in).
+                if (!mPreferences.isInAppKeyboardVoiceEngineChosen()
+                    && com.termux.ai.TaiSpeechModels.resolveActive(mContext) != null) {
+                    return TermuxPreferenceConstants.TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE;
+                }
                 return mPreferences.getInAppKeyboardVoiceEngine();
             case "keyboard_voice_language":
                 return mPreferences.getInAppKeyboardVoiceLanguage();

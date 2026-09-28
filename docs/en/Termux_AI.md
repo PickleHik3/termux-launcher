@@ -16,7 +16,7 @@ Models are not bundled in the APK. A download can be several gigabytes, so check
 
 ## Choosing a model
 
-The built-in catalog is deliberately short: the two Gemma 4 chat models and the speech-to-text models voice input uses. Any other LiteRT-LM or MNN model (Qwen, DeepSeek, FunctionGemma, an embedding model) still runs when you add it by Hugging Face link or import the file; it is just not listed.
+The built-in catalog is deliberately short: the two Gemma 4 chat models, the speech-to-text models [voice input](Voice_Input.md) uses, and the voice model for [text to speech](Text_To_Speech.md). Any other LiteRT-LM or MNN model (Qwen, DeepSeek, FunctionGemma, an embedding model) still runs when you add it by Hugging Face link or import the file; it is just not listed.
 
 | Model | Best for | Approximate download | Suggested device RAM | Notes |
 | --- | --- | ---: | ---: | --- |
@@ -25,8 +25,9 @@ The built-in catalog is deliberately short: the two Gemma 4 chat models and the 
 | Whisper ACFT Base / Base (English) | Voice input, multilingual or English only | 97 MB | 6 GB+ | 5 s or 10 s window |
 | Whisper ACFT Small / Small (English) | Voice input, better accuracy | 273 MB | 8 GB+ | 5 s or 10 s window |
 | Parakeet TDT 0.6B v3 | Voice input in 25 European languages | 586 MB | 8 GB+ | Language detected automatically |
+| KittenTTS Nano 0.8 | Reading text aloud, in English | 90 MB | 4 GB+ | Four voices; under Speech > Voice output |
 
-Only one chat/generation model is active at a time: loading a model replaces the currently loaded chat model.
+Only one chat/generation model is active at a time: loading a model replaces the currently loaded chat model. Speech models are separate: they load on demand beside the chat model and never replace it.
 
 Downloads run two at a time by default (the `tai_download_parallel` setting allows 1 to 3); the rest wait in line. A download can be paused and continues from the bytes it already has; one interrupted by the app closing or the network dropping is shown as paused and continues by itself on an unmetered (Wi-Fi) network, or waits for a tap on mobile data. Cancelling deletes the partial file. Before a download starts, the free space on the model directory must cover the remaining bytes plus a reserve of 500 MB or 5% of the volume.
 
@@ -112,7 +113,8 @@ You do not need these routes for normal use, but they help when configuring anot
 | POST | `/v1/chat/completions` | Chat Completions text, streaming, media, and tools |
 | POST | `/v1/completions` | Legacy text completions |
 | POST | `/v1/embeddings` | Embeddings for models advertising `text_embeddings` |
-| POST | `/v1/audio/speech` | Speech output with the voice model: `input`, `voice`, `speed`, `response_format` `wav` or `pcm` |
+| POST | `/v1/audio/transcriptions` | Speech to text with the voice input speech model: multipart `file`, `model`, `language`, `prompt`, `response_format` `json`, `text` or `verbose_json` ([Voice input](Voice_Input.md#the-api-v1audiotranscriptions)) |
+| POST | `/v1/audio/speech` | Speech output with the voice model: `input`, `voice`, `speed`, `response_format` `wav` or `pcm` ([Text to speech](Text_To_Speech.md#the-api-v1audiospeech)) |
 
 OpenAI streaming uses server-sent events and ends with `data: [DONE]`.
 
@@ -181,10 +183,13 @@ tai load MODEL_ID --gpu
 tai keep-warm MODEL_ID --minutes 30
 tai cancel
 tai unload
+tai transcribe recording.wav
+tai speak "text to read aloud"
+tai speak --stop
 tai doctor
 ```
 
-`tai` manages models; it is not an interactive chat program. Add `--json` when you need raw output for a script.
+`tai` manages models; it is not an interactive chat program. Add `--json` when you need raw output for a script. `tai transcribe` is described in [Voice input](Voice_Input.md#from-the-terminal-tai-transcribe) and `tai speak` in [Text to speech](Text_To_Speech.md#tai-speak).
 
 ## Importing your own model
 

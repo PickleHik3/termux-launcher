@@ -797,7 +797,7 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_IN_APP_KEYBOARD_VOICE_POLISH = "keyboard_voice_polish";
 
-        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH = false;
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH = true;
 
         /**
          * The installed chat model "Polish dictation" is pinned to, or an empty string for
