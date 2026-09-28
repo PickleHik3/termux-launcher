@@ -18,6 +18,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.FrameCrossfade;
 import com.termux.app.chrome.GlassAnchor;
+import com.termux.app.chrome.GlassRefraction;
 import com.termux.app.chrome.WallpaperParallax;
 
 /**
@@ -31,12 +32,19 @@ import com.termux.app.chrome.WallpaperParallax;
  * cached frame is drawn through a translation matrix instead, recomputed only when this view's
  * position over the wallpaper actually changes — its layout position, the wall page's slide, or
  * the wallpaper's own parallax offset.
+ *
+ * <p>With Fancier Glass on ({@link #setRefraction}), that same aim is handed to
+ * {@link GlassRefraction} as uniforms and the frame is drawn through its program instead — bent
+ * under the slab's rim and lit along it — in the one pass the plain draw took. The tint and the
+ * grain stay where they are: they are the slab's own surface, not the picture behind it.
  */
 public final class PaneGlassBackdropView extends View {
 
     private final Paint mFramePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Paint mTintPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Matrix mFrameMatrix = new Matrix();
+    /** The aim as {@code {scaleX, scaleY, translateX, translateY}}; the matrix or the uniforms are set from it. */
+    private final float[] mAim = new float[4];
     private final int[] mLocation = new int[2];
     private final int[] mRootLocation = new int[2];
     private final Rect mFrameRect = new Rect();
@@ -79,6 +87,11 @@ public final class PaneGlassBackdropView extends View {
     @Nullable private WallpaperParallax mParallax;
     /** The wall slide and parallax the matrix was last aimed for, in px. */
     private float mLastShiftX;
+    /** Fancier Glass, or null for the plain draw. */
+    @Nullable private GlassRefraction.Look mLook;
+    /** The program the frame draws through while {@link #mLook} is set and the phone runs one. */
+    @Nullable private GlassRefraction.Program mProgram;
+    @Nullable private GlassRefraction.Program mPreviousProgram;
 
     public PaneGlassBackdropView(@NonNull Context context) {
         this(context, null);
@@ -160,6 +173,7 @@ public final class PaneGlassBackdropView extends View {
         mFrameShader = mFrame == null
             ? null : new BitmapShader(mFrame, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
         mFramePaint.setShader(mFrameShader);
+        syncRefraction();
         mFrameRect.set(frameRect);
         mTintColor = tintColor;
         mGrain = grain;
@@ -188,7 +202,76 @@ public final class PaneGlassBackdropView extends View {
         float resolved = Math.max(0f, radiusPx);
         if (mCornerMaskRadiusPx == resolved) return;
         mCornerMaskRadiusPx = resolved;
+        syncRefraction();
         invalidate();
+    }
+
+    /**
+     * Fancier Glass on this slab: the frame is bent under the rim and lit along it, through
+     * {@link GlassRefraction}, at this slab's own corner radius. Null puts the plain draw back —
+     * the default mode, and what every phone below API 33 draws whatever it is handed. Idempotent,
+     * so every dress may restate it. A corner mask never refracts: it stands in for what is
+     * behind the page, which has no rim.
+     */
+    public void setRefraction(@Nullable GlassRefraction.Look look) {
+        if (java.util.Objects.equals(look, mLook)) return;
+        mLook = look;
+        syncRefraction();
+        // Whichever way the draw goes now, its aim has to be written afresh: the program's on
+        // first use, the shader's matrix after the program cleared it.
+        mLastLeft = Integer.MIN_VALUE;
+        invalidate();
+    }
+
+    /** True while the frame is drawn through the refraction program rather than plain. */
+    public boolean refracts() {
+        return mProgram != null;
+    }
+
+    /**
+     * Points the paints at the program or at the frame's own shader, whichever the look asks for
+     * and the phone can run. On every frame change and look change, never per draw: the program
+     * captures its input when it is set.
+     */
+    private void syncRefraction() {
+        GlassRefraction.Look look = mLook;
+        BitmapShader shader = mFrameShader;
+        if (look == null || shader == null || mCornerMaskRadiusPx > 0f || !GlassRefraction.available()) {
+            mProgram = null;
+            mPreviousProgram = null;
+            mFramePaint.setShader(shader);
+            return;
+        }
+        float density = getResources().getDisplayMetrics().density;
+        GlassRefraction.Program program = mProgram;
+        if (program == null || program.density() != density) {
+            program = GlassRefraction.Program.create(density);
+        }
+        mProgram = program;
+        if (program == null) {
+            // The driver refused the program: the plain draw is the look this phone gets.
+            mPreviousProgram = null;
+            mFramePaint.setShader(shader);
+            return;
+        }
+        program.setLook(look);
+        program.setInput(shader);
+        program.applyTo(mFramePaint);
+        BitmapShader previousShader = mPreviousFrameShader;
+        if (previousShader == null) {
+            mPreviousProgram = null;
+            return;
+        }
+        GlassRefraction.Program previous = mPreviousProgram;
+        if (previous == null || previous.density() != density) {
+            previous = GlassRefraction.Program.create(density);
+        }
+        mPreviousProgram = previous;
+        if (previous != null) {
+            previous.setLook(look);
+            previous.setInput(previousShader);
+            previous.applyTo(mPreviousFramePaint);
+        }
     }
 
     /** The colour laid over the arcs: the wall's dim over its wallpaper, or a flat colour alone. */
@@ -249,6 +332,7 @@ public final class PaneGlassBackdropView extends View {
             // carries the wallpaper to the left under it; either way the frame is sampled that
             // much further along.
             float shiftX = (mParallax == null ? 0f : mParallax.offsetPx()) + slideX;
+            GlassRefraction.Program program = mProgram;
             if (mLocation[0] != mLastLeft || mLocation[1] != mLastTop
                 || width != mLastWidth || height != mLastHeight || shiftX != mLastShiftX) {
                 mLastLeft = mLocation[0];
@@ -256,16 +340,35 @@ public final class PaneGlassBackdropView extends View {
                 mLastWidth = width;
                 mLastHeight = height;
                 mLastShiftX = shiftX;
-                float scaleX = mFrameRect.width() / (float) Math.max(1, mFrame.getWidth());
-                float scaleY = mFrameRect.height() / (float) Math.max(1, mFrame.getHeight());
-                mFrameMatrix.reset();
-                mFrameMatrix.setScale(scaleX, scaleY);
-                mFrameMatrix.postTranslate(mFrameRect.left - mLastLeft - shiftX,
-                    mFrameRect.top - mLastTop);
-                mFrameShader.setLocalMatrix(mFrameMatrix);
-                // The retired frame shares this pane's rect and, always, the current frame's own
-                // size — both are full captures of the same radius — so the same matrix aims it.
-                if (mPreviousFrameShader != null) mPreviousFrameShader.setLocalMatrix(mFrameMatrix);
+                mAim[0] = mFrameRect.width() / (float) Math.max(1, mFrame.getWidth());
+                mAim[1] = mFrameRect.height() / (float) Math.max(1, mFrame.getHeight());
+                mAim[2] = mFrameRect.left - mLastLeft - shiftX;
+                mAim[3] = mFrameRect.top - mLastTop;
+                if (program != null) {
+                    // The same aim, as uniforms: the program samples the frame by its own pixels,
+                    // and the rim runs along this slab's own rounded rect.
+                    program.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
+                    program.setRect(0f, 0f, width, height, mRadiusPx);
+                    if (mPreviousProgram != null) {
+                        mPreviousProgram.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
+                        mPreviousProgram.setRect(0f, 0f, width, height, mRadiusPx);
+                    } else if (mPreviousFrameShader != null) {
+                        // No program for the retiring frame: it fades out drawn plain.
+                        mFrameMatrix.reset();
+                        mFrameMatrix.setScale(mAim[0], mAim[1]);
+                        mFrameMatrix.postTranslate(mAim[2], mAim[3]);
+                        mPreviousFrameShader.setLocalMatrix(mFrameMatrix);
+                    }
+                } else {
+                    mFrameMatrix.reset();
+                    mFrameMatrix.setScale(mAim[0], mAim[1]);
+                    mFrameMatrix.postTranslate(mAim[2], mAim[3]);
+                    mFrameShader.setLocalMatrix(mFrameMatrix);
+                    // The retired frame shares this pane's rect and, always, the current frame's
+                    // own size — both are full captures of the same radius — so the same matrix
+                    // aims it.
+                    if (mPreviousFrameShader != null) mPreviousFrameShader.setLocalMatrix(mFrameMatrix);
+                }
             }
             float progress = mCrossfade.progress();
             boolean fading = progress < 1f && mPreviousFrame != null && !mPreviousFrame.isRecycled()
@@ -273,7 +376,9 @@ public final class PaneGlassBackdropView extends View {
                 && mPreviousFrame.getWidth() == mFrame.getWidth()
                 && mPreviousFrame.getHeight() == mFrame.getHeight();
             if (fading) {
-                mPreviousFramePaint.setShader(mPreviousFrameShader);
+                if (program == null || mPreviousProgram == null) {
+                    mPreviousFramePaint.setShader(mPreviousFrameShader);
+                }
                 mPreviousFramePaint.setAlpha(255);
                 canvas.drawRect(0f, 0f, width, height, mPreviousFramePaint);
                 mFramePaint.setAlpha(Math.round(255f * progress));
@@ -282,6 +387,7 @@ public final class PaneGlassBackdropView extends View {
             } else {
                 mPreviousFrame = null;
                 mPreviousFrameShader = null;
+                mPreviousProgram = null;
                 mFramePaint.setAlpha(255);
                 canvas.drawRect(0f, 0f, width, height, mFramePaint);
             }

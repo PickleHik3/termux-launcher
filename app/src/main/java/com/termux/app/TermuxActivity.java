@@ -28,7 +28,6 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RenderEffect;
-import android.graphics.RuntimeShader;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
@@ -1306,6 +1305,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @NonNull @Override public com.termux.app.chrome.WallpaperParallax wallpaperParallax() {
             return mWallpaperParallax;
+        }
+
+        @Nullable @Override public com.termux.app.chrome.GlassRefraction.Look fancierGlassLook() {
+            return mFancierGlassLook;
+        }
+
+        @Override public float planeGlassCornerRadiusPx() {
+            // The planes are clipped to the terminal's own edge shape, capsule or knob.
+            return terminalEdgeCornerRadiusPx();
         }
 
         @Override public boolean useManagedWallpaperSource() {
@@ -2925,6 +2933,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mWallpaperParallax;
             }
 
+            @Override @Nullable public com.termux.app.chrome.GlassRefraction.Look paneGlassRefraction() {
+                return mFancierGlassLook;
+            }
+
             @Override @Nullable public ColorFilter paneGlassFrostFilter() {
                 return com.termux.app.chrome.GlassFilters.frost();
             }
@@ -3018,6 +3030,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * rather than in a per-surface bitmap.
      */
     private void updateTerminalGlassFrost() {
+        // Whether the slabs refract is decided before the style is read: a knob the editor just
+        // turned, or the switch flipped in Settings, has to land on this very pass.
+        syncFancierGlassLook();
         // The backdrop shows the very frame the crops below are cut from, so it is dressed in this
         // same pass: a backdrop and a glass that disagreed for even one frame would show as the
         // misalignment this whole mode exists to remove.
@@ -3040,6 +3055,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** What {@link #updateTerminalGlassFrost} last dressed the panes with; null forces a pass. */
     @Nullable private com.termux.app.terminal.PaneStyleKey mAppliedPaneStyleKey;
+
+    /**
+     * Fancier Glass as it stands this instant: the switch, the three knobs, Android 13, and a
+     * wallpaper the launcher set — see {@link com.termux.app.chrome.FancierGlassPolicy}. Null is
+     * the default mode.
+     */
+    @Nullable
+    private com.termux.app.chrome.GlassRefraction.Look currentFancierGlassLook() {
+        if (mPreferences == null) return null;
+        if (!com.termux.app.chrome.FancierGlassPolicy.active(Build.VERSION.SDK_INT,
+                mPreferences.isFancierGlassEnabled(), shouldUseManagedWallpaperBlurSource())) {
+            return null;
+        }
+        return com.termux.app.chrome.GlassRefraction.Look.of(mPreferences);
+    }
+
+    /**
+     * Re-reads {@link #mFancierGlassLook} and, when it moved — the switch, a knob, a wallpaper the
+     * launcher did or did not set — makes this pass re-dress every glass surface: the dock, the
+     * strip and the keyboard through their backdrop entries, the panes through a style key that no
+     * longer matches; the frosts restate the look on every pass of their own. At the head of the
+     * apply and of the panes' pass, so no surface in a pass reads a different answer.
+     */
+    private void syncFancierGlassLook() {
+        com.termux.app.chrome.GlassRefraction.Look look = currentFancierGlassLook();
+        if (java.util.Objects.equals(look, mFancierGlassLook)) return;
+        mFancierGlassLook = look;
+        mChrome.ledger().markAllBackdropsDirty();
+        mAppliedPaneStyleKey = null;
+    }
 
     /**
      * Whether a managed wallpaper can pan here and now: the switch is on, the phone animates,
@@ -3400,8 +3445,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Cached light-scatter filter applied to the blurred wallpaper backdrop. */
 
 
-    /** Cached AGSL glass-refraction shader (API 33+). */
-    @Nullable private RuntimeShader mGlassShader;
+    /**
+     * The dock's and the under-pill strip's refraction (API 33+), applied as a {@code RenderEffect}
+     * over their backdrops. The program itself is the one every glass surface shares — see
+     * {@link com.termux.app.chrome.GlassRefraction}; these two keep the effect route because the
+     * key-press lens rides it.
+     */
+    @Nullable private com.termux.app.chrome.GlassRefraction.Program mDockRefraction;
+
+    /**
+     * What Fancier Glass draws right now, or null in the default mode — see
+     * {@link com.termux.app.chrome.FancierGlassPolicy}. Re-read at the head of every apply
+     * ({@link #syncFancierGlassLook}) rather than per surface: the answer asks Android for the
+     * wallpaper id, and every glass surface in a pass reads it.
+     */
+    @Nullable private com.termux.app.chrome.GlassRefraction.Look mFancierGlassLook;
 
     // --- Active extra-key lens state (drives the per-key refraction in the backdrop shader). ---
     private boolean mKeyLensActive = false;
@@ -3414,71 +3472,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mGlassBlurPx, mGlassCapLeft, mGlassCapTop, mGlassCapRight, mGlassCapBottom, mGlassRadiusPx;
 
     /**
-     * AGSL glass: what separates real glass from frosted polymer is that glass <em>bends</em> light
-     * at its edges (refraction) and catches a crisp edge highlight, instead of just diffusing it.
-     * This shader samples the blurred backdrop and, within a band along the rounded-capsule edge,
-     * displaces the sample inward along the edge normal — so the wallpaper compresses/lenses at the
-     * rim like the bevel of a thick glass slab — then lays a thin sharp rim highlight and a faint
-     * inner shadow for thickness. Runs on the GPU as a one-shot RenderEffect; no per-frame re-blur.
-     */
-    private static final String GLASS_AGSL =
-        "uniform shader content;\n" +
-        "uniform float2 uRectMin;\n" +
-        "uniform float2 uRectMax;\n" +
-        "uniform float uRadius;\n" +
-        "uniform float uBand;\n" +
-        "uniform float uStrength;\n" +
-        "uniform float uRim;\n" +
-        "uniform float uDensity;\n" +
-        // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
-        // the middle and eases to nothing at its rim, so a pressed key reads as a thick glass pill
-        // refracting the wallpaper that shows through the transparent key cell. uLensActive carries
-        // the 0..1 fade intensity.
-        "uniform float uLensActive;\n" +
-        "uniform float2 uLensCenter;\n" +
-        "uniform float2 uLensHalf;\n" +
-        "uniform float uLensRadius;\n" +
-        "uniform float uLensStrength;\n" +
-        "uniform float uLensFeather;\n" +
-        "float sdRoundRect(float2 p, float2 b, float r) {\n" +
-        "    float2 q = abs(p) - b + float2(r, r);\n" +
-        "    return min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0, 0.0))) - r;\n" +
-        "}\n" +
-        "half4 main(float2 fragCoord) {\n" +
-        "    float2 center = (uRectMin + uRectMax) * 0.5;\n" +
-        "    float2 b = (uRectMax - uRectMin) * 0.5;\n" +
-        "    float2 p = fragCoord - center;\n" +
-        "    float inside = -sdRoundRect(p, b, uRadius);\n" +
-        "    float2 n = normalize(float2(p.x / max(b.x, 1.0), p.y / max(b.y, 1.0)) + float2(1e-4, 1e-4));\n" +
-        "    float e = clamp(1.0 - inside / uBand, 0.0, 1.0);\n" +
-        "    e = e * e;\n" +
-        "    float2 sampleCoord = fragCoord - n * (e * uStrength);\n" +
-        // Per-key lens: magnify the backdrop toward the key centre, fading out to the pill rim.
-        "    float lensGlow = 0.0;\n" +
-        "    if (uLensActive > 0.001) {\n" +
-        "        float2 lp = fragCoord - uLensCenter;\n" +
-        "        float ld = -sdRoundRect(lp, uLensHalf, uLensRadius);\n" +
-        "        if (ld > 0.0) {\n" +
-        "            float2 ln = float2(lp.x / max(uLensHalf.x, 1.0), lp.y / max(uLensHalf.y, 1.0));\n" +
-        "            float rr = clamp(length(ln), 0.0, 1.0);\n" +
-        "            float kFull = mix(1.0 - uLensStrength, 1.0, smoothstep(0.5, 1.0, rr));\n" +
-        "            float k = mix(1.0, kFull, uLensActive);\n" +
-        "            float fade = smoothstep(0.0, max(uLensFeather, 1.0), ld) * uLensActive;\n" +
-        "            float2 lensCoord = uLensCenter + lp * k;\n" +
-        "            sampleCoord = mix(sampleCoord, lensCoord - n * (e * uStrength), fade);\n" +
-        "            lensGlow = fade * (1.0 - rr);\n" +
-        "        }\n" +
-        "    }\n" +
-        "    half4 col = content.eval(sampleCoord);\n" +
-        // One clean, sharp hairline rim where the light catches the glass edge. No dark contour, no
-        // wide bevel band, no inner shadow — minimal/zen: a crisp pane with slight edge refraction.
-        "    float rim = 1.0 - smoothstep(0.0, 2.0 * uDensity, inside);\n" +
-        "    col.rgb = col.rgb + half3(rim * uRim);\n" +
-        "    col.rgb = col.rgb + half3(lensGlow * uRim * 0.6);\n" +
-        "    return col;\n" +
-        "}\n";
-
-    /**
      * Build the glass RenderEffect: refraction shader fed by a blur of the backdrop. Returns null on
      * pre-33 devices or if the shader fails to compile, so the caller falls back to a plain blur.
      */
@@ -3489,25 +3482,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return null;
         }
         try {
-            if (mGlassShader == null) {
-                mGlassShader = new RuntimeShader(GLASS_AGSL);
+            com.termux.app.chrome.GlassRefraction.Program program = mDockRefraction;
+            if (program == null) {
+                program = com.termux.app.chrome.GlassRefraction.Program.create(
+                    getResources().getDisplayMetrics().density);
+                mDockRefraction = program;
             }
-            float density = getResources().getDisplayMetrics().density;
-            mGlassShader.setFloatUniform("uRectMin", capLeft, capTop);
-            mGlassShader.setFloatUniform("uRectMax", capRight, capBottom);
-            mGlassShader.setFloatUniform("uRadius", radiusPx);
-            mGlassShader.setFloatUniform("uBand", density * 20f);
-            mGlassShader.setFloatUniform("uStrength", density * 9f);
-            mGlassShader.setFloatUniform("uRim", 0.16f);
-            mGlassShader.setFloatUniform("uDensity", density);
+            if (program == null) {
+                return null;
+            }
+            // The view's own pixels are the content here, so the aim is identity.
+            program.setAim(1f, 1f, 0f, 0f);
+            program.setRect(capLeft, capTop, capRight, capBottom, radiusPx);
+            // The user's knobs while Fancier Glass is on; the numbers this dock always ran with
+            // otherwise, so the default mode's dock and strip are pixel for pixel what they were.
+            program.setLook(mFancierGlassLook != null
+                ? mFancierGlassLook : com.termux.app.chrome.GlassRefraction.Look.DEFAULT);
             // Per-key lens state (0 intensity == no lens, dock refraction unchanged).
-            mGlassShader.setFloatUniform("uLensActive", mKeyLensActive ? mKeyLensIntensity : 0f);
-            mGlassShader.setFloatUniform("uLensCenter", mKeyLensCx, mKeyLensCy);
-            mGlassShader.setFloatUniform("uLensHalf", Math.max(1f, mKeyLensHx), Math.max(1f, mKeyLensHy));
-            mGlassShader.setFloatUniform("uLensRadius", mKeyLensRadius);
-            mGlassShader.setFloatUniform("uLensStrength", 0.20f);
-            mGlassShader.setFloatUniform("uLensFeather", density * 10f);
-            RenderEffect shaderEffect = RenderEffect.createRuntimeShaderEffect(mGlassShader, "content");
+            if (mKeyLensActive && mKeyLensIntensity > 0f) {
+                program.setLens(mKeyLensCx, mKeyLensCy, mKeyLensHx, mKeyLensHy, mKeyLensRadius,
+                    mKeyLensIntensity);
+            } else {
+                program.clearLens();
+            }
+            // Built afresh each time: the effect copies the program's uniforms as they are now.
+            RenderEffect shaderEffect = RenderEffect.createRuntimeShaderEffect(program.shader(), "content");
             if (blurPx > 0f) {
                 RenderEffect blur = RenderEffect.createBlurEffect(blurPx, blurPx, Shader.TileMode.CLAMP);
                 return RenderEffect.createChainEffect(shaderEffect, blur);
@@ -5539,6 +5538,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             com.termux.app.chrome.GlassAnchor.layout(surfaceHost, mAccessoryStackLift));
                     // Same content-aware light scatter the dock backdrop uses — one material.
                     backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
+                    // Fancier Glass: the rim follows the capsule, or runs square; a docked keyboard
+                    // over the under-pill strip continues into it, so its bottom edge takes none.
+                    backdrop.setRefraction(mFancierGlassLook,
+                        getResources().getDisplayMetrics().density, capsule ? cornerRadiusPx : 0f,
+                        !capsule && shouldShowDecorNavBarSurface(state)
+                            ? com.termux.app.chrome.GlassRefraction.SEAM_BOTTOM : 0);
                     layers.add(backdrop);
                 }
             }
@@ -6431,6 +6436,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyChromeSpec(@NonNull ChromeSpec state) {
         Trace.beginSection("Chrome.applyChromeSpec");
         try {
+            syncFancierGlassLook();
             doApplyChromeSpec(state);
             // The bar's ink is measured from the wallpaper under it, so it is re-asked on the same
             // pass that re-cuts the glass — a wallpaper, palette, mode or geometry change reaches
@@ -12409,11 +12415,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @NonNull
     private File getManagedWallpaperExactFile() {
-        File directory = new File(getFilesDir(), "managed-wallpaper");
-        if (!directory.exists()) {
-            directory.mkdirs();
-        }
-        return new File(directory, "system-wallpaper-exact.png");
+        // One statement of the path, shared with the settings page's own check.
+        return com.termux.app.chrome.WallpaperPictureReader.managedWallpaperExactFile(this);
     }
 
     @NonNull
