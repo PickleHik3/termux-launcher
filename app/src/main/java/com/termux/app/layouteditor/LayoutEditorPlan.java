@@ -79,6 +79,9 @@ public final class LayoutEditorPlan {
      */
     private enum Section {
         DOCK(Element.PINNED_APPS, false),
+        // On, Minimised to a pull tab, or Off: the tab has no edge band to drag on the picture,
+        // so the three-way choice is a row, with the edge beside it.
+        AZ_INDEX(Element.AZ_INDEX, true),
         KEYBOARD(Element.KEYBOARD, true),
         WIDGET_GRID(Element.WIDGET_GRID, true);
 

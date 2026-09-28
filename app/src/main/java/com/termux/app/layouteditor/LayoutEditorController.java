@@ -636,7 +636,8 @@ public final class LayoutEditorController {
      * store every time anything else might have.
      */
     private void syncRows(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
-        String key = plan.place().name() + '.' + plan.shownOrientation().name();
+        String key = plan.place().name() + '.' + plan.shownOrientation().name() + '.'
+            + plan.rows().size();
         if (!key.equals(mRowsKey)) {
             rebuildRows(card, plan);
             mRowsKey = key;
@@ -728,6 +729,8 @@ public final class LayoutEditorController {
         switch (element) {
             case PINNED_APPS:
                 return R.string.termux_surface_tuning_dock;
+            case AZ_INDEX:
+                return R.string.settings_layout_miniature_alphabets;
             case WIDGET_GRID:
                 return R.string.settings_layout_widget_grid_title;
             default:
@@ -876,7 +879,14 @@ public final class LayoutEditorController {
         if (card == null || plan == null)
             return;
         if (plan.follows(row)) mHost.applyPlaceArrangement();
+        // A row can change the picture (the keyboard's block, the A–Z index's tab) and the rows
+        // offered (Off takes the A–Z index's Position away), so both are re-read. The rebuild is
+        // posted: the toggle group that was picked on is still dispatching its listener.
+        card.miniature.setLayout(plan.shownLayout(), plan.shownOrientation(), plan.place());
         for (Runnable sync : mRowSyncs) sync.run();
+        card.root.post(() -> {
+            if (mCard == card && mPlan == plan) syncRows(card, plan);
+        });
         syncDirty(card, plan);
     }
 

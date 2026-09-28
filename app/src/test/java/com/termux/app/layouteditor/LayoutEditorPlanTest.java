@@ -16,6 +16,7 @@ import com.termux.app.editorshell.EditorShellMetrics;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.PlaceArrangeModel;
+import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceArrangeModel.Element;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
@@ -322,8 +323,8 @@ public class LayoutEditorPlanTest {
     public void homeOffersTheKeyboardsFormAndTheGridsTwoCounts() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
 
-        assertEquals(labels(plan), Arrays.asList("Height", "Keyboard on/off", "Type", "Height",
-            "Bottom padding", "Grid columns", "Grid rows"));
+        assertEquals(labels(plan), Arrays.asList("Height", "A–Z index", "Position",
+            "Keyboard on/off", "Type", "Height", "Bottom padding", "Grid columns", "Grid rows"));
         assertTrue("the grid's counts are counters",
             row(plan, "Grid columns").group instanceof PlaceArrangeModel.Counter);
     }
@@ -333,7 +334,8 @@ public class LayoutEditorPlanTest {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
         assertEquals(labels(plan),
-            Arrays.asList("Height", "Keyboard on/off", "Type", "Height", "Bottom padding"));
+            Arrays.asList("Height", "A–Z index", "Position", "Keyboard on/off", "Type",
+                "Height", "Bottom padding"));
     }
 
     /**
@@ -363,8 +365,24 @@ public class LayoutEditorPlanTest {
     public void onlyTheDisplayOffersTheKeyboardMode() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.DISPLAY, PORTRAIT);
 
-        assertEquals(labels(plan), Arrays.asList("Height", "Keyboard on/off", "Type",
-            "Keyboard mode", "Height", "Bottom padding"));
+        assertEquals(labels(plan), Arrays.asList("Height", "A–Z index", "Position",
+            "Keyboard on/off", "Type", "Keyboard mode", "Height", "Bottom padding"));
+    }
+
+    /** The A–Z index's three-way form is a row: the tab has no band to be dragged by. */
+    @Test
+    public void theAzRowMinimisesTheIndexAndOffDropsItsPosition() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+
+        pick(plan, "A–Z index", "minimised");
+        assertEquals(PlaceLayout.AzIndexMode.MINIMISED, places.azIndexMode(PORTRAIT));
+        assertTrue("a tab still stands on an edge", labels(plan).contains("Position"));
+
+        pick(plan, "A–Z index", "hidden");
+        assertEquals(PlaceLayout.AzIndexMode.OFF, places.azIndexMode(PORTRAIT));
+        assertFalse(labels(plan).contains("Position"));
+        plan.revert();
+        assertEquals(PlaceLayout.AzIndexMode.ON, places.azIndexMode(PORTRAIT));
     }
 
     @Test
@@ -422,10 +440,10 @@ public class LayoutEditorPlanTest {
     @Test
     public void theRowsFollowTheSecondDoorToItsPlace() {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
-        assertEquals(5, plan.rows().size());
+        assertEquals(7, plan.rows().size());
 
         plan.showPlace(PaneWallPage.WIDGETS);
-        assertEquals("home's grid counts join the card", 7, plan.rows().size());
+        assertEquals("home's grid counts join the card", 9, plan.rows().size());
     }
 
 
