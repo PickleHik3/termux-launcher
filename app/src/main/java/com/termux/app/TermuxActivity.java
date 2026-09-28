@@ -11604,6 +11604,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyStatusBarEdge(@NonNull PlaceLayout layout) {
         View host = findViewById(R.id.terminal_window_bar_host);
         if (!(host instanceof ViewGroup)) return;
+        // Put away in the Layout editor: the bar and its fold go, and the content takes the band.
+        if (layout.slot(Element.STATUS).hidden) {
+            if (host.getVisibility() != View.GONE) {
+                cancelTopStatusBarAnimator();
+                int dragLease = endTopStatusBarDrag();
+                if (dragLease >= 0) finishStatusBarTerminalResizeAfterLayout(host, dragLease);
+                host.setVisibility(View.GONE);
+                applyTerminalWindowBarBackdropInsets();
+                if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
+            }
+            return;
+        }
+        if (host.getVisibility() != View.VISIBLE && isSplitPanesEnabled()) {
+            host.setVisibility(View.VISIBLE);
+            applyTerminalWindowBarBackdropInsets();
+            setTopStatusBarCollapsed(isStatusBarCompact(), false);
+            refreshTerminalWindowBar();
+            if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
+        }
         PlaceLayout.Edge edge = layout.slot(Element.STATUS).edge;
         boolean edgeChanged = edge != mStatusBarEdge;
         if (!edgeChanged && mStatusBarEdgeApplied) {
@@ -19050,7 +19069,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Re-applied here, not only at setup, so a lazy-mode toggle takes effect on the
         // settings-return refresh instead of waiting for the activity to be recreated.
         applyLazyMode();
-        boolean visible = isSplitPanesEnabled();
+        boolean visible = isSplitPanesEnabled()
+            && !currentPlaceLayout().slot(Element.STATUS).hidden;
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         if (!visible) {
             applyTerminalSurfaceAppearance();
