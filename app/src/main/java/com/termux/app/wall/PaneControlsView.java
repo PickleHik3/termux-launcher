@@ -659,10 +659,36 @@ public final class PaneControlsView extends View {
         canvas.drawText(action.text, button.centerX(), baseline, paint);
     }
 
+    /**
+     * A detach lands whatever motion was under way. The terminal's pane tree takes this view off
+     * its host and puts it back on every render, and a render follows the dismiss that the
+     * minimal glyph asks for in the same call — so a cancelled retract used to leave the tab
+     * fully drawn, {@code mShown} and {@code mRetracting} both true: nothing on the wall could put
+     * it away again (a tap off it asks {@link #isControlsShown}, which said no) and nothing could
+     * bring it back either. A retract that was cut short is a tab that is gone; a reveal that was
+     * cut short is a tab that is out.
+     */
     @Override
     protected void onDetachedFromWindow() {
-        if (mAnimator != null) mAnimator.cancel();
+        landMotion();
         super.onDetachedFromWindow();
+    }
+
+    /** Where the tab was heading, asserted at once; nothing while it is at rest. */
+    private void landMotion() {
+        if (mAnimator == null) return;
+        ValueAnimator animator = mAnimator;
+        mAnimator = null;
+        animator.cancel();
+        if (mRetracting) {
+            mProgress = 0f;
+            mShown = false;
+            mRetracting = false;
+            mCorner = CornerZones.NONE;
+        } else if (mShown) {
+            mProgress = 1f;
+        }
+        invalidate();
     }
 
     private float dp(float value) {
