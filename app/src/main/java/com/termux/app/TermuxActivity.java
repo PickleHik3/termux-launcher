@@ -629,6 +629,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mTravelHoldsContent;
     /** The content reservation the hold keeps, read when the hold began. */
     private int mTravelHeldReservationPx;
+    /**
+     * How far the content reaches under the stack as the hold last laid it out
+     * (PlaceChromeTravel.heldOverlapPx): the band the chrome's live edge rises through, which the
+     * panes standing on the content's bottom edge are clipped by frame by frame.
+     */
+    private int mTravelHeldOverlapPx;
     /** The keyboard was brought up below the screen for this slide, not by the place. */
     private boolean mTravelKeyboardPreRolled;
     /**
@@ -11835,6 +11841,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTravelHoldsContent) {
             keyboardOverlapPx = com.termux.app.place.PlaceChromeTravel.heldOverlapPx(
                 combinedHeight, accessoryBottomMarginPx, mTravelHeldReservationPx);
+            mTravelHeldOverlapPx = keyboardOverlapPx;
         }
         // With the stack away the content is the surface on the bottom edge, and it keeps the
         // same gap from it the dock would (ChromePolicy.bottomEdgeGapPx): a gone stack's margin
@@ -16085,8 +16092,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyAccessoryStackTranslation();
         // A keyboard up on both places crosses from one material to the other with the wall.
         syncKeyboardMaterialTravel(frame);
-        // The terminal's rows are drawn where the settle's resize is going to put them.
-        if (mTravelHoldsContent) syncTerminalTravelDisplacement(frame, arriving);
+        // The terminal's rows are drawn where the settle's resize is going to put them, and the
+        // pane's own edge ends where the chrome's live edge begins rather than under it.
+        if (mTravelHoldsContent) {
+            syncTerminalTravelDisplacement(frame, arriving);
+            syncTerminalTravelCover(translation);
+        }
         // A minimal place's strip has no content to show, and gets it back at settle; a normal
         // place's content fades as the strip it is heading for comes closer. The bars minimal mode
         // takes away from the sides and the top fade with the dock.
@@ -16247,6 +16258,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * One frame of the pane's bottom edge riding on the chrome: however far the stack's live top
+     * stands up into the room the content holds this frame (PlaceChromeTravel.coveredRoomPx), the
+     * tiled panes on the room's bottom edge are clipped by, so a keyboard or a dock rising from
+     * the bottom never draws over the pane's slab — the slab shrinks ahead of it, at the same
+     * fraction its rows are drawn toward the settle's size, and a chrome sliding away uncovers
+     * it. A clip on the frame's own outline, so nothing is laid out per frame.
+     */
+    private void syncTerminalTravelCover(float stackTranslationPx) {
+        if (mPaneController == null) return;
+        mPaneController.setTravelBottomCoverPx(com.termux.app.place.PlaceChromeTravel
+            .coveredRoomPx(mTravelHeldOverlapPx, stackTranslationPx));
+    }
+
+    /**
      * The slide landed: every pane's travel ends on the resize it was drawn toward, or now. The
      * reflow is frosted only where it can be seen, on the terminal, and not under lazy mode or
      * reduced motion, which stop every animation.
@@ -16356,12 +16381,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTravelRoomArriving = null;
         mChromeTravelMoved = false;
         mDockTravelTranslationPx = 0f;
+        mTravelHeldOverlapPx = 0;
         // The material blend, if one ran, has landed on the arriving place's material; the pass
         // below paints that material plainly, and the blend's layers go with it.
         mKeyboardTravelSolidness = KeyboardMaterialPolicy.NO_TRAVEL;
         mKeyboardTravelSolidFill = null;
         applyAccessoryStackTranslation();
         applyChromeTravelAlpha(1f, 1f);
+        // The panes' clip comes off with the hold: the geometry pass below lays them out at the
+        // size the clip was standing in for, in the same traversal.
+        if (held && mPaneController != null) mPaneController.setTravelBottomCoverPx(0);
         // A keyboard pre-rolled for a place the wall did not stay on goes away quietly, as it came:
         // the place under it never had it up. One the arriving place wants is already where it
         // belongs, and the place's own sync below finds nothing to do.
