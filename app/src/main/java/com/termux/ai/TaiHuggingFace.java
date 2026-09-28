@@ -1,5 +1,8 @@
 package com.termux.ai;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -115,6 +118,9 @@ public final class TaiHuggingFace {
             if (item != null && safePath(item.optString("rfilename"))) files.add(item.optString("rfilename"));
         }
         List<String> entries = new ArrayList<>();
+        // A directory whose config.json sits next to eagle.mnn: an EAGLE-3 draft head shipped
+        // alongside the plain model (taobao-mnn/…-Eagle3-MNN), decoded faster for the same answers.
+        LinkedHashSet<String> eagleDirectories = new LinkedHashSet<>();
         for (String name : files) {
             if (file ? !name.equals(path) : !path.isEmpty() && !name.startsWith(path.replaceAll("/$", "") + "/")) continue;
             String lower = name.toLowerCase(Locale.ROOT);
@@ -124,6 +130,7 @@ public final class TaiHuggingFace {
                 for (String other : files) {
                     if (other.startsWith(directory) && other.endsWith(".mnn")) { entries.add(name); break; }
                 }
+                if (files.contains(directory + "eagle.mnn")) eagleDirectories.add(directory);
             }
         }
         Collections.sort(entries);
@@ -141,6 +148,15 @@ public final class TaiHuggingFace {
                 candidate.put("sizeBytes", sibling.optLong("size", lfs == null ? -1 : lfs.optLong("size", -1)));
                 if (lfs != null) candidate.put("sha256", lfs.optString("sha256", ""));
             }
+            if (name.equals("config.json") || name.endsWith("/config.json")) {
+                // The listing's own size for a config.json is a few bytes; the package the user
+                // actually downloads is every file beside it (model, weight, tokenizer, and, for
+                // an Eagle repo, the draft head), already in hand from the same metadata call.
+                String directory = name.substring(0, name.length() - "config.json".length());
+                long packageSize = packageSizeBytes(siblings, directory);
+                if (packageSize > 0L) candidate.put("sizeBytes", packageSize);
+                if (eagleDirectories.contains(directory)) candidate.put("speculative", "eagle");
+            }
             // Publisher-specific contract, not a family-name capability guess: the runtime floor a
             // litert-community card states for its files (Qwen3.5 0.15, MiniCPM5-2B 0.16).
             TaiImportProfiles.Match family = repository.startsWith("litert-community/") && name.endsWith(".litertlm")
@@ -150,6 +166,30 @@ public final class TaiHuggingFace {
             result.put(candidate);
         }
         return result;
+    }
+
+    /**
+     * The combined size of {@code directory}'s direct files (never a nested subdirectory, so an
+     * empty {@code directory} sums the repository root, not every file in the repository), or
+     * {@code -1} when none is known.
+     */
+    private static long packageSizeBytes(@Nullable JSONArray siblings, @NonNull String directory) {
+        if (siblings == null) return -1L;
+        long total = 0L;
+        boolean any = false;
+        for (int i = 0; i < siblings.length(); i++) {
+            JSONObject sibling = siblings.optJSONObject(i);
+            String rfile = sibling == null ? "" : sibling.optString("rfilename", "");
+            if (rfile.isEmpty() || !rfile.startsWith(directory)) continue;
+            if (rfile.substring(directory.length()).contains("/")) continue;
+            JSONObject lfs = sibling.optJSONObject("lfs");
+            long size = sibling.optLong("size", lfs == null ? -1L : lfs.optLong("size", -1L));
+            if (size > 0L) {
+                total += size;
+                any = true;
+            }
+        }
+        return any ? total : -1L;
     }
 
     static boolean safePath(String path) {

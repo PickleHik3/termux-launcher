@@ -579,6 +579,9 @@ public final class TaiSettings {
         put(specs, ParameterSpec.decimal(FIELD_TEMPERATURE, "0.80", 0.80d, 0.0d, 2.0d));
         put(specs, ParameterSpec.decimal(FIELD_TOP_P, "0.90", 0.90d, 0.0d, 1.0d));
         put(specs, ParameterSpec.integer(FIELD_TOP_K, "40", 40, 1, 100));
+        // Auto (unset) keeps the EAGLE-3 package's own speculative_type; explicit false makes
+        // mergedConfigJson drop it so the model falls back to plain decoding (MnnTaiRuntime).
+        put(specs, ParameterSpec.bool(FIELD_ENABLE_SPECULATIVE_DECODING, "false", false));
         return new ParameterSchema(TaiModelSpec.BACKEND_MNN_LLM, specs);
     }
 

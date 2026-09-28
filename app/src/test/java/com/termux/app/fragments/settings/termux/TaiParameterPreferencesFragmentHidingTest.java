@@ -78,9 +78,14 @@ public class TaiParameterPreferencesFragmentHidingTest {
     }
 
     private TaiModelSpec mnnModel() {
+        return mnnModel(false);
+    }
+
+    private TaiModelSpec mnnModel(boolean speculative) {
         LinkedHashSet<String> caps = new LinkedHashSet<>();
         caps.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
         caps.add(TaiModelSpec.CAPABILITY_CODE);
+        if (speculative) caps.add(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING);
         return new TaiModelSpec(
             "qwen2.5-coder-1.5b-instruct-mnn",
             "Qwen2.5 Coder MNN",
@@ -115,17 +120,19 @@ public class TaiParameterPreferencesFragmentHidingTest {
     }
 
     /**
-     * The switch keys off {@link TaiModelSpec#capabilities} (the endpoint set), and
-     * {@code TaiModelSpec} only promotes speculative decoding into that set after reading
-     * capability flags out of the real {@code .litertlm} package. A JVM test has no package and
-     * no native reader, so every case here is a hidden case — including a spec whose *source*
-     * metadata declares the capability. That last one is the assertion worth having: declared
-     * intent alone must not surface a runtime override.
+     * The switch keys off {@link TaiModelSpec#capabilities} (the endpoint set): for LiteRT that
+     * set only gains the capability after reading capability flags out of the real
+     * {@code .litertlm} package, so a JVM test with no native reader is always the hidden case
+     * there — including a spec whose *source* metadata declares the capability, which is the
+     * assertion worth having (declared intent alone must not surface a runtime override). For MNN
+     * the capability is detected from {@code config.json}'s {@code speculative_type} at import
+     * time and lands directly in the endpoint set, so a spec can carry it here, and the switch
+     * shows: it can only turn the package's own EAGLE-3 draft head off.
      *
-     * The shown case needs a real installed package; it is covered by instrumentation, not here.
+     * The LiteRT shown case needs a real installed package; it is covered by instrumentation, not here.
      */
     @Test
-    public void speculativeDecodingParam_hiddenWithoutAReadablePackageThatAdvertisesIt() {
+    public void speculativeDecodingParam_shownOnlyForAnEndpointThatActuallyHasIt() {
         assertFalse("LiteRT spec not declaring the capability", TaiParameterPreferencesFragment.shouldShowParameter(
             litertMultimodal(false), "gemma-4-e2b-it-litert-lm", TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING, true));
         assertFalse("source metadata declares it but no package backs it",
@@ -133,9 +140,12 @@ public class TaiParameterPreferencesFragmentHidingTest {
         assertFalse("source metadata alone must not surface the switch",
             TaiParameterPreferencesFragment.shouldShowParameter(
                 litertMultimodal(true), "gemma-4-e2b-it-litert-lm", TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING, true));
-        assertFalse("MNN speculative_type is package-fixed, never a runtime toggle",
+        assertFalse("MNN without the capability: no Eagle head to toggle",
             TaiParameterPreferencesFragment.shouldShowParameter(
                 mnnModel(), "qwen2.5-coder-1.5b-instruct-mnn", TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING, true));
+        assertTrue("MNN with the capability: an EAGLE-3 package, the switch can turn it off",
+            TaiParameterPreferencesFragment.shouldShowParameter(
+                mnnModel(true), "qwen3-vl-2b-instruct-eagle3-mnn", TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING, true));
         assertFalse("no resolved model", TaiParameterPreferencesFragment.shouldShowParameter(
             null, "gemma-4-e2b-it-litert-lm", TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING, true));
     }

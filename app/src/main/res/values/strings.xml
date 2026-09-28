@@ -1123,6 +1123,7 @@
         <string name="termux_ai_import_source_file_name">file name</string>
         <string name="termux_ai_import_source_format">file format</string>
         <string name="termux_ai_import_source_tags">Hugging Face tags</string>
+        <string name="termux_ai_import_source_package">the package\'s own files</string>
         <string name="termux_ai_import_advanced_show">Advanced</string>
         <string name="termux_ai_import_advanced_hide">Hide advanced</string>
         <string name="termux_ai_import_cap_chat">Chat</string>
@@ -1133,6 +1134,8 @@
         <string name="termux_ai_import_cap_code">Code</string>
         <string name="termux_ai_import_cap_reasoning">Reasoning</string>
         <string name="termux_ai_import_cap_multilingual">Multilingual</string>
+        <string name="termux_ai_import_cap_speculative">Faster replies</string>
+        <string name="termux_ai_import_cap_speculative_detail">A small draft model predicts ahead; same answers, quicker.</string>
         <string name="termux_ai_import_no_capability">Tick at least one thing this model can do.</string>
         <string name="termux_ai_import_processor_label">Runs on</string>
         <string name="termux_ai_import_processor_auto">Let the app decide</string>

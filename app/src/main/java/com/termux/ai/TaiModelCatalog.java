@@ -415,6 +415,7 @@ public final class TaiModelCatalog {
         if (capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) tags.add("Audio");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_CODE)) tags.add("Code");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_TOOL_USE)) tags.add("Tools");
+        if (capabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING)) tags.add("Fast");
         return tags;
     }
     private static String repoId(@NonNull String url) {
