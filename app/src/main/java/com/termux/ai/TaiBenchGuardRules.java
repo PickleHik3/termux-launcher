@@ -10,17 +10,17 @@ import androidx.annotation.Nullable;
  * TaiBenchConditionsGuard} is the only caller; it holds the state (the baseline snapshot, the
  * wait clock, which entry started warm) this class is pure of.
  */
-final class TaiBenchGuardRules {
+public final class TaiBenchGuardRules {
     /** Start check: battery must be at least this or charging. */
-    static final int START_BATTERY_MIN_PERCENT = 30;
+    public static final int START_BATTERY_MIN_PERCENT = 30;
     /** While running: battery below this and not charging stops the run. */
-    static final int RUNNING_BATTERY_STOP_PERCENT = 15;
+    public static final int RUNNING_BATTERY_STOP_PERCENT = 15;
 
     // PowerManager.THERMAL_STATUS_* values, repeated here so this class imports no Android type.
-    static final int THERMAL_STATUS_NONE = 0;
-    static final int THERMAL_STATUS_LIGHT = 1;
-    static final int THERMAL_STATUS_MODERATE = 2;
-    static final int THERMAL_STATUS_SEVERE = 3;
+    public static final int THERMAL_STATUS_NONE = 0;
+    public static final int THERMAL_STATUS_LIGHT = 1;
+    public static final int THERMAL_STATUS_MODERATE = 2;
+    public static final int THERMAL_STATUS_SEVERE = 3;
     static final int THERMAL_STATUS_CRITICAL = 4;
     static final int THERMAL_STATUS_EMERGENCY = 5;
     static final int THERMAL_STATUS_SHUTDOWN = 6;
@@ -28,11 +28,11 @@ final class TaiBenchGuardRules {
     /** While running: how often a MODERATE-thermal pause asks again. */
     static final long THERMAL_POLL_MS = 5_000L;
     /** While running: a MODERATE-thermal pause held this long in total stops the run. */
-    static final long THERMAL_TIMEOUT_MS = 10 * 60_000L;
+    public static final long THERMAL_TIMEOUT_MS = 10 * 60_000L;
     /** Cool-down: how often a wait asks again. */
     static final long COOLDOWN_POLL_MS = 2_000L;
     /** Cool-down: waited this long without recovering proceeds anyway, marked warm. */
-    static final long COOLDOWN_CAP_MS = 5 * 60_000L;
+    public static final long COOLDOWN_CAP_MS = 5 * 60_000L;
     /** Cool-down: the headroom is "recovered" within this much of the baseline's. */
     static final float HEADROOM_TOLERANCE = 0.05f;
 
@@ -40,20 +40,20 @@ final class TaiBenchGuardRules {
     }
 
     /** One reading of the phone's state; {@code -1}/{@code NaN} means unknown. */
-    static final class Snapshot {
-        final int batteryPercent;
-        final boolean charging;
-        final int thermalStatus;
-        final float headroom;
+    public static final class Snapshot {
+        public final int batteryPercent;
+        public final boolean charging;
+        public final int thermalStatus;
+        public final float headroom;
 
-        Snapshot(int batteryPercent, boolean charging, int thermalStatus, float headroom) {
+        public Snapshot(int batteryPercent, boolean charging, int thermalStatus, float headroom) {
             this.batteryPercent = batteryPercent;
             this.charging = charging;
             this.thermalStatus = thermalStatus;
             this.headroom = headroom;
         }
 
-        static final Snapshot UNKNOWN = new Snapshot(-1, false, -1, Float.NaN);
+        public static final Snapshot UNKNOWN = new Snapshot(-1, false, -1, Float.NaN);
     }
 
     /** {@code beforePhase}'s decision plus whether this call resolved a cool-down as warm. */
@@ -73,7 +73,7 @@ final class TaiBenchGuardRules {
      * status passes). {@code null} means go ahead.
      */
     @Nullable
-    static String startCheck(@NonNull Snapshot snapshot) {
+    public static String startCheck(@NonNull Snapshot snapshot) {
         if (snapshot.batteryPercent >= 0 && snapshot.batteryPercent < START_BATTERY_MIN_PERCENT && !snapshot.charging) {
             return "battery_low";
         }
@@ -138,7 +138,7 @@ final class TaiBenchGuardRules {
 
     /** {@code none|light|moderate|severe|critical|emergency|shutdown}, or {@code null} when unknown. */
     @Nullable
-    static String thermalStatusName(int status) {
+    public static String thermalStatusName(int status) {
         switch (status) {
             case THERMAL_STATUS_NONE: return "none";
             case THERMAL_STATUS_LIGHT: return "light";

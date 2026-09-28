@@ -39,15 +39,16 @@ import java.util.Set;
  * sizeBytes, sha256, backend, accelerator, speculative, runtimeVersion, appVersion, device{soc,
  * ramClassGb}, conditions{batteryStart, batteryEnd, charging, thermalStart, thermalEnd,
  * headroomStart, headroomEnd, warmStart},
- * phases{load{ms, memBytes}, reading{med,min,max,runs}, firstWord{…}, writing{…, tokens},
+ * phases{load{ms, memBytes, pssBytes}, reading{med,min,max,runs}, firstWord{…}, writing{…, tokens},
  * sustained{startTps, endTps, dropPct}|null}, check{passed, total, details}, status, verdict}.
- * The entry key is {@code modelId|backend|accelerator|speculative}.
+ * The entry key is {@code modelId|backend|accelerator|speculative}. The leaderboard's
+ * {@code memBytes} is {@link #memoryBytes}: the PSS when the record has one, else the older figure.
  */
-final class TaiBenchStore {
+public final class TaiBenchStore {
     static final String FILE_NAME = "benchmarks.json";
     /** Runs kept per leaderboard entry; the oldest go first. */
     static final int KEEP_PER_KEY = 20;
-    static final String STATUS_COMPLETE = "complete";
+    public static final String STATUS_COMPLETE = "complete";
     private static final int FORMAT_VERSION = 1;
 
     @NonNull private final File file;
@@ -69,7 +70,7 @@ final class TaiBenchStore {
 
     /** {@code modelId|backend|accelerator|speculative}, the leaderboard entry a record belongs to. */
     @NonNull
-    static String keyOf(@NonNull JSONObject record) {
+    public static String keyOf(@NonNull JSONObject record) {
         return TaiBenchSuite.EntryPlan.key(record.optString("modelId", ""), record.optString("backend", ""),
             record.optString("accelerator", ""), record.optBoolean("speculative", false));
     }
@@ -136,7 +137,7 @@ final class TaiBenchStore {
      * either, though an older complete record of the same entry does.
      */
     @NonNull
-    static JSONObject leaderboard(@NonNull JSONArray records, @NonNull String benchVersion) throws JSONException {
+    public static JSONObject leaderboard(@NonNull JSONArray records, @NonNull String benchVersion) throws JSONException {
         Map<String, JSONObject> latestComplete = new LinkedHashMap<>();
         for (int i = 0; i < records.length(); i++) {
             JSONObject record = records.optJSONObject(i);
@@ -173,6 +174,18 @@ final class TaiBenchStore {
             .put("broken", brokenJson);
     }
 
+    /**
+     * The memory figure a load phase stands for: the runtime process's own PSS after load and
+     * warm-up ({@code pssBytes}, bench v1 records from 2026-09-28 on) when it was measured, else
+     * the MemAvailable difference ({@code memBytes}) older records carry. The PSS is preferred
+     * because MemAvailable says nothing useful about an mmap'd MNN package (the same model has
+     * read 4 MB and 660 MB); {@code -1} when neither was measured.
+     */
+    public static long memoryBytes(@NonNull JSONObject load) {
+        long pss = load.optLong("pssBytes", -1L);
+        return pss > 0L ? pss : load.optLong("memBytes", -1L);
+    }
+
     /** A missing first-word figure sorts after every measured one. */
     private static double firstWordForSort(@NonNull JSONObject row) {
         double value = row.optDouble("firstWordMs", Double.NaN);
@@ -205,7 +218,7 @@ final class TaiBenchStore {
         row.put("firstWordMs", firstWord == null ? JSONObject.NULL : firstWord.optDouble("med", 0.0));
         row.put("readingTps", reading == null ? JSONObject.NULL : reading.optDouble("med", 0.0));
         row.put("loadMs", load == null ? JSONObject.NULL : load.optLong("ms", 0L));
-        row.put("memBytes", load == null ? JSONObject.NULL : load.optLong("memBytes", -1L));
+        row.put("memBytes", load == null ? JSONObject.NULL : memoryBytes(load));
         row.put("checkPassed", checkPassed);
         row.put("verdict", record.optString("verdict", TaiBenchStats.verdict(writingTps, checkPassed)));
         row.put("conditions", record.opt("conditions") == null ? JSONObject.NULL : record.opt("conditions"));

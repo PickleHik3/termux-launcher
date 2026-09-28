@@ -1090,6 +1090,17 @@ public final class TaiManager {
             MnnTaiRuntime.clearMmapCache(appContext, spec(entry).id);
         }
 
+        /** {@code :tai_runtime}'s own PSS (this process, where the model is resident). */
+        @Override
+        public long processPssBytes() {
+            try {
+                long kb = android.os.Debug.getPss();
+                return kb > 0L ? kb * 1024L : -1L;
+            } catch (RuntimeException e) {
+                return -1L;
+            }
+        }
+
         @NonNull
         @Override
         public JSONObject describe(@NonNull TaiBenchSuite.EntryPlan entry) throws JSONException {

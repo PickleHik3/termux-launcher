@@ -170,6 +170,18 @@ public class TaiBenchSuiteTest {
         assertEquals(3L * TaiBenchSuite.EXPECTED_LOAD_SECONDS * 1000L, TaiBenchSuite.timeLimitMs(TaiBenchSuite.PHASE_LOAD));
     }
 
+    @Test
+    public void estimateIsAMinuteForQuickAndPerProcessorOtherwise() {
+        assertEquals(60_000L, TaiBenchSuite.estimateMs(TaiBenchSuite.Preset.QUICK, 1));
+        assertEquals(60_000L, TaiBenchSuite.estimateMs(TaiBenchSuite.Preset.QUICK, 2));
+        assertEquals(2 * 60_000L, TaiBenchSuite.estimateMs(TaiBenchSuite.Preset.STANDARD, 1));
+        assertEquals(4 * 60_000L, TaiBenchSuite.estimateMs(TaiBenchSuite.Preset.STANDARD, 2));
+        assertEquals(4 * 60_000L, TaiBenchSuite.estimateMs(TaiBenchSuite.Preset.THOROUGH, 1));
+        assertEquals(8 * 60_000L, TaiBenchSuite.estimateMs(TaiBenchSuite.Preset.THOROUGH, 2));
+        // A count under one is one processor, never a zero estimate.
+        assertEquals(2 * 60_000L, TaiBenchSuite.estimateMs(TaiBenchSuite.Preset.STANDARD, 0));
+    }
+
     // ---- the passage ----
 
     /** Read straight off disk, the way the help tests read strings.xml: no resource table needed. */

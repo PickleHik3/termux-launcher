@@ -19,7 +19,7 @@ import java.util.concurrent.Executors;
  * ({@code -1}/{@code NaN}) rather than throwing, the same as {@link TaiBenchGuardRules.Snapshot}
  * treats a phone that has never reported one.
  */
-final class TaiDeviceConditions {
+public final class TaiDeviceConditions {
     /**
      * {@link PowerManager#getThermalHeadroom} returns {@code NaN} when polled faster than about a
      * second; the last real reading is reused for that long instead of reporting unknown.
@@ -33,7 +33,7 @@ final class TaiDeviceConditions {
     private long cachedHeadroomAtMs;
     @Nullable private PowerManager.OnThermalStatusChangedListener thermalListener;
 
-    TaiDeviceConditions(@NonNull Context context) {
+    public TaiDeviceConditions(@NonNull Context context) {
         this.appContext = context.getApplicationContext();
         PowerManager pm = null;
         try {
@@ -51,7 +51,7 @@ final class TaiDeviceConditions {
 
     /** One reading of battery level/charging and thermal status/headroom, each independently guarded. */
     @NonNull
-    TaiBenchGuardRules.Snapshot snapshot() {
+    public TaiBenchGuardRules.Snapshot snapshot() {
         int battery = -1;
         boolean charging = false;
         try {

@@ -22,18 +22,18 @@ import java.util.Locale;
  * that changes what a record means bumps {@link #BENCH_VERSION}; the store never ranks two
  * versions against each other.
  */
-final class TaiBenchSuite {
-    static final String BENCH_VERSION = "bench_v1";
+public final class TaiBenchSuite {
+    public static final String BENCH_VERSION = "bench_v1";
     /** Where the harness finds the reading passage in the APK. */
     static final String READING_ASSET = "tai/bench/reading.txt";
 
-    static final String PHASE_LOAD = "load";
-    static final String PHASE_WARMUP = "warmup";
-    static final String PHASE_READING = "reading";
-    static final String PHASE_FIRST_WORD = "firstWord";
-    static final String PHASE_WRITING = "writing";
-    static final String PHASE_SUSTAINED = "sustained";
-    static final String PHASE_CHECK = "check";
+    public static final String PHASE_LOAD = "load";
+    public static final String PHASE_WARMUP = "warmup";
+    public static final String PHASE_READING = "reading";
+    public static final String PHASE_FIRST_WORD = "firstWord";
+    public static final String PHASE_WRITING = "writing";
+    public static final String PHASE_SUSTAINED = "sustained";
+    public static final String PHASE_CHECK = "check";
 
     /** Nothing but the reply: a system line the chat templates of both backends accept. */
     static final String SYSTEM_PROMPT = "You are a helpful assistant. Answer directly.";
@@ -70,8 +70,8 @@ final class TaiBenchSuite {
     static final int EXPECTED_CHECK_SECONDS = 20;
     static final int TIME_LIMIT_FACTOR = 3;
 
-    static final String ACCELERATOR_CPU = "cpu";
-    static final String ACCELERATOR_GPU = "gpu";
+    public static final String ACCELERATOR_CPU = "cpu";
+    public static final String ACCELERATOR_GPU = "gpu";
 
     private TaiBenchSuite() {
     }
@@ -80,6 +80,25 @@ final class TaiBenchSuite {
     @NonNull
     static String readingPrompt(@NonNull String passage) {
         return passage.trim() + "\n\n" + READING_INSTRUCTION;
+    }
+
+    /** Screen 2's rough time per model: Quick about a minute in all, Standard two minutes per processor, Thorough four. */
+    static final long ESTIMATE_QUICK_MS = 60_000L;
+    static final long ESTIMATE_STANDARD_PER_PROCESSOR_MS = 2 * 60_000L;
+    static final long ESTIMATE_THOROUGH_PER_PROCESSOR_MS = 4 * 60_000L;
+
+    /**
+     * How long one model is expected to take under {@code preset} on {@code processors}
+     * processors (the spec's "rough time per model", without the cool-down). Quick runs one
+     * processor whatever the count; a count under one reads as one.
+     */
+    public static long estimateMs(@NonNull Preset preset, int processors) {
+        int count = Math.max(1, processors);
+        switch (preset) {
+            case QUICK: return ESTIMATE_QUICK_MS;
+            case THOROUGH: return ESTIMATE_THOROUGH_PER_PROCESSOR_MS * count;
+            default: return ESTIMATE_STANDARD_PER_PROCESSOR_MS * count;
+        }
     }
 
     /** The limit for one run of {@code phase}, or for the whole sustained window. */
@@ -101,18 +120,18 @@ final class TaiBenchSuite {
     // ---- Presets ----------------------------------------------------------------------------
 
     /** How many runs of each timed phase a preset does, and which processors it covers. */
-    enum Preset {
+    public enum Preset {
         QUICK("quick", 1, 1, 1, false, false),
         STANDARD("standard", 3, 3, 3, false, true),
         THOROUGH("thorough", 3, 3, 5, true, true);
 
-        final String id;
-        final int readingRuns;
-        final int firstWordRuns;
-        final int writingRuns;
-        final boolean sustained;
+        public final String id;
+        public final int readingRuns;
+        public final int firstWordRuns;
+        public final int writingRuns;
+        public final boolean sustained;
         /** Every supported processor, or only the one an automatic load would pick. */
-        final boolean bothProcessors;
+        public final boolean bothProcessors;
 
         Preset(String id, int readingRuns, int firstWordRuns, int writingRuns, boolean sustained, boolean bothProcessors) {
             this.id = id;
@@ -125,7 +144,7 @@ final class TaiBenchSuite {
 
         /** {@code null} for a name that is not a preset; an empty or missing name is Standard. */
         @Nullable
-        static Preset fromId(@Nullable String id) {
+        public static Preset fromId(@Nullable String id) {
             if (id == null || id.trim().isEmpty()) return STANDARD;
             String wanted = id.trim().toLowerCase(Locale.ROOT);
             for (Preset preset : values()) {
@@ -157,13 +176,13 @@ final class TaiBenchSuite {
     }
 
     /** One leaderboard entry to run: a model on one processor, with or without its draft model. */
-    static final class EntryPlan {
-        @NonNull final String modelId;
-        @NonNull final String backend;
-        @NonNull final String accelerator;
-        final boolean speculative;
+    public static final class EntryPlan {
+        @NonNull public final String modelId;
+        @NonNull public final String backend;
+        @NonNull public final String accelerator;
+        public final boolean speculative;
 
-        EntryPlan(@NonNull String modelId, @NonNull String backend, @NonNull String accelerator, boolean speculative) {
+        public EntryPlan(@NonNull String modelId, @NonNull String backend, @NonNull String accelerator, boolean speculative) {
             this.modelId = modelId;
             this.backend = backend;
             this.accelerator = accelerator;
@@ -172,17 +191,17 @@ final class TaiBenchSuite {
 
         /** The store's entry key: {@code modelId|backend|accelerator|speculative}. */
         @NonNull
-        String key() {
+        public String key() {
             return key(modelId, backend, accelerator, speculative);
         }
 
         @NonNull
-        static String key(@NonNull String modelId, @NonNull String backend, @NonNull String accelerator, boolean speculative) {
+        public static String key(@NonNull String modelId, @NonNull String backend, @NonNull String accelerator, boolean speculative) {
             return modelId + "|" + backend + "|" + accelerator + "|" + (speculative ? "on" : "off");
         }
 
         @NonNull
-        JSONObject toJson() throws JSONException {
+        public JSONObject toJson() throws JSONException {
             return new JSONObject()
                 .put("modelId", modelId)
                 .put("backend", backend)

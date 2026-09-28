@@ -15,15 +15,15 @@ import java.util.List;
  * and the verdict thresholds. Pure, so the formulas are pinned by JVM tests and both backends are
  * measured by the same code.
  */
-final class TaiBenchStats {
-    static final String VERDICT_SMOOTH = "smooth";
-    static final String VERDICT_USABLE = "usable";
-    static final String VERDICT_SLOW = "slow";
-    static final String VERDICT_BROKEN = "broken";
+public final class TaiBenchStats {
+    public static final String VERDICT_SMOOTH = "smooth";
+    public static final String VERDICT_USABLE = "usable";
+    public static final String VERDICT_SLOW = "slow";
+    public static final String VERDICT_BROKEN = "broken";
     /** Decode tok/s at or above which a reply reads as it is written. */
-    static final double SMOOTH_TPS = 15.0;
+    public static final double SMOOTH_TPS = 15.0;
     /** Below this a reply is a wait, not a conversation. */
-    static final double USABLE_TPS = 7.0;
+    public static final double USABLE_TPS = 7.0;
 
     private TaiBenchStats() {
     }
@@ -51,7 +51,7 @@ final class TaiBenchStats {
 
     /** Smooth ≥ 15 tok/s, Usable 7–15, Slow below 7; Broken whenever the check failed. */
     @NonNull
-    static String verdict(double writingTpsMedian, boolean checkPassed) {
+    public static String verdict(double writingTpsMedian, boolean checkPassed) {
         if (!checkPassed) return VERDICT_BROKEN;
         if (writingTpsMedian >= SMOOTH_TPS) return VERDICT_SMOOTH;
         if (writingTpsMedian >= USABLE_TPS) return VERDICT_USABLE;
