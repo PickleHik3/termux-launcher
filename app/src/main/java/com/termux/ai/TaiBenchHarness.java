@@ -126,6 +126,11 @@ final class TaiBenchHarness {
         guard.skipCooldown();
     }
 
+    /** Forwards to the guard: whether the in-app screen that owns this run has left the foreground. */
+    void setHeld(boolean held) {
+        guard.setHeld(held);
+    }
+
     boolean stopRequested() {
         return stopReason != null;
     }

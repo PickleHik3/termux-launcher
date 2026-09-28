@@ -22,6 +22,13 @@ public class TaiRuntimeServiceDispatchTest {
         assertFalse(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_BENCH_SKIP_WAIT));
     }
 
+    /** Hold reaches an active bench the same way cancel and skip-wait do. */
+    @Test
+    public void benchHold_usesConcurrentControlLaneAndIsNeverRefusedDuringBench() {
+        assertTrue(TaiRuntimeService.isConcurrentControlOperation(TaiRuntimeIpc.OP_BENCH_HOLD));
+        assertFalse(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_BENCH_HOLD));
+    }
+
     /**
      * The busy rule for a running bench: chat-lane work is refused, control and status pass, and
      * speech keeps its own lanes.

@@ -31,7 +31,11 @@ final class TaiBenchConditionsGuard implements TaiBenchGuard {
     @Nullable private TaiBenchSuite.EntryPlan firstEntry;
     /** When the current wait began; {@link #NO_WAIT} when none is running (0 is a valid clock reading). */
     private long waitStartedMs = NO_WAIT;
+    /** The reason the current wait is paused for, so a change of reason starts a fresh wait clock. */
+    @Nullable private String waitReason;
     private final AtomicBoolean skipRequested = new AtomicBoolean();
+    /** Whether the screen that owns this run has left the foreground; see {@link #setHeld}. */
+    private final AtomicBoolean held = new AtomicBoolean();
     private final Set<TaiBenchSuite.EntryPlan> warmEntries =
         java.util.Collections.newSetFromMap(new IdentityHashMap<>());
     private final Map<TaiBenchSuite.EntryPlan, TaiBenchGuardRules.Snapshot> startSnapshots = new IdentityHashMap<>();
@@ -54,16 +58,46 @@ final class TaiBenchConditionsGuard implements TaiBenchGuard {
         boolean isFirst = entry == firstEntry;
         boolean cooldownApplies = TaiBenchSuite.PHASE_LOAD.equals(phase) && !isFirst;
         boolean skip = cooldownApplies && skipRequested.getAndSet(false);
+        boolean isHeld = held.get();
+        // A hold wait is its own wait: if the reason a wait is running for is about to change
+        // (e.g. a cool-down wait in progress and the screen now leaves), the new wait's clock
+        // starts fresh rather than inheriting the old wait's elapsed time.
+        String candidateReason = candidateWaitReason(phase, cooldownApplies, isHeld, snapshot);
+        if (waitStartedMs != NO_WAIT && !java.util.Objects.equals(candidateReason, waitReason)) {
+            waitStartedMs = NO_WAIT;
+        }
         long waitStart = waitStartedMs == NO_WAIT ? now : waitStartedMs;
         TaiBenchGuardRules.Result result = TaiBenchGuardRules.beforePhase(
-            phase, isFirst, snapshot, baseline, waitStart, now, skip);
+            phase, isFirst, snapshot, baseline, waitStart, now, skip, isHeld);
         if (TaiBenchGuard.PAUSE.equals(result.decision.action)) {
             waitStartedMs = waitStart;
+            waitReason = result.decision.reason;
             return withDetail(result.decision, snapshot);
         }
         waitStartedMs = NO_WAIT;
+        waitReason = null;
         if (result.warmStart) warmEntries.add(entry);
         return result.decision;
+    }
+
+    /**
+     * The reason a wait would be paused for right now, mirroring {@link TaiBenchGuardRules}'
+     * precedence (a battery/SEVERE-thermal stop wins over any wait, held wins over cool-down,
+     * cool-down wins over a thermal pause) — without running the full rule, so the wait clock can
+     * be reset before the rule is consulted.
+     */
+    @Nullable
+    private static String candidateWaitReason(@NonNull String phase, boolean cooldownApplies, boolean held,
+                                               @NonNull TaiBenchGuardRules.Snapshot snapshot) {
+        if (snapshot.batteryPercent >= 0 && snapshot.batteryPercent < TaiBenchGuardRules.RUNNING_BATTERY_STOP_PERCENT
+                && !snapshot.charging) {
+            return null;
+        }
+        if (snapshot.thermalStatus >= TaiBenchGuardRules.THERMAL_STATUS_SEVERE) return null;
+        if (held) return "left";
+        if (cooldownApplies) return "cooldown";
+        if (snapshot.thermalStatus == TaiBenchGuardRules.THERMAL_STATUS_MODERATE) return "thermal";
+        return null;
     }
 
     /** Adds the thermal status name and headroom to a pause's event, when either is known. */
@@ -136,5 +170,10 @@ final class TaiBenchConditionsGuard implements TaiBenchGuard {
     @Override
     public void skipCooldown() {
         skipRequested.set(true);
+    }
+
+    @Override
+    public void setHeld(boolean held) {
+        this.held.set(held);
     }
 }

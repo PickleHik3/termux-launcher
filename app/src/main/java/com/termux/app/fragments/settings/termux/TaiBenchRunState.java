@@ -170,9 +170,16 @@ public final class TaiBenchRunState {
             return "cooldown".equals(reason);
         }
 
-        /** How long the run will wait at most before it proceeds anyway (cool-down) or stops (thermal). */
+        /** The screen/app left the foreground (spec Safety table, Screen/app row): "Paused — you left the screen". */
+        public boolean left() {
+            return "left".equals(reason);
+        }
+
+        /** How long the run will wait at most before it proceeds anyway (cool-down), or stops (thermal, left). */
         public long capMs() {
-            return cooldown() ? TaiBenchGuardRules.COOLDOWN_CAP_MS : TaiBenchGuardRules.THERMAL_TIMEOUT_MS;
+            if (cooldown()) return TaiBenchGuardRules.COOLDOWN_CAP_MS;
+            if (left()) return TaiBenchGuardRules.HELD_TIMEOUT_MS;
+            return TaiBenchGuardRules.THERMAL_TIMEOUT_MS;
         }
 
         /** Time waited as of {@code nowMs}, never past the cap. */

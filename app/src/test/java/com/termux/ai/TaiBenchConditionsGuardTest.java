@@ -152,6 +152,40 @@ public class TaiBenchConditionsGuardTest {
     }
 
     @Test
+    public void held_pausesLeftDuringACooldownWaitWithoutConsumingTheCooldownCap() {
+        TaiBenchConditionsGuard guard = new TaiBenchConditionsGuard(this::read, this::clock);
+        TaiBenchSuite.EntryPlan first = entry("m1");
+        TaiBenchSuite.EntryPlan second = entry("m2");
+
+        nowMs = 0L;
+        current = new TaiBenchGuardRules.Snapshot(90, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.10f);
+        guard.beforePhase(TaiBenchSuite.PHASE_LOAD, first);
+        guard.entryStarted(first);
+        guard.entryFinished(first);
+
+        // Still hot: a cool-down wait starts.
+        current = new TaiBenchGuardRules.Snapshot(88, false, TaiBenchGuardRules.THERMAL_STATUS_MODERATE, 0.90f);
+        assertEquals(TaiBenchGuard.PAUSE, guard.beforePhase(TaiBenchSuite.PHASE_LOAD, second).action);
+        nowMs += 4 * 60_000L; // under the 5-minute cool-down cap
+
+        // The screen leaves for most of the cool-down cap: held pre-empts the cool-down pause.
+        guard.setHeld(true);
+        TaiBenchGuard.Decision held = guard.beforePhase(TaiBenchSuite.PHASE_LOAD, second);
+        assertEquals(TaiBenchGuard.PAUSE, held.action);
+        assertEquals("left", held.reason);
+        nowMs += 4 * 60_000L; // this alone would have blown the cool-down cap, had it been counted
+        assertEquals(TaiBenchGuard.PAUSE, guard.beforePhase(TaiBenchSuite.PHASE_LOAD, second).action);
+
+        // Back on screen: the cool-down wait resumes with its own clock, not inheriting held's time.
+        guard.setHeld(false);
+        assertEquals(TaiBenchGuard.PAUSE, guard.beforePhase(TaiBenchSuite.PHASE_LOAD, second).action);
+        nowMs += 60_000L; // the cool-down's own 4 minutes so far, plus this, is still under 5
+        TaiBenchGuard.Decision decision = guard.beforePhase(TaiBenchSuite.PHASE_LOAD, second);
+        assertEquals(TaiBenchGuard.PAUSE, decision.action);
+        assertEquals("cooldown", decision.reason);
+    }
+
+    @Test
     public void unknownEntry_conditionsAreTheAllNullDefaultShape() throws Exception {
         TaiBenchConditionsGuard guard = new TaiBenchConditionsGuard(this::read, this::clock);
         JSONObject conditions = guard.entryConditions(entry("never-ran"));

@@ -99,9 +99,6 @@ Cool-down), `TaiBenchResultFragment`. All hosted by `SettingsActivity` like the 
 
 Known gaps after slice 3:
 
-- The Safety table's "Leaving pauses at the end of the current step; Resume on return" is not
-  implemented: the run goes on in the session while the screen is away. The Check sheet says so.
-- The device card has no GPU line: nothing cheap and reliable names the GPU without a GL context.
 - The Choose screen's "Tight" (SLOW) fit and the storage rule use `TaiImportFit` and the file
   size plus 10%; the per-model `TaiLoadBudget` decision is the runtime's at load time, and a
   model it refuses is skipped with the reason in the Run stepper rather than hidden here.
@@ -139,7 +136,7 @@ There is one harness for both backends in `:tai_runtime`. It times each token vi
 | Heat | `PowerManager.getCurrentThermalStatus` (29+), `getThermalHeadroom` (30+), listener (new) | NONE or LIGHT | MODERATE: pause until headroom recovers. SEVERE+: stop and unload |
 | Memory | `TaiLoadBudget`, `TaiPressureWatch` | Each model must pass the budget, or it is skipped with the reason | Pressure tiers unload; marked "stopped: memory" |
 | Storage | `File.getUsableSpace` | Downloads fit, plus 10% | – |
-| Screen/app | Keep-screen-on; runtime ops already run in the foreground | "Keep this screen open" | Leaving pauses at the end of the current step; Resume on return |
+| Screen/app | Keep-screen-on; runtime ops already run in the foreground | "Keep this screen open" | Leaving pauses at the end of the current step (`stopped: left` past 30 min); Resume on return |
 | Time | Per phase | – | Stop a phase at 3× its expected time |
 
 Implemented in slice 2 (`TaiBenchGuardRules`, `TaiDeviceConditions`, `TaiBenchConditionsGuard`). The
@@ -152,6 +149,14 @@ the cool-down (and marks the same way) at once. The battery-stop and SEVERE+ the
 still apply during a cool-down and win over it. `force: true` on the request (`tai benchmark
 --force`) skips only the before-start check, not the while-running rules; `tai benchmark
 --skip-wait` is the CLI's "Skip the wait".
+
+The Run screen's own hold (`TaiManager#holdBench`, `TaiRuntimeIpc#OP_BENCH_HOLD`) is how "Leaving
+pauses…" is implemented: the screen holds the guard in `onStop` (unless the activity is only
+changing configurations) and releases it in `onStart`. While held, `beforePhase` pauses with
+reason `left`, polled every 1 s, checked ahead of the cool-down and thermal pauses (so leaving
+during either of those pre-empts it) but after the battery/SEVERE-thermal stop rules, which still
+win. Held past 30 minutes total stops the run as `stopped: left`. This is the in-app screen's own
+lever; a `tai benchmark` run from the terminal is never held.
 
 ## Which models are offered
 
@@ -171,7 +176,7 @@ The recommended downloads come from the signed remote catalogue (`TaiRemoteCatal
 | Qwen3-VL 2B Instruct | MNN | 1.5 GB | 6 GB+ | measured: 21 tok/s CPU, 15 GPU on pong — see recommended-set.md |
 | Qwen2.5 1.5B Instruct | LiteRT | 1.6 GB | 6 GB+ | see recommended-set.md |
 | Gemma 3 1B | LiteRT | 1.0 GB | 6 GB+ | see recommended-set.md |
-| Qwen2.5 0.5B Instruct | LiteRT | 0.5 GB | 4 GB+ | see recommended-set.md |
+| Qwen3 0.6B | LiteRT + MNN | 0.5 GB | 4 GB+ | see recommended-set.md (replaces Qwen2.5 0.5B, which has no `.litertlm`) |
 | SmolVLM 500M | MNN | ~0.5 GB | 4 GB+ | see recommended-set.md |
 | Qwen3.5 2B | MNN | ~2 GB | 8 GB+ | see recommended-set.md (3.6.1 fixes its fused inference) |
 | Eagle3 builds | MNN | +90 MB | — | off by default; runnable as a separate entry |

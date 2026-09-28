@@ -62,6 +62,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     /** The device card's facts, gathered off the main thread. */
     private static final class DeviceFacts {
         @NonNull String soc = "";
+        @Nullable String gpu;
         long ramClassBytes;
         long freeRamBytes = -1L;
         long freeStorageBytes = -1L;
@@ -227,6 +228,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             facts.freeRamBytes = device.availableMemoryBytes;
         } catch (RuntimeException ignored) {
         }
+        facts.gpu = TaiGpuName.get();
         try {
             File probe = new TaiModelStore(app).getModelsDirectory();
             while (probe != null && !probe.exists()) probe = probe.getParentFile();
@@ -256,7 +258,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             items.add(new TaiBenchListAdapter.Item(TYPE_BANNER, "running", text, text));
         }
         DeviceFacts d = facts;
-        String deviceSignature = d == null ? "" : d.soc + '|' + d.ramClassBytes + '|' + d.freeRamBytes + '|' + d.freeStorageBytes
+        String deviceSignature = d == null ? "" : d.soc + '|' + d.gpu + '|' + d.ramClassBytes + '|' + d.freeRamBytes + '|' + d.freeStorageBytes
             + '|' + d.batteryPercent + '|' + d.charging + '|' + d.thermalStatus;
         items.add(new TaiBenchListAdapter.Item(TYPE_DEVICE, "device", deviceSignature, d));
         TaiBenchLeaderboard.Board b = board;
@@ -357,8 +359,11 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             return;
         }
         String none = getString(R.string.tai_bench_none);
-        String[][] lines = {
-            {getString(R.string.tai_bench_device_soc), d.soc.isEmpty() ? none : d.soc},
+        List<String[]> lines = new ArrayList<>();
+        lines.add(new String[] {getString(R.string.tai_bench_device_soc), d.soc.isEmpty() ? none : d.soc});
+        // Only where a GL context named it; see TaiGpuName.
+        if (d.gpu != null) lines.add(new String[] {getString(R.string.tai_bench_device_gpu), d.gpu});
+        String[][] rest = {
             {getString(R.string.tai_bench_device_ram), d.ramClassBytes > 0L
                 ? getString(R.string.tai_bench_device_ram_class, Math.round(d.ramClassBytes / (double) (1024L * 1024L * 1024L))) : none},
             {getString(R.string.tai_bench_device_free_ram), TaiBenchViews.bytes(context, d.freeRamBytes)},
@@ -367,6 +372,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             {getString(R.string.tai_bench_device_battery), TaiBenchViews.batteryLabel(context, d.batteryPercent, d.charging)},
             {getString(R.string.tai_bench_device_heat), TaiBenchViews.heatLabel(context, d.thermalStatus)},
         };
+        java.util.Collections.addAll(lines, rest);
         int width = 0;
         for (String[] line : lines) width = Math.max(width, line[0].length());
         StringBuilder text = new StringBuilder();

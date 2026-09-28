@@ -80,7 +80,7 @@ public class TaiBenchGuardRulesTest {
         TaiBenchGuardRules.Snapshot baseline = snapshot(100, false, 0, 0.1f);
         TaiBenchGuardRules.Snapshot hot = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.9f);
         TaiBenchGuardRules.Result result = TaiBenchGuardRules.beforePhase(
-            TaiBenchSuite.PHASE_LOAD, true, hot, baseline, 0L, 0L, false);
+            TaiBenchSuite.PHASE_LOAD, true, hot, baseline, 0L, 0L, false, false);
         assertEquals(TaiBenchGuard.CONTINUE, result.decision.action);
         assertEquals(false, result.warmStart);
     }
@@ -90,7 +90,7 @@ public class TaiBenchGuardRulesTest {
         TaiBenchGuardRules.Snapshot baseline = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.1f);
         TaiBenchGuardRules.Snapshot stillHot = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_MODERATE, 0.9f);
         TaiBenchGuardRules.Result result = TaiBenchGuardRules.beforePhase(
-            TaiBenchSuite.PHASE_LOAD, false, stillHot, baseline, 0L, 0L, false);
+            TaiBenchSuite.PHASE_LOAD, false, stillHot, baseline, 0L, 0L, false, false);
         assertEquals(TaiBenchGuard.PAUSE, result.decision.action);
         assertEquals(2_000L, result.decision.pauseMs);
         assertEquals("cooldown", result.decision.reason);
@@ -103,11 +103,11 @@ public class TaiBenchGuardRulesTest {
         // Status back at or below baseline, headroom within 0.05 of baseline: recovered.
         TaiBenchGuardRules.Snapshot recovered = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.15f);
         assertEquals(TaiBenchGuard.CONTINUE,
-            TaiBenchGuardRules.beforePhase(TaiBenchSuite.PHASE_LOAD, false, recovered, baseline, 0L, 0L, false).decision.action);
+            TaiBenchGuardRules.beforePhase(TaiBenchSuite.PHASE_LOAD, false, recovered, baseline, 0L, 0L, false, false).decision.action);
         // Status recovered but headroom still too far above baseline: not recovered yet.
         TaiBenchGuardRules.Snapshot statusOnlyRecovered = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.20f);
         assertEquals(TaiBenchGuard.PAUSE,
-            TaiBenchGuardRules.beforePhase(TaiBenchSuite.PHASE_LOAD, false, statusOnlyRecovered, baseline, 0L, 0L, false).decision.action);
+            TaiBenchGuardRules.beforePhase(TaiBenchSuite.PHASE_LOAD, false, statusOnlyRecovered, baseline, 0L, 0L, false, false).decision.action);
     }
 
     @Test
@@ -115,12 +115,12 @@ public class TaiBenchGuardRulesTest {
         TaiBenchGuardRules.Snapshot baseline = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.1f);
         TaiBenchGuardRules.Snapshot stillHot = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_MODERATE, 0.9f);
         TaiBenchGuardRules.Result underCap = TaiBenchGuardRules.beforePhase(
-            TaiBenchSuite.PHASE_LOAD, false, stillHot, baseline, 1L, 1L + 5 * 60_000L - 1L, false);
+            TaiBenchSuite.PHASE_LOAD, false, stillHot, baseline, 1L, 1L + 5 * 60_000L - 1L, false, false);
         assertEquals(TaiBenchGuard.PAUSE, underCap.decision.action);
         assertEquals(false, underCap.warmStart);
 
         TaiBenchGuardRules.Result atCap = TaiBenchGuardRules.beforePhase(
-            TaiBenchSuite.PHASE_LOAD, false, stillHot, baseline, 1L, 1L + 5 * 60_000L, false);
+            TaiBenchSuite.PHASE_LOAD, false, stillHot, baseline, 1L, 1L + 5 * 60_000L, false, false);
         assertEquals(TaiBenchGuard.CONTINUE, atCap.decision.action);
         assertEquals(true, atCap.warmStart);
     }
@@ -130,7 +130,7 @@ public class TaiBenchGuardRulesTest {
         TaiBenchGuardRules.Snapshot baseline = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.1f);
         TaiBenchGuardRules.Snapshot stillHot = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_MODERATE, 0.9f);
         TaiBenchGuardRules.Result result = TaiBenchGuardRules.beforePhase(
-            TaiBenchSuite.PHASE_LOAD, false, stillHot, baseline, 0L, 0L, true);
+            TaiBenchSuite.PHASE_LOAD, false, stillHot, baseline, 0L, 0L, true, false);
         assertEquals(TaiBenchGuard.CONTINUE, result.decision.action);
         assertEquals(true, result.warmStart);
     }
@@ -140,7 +140,7 @@ public class TaiBenchGuardRulesTest {
         TaiBenchGuardRules.Snapshot unknownBaseline = snapshot(100, false, -1, Float.NaN);
         TaiBenchGuardRules.Snapshot now = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_MODERATE, Float.NaN);
         TaiBenchGuardRules.Result result = TaiBenchGuardRules.beforePhase(
-            TaiBenchSuite.PHASE_LOAD, false, now, unknownBaseline, 0L, 0L, false);
+            TaiBenchSuite.PHASE_LOAD, false, now, unknownBaseline, 0L, 0L, false, false);
         assertEquals(TaiBenchGuard.CONTINUE, result.decision.action);
         assertEquals(false, result.warmStart);
     }
@@ -151,7 +151,7 @@ public class TaiBenchGuardRulesTest {
         // Would otherwise pause for cool-down (hotter than baseline), but battery is critical.
         TaiBenchGuardRules.Snapshot lowBattery = snapshot(14, false, TaiBenchGuardRules.THERMAL_STATUS_MODERATE, 0.9f);
         TaiBenchGuardRules.Result result = TaiBenchGuardRules.beforePhase(
-            TaiBenchSuite.PHASE_LOAD, false, lowBattery, baseline, 0L, 0L, false);
+            TaiBenchSuite.PHASE_LOAD, false, lowBattery, baseline, 0L, 0L, false, false);
         assertEquals(TaiBenchGuard.STOP, result.decision.action);
         assertEquals("battery_low", result.decision.reason);
     }
@@ -172,6 +172,61 @@ public class TaiBenchGuardRulesTest {
     private static TaiBenchGuard.Decision decide(String phase, boolean isFirstEntry, TaiBenchGuardRules.Snapshot now,
                                                    TaiBenchGuardRules.Snapshot baseline, long waitStartedMs, long nowMs,
                                                    boolean skipRequested) {
-        return TaiBenchGuardRules.beforePhase(phase, isFirstEntry, now, baseline, waitStartedMs, nowMs, skipRequested).decision;
+        return decide(phase, isFirstEntry, now, baseline, waitStartedMs, nowMs, skipRequested, false);
+    }
+
+    private static TaiBenchGuard.Decision decide(String phase, boolean isFirstEntry, TaiBenchGuardRules.Snapshot now,
+                                                   TaiBenchGuardRules.Snapshot baseline, long waitStartedMs, long nowMs,
+                                                   boolean skipRequested, boolean held) {
+        return TaiBenchGuardRules.beforePhase(phase, isFirstEntry, now, baseline, waitStartedMs, nowMs, skipRequested, held).decision;
+    }
+
+    // ---- held (left the screen) ------------------------------------------------------------------
+
+    @Test
+    public void held_pausesWithReasonLeft() {
+        TaiBenchGuard.Decision pause = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 0, Float.NaN),
+            null, 0L, 0L, false, true);
+        assertEquals(TaiBenchGuard.PAUSE, pause.action);
+        assertEquals("left", pause.reason);
+        assertEquals(1_000L, pause.pauseMs);
+    }
+
+    @Test
+    public void held_batteryStopStillWins() {
+        TaiBenchGuard.Decision stop = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(14, false, 0, Float.NaN),
+            null, 0L, 0L, false, true);
+        assertEquals(TaiBenchGuard.STOP, stop.action);
+        assertEquals("battery_low", stop.reason);
+    }
+
+    @Test
+    public void held_severeThermalStopStillWins() {
+        TaiBenchGuard.Decision stop = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 3, Float.NaN),
+            null, 0L, 0L, false, true);
+        assertEquals(TaiBenchGuard.STOP, stop.action);
+        assertEquals("thermal", stop.reason);
+    }
+
+    @Test
+    public void held_beyondThirtyMinutesStopsLeft() {
+        TaiBenchGuard.Decision stillWaiting = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 0, Float.NaN),
+            null, 1L, 1L + TaiBenchGuardRules.HELD_TIMEOUT_MS - 1L, false, true);
+        assertEquals(TaiBenchGuard.PAUSE, stillWaiting.action);
+
+        TaiBenchGuard.Decision timedOut = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 0, Float.NaN),
+            null, 1L, 1L + TaiBenchGuardRules.HELD_TIMEOUT_MS, false, true);
+        assertEquals(TaiBenchGuard.STOP, timedOut.action);
+        assertEquals("left", timedOut.reason);
+    }
+
+    @Test
+    public void held_duringCooldownEntryPausesLeftAheadOfCooldown() {
+        TaiBenchGuardRules.Snapshot baseline = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.1f);
+        TaiBenchGuardRules.Snapshot stillHot = snapshot(100, false, TaiBenchGuardRules.THERMAL_STATUS_MODERATE, 0.9f);
+        TaiBenchGuardRules.Result result = TaiBenchGuardRules.beforePhase(
+            TaiBenchSuite.PHASE_LOAD, false, stillHot, baseline, 0L, 0L, false, true);
+        assertEquals(TaiBenchGuard.PAUSE, result.decision.action);
+        assertEquals("left", result.decision.reason);
     }
 }
