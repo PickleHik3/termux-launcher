@@ -1,14 +1,15 @@
 # The Linux display
 
 The launcher can show a Linux desktop or any X11 app beside the terminal, as the **Display**
-place of the pane wall — swipe left on the status bar from the terminal, or tap the screen glyph
-in the status bar's right edge. The display server runs in your shell like any other command, so
-everything you know from Termux:X11 (its flags, its preferences, `pkill termux-x11`) works the
-same way. This page is the short route from switching it on to running a desktop in a proot.
+place of the pane wall — hold a press on the terminal's border until it ticks, then drag left, or
+tap the screen glyph in the status bar's right edge. The display server runs in your shell like
+any other command, so everything you know from Termux:X11 (its flags, its preferences, `pkill
+termux-x11`) works the same way. This page is the short route from switching it on to running a
+desktop in a proot.
 
 ## Turn it on
 
-1. Swipe to the Display place and tap **Turn on**, or open **Settings → Display** and
+1. Drag to the Display place and tap **Turn on**, or open **Settings → Display** and
    switch on **Display**. The Display place is always there; switching the display on puts
    the `termux-x11` and `termux-x11-preference` commands in your `$PREFIX/bin` so a display can
    be started from it.
@@ -31,7 +32,7 @@ same way. This page is the short route from switching it on to running a desktop
    ```
 
    or tap **Start display** on the Display place, which runs the same command.
-4. Run something: `pkg install xorg-xeyes && xeyes`. Swipe to the Display place to see it.
+4. Run something: `pkg install xorg-xeyes && xeyes`. Drag to the Display place to see it.
 
 Switching the display off in Settings takes the two commands back out of `$PREFIX/bin`; the
 Display place stays and offers to turn it on again. Running servers are not stopped.
