@@ -8,7 +8,6 @@ import android.content.Context;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.util.AttributeSet;
-import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -50,19 +49,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         /** The fold drag's stream was cancelled under it: the bar goes back to the form it had. */
         default void onFoldDragCancelled() { }
         default boolean isStatusGestureBlocked() { return false; }
-        /**
-         * A drag along the bar claimed the stream and the pane wall may take it; return true to
-         * drive the wall from this drag.
-         */
-        default boolean onWallDragBegin() { return false; }
-        /**
-         * @param alongPx finger travel along the bar since the DOWN — to the right on a bar that
-         *                stands along the top or the bottom, downward on one down a side.
-         */
-        default void onWallDrag(float alongPx) { }
-        /** @param velocityPxPerSec release velocity along the bar, in that same direction */
-        default void onWallDragEnd(float velocityPxPerSec) { }
-        default void onWallDragCancel() { }
     }
 
     private final int mTouchSlop;
@@ -117,15 +103,13 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     public void setAnotherSurfaceEngaged(boolean engaged) { mAnotherSurfaceEngaged = engaged; }
 
     /**
-     * The edge the bar stands on. It decides which way a drag pages the wall and which way it
-     * folds the bar; a live stream is dropped rather than reinterpreted mid-gesture.
+     * The edge the bar stands on. It decides which way a drag folds the bar; a live stream is
+     * dropped rather than reinterpreted mid-gesture.
      */
     public void setEdge(@NonNull Edge edge) {
         if (mEdge == edge) return;
         mEdge = edge;
         if (mGesture != null) mGesture.cancel();
-        if (mWallDragActive && mListener != null) mListener.onWallDragCancel();
-        mWallDragActive = false;
         cancelFoldDrag();
         requestStructuralReset();
     }
@@ -158,29 +142,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
      * regardless: this only vetoes the expand swipe, it never folds a bar already open elsewhere.
      */
     public void setExpansionAllowed(boolean allowed) { mExpansionAllowed = allowed; }
-
-    /** Whether the pane wall has a place to go from here; off, a sideways drag means nothing. */
-    public void setWallAvailable(boolean available) {
-        mWallAvailable = available;
-        if (!available && mWallDragActive) {
-            mWallDragActive = false;
-            if (mListener != null) mListener.onWallDragCancel();
-        }
-    }
-
-    public boolean isWallAvailable() { return mWallAvailable; }
-
-    /**
-     * The wall was moved from elsewhere mid-drag (a tile tap, {@code wall.go}, Home). The drag
-     * is over: the rest of this finger's stream is ignored rather than fed to a wall that has
-     * stopped listening, and the next touch starts clean.
-     */
-    public void cancelWallDrag() {
-        if (!mWallDragActive) return;
-        mWallDragActive = false;
-        if (mGesture != null) mGesture.cancel();
-        requestStructuralReset();
-    }
 
     /**
      * A tap on the bar's own chrome answers with the direction the bar does not show at rest:
@@ -301,30 +262,23 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         }
     }
 
-    private boolean mWallAvailable;
-    private boolean mWallDragActive;
     /** The fold has claimed the stream and the listener has heard at least one move of it. */
     private boolean mFoldDragActive;
     private boolean mExpansionAllowed = true;
 
     /**
-     * Child streams are frozen at DOWN with one exception: a claimed wall drag takes over — the
+     * Child streams are frozen at DOWN with one exception: a claimed fold takes over — the
      * platform then delivers the children their CANCEL, exactly like a scroll container would.
      */
     @Override public boolean onInterceptTouchEvent(MotionEvent event) {
         StatusBarGesturePolicy gesture = mGesture;
         if (gesture == null) return false;
-        StatusBarGesturePolicy.Claim claim = gesture.claim();
         // The fold works from anywhere on the bar, so it starts over the clock, a chip or a tile
         // as readily as over bare chrome. Taking the stream the moment it is claimed is what keeps
         // those children usable: they get their CANCEL, exactly as a scroll container's children
         // do, so the finger that folded the bar never also opens what it started on. A tap is
         // untouched — it never travels far enough to make this claim.
-        if (claim == StatusBarGesturePolicy.Claim.EXPAND_SWIPE
-            || claim == StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE) return true;
-        // A wall drag can start on the clock or a tile, which own their own touches until the
-        // intent along the bar is clear; taking the stream then delivers them their CANCEL.
-        return mWallDragActive && claim == StatusBarGesturePolicy.Claim.WALL_PAGING;
+        return isFoldClaim(gesture.claim());
     }
 
     @Override
@@ -336,7 +290,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (gesture == null) return false;
         switch (gesture.claim()) {
             case PENDING:
-            case WALL_PAGING:
             case EXPAND_SWIPE:
             case COLLAPSE_SWIPE:
                 return true;
@@ -355,18 +308,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                 break;
             case MotionEvent.ACTION_MOVE:
                 if (mGesture != null) {
-                    StatusBarGesturePolicy.Claim before = mGesture.claim();
                     StatusBarGesturePolicy.Claim after = mGesture.move(event.getX(), event.getY());
-                    if (before == StatusBarGesturePolicy.Claim.PENDING
-                        && after == StatusBarGesturePolicy.Claim.WALL_PAGING) {
-                        beginWallDrag();
-                    }
-                    if (mWallDragActive && after == StatusBarGesturePolicy.Claim.WALL_PAGING
-                        && mListener != null) {
-                        mListener.onWallDrag(StatusBarGesturePolicy.alongAxis(mEdge,
-                            event.getRawX() - mGesture.down().rawX,
-                            event.getRawY() - mGesture.down().rawY));
-                    }
                     if (isFoldClaim(after) && mListener != null) {
                         // The fold is the finger's while the finger is down: the bar stands
                         // where the travel across it says, the way it opens being positive.
@@ -385,23 +327,13 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                 finish(event);
                 break;
             case MotionEvent.ACTION_CANCEL:
-                if (mWallDragActive && mListener != null) mListener.onWallDragCancel();
-                mWallDragActive = false;
                 cancelFoldDrag();
                 if (mGesture != null) mGesture.cancel();
-                        requestStructuralReset();
+                requestStructuralReset();
                 break;
             default:
                 break;
         }
-    }
-
-    private void beginWallDrag() {
-        Listener listener = mListener;
-        if (listener == null) return;
-        mWallDragActive = listener.onWallDragBegin();
-        if (mWallDragActive) performHapticFeedback(HapticFeedbackConstants.GESTURE_START);
-        else if (mGesture != null) mGesture.cancel();
     }
 
     private void begin(MotionEvent event) {
@@ -426,14 +358,10 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         // is exactly where a downward fold starts — and the bar could be opened but never closed.
         boolean childOwnsFoldAxis = isInsideFoldAxisOwner(this, event);
         boolean formEligible = !blocked && !childOwnsFoldAxis && mExpansionAllowed;
-        // The wall takes a drag along the bar from anywhere on it except the window strip, whose
-        // chips scroll first and hand over their own surplus distance. It works over the clock,
-        // the tiles and the stat widgets too: a drag along the bar on one of those is not a tap.
-        boolean wallEligible = mWallAvailable && !blocked && !inWindowBar && !nestedChildOwned;
         StatusBarGesturePolicy.Down down = new StatusBarGesturePolicy.Down(
             event.getPointerId(0), event.getRawX(), event.getRawY(), event.getX(), event.getY(),
             event.getEventTime(), mState, inWindowBar, interactive, nestedChildOwned,
-            blocked, formEligible, wallEligible, mTouchSlop, mEdge);
+            blocked, formEligible, mTouchSlop, mEdge);
         mGesture = new StatusBarGesturePolicy(down);
         if (mVelocityTracker == null) mVelocityTracker = android.view.VelocityTracker.obtain();
         mVelocityTracker.clear();
@@ -442,19 +370,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     private void finish(MotionEvent event) {
         StatusBarGesturePolicy gesture = mGesture;
-        if (gesture != null
-            && gesture.claim() == StatusBarGesturePolicy.Claim.WALL_PAGING) {
-            if (mWallDragActive && mListener != null) {
-                float velocity = 0f;
-                if (mVelocityTracker != null) {
-                    mVelocityTracker.computeCurrentVelocity(1000);
-                    velocity = StatusBarGesturePolicy.alongAxis(mEdge,
-                        mVelocityTracker.getXVelocity(), mVelocityTracker.getYVelocity());
-                }
-                mListener.onWallDragEnd(velocity);
-            }
-            mWallDragActive = false;
-        } else if (gesture != null && isFoldClaim(gesture.claim())) {
+        if (gesture != null && isFoldClaim(gesture.claim())) {
             // The release lands the fold the way the claim said, from wherever the finger has
             // the bar, at the speed it let go.
             boolean collapsed = gesture.claim() == StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE;
@@ -473,19 +389,16 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     }
 
     /**
-     * A live wall drag owns its stream outright: state flips it causes must not reset the
-     * tracking that is driving them; the drag resets itself at UP/CANCEL. A reentrant callback
-     * cannot clear the dispatch latch until dispatchTouchEvent returns either.
+     * A reentrant callback cannot clear the dispatch latch until dispatchTouchEvent returns; the
+     * reset waits for it.
      */
     private void requestStructuralReset() {
-        if (mWallDragActive) return;
         if (mDispatchInProgress) mDeferredReset = true;
         else clearTracking();
     }
 
     private void clearTracking() {
         mGesture = null;
-        mWallDragActive = false;
         mFoldDragActive = false;
         if (mVelocityTracker != null) {
             mVelocityTracker.recycle();
