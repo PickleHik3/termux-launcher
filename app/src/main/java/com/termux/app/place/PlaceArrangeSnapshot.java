@@ -10,7 +10,7 @@ import java.util.List;
  * The shared arrangement, in both orientations, as one immutable value: what the Layout editor took
  * a copy of on entry, what its revert puts back, and — folded to a string — how it knows a bar has
  * been moved since. The three sizes ride along, so a dragged dock, keyboard or chin is exactly as
- * unsaved as a moved bar.
+ * unsaved as a moved bar, and so does the keyboard element's on/off switch.
  *
  * <p>Read and written through {@link PlaceLayoutStore}'s own accessors rather than the raw keys, so
  * a restore writes the value the layout was resolving to whether or not it had a key of its own.
@@ -94,9 +94,12 @@ public final class PlaceArrangeSnapshot {
     }
 
     @NonNull private final List<Entry> mEntries;
+    /** The keyboard element, on or off: one switch for both orientations, captured once. */
+    private final boolean mKeyboardShown;
 
-    private PlaceArrangeSnapshot(@NonNull List<Entry> entries) {
+    private PlaceArrangeSnapshot(@NonNull List<Entry> entries, boolean keyboardShown) {
         mEntries = Collections.unmodifiableList(entries);
+        mKeyboardShown = keyboardShown;
     }
 
     /** Both orientations: a rotation mid-edit moves which one the editor writes. */
@@ -105,12 +108,13 @@ public final class PlaceArrangeSnapshot {
         List<Entry> entries = new ArrayList<>();
         for (PlaceOrientation orientation : PlaceOrientation.values())
             entries.add(new Entry(places, orientation));
-        return new PlaceArrangeSnapshot(entries);
+        return new PlaceArrangeSnapshot(entries, places.isKeyboardShown());
     }
 
     /** Puts the arrangement back the way {@link #capture} found it. */
     public void restore(@NonNull PlaceLayoutStore places) {
         for (Entry entry : mEntries) entry.restore(places);
+        places.setKeyboardShown(mKeyboardShown);
     }
 
     /** The whole arrangement as one string, for the editor's unsaved-changes comparison. */
@@ -118,6 +122,7 @@ public final class PlaceArrangeSnapshot {
     public String signature() {
         StringBuilder out = new StringBuilder(128);
         for (Entry entry : mEntries) entry.appendTo(out);
+        out.append("keyboard:").append(mKeyboardShown);
         return out.toString();
     }
 }

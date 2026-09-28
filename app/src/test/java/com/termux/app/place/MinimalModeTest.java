@@ -45,10 +45,14 @@ public class MinimalModeTest {
                     minimal.slot(element).order);
             }
             assertFalse(PlaceChromePolicy.dockShown(minimal));
-            // The keyboard's own type and the grid are not the mode's business.
+            // The keyboard's own type, its on/off switch and the grid are not the mode's
+            // business: minimal puts the keyboard down on entry, it does not switch it off.
             assertEquals(layout.keyboardForm, minimal.keyboardForm);
             assertEquals(layout.keyboardMode, minimal.keyboardMode);
+            assertEquals(layout.keyboardShown, minimal.keyboardShown);
             assertEquals(layout.widgetColumns, minimal.widgetColumns);
+            assertEquals("a switched-off keyboard stays off in minimal mode",
+                false, MinimalMode.apply(layout.withKeyboardShown(false)).keyboardShown);
         }
     }
 

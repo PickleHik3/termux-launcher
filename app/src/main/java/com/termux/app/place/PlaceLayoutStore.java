@@ -182,8 +182,34 @@ public final class PlaceLayoutStore {
         return new PlaceLayout(slots,
             keyboardMode(orientation),
             keyboardForm(orientation),
+            isKeyboardShown(),
             widgetColumns(orientation),
             widgetRows(orientation));
+    }
+
+    /**
+     * Whether the keyboard is part of the arrangement: the Layout editor's Keyboard element,
+     * shown or hidden. It is the one switch the palette's Keyboard on/off flips
+     * ({@link TermuxAppSharedPreferences#isKeyboardTurnedOff}), read here inverted, so there is
+     * one answer to whether the keyboard may come up however the question is asked. One value
+     * for both orientations and every place, unlike the rest of the arrangement: the keyboard is
+     * switched off because a hardware keyboard is in use, not because the phone was turned, and
+     * that stance holds until it is switched on again.
+     */
+    public boolean isKeyboardShown() {
+        return !mPreferences.isKeyboardTurnedOff();
+    }
+
+    /**
+     * Shows or hides the keyboard element, which is the same as turning the keyboard on or off
+     * from the palette. Writes the preference only: the keyboard on screen follows on the next
+     * layout pass ({@code TermuxActivity}'s), which puts it down when hidden and leaves it to
+     * the next tap when shown again.
+     */
+    public void setKeyboardShown(boolean shown) {
+        if (mPreferences.isKeyboardTurnedOff() == !shown) return;
+        mPreferences.setKeyboardTurnedOff(!shown);
+        mRevision++;
     }
 
     // ---------------------------------------------------------------- slots

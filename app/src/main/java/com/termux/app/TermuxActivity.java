@@ -11483,8 +11483,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // itself is every place's, so nothing else here depends on where the wall stands.
         boolean sizesMoved = applyPlaceSizes();
         PlaceLayout layout = currentPlaceLayout();
-        boolean arrangementChanged = !layout.equals(mAppliedPlaceLayout);
+        PlaceLayout previous = mAppliedPlaceLayout;
+        boolean arrangementChanged = !layout.equals(previous);
         mAppliedPlaceLayout = layout;
+        // The keyboard element put away in the Layout editor is the keyboard switched off: it
+        // goes down here, on the same pass every other element leaves on. Shown again, it waits
+        // for the next tap rather than rising behind the editor's sheet; the palette's own
+        // Keyboard on/off raises it itself, before this pass ever sees the change.
+        if (previous != null && previous.keyboardShown && !layout.keyboardShown
+            && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+            mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                .HideReason.KEYBOARD_ACTION);
+        }
         // The keyboard hears the type from here rather than from the tool that wrote it: a
         // rotation moves it too, and this is the one pass both take.
         // Hosting first: the geometry pass the keyboard then asks for has to see the keyboard where

@@ -58,9 +58,27 @@ public class PlaceArrangeSnapshotTest {
         places.setDockHeightScale(PORTRAIT, 1.4f);
         places.setKeyboardHeightScale(PORTRAIT, 1.25f);
         places.setKeyboardChinDp(PORTRAIT, 16);
+        places.setKeyboardShown(false);
         // And, after a rotation mid-session, the other orientation as well.
         places.setStatusBarEdge(LANDSCAPE, Edge.LEFT);
         places.setWidgetColumns(LANDSCAPE, 6);
+    }
+
+    /** The keyboard element's switch is as unsaved as a moved bar, and Discard puts it back. */
+    @Test
+    public void theKeyboardSwitchIsSomethingToLose() {
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+        String entrySignature = entry.signature();
+
+        places.setKeyboardShown(false);
+        assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+        assertTrue("the same switch as the palette's Keyboard on/off",
+            prefs.getBoolean(TERMUX_APP.KEY_KEYBOARD_TURNED_OFF, false));
+
+        entry.restore(places);
+        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+        assertTrue(places.isKeyboardShown());
+        assertFalse(prefs.getBoolean(TERMUX_APP.KEY_KEYBOARD_TURNED_OFF, false));
     }
 
     @Test
@@ -107,6 +125,7 @@ public class PlaceArrangeSnapshotTest {
             places.keyboardHeightScale(PORTRAIT), 0.0001f);
         assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING,
             places.keyboardChinDp(PORTRAIT));
+        assertTrue(places.isKeyboardShown());
     }
 
     @Test

@@ -390,10 +390,10 @@ public class LayoutEditorPlanTest {
     @Test
     public void theRowsFollowTheSecondDoorToItsPlace() {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
-        assertEquals(4, plan.rows().size());
+        assertEquals(5, plan.rows().size());
 
         plan.showPlace(PaneWallPage.WIDGETS);
-        assertEquals("home's grid counts join the card", 6, plan.rows().size());
+        assertEquals("home's grid counts join the card", 7, plan.rows().size());
     }
 
 

@@ -49,6 +49,13 @@ underneath.
 - **Dock height** and **Keyboard height**: how tall the dock and the built-in keyboard stand, and
   **Keyboard bottom padding** for the clearance it leaves below the keyboard, each set separately
   per orientation; upgrading carries your terminal's values over unchanged.
+- **Keyboard on/off**: whether the built-in keyboard is part of the layout at all. Off, nothing
+  raises it — not a tap on the terminal, not a text field — until you turn it on again, which
+  makes it the setting for a hardware keyboard or a touch-driven full-screen program. It is the
+  same switch as **Keyboard on/off** in the command palette and on the extra-keys row, and unlike
+  the rest of the layout it is one switch for both orientations and every place. Turning it off
+  here puts the keyboard down; turning it on lets the next tap raise it, and the keyboard key or
+  the palette raise it straight away. Discard puts it back the way the editor found it.
 - **Keyboard type**: whether the on-screen keyboard is docked along the bottom, floats over the
   content where you put it, or is split in the middle for two thumbs. Set per orientation, and
   reachable from a key or the command palette as well.
@@ -60,6 +67,12 @@ up or down the way you left them, and Home always comes back with it down. On Ho
 opens over the page rather than shrinking it, so the widgets keep their places; a text field inside
 a widget opens the Android keyboard, and the keyboard key on the extra keys row opens the built-in
 one.
+
+Minimal mode is a preset of the same elements: with it on, the status bar, the pinned apps, the
+A–Z index and the extra keys are put away and the keyboard is put down, and turning it off brings
+each one back exactly where the layout has it. Anything you want left on screen in minimal mode is
+therefore arranged here — a terminal with only the A–Z index and the keyboard, say, is that layout
+with the other bars hidden, and minimal mode adds nothing to it but the full-screen pane.
 - **Grid columns** and **Grid rows** (Home only): how many widgets fit across and down a page, set
   separately for portrait and landscape; widgets that no longer fit a smaller grid move to free
   space or a new page rather than being dropped.

@@ -107,17 +107,42 @@ public class PlaceArrangeModelTest {
     }
 
     @Test
-    public void theKeyboardOffersItsTypeEverywhereAndTheModeOnTheDisplayAlone() {
-        assertEquals(1, groups(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD).size());
-        assertEquals(Arrays.asList("docked", "floating", "split"),
+    public void theKeyboardOffersItsSwitchAndTypeEverywhereAndTheModeOnTheDisplayAlone() {
+        assertEquals(2, groups(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD).size());
+        assertEquals(Arrays.asList("on", "off"),
             Arrays.asList(pills(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD, 0).values));
+        assertEquals(Arrays.asList("docked", "floating", "split"),
+            Arrays.asList(pills(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD, 1).values));
 
         List<Group> display = groups(PaneWallPage.DISPLAY, LANDSCAPE, Element.KEYBOARD);
-        assertEquals(2, display.size());
+        assertEquals(3, display.size());
         assertEquals(Arrays.asList("resize", "overlay"),
-            Arrays.asList(((Pills) display.get(1)).values));
+            Arrays.asList(((Pills) display.get(2)).values));
         assertEquals("landscape on the display floats by default",
-            "overlay", ((Pills) display.get(1)).selected);
+            "overlay", ((Pills) display.get(2)).selected);
+    }
+
+    /**
+     * The keyboard element's switch is the palette's Keyboard on/off: one setting, read both
+     * ways, and one for both orientations and every place.
+     */
+    @Test
+    public void theKeyboardSwitchIsKeyboardOnOff() {
+        assertEquals("on", pills(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD, 0).selected);
+        assertTrue(places.resolve(PORTRAIT).keyboardShown);
+
+        pills(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD, 0).writer.write("off");
+        assertTrue("the editor's off is the palette's off",
+            prefs.getBoolean("keyboard_turned_off", false));
+        assertFalse(places.isKeyboardShown());
+        assertFalse(places.resolve(PORTRAIT).keyboardShown);
+        assertFalse("one switch for both orientations", places.resolve(LANDSCAPE).keyboardShown);
+        assertEquals("off", pills(PaneWallPage.DISPLAY, LANDSCAPE, Element.KEYBOARD, 0).selected);
+
+        // The palette writes the same key, and the editor reads it back.
+        prefs.edit().putBoolean("keyboard_turned_off", false).commit();
+        assertEquals("the palette's on is the editor's on",
+            "on", pills(PaneWallPage.WIDGETS, PORTRAIT, Element.KEYBOARD, 0).selected);
     }
 
     @Test
@@ -148,7 +173,7 @@ public class PlaceArrangeModelTest {
     public void aPickOnEveryOtherElementLandsOnItsOwnKey() {
         pills(PaneWallPage.TERMINAL, PORTRAIT, Element.PINNED_APPS, 0).writer.write("hidden");
         pills(PaneWallPage.TERMINAL, PORTRAIT, Element.EXTRA_KEYS, 0).writer.write("hidden");
-        pills(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD, 0).writer.write("split");
+        pills(PaneWallPage.TERMINAL, PORTRAIT, Element.KEYBOARD, 1).writer.write("split");
         pills(PaneWallPage.TERMINAL, PORTRAIT, Element.AZ_INDEX, 0).writer.write("hidden");
         ((Counter) groups(PaneWallPage.WIDGETS, LANDSCAPE, Element.WIDGET_GRID).get(0))
             .writer.write(6);

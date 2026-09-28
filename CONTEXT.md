@@ -69,6 +69,14 @@ orientation with a toggle to the other. Entered from the corner tab or
 the long-press menu; Settings has no door to it.
 _Avoid_: arrange mode, surface editor, place editor
 
+**Element**:
+One piece of the arrangement the Layout editor shows or hides: the status bar (never hidden),
+the pinned apps, the A–Z index, the extra keys — each on an edge, in an order — and the keyboard,
+which has no edge and no order, only on or off. The keyboard's on/off is the one switch the
+palette's **Keyboard on/off** flips (`keyboard_turned_off`), shared by both orientations and every
+place; the last write wins, whichever door it came through.
+_Avoid_: bar (for the keyboard), widget, slot (the store's word for where an element stands)
+
 **Miniature**:
 The scaled model of a place's layout that the user drags elements around on. The same miniature
 is the Layout editor's canvas everywhere; there is no second one.
