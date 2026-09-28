@@ -4139,11 +4139,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     || params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != RelativeLayout.TRUE;
                 params.removeRule(RelativeLayout.ABOVE);
                 params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
+            } else if (!dockGlassStopsAtKeyboard(state)) {
+                // Bands under a keyboard that is not docked between them and the rows: the
+                // dock's one sheet runs the whole stack, down over them.
+                rulesChanged = params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != 0
+                    || params.getRule(RelativeLayout.ABOVE) != 0;
+                params.removeRule(RelativeLayout.ALIGN_PARENT_TOP);
+                params.removeRule(RelativeLayout.ABOVE);
             } else {
                 rulesChanged = params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != 0
-                    || params.getRule(RelativeLayout.ABOVE) != R.id.inapp_keyboard_container;
+                    || params.getRule(RelativeLayout.ABOVE) != R.id.accessory_keyboard_column;
                 params.removeRule(RelativeLayout.ALIGN_PARENT_TOP);
-                params.addRule(RelativeLayout.ABOVE, R.id.inapp_keyboard_container);
+                params.addRule(RelativeLayout.ABOVE, R.id.accessory_keyboard_column);
                 params.alignWithParent = true;
             }
             if (rulesChanged)
@@ -4153,6 +4160,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? buildToolbarOnlyAccessoryBounds(state) : null;
         applyAccessoryLayerBounds(R.id.accessory_surface_host,
             withDockGlassTopInset(bounds, dockGlassTopInsetPx()));
+        applyUnderKeyboardStackGlass(state);
+    }
+
+    /**
+     * Whether the dock's glass ends where the keyboard's column begins, as it always has. It does
+     * unless bands stand under the keyboard while the keyboard is not docked between them and the
+     * rows — closed, or lifted out by the floating form — when the dock is one stack again and
+     * its sheet runs down over them.
+     */
+    private boolean dockGlassStopsAtKeyboard(@NonNull ChromeSpec state) {
+        View under = findViewById(R.id.accessory_under_keyboard_stack);
+        return under == null || under.getVisibility() != View.VISIBLE
+            || isKeyboardDockedOverUnderStack(state);
+    }
+
+    /** The keyboard up in its column, between the dock's rows and the bands under it. */
+    private boolean isKeyboardDockedOverUnderStack(@NonNull ChromeSpec state) {
+        View keyboard = findViewById(R.id.inapp_keyboard_container);
+        return state.keyboardShown && keyboard != null && keyboard.getVisibility() != View.GONE
+            && keyboard.getParent() == findViewById(R.id.accessory_keyboard_column);
+    }
+
+    /**
+     * The bands under a docked keyboard wear the dock's tint on a sheet of their own, inset like
+     * the dock's; the dock's sheet stops at the keyboard, and the unified dock-and-keyboard
+     * surface, when that is the material, already runs under them. Otherwise the stack is bare
+     * and stands on the dock's own glass.
+     */
+    private void applyUnderKeyboardStackGlass(@NonNull ChromeSpec state) {
+        View under = findViewById(R.id.accessory_under_keyboard_stack);
+        if (under == null) return;
+        boolean ownSheet = under.getVisibility() == View.VISIBLE
+            && isKeyboardDockedOverUnderStack(state)
+            && !shouldUseUnifiedDefaultKeyboardGlassSurface(state);
+        if (!ownSheet) {
+            if (under.getBackground() != null) under.setBackground(null);
+            return;
+        }
+        int insetPx = getDockLayout().horizontalInsetPx;
+        under.setBackground(new android.graphics.drawable.InsetDrawable(
+            mChrome.glass().dockSurface(state.barAlpha, 0f, 1f, false), insetPx, 0, insetPx, 0));
     }
 
     /**
@@ -4711,6 +4759,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int dockInsetPx = dockLayout.capsule
             ? dockLayout.capsuleExtraKeysInsetPx : dockLayout.horizontalInsetPx;
         setSeparatorLook(R.id.accessory_row_stack, color, thicknessPx, dockInsetPx);
+        setSeparatorLook(R.id.accessory_under_keyboard_stack, color, thicknessPx, dockInsetPx);
         // The plank already stands inside the dock's own side gap, so its hairline keeps only what
         // is left of the same inset — the line is held off the sheet's sides by the one figure.
         setSeparatorLook(R.id.place_off_dock_plank_bars, color, thicknessPx,
@@ -11347,7 +11396,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // outermost first. One edge is one stack: the bottom's is the dock's own row stack.
             List<View> bars = new ArrayList<>(4);
             List<View> plankContents = new ArrayList<>(2);
-            for (Element element : EdgeStackPolicy.stack(layout, edge)) {
+            // The bottom's bands under the keyboard stand in a stack of their own below it.
+            for (Element element : edge == PlaceLayout.Edge.BOTTOM
+                ? EdgeStackPolicy.overKeyboard(layout) : EdgeStackPolicy.stack(layout, edge)) {
                 View host = edgeStackHost(element, edge);
                 if (host == null || stack == null) continue;
                 if (onPlank.contains(element)) {
@@ -11365,6 +11416,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             if (stack != null) moved |= stack.setStack(bars);
         }
+        moved |= applyUnderKeyboardStack(layout);
         // The hairlines. Only the two stacks that are one sheet of glass draw any: every band in a
         // screen edge's stack carries its own, and a line between two of those would float in the
         // air between them.
@@ -11380,7 +11432,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.EdgeStackView dockRows = findViewById(R.id.accessory_row_stack);
         if (dockRows != null)
             dockRows.setSeparatorCount(EdgeStackPolicy.separatorsFor(
-                AccessoryStackLayoutPolicy.plankBands(bottom)).size());
+                AccessoryStackLayoutPolicy.plankBands(EdgeStackPolicy.overKeyboard(layout)))
+                .size());
+        return moved;
+    }
+
+    /**
+     * Stands the bottom bands a place puts under the keyboard in the stack below it, outermost
+     * first, and shows that stack only while it holds one. A host that left for another edge or
+     * the tray goes back to the dock's row stack, where every bottom host has always waited, so
+     * nothing is left in a stack that is gone. Its hairlines are its own: the keyboard, when it is
+     * up, is between the two stacks, and with it down they meet on one sheet of glass.
+     *
+     * @return whether anything moved
+     */
+    private boolean applyUnderKeyboardStack(@NonNull PlaceLayout layout) {
+        com.termux.app.place.EdgeStackView under =
+            findViewById(R.id.accessory_under_keyboard_stack);
+        com.termux.app.place.EdgeStackView rows = findViewById(R.id.accessory_row_stack);
+        if (under == null || rows == null) return false;
+        List<Element> elements = EdgeStackPolicy.underKeyboard(layout);
+        List<View> hosts = new ArrayList<>(elements.size());
+        for (Element element : elements) {
+            View host = edgeStackHost(element, PlaceLayout.Edge.BOTTOM);
+            if (host != null) hosts.add(host);
+        }
+        boolean moved = under.setStack(hosts);
+        for (int index = under.getChildCount() - 1; index >= 0; index--) {
+            View child = under.getChildAt(index);
+            if (hosts.contains(child)) continue;
+            under.removeView(child);
+            rows.addView(child);
+            moved = true;
+        }
+        int visibility = hosts.isEmpty() ? View.GONE : View.VISIBLE;
+        if (under.getVisibility() != visibility) {
+            under.setVisibility(visibility);
+            moved = true;
+        }
+        under.setSeparatorCount(EdgeStackPolicy.separatorsFor(elements).size());
         return moved;
     }
 

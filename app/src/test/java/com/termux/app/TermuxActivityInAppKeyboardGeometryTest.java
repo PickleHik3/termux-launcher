@@ -100,11 +100,15 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertEquals(View.GONE, heightAdjustControls.getVisibility());
 
         // The dock's rows stand in one ordered stack now instead of hanging off each other, so it
-        // is the stack that carries the anchor the chain's last link used to.
+        // is the stack that carries the anchor the chain's last link used to. Updated for the
+        // slot under the keyboard: the anchor is the keyboard's column, which is the keyboard
+        // and whatever bands stand under it, and exactly the keyboard while none do.
         RelativeLayout.LayoutParams rowStackParams = (RelativeLayout.LayoutParams)
             mActivity.findViewById(R.id.accessory_row_stack).getLayoutParams();
-        assertEquals(R.id.inapp_keyboard_container,
+        assertEquals(R.id.accessory_keyboard_column,
             rowStackParams.getRules()[RelativeLayout.ABOVE]);
+        assertSame(mActivity.findViewById(R.id.accessory_keyboard_column),
+            keyboardContainer.getParent());
         assertEquals(0, rowStackParams.getRules()[RelativeLayout.ALIGN_PARENT_BOTTOM]);
         // The keyboard container is GONE whenever the embedded keyboard is hidden, and the
         // floating and split forms take it out of the accessory stack altogether. Without the
@@ -122,7 +126,7 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         for (int layerId : toolbarOnlyLayerIds) {
             RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams)
                 mActivity.findViewById(layerId).getLayoutParams();
-            assertEquals(R.id.inapp_keyboard_container,
+            assertEquals(R.id.accessory_keyboard_column,
                 params.getRules()[RelativeLayout.ABOVE]);
             assertTrue(params.alignWithParent);
         }

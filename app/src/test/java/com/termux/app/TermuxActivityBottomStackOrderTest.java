@@ -188,6 +188,76 @@ public class TermuxActivityBottomStackOrderTest {
         assertEquals("keyboard lifted out", HEIGHT, topIn(container, rows) + rows.getHeight());
     }
 
+    // ---------------------------------------------------------------- under the keyboard
+
+    @Test
+    public void aBandUnderTheKeyboardStandsBelowItAndTheRestAboveIt() {
+        activity.applyEdgeStacks(keysUnderKeyboard());
+        EdgeStackView under = activity.findViewById(R.id.accessory_under_keyboard_stack);
+        assertEquals(View.VISIBLE, under.getVisibility());
+        assertSame(activity.findViewById(R.id.terminal_toolbar_host), under.getChildAt(0));
+        assertEquals("the rows over it are the other two", 2, rows.getChildCount());
+        layoutContainer();
+
+        // Reading up from the dock's bottom: the keys, the keyboard, then the letters and the row.
+        assertBand(R.id.terminal_toolbar_view_pager, HEIGHT - KEYS_PX, HEIGHT);
+        View keyboard = activity.findViewById(R.id.inapp_keyboard_container);
+        assertEquals(HEIGHT - KEYS_PX - KEYBOARD_PX, topIn(container, keyboard));
+        assertEquals("the rows sit on the keyboard", HEIGHT - KEYS_PX - KEYBOARD_PX,
+            topIn(container, rows) + rows.getHeight());
+        assertBand(R.id.apps_bar_az_row, HEIGHT - KEYS_PX - KEYBOARD_PX - AZ_PX,
+            HEIGHT - KEYS_PX - KEYBOARD_PX);
+    }
+
+    @Test
+    public void withTheKeyboardDownOrLiftedOutTheRowsSitOnTheBandsUnderItWithNoHole() {
+        activity.applyEdgeStacks(keysUnderKeyboard());
+        View keyboard = activity.findViewById(R.id.inapp_keyboard_container);
+
+        keyboard.setVisibility(View.GONE);
+        layoutContainer();
+        assertBand(R.id.terminal_toolbar_view_pager, HEIGHT - KEYS_PX, HEIGHT);
+        assertEquals("keyboard down: the rows are straight on the keys", HEIGHT - KEYS_PX,
+            topIn(container, rows) + rows.getHeight());
+
+        ((ViewGroup) keyboard.getParent()).removeView(keyboard);
+        layoutContainer();
+        assertBand(R.id.terminal_toolbar_view_pager, HEIGHT - KEYS_PX, HEIGHT);
+        assertEquals("keyboard lifted out: the same", HEIGHT - KEYS_PX,
+            topIn(container, rows) + rows.getHeight());
+    }
+
+    @Test
+    public void aBandTakenBackOverTheKeyboardLeavesNothingUnderIt() {
+        activity.applyEdgeStacks(keysUnderKeyboard());
+        activity.applyEdgeStacks(bottom(Element.APPS, Element.AZ, Element.EXTRA_KEYS));
+        EdgeStackView under = activity.findViewById(R.id.accessory_under_keyboard_stack);
+        assertEquals(View.GONE, under.getVisibility());
+        assertEquals(0, under.getChildCount());
+        assertSame(activity.findViewById(R.id.terminal_toolbar_host), rows.getChildAt(2));
+        layoutContainer();
+        int keyboardTop = HEIGHT - KEYBOARD_PX;
+        assertBand(R.id.terminal_toolbar_view_pager, keyboardTop - KEYS_PX, keyboardTop);
+    }
+
+    @Test
+    public void aBandUnderTheKeyboardThatLeavesTheBottomGoesBackToTheDocksStack() {
+        activity.applyEdgeStacks(keysUnderKeyboard());
+        // The keys stand in a column on the left now: their bottom host is no one's.
+        activity.applyEdgeStacks(keysUnderKeyboard()
+            .withSlot(Element.EXTRA_KEYS, Slot.on(Edge.LEFT, Element.EXTRA_KEYS)));
+        EdgeStackView under = activity.findViewById(R.id.accessory_under_keyboard_stack);
+        assertEquals(View.GONE, under.getVisibility());
+        assertEquals(0, under.getChildCount());
+        assertSame(rows, activity.findViewById(R.id.terminal_toolbar_host).getParent());
+    }
+
+    /** The shipped bottom order, with the extra keys standing under the keyboard instead. */
+    private static PlaceLayout keysUnderKeyboard() {
+        return bottom(Element.APPS, Element.AZ, Element.EXTRA_KEYS)
+            .withSlot(Element.EXTRA_KEYS, new Slot(false, Edge.BOTTOM, 0, true));
+    }
+
     // ---------------------------------------------------------------- the furniture travels
 
     @Test

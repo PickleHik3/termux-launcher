@@ -615,7 +615,7 @@
                 android:id="@+id/accessory_surface_host"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_above="@id/inapp_keyboard_container"
+                android:layout_above="@id/accessory_keyboard_column"
                 android:layout_alignWithParentIfMissing="true"
                 android:clipChildren="true"
                 android:clipToPadding="true"
@@ -668,7 +668,7 @@
                 android:id="@+id/apps_bar_az_fx_underlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_above="@id/inapp_keyboard_container"
+                android:layout_above="@id/accessory_keyboard_column"
                 android:layout_alignWithParentIfMissing="true"
                 android:clickable="false"
                 android:focusable="false"
@@ -681,10 +681,11 @@
                  The band touching the canvas keeps a sheet of glass of its own; the rest stand on
                  the dock's (accessory_surface_host, inset below it). They used to
                  hang off each other by layout_above, which pinned them to the shipped order and
-                 left every other one unrenderable. The stack is anchored above the keyboard
-                 container and falls back to the parent's bottom when that is gone or has been
-                 lifted out by the floating/split keyboard, which is the one thing the old chain's
-                 alignWithParentIfMissing was there for.
+                 left every other one unrenderable. The stack is anchored above the keyboard's
+                 column, which holds the keyboard and any bands a place stands under it; with the
+                 keyboard gone or lifted out by the floating/split keyboard the column is only
+                 those bands, or nothing, and the stack sits on them or on the parent's bottom.
+                 Bands under the keyboard are the one part of the bottom edge not standing here.
 
                  Declared top to bottom in the shipped order, so the screen before the first
                  arrangement pass is the one the chain drew. Each row stands in a host of its own,
@@ -697,7 +698,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:edgeStackEdge="bottom"
-                android:layout_above="@id/inapp_keyboard_container"
+                android:layout_above="@id/accessory_keyboard_column"
                 android:layout_alignWithParentIfMissing="true"
                 android:clipChildren="false"
                 android:clipToPadding="false">
@@ -792,143 +793,174 @@
                 android:id="@+id/apps_bar_az_fx_overlay"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_above="@id/inapp_keyboard_container"
+                android:layout_above="@id/accessory_keyboard_column"
                 android:layout_alignWithParentIfMissing="true"
                 android:clickable="false"
                 android:focusable="false"
                 android:visibility="gone" />
 
+            <!-- The keyboard and the bands standing under it, bottom-anchored as one column: the
+                 keyboard on top and accessory_under_keyboard_stack below it, so the bands a place
+                 stands under the keyboard stay under it whatever height it takes. Everything the
+                 dock stands over the keyboard is anchored above this column, not the keyboard, so
+                 with the keyboard closed, or lifted out by the floating form, the dock's rows sit
+                 straight on the bands under it and nothing opens between them. Holding only the
+                 keyboard, the column is exactly the keyboard and every arrangement that has ever
+                 shipped lays out as it did.
+                 FloatingKeyboardController takes inapp_keyboard_container out of here and puts it
+                 back at the same index. -->
             <LinearLayout
-                android:id="@+id/inapp_keyboard_container"
+                android:id="@+id/accessory_keyboard_column"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_alignParentBottom="true"
                 android:orientation="vertical"
-                android:visibility="gone">
+                android:clipChildren="false"
+                android:clipToPadding="false">
 
                 <LinearLayout
-                    android:id="@+id/inapp_keyboard_height_adjust_controls"
+                    android:id="@+id/inapp_keyboard_container"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:visibility="gone">
 
-                    <FrameLayout
+                    <LinearLayout
+                        android:id="@+id/inapp_keyboard_height_adjust_controls"
                         android:layout_width="match_parent"
-                        android:layout_height="36dp">
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <FrameLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="36dp">
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="match_parent"
+                                android:layout_gravity="center"
+                                android:gravity="center"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:id="@+id/inapp_keyboard_height_adjust_cancel"
+                                    android:layout_width="40dp"
+                                    android:layout_height="32dp"
+                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    android:contentDescription="@string/termux_in_app_keyboard_height_adjust_cancel"
+                                    android:gravity="center"
+                                    android:text="@string/termux_in_app_keyboard_height_adjust_cancel_symbol"
+                                    android:textColor="?attr/termuxColorOnSurface"
+                                    android:textSize="18sp" />
+
+                                <FrameLayout
+                                    android:id="@+id/inapp_keyboard_height_adjust_handle"
+                                    android:layout_width="88dp"
+                                    android:layout_height="match_parent"
+                                    android:contentDescription="@string/termux_in_app_keyboard_height_adjust_handle"
+                                    android:clickable="true"
+                                    android:focusable="true">
+
+                                    <View
+                                        android:id="@+id/inapp_keyboard_height_adjust_handle_indicator"
+                                        android:layout_width="52dp"
+                                        android:layout_height="4dp"
+                                        android:layout_gravity="center"
+                                        android:background="?attr/termuxColorOnSurfaceVariant" />
+                                </FrameLayout>
+
+                                <TextView
+                                    android:id="@+id/inapp_keyboard_height_adjust_confirm"
+                                    android:layout_width="40dp"
+                                    android:layout_height="32dp"
+                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    android:contentDescription="@string/termux_in_app_keyboard_height_adjust_confirm"
+                                    android:gravity="center"
+                                    android:text="@string/termux_in_app_keyboard_height_adjust_confirm_symbol"
+                                    android:textColor="?attr/termuxColorOnSurface"
+                                    android:textSize="18sp" />
+                            </LinearLayout>
+                        </FrameLayout>
 
                         <LinearLayout
-                            android:layout_width="wrap_content"
-                            android:layout_height="match_parent"
-                            android:layout_gravity="center"
-                            android:gravity="center"
-                            android:orientation="horizontal">
+                            android:layout_width="match_parent"
+                            android:layout_height="28dp"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="8dp">
 
                             <TextView
-                                android:id="@+id/inapp_keyboard_height_adjust_cancel"
-                                android:layout_width="40dp"
-                                android:layout_height="32dp"
-                                android:background="?attr/selectableItemBackgroundBorderless"
-                                android:contentDescription="@string/termux_in_app_keyboard_height_adjust_cancel"
-                                android:gravity="center"
-                                android:text="@string/termux_in_app_keyboard_height_adjust_cancel_symbol"
+                                android:id="@+id/inapp_keyboard_key_spacing_label"
+                                android:layout_width="92dp"
+                                android:layout_height="wrap_content"
+                                android:maxLines="1"
+                                android:text="@string/termux_in_app_keyboard_key_spacing"
                                 android:textColor="?attr/termuxColorOnSurface"
-                                android:textSize="18sp" />
+                                android:textSize="11sp" />
 
-                            <FrameLayout
-                                android:id="@+id/inapp_keyboard_height_adjust_handle"
-                                android:layout_width="88dp"
-                                android:layout_height="match_parent"
-                                android:contentDescription="@string/termux_in_app_keyboard_height_adjust_handle"
-                                android:clickable="true"
-                                android:focusable="true">
-
-                                <View
-                                    android:id="@+id/inapp_keyboard_height_adjust_handle_indicator"
-                                    android:layout_width="52dp"
-                                    android:layout_height="4dp"
-                                    android:layout_gravity="center"
-                                    android:background="?attr/termuxColorOnSurfaceVariant" />
-                            </FrameLayout>
-
-                            <TextView
-                                android:id="@+id/inapp_keyboard_height_adjust_confirm"
-                                android:layout_width="40dp"
-                                android:layout_height="32dp"
-                                android:background="?attr/selectableItemBackgroundBorderless"
-                                android:contentDescription="@string/termux_in_app_keyboard_height_adjust_confirm"
-                                android:gravity="center"
-                                android:text="@string/termux_in_app_keyboard_height_adjust_confirm_symbol"
-                                android:textColor="?attr/termuxColorOnSurface"
-                                android:textSize="18sp" />
+                            <SeekBar
+                                android:id="@+id/inapp_keyboard_key_spacing_slider"
+                                android:layout_width="0dp"
+                                android:layout_height="28dp"
+                                android:layout_weight="1"
+                                android:contentDescription="@string/termux_in_app_keyboard_key_spacing_slider"
+                                android:max="200"
+                                android:splitTrack="false" />
                         </LinearLayout>
-                    </FrameLayout>
 
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="28dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingStart="8dp"
-                        android:paddingEnd="8dp">
-
-                        <TextView
-                            android:id="@+id/inapp_keyboard_key_spacing_label"
-                            android:layout_width="92dp"
-                            android:layout_height="wrap_content"
-                            android:maxLines="1"
-                            android:text="@string/termux_in_app_keyboard_key_spacing"
-                            android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="11sp" />
-
-                        <SeekBar
-                            android:id="@+id/inapp_keyboard_key_spacing_slider"
-                            android:layout_width="0dp"
+                        <LinearLayout
+                            android:layout_width="match_parent"
                             android:layout_height="28dp"
-                            android:layout_weight="1"
-                            android:contentDescription="@string/termux_in_app_keyboard_key_spacing_slider"
-                            android:max="200"
-                            android:splitTrack="false" />
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="8dp">
+
+                            <TextView
+                                android:id="@+id/inapp_keyboard_key_corner_radius_label"
+                                android:layout_width="92dp"
+                                android:layout_height="wrap_content"
+                                android:maxLines="1"
+                                android:text="@string/termux_in_app_keyboard_key_corner_radius"
+                                android:textColor="?attr/termuxColorOnSurface"
+                                android:textSize="11sp" />
+
+                            <SeekBar
+                                android:id="@+id/inapp_keyboard_key_corner_radius_slider"
+                                android:layout_width="0dp"
+                                android:layout_height="28dp"
+                                android:layout_weight="1"
+                                android:contentDescription="@string/termux_in_app_keyboard_key_corner_radius_slider"
+                                android:max="240"
+                                android:splitTrack="false" />
+                        </LinearLayout>
                     </LinearLayout>
 
-                    <LinearLayout
+                    <FrameLayout
+                        android:id="@+id/inapp_keyboard_suggestion_host"
                         android:layout_width="match_parent"
-                        android:layout_height="28dp"
-                        android:gravity="center_vertical"
-                        android:orientation="horizontal"
-                        android:paddingStart="8dp"
-                        android:paddingEnd="8dp">
+                        android:layout_height="wrap_content"
+                        android:visibility="gone" />
 
-                        <TextView
-                            android:id="@+id/inapp_keyboard_key_corner_radius_label"
-                            android:layout_width="92dp"
-                            android:layout_height="wrap_content"
-                            android:maxLines="1"
-                            android:text="@string/termux_in_app_keyboard_key_corner_radius"
-                            android:textColor="?attr/termuxColorOnSurface"
-                            android:textSize="11sp" />
-
-                        <SeekBar
-                            android:id="@+id/inapp_keyboard_key_corner_radius_slider"
-                            android:layout_width="0dp"
-                            android:layout_height="28dp"
-                            android:layout_weight="1"
-                            android:contentDescription="@string/termux_in_app_keyboard_key_corner_radius_slider"
-                            android:max="240"
-                            android:splitTrack="false" />
-                    </LinearLayout>
+                    <FrameLayout
+                        android:id="@+id/inapp_keyboard_view_host"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content" />
                 </LinearLayout>
 
-                <FrameLayout
-                    android:id="@+id/inapp_keyboard_suggestion_host"
+                <!-- The bottom bands a place stands under the keyboard, outermost last as in every
+                     bottom stack (EdgeStackPolicy.underKeyboard). applyEdgeStacks() moves the
+                     hosts in and out of here, and hides it while it holds none. -->
+                <com.termux.app.place.EdgeStackView
+                    android:id="@+id/accessory_under_keyboard_stack"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    app:edgeStackEdge="bottom"
+                    android:clipChildren="false"
+                    android:clipToPadding="false"
                     android:visibility="gone" />
-
-                <FrameLayout
-                    android:id="@+id/inapp_keyboard_view_host"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content" />
             </LinearLayout>
         </RelativeLayout>
 
