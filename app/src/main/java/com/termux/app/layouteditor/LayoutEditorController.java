@@ -391,8 +391,8 @@ public final class LayoutEditorController {
         LayoutEditorPlan plan = mPlan;
         if (card == null || plan == null)
             return;
-        // The header says what is being edited: the one layout every place stands in.
-        card.title.setText(R.string.termux_layout_editor_scope_all);
+        // The header names the editor; the one layout is every place's, which needs no saying.
+        card.title.setText(R.string.termux_layout_editor_title);
         mRestatingToggle = true;
         card.orientation.check(plan.shownOrientation() == PlaceOrientation.LANDSCAPE
             ? R.id.layout_editor_orientation_landscape : R.id.layout_editor_orientation_portrait);
