@@ -318,7 +318,9 @@ Open **Settings → Keyboard** to change input method, layouts, typing, feedback
 `~/.termux/keyboard/layout.xml` support; its look — theme, colors, and typeface — is on **Settings →
 Look** now.
 
-A hidden keyboard comes back the next time you tap the terminal. To keep it shut, run **Keyboard
+To put the keyboard away, swipe down from its top edge, the thin strip just above the first row of
+keys; let go early and it springs back. A hidden keyboard comes back the next time you tap the
+terminal. To keep it shut, run **Keyboard
 on/off** from the command palette, or put `tool:keyboard.toggle_enabled` on the extra-keys row.
 While the keyboard is off, taps and text fields no longer open it, and it stays off after a
 restart. Press the keyboard key or run **Keyboard on/off** again to turn it back on. This works

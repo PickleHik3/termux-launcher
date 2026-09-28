@@ -207,6 +207,18 @@ fails when the catalogue has gone stale.
   model itself lives in the launcher
   (`app/.../terminal/inappkeyboard/TapModel`, `TapModelStore`,
   `TapCorrectionController`); the module holds no learning logic.
+- Top-edge gesture hook (local addition): `Keyboard2View.TopEdgeTouchDelegate`
+  plus `setTopEdgeTouchDelegate`, `topEdgeNullBandPx` and
+  `topEdgeFirstCapTopPx`, and the private `onTopEdgeTouch` consulted first in
+  `onTouch`. A primary `ACTION_DOWN` above the drawn top of the first row's
+  caps is offered to the delegate with where upstream's key slop begins and
+  where the caps are drawn; taken, the rest of that stream goes to the
+  delegate and never reaches `Pointers`, declined, it continues exactly as
+  upstream (no key above the slop, the first row inside it). A press on a key
+  is never offered, so key swipes are unchanged. The launcher uses it for the
+  swipe-down that hides the keyboard
+  (`app/.../terminal/inappkeyboard/KeyboardHideSwipeGesture`); the module
+  holds no gesture policy.
 - Pressed-key popup hook (local addition): `Pointers.IPointerPreview` plus
   `Pointers.setPreviewHandler`, a `slot` field on `Pointer`, and
   `Keyboard2View.KeyPopupListener` / `KeyPopupInfo` / `setKeyPopupListener` /
