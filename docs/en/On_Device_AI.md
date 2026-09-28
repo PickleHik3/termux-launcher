@@ -145,9 +145,9 @@ get a suffix:
 - `model-id-audio` for audio input
 
 Choose the id matching the input you intend to send. Only one mode is loaded at a time, which
-reduces memory use. An advanced **Combined exposure** setting can serve every modality from the
-bare id at once (at a higher memory cost); in that case the text-only variant moves to
-`model-id-text` instead of disappearing.
+reduces memory use. The advanced **Endpoint exposure** setting changes this: **Combined** serves
+every modality from the bare id alone, with no suffixed ids, at a higher memory cost; **Both**
+keeps that combined bare id and adds the splits, with the text-only variant as `model-id-text`.
 
 ### FunctionGemma and phone actions
 

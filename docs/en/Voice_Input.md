@@ -129,7 +129,7 @@ apply:
 **Automatic** uses Gemma 4 E2B when it is installed, else Gemma 4 E4B. E2B is the recommended
 model: it keeps your words and is about three times faster than E4B. With no chat model installed,
 the text stays as heard. The cleanup model loads while you speak, so the pass at the end does not
-wait for it, and it stays loaded afterwards until TAI's normal idle unload.
+wait for it, and it stays loaded afterwards until On-device AI's normal idle unload.
 
 The text is **Kept as heard** when:
 

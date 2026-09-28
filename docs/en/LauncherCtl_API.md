@@ -26,7 +26,7 @@ Runtime files under `$HOME/.launcherctl`:
 - `token`: API bearer token.
 - `endpoint`: local base URL (`http://127.0.0.1:<port>`).
 
-TAI model packages live under app-private model storage, not under `~/.launcherctl`.
+On-device AI model packages live under app-private model storage, not under `~/.launcherctl`.
 
 ## Discovery
 
@@ -76,7 +76,7 @@ remote page points its own hostname at `127.0.0.1` so the browser treats the API
 
 ## Endpoint Reference
 
-The complete route surface is below. Besides the TAI routes there are app launch, the pane and window routes, the on-screen keyboard, and the three signal routes (notification, progress, clipboard). There are no media, resource, event, MCP, restart, or general device-control routes.
+The complete route surface is below. Besides the On-device AI routes there are app launch, the pane and window routes, the on-screen keyboard, and the three signal routes (notification, progress, clipboard). There are no media, resource, event, MCP, restart, or general device-control routes.
 
 ### Health and discovery
 
@@ -392,7 +392,7 @@ launcherctl clipboard paste        # {"ok":true,"text":"…"}
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| GET | `/v1/models` | List installed, loadable models with TAI metadata |
+| GET | `/v1/models` | List installed, loadable models with On-device AI metadata |
 | GET | `/v1/models/{id}` | Return one model object (filtered from `/v1/models`) |
 | POST | `/v1/chat/completions` | Chat completions: text, image/audio input, tools, SSE streaming |
 | POST | `/v1/responses` | Stateless OpenAI Responses adapter (text/image input, function calls/results) |
@@ -408,7 +408,7 @@ OpenAI `/v1/*` streaming uses Server-Sent Events (`text/event-stream`) and ends 
 
 #### `GET /v1/models` metadata
 
-Each entry in the standard OpenAI-shaped `data` array includes TAI-specific metadata prefixed with an underscore so existing OpenAI clients ignore it:
+Each entry in the standard OpenAI-shaped `data` array includes On-device AI metadata prefixed with an underscore so existing OpenAI clients ignore it:
 
 - `_backend`: backend routing for the model, currently `litert-lm` (default LiteRT-LM runtime) or `mnn-llm` (bundled MNN backend).
 - `_capabilities`: ordered list of endpoint capability strings, for example `text_chat`, `image_input`, `audio_input`, `tool_use`, or `code`. This is what the installed APK can currently serve and is identical to `_endpoint_capabilities`.
@@ -464,7 +464,7 @@ These routes are used by the `tai` CLI and the Settings UI. They share the same 
 | --- | --- | --- |
 | GET | `/v1/ai/status` | Overall status, settings, and limitations |
 | GET | `/v1/ai/runtime` | Loaded model and runtime state |
-| GET | `/v1/ai/models` | Detailed TAI model registry |
+| GET | `/v1/ai/models` | Detailed On-device AI model registry |
 | GET | `/v1/ai/models/downloads` | Show download progress/history |
 | POST | `/v1/ai/models/import` | Register a supported local package |
 | POST | `/v1/ai/models/download` | Download a model from a URL |
@@ -523,7 +523,7 @@ Rate-limit errors use `type: "rate_limit_error"` on `/v1/*` and the same flat `e
 
 ## Terminal LLM Client Configuration
 
-TAI exposes OpenAI-compatible HTTP endpoints so terminal clients such as `aichat`, `aider`, `tmuxai`, or any tool that reads `OPENAI_BASE_URL` / `OPENAI_API_KEY` can drive the local model runtime.
+On-device AI exposes OpenAI-compatible HTTP endpoints so terminal clients such as `aichat`, `aider`, `tmuxai`, or any tool that reads `OPENAI_BASE_URL` / `OPENAI_API_KEY` can drive the local model runtime.
 
 Default bind mode is `localhost` (server bound to `127.0.0.1`). With the **Require API token** setting on (default), the bearer token is required for every protected request. Token and endpoint URL are written to:
 

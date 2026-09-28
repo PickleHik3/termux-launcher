@@ -203,9 +203,9 @@ the bare id is text-only, and only the modalities beyond that get a suffix:
 | `gemma-4-e4b-it-litert-lm-vision` | text + image | vision (GPU) |
 | `gemma-4-e4b-it-litert-lm-audio` | text + audio | audio (CPU) |
 
-An advanced **Combined exposure** setting serves every modality from the bare id at once, at a
-higher memory cost; in that case the text-only variant is advertised as `model-id-text` instead of
-the bare id.
+The advanced **Endpoint exposure** setting (`TaiModelVariants.Exposure`) has three values:
+**Split** (the default, above), **Combined** (only the bare id, loading every enabled modality, no
+suffixed ids) and **Both** (the bare id is combined, plus `model-id-text`, `-vision` and `-audio`).
 
 Select the id from the shell exactly like any other model (`-m`/`"model"`). Switching ids reloads
 the runtime scoped to that modality, the same way switching Gallery sections does. There is no

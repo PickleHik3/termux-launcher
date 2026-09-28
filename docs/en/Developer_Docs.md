@@ -52,7 +52,7 @@ The installed `launcherctl launch <app name, package, or activity>` client is th
 for this route. Agent, MCP, notification, media, resource, event, and restart commands are not
 installed. Local AI commands belong to `tai`.
 
-### TAI Routes
+### On-device AI routes
 
 ```text
 GET  /v1/ai/status
