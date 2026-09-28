@@ -311,6 +311,8 @@ public class TerminalPaneController {
     /** Live border drawable + focus state per pane, so a focus flip can crossfade and a
      *  redundant re-render can leave a mid-flight crossfade untouched instead of snapping it. */
     private final Map<TerminalSession, PaneRim> mBorderStates = new HashMap<>();
+    /** How much of every rim the wall's slide leaves showing; 1 at rest (setRimTravelAlpha). */
+    private float mRimTravelAlpha = 1f;
     private final Map<Split, LinearLayout> mSplitLayouts = new HashMap<>();
     /** The split a keybind resize burst is adjusting, while the finish is still debounced. */
     @Nullable private Split mPendingKeyResizeSplit;
@@ -3304,14 +3306,27 @@ public class TerminalPaneController {
             // outline over frost reads as a box sitting on the material.
             PaneRim rim = mBorderStates.get(paneSession);
             if (rim == null) rim = new PaneRim();
-            if (rim.apply(frame, glassShape, paneRadiusPx(), paneSession == activeSession))
+            if (rim.apply(frame, glassShape, paneRadiusPx(), paneSession == activeSession)) {
+                // A rim built mid-slide (a split made while the wall moves) fades like the rest.
+                rim.setTravelAlpha(mRimTravelAlpha);
                 mBorderStates.put(paneSession, rim);
-            else
+            } else {
                 mBorderStates.remove(paneSession);
+            }
         }
         applyCursorOwnership();
         // The float handle pill dims with focus like the pane borders do.
         for (FloatingPaneContainer container : mFloatContainers.values()) container.invalidate();
+    }
+
+    /**
+     * How much of every pane's rim the wall's slide leaves showing (PaneWallPolicy#outlineAlpha):
+     * the terminal page's outline is its panes' rims, and they fade with the other pages' so one
+     * edge shows while the wall moves. A rim applied after this call takes the same share.
+     */
+    public void setRimTravelAlpha(float alpha) {
+        mRimTravelAlpha = alpha;
+        for (PaneRim rim : mBorderStates.values()) rim.setTravelAlpha(alpha);
     }
 
 

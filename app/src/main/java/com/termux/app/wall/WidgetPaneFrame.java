@@ -578,6 +578,11 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
     }
 
+    /** How much of the page's rim the wall's slide leaves showing; see PaneWallPolicy#outlineAlpha. */
+    public void setOutlineTravelAlpha(float alpha) {
+        mRim.setTravelAlpha(alpha);
+    }
+
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();

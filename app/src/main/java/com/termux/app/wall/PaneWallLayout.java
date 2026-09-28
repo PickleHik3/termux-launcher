@@ -50,10 +50,18 @@ public final class PaneWallLayout extends ViewGroup {
     /**
      * A slide is the terminal's own window pan: the same settle curve over the same time for a
      * full width, shortened in proportion when the wall has less far to go, so a release near
-     * rest lands quickly and a tap from one place to the next travels like a window switch.
+     * rest lands quickly and a tap from one place to the next travels like a window switch. The
+     * same time whatever the destination, too: the slide keeps its own clock
+     * ({@link WallSlideClock}), so the frames an arrival costs stretch it rather than skip it.
      */
     private static final long SLIDE_FULL_MS = 560L;
     private static final long SLIDE_MIN_MS = 180L;
+    /**
+     * How much longer than its way the slide's ticker is allowed to run before the slide is cut
+     * short and settles where it stands: the ceiling under which a run of long frames can stretch
+     * it.
+     */
+    private static final int SLIDE_STRETCH_CEILING = 2;
 
     public interface Listener {
         /** The wall has committed to a different page; the slide may still be running. */
@@ -368,13 +376,35 @@ public final class PaneWallLayout extends ViewGroup {
         stopSlide();
         int width = Math.max(1, getWidth());
         float fraction = Math.min(1f, Math.abs(mOffsetPx) / width);
-        long duration = Math.max(SLIDE_MIN_MS, Math.round(SLIDE_FULL_MS * fraction));
-        ValueAnimator slide = ValueAnimator.ofFloat(mOffsetPx, 0f);
-        slide.setDuration(duration);
-        slide.setInterpolator(Motion.settle());
-        slide.addUpdateListener(animation -> {
-            mOffsetPx = (Float) animation.getAnimatedValue();
-            applyPagePositions();
+        final long duration = Math.max(SLIDE_MIN_MS, Math.round(SLIDE_FULL_MS * fraction));
+        final float from = mOffsetPx;
+        final android.view.animation.Interpolator curve = Motion.settle();
+        // The animator is the ticker only. The slide reads its own clock off the ticker's play
+        // time, a bounded step per frame (WallSlideClock), so the first frame — which pre-rolls
+        // the arriving place's chrome and lays its page out — cannot swallow the take-off. The
+        // ticker is given more than the way as a ceiling and is ended from here once the clock
+        // is up, which runs the same end listener as a ticker that ran out.
+        ValueAnimator slide = ValueAnimator.ofFloat(0f, 1f);
+        slide.setDuration(duration * SLIDE_STRETCH_CEILING);
+        slide.setInterpolator(null);
+        slide.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            private long mLastPlayTimeMs;
+            private long mElapsedMs;
+            private boolean mEnding;
+
+            @Override public void onAnimationUpdate(ValueAnimator animation) {
+                if (mEnding) return;
+                long playTime = animation.getCurrentPlayTime();
+                mElapsedMs = WallSlideClock.advance(mElapsedMs, playTime - mLastPlayTimeMs);
+                mLastPlayTimeMs = playTime;
+                float t = curve.getInterpolation(WallSlideClock.fraction(mElapsedMs, duration));
+                mOffsetPx = from * (1f - t);
+                applyPagePositions();
+                if (mElapsedMs >= duration && mSlide == animation) {
+                    mEnding = true;
+                    animation.end();
+                }
+            }
         });
         slide.addListener(new AnimatorListenerAdapter() {
             private boolean mCancelled;
