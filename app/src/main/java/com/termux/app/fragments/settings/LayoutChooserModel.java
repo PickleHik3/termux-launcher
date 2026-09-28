@@ -44,7 +44,22 @@ public final class LayoutChooserModel {
                                     @NonNull PlaceOrientation orientation,
                                     @NonNull MiniatureDragPolicy.Bar bar, @Nullable Edge edge,
                                     int index) {
+        return applyDrop(places, orientation, bar, edge, index, false);
+    }
+
+    /**
+     * As {@link #applyDrop(PlaceLayoutStore, PlaceOrientation, MiniatureDragPolicy.Bar, Edge,
+     * int)}, into a gap on either side of the keyboard: {@code underKeyboard} puts the bar in the
+     * bottom edge's group under it, where {@code index} counts from the screen edge up to the
+     * keyboard. A bar that may not stand there is refused, so the picture springs it back.
+     */
+    public static boolean applyDrop(@NonNull PlaceLayoutStore places,
+                                    @NonNull PlaceOrientation orientation,
+                                    @NonNull MiniatureDragPolicy.Bar bar, @Nullable Edge edge,
+                                    int index, boolean underKeyboard) {
         Element element = bar.element();
+        if (underKeyboard && (edge != Edge.BOTTOM || !element.underKeyboardAllowed()))
+            return false;
         PlaceLayout layout = places.resolve(orientation);
         PlaceLayout next;
         if (edge == null) {
@@ -52,9 +67,10 @@ public final class LayoutChooserModel {
             if (!element.hideAllowed()) return false;
             next = EdgeStackPolicy.withAway(layout, element);
         } else if (index < 0) {
-            next = layout.withSlot(element, Slot.on(edge, element));
+            next = layout.withSlot(element,
+                Slot.on(edge, element).withUnderKeyboard(underKeyboard));
         } else {
-            next = EdgeStackPolicy.withDrop(layout, element, edge, index);
+            next = EdgeStackPolicy.withDrop(layout, element, edge, index, underKeyboard);
         }
         for (Element each : Element.values()) {
             Slot slot = next.slot(each);

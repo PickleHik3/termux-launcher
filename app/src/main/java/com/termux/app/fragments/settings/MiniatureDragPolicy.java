@@ -23,8 +23,10 @@ import java.util.List;
  *
  * <p>The legal set is {@link EdgeStackPolicy#targets}: every edge in both orientations, one drop
  * per gap in that edge's stack, and the tray for every bar, the status bar included since the
- * wall's paging left its swipe for the border drag. This class adds nothing to that but the tray
- * — which is the view's word for hidden — and the rectangles a finger is hit-tested against.
+ * wall's paging left its swipe for the border drag. The dock's rows are also offered the gaps under
+ * the keyboard ({@link EdgeStackPolicy#underKeyboardTargets}). This class adds nothing to that but
+ * the tray — which is the view's word for hidden — and the rectangles a finger is hit-tested
+ * against.
  */
 public final class MiniatureDragPolicy {
 
@@ -77,9 +79,19 @@ public final class MiniatureDragPolicy {
         public final float top;
         public final float right;
         public final float bottom;
+        /**
+         * A gap under the keyboard, among the bottom bands on its far side from the canvas;
+         * {@link #index} then counts within that group.
+         */
+        public final boolean underKeyboard;
 
         public Slot(@Nullable Edge edge, int index, float line, float left, float top, float right,
                     float bottom) {
+            this(edge, index, line, left, top, right, bottom, false);
+        }
+
+        public Slot(@Nullable Edge edge, int index, float line, float left, float top, float right,
+                    float bottom, boolean underKeyboard) {
             this.edge = edge;
             this.index = Math.max(0, index);
             this.line = line;
@@ -87,6 +99,12 @@ public final class MiniatureDragPolicy {
             this.top = top;
             this.right = right;
             this.bottom = bottom;
+            this.underKeyboard = underKeyboard && edge == Edge.BOTTOM;
+        }
+
+        /** Whether two gaps are on the same side of the same edge: one outlined region. */
+        public boolean sameGroup(@NonNull Slot other) {
+            return edge == other.edge && underKeyboard == other.underKeyboard;
         }
 
         /** An edge's outermost gap, for a caller that has a rectangle and no stack to place in. */
@@ -115,23 +133,38 @@ public final class MiniatureDragPolicy {
         @NonNull
         @Override
         public String toString() {
-            return "Slot{" + (edge == null ? "tray" : edge + "#" + index) + "}";
+            return "Slot{" + (edge == null ? "tray"
+                : edge + (underKeyboard ? "(under keyboard)" : "") + "#" + index) + "}";
         }
     }
 
     /** Everywhere one lifted bar may land: the gaps it may stand in, and whether it may hide. */
     public static final class Targets {
+        /** Every gap over the keyboard, and on the other three edges. */
         @NonNull public final List<EdgeStackPolicy.Drop> drops;
+        /** The gaps under the keyboard; empty for a bar that may not stand there. */
+        @NonNull public final List<EdgeStackPolicy.Drop> underKeyboardDrops;
         public final boolean tray;
 
         Targets(@NonNull List<EdgeStackPolicy.Drop> drops, boolean tray) {
+            this(drops, Collections.<EdgeStackPolicy.Drop>emptyList(), tray);
+        }
+
+        Targets(@NonNull List<EdgeStackPolicy.Drop> drops,
+                @NonNull List<EdgeStackPolicy.Drop> underKeyboardDrops, boolean tray) {
             this.drops = Collections.unmodifiableList(drops);
+            this.underKeyboardDrops = Collections.unmodifiableList(underKeyboardDrops);
             this.tray = tray;
         }
 
         /** A bar with nowhere to go is not liftable at all. */
         public boolean isEmpty() {
-            return drops.isEmpty() && !tray;
+            return drops.isEmpty() && underKeyboardDrops.isEmpty() && !tray;
+        }
+
+        /** How many gaps there are under the keyboard for this bar. */
+        public int gapsUnderKeyboard() {
+            return underKeyboardDrops.size();
         }
 
         public boolean offers(@NonNull Edge edge) {
@@ -172,6 +205,7 @@ public final class MiniatureDragPolicy {
         // The tray is the bar's own rule, not a gap's: the A-Z index riding the pinned apps row is
         // offered no gap at all, and putting it away is still the one thing a drag can do with it.
         return new Targets(new ArrayList<>(EdgeStackPolicy.targets(layout, element, orientation)),
+            new ArrayList<>(EdgeStackPolicy.underKeyboardTargets(layout, element)),
             element.hideAllowed());
     }
 

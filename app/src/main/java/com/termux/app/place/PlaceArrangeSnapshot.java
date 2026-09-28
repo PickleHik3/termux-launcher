@@ -42,6 +42,8 @@ public final class PlaceArrangeSnapshot {
         final int keyboardChinDp;
         /** Each element's position in its edge's stack, by {@link Element#ordinal()}. */
         final int[] slotOrders;
+        /** Which bottom bands stand under the keyboard, by {@link Element#ordinal()}. */
+        final boolean[] slotsUnderKeyboard;
 
         Entry(@NonNull PlaceLayoutStore places, @NonNull PlaceOrientation orientation) {
             this.orientation = orientation;
@@ -62,6 +64,10 @@ public final class PlaceArrangeSnapshot {
             slotOrders = new int[Element.values().length];
             for (Element element : Element.values())
                 slotOrders[element.ordinal()] = places.slotOrder(orientation, element);
+            slotsUnderKeyboard = new boolean[Element.values().length];
+            for (Element element : Element.values())
+                slotsUnderKeyboard[element.ordinal()] =
+                    places.slotUnderKeyboard(orientation, element);
         }
 
         void restore(@NonNull PlaceLayoutStore places) {
@@ -81,6 +87,11 @@ public final class PlaceArrangeSnapshot {
             places.setKeyboardChinDp(orientation, keyboardChinDp);
             for (Element element : Element.values())
                 places.setSlotOrder(orientation, element, slotOrders[element.ordinal()]);
+            for (Element element : Element.values()) {
+                boolean under = slotsUnderKeyboard[element.ordinal()];
+                if (under || places.slotUnderKeyboard(orientation, element))
+                    places.setSlotUnderKeyboard(orientation, element, under);
+            }
         }
 
         void appendTo(@NonNull StringBuilder out) {
@@ -97,6 +108,7 @@ public final class PlaceArrangeSnapshot {
                 .append(keyboardHeightScale).append(',')
                 .append(keyboardChinDp).append(',');
             for (int order : slotOrders) out.append(order).append(';');
+            for (boolean under : slotsUnderKeyboard) out.append(under ? 'u' : 'o');
             out.append('|');
         }
     }

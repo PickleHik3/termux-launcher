@@ -88,6 +88,16 @@ public final class PlaceMiniatureView extends View {
      */
     public interface OnBarDroppedListener {
         void onBarDropped(@NonNull Block bar, @Nullable Edge edge, int index);
+
+        /**
+         * The same, told which side of the keyboard a bottom gap was on: {@code underKeyboard} is
+         * the far one, where {@code index} counts from the phone's bottom up to the keyboard. A
+         * listener that does not tell the sides apart hears every drop as over it.
+         */
+        default void onBarDropped(@NonNull Block bar, @Nullable Edge edge, int index,
+                                  boolean underKeyboard) {
+            onBarDropped(bar, edge, index);
+        }
     }
 
     /** Legend order, top to bottom: the way the rows stack on a default portrait screen. */
@@ -402,7 +412,17 @@ public final class PlaceMiniatureView extends View {
     @VisibleForTesting
     public MiniatureDragPolicy.Slot slotFor(@NonNull Edge edge, int index) {
         for (MiniatureDragPolicy.Slot slot : mSlots) {
-            if (slot.edge == edge && slot.index == index) return slot;
+            if (slot.edge == edge && slot.index == index && !slot.underKeyboard) return slot;
+        }
+        return null;
+    }
+
+    /** One gap under the keyboard, counted from the phone's bottom up; null while not offered. */
+    @Nullable
+    @VisibleForTesting
+    public MiniatureDragPolicy.Slot underKeyboardSlotFor(int index) {
+        for (MiniatureDragPolicy.Slot slot : mSlots) {
+            if (slot.underKeyboard && slot.index == index) return slot;
         }
         return null;
     }
@@ -624,6 +644,13 @@ public final class PlaceMiniatureView extends View {
             mSlots.clear();
             return;
         }
+        // The bands under the keyboard are the bottom's outermost, so they claim first; with no
+        // keyboard drawn they are simply the bottom stack's outer end, as on the screen.
+        List<Element> underKeyboard = EdgeStackPolicy.underKeyboard(mLayout);
+        for (Element element : underKeyboard) {
+            takeEdgeStrip(blockOf(element), Edge.BOTTOM,
+                MiniatureDragPolicy.bandFraction(element));
+        }
         // The keyboard has no edge and no order: when the place shows it, it is the block along
         // the bottom that everything else — the dock's rows included, lifted above it the way the
         // real dock is — stands above.
@@ -637,8 +664,10 @@ public final class PlaceMiniatureView extends View {
         // column ran the height of the phone, past the dock and into its corner, and took the
         // grip that lifts it down there with it.
         for (Edge edge : CLAIM_ORDER) {
-            for (Element element : EdgeStackPolicy.stack(mLayout, edge))
+            for (Element element : EdgeStackPolicy.stack(mLayout, edge)) {
+                if (underKeyboard.contains(element)) continue;
                 takeEdgeStrip(blockOf(element), edge, MiniatureDragPolicy.bandFraction(element));
+            }
         }
         mBlockRects.put(Block.CANVAS, new RectF(mRemaining));
         // The minimised index claims no band: its tab is laid over the canvas once the canvas is
@@ -853,6 +882,9 @@ public final class PlaceMiniatureView extends View {
         if (free != null && !free.isEmpty()) {
             for (Edge edge : Edge.values())
                 addEdgeSlots(edge, targets.gapsOn(edge), free, bar.element());
+            // The gaps under the keyboard, only while there is a keyboard drawn to be under.
+            if (!mKeyboardRect.isEmpty())
+                addUnderKeyboardSlots(targets.gapsUnderKeyboard(), free, bar.element());
         }
         if (targets.tray && !mTrayRect.isEmpty()) {
             mSlots.add(new MiniatureDragPolicy.Slot(null, -1, 0f, mTrayRect.left, mTrayRect.top,
@@ -864,36 +896,71 @@ public final class PlaceMiniatureView extends View {
     private void addEdgeSlots(@NonNull Edge edge, int gaps, @NonNull RectF free,
                               @NonNull Element dragged) {
         if (gaps <= 0 || mLayout == null) return;
-        float[] gapDepths = gapDepths(edge, gaps, free, dragged);
+        // Along the bottom these are the gaps over the keyboard: they start from its middle, and
+        // the half under that is the far side's (addUnderKeyboardSlots).
+        boolean overKeyboard = edge == Edge.BOTTOM && !mKeyboardRect.isEmpty();
+        List<Element> bands = edge == Edge.BOTTOM
+            ? EdgeStackPolicy.overKeyboard(mLayout) : EdgeStackPolicy.stack(mLayout, edge);
+        float[] gapDepths = gapDepths(edge, bands, gaps, depthOf(edge, free, true), dragged);
+        addSlots(edge, gapDepths, overKeyboard ? keyboardMiddleDepth() : 0f, frameDepth(edge),
+            free, dragged, false);
+    }
+
+    /**
+     * The gaps under the keyboard, from the phone's bottom edge up to the keyboard's middle: one
+     * outside the outermost band standing there, one between each pair, one against the keyboard,
+     * or the one a bare side has, which is the keyboard's own bottom.
+     */
+    private void addUnderKeyboardSlots(int gaps, @NonNull RectF free, @NonNull Element dragged) {
+        if (gaps <= 0 || mLayout == null) return;
+        float[] gapDepths = gapDepths(Edge.BOTTOM, EdgeStackPolicy.underKeyboard(mLayout), gaps,
+            depthOf(Edge.BOTTOM, mKeyboardRect, true), dragged);
+        addSlots(Edge.BOTTOM, gapDepths, 0f, keyboardMiddleDepth(), free, dragged, true);
+    }
+
+    /** How far up from the phone's bottom the keyboard block's middle stands. */
+    private float keyboardMiddleDepth() {
+        return mFrameRect.bottom - mKeyboardRect.centerY();
+    }
+
+    /**
+     * One slot per gap, laid from {@code start} inwards: each reaches halfway to its neighbours,
+     * the first back to {@code start} and the last a band's thickness past its line, never past
+     * {@code limit}.
+     */
+    private void addSlots(@NonNull Edge edge, @NonNull float[] gapDepths, float start, float limit,
+                          @NonNull RectF free, @NonNull Element dragged, boolean underKeyboard) {
+        int gaps = gapDepths.length;
         float span = edge.isOnSide() ? free.width() : free.height();
         float thickness = Math.max(dp(9),
             Math.min(span * MiniatureDragPolicy.bandFraction(dragged), span * 0.45f));
-        float limit = frameDepth(edge);
         for (int index = 0; index < gaps; index++) {
-            float from = index == 0 ? 0f : (gapDepths[index - 1] + gapDepths[index]) / 2f;
+            float from = index == 0 ? start : (gapDepths[index - 1] + gapDepths[index]) / 2f;
             float to = index == gaps - 1
                 ? gapDepths[index] + thickness
                 : (gapDepths[index] + gapDepths[index + 1]) / 2f;
+            if (underKeyboard && index == gaps - 1) to = limit;
             to = Math.min(limit, Math.max(to, from + dp(2)));
             mSlots.add(new MiniatureDragPolicy.Slot(edge, index, coordinateAt(edge,
                 gapDepths[index]), slotLeft(edge, free, from, to), slotTop(edge, free, from, to),
-                slotRight(edge, free, from, to), slotBottom(edge, free, from, to)));
+                slotRight(edge, free, from, to), slotBottom(edge, free, from, to),
+                underKeyboard));
         }
     }
 
     /**
-     * Where each of an edge's gaps sits, as a distance in from the screen edge: outside the
+     * Where each of a stack's gaps sits, as a distance in from the screen edge: outside the
      * outermost band, between each pair, and inside the innermost. The lifted bar's own band is
-     * not one of them — it is the thing being moved — and an edge that ends up bare has its one
-     * gap where the canvas starts.
+     * not one of them — it is the thing being moved — and a stack that ends up bare has its one
+     * gap at {@code bareDepth}: where the canvas starts, or under the keyboard its own bottom.
      */
     @NonNull
-    private float[] gapDepths(@NonNull Edge edge, int gaps, @NonNull RectF free,
-                              @NonNull Element dragged) {
+    private float[] gapDepths(@NonNull Edge edge, @NonNull List<Element> stack, int gaps,
+                              float bareDepth, @NonNull Element dragged) {
         float[] depths = new float[gaps];
         int at = 0;
         RectF last = null;
-        for (Element element : EdgeStackPolicy.stack(mLayout, edge)) {
+        for (Element element : stack) {
             if (element == dragged) continue;
             RectF band = mBlockRects.get(blockOf(element));
             if (band == null || band.isEmpty()) continue;
@@ -901,7 +968,7 @@ public final class PlaceMiniatureView extends View {
             last = band;
         }
         if (at < gaps) {
-            depths[at++] = last == null ? depthOf(edge, free, true) : depthOf(edge, last, false);
+            depths[at++] = last == null ? bareDepth : depthOf(edge, last, false);
         }
         // A band too thin to have been drawn leaves its gap on top of the one inside it.
         for (int rest = at; rest < gaps; rest++) depths[rest] = depths[rest - 1];
@@ -1017,7 +1084,13 @@ public final class PlaceMiniatureView extends View {
         if (mLayout == null || isBlockHidden(bar)) {
             return getContext().getString(R.string.settings_layout_row_hidden);
         }
-        String edge = getContext().getString(LayoutChooserModel.edgeLabel(edgeOfBlock(bar)));
+        Element element = elementOf(bar);
+        boolean underKeyboard = element != null
+            && EdgeStackPolicy.standsUnderKeyboard(mLayout, element)
+            && EdgeStackPolicy.claimsBand(mLayout, element);
+        String edge = getContext().getString(underKeyboard
+            ? R.string.settings_layout_edge_under_keyboard
+            : LayoutChooserModel.edgeLabel(edgeOfBlock(bar)));
         if (bar == Block.ALPHABETS_ROW && isAzTab()) {
             return getContext().getString(R.string.settings_layout_miniature_minimised_format,
                 edge);
@@ -1890,17 +1963,22 @@ public final class PlaceMiniatureView extends View {
         if (mSlots.isEmpty()) return;
         int accent = accent();
         float radius = dp(4);
-        Edge hovered = mHoverSlot == null ? null : mHoverSlot.edge;
+        MiniatureDragPolicy.Slot hoveredSlot = mHoverSlot;
+        Edge hovered = hoveredSlot == null ? null : hoveredSlot.edge;
         mDashPaint.setPathEffect(mSlotDash);
         mDashPaint.setStrokeWidth(dp(1f));
+        // The bottom is two regions while the keyboard stands on it: the gaps over it, and the
+        // ones under it, outlined apart so the keyboard between them is not a target.
         for (Edge edge : Edge.values()) {
-            if (!edgeRegion(edge, mScratchRectA)) continue;
-            mDashPaint.setColor(accent);
-            canvas.drawRoundRect(mScratchRectA, radius, radius, mDashPaint);
+            for (boolean underKeyboard : new boolean[] {false, true}) {
+                if (!edgeRegion(edge, underKeyboard, mScratchRectA)) continue;
+                mDashPaint.setColor(accent);
+                canvas.drawRoundRect(mScratchRectA, radius, radius, mDashPaint);
+            }
         }
         if (hovered == null) return;
         for (MiniatureDragPolicy.Slot slot : mSlots) {
-            if (slot.edge != hovered) continue;
+            if (!slot.sameGroup(hoveredSlot)) continue;
             boolean under = slot == mHoverSlot;
             if (under) {
                 mScratchRectB.set(slot.left, slot.top, slot.right, slot.bottom);
@@ -1919,11 +1997,14 @@ public final class PlaceMiniatureView extends View {
         mLinePaint.setAlpha(255);
     }
 
-    /** One edge's gaps as the single region they cover, or false while the edge offers none. */
-    private boolean edgeRegion(@NonNull Edge edge, @NonNull RectF out) {
+    /**
+     * One edge's gaps on one side of the keyboard as the single region they cover, or false while
+     * that side offers none. Only the bottom has an under side.
+     */
+    private boolean edgeRegion(@NonNull Edge edge, boolean underKeyboard, @NonNull RectF out) {
         boolean any = false;
         for (MiniatureDragPolicy.Slot slot : mSlots) {
-            if (slot.edge != edge) continue;
+            if (slot.edge != edge || slot.underKeyboard != underKeyboard) continue;
             if (!any) out.set(slot.left, slot.top, slot.right, slot.bottom);
             else out.union(slot.left, slot.top, slot.right, slot.bottom);
             any = true;
@@ -2160,7 +2241,8 @@ public final class PlaceMiniatureView extends View {
         }
         endDrag();
         if (mDropListener != null) {
-            mDropListener.onBarDropped(bar, slot.edge, slot.isTray() ? -1 : slot.index);
+            mDropListener.onBarDropped(bar, slot.edge, slot.isTray() ? -1 : slot.index,
+                slot.underKeyboard);
         }
     }
 

@@ -49,6 +49,16 @@ public enum Element {
     }
 
     /**
+     * Whether this element may stand under the keyboard, on the bottom edge's far side of it: the
+     * dock's own rows may — the pinned apps, the alphabets index, the extra keys. The status bar
+     * may not; along the bottom it is the band that touches the canvas or one of the dock's, never
+     * a bar the keyboard stands on.
+     */
+    public boolean underKeyboardAllowed() {
+        return this != STATUS;
+    }
+
+    /**
      * Where this element stands in an edge's stack before anyone has re-ordered it — 0 outermost,
      * against the screen edge. These are the stacks the launcher has always drawn, verified
      * against the views themselves rather than chosen:

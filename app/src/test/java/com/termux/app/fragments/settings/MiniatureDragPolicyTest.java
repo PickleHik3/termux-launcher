@@ -56,6 +56,29 @@ public class MiniatureDragPolicyTest {
         Arrays.asList(Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT);
 
     @Test
+    public void theDocksRowsAreOfferedTheSideUnderTheKeyboardAndTheStatusBarIsNot() {
+        PlaceLayout layout = layout(RowPlacement.BOTTOM);
+        for (Bar bar : new Bar[] {Bar.APPS_ROW, Bar.AZ_INDEX, Bar.EXTRA_KEYS}) {
+            Targets offered = targets(bar, PlaceOrientation.PORTRAIT, layout);
+            assertEquals(bar + ": nothing stands under it yet, so one gap", 1,
+                offered.gapsUnderKeyboard());
+            assertTrue(offered.underKeyboardDrops.get(0).underKeyboard);
+        }
+        assertEquals(0, targets(Bar.STATUS_BAR, PlaceOrientation.PORTRAIT, layout)
+            .gapsUnderKeyboard());
+    }
+
+    @Test
+    public void aGapUnderTheKeyboardIsOneRegionAndTheBottomsOwnGapsAnother() {
+        Slot over = new Slot(Edge.BOTTOM, 0, 10f, 0f, 0f, 10f, 10f);
+        Slot under = new Slot(Edge.BOTTOM, 0, 20f, 0f, 15f, 10f, 20f, true);
+        Slot top = new Slot(Edge.TOP, 0, 0f, 0f, 0f, 10f, 5f, true);
+        assertFalse(over.sameGroup(under));
+        assertTrue(under.sameGroup(new Slot(Edge.BOTTOM, 1, 18f, 0f, 16f, 10f, 20f, true)));
+        assertFalse("only the bottom has an under side", top.underKeyboard);
+    }
+
+    @Test
     public void everyBarIsNamedForAnElementAndBackAgain() {
         for (Bar bar : Bar.values()) assertSame(bar, Bar.of(bar.element()));
         assertSame(Element.AZ, Bar.AZ_INDEX.element());

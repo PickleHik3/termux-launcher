@@ -334,7 +334,20 @@ public final class LayoutEditorController {
 
         card.orientationNotice.setText(R.string.termux_layout_editor_other_orientation_notice);
         card.miniature.setLegendVisible(false);
-        card.miniature.setOnBarDroppedListener(this::onBarDropped);
+        card.miniature.setOnBarDroppedListener(new PlaceMiniatureView.OnBarDroppedListener() {
+            @Override
+            public void onBarDropped(@NonNull PlaceMiniatureView.Block bar,
+                                     @Nullable PlaceLayout.Edge edge, int index) {
+                LayoutEditorController.this.onBarDropped(bar, edge, index, false);
+            }
+
+            @Override
+            public void onBarDropped(@NonNull PlaceMiniatureView.Block bar,
+                                     @Nullable PlaceLayout.Edge edge, int index,
+                                     boolean underKeyboard) {
+                LayoutEditorController.this.onBarDropped(bar, edge, index, underKeyboard);
+            }
+        });
         card.orientation.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (!isChecked || mRestatingToggle || mPlan == null)
                 return;
@@ -357,10 +370,17 @@ public final class LayoutEditorController {
     @VisibleForTesting
     void onBarDropped(@NonNull PlaceMiniatureView.Block block, @Nullable PlaceLayout.Edge edge,
                       int index) {
+        onBarDropped(block, edge, index, false);
+    }
+
+    /** As above, on either side of the keyboard; {@code underKeyboard} is the far one. */
+    @VisibleForTesting
+    void onBarDropped(@NonNull PlaceMiniatureView.Block block, @Nullable PlaceLayout.Edge edge,
+                      int index, boolean underKeyboard) {
         MiniatureDragPolicy.Bar bar = PlaceMiniatureView.barOf(block);
         if (mPlan == null || bar == null)
             return;
-        if (mPlan.drop(bar, edge, index) == LayoutEditorPlan.Drop.LIVE)
+        if (mPlan.drop(bar, edge, index, underKeyboard) == LayoutEditorPlan.Drop.LIVE)
             mHost.applyPlaceArrangement();
         sync();
     }

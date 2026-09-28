@@ -64,6 +64,27 @@ public class PlaceArrangeSnapshotTest {
         places.setWidgetColumns(LANDSCAPE, 6);
     }
 
+    /** A band moved under the keyboard is as unsaved as any move, and Discard takes it back. */
+    @Test
+    public void aBandUnderTheKeyboardIsSomethingToLose() {
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+        String entrySignature = entry.signature();
+
+        places.setSlot(PORTRAIT, Element.EXTRA_KEYS, new Slot(false, Edge.BOTTOM, 0, true));
+        assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+
+        entry.restore(places);
+        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+        assertFalse(places.slotUnderKeyboard(PORTRAIT, Element.EXTRA_KEYS));
+
+        // And the other way: an entry with the band under it is put back under it.
+        places.setSlot(PORTRAIT, Element.APPS, new Slot(false, Edge.BOTTOM, 0, true));
+        PlaceArrangeSnapshot under = PlaceArrangeSnapshot.capture(places);
+        places.setSlot(PORTRAIT, Element.APPS, new Slot(false, Edge.BOTTOM, 2));
+        under.restore(places);
+        assertTrue(places.slotUnderKeyboard(PORTRAIT, Element.APPS));
+    }
+
     /** The keyboard element's switch is as unsaved as a moved bar, and Discard puts it back. */
     @Test
     public void theKeyboardSwitchIsSomethingToLose() {

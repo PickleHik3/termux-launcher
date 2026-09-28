@@ -26,6 +26,8 @@ import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
+import java.util.Arrays;
+
 /**
  * The layout store: what the shared layout resolves to before anything is written, what the old
  * global keys become, that a write is what every place reads back, and what the one thing a place
@@ -817,6 +819,65 @@ public class PlaceLayoutStoreTest {
             store.dockHeightScale(PlaceOrientation.PORTRAIT), 0.0001f);
         assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING,
             store.keyboardChinDp(PlaceOrientation.PORTRAIT));
+    }
+
+    // ------------------------------------------------------------------ under the keyboard
+
+    @Test
+    public void anInstallThatNeverPutABandUnderTheKeyboardReadsAsItAlwaysDid() {
+        // A store written before the slot existed: a re-ordered bottom and nothing else.
+        prefs.edit()
+            .putString("layout.portrait.extra_keys", "bottom")
+            .putInt("layout.portrait.extra_keys_order", 2)
+            .putInt("layout.portrait.apps_row_order", 0)
+            .commit();
+        PlaceLayout layout = store().resolve(PlaceOrientation.PORTRAIT);
+        for (Element element : Element.values())
+            assertFalse(element.toString(), layout.slot(element).underKeyboard);
+        assertTrue(EdgeStackPolicy.underKeyboard(layout).isEmpty());
+        // Reading wrote nothing.
+        assertFalse(prefs.contains("layout.portrait."
+            + PlaceLayoutStore.underKeyboardKeyName(Element.EXTRA_KEYS)));
+    }
+
+    @Test
+    public void aBandUnderTheKeyboardIsKeptPerOrientationAndTakenBack() {
+        PlaceLayoutStore store = store();
+        store.setSlot(PlaceOrientation.PORTRAIT, Element.EXTRA_KEYS,
+            new Slot(false, Edge.BOTTOM, 0, true));
+        assertEquals(new Slot(false, Edge.BOTTOM, 0, true),
+            store().slot(PlaceOrientation.PORTRAIT, Element.EXTRA_KEYS));
+        assertFalse("landscape keeps its own",
+            store().slot(PlaceOrientation.LANDSCAPE, Element.EXTRA_KEYS).underKeyboard);
+        assertEquals(Arrays.asList(Element.EXTRA_KEYS),
+            EdgeStackPolicy.underKeyboard(store().resolve(PlaceOrientation.PORTRAIT)));
+
+        // Put away, it remembers the side it comes back to.
+        store.setSlot(PlaceOrientation.PORTRAIT, Element.EXTRA_KEYS,
+            new Slot(true, Edge.BOTTOM, 0, true));
+        assertTrue(store().slot(PlaceOrientation.PORTRAIT, Element.EXTRA_KEYS).underKeyboard);
+
+        store.setSlot(PlaceOrientation.PORTRAIT, Element.EXTRA_KEYS,
+            new Slot(false, Edge.BOTTOM, 0));
+        assertFalse(store().slot(PlaceOrientation.PORTRAIT, Element.EXTRA_KEYS).underKeyboard);
+    }
+
+    @Test
+    public void theStatusBarIsNeverWrittenUnderTheKeyboard() {
+        PlaceLayoutStore store = store();
+        store.setSlot(PlaceOrientation.PORTRAIT, Element.STATUS,
+            new Slot(false, Edge.BOTTOM, 0, true));
+        assertFalse(store().slot(PlaceOrientation.PORTRAIT, Element.STATUS).underKeyboard);
+        assertFalse(store().slotUnderKeyboard(PlaceOrientation.PORTRAIT, Element.STATUS));
+    }
+
+    @Test
+    public void clearingAnOrientationTakesItsBandsBackOverTheKeyboard() {
+        PlaceLayoutStore store = store();
+        store.setSlot(PlaceOrientation.PORTRAIT, Element.APPS,
+            new Slot(false, Edge.BOTTOM, 0, true));
+        store.clear(PlaceOrientation.PORTRAIT);
+        assertFalse(store().slotUnderKeyboard(PlaceOrientation.PORTRAIT, Element.APPS));
     }
 
     /**

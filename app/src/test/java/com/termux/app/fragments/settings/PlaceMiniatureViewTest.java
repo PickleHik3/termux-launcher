@@ -999,4 +999,101 @@ public class PlaceMiniatureViewTest {
         assertEquals("the status bar hides like the rest now",
             PlaceMiniatureView.TrayState.OFFERING, view.trayState());
     }
+
+    // ---- Under the keyboard -----------------------------------------------------------------
+
+    /** The shipped arrangement, with the extra keys standing under the keyboard. */
+    private static PlaceLayout keysUnderKeyboard() {
+        return layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM)
+            .withSlot(Element.EXTRA_KEYS, new Slot(false, Edge.BOTTOM, 0, true));
+    }
+
+    @Test
+    public void aBandUnderTheKeyboardIsDrawnBelowItAndTheRestAbove() {
+        PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(keysUnderKeyboard(), PlaceOrientation.PORTRAIT);
+        RectF keyboard = view.keyboardRect();
+        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(keyboard);
+        assertNotNull(keys);
+        assertNotNull(apps);
+        assertTrue("the keys stand under the keyboard", keys.top >= keyboard.bottom - 0.5f);
+        assertTrue("the apps row over it", apps.bottom <= keyboard.top + 0.5f);
+    }
+
+    @Test
+    public void theKeyboardOffersADropSlotUnderItAndTheDropSaysSo() {
+        PlaceLayoutStore places = store();
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        boolean[] heardUnder = {false};
+        view.setOnBarDroppedListener(new PlaceMiniatureView.OnBarDroppedListener() {
+            @Override
+            public void onBarDropped(@NonNull PlaceMiniatureView.Block bar, Edge edge,
+                                     int index) {
+                onBarDropped(bar, edge, index, false);
+            }
+
+            @Override
+            public void onBarDropped(@NonNull PlaceMiniatureView.Block bar, Edge edge, int index,
+                                     boolean underKeyboard) {
+                heardUnder[0] = underKeyboard;
+                MiniatureDragPolicy.Bar dragged = PlaceMiniatureView.barOf(bar);
+                assertNotNull(dragged);
+                LayoutChooserModel.applyDrop(places, PlaceOrientation.PORTRAIT, dragged, edge,
+                    index, underKeyboard);
+            }
+        });
+
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        RectF keyboard = view.keyboardRect();
+        assertNotNull(keyboard);
+        MiniatureDragPolicy.Slot under = view.underKeyboardSlotFor(0);
+        assertNotNull("the keyboard has a slot under it", under);
+        assertTrue(under.underKeyboard);
+        assertTrue("it is under the keyboard's middle", under.top >= keyboard.centerY() - 0.5f);
+        MiniatureDragPolicy.Slot over = view.slotFor(Edge.BOTTOM, 0);
+        assertNotNull(over);
+        assertTrue("and the bottom's own gaps start above it",
+            over.bottom <= keyboard.centerY() + 0.5f);
+
+        touch(view, MotionEvent.ACTION_MOVE, under.centerX(), under.centerY());
+        touch(view, MotionEvent.ACTION_UP, under.centerX(), under.centerY());
+        assertTrue(heardUnder[0]);
+        PlaceLayout after = places.resolve(PlaceOrientation.PORTRAIT);
+        assertTrue(after.slot(Element.APPS).underKeyboard);
+        assertEquals(Edge.BOTTOM, after.slot(Element.APPS).edge);
+    }
+
+    @Test
+    public void withNoKeyboardDrawnThereIsNothingToBeUnder() {
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        // Home: the keyboard opens over the page, so the picture draws none.
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT, PaneWallPage.WIDGETS);
+        assertNull(view.keyboardRect());
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        assertNull(view.underKeyboardSlotFor(0));
+    }
+
+    @Test
+    public void theStatusBarIsOfferedNoSlotUnderTheKeyboard() {
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.STATUS_BAR);
+        assertNotNull(grip);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        assertNull(view.underKeyboardSlotFor(0));
+    }
 }
