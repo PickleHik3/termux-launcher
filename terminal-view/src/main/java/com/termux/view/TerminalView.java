@@ -1384,7 +1384,7 @@ public final class TerminalView extends View {
     private int getRowForY(float y) {
         // While a smooth fling/settle holds a fractional offset, drawn content sits that many
         // pixels above its nominal row position, so screen Y maps back by adding it; the
-        // bottom-anchor offset shifts it the other way.
+        // centring offset shifts it the other way.
         return (int) ((y - getVerticalContentOffset() + mScrollOffsetPixels
             - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
     }
@@ -2625,7 +2625,8 @@ public final class TerminalView extends View {
     /**
      * One frame of the slide: the grid is drawn {@code progress} of the way to where a resize from
      * the height the travel began at to that plus {@code futureHeightDeltaPx} will put its rows,
-     * anchored at the bottom as the settle's resize is ({@link #predictResizeDisplacementPx}).
+     * centred as the settle's layout will draw it, with the buffer's bottom-anchored shift on top
+     * ({@link #predictResizeDisplacementPx}).
      * The cursor trail snaps to the rows rather than smearing along a whole slide.
      */
     public void setTravelDisplacement(int futureHeightDeltaPx, float progress) {
@@ -2685,24 +2686,20 @@ public final class TerminalView extends View {
             / mRenderer.mFontLineSpacing);
         int rowShift = mEmulator.predictRowsOnlyResizeShift(toRows, true);
         return travelDisplacementPx(fromHeightPx, toHeightPx, mEmulator.mRows, toRows, rowShift,
-            mRenderer.mFontLineSpacing, mRenderer.mFontLineSpacingAndAscent,
-            mEmulator.isAlternateBufferActive());
+            mRenderer.mFontLineSpacing, mRenderer.mFontLineSpacingAndAscent);
     }
 
     /**
-     * The arithmetic behind {@link #predictResizeDisplacementPx}: the grid is drawn bottom-aligned
-     * in its view ({@link #getVerticalContentOffset}, top-aligned on the alternate screen), so a
-     * row's move is the change in that headroom plus the rows the buffer shifts the screen by.
+     * The arithmetic behind {@link #predictResizeDisplacementPx}: the grid is drawn centred in
+     * its view ({@link #getVerticalContentOffset}), so a row's move is the change in the slack
+     * above the grid plus the rows the buffer shifts the screen by. The same on either buffer.
      *
      * @param rowShift how many rows down each surviving row lands, from the buffer's prediction
      */
     static float travelDisplacementPx(int fromHeightPx, int toHeightPx, int fromRows, int toRows,
-                                      int rowShift, int lineSpacingPx, int ascentPx,
-                                      boolean altScreen) {
-        float fromHeadroom = altScreen ? 0f
-            : Math.max(0f, fromHeightPx - (fromRows * lineSpacingPx + ascentPx));
-        float toHeadroom = altScreen ? 0f
-            : Math.max(0f, toHeightPx - (toRows * lineSpacingPx + ascentPx));
+                                      int rowShift, int lineSpacingPx, int ascentPx) {
+        int fromHeadroom = centredSlackPx(fromHeightPx, fromRows * lineSpacingPx + ascentPx);
+        int toHeadroom = centredSlackPx(toHeightPx, toRows * lineSpacingPx + ascentPx);
         return (toHeadroom - fromHeadroom) + rowShift * (float) lineSpacingPx;
     }
 
@@ -3109,11 +3106,14 @@ public final class TerminalView extends View {
     }
 
     /**
-     * Paint the in-view slack the centred/anchored grid leaves against this view's own edges: the
-     * headroom above row 0 (and, on the alternate buffer, the leftover below the last row instead),
-     * and the centring margin either side of the grid when the view is wider than its columns need.
-     * Called inside the same translate {@link #onDraw} applies before rendering the grid, so row
-     * math lines up with the renderer's exactly, scroll animation included.
+     * Paint the in-view slack the centred grid leaves against this view's own edges: the headroom
+     * above row 0 and the leftover below the last row, and the centring margin either side of the
+     * grid when the view is wider than its columns need. The first and last run of every band
+     * reach the view's own corner, so the four squares where a vertical band meets a horizontal
+     * one are painted too — by both, in the one colour the corner cell has — and nothing behind
+     * the grid shows through beside its slack. Called inside the same translate {@link #onDraw}
+     * applies before rendering the grid, so row math lines up with the renderer's exactly, scroll
+     * animation included.
      *
      * <p>Every rect below shares its edges with {@code getPaddingColumnLeft}/{@code getPaddingRowTop}
      * — the same {@code Math.round(offset + n * step)} {@code drawCellRect} snaps a cell's own edges
@@ -3141,8 +3141,9 @@ public final class TerminalView extends View {
             int runEnd = c + 1;
             while (runEnd < mEdgeColorsColumns && mEdgeTopColors[runEnd] == topColor) runEnd++;
             if (topColor != 0) {
-                final float left = Math.round(horizontalOffset + c * fontWidth);
-                final float right = Math.round(horizontalOffset + runEnd * fontWidth);
+                final float left = c == 0 ? 0f : Math.round(horizontalOffset + c * fontWidth);
+                final float right = runEnd == mEdgeColorsColumns
+                    ? viewWidth : Math.round(horizontalOffset + runEnd * fontWidth);
                 mPaddingFillPaint.setColor(topColor);
                 canvas.drawRect(left, viewTop, right, firstRowTop, mPaddingFillPaint);
             }
@@ -3154,8 +3155,9 @@ public final class TerminalView extends View {
             int runEnd = c + 1;
             while (runEnd < mEdgeColorsColumns && mEdgeBottomColors[runEnd] == bottomColor) runEnd++;
             if (bottomColor != 0) {
-                final float left = Math.round(horizontalOffset + c * fontWidth);
-                final float right = Math.round(horizontalOffset + runEnd * fontWidth);
+                final float left = c == 0 ? 0f : Math.round(horizontalOffset + c * fontWidth);
+                final float right = runEnd == mEdgeColorsColumns
+                    ? viewWidth : Math.round(horizontalOffset + runEnd * fontWidth);
                 mPaddingFillPaint.setColor(bottomColor);
                 canvas.drawRect(left, rowsBottom, right, viewBottom, mPaddingFillPaint);
             }
@@ -3170,8 +3172,9 @@ public final class TerminalView extends View {
                 int runEnd = r + 1;
                 while (runEnd < mEdgeColorsRows && mEdgeLeftColors[runEnd] == leftColor) runEnd++;
                 if (leftColor != 0) {
-                    final float top = Math.round(firstRowTop + r * fontLineSpacing);
-                    final float bottom = Math.round(firstRowTop + runEnd * fontLineSpacing);
+                    final float top = r == 0 ? viewTop : Math.round(firstRowTop + r * fontLineSpacing);
+                    final float bottom = runEnd == mEdgeColorsRows
+                        ? viewBottom : Math.round(firstRowTop + runEnd * fontLineSpacing);
                     mPaddingFillPaint.setColor(leftColor);
                     canvas.drawRect(0f, top, leftSlackRight, bottom, mPaddingFillPaint);
                 }
@@ -3183,8 +3186,9 @@ public final class TerminalView extends View {
                 int runEnd = r + 1;
                 while (runEnd < mEdgeColorsRows && mEdgeRightColors[runEnd] == rightColor) runEnd++;
                 if (rightColor != 0) {
-                    final float top = Math.round(firstRowTop + r * fontLineSpacing);
-                    final float bottom = Math.round(firstRowTop + runEnd * fontLineSpacing);
+                    final float top = r == 0 ? viewTop : Math.round(firstRowTop + r * fontLineSpacing);
+                    final float bottom = runEnd == mEdgeColorsRows
+                        ? viewBottom : Math.round(firstRowTop + runEnd * fontLineSpacing);
                     mPaddingFillPaint.setColor(rightColor);
                     canvas.drawRect(rightSlackLeft, top, viewWidth, bottom, mPaddingFillPaint);
                 }
@@ -3231,19 +3235,6 @@ public final class TerminalView extends View {
     }
 
     /**
-     * How far down the grid is drawn, anchoring it to the edge the content lives against.
-     *
-     * <p>Rows are integral, so up to a line of the view's height is left over, and it has to sit
-     * somewhere. On the normal buffer the prompt is the content's live edge, so the grid anchors
-     * to the bottom: the last row's cells end flush with the view (the pane frame's corner
-     * clearance is outside this view), the prompt sits a constant distance off the border, and the
-     * leftover joins the slack that already sits above the first row's cells (the renderer starts
-     * them {@code mFontLineSpacingAndAscent} down), where it reads as headroom. On the alternate
-     * buffer a full-screen app has drawn its own frame from row 0, so the grid anchors to the top
-     * and the leftover returns to the bottom, under the app's last row — anchoring such an app to
-     * the bottom would instead float its top border below the pane's arc.
-     */
-    /**
      * How far down the grid is drawn this frame. A travelling grid is drawn from where it stood
      * when the travel began, displaced toward where the settle's resize will put it (see
      * mTravelActive); a smooth scroll shifts it by its pixel offset.
@@ -3270,13 +3261,41 @@ public final class TerminalView extends View {
         return drawOffset + spacingAndAscent + (float) screenRow * lineSpacing;
     }
 
+    /**
+     * How far down the grid is drawn: centred in the view, on either buffer.
+     *
+     * <p>Rows are integral, so up to a line of the view's height is left over, and it has to sit
+     * somewhere. It is split between the top and the bottom ({@link #centredSlackPx}), the way
+     * the columns' leftover is already split between the sides
+     * ({@link #getHorizontalContentOffset}), so the grid sits the same distance off every edge of
+     * the pane and a full-screen program's frame floats no further below the top border than it
+     * stands above the bottom one. The grid used to anchor to the bottom on the normal buffer, so
+     * the prompt kept a constant distance off the border across resizes; with the leftover split
+     * the prompt moves by at most half a row when the pane's height changes. Where the dock pads
+     * the pane down to a whole number of rows ({@code TermuxActivity}'s flush padding) the
+     * leftover is zero and nothing moves at all.
+     *
+     * <p>The first row's cells start a further {@code mFontLineSpacingAndAscent} down from here
+     * (the renderer's ascent allowance); the frame around this view counts that as clearance the
+     * top edge already has.
+     */
     public float getVerticalContentOffset() {
-        if (mEmulator == null || mRenderer == null || mEmulator.isAlternateBufferActive()) {
+        if (mEmulator == null || mRenderer == null) {
             return 0f;
         }
-        float contentHeight = mEmulator.mRows * mRenderer.mFontLineSpacing
+        int contentHeight = mEmulator.mRows * mRenderer.mFontLineSpacing
             + mRenderer.mFontLineSpacingAndAscent;
-        return Math.max(0f, getHeight() - contentHeight);
+        return centredSlackPx(getHeight(), contentHeight);
+    }
+
+    /**
+     * The slack a grid of {@code contentPx} leaves at the near edge of a view {@code extentPx}
+     * long when it is centred: half the leftover, rounded down, so rows and columns keep landing
+     * on whole pixels and the far edge takes the odd pixel. Never negative: a grid that overflows
+     * its view starts at the edge.
+     */
+    static int centredSlackPx(int extentPx, int contentPx) {
+        return Math.max(0, extentPx - contentPx) / 2;
     }
 
     /**
