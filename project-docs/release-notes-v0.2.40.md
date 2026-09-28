@@ -76,6 +76,7 @@
 
 - Copying a wrapped line drops the padding spaces at its end. Settings ▸ Terminal ▸ Clipboard turns it off if you want the spaces kept.
 - Let programs read the clipboard (Settings ▸ Terminal ▸ Clipboard) decides whether a program in the terminal may paste what you copied.
+- Clipboard Cleanup (Settings ▸ Terminal ▸ Clipboard) drops trailing spaces from copied lines and the trailing newline from a one-line paste, so a copied command runs again cleanly instead of leaving a blank line behind it or waiting on an extra newline. On by default.
 - Programs can draw text at two to seven times the normal size, and place smaller text inside a block, so a heading in a preview or a document viewer is actually large (kitty's text sizing, OSC 66). The cursor and selection cover a whole block, copying it gives you its text once, and a block too wide for the pane drops to normal size until there is room again.
 - Pictures can be sent as a file rather than pasted in as data, which is how Neovim plugins such as md-render.nvim draw images — they used to draw nothing at all.
 - A message from a program in the terminal reaches the phone's own notification shade, so you read it with the launcher put away; tapping it comes back to the pane that sent it, and urgent messages can be silenced separately in the phone's notification settings.

@@ -653,6 +653,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES, value, false);
     }
 
+    public boolean isClipboardCleanupEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_CLIPBOARD_CLEANUP, TERMUX_APP.DEFAULT_TERMINAL_CLIPBOARD_CLEANUP);
+    }
+
+    public void setClipboardCleanupEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CLIPBOARD_CLEANUP, value, false);
+    }
+
     public boolean isAppLauncherDisplayAppNamesEnabled() {
         // App names are always shown; no longer user-configurable.
         return true;
