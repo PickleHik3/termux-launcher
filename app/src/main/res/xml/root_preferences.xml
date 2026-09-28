@@ -8,6 +8,7 @@
 
     <ListPreference
         app:key="app_launcher_use_case_mode"
+        app:icon="@drawable/ic_symbol_stacks"
         app:title="@string/settings_use_as_title"
         app:dialogTitle="@string/settings_use_as_dialog_title" />
 
@@ -54,6 +55,13 @@
             app:title="@string/settings_destination_display"
             app:summary="@string/settings_destination_display_summary"
             app:fragment="com.termux.app.fragments.settings.termux.X11DisplayPreferencesFragment" />
+
+        <Preference
+            app:key="on_device_ai"
+            app:icon="@drawable/ic_symbol_smart_toy"
+            app:title="@string/settings_tai_service_title"
+            app:summary="@string/settings_destination_on_device_ai_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TaiPreferencesFragment" />
 
     </PreferenceCategory>
 

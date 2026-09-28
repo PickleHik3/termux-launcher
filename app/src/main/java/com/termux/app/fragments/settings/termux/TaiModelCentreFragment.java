@@ -441,6 +441,7 @@ public class TaiModelCentreFragment extends Fragment
             row.subtitle = kindLine(context, false, spec.sizeBytes, !TaiModelCatalog.entries().containsKey(spec.id));
             row.pillPrimary = spec.id.equals(loadedId) ? getString(R.string.tai_centre_pill_in_use) : "";
             row.pillSecondary = spec.id.equals(defaultId) ? getString(R.string.tai_centre_pill_default) : "";
+            row.pillBackend = backendPill(spec.backend);
             addModelRow(items, row);
         }
         List<TaiModelSpec> speech = new ArrayList<>(installedSpeech);
@@ -489,6 +490,7 @@ public class TaiModelCentreFragment extends Fragment
                 .append(" · ").append(size);
             if (entry.ramTier != null && !entry.ramTier.isEmpty()) subtitle.append(" · ").append(entry.ramTier);
             row.subtitle = subtitle.toString();
+            if (!speech) row.pillBackend = backendPill(entry.backend);
             row.installable = entry.downloadAvailable;
             row.installing = installing.contains(entry.modelId);
             String error = errors.get(entry.modelId);
@@ -581,6 +583,14 @@ public class TaiModelCentreFragment extends Fragment
         if (!speech) return displayName == null || displayName.isEmpty() ? modelId : displayName;
         String plain = TaiSpeechModels.plainName(modelId, displayName, path);
         return TaiSpeechActions.isWhisper(modelId) ? "Whisper " + plain : plain;
+    }
+
+    /** The row's backend pill text ("LiteRT", "MNN"), or "" for a backend this build does not name. */
+    @NonNull
+    private String backendPill(@Nullable String backend) {
+        if (TaiModelSpec.BACKEND_LITERT_LM.equals(backend)) return getString(R.string.tai_centre_pill_backend_litert);
+        if (TaiModelSpec.BACKEND_MNN_LLM.equals(backend)) return getString(R.string.tai_centre_pill_backend_mnn);
+        return "";
     }
 
     private static long catalogueSize(@NonNull String modelId) {

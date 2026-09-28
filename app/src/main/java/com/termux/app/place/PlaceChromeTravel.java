@@ -290,6 +290,19 @@ public final class PlaceChromeTravel {
     }
 
     /**
+     * How far the chrome's live top edge stands up into the room the content holds this frame:
+     * the band the content reaches under the laid-out stack ({@link #heldOverlapPx}), less what
+     * {@link #stackTranslationPx} has slid the stack down by. A pane standing on the room's
+     * bottom edge is clipped by exactly this, so it ends where the rising keyboard or dock
+     * begins instead of being drawn under it, and grows back as a chrome slides away; 0 once
+     * the stack has slid clear of the room, and at rest.
+     */
+    public static int coveredRoomPx(int heldOverlapPx, float stackTranslationPx) {
+        float translation = Float.isNaN(stackTranslationPx) ? 0f : Math.max(0f, stackTranslationPx);
+        return Math.max(0, Math.round(Math.max(0, heldOverlapPx) - translation));
+    }
+
+    /**
      * The place a frame is travelling toward, seen from the place the chrome is committed to:
      * whichever side of the frame is not {@code leaving}. Null while the frame blends the leaving
      * place with itself — at rest, or pressed into an outer edge's resistance.

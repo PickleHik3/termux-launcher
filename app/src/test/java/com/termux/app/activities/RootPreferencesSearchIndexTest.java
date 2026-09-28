@@ -70,10 +70,10 @@ public class RootPreferencesSearchIndexTest {
     }
 
     @Test
-    public void searchingForUseAsFindsTheUsageModeRow() {
+    public void searchingForModeFindsTheUsageModeRow() {
         SettingsActivity.RootPreferencesFragment root = launch();
         SettingsSearchPreference search = root.findPreference("settings_search");
-        search.getOnQueryChangedListener().onQueryChanged("use as");
+        search.getOnQueryChangedListener().onQueryChanged("mode");
 
         assertTrue(isVisible(root, "app_launcher_use_case_mode"));
         assertFalse("no page below carries the words", isVisible(root, "status_bar"));

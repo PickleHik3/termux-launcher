@@ -1118,6 +1118,51 @@ public class TerminalPaneController {
     /** True while any host surface owns transient terminal geometry. */
     public boolean isHostSurfaceResizeInProgress() { return mHostSurfaceResizeDepth > 0; }
 
+    /** The cover last applied, so a frame that repeats it touches no pane. */
+    private int mTravelBottomCoverPx;
+
+    /**
+     * The wall's travel has the chrome's live top edge {@code coverPx} up from this host's bottom
+     * edge, over room the panes still hold: every tiled pane reaching into that band is clipped at
+     * it ({@link PaneContentFrame#setTravelBottomInsetPx}), so its slab ends where the rising
+     * keyboard or dock begins rather than under it, and a chrome sliding away uncovers it. 0 at
+     * settle puts every pane back to its laid-out bottom. Floats are frames of their own over the
+     * place and are left alone; a maximized pane is the one tile.
+     */
+    public void setTravelBottomCoverPx(int coverPx) {
+        int cover = Math.max(0, coverPx);
+        if (cover == mTravelBottomCoverPx) return;
+        mTravelBottomCoverPx = cover;
+        if (mActiveWindow == null) return;
+        int hostHeight = mHostView.getHeight();
+        if (mMaximizedLeaf != null) {
+            coverPaneFrame(mPaneFrames.get(mMaximizedLeaf.session), hostHeight, cover);
+            return;
+        }
+        for (Leaf leaf : leavesOf(mActiveWindow.root))
+            coverPaneFrame(mPaneFrames.get(leaf.session), hostHeight, cover);
+    }
+
+    private void coverPaneFrame(@Nullable PaneContentFrame frame, int hostHeight, int coverPx) {
+        if (frame == null) return;
+        // A tile above another is that much further from the host's bottom edge, and only what
+        // the cover reaches past that is its own.
+        int below = Math.max(0, hostHeight - bottomInHostPx(frame));
+        frame.setTravelBottomInsetPx(Math.max(0, coverPx - below));
+    }
+
+    /** A pane frame's bottom edge in the host's coordinates, through the split layouts between. */
+    private int bottomInHostPx(@NonNull View frame) {
+        int bottom = frame.getBottom();
+        android.view.ViewParent parent = frame.getParent();
+        while (parent instanceof View && parent != mHostView) {
+            View view = (View) parent;
+            bottom += view.getTop();
+            parent = view.getParent();
+        }
+        return bottom;
+    }
+
     /** The pane view showing {@code session}, if it is a leaf of the active window. */
     @Nullable public TerminalView getViewForSession(@Nullable TerminalSession session) {
         return session == null ? null : mPaneViews.get(session);

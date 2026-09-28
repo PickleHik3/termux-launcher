@@ -8,7 +8,7 @@ was off. **Usage mode** replaces it with three nested presets that a user can fi
 surface that is off release what it held.
 
 Naming: the modes are `terminal`, `home` and `display`, stored under the old key
-`app_launcher_use_case_mode`. In the UI the row is **Use as** and the choices are **Terminal**,
+`app_launcher_use_case_mode`. In the UI the row is **Mode** (it was **Use as** until 2026-09-28), with the stacks glyph, and the choices are **Terminal**,
 **Terminal + Home screen** and **Terminal + Home screen + Linux display**. The summary reads
 **Custom** once a switch below has moved the surfaces off the stored preset.
 
@@ -113,7 +113,7 @@ activity start (`migrateIfNeeded`). A build with `BuildConfig.X11_SERVER = false
 3. Settings → Display switch off with a display running: the question appears on the way back to
    the launcher; Stop closes the apps and the page goes; Leave it running keeps the server (a
    later Turn on reconnects). Switch on: the page appears without a recreate.
-4. Settings → Use as → Terminal while this launcher is Home: the prompt appears; Keep leaves it.
+4. Settings → Mode → Terminal while this launcher is Home: the prompt appears; Keep leaves it.
 5. Terminal mode: no package receiver (`dumpsys activity broadcasts`), no catalogue warm-up in
    the log, no LorieView in the hierarchy, no widget host.
 6. Home mode with the display off: the shipped row has no Display key; a custom row's Display key
