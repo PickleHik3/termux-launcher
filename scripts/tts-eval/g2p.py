@@ -1,3 +1,10 @@
+# Copyright 2026 The Google AI Edge Authors. All Rights Reserved.
+# Licensed under the Apache License, Version 2.0. See LICENSE-TERMINAL-EMULATOR.
+# https://www.apache.org/licenses/LICENSE-2.0
+# Distributed on an AS IS basis, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND.
+# Modified for Termux Launcher: Python adaptation of Google AI Edge LiteRT samples
+# for host-side speech evaluation. See THIRD_PARTY_NOTICES.md and the module docstring.
+
 """GPL-free English G2P shared by the three TTS models (no espeak-ng, no phonemizer package).
 
 A Python port of Google's litert-samples `KittenG2P.kt` / `MatchaG2P.kt`

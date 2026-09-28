@@ -13,6 +13,24 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
 - **Termux** — GPLv3-only — Copyright Termux contributors.
 - **Termux:Monet** — GPLv3-only — Copyright Termux:Monet contributors.
 - **[Unexpected-Keyboard](https://github.com/Julow/Unexpected-Keyboard)** — GPL-3.0 — Copyright Jules Aguillon (Julow) and Unexpected-Keyboard contributors. Vendored and modified as the `inapp-keyboard/` module (upstream commit `38836e440d8ca779d572b52601c6b2ad10f3bb7f` recorded in `inapp-keyboard/UPSTREAM.md`); modifications include removal of the IME service and adaptation as an embedded view. See `inapp-keyboard/UPSTREAM.md`.
+- **[kitty](https://github.com/kovidgoyal/kitty)** — GPL-3.0-only — Copyright Kovid Goyal
+  and kitty contributors. `terminal-view/.../KittyCursorTrail.java` adapts
+  `kitty/cursor_trail.c` to Java and Android pane geometry; the graphics animation handling in
+  `terminal-emulator/.../KittyImageStore.java` also follows kitty's `graphics.c`. These are
+  adaptations shipped inside the APK, separate from the external `kitten` tool below. The original
+  port commits did not record an exact upstream revision; the Java files document local changes.
+- **[herdr](https://github.com/herdrdev/herdr)** — Apache-2.0 — herdr contributors.
+  `AgentTitleRules.java` and `AgentScreenRules.java` adapt the agent-detection manifests recorded
+  on 2026-09-11 into ordered Java rules. The original work is credited here separately from the
+  independently written herdr colour template. The exact manifest revision was not recorded;
+  the upstream v0.9.0 distribution carries Apache-2.0.
+- **[Google AI Edge LiteRT samples](https://github.com/google-ai-edge/litert-samples)** —
+  Apache-2.0 — Copyright 2026 Google LLC; Copyright 2026 The Google AI Edge Authors.
+  `TaiG2p.java`, `TaiTtsChunker.java`, and `ParakeetTdtDecoder.java` adapt the samples'
+  `KittenG2P.kt`, `SentenceChunker.kt`, and `TdtDecoder.kt`. The host evaluation scripts under
+  `scripts/tts-eval/` and `scripts/parakeet_replay_server.py` use the same upstream work.
+  The adaptations change language, runtime integration, chunking and decoding; their comments
+  describe the changes. This code ships in the APK; the model weights described below do not.
 - **Terminal Emulator for Android** — Apache-2.0 — Copyright Jack Palevich and contributors.
 - **Android Open Source Project / Launcher3** — Apache-2.0 — portions of terminal compatibility,
   `termux-am-library`, and launcher gesture navigation.
@@ -28,8 +46,9 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
 - **Tinted Theming schemes** — MIT — imported on demand from
   [tinted-theming/schemes](https://github.com/tinted-theming/schemes); palette authors remain
   credited in the downloaded scheme metadata.
-- **[noctalia shell](https://github.com/noctalia-dev/noctalia-shell)** — MIT — Copyright the
-  noctalia-shell contributors. The `starship` and `helix` theme templates under
+- **[noctalia shell](https://github.com/noctalia-dev/noctalia-shell)** — MIT — Copyright (c) 2026 noctalia-dev.
+  The full upstream notice is reproduced in THIRD_PARTY_LICENSES.txt. The `starship` and `helix`
+  theme templates under
   `app/src/main/assets/theme-templates/` are ported from noctalia's
   `assets/templates/{starship,helix}/`, renamed from `noctalia` to `launcher-material` and
   adapted to the launcher's own hook environment and Material palette (no filters or wallpaper
@@ -39,21 +58,23 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   `x11-server/` and its `shell-loader` as `x11-server/loader/` (upstream commit
   `9df8b767645aa0d0a2f2576767449df55b41962f`, recorded in `x11-server/UPSTREAM.md` with every
   deviation); the `libXlorie.so` prebuilts under `app/src/main/jniLibs/` are built from the same
-  commit with the one patch in `ci/x11-patch/`. `libXlorie.so` statically links the freedesktop
+  commit with the patch set in `ci/x11-patch/`. `libXlorie.so` statically links the freedesktop
   components termux-x11 builds from source: the **X.Org Server**, **libX11**, **xorgproto**,
   **libXfont2**, **libxkbfile**, **xkbcomp**, **libxcvt**, **libxshmfence**, **xtrans**,
-  **libXau**, **libXdmcp** and **libfontenc** (MIT/X11 licenses, see the notice below),
-  **pixman** (MIT), **libepoxy** (MIT), **libtirpc** (BSD-3-Clause — Copyright Sun Microsystems,
-  Inc.) and **bzip2** (bzip2 license — Copyright 1996–2019 Julian Seward).
+  **libXau**, **libXdmcp** and **libfontenc** (individual notices reproduced in THIRD_PARTY_LICENSES.txt),
+  **pixman** (MIT), **libepoxy** (MIT), **libtirpc** (BSD-style notices — Copyright Sun Microsystems,
+  Inc., Bull S.A., and other authors named in the bundled notices) and **bzip2** (bzip2 license — Copyright 1996–2019 Julian Seward).
 
 ## Bundled assets
 
-- **[Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts)** — SIL Open Font License 1.1
-  — Copyright 2014 Ryan L McIntyre and Nerd Fonts contributors. Shipped as
+- **[Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts)** — MIT for the Symbols-only font,
+  with additional licenses for its constituent glyphs — Copyright 2014 Ryan L McIntyre and
+  Nerd Fonts contributors. Version 3.5.0. Shipped as
   `app/src/main/assets/fonts/SymbolsNerdFontMono.ttf`, drawn on app chrome and extracted for the
   terminal font config. The icon sets Nerd Fonts aggregates — Material Design Icons, Font Awesome,
   Octicons, Weather Icons, Devicons, Codicons, Powerline and others — remain under their own
-  licenses; see the Nerd Fonts license audit. The glyph names in
+  licenses; the upstream license audit and glyph notices are reproduced in THIRD_PARTY_LICENSES.txt.
+  The glyph names in
   `app/src/main/res/raw/nerd_font_glyphs.csv` are generated from that font's own name table.
 - **[Meteocons](https://github.com/basmilius/meteocons)** — MIT — Copyright 2020-present Bas
   Milius. The weather animations in `app/src/main/assets/weather/` are the fill style of
@@ -87,17 +108,13 @@ licenses remain available in their respective distributions.
 
 ## Build recipes for external terminal tools
 
-The `recipes/` directory builds third-party command-line tools that exercise the launcher's
-graphics protocols. **No binary of any of these is distributed inside the Termux Launcher APK.**
-This repository contains only build scripts and patches; the tools are compiled from upstream
-sources on the machine that runs a recipe.
-
-Prebuilt `aarch64` binaries of three of them — `kitten`, the patched Fastfetch, and Sigye — are
-published separately at
-[PickleHik3/tlstore](https://github.com/PickleHik3/tlstore),
-which `tlstore`'s catalog can install. That repository carries the upstream licence texts, the
-patches, the build recipes, and the corresponding-source pointers for the GPL-3.0-only `kitten`.
-The notices below apply to those builds.
+The source, build recipes, patches, corresponding-source pointers and tool-specific licenses
+live in [PickleHik3/tlstore](https://github.com/PickleHik3/tlstore). The launcher bundles the
+`tlstore` engine and store UI; it downloads the selected tools when the user installs them.
+The catalog includes kitten, Fastfetch, Sigye, dawn, btop, and the runtime used for Claude Code
+and OpenCode, as well as shell and theme configs. Their binaries are not bundled in the APK.
+The following entries describe some of those external tools; tlstore maintains the complete
+notices for its own releases.
 
 - **[Fastfetch](https://github.com/fastfetch-cli/fastfetch)** — MIT — Copyright 2021–2023 Linus
   Dierheimer, 2022– Carter Li. Built from pinned commit `9c7cfb8` (v2.67.0) with the repository's
@@ -139,8 +156,7 @@ on the phone in the app's own runtime process.
 - **[KittenTTS nano 0.8](https://huggingface.co/litert-community/kitten-tts-nano-0.8)** —
   Apache-2.0 — Copyright KittenML (KittenTTS). The LiteRT conversion (`kitten_predictor.tflite`,
   `kitten_prosody.tflite`, `kitten_vocoder.tflite`, `voices.npz`) is published by
-  litert-community. The on-device pipeline follows Google's Apache-2.0 LiteRT sample
-  (`google-ai-edge/litert-samples`, `text_to_speech_streaming`).
+  litert-community. The separately bundled pipeline code is credited under Vendored and adapted code above.
 - **OpenPhonemizer pronunciation dictionary** (`g2p_dict.txt.gz`, as published in
   [litert-community/Matcha-TTS](https://huggingface.co/litert-community/Matcha-TTS)) — The Clear
   BSD License — Copyright (c) 2024 mrfakename, NeuralVox, OpenPhonemizer Contributors. The Clear BSD
@@ -199,26 +215,10 @@ NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FO
 DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
 OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-## MIT/X11 notice for the X.Org components in libXlorie.so
+## Additional full license texts
 
-Copyright © The X.Org Foundation, The Open Group, Keith Packard, Red Hat, Inc., Intel Corporation,
-and the other authors named in each component's COPYING file.
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
-associated documentation files (the "Software"), to deal in the Software without restriction,
-including without limitation the rights to use, copy, modify, merge, publish, distribute,
-sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice (including the next paragraph) shall be
-included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
-NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
-DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
-OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-Except as contained in this notice, the names of the copyright holders shall not be used in
-advertising or otherwise to promote the sale, use or other dealings in this Software without prior
-written authorization.
+[THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt) reproduces the individual license notices
+from the pinned X11 dependencies, Noctalia, and Nerd Fonts and its glyph sources. It is bundled
+with this document in the app's Open-source licenses screen. Source URLs identify each notice's
+origin; the X11 revisions are those pinned by termux-x11 at
+`9df8b767645aa0d0a2f2576767449df55b41962f`.

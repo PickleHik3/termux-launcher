@@ -460,6 +460,9 @@ tasks.register("generateLicenseResources", Copy) {
     from(rootProject.file("THIRD_PARTY_NOTICES.md")) {
         rename { "third_party_notices.txt" }
     }
+    from(rootProject.file("THIRD_PARTY_LICENSES.txt")) {
+        rename { "third_party_licenses.txt" }
+    }
     from(rootProject.file("LICENSE")) {
         rename { "license_gpl_3.txt" }
     }

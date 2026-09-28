@@ -1,3 +1,10 @@
+# Copyright 2026 Google LLC
+# Licensed under the Apache License, Version 2.0. See LICENSE-TERMINAL-EMULATOR.
+# https://www.apache.org/licenses/LICENSE-2.0
+# Distributed on an AS IS basis, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND.
+# Modified for Termux Launcher: Python adaptation of Google AI Edge LiteRT samples
+# for host-side speech evaluation. See THIRD_PARTY_NOTICES.md and the module docstring.
+
 """Host-side Parakeet TDT server for VoiceReplayRig, the counterpart of whisper_replay_server.py.
 
 Runs NVIDIA parakeet-tdt-0.6b-v3 from Google's LiteRT conversion

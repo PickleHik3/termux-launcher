@@ -1,3 +1,9 @@
+/*
+ * Adapted from kitty/cursor_trail.c, Copyright Kovid Goyal and kitty contributors.
+ * SPDX-License-Identifier: GPL-3.0-only
+ * Modified for Termux Launcher: Java/Android adaptation with pane geometry and snap handling.
+ * See the repository LICENSE and THIRD_PARTY_NOTICES.md.
+ */
 package com.termux.view;
 
 /**
