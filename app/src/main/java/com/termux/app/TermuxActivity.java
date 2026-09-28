@@ -4195,8 +4195,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
             int sideMargin = resolveStatusBarHorizontalInsetPx();
             // Extend Rounded away from its own edge without moving the edge it faces the terminal
-            // with, or the terminal content beside it.
-            int outerMargin = statusBarColumnOuterMarginPx();
+            // with, or the terminal content beside it. A minimal place's strip draws nothing and
+            // keeps no air: its band is the strip alone, which is what its stack gives back to
+            // the pane (syncMinimalStripOverlay).
+            int outerMargin = isChromeMinimal() ? 0 : statusBarColumnOuterMarginPx();
             int targetThickness = targetStatusBarHeightPx(capsule, collapsed);
             boolean vertical = isStatusBarVertical();
             // A column keeps only its own air from the band beside it. The camera hole it used to
@@ -11623,6 +11625,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The bar is not the system status bar's glass anywhere but along the top; everywhere else
         // the terminal simply starts under the system bar, as it does with the bar folded today.
         applyTerminalWindowBarBackdropInsets();
+        // A minimal place's strip overlaps the pane from whichever edge it now stands on.
+        syncMinimalStripOverlay();
         setTopStatusBarCollapsed(isStatusBarCompact(), false);
         refreshTerminalWindowBar();
         // The bar's column is a band on its edge like the rail's; the insets pass re-derives what
@@ -16532,9 +16536,50 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View stackedClock = findViewById(R.id.terminal_status_column_clock);
             if (stackedClock != null) stackedClock.setVisibility(View.GONE);
         }
+        // Before the bar is sized: the strip's band and its overlap land in the same layout pass,
+        // under the same lease.
+        syncMinimalStripOverlay();
         // The fold's own path sizes the bar, under the resize lease that gives the panes one
         // row-and-column update for the change instead of one per pass.
         setTopStatusBarCollapsed(isStatusBarCompact(), false);
+    }
+
+    /**
+     * A minimal place's strip lies over the pane's edge rather than beside it
+     * ({@link com.termux.app.place.MinimalMode#stripOverlapPx}): the stack it stands in gives the
+     * strip's thickness back to the canvas as a negative margin on its inner side, so the pane runs
+     * to the screen's edge — the system bar's inset aside, which the padded root keeps only while
+     * that bar shows — and the strip is laid out over its first pixels. The stack is raised in Z
+     * for the same reason: a stack laid out before the canvas is drawn under it and asked for a
+     * finger after it, and the terminal would take the swipe out of the mode. Every side stack is
+     * written, so the one the strip left when the bar moved edge is put back.
+     */
+    private void syncMinimalStripOverlay() {
+        boolean minimal = isChromeMinimal();
+        int stripPx = com.termux.app.place.MinimalMode.stripThicknessPx(
+            getResources().getDisplayMetrics().density);
+        for (PlaceLayout.Edge edge : PlaceLayout.Edge.values()) {
+            if (edge == PlaceLayout.Edge.BOTTOM) continue;
+            View stack = edgeStack(edge);
+            if (stack == null
+                || !(stack.getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) continue;
+            int overlap = com.termux.app.place.MinimalMode.stripOverlapPx(
+                minimal, mStatusBarEdge, edge, stripPx);
+            int left = edge == PlaceLayout.Edge.RIGHT ? -overlap : 0;
+            int right = edge == PlaceLayout.Edge.LEFT ? -overlap : 0;
+            int bottom = edge == PlaceLayout.Edge.TOP ? -overlap : 0;
+            ViewGroup.MarginLayoutParams params =
+                (ViewGroup.MarginLayoutParams) stack.getLayoutParams();
+            if (params.leftMargin != left || params.rightMargin != right
+                || params.bottomMargin != bottom) {
+                params.leftMargin = left;
+                params.rightMargin = right;
+                params.bottomMargin = bottom;
+                stack.setLayoutParams(params);
+            }
+            float z = overlap > 0 ? dpToPx(1) : 0f;
+            if (stack.getTranslationZ() != z) stack.setTranslationZ(z);
+        }
     }
 
     /**

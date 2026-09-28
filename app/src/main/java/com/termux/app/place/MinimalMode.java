@@ -84,4 +84,22 @@ public final class MinimalMode {
     public static int stripThicknessPx(float density) {
         return Math.max(1, Math.round(STRIP_DP * density));
     }
+
+    /**
+     * How far the stack the strip stands in reaches back over the pane, in pixels: the strip's
+     * own thickness, given back as a negative margin on the stack's inner side, so the band the
+     * strip stands in reserves nothing and the pane runs to the screen's edge under it. The strip
+     * itself is still laid out at its thickness and still takes the swipe out of the mode; it
+     * lies over the pane's edge instead of beside it. Zero for every stack but the strip's, zero
+     * while the place is not minimal, and zero on the bottom edge, where the bar is a band of the
+     * dock's stack — whose height is arithmetic the accessory geometry owns — rather than a stack
+     * the layout sizes.
+     *
+     * @param stripPx {@link #stripThicknessPx}
+     */
+    public static int stripOverlapPx(boolean minimal, @NonNull Edge stripEdge,
+                                     @NonNull Edge stackEdge, int stripPx) {
+        if (!minimal || stackEdge != stripEdge || stackEdge == Edge.BOTTOM) return 0;
+        return Math.max(0, stripPx);
+    }
 }
