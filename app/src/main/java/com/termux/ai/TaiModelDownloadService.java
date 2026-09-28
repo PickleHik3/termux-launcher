@@ -347,8 +347,8 @@ public final class TaiModelDownloadService extends Service implements TaiDownloa
     private void ensureChannel() {
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager == null || manager.getNotificationChannel(CHANNEL_ID) != null) return;
-        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "TAI model downloads", NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("Progress for Termux AI model downloads");
+        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "On-device AI model downloads", NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription("Progress for On-device AI model downloads");
         manager.createNotificationChannel(channel);
     }
 

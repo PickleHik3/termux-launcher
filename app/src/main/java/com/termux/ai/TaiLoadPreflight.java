@@ -164,7 +164,7 @@ public final class TaiLoadPreflight {
             JSONObject json = new JSONObject();
             json.put("ok", false);
             json.put("error", errorCode.isEmpty() ? "preflight_failed" : errorCode);
-            json.put("message", message.isEmpty() ? "TAI model preflight failed." : message);
+            json.put("message", message.isEmpty() ? "On-device AI model preflight failed." : message);
             json.put("_statusCode", statusCode);
             json.put("preflight", toJson());
             return json;
