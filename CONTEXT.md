@@ -95,19 +95,23 @@ _Avoid_: arrange mode, surface editor, place editor
 One piece of the arrangement the Layout editor shows or hides: the status bar, the pinned apps,
 the A–Z index, the extra keys — each on an edge, in an order, or put away in the Hidden tray, the
 status bar included now that paging is the border drag — and the keyboard,
-which has no edge and no order, only on or off. The keyboard's on/off is the one switch the
+which has no edge and no order, only on or off. Along the bottom the dock's rows (not the status
+bar) may stand **under the keyboard** instead of over it; with the keyboard down they are simply
+the bottom's outermost bands. The keyboard's on/off is the one switch the
 palette's **Keyboard on/off** flips (`keyboard_turned_off`), shared by both orientations and every
 place; the last write wins, whichever door it came through.
 _Avoid_: bar (for the keyboard), widget, slot (the store's word for where an element stands)
 
 **Minimised A–Z index**:
 The A–Z index's third form beside On and Off, chosen per orientation in the Layout editor: a
-small glass **pull tab** on the index's edge, at its leading end past the corner square, laid over
-the content and claiming no band. A finger on the tab is the index's from its first touch — the
-border drag and the corner tab never see it — and sliding brings the letters out over the content
-and scrubs them in the same gesture, with the matches on the floating strip as for any index that
+small glass **pull tab**, a half-pill flush against the physical screen's edge outside the pane's
+border — on the index's own side for a column, on the row's leading side for a top or bottom row
+— at the index's leading end past the corner square, claiming no band. Solid where the dock has no
+glass. A finger on the tab is the index's from its first touch — the border drag and the corner
+tab never see it — and sliding brings the letters out along their edge over the content and
+scrubs them in the same gesture, with the matches on the floating strip as for any index that
 stands without the pinned apps row. Release launches what it picked, if anything, and the letters
-tuck back behind the tab. Minimal mode puts the tab away with everything else.
+tuck back away. Minimal mode puts the tab away with everything else.
 _Avoid_: collapsed index, hidden index (hidden is Off), drawer handle
 
 **Miniature**:
