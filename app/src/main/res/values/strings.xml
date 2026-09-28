@@ -1498,6 +1498,12 @@
                 <!-- Two more section names, one word each, naming the thing being changed. -->
                 <string name="termux_surface_editor_section_keys">Keys</string>
                 <string name="termux_surface_editor_section_indicator">Indicator</string>
+                <!-- Fancier Glass's own section on the shared layer, shown only while it is on;
+                     three rows, each naming what it changes about the glass edge. -->
+                <string name="termux_surface_editor_section_refraction">Fancier Glass</string>
+                <string name="termux_surface_editor_bend">Bend</string>
+                <string name="termux_surface_editor_edge_width">Edge width</string>
+                <string name="termux_surface_editor_edge_light">Edge light</string>
                 <string name="termux_surface_tuning_material_solid">Solid</string>
                 <string name="termux_surface_tuning_material_glass">Glass</string>
                 <string name="termux_surface_tuning_material_frost">Frost</string>

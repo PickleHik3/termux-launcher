@@ -9720,6 +9720,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void openWallpaperPicker() {
             TermuxActivity.this.openWallpaperPicker();
         }
+
+        @Override public boolean fancierGlassActive() {
+            // Live, not the apply's snapshot: the card is built when the editor opens, and the
+            // wallpaper may have been picked since the last pass.
+            return currentFancierGlassLook() != null;
+        }
     }
 
     /**

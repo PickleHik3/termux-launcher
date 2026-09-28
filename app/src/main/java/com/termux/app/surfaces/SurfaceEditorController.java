@@ -183,6 +183,12 @@ public final class SurfaceEditorController {
         @NonNull com.termux.app.chrome.WallpaperPicture wallpaperPicture();
         /** Opens the in-app wallpaper picker; the way out a Blur row's hint offers. */
         void openWallpaperPicker();
+        /**
+         * Whether Fancier Glass is on and doing something right now — the switch, Android 13 and
+         * a wallpaper the launcher set, see {@link com.termux.app.chrome.FancierGlassPolicy} —
+         * which is when its three knobs stand on the shared layer's card.
+         */
+        boolean fancierGlassActive();
     }
 
     @NonNull
@@ -591,6 +597,9 @@ public final class SurfaceEditorController {
         final int initialTerminalCornerRadius = prefs.getTerminalCornerRadius();
         final int initialTerminalGap = prefs.getTerminalPaneGap();
         final int initialWallpaperDim = prefs.getWallpaperBackdropDim();
+        final int initialBend = prefs.getFancierGlassBendDp();
+        final int initialEdgeWidth = prefs.getFancierGlassEdgeWidthDp();
+        final int initialEdgeLight = prefs.getFancierGlassEdgeLightPercent();
         final String initialMaterial = prefs.getSurfaceMaterial();
         final int initialMaterialIntensity = prefs.getSurfaceMaterialIntensity();
         final int[] initialBase = new int[SurfaceProperty.values().length];
@@ -633,6 +642,9 @@ public final class SurfaceEditorController {
             prefs().setTerminalCornerRadius(initialTerminalCornerRadius);
             prefs().setTerminalPaneGap(initialTerminalGap);
             prefs().setWallpaperBackdropDim(initialWallpaperDim);
+            prefs().setFancierGlassBendDp(initialBend);
+            prefs().setFancierGlassEdgeWidthDp(initialEdgeWidth);
+            prefs().setFancierGlassEdgeLightPercent(initialEdgeLight);
             for (SurfaceProperty property : SurfaceProperty.values())
                 prefs().setSurfaceBaseValue(property, initialBase[property.ordinal()]);
             prefs().setSurfaceMaterial(initialMaterial);
@@ -1551,8 +1563,11 @@ public final class SurfaceEditorController {
      * the terminal's own Frame switch) is one tap away.
      */
     private boolean isAvailable(@Nullable SurfaceSlot slot, @NonNull Control control) {
-        if (slot == null)
-            return true;
+        if (slot == null) {
+            // The refraction knobs turn nothing while Fancier Glass is off; the switch that brings
+            // them back is on the Terminal settings page.
+            return !SurfaceEditorProperties.isRefractionRow(control.id) || mHost.fancierGlassActive();
+        }
         // What the place's arrangement leaves the row nothing to move: the dock's own two rows
         // about its pinned apps, once those stand in a rail instead.
         if (!scene().offersRow(slot, control.id))
@@ -3541,6 +3556,9 @@ public final class SurfaceEditorController {
             .append(prefs().getTerminalCornerRadius()).append('|')
             .append(prefs().getTerminalPaneGap()).append('|')
             .append(prefs().getWallpaperBackdropDim()).append('|')
+            .append(prefs().getFancierGlassBendDp()).append('|')
+            .append(prefs().getFancierGlassEdgeWidthDp()).append('|')
+            .append(prefs().getFancierGlassEdgeLightPercent()).append('|')
             .append(surfaceEditorLinkSignature()).append('|')
             .append(prefs().getSurfaceBaseValue(SurfaceProperty.BLUR)).append('|')
             .append(prefs().getSurfaceBaseValue(SurfaceProperty.OPACITY)).append('|')
