@@ -208,6 +208,9 @@ Use this section for terminal geometry, panes, and how the launcher behaves as a
   pane it drives to switch which one is big. Turning it off puts every divider back to 1:1.
 - **Let scripts open panes:** whether `launcherctl pane …` and the `/v1/panes` routes of the local
   API may open and drive panes. On by default; off answers those routes with 403.
+- **Clipboard Cleanup:** drop trailing spaces from copied lines, and the trailing newline from a
+  one-line paste, so a copied command runs again cleanly instead of leaving a blank line behind it
+  or waiting on an extra newline. On by default.
 - **Battery → Lazy mode:** stop the launcher animating while you are only looking at it. The clock
   swaps its digits instead of folding them, a working window's rim holds lit instead of breathing,
   the status readings sample less often, and the weather icon rests on its last frame. Nothing on

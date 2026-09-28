@@ -402,6 +402,9 @@ public final class TerminalEmulator {
      */
     final TerminalBuffer mAltBuffer;
 
+    /** @see #setClipboardCleanupEnabled(boolean) */
+    private boolean mClipboardCleanupEnabled = true;
+
     /**
      * The current screen buffer, pointing at either {@link #mMainBuffer} or {@link #mAltBuffer}.
      */
@@ -1157,6 +1160,23 @@ public final class TerminalEmulator {
     /** @see #setTrimWrappedTrailingSpaces(boolean) */
     public boolean isTrimWrappedTrailingSpaces() {
         return mMainBuffer.isTrimWrappedTrailingSpaces();
+    }
+
+    /**
+     * Whether copy and paste run through {@link ClipboardCleanup}: copying drops a line's
+     * trailing spaces and tabs and any blank lines left at the end, and pasting a single line
+     * loses its trailing whitespace and newline so it runs instead of queuing an empty line
+     * behind it. An emulator has no preferences access of its own; the app pushes the "Clipboard
+     * Cleanup" setting here on every new session and again whenever the preference changes, the
+     * same way it does {@link #setTrimWrappedTrailingSpaces(boolean)}.
+     */
+    public void setClipboardCleanupEnabled(boolean clipboardCleanupEnabled) {
+        mClipboardCleanupEnabled = clipboardCleanupEnabled;
+    }
+
+    /** @see #setClipboardCleanupEnabled(boolean) */
+    public boolean isClipboardCleanupEnabled() {
+        return mClipboardCleanupEnabled;
     }
 
     public boolean isKeypadApplicationMode() {
@@ -5053,8 +5073,16 @@ public final class TerminalEmulator {
             mKittyPlacementGeneration++;
     }
 
+    /**
+     * The long-press selection's text, for copy, cut and read-aloud. With Clipboard Cleanup on
+     * this runs through {@link ClipboardCleanup#forCopy(String)}; it is the one caller of this
+     * method ({@link com.termux.view.textselection.TextSelectionCursorController}), so cleanup
+     * lands here rather than in {@link TerminalBuffer#getSelectedText}, whose other callers
+     * (transcripts, find, AI context) must see the text exactly as it sits on screen.
+     */
     public String getSelectedText(int x1, int y1, int x2, int y2) {
-        return mScreen.getSelectedText(x1, y1, x2, y2);
+        String selectedText = mScreen.getSelectedText(x1, y1, x2, y2);
+        return mClipboardCleanupEnabled ? ClipboardCleanup.forCopy(selectedText) : selectedText;
     }
 
     /** used to read aloud the character under the cursor in A11Y */
@@ -5082,9 +5110,13 @@ public final class TerminalEmulator {
      * If DECSET 2004 is set, prefix paste with "\033[200~" and suffix with "\033[201~".
      */
     public void paste(String text) {
-        // First: Always remove escape key and C1 control characters [0x80,0x9F]:
+        // First: with Clipboard Cleanup on, trim a single-line paste's trailing whitespace and
+        // newline (Windows Terminal's TrimPaste) so a copied one-line command runs immediately
+        // instead of queuing an empty line behind it. A multi-line paste is left alone.
+        if (mClipboardCleanupEnabled) text = ClipboardCleanup.forPaste(text);
+        // Second: Always remove escape key and C1 control characters [0x80,0x9F]:
         text = text.replaceAll("(\u001B|[\u0080-\u009F])", "");
-        // Second: Replace all newlines (\n) or CRLF (\r\n) with carriage returns (\r).
+        // Third: Replace all newlines (\n) or CRLF (\r\n) with carriage returns (\r).
         text = text.replaceAll("\r?\n", "\r");
         // Then: Implement bracketed paste mode if enabled:
         boolean bracketed = isDecsetInternalBitSet(DECSET_BIT_BRACKETED_PASTE_MODE);

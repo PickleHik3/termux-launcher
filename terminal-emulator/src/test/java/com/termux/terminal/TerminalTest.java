@@ -136,6 +136,26 @@ public class TerminalTest extends TerminalTestCase {
 		assertEquals("hi", mOutput.getOutputAndClear());
 	}
 
+	public void testPasteClipboardCleanup() {
+		withTerminalSized(5, 5);
+		assertTrue(mTerminal.isClipboardCleanupEnabled());
+
+		// On (the default): a single-line paste loses its trailing newline and whitespace, so a
+		// copied one-line command runs instead of queuing an empty line behind it.
+		mTerminal.paste("echo hi\n");
+		assertEquals("echo hi", mOutput.getOutputAndClear());
+
+		// A multi-line paste is left untouched.
+		mTerminal.paste("echo one\necho two\n");
+		assertEquals("echo one\recho two\r", mOutput.getOutputAndClear());
+
+		// Off: pasted text reaches the session exactly as given (past the existing escape and
+		// newline handling, which is unrelated to Clipboard Cleanup).
+		mTerminal.setClipboardCleanupEnabled(false);
+		mTerminal.paste("echo hi\n");
+		assertEquals("echo hi\r", mOutput.getOutputAndClear());
+	}
+
 	public void testSelectGraphics() {
 		selectGraphicsTestRun(';');
 		selectGraphicsTestRun(':');

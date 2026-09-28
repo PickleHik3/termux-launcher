@@ -57,6 +57,9 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "terminal_trim_wrapped_trailing_spaces":
                 mPreferences.setTrimWrappedTrailingSpacesEnabled(value);
                 break;
+            case "terminal_clipboard_cleanup":
+                mPreferences.setClipboardCleanupEnabled(value);
+                break;
             case "top_pane_clock_am_pm":
                 mPreferences.setTopPaneClockAmPmEnabled(value);
                 break;
@@ -110,6 +113,8 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isOsc52ClipboardReadEnabled();
             case "terminal_trim_wrapped_trailing_spaces":
                 return mPreferences.isTrimWrappedTrailingSpacesEnabled();
+            case "terminal_clipboard_cleanup":
+                return mPreferences.isClipboardCleanupEnabled();
             case "top_pane_clock_am_pm":
                 return mPreferences.isTopPaneClockAmPmEnabled();
             case "show_key_hints":

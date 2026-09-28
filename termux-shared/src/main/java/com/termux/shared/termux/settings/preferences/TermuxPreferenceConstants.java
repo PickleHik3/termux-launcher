@@ -583,6 +583,13 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES = true;
 
         /**
+         * Whether copy drops a line's trailing spaces and tabs and trailing blank lines, and a
+         * single-line paste drops its trailing whitespace and newline.
+         */
+        public static final String KEY_TERMINAL_CLIPBOARD_CLEANUP = "terminal_clipboard_cleanup";
+        public static final boolean DEFAULT_TERMINAL_CLIPBOARD_CLEANUP = true;
+
+        /**
          * Defines the key for showing focused app names while scrubbing the dock.
          */
         public static final String KEY_APP_LAUNCHER_DISPLAY_APP_NAMES = "app_launcher_display_app_names";
