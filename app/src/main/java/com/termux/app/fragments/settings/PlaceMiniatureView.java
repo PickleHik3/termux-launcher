@@ -57,11 +57,11 @@ import java.util.Map;
  * the settings page can scroll to its row.
  *
  * <p>The picture is also the editor. Every band with a placement carries a six-dot grip at its
- * upper trailing corner; a touch-down on one lifts that bar at once — no long press — and for the
- * rest of the gesture the view keeps the preference list from stealing the touch. While a bar is
- * lifted every edge it may legally stand on is outlined, the tray under the phone offers to put it
- * away, and a release over either reports the new placement. A release anywhere else springs the
- * bar back and reports nothing. {@link MiniatureDragPolicy} owns which targets exist and which one
+ * trailing end, centred across it (a column's at its top); a touch-down on one lifts that bar at
+ * once — no long press — and for the rest of the gesture the view keeps the preference list from
+ * stealing the touch. While a bar is lifted every edge it may legally stand on is outlined, the
+ * tray under the phone offers to put it away, and a release over either reports the new placement.
+ * A release anywhere else springs the bar back and reports nothing. {@link MiniatureDragPolicy} owns which targets exist and which one
  * the finger is over.
  *
  * <p>The artwork is drawn from {@code project-docs/layout-editor/miniature-material}: its
@@ -168,12 +168,18 @@ public final class PlaceMiniatureView extends View {
     private static final float LIFTED_STROKE_U = 1.5f;
     /** How far the lifted card's solid underlay sits below it: the tonal raise. */
     private static final float LIFT_OFFSET_U = 4f;
-    /** The six-dot grip: two columns of three, from its centre. */
-    private static final float GRIP_DOT_RADIUS_U = 1.6f;
-    private static final float GRIP_PITCH_X_U = 6f;
-    private static final float GRIP_PITCH_Y_U = 5f;
-    /** The grip's centre from the card's trailing edge, and from its top. */
+    /**
+     * The six-dot grip: two columns of three, from its centre. Big enough to find before a finger
+     * goes looking for it — the dots were 1.6 units and read as dust on a thin band.
+     */
+    private static final float GRIP_DOT_RADIUS_U = 2.2f;
+    private static final float GRIP_PITCH_X_U = 6.5f;
+    private static final float GRIP_PITCH_Y_U = 5.5f;
+    /** How far apart two dots of a squeezed column stay, in dot radii, so they never merge. */
+    private static final float GRIP_MIN_PITCH_RADII = 2.4f;
+    /** The grip's centre from the card's trailing edge; across a row it is always the middle. */
     private static final float GRIP_INSET_END_U = 13f;
+    /** A column's grip: its centre down from the column's top. */
     private static final float GRIP_INSET_TOP_U = 16f;
     /** What a band's own content keeps clear of the grip at its trailing end. */
     private static final float GRIP_CLEARANCE_U = 22f;
@@ -197,8 +203,10 @@ public final class PlaceMiniatureView extends View {
     private static final float TAB_EDGE_GAP_U = 8f;
 
     // ---- The theme's roles, as the design maps them ---------------------------------------------
-    /** Outlines, text lines, resting grips: the on-surface-variant at the design's 45%. */
+    /** Outlines and text lines: the on-surface-variant at the design's 45%. */
     private static final int DIM_ALPHA = 115;
+    /** A resting grip: the on-surface-variant at 85%, so it reads on the thinnest band. */
+    private static final int GRIP_ALPHA = 217;
     /** Text and glyphs that have to read at the real size: the same ink, less faded. */
     private static final int TEXT_ALPHA = 205;
     /** The tonal layer a lifted card or an active tray wears: the accent at 9%. */
@@ -847,7 +855,7 @@ public final class PlaceMiniatureView extends View {
 
     // ---- Grips, tray and slots -----------------------------------------------------------------
 
-    /** A grip at the upper trailing corner of every band the user may move; the canvas gets none. */
+    /** A grip at the trailing end of every band the user may move; the canvas gets none. */
     private void computeGrips() {
         for (Block bar : BARS) {
             RectF band = mBlockRects.get(bar);
@@ -857,10 +865,11 @@ public final class PlaceMiniatureView extends View {
     }
 
     /**
-     * The grip glyph's own rectangle: the six dots' extent, centred at the design's anchor —
-     * {@value #GRIP_INSET_END_U} units in from the card's trailing edge and
-     * {@value #GRIP_INSET_TOP_U} down from its top, or as far down as a thin band allows. A column
-     * is too narrow for a trailing corner, so its grip stands centred across it at its top.
+     * The grip glyph's own rectangle: the six dots' extent, in the one spot every row carries it —
+     * {@value #GRIP_INSET_END_U} units in from the card's trailing edge, centred across the row —
+     * squeezed to the card on a band too thin for the whole column of dots. A column is too
+     * narrow for a trailing end, so its grip stands centred across it,
+     * {@value #GRIP_INSET_TOP_U} down from its top.
      */
     @NonNull
     private RectF gripFor(@NonNull RectF band, boolean vertical) {
@@ -872,13 +881,17 @@ public final class PlaceMiniatureView extends View {
     private void gripInto(@NonNull RectF band, boolean vertical, @NonNull RectF out) {
         float pad = u(CARD_PAD_U);
         float halfWidth = u(GRIP_PITCH_X_U) / 2f + u(GRIP_DOT_RADIUS_U);
-        float halfHeight = u(GRIP_PITCH_Y_U) + u(GRIP_DOT_RADIUS_U);
         float innerHeight = Math.max(0f, band.height() - 2f * pad);
-        float cy = band.top + pad + Math.min(u(GRIP_INSET_TOP_U), innerHeight / 2f);
+        // The card's own rim and a hair of air stay clear of the dots.
+        float halfHeight = gripHalfHeightPx(u(GRIP_PITCH_Y_U) + u(GRIP_DOT_RADIUS_U),
+            innerHeight, u(CARD_STROKE_U) + u(1f));
+        float cy;
         float cx;
         if (vertical) {
+            cy = band.top + pad + Math.min(u(GRIP_INSET_TOP_U), innerHeight / 2f);
             cx = band.centerX();
         } else {
+            cy = band.centerY();
             float end = Math.min(u(GRIP_INSET_END_U), Math.max(0f, band.width() - 2f * pad) / 2f);
             cx = isRtl() ? band.left + pad + end : band.right - pad - end;
         }
@@ -1254,8 +1267,8 @@ public final class PlaceMiniatureView extends View {
     // ---- Colours -------------------------------------------------------------------------------
     // The artwork names four roles and the theme supplies them: the surface for the phone, the
     // pane and the keyboard's own card; the raised container for every strip; the on-surface
-    // variant, dimmed, for outlines, glyphs and resting grips; and the accent for what is held,
-    // chosen or about to take a drop.
+    // variant, dimmed for outlines and glyphs and stronger for resting grips; and the accent for
+    // what is held, chosen or about to take a drop.
 
     /** The band's fill; the legend swatch uses the same one so the two are read as one thing. */
     @ColorInt
@@ -1303,10 +1316,16 @@ public final class PlaceMiniatureView extends View {
             R.color.termux_on_surface_variant);
     }
 
-    /** Outlines, key silhouettes and resting grips: the ink at the design's 45%. */
+    /** Outlines and key silhouettes: the ink at the design's 45%. */
     @ColorInt
     private int dim() {
         return ColorUtils.setAlphaComponent(onVariant(), DIM_ALPHA);
+    }
+
+    /** A resting grip: the ink at readable emphasis, over any band, light or dark. */
+    @ColorInt
+    private int gripInk() {
+        return ColorUtils.setAlphaComponent(onVariant(), GRIP_ALPHA);
     }
 
     /** Text and glyphs, which have to read at the real size: the ink, a little less faded. */
@@ -1418,7 +1437,7 @@ public final class PlaceMiniatureView extends View {
         }
         drawBandCard(canvas, block, rect, isBarVertical(block), false);
         RectF grip = mGripRects.get(block);
-        if (grip != null) drawGrip(canvas, grip, dim());
+        if (grip != null) drawGrip(canvas, grip, gripInk());
     }
 
     /**
@@ -1986,13 +2005,39 @@ public final class PlaceMiniatureView extends View {
         else local.right -= room;
     }
 
-    /** The six dots, from their rectangle's centre; the colour says whether the bar is held. */
+    /**
+     * Half the grip's height on a card with {@code innerHeightPx} of room: the whole column of
+     * dots where it fits, and no taller than the card less {@code clearancePx} on each side where
+     * it does not — the A–Z band is the one this is for.
+     */
+    @VisibleForTesting
+    static float gripHalfHeightPx(float wantedHalfPx, float innerHeightPx, float clearancePx) {
+        float room = Math.max(0f, innerHeightPx / 2f - Math.max(0f, clearancePx));
+        return Math.max(0f, Math.min(wantedHalfPx, room));
+    }
+
+    /**
+     * The dots' radius for a grip {@code halfHeightPx} tall: the design's, or — where the column
+     * has been squeezed — small enough that three rows still stand
+     * {@value #GRIP_MIN_PITCH_RADII} radii apart. Never under half a pixel.
+     */
+    @VisibleForTesting
+    static float gripDotRadiusPx(float designRadiusPx, float halfHeightPx) {
+        float fit = Math.max(0f, halfHeightPx) / (1f + GRIP_MIN_PITCH_RADII);
+        return Math.max(0.5f, Math.min(designRadiusPx, fit));
+    }
+
+    /**
+     * The six dots, filling their rectangle: two columns at its sides, three rows from its top to
+     * its bottom. The colour says whether the bar is held.
+     */
     private void drawGrip(@NonNull Canvas canvas, @NonNull RectF grip, int color) {
         float cx = grip.centerX();
         float cy = grip.centerY();
-        float pitchX = Math.min(u(GRIP_PITCH_X_U), grip.width() / 2f);
-        float pitchY = Math.min(u(GRIP_PITCH_Y_U), grip.height() / 3f);
-        float radius = Math.max(0.6f, Math.min(u(GRIP_DOT_RADIUS_U), pitchY * 0.35f));
+        float radius = gripDotRadiusPx(Math.min(u(GRIP_DOT_RADIUS_U), grip.width() / 4f),
+            grip.height() / 2f);
+        float pitchX = Math.max(0f, grip.width() - 2f * radius);
+        float pitchY = Math.max(0f, grip.height() / 2f - radius);
         mFillPaint.setColor(color);
         for (int c = -1; c <= 1; c += 2) {
             for (int r = -1; r <= 1; r++) {
@@ -2149,7 +2194,7 @@ public final class PlaceMiniatureView extends View {
 
             String name = barName(bar);
             RectF grip = mGripRects.get(bar);
-            if (grip != null) drawGrip(canvas, grip, dim());
+            if (grip != null) drawGrip(canvas, grip, gripInk());
             if (name == null) continue;
             float textLeft = chip.left + dp(8);
             float textRoom = Math.max(0f, (grip == null ? chip.right : grip.left)

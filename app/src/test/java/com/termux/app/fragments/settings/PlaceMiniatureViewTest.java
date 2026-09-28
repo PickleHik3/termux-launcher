@@ -1128,4 +1128,42 @@ public class PlaceMiniatureViewTest {
         assertEquals("the Corners control moves every card together", before * 2f,
             view.surfaceRadiusPx(), 0.01f);
     }
+
+    // ---- The grip ---------------------------------------------------------------------------------
+
+    @Test
+    public void everyRowsGripStandsInTheSameSpotCentredAcrossIt() {
+        PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        Float end = null;
+        for (PlaceMiniatureView.Block bar : new PlaceMiniatureView.Block[]{
+            PlaceMiniatureView.Block.STATUS_BAR, PlaceMiniatureView.Block.APPS_ROW,
+            PlaceMiniatureView.Block.ALPHABETS_ROW, PlaceMiniatureView.Block.EXTRA_KEYS}) {
+            RectF grip = view.gripRect(bar);
+            RectF band = view.blockRect(bar);
+            assertNotNull(grip);
+            assertNotNull(band);
+            assertEquals("centred across " + bar, band.centerY(), grip.centerY(), 0.01f);
+            assertTrue("the whole grip stays on " + bar,
+                grip.top >= band.top && grip.bottom <= band.bottom);
+            float fromEnd = band.right - grip.centerX();
+            if (end == null) end = fromEnd;
+            assertEquals("the same distance from the trailing end on " + bar, end, fromEnd, 0.01f);
+        }
+    }
+
+    @Test
+    public void aThinBandSqueezesTheColumnOfDotsWithoutMergingThem() {
+        assertEquals("room to spare: the whole column", 7.7f,
+            PlaceMiniatureView.gripHalfHeightPx(7.7f, 40f, 2f), 0.001f);
+        assertEquals("a thin band: the card less its rim", 4f,
+            PlaceMiniatureView.gripHalfHeightPx(7.7f, 12f, 2f), 0.001f);
+        float radius = PlaceMiniatureView.gripDotRadiusPx(2.2f, 4f);
+        assertTrue("squeezed dots shrink", radius < 2.2f);
+        assertTrue("and still stand apart", 4f - radius >= 2.4f * radius - 0.001f);
+        assertEquals("unsqueezed they keep the design's size", 2.2f,
+            PlaceMiniatureView.gripDotRadiusPx(2.2f, 7.7f), 0.001f);
+    }
 }
