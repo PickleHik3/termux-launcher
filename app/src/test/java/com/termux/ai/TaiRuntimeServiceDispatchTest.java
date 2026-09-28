@@ -15,6 +15,34 @@ public class TaiRuntimeServiceDispatchTest {
         assertFalse(TaiRuntimeService.isConcurrentControlOperation(TaiRuntimeIpc.OP_LOAD_MODEL));
     }
 
+    /**
+     * The busy rule for a running bench: chat-lane work is refused, control and status pass, and
+     * speech keeps its own lanes.
+     */
+    @Test
+    public void aRunningBench_refusesChatLaneWorkAndLetsControlThrough() {
+        assertTrue(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_LOAD_MODEL));
+        assertTrue(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_KEEP_WARM));
+        assertTrue(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_OPENAI_CHAT));
+        assertTrue(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM));
+        assertTrue(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_OPENAI_COMPLETION));
+        assertTrue(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM));
+        assertTrue(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_EMBEDDINGS));
+        assertTrue(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_BENCHMARK));
+        assertTrue(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_BENCH_RUN));
+        assertFalse(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_CANCEL));
+        assertFalse(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_UNLOAD_MODEL));
+        assertFalse(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_STATUS));
+        assertFalse(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_RUNTIME_STATUS));
+        assertFalse(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_PREFLIGHT));
+        assertFalse(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_TRANSCRIBE));
+        assertFalse(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_TTS_SPEAK));
+        // The bench itself is neither a control nor a speech operation: it runs on the serial lane.
+        assertFalse(TaiRuntimeService.isConcurrentControlOperation(TaiRuntimeIpc.OP_BENCH_RUN));
+        assertFalse(TaiRuntimeService.isSttOperation(TaiRuntimeIpc.OP_BENCH_RUN));
+        assertFalse(TaiRuntimeService.isTtsOperation(TaiRuntimeIpc.OP_BENCH_RUN));
+    }
+
     /** Speech-to-text has its own lane: it must never queue behind a chat generation. */
     @Test
     public void transcribeAndSttWarm_useTheSttLane() {
