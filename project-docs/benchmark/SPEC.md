@@ -100,6 +100,17 @@ There is one harness for both backends in `:tai_runtime`. It times each token vi
 | Screen/app | Keep-screen-on; runtime ops already run in the foreground | "Keep this screen open" | Leaving pauses at the end of the current step; Resume on return |
 | Time | Per phase | – | Stop a phase at 3× its expected time |
 
+Implemented in slice 2 (`TaiBenchGuardRules`, `TaiDeviceConditions`, `TaiBenchConditionsGuard`). The
+runtime process reads battery and thermal state (it is where the harness runs); the app process is
+still the only writer of `benchmarks.json`, copying each record's `conditions` field as it arrives.
+Between entries, a later model waits (cool-down, polled every 2 s) for thermal status to return to
+the run's starting reading and headroom to come back within 0.05 of the start's — capped at 5
+minutes, after which the run proceeds and that entry is marked `warmStart`; "Skip the wait" ends
+the cool-down (and marks the same way) at once. The battery-stop and SEVERE+ thermal-stop rules
+still apply during a cool-down and win over it. `force: true` on the request (`tai benchmark
+--force`) skips only the before-start check, not the while-running rules; `tai benchmark
+--skip-wait` is the CLI's "Skip the wait".
+
 ## Which models are offered
 
 The filter:

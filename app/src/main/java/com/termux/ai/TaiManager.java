@@ -645,6 +645,22 @@ public final class TaiManager {
         return localRuntime().cancel();
     }
 
+    /**
+     * "Skip the wait" (spec Screen 5): ends the active bench's current or next cool-down wait at
+     * once, and that entry's record is marked {@code warmStart}. A no-op, not an error, when
+     * nothing is running.
+     */
+    @NonNull
+    public JSONObject skipBenchCooldown() throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_BENCH_SKIP_WAIT, "{}");
+        TaiBenchHarness bench = activeBench;
+        if (bench != null) bench.skipCooldown();
+        JSONObject result = new JSONObject();
+        result.put("ok", true);
+        result.put("skipped", bench != null);
+        return result;
+    }
+
     // ---- Benchmark (bench v1) ------------------------------------------------------------------
 
     /** The results file, {@code files/tai/benchmarks.json}, written by this (the app) process only. */
@@ -859,6 +875,7 @@ public final class TaiManager {
         body.put("preset", preset.id);
         body.put("processors", processors == null ? JSONObject.NULL : processors);
         body.put("eagle", request.optBoolean("eagle", false));
+        body.put("force", request.optBoolean("force", false));
         return body;
     }
 
@@ -927,20 +944,49 @@ public final class TaiManager {
         JSONObject deviceJson = new JSONObject();
         deviceJson.put("soc", device.socModel == null ? JSONObject.NULL : device.socModel);
         deviceJson.put("ramClassGb", device.memoryBytes > 0L ? Math.round(device.memoryBytes / (double) (1024L * 1024L * 1024L)) : JSONObject.NULL);
-        // Filled by slice 2's guards; recorded as unknown until then.
-        JSONObject conditions = new JSONObject();
-        for (String key : new String[] {"batteryStart", "batteryEnd", "charging", "thermalStart", "thermalEnd", "warmStart"}) {
-            conditions.put(key, JSONObject.NULL);
+
+        TaiDeviceConditions conditionsReader = new TaiDeviceConditions(appContext);
+        boolean force = request.optBoolean("force", false);
+        if (!force) {
+            TaiBenchGuardRules.Snapshot startSnapshot = conditionsReader.snapshot();
+            String reason = TaiBenchGuardRules.startCheck(startSnapshot);
+            if (reason != null) {
+                JSONObject refusal = error(409, "conditions_not_met", conditionsMessage(reason));
+                refusal.put("reason", reason);
+                refusal.put("batteryPercent", startSnapshot.batteryPercent >= 0 ? startSnapshot.batteryPercent : JSONObject.NULL);
+                refusal.put("charging", startSnapshot.charging);
+                refusal.put("thermalStatus", startSnapshot.thermalStatus >= 0 ? startSnapshot.thermalStatus : JSONObject.NULL);
+                emitBenchError(sink, refusal);
+                return;
+            }
         }
+
+        TaiBenchGuard guard = new TaiBenchConditionsGuard(conditionsReader::snapshot, System::currentTimeMillis);
         TaiBenchHarness harness = new TaiBenchHarness(preset, entries, new BenchHost(specs, baseOptions),
-            TaiBenchGuard.ALWAYS_CONTINUE, sink::onEvent, com.termux.BuildConfig.VERSION_NAME, deviceJson, conditions);
+            guard, sink::onEvent, com.termux.BuildConfig.VERSION_NAME, deviceJson);
         activeBench = harness;
+        conditionsReader.startThermalListener(() -> harness.requestStop("thermal"));
         try {
             harness.run();
         } finally {
+            conditionsReader.stopThermalListener();
             activeBench = null;
         }
         sink.onDone();
+    }
+
+    /** The human message for a {@code conditions_not_met} refusal, by {@link TaiBenchGuardRules#startCheck} reason. */
+    @NonNull
+    private static String conditionsMessage(@NonNull String reason) {
+        switch (reason) {
+            case "battery_low":
+                return "Battery is below " + TaiBenchGuardRules.START_BATTERY_MIN_PERCENT
+                    + "%; plug in or charge before benchmarking, or pass force=true to run anyway.";
+            case "too_hot":
+                return "The phone is already warm; let it cool before benchmarking, or pass force=true to run anyway.";
+            default:
+                return "The phone is not in a state to start a benchmark.";
+        }
     }
 
     /** The harness's window on this process: the router, the meter, the passage, the stamps. */
@@ -1071,6 +1117,15 @@ public final class TaiManager {
         event.put("message", source.optString("message", "The benchmark could not start."));
         event.put("status", source.optInt("_statusCode", 500));
         if (source.has("loadedModelId")) event.put("loadedModelId", source.opt("loadedModelId"));
+        // A conditions_not_met refusal attaches reason/batteryPercent/charging/thermalStatus; any
+        // field beyond the standard shape travels through to the caller unchanged.
+        Iterator<String> keys = source.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if ("ok".equals(key) || "error".equals(key) || "message".equals(key)
+                || "_statusCode".equals(key) || "loadedModelId".equals(key)) continue;
+            event.put(key, source.get(key));
+        }
         return event;
     }
 

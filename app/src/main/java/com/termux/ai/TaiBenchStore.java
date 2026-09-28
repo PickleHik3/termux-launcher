@@ -37,7 +37,8 @@ import java.util.Set;
  *
  * <p>Record layout (bench v1): {@code id, benchVersion, preset, timestamp, modelId, displayName,
  * sizeBytes, sha256, backend, accelerator, speculative, runtimeVersion, appVersion, device{soc,
- * ramClassGb}, conditions{batteryStart, batteryEnd, charging, thermalStart, thermalEnd, warmStart},
+ * ramClassGb}, conditions{batteryStart, batteryEnd, charging, thermalStart, thermalEnd,
+ * headroomStart, headroomEnd, warmStart},
  * phases{load{ms, memBytes}, reading{med,min,max,runs}, firstWord{…}, writing{…, tokens},
  * sustained{startTps, endTps, dropPct}|null}, check{passed, total, details}, status, verdict}.
  * The entry key is {@code modelId|backend|accelerator|speculative}.
