@@ -941,7 +941,10 @@
 
                 <!-- The bottom bands a place stands under the keyboard, outermost last as in every
                      bottom stack (EdgeStackPolicy.underKeyboard). applyEdgeStacks() moves the
-                     hosts in and out of here, and hides it while it holds none. -->
+                     hosts in and out of here, and hides it while it holds none. While it holds
+                     any it is a card of the dock's material (applyUnderKeyboardStackGlass), with
+                     the air above and under it as margins the stack's height counts
+                     (UnderKeyboardBand). -->
                 <com.termux.app.place.EdgeStackView
                     android:id="@+id/accessory_under_keyboard_stack"
                     android:layout_width="match_parent"
