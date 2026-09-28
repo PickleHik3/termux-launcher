@@ -24,11 +24,13 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -367,55 +369,71 @@ public final class TaiModelDownloader {
             }
 
             File partial = new File(output.getAbsolutePath() + ".part");
-            long existing = resumeOffset(partial, url);
-            HttpURLConnection connection = open(url, authToken, existing);
-            int status = connection.getResponseCode();
-            if (status == 416 && existing > 0) {
-                connection.disconnect();
-                connection = open(url, authToken, 0);
-                status = connection.getResponseCode();
-                existing = 0;
-            }
-            if (status == 206 && !validContentRange(connection.getHeaderField("Content-Range"), existing)) {
-                connection.disconnect();
-                throw new IllegalStateException("Invalid partial response");
-            }
-            if (status < 200 || status >= 300) {
-                throw new IllegalStateException("Download failed with HTTP " + status);
-            }
-            boolean resumed = existing > 0L && status == 206;
-            if (!resumed) existing = 0L;
-            long responseLength = connection.getHeaderFieldLong("Content-Length", -1L);
-            // What this response promised, for the short-read check below; contentLength (shown
-            // to the user) may be raised to the catalogue's size when the server says less.
-            long promised = responseLength > 0 ? existing + responseLength : -1L;
-            contentLength = promised;
-            if (expectedSizeBytes > 0L) contentLength = Math.max(contentLength, expectedSizeBytes);
-            bytesRead = existing;
-            startBytes = existing;
-            run.persist(run.record(TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""));
+            // A re-issued download for a file that is already complete (a re-import of the same
+            // revision, a retried request after the app already finished it) should not re-fetch
+            // gigabytes it already has; the URL pins the revision, so a matching length is enough.
+            // Fold the existing file into the .part slot so everything below (hash check, the
+            // MNN-package expansion, the final rename) runs exactly as it would after a real
+            // transfer.
+            boolean keptExisting = !partial.exists() && isFileAlreadyComplete(output, expectedSizeBytes)
+                && output.renameTo(partial);
+            if (keptExisting) {
+                bytesRead = partial.length();
+                startBytes = bytesRead;
+                contentLength = expectedSizeBytes;
+                run.persist(run.record(TaiModelStore.STATE_VERIFYING, bytesRead, contentLength, ""));
+            } else {
+                long existing = resumeOffset(partial, url);
+                HttpURLConnection connection = open(url, authToken, existing);
+                int status = connection.getResponseCode();
+                if (status == 416 && existing > 0) {
+                    connection.disconnect();
+                    connection = open(url, authToken, 0);
+                    status = connection.getResponseCode();
+                    existing = 0;
+                }
+                if (status == 206 && !validContentRange(connection.getHeaderField("Content-Range"), existing)) {
+                    connection.disconnect();
+                    throw new IllegalStateException("Invalid partial response");
+                }
+                if (status < 200 || status >= 300) {
+                    throw new IllegalStateException("Download failed with HTTP " + status);
+                }
+                boolean resumed = existing > 0L && status == 206;
+                if (!resumed) existing = 0L;
+                long responseLength = connection.getHeaderFieldLong("Content-Length", -1L);
+                // What this response promised, for the short-read check below; contentLength (shown
+                // to the user) may be raised to the catalogue's size when the server says less.
+                long promised = responseLength > 0 ? existing + responseLength : -1L;
+                contentLength = promised;
+                if (expectedSizeBytes > 0L) contentLength = Math.max(contentLength, expectedSizeBytes);
+                bytesRead = existing;
+                startBytes = existing;
+                run.persist(run.record(TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""));
 
-            try (InputStream input = new BufferedInputStream(connection.getInputStream());
-                 FileOutputStream outputStream = new FileOutputStream(partial, resumed)) {
-                byte[] buffer = new byte[1024 * 64];
-                int read;
-                long lastPersisted = bytesRead;
-                while ((read = input.read(buffer)) != -1) {
-                    control.checkpoint();
-                    outputStream.write(buffer, 0, read);
-                    bytesRead += read;
-                    if (bytesRead - lastPersisted >= PERSIST_EVERY_BYTES) {
-                        run.persist(run.record(TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""));
-                        lastPersisted = bytesRead;
-                    } else {
-                        run.report(run.record(TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""));
+                try (InputStream input = new BufferedInputStream(connection.getInputStream());
+                     FileOutputStream outputStream = new FileOutputStream(partial, resumed)) {
+                    byte[] buffer = new byte[1024 * 64];
+                    int read;
+                    long lastPersisted = bytesRead;
+                    while ((read = input.read(buffer)) != -1) {
+                        control.checkpoint();
+                        outputStream.write(buffer, 0, read);
+                        bytesRead += read;
+                        if (bytesRead - lastPersisted >= PERSIST_EVERY_BYTES) {
+                            run.persist(run.record(TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""));
+                            lastPersisted = bytesRead;
+                        } else {
+                            run.report(run.record(TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""));
+                        }
                     }
                 }
-            }
-            // A connection that ends before the promised length is the network going away, not a
-            // finished file; some HTTP stacks report it as a plain end of stream, so say so here.
-            if (promised > 0L && bytesRead < promised) {
-                throw new IOException("The connection closed after " + bytesRead + " of " + promised + " bytes");
+                // A connection that ends before the promised length is the network going away, not
+                // a finished file; some HTTP stacks report it as a plain end of stream, so say so
+                // here.
+                if (promised > 0L && bytesRead < promised) {
+                    throw new IOException("The connection closed after " + bytesRead + " of " + promised + " bytes");
+                }
             }
 
             // "Checking file" is shown while the hash actually runs, so the wait after the last
@@ -445,7 +463,8 @@ public final class TaiModelDownloader {
 
                 File modelDir = output.getParentFile();
                 String baseUrl = baseUrlFromUrl(url);
-                LinkedHashSet<String> packageFiles = mnnPackageFilesFromHuggingFace(url, authToken);
+                HfPackageListing packageListing = mnnPackageListingFromHuggingFace(url, authToken);
+                LinkedHashSet<String> packageFiles = packageListing.files;
                 if (packageFiles.isEmpty()) {
                     for (String fileName : MNN_MODEL_FILES) packageFiles.add(fileName);
                 }
@@ -462,6 +481,22 @@ public final class TaiModelDownloader {
                     if (output.getName().equals(fileName)) continue;
                     String fileUrl = baseUrl + encodeHuggingFacePath(fileName);
                     File fileOutput = new File(modelDir, fileName);
+                    // A file already complete on disk (a re-download of an installed package, or
+                    // one this same run already fetched under an earlier name) is kept rather than
+                    // re-fetched: the revision is pinned in the URL, so a matching length is enough
+                    // to trust it. Its bytes still count toward progress so the total lands right.
+                    Long expectedFileSize = packageListing.sizes.get(fileName);
+                    if (isFileAlreadyComplete(fileOutput, expectedFileSize == null ? -1L : expectedFileSize)) {
+                        currentBytes += fileOutput.length();
+                        bytesRead = currentBytes;
+                        run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
+                        if (fileName.endsWith(".json")) {
+                            TaiMnnPackage.references(TaiMnnPackage.readConfig(fileOutput), packageFiles);
+                            for (String dependency : packageFiles)
+                                if (!pendingFiles.contains(dependency)) pendingFiles.add(dependency);
+                        }
+                        continue;
+                    }
                     File fileParent = fileOutput.getParentFile();
                     if (fileParent != null && !fileParent.exists() && !fileParent.mkdirs()) {
                         throw new IllegalStateException("Could not create MNN package directory.");
@@ -1034,32 +1069,61 @@ public final class TaiModelDownloader {
     }
 
     @NonNull
-    private LinkedHashSet<String> mnnPackageFilesFromHuggingFace(@NonNull String url, @Nullable String authToken) {
-        LinkedHashSet<String> files = new LinkedHashSet<>();
+    /** A Hugging Face repository's directory listing, kept around for MNN package selection:
+     *  which files belong to the package (by name/extension), and, for every file the listing
+     *  covers, the size (and, for a Git LFS file, the sha256) the repository declares for it at
+     *  the pinned revision. A package member already on disk with a matching length is kept
+     *  rather than re-fetched (see the download loop); this is where that expected length comes
+     *  from. An unreachable or unparsable repository leaves both maps empty, so every file falls
+     *  back to today's behaviour of being fetched unconditionally. */
+    private static final class HfPackageListing {
+        final LinkedHashSet<String> files = new LinkedHashSet<>();
+        final Map<String, Long> sizes = new HashMap<>();
+        final Map<String, String> sha256s = new HashMap<>();
+    }
+
+    /** Whether {@code file} already holds the complete download: it exists (not a {@code .part})
+     *  and its length matches what the source declared for it. {@code expectedSize <= 0} means
+     *  the size is unknown, so the file is always treated as incomplete and re-fetched, which is
+     *  today's behaviour, unchanged. Never used to skip a file whose size differs. */
+    static boolean isFileAlreadyComplete(@NonNull File file, long expectedSize) {
+        return expectedSize > 0L && file.isFile() && file.length() == expectedSize;
+    }
+
+    @NonNull
+    private HfPackageListing mnnPackageListingFromHuggingFace(@NonNull String url, @Nullable String authToken) {
+        HfPackageListing listing = new HfPackageListing();
         String repoId = huggingFaceRepoIdFromResolveUrl(url);
-        if (repoId.isEmpty()) return files;
+        if (repoId.isEmpty()) return listing;
         try {
-            HttpURLConnection connection = open(TaiHuggingFace.parse(url).metadataUrl(), authToken, 0);
+            TaiHuggingFace source = TaiHuggingFace.parse(url);
+            HttpURLConnection connection = open(source.metadataUrl(), authToken, 0);
             int status = connection.getResponseCode();
-            if (status < 200 || status >= 300) return files;
+            if (status < 200 || status >= 300) return listing;
             String body = readSmallUtf8(connection.getInputStream(), 2L * 1024L * 1024L);
             JSONObject json = new JSONObject(body);
             JSONArray siblings = json.optJSONArray("siblings");
-            if (siblings == null) return files;
+            if (siblings == null) return listing;
+            String directory = source.path.substring(0, source.path.lastIndexOf('/') + 1);
             for (int i = 0; i < siblings.length(); i++) {
                 JSONObject sibling = siblings.optJSONObject(i);
                 if (sibling == null) continue;
                 String fileName = sibling.optString("rfilename", "");
-                TaiHuggingFace source = TaiHuggingFace.parse(url);
-                String directory = source.path.substring(0, source.path.lastIndexOf('/') + 1);
-                if (fileName.startsWith(directory)) {
-                    String relative = fileName.substring(directory.length());
-                    if (TaiHuggingFace.safePath(relative) && isMnnPackageFile(relative)) files.add(relative);
+                if (!fileName.startsWith(directory)) continue;
+                String relative = fileName.substring(directory.length());
+                if (!TaiHuggingFace.safePath(relative)) continue;
+                JSONObject lfs = sibling.optJSONObject("lfs");
+                long size = sibling.optLong("size", lfs == null ? -1L : lfs.optLong("size", -1L));
+                if (size > 0L) listing.sizes.put(relative, size);
+                if (lfs != null) {
+                    String sha256 = lfs.optString("sha256", "");
+                    if (!sha256.isEmpty()) listing.sha256s.put(relative, sha256);
                 }
+                if (isMnnPackageFile(relative)) listing.files.add(relative);
             }
         } catch (Exception ignored) {
         }
-        return files;
+        return listing;
     }
 
     public static final class HfResolve {
