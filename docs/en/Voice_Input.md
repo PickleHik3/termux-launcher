@@ -113,8 +113,9 @@ Cleanup is one pass a local chat model makes over the whole dictation once it st
 tap the voice key or the Dictate key, press ✓ or Copy early, or the silence auto-stop fires. It
 fixes punctuation, capitals and fillers, and resolves self-corrections ("at five, no, six" becomes
 "at six"). The panel marks what changed: changed and added words in the accent colour, removed words
-struck through, fading to plain text after a moment. ✓ and Copy use the cleaned text; undo takes it
-back.
+struck through. The marks stay on screen for as long as the cleaned text does, so a long dictation's
+corrections can still be read; ✓ and Copy use the plain cleaned text. Undo takes the cleanup back and
+redo puts it, marks and all, on screen again.
 
 Cleanup is **on by default** and needs a Gemma chat model installed. Turn it off with **Polish
 dictation with local model** in **Settings → Keyboard → Voice input**. While it is on, two more rows

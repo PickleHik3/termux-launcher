@@ -1,6 +1,5 @@
 package com.termux.app.terminal.inappkeyboard.voice;
 
-import android.animation.ArgbEvaluator;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
@@ -53,8 +52,9 @@ import java.util.List;
  * nothing better came back) has no other version to be told from and shows upright and primary.
  * Once the one pass has landed (the model's, or the command formatter's), the cleaned text
  * replaces the as-heard one with the changes marked from {@link VoiceWordDiff}: changed and added
- * words in the accent colour, removed words struck through, held for {@link #MARK_HOLD_MS} and
- * then faded into the plain cleaned text.
+ * words in the accent colour, removed words struck through. The marks stay for as long as the
+ * cleaned text is on screen, so a long dictation's corrections can still be read; what is
+ * inserted or copied is the plain cleaned text.
  *
  * <p>The text only ever moves one way: as heard, then cleaned. What is shown is always
  * {@link #shownText()}; a phrase that arrives after the cleanup joins that, never the as-heard
@@ -81,8 +81,6 @@ final class VoiceTranscriptPanel extends LinearLayout {
     /** The fewest lines the panel shrinks to where the pane area is short (landscape, keyboard up). */
     static final int MIN_VISIBLE_LINES = 2;
     static final long TYPE_MS = 300L;
-    static final long MARK_HOLD_MS = 1500L;
-    static final long MARK_FADE_MS = 400L;
     /** The action pill's height, and each control's. */
     static final int ACTION_PILL_DP = 40;
     /** Between the text (or the shimmer line) and the action pill. */
@@ -110,8 +108,6 @@ final class VoiceTranscriptPanel extends LinearLayout {
     @Nullable private List<VoiceWordDiff.Op> ops;
     /** Undo is showing {@link #raw} in place of {@link #cleaned}. */
     private boolean undone;
-    @Nullable private ValueAnimator markFade;
-    private final Runnable fadeMarks = this::fadeMarks;
 
     /**
      * @param onSurface the primary text colour: cleaned and final text, the icons
@@ -257,8 +253,7 @@ final class VoiceTranscriptPanel extends LinearLayout {
         ops = VoiceWordDiff.diff(raw.toString(), cleanedText);
         undone = false;
         showUndo(true);
-        renderCleaned(true, 0f);
-        postDelayed(fadeMarks, MARK_HOLD_MS);
+        renderCleaned();
     }
 
     /**
@@ -274,19 +269,18 @@ final class VoiceTranscriptPanel extends LinearLayout {
 
     /**
      * Undo ({@code true}): the text as it went into the cleanup, in the as-heard style; redo
-     * ({@code false}): the cleaned text again, plain. No-op without a cleanup.
+     * ({@code false}): the cleaned text again, its changes marked. No-op without a cleanup.
      */
     void setUndone(boolean undoneNow) {
         if (cleaned == null || undone == undoneNow) return;
         undone = undoneNow;
-        cancelMarks();
         if (undone) {
             SpannableStringBuilder builder = new SpannableStringBuilder(raw);
             styleAsHeard(builder, true);
             text.setText(builder, TextView.BufferType.SPANNABLE);
             scrollToEnd();
         } else {
-            renderCleaned(false, 1f);
+            renderCleaned();
         }
         undo.setImageResource(undone ? R.drawable.ic_symbol_redo : R.drawable.ic_symbol_undo);
         undo.setContentDescription(getContext().getString(undone ? R.string.voice_input_redo : R.string.voice_input_undo));
@@ -306,7 +300,6 @@ final class VoiceTranscriptPanel extends LinearLayout {
     /** Stops every animation; the panel is going away. */
     void release() {
         finishTyping();
-        cancelMarks();
         shimmer.setVisibility(GONE);
     }
 
@@ -354,20 +347,12 @@ final class VoiceTranscriptPanel extends LinearLayout {
 
     // ------------------------------------------------------------------ cleaned text
 
-    /** Forgets the cleanup (the text carries on, or starts over) and stops its marks. */
+    /** Forgets the cleanup (the text carries on, or starts over). */
     private void clearCleanup() {
-        cancelMarks();
         cleaned = null;
         ops = null;
         undone = false;
         showUndo(false);
-    }
-
-    private void cancelMarks() {
-        removeCallbacks(fadeMarks);
-        ValueAnimator animator = markFade;
-        markFade = null;
-        if (animator != null) animator.cancel();
     }
 
     private void showUndo(boolean shown) {
@@ -378,39 +363,16 @@ final class VoiceTranscriptPanel extends LinearLayout {
         undo.setVisibility(shown ? VISIBLE : GONE);
     }
 
-    private void fadeMarks() {
-        if (ops == null || undone) return;
-        if (!ValueAnimator.areAnimatorsEnabled()) {
-            renderCleaned(false, 1f);
-            return;
-        }
-        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(MARK_FADE_MS);
-        animator.addUpdateListener(a -> {
-            if (markFade != a || ops == null || undone) return;
-            float fraction = (float) a.getAnimatedValue();
-            if (fraction >= 1f) renderCleaned(false, 1f);
-            else renderCleaned(true, fraction);
-        });
-        markFade = animator;
-        animator.start();
-    }
-
     /**
-     * The cleaned text, from {@link #ops}. With {@code marks}, changed and added words are the
-     * accent blended {@code fade} of the way to the ordinary colour and removed words are struck
-     * through, fading out; without, removed words are gone and the text is plain.
+     * The cleaned text, from {@link #ops}, its changes marked: changed and added words in the
+     * accent, removed words struck through and dimmed.
      */
-    private void renderCleaned(boolean marks, float fade) {
+    private void renderCleaned() {
         List<VoiceWordDiff.Op> current = ops;
         if (current == null) return;
-        ArgbEvaluator blend = new ArgbEvaluator();
-        int markColor = (Integer) blend.evaluate(fade, accent, onSurface);
-        int removedAlpha = Math.round(0x99 * (1f - fade));
-        int removedColor = (onSurface & 0x00FFFFFF) | (removedAlpha << 24);
+        int removedColor = (onSurface & 0x00FFFFFF) | (0x99 << 24);
         SpannableStringBuilder builder = new SpannableStringBuilder();
         for (VoiceWordDiff.Op op : current) {
-            if (op.kind == VoiceWordDiff.Kind.REMOVED && !marks) continue;
             if (builder.length() > 0) builder.append(' ');
             int start = builder.length();
             builder.append(op.word);
@@ -419,7 +381,7 @@ final class VoiceTranscriptPanel extends LinearLayout {
             switch (op.kind) {
                 case CHANGED:
                 case ADDED:
-                    color = marks ? markColor : onSurface;
+                    color = accent;
                     break;
                 case REMOVED:
                     color = removedColor;

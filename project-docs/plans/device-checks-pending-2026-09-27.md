@@ -126,7 +126,7 @@ Checks 1–5 pass (the developer, 2026-09-28).
 ## Round 3 checks (voice pill and panel, branch voice-round3)
 1. **As heard vs cleaned.** With cleanup on, dictate a few phrases with an "um". While listening and
    cleaning, the text is italic and dimmer (secondary colour); once cleaned, it turns upright in the
-   normal text colour, with the change marks fading as before. Undo brings back the italic as-heard
+   normal text colour, with the change marks (they no longer fade; see round 4). Undo brings back the italic as-heard
    text, and redo the upright cleaned text. With cleanup off, and after "Kept as heard", the text is
    upright and normal. Check the light theme, the dark theme, and the glass (wallpaper) look: the
    italic text must stay readable on each.
@@ -161,3 +161,9 @@ Checks 1–5 pass (the developer, 2026-09-28).
       place (the corner until moved there).
    - d. Double-tap the handle: back to the top right corner, and the next dictation starts there.
    - e. Swiping the card itself (not the handle) sideways still discards.
+
+## Round 4 checks (voice panel, two states)
+1. **Marks stay.** Dictate a long passage with cleanup on. The panel shows the italic as-heard text,
+   then the cleaned text with changed and added words in the accent and removed words struck
+   through. The marks stay until the panel closes; they never fade to plain text. ✓ inserts the plain
+   cleaned text (no struck-through words). Undo shows the as-heard text; redo shows the marks again.
