@@ -1227,14 +1227,16 @@ public final class MnnTaiRuntime implements TaiRuntime {
     /**
      * Auto (null) leaves an EAGLE-3 package's own {@code speculative_type} (and whatever it
      * shipped for {@code hidden_states}) exactly as the config declares it: the package decides.
-     * Explicit {@code false} strips {@code speculative_type} so the engine falls back to plain
-     * decoding; {@code hidden_states} is left alone, since MNN reads it independently of Eagle.
+     * Explicit {@code false} writes an empty {@code speculative_type} so the engine falls back to
+     * plain decoding: MNN merges this JSON over the package's own config.json, so removing the key
+     * would leave the package's "eagle" in force, and only an empty value turns it off
+     * (Llm::setSpeculativeConfig); {@code hidden_states} is left alone, since MNN reads it independently of Eagle.
      * Explicit {@code true} on a package that never declared {@code speculative_type} is a no-op:
      * there is no draft head to turn on.
      */
     private static void applySpeculativeDecodingOverride(@NonNull JSONObject json, @Nullable Boolean speculativeDecodingEnabled) throws JSONException {
         if (speculativeDecodingEnabled == null || speculativeDecodingEnabled) return;
-        json.remove("speculative_type");
+        if (json.has("speculative_type")) json.put("speculative_type", "");
     }
 
     @NonNull

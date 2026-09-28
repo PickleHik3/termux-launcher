@@ -168,12 +168,12 @@ public class MnnTaiRuntimeConfigTest {
         JSONObject onMerged = new JSONObject((String) invokeMergedConfig(runtime, config, spec, on));
         assertEquals("eagle", onMerged.getString("speculative_type"));
 
-        // Explicit false: speculative_type is dropped so the engine decodes plainly;
-        // hidden_states is left alone (MNN reads it independently of Eagle).
+        // Explicit false: an empty speculative_type, which is what turns Eagle off once MNN merges
+        // this over the package's config.json; hidden_states is left alone.
         TaiRuntimeOptions off = new TaiRuntimeOptions(null, null, null, null,
             null, null, null, null, null, null, false, null);
         JSONObject offMerged = new JSONObject((String) invokeMergedConfig(runtime, config, spec, off));
-        assertFalse(offMerged.has("speculative_type"));
+        assertEquals("", offMerged.getString("speculative_type"));
         assertTrue(offMerged.getBoolean("hidden_states"));
     }
 
