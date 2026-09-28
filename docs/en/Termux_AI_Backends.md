@@ -22,6 +22,7 @@ POST /v1/chat/completions
 POST /v1/responses
 POST /v1/completions
 POST /v1/embeddings
+POST /v1/tokenize
 POST /v1/audio/transcriptions
 POST /v1/audio/speech
 ```
@@ -39,12 +40,20 @@ on demand beside the chat model, and are never queued behind a chat generation. 
 fields, the `tai transcribe` and `tai speak` commands and Read aloud are described in
 [Voice input](Voice_Input.md) and [Text to speech](Text_To_Speech.md).
 
-`/v1/embeddings` accepts a string or an array of strings and returns float
-vectors in OpenAI's `embedding` list shape. Use it only with models whose
-`/v1/models` `_capabilities` include `text_embeddings`. LiteRT
-EmbeddingGemma `.tflite` packages need `sentencepiece.model` beside the model
-file; new downloads fetch that sidecar automatically. Older installs missing
-the sidecar return `embedding_tokenizer_missing`.
+`/v1/embeddings` accepts a string or an array of strings (at most `_endpoint_max_batch`, currently
+64) and returns float (or, with `encoding_format:"base64"`, base64) vectors in OpenAI's `embedding`
+list shape, each carrying `tokens` and `truncated`. Use it only with models whose `/v1/models`
+`_capabilities` include `text_embeddings`. LiteRT EmbeddingGemma `.tflite` packages need
+`sentencepiece.model` beside the model file; new downloads fetch that sidecar automatically. Older
+installs missing the sidecar return `embedding_tokenizer_missing`.
+
+`input_type: "query"` or `"document"` (default) selects EmbeddingGemma's trained task prefix,
+applied on the server and counted inside the model's window; an optional `title` folds into the
+document prefix. While a chat generation is running, embeddings run throttled (fewer LiteRT
+threads or background MNN thread priority) so they never slow the live reply, and a load that does
+not fit in memory returns `503` with `Retry-After` and `code: "embedding_memory"` rather than the
+chat path's `409`. `/v1/tokenize` (`{model, input}` → `{tokens: n}`) uses the same tokenizer with
+no prefix, for splitting text on real token counts.
 
 ## Model IDs
 

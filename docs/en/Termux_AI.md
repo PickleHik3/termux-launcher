@@ -115,6 +115,7 @@ You do not need these routes for normal use, but they help when configuring anot
 | POST | `/v1/chat/completions` | Chat Completions text, streaming, media, and tools |
 | POST | `/v1/completions` | Legacy text completions |
 | POST | `/v1/embeddings` | Embeddings for models advertising `text_embeddings` |
+| POST | `/v1/tokenize` | `{model, input}` in, `{tokens: n}` out, using the model's own tokenizer |
 | POST | `/v1/audio/transcriptions` | Speech to text with the voice input speech model: multipart `file`, `model`, `language`, `prompt`, `response_format` `json`, `text` or `verbose_json` ([Voice input](Voice_Input.md#the-api-v1audiotranscriptions)) |
 | POST | `/v1/audio/speech` | Speech output with the voice model: `input`, `voice`, `speed`, `response_format` `wav` or `pcm` ([Text to speech](Text_To_Speech.md#the-api-v1audiospeech)) |
 
