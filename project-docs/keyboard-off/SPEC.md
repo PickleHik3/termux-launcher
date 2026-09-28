@@ -93,6 +93,12 @@ preference but does not set the disable-soft-keyboard flags until the next `setS
   It exists on every place and in every mode, minimal mode and a one-place wall included, so a
   user who switched the keyboard off and put the extra keys away still has a way back that is not
   the Layout editor.
+- **The keyboard swipe under the finger (2026-09-28, later).** Where the keyboard is a band of the
+  dock's stack, the swipe carries it with the finger (`wall/KeyboardReveal`,
+  `TermuxActivity.beginKeyboardSwipeTravel`) and the release settles it. A keyboard switched off
+  is not carried: `beginKeyboardSwipeTravel` answers 0 for it, and the release takes the path
+  above, so turning it back on is unchanged. The same goes for a floating keyboard, Android's
+  keyboard, and the Display place's own routes.
 
 ## Known gaps
 
