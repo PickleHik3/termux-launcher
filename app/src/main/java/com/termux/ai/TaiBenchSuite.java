@@ -176,13 +176,13 @@ public final class TaiBenchSuite {
     }
 
     /** One leaderboard entry to run: a model on one processor, with or without its draft model. */
-    static final class EntryPlan {
-        @NonNull final String modelId;
-        @NonNull final String backend;
-        @NonNull final String accelerator;
-        final boolean speculative;
+    public static final class EntryPlan {
+        @NonNull public final String modelId;
+        @NonNull public final String backend;
+        @NonNull public final String accelerator;
+        public final boolean speculative;
 
-        EntryPlan(@NonNull String modelId, @NonNull String backend, @NonNull String accelerator, boolean speculative) {
+        public EntryPlan(@NonNull String modelId, @NonNull String backend, @NonNull String accelerator, boolean speculative) {
             this.modelId = modelId;
             this.backend = backend;
             this.accelerator = accelerator;
@@ -191,17 +191,17 @@ public final class TaiBenchSuite {
 
         /** The store's entry key: {@code modelId|backend|accelerator|speculative}. */
         @NonNull
-        String key() {
+        public String key() {
             return key(modelId, backend, accelerator, speculative);
         }
 
         @NonNull
-        static String key(@NonNull String modelId, @NonNull String backend, @NonNull String accelerator, boolean speculative) {
+        public static String key(@NonNull String modelId, @NonNull String backend, @NonNull String accelerator, boolean speculative) {
             return modelId + "|" + backend + "|" + accelerator + "|" + (speculative ? "on" : "off");
         }
 
         @NonNull
-        JSONObject toJson() throws JSONException {
+        public JSONObject toJson() throws JSONException {
             return new JSONObject()
                 .put("modelId", modelId)
                 .put("backend", backend)

@@ -70,7 +70,7 @@ public final class TaiBenchStore {
 
     /** {@code modelId|backend|accelerator|speculative}, the leaderboard entry a record belongs to. */
     @NonNull
-    static String keyOf(@NonNull JSONObject record) {
+    public static String keyOf(@NonNull JSONObject record) {
         return TaiBenchSuite.EntryPlan.key(record.optString("modelId", ""), record.optString("backend", ""),
             record.optString("accelerator", ""), record.optBoolean("speculative", false));
     }
@@ -137,7 +137,7 @@ public final class TaiBenchStore {
      * either, though an older complete record of the same entry does.
      */
     @NonNull
-    static JSONObject leaderboard(@NonNull JSONArray records, @NonNull String benchVersion) throws JSONException {
+    public static JSONObject leaderboard(@NonNull JSONArray records, @NonNull String benchVersion) throws JSONException {
         Map<String, JSONObject> latestComplete = new LinkedHashMap<>();
         for (int i = 0; i < records.length(); i++) {
             JSONObject record = records.optJSONObject(i);
@@ -181,7 +181,7 @@ public final class TaiBenchStore {
      * because MemAvailable says nothing useful about an mmap'd MNN package (the same model has
      * read 4 MB and 660 MB); {@code -1} when neither was measured.
      */
-    static long memoryBytes(@NonNull JSONObject load) {
+    public static long memoryBytes(@NonNull JSONObject load) {
         long pss = load.optLong("pssBytes", -1L);
         return pss > 0L ? pss : load.optLong("memBytes", -1L);
     }

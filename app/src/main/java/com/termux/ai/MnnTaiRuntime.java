@@ -40,7 +40,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
      * The bundled MNN release, as the benchmark record stamps it. The Java binding exposes no
      * version call ({@code LlmSession} has none), so this is kept by hand with the native libraries.
      */
-    static final String RUNTIME_VERSION = "3.6.1";
+    public static final String RUNTIME_VERSION = "3.6.1";
     private static final int DEFAULT_KEEP_WARM_MINUTES = 30;
 
     private final Context appContext;
