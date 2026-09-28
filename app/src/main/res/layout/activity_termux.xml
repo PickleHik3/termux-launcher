@@ -573,17 +573,6 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:visibility="gone" />
-
-                <!-- The minimised A–Z index: a pull tab on its edge, over the canvas, and the
-                     letters it slides out over the canvas while held. Last, so a touch on the tab
-                     reaches it before the pane wall (and its border hold-drag) sees the stream; a
-                     touch anywhere else is refused and goes on to the wall. It claims no band.
-                     syncAzBarHosts() configures and shows it. -->
-                <com.termux.app.AzPullTabLayer
-                    android:id="@+id/place_az_tab_layer"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:visibility="gone" />
             </FrameLayout>
 
             <com.termux.app.place.EdgeStackView
@@ -963,6 +952,20 @@
                     android:visibility="gone" />
             </LinearLayout>
         </RelativeLayout>
+
+        <!-- The minimised A–Z index: a half-pill tab flush against the screen's side, outside the
+             pane's border, and the letters it slides out over the canvas while held. The whole
+             screen, over the content and the dock, so a touch on the tab reaches it before the
+             pane wall (and its border hold-drag) sees the stream; a touch anywhere else is
+             refused and goes on to whatever is under it. It claims no band. Under the floating
+             keyboard, the editors and the sheets. syncAzBarHosts() configures and shows it. -->
+        <com.termux.app.AzPullTabLayer
+            android:id="@+id/place_az_tab_layer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentBottom="true"
+            android:visibility="gone" />
 
         <!-- Where the keyboard goes when the place's keyboard type is Floating: the whole content
              region, so the frame inside it can be dragged anywhere and still be touchable, and

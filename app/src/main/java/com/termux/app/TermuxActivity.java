@@ -8279,10 +8279,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The minimised index's pull tab: shown on the index's edge over the canvas, with the letters'
-     * own view installed in the frame it slides out of, or taken away with the letters tucked.
-     * The tab is sized like a bar off the dock — the same thickness, the same air, a row inset
-     * like the dock — so the letters that come out are the bar every other edge has.
+     * The minimised index's pull tab: shown flush against the screen's side, with the letters'
+     * own view installed in the frame they slide out of over the canvas, or taken away with the
+     * letters tucked. The letters are sized like a bar off the dock — the same thickness, the
+     * same air, a row inset like the dock — so what comes out is the bar every other edge has.
      */
     private void syncAzTabLayer(boolean shown, @NonNull PlaceLayout.Edge edge) {
         if (mAzTabLayer == null) mAzTabLayer = findViewById(R.id.place_az_tab_layer);
@@ -8290,6 +8290,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (layer == null) return;
         if (shown) {
             int thicknessPx = azBarThicknessPx();
+            layer.setCanvas(findViewById(R.id.terminal_surface_host));
             mAzTabRowView = installAzBarRow(layer.revealHost(), mAzTabRowView);
             layer.setRow(mAzTabRowView);
             layer.configure(edge, thicknessPx, azBarHostMarginPx(),
@@ -8303,15 +8304,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The tab and the letters' sheet wear the dock's glass. They stand over live content rather
      * than over the wallpaper the dock's opacity is tuned against, so they keep a floor under it
-     * ({@link AzTabPolicy#MIN_GLASS_OPACITY}) for the letters to read on.
+     * ({@link AzTabPolicy#MIN_GLASS_OPACITY}) for the letters to read on. Where the dock has no
+     * glass — the Solid material, a wallpaper nothing blurs — the tab is its base made solid.
      */
     private void refreshAzTabGlass() {
         AzPullTabLayer layer = mAzTabLayer;
         if (layer == null || layer.getVisibility() != View.VISIBLE) return;
         float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity() / 100f;
         opacity = Math.max(opacity, AzTabPolicy.MIN_GLASS_OPACITY);
-        layer.setGlass(mChrome.glass().dockSurface(opacity, 0f, 1f, false),
-            mChrome.glass().dockSurface(opacity, 0f, 1f, false));
+        boolean glass = ChromePolicy.dockBlurEnabled(getEffectiveExtraKeysBlurRadius());
+        int base = resolveAccessoryGlassBaseColor();
+        layer.setGlass(glass ? mChrome.glass().dockSurface(opacity, 0f, 1f, false) : null,
+            mChrome.glass().dockSurface(opacity, 0f, 1f, false),
+            AzTabPolicy.tabFill(glass, base), base);
     }
 
     /**

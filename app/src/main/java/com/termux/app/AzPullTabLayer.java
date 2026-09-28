@@ -6,9 +6,11 @@ import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.os.SystemClock;
 import android.util.AttributeSet;
 import android.util.TypedValue;
@@ -27,22 +29,31 @@ import com.termux.app.launcher.az.AzTabPolicy;
 import com.termux.app.launcher.az.AzTabReveal;
 import com.termux.app.place.PlaceLayout.Edge;
 
+import java.util.Collections;
+import java.util.List;
+
 /**
- * The minimised A&#8211;Z index on screen: a small glass pull tab on the index's edge, laid over
- * the content, and the letters that slide out over the content while a finger holds it.
+ * The minimised A&#8211;Z index on screen: a glass half-pill flush against the physical screen's
+ * edge, outside the pane's border, and the letters that slide out over the content while a finger
+ * holds it.
  *
- * <p>The layer covers the canvas and takes nothing from it: a touch that does not land on the
- * tab is refused on its DOWN, so the pane under it gets it exactly as if the layer were not there.
- * A touch that lands on the tab is the tab's from that first event ({@link AzTabReveal}) — it sits
- * on the page's border band, and taking the DOWN is what keeps the wall's border hold-drag and the
- * corner tab from ever seeing it — and every event of it is handed to the letters as if the finger
- * had landed on them, so touch, slide along and scrub is one gesture. The letters are the same
- * {@link AzScrubRowView} every other edge uses, with the same callback, the same floating strip
- * and the same launch on release; this view only moves them.
+ * <p>The layer covers the whole screen, above the content and the dock, and takes nothing from
+ * either: a touch that does not land on the tab is refused on its DOWN, so whatever is under it
+ * gets it exactly as if the layer were not there. A touch that lands on the tab is the tab's from
+ * that first event ({@link AzTabReveal}) — taking the DOWN is what keeps the wall's border
+ * hold-drag and the corner tab from ever seeing it — and every event of it is handed to the
+ * letters as if the finger had landed on their middle line at the same point along the edge
+ * ({@link AzTabPolicy#shiftOntoLetters}), so touch, slide along and scrub is one gesture. The
+ * letters are the same {@link AzScrubRowView} every other edge uses, with the same callback, the
+ * same floating strip and the same launch on release; this view only moves them.
+ *
+ * <p>The letters belong to the canvas, which is where they come out of: the layer is told which
+ * view that is ({@link #setCanvas}) and follows it as it moves, and it clips the letters to it so
+ * they slide out from behind its edge rather than over the bars beside it. The tab stands outside
+ * that clip, on the screen's side.
  *
  * <p>Where everything stands is {@link AzTabPolicy}'s answer. The slide is a critically damped
- * {@link Spring} that arrives at once under reduced motion, and the whole layer is clipped to the
- * canvas so the letters come out from behind its edge rather than over the bars beside it.
+ * {@link Spring} that arrives at once under reduced motion.
  */
 public final class AzPullTabLayer extends FrameLayout {
 
@@ -56,6 +67,7 @@ public final class AzPullTabLayer extends FrameLayout {
     @NonNull private final FrameLayout mHost;
     @NonNull private final View mSheet;
     @Nullable private AzScrubRowView mRow;
+    @Nullable private View mCanvas;
 
     @NonNull private Edge mEdge = Edge.BOTTOM;
     private int mThicknessPx;
@@ -63,16 +75,33 @@ public final class AzPullTabLayer extends FrameLayout {
     private int mSideInsetPx;
     private float mSheetRadiusPx;
     private boolean mReducedMotion;
+    private int mGlassBase = Color.BLACK;
+    private int mLettersInk = Color.WHITE;
 
     @Nullable private AzTabPolicy.Placement mPlacement;
-    @NonNull private AzTabPolicy.Box mRevealBox = AzTabPolicy.EMPTY;
+    /** The canvas, in this layer's pixels: what the letters are measured in and clipped to. */
+    @NonNull private AzTabPolicy.Box mCanvasBox = AzTabPolicy.EMPTY;
+    /** Where the letters rest while out, in this layer's pixels. */
+    @NonNull private AzTabPolicy.Box mLettersBox = AzTabPolicy.EMPTY;
 
     /** Whether the stream in progress began on the tab, and so is being handed to the letters. */
     private boolean mOwnsTouch;
+    /** How far the stream in progress is moved for the letters to hear it; set at its DOWN. */
+    private float mShiftX;
+    private float mShiftY;
     private boolean mTicking;
     private long mLastFrameNanos;
     private final Runnable mTick = this::tick;
     private final int[] mLocation = new int[2];
+    private final int[] mCanvasLocation = new int[2];
+    private final Rect mExclusion = new Rect();
+    private final RectF mClip = new RectF();
+
+    /** The canvas moving is the letters moving, and the tab with them along the screen's side. */
+    private final OnLayoutChangeListener mCanvasListener =
+        (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            if (!readCanvasBox().equals(mCanvasBox)) requestLayout();
+        };
 
     public AzPullTabLayer(@NonNull Context context) {
         this(context, null);
@@ -84,11 +113,7 @@ public final class AzPullTabLayer extends FrameLayout {
         setMotionEventSplittingEnabled(false);
         setClipChildren(false);
         setClipToPadding(false);
-
-        mTab = new TabView(context);
-        mTab.setContentDescription(context.getString(R.string.az_pull_tab_description));
-        mTab.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
-        addView(mTab);
+        setWillNotDraw(true);
 
         mHost = new FrameLayout(context);
         mHost.setClipChildren(false);
@@ -109,6 +134,11 @@ public final class AzPullTabLayer extends FrameLayout {
         mHost.addView(mSheet, new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT));
         addView(mHost);
+
+        mTab = new TabView(context);
+        mTab.setContentDescription(context.getString(R.string.az_pull_tab_description));
+        mTab.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
+        addView(mTab);
     }
 
     // ------------------------------------------------------------------------ what the host sets
@@ -136,6 +166,18 @@ public final class AzPullTabLayer extends FrameLayout {
     }
 
     /**
+     * The view the letters come out of: the content's own box, which the layer follows wherever
+     * it is laid out — a keyboard opening under it, a bar taking a side of it.
+     */
+    public void setCanvas(@Nullable View canvas) {
+        if (mCanvas == canvas) return;
+        if (mCanvas != null) mCanvas.removeOnLayoutChangeListener(mCanvasListener);
+        mCanvas = canvas;
+        if (canvas != null) canvas.addOnLayoutChangeListener(mCanvasListener);
+        requestLayout();
+    }
+
+    /**
      * Shows the tab or takes it away. Away, the letters are tucked at once and the layer takes no
      * touch at all.
      */
@@ -160,15 +202,27 @@ public final class AzPullTabLayer extends FrameLayout {
         mReducedMotion = reduced;
     }
 
-    /** The glass under the tab and under the letters; two drawables, since each has its bounds. */
-    public void setGlass(@Nullable Drawable tabGlass, @Nullable Drawable sheetGlass) {
-        mTab.setGlass(tabGlass);
+    /**
+     * What the tab and the letters' sheet are made of: the dock's glass for each, two drawables
+     * since each has its bounds, and what the tab is filled with under its glass
+     * ({@link AzTabPolicy#tabFill}) — nothing while the glass is the material, the glass's base
+     * made solid where there is no glass. {@code glassBase} is that base either way, which the
+     * tab's "A" is made legible against.
+     */
+    public void setGlass(@Nullable Drawable tabGlass, @Nullable Drawable sheetGlass, int tabFill,
+                         int glassBase) {
+        mTab.setGlass(tabGlass, tabFill);
         mSheet.setBackground(sheetGlass);
+        if (mGlassBase != glassBase) {
+            mGlassBase = glassBase;
+            mTab.setInk(AzTabPolicy.glyphInk(mGlassBase, mLettersInk));
+        }
     }
 
-    /** The ink the letters are drawn in, which the tab's own "A" and grip wear too. */
+    /** The ink the letters are drawn in, which the tab's "A" is seeded from. */
     public void setInk(int ink) {
-        mTab.setInk(ink);
+        mLettersInk = ink;
+        mTab.setInk(AzTabPolicy.glyphInk(mGlassBase, ink));
     }
 
     /**
@@ -189,6 +243,21 @@ public final class AzPullTabLayer extends FrameLayout {
         if (getVisibility() != VISIBLE || mPlacement == null || !mReveal.isEnabled()) return false;
         getLocationOnScreen(mLocation);
         return mPlacement.hit(rawX - mLocation[0], rawY - mLocation[1]);
+    }
+
+    /**
+     * The visible half-pill on the screen, for the tour to point at, or false while there is no
+     * tab to see.
+     */
+    public boolean tabRectOnScreen(@NonNull Rect out) {
+        AzTabPolicy.Placement placement = mPlacement;
+        if (!isShown() || placement == null || placement.visual.isEmpty()) return false;
+        getLocationOnScreen(mLocation);
+        out.set(Math.round(placement.visual.left) + mLocation[0],
+            Math.round(placement.visual.top) + mLocation[1],
+            Math.round(placement.visual.right) + mLocation[0],
+            Math.round(placement.visual.bottom) + mLocation[1]);
+        return true;
     }
 
     /** Whether a finger is holding the tab and the letters are out for it. */
@@ -216,35 +285,62 @@ public final class AzPullTabLayer extends FrameLayout {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        int width = MeasureSpec.getSize(widthMeasureSpec);
-        int height = MeasureSpec.getSize(heightMeasureSpec);
-        setMeasuredDimension(width, height);
-        computeGeometry(width, height);
-        AzTabPolicy.Box touch = mPlacement == null ? AzTabPolicy.EMPTY : mPlacement.touch;
-        mTab.measure(exactly(touch.width()), exactly(touch.height()));
-        mHost.measure(exactly(mRevealBox.width()), exactly(mRevealBox.height()));
+        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec),
+            MeasureSpec.getSize(heightMeasureSpec));
+        measureTabAndLetters();
     }
 
+    /**
+     * Laid out from where the canvas stands now: this layer and the canvas are laid out in the
+     * same pass, the canvas first, so its position is read here rather than guessed at measure.
+     */
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        mCanvasBox = readCanvasBox();
+        computeGeometry(right - left);
+        measureTabAndLetters();
         AzTabPolicy.Box touch = mPlacement == null ? AzTabPolicy.EMPTY : mPlacement.touch;
         layoutAt(mTab, touch);
-        layoutAt(mHost, mRevealBox);
+        layoutAt(mHost, mLettersBox);
         applySlide();
+        publishExclusion(touch);
     }
 
-    private void computeGeometry(int width, int height) {
+    private void measureTabAndLetters() {
+        AzTabPolicy.Box touch = mPlacement == null ? AzTabPolicy.EMPTY : mPlacement.touch;
+        mTab.measure(exactly(touch.width()), exactly(touch.height()));
+        mHost.measure(exactly(mLettersBox.width()), exactly(mLettersBox.height()));
+    }
+
+    /** The canvas's box in this layer's pixels, or nothing while there is no canvas laid out. */
+    @NonNull
+    private AzTabPolicy.Box readCanvasBox() {
+        View canvas = mCanvas;
+        if (canvas == null || !canvas.isAttachedToWindow() || canvas.getWidth() <= 0
+            || canvas.getHeight() <= 0) return AzTabPolicy.EMPTY;
+        canvas.getLocationInWindow(mCanvasLocation);
+        getLocationInWindow(mLocation);
+        float left = mCanvasLocation[0] - mLocation[0];
+        float top = mCanvasLocation[1] - mLocation[1];
+        return new AzTabPolicy.Box(left, top, left + canvas.getWidth(), top + canvas.getHeight());
+    }
+
+    private void computeGeometry(int width) {
         float density = getResources().getDisplayMetrics().density;
         boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
-        AzTabPolicy.Placement placement = AzTabPolicy.place(mEdge, rtl, width, height, density);
+        AzTabPolicy.Placement placement = AzTabPolicy.placeOnScreen(mEdge, rtl, mCanvasBox,
+            width, density);
         mPlacement = placement;
-        mRevealBox = AzTabPolicy.revealBox(mEdge, width, height, mThicknessPx, mMarginPx,
-            mSideInsetPx);
+        AzTabPolicy.Box letters = AzTabPolicy.revealBox(mEdge, mCanvasBox.width(),
+            mCanvasBox.height(), mThicknessPx, mMarginPx, mSideInsetPx);
+        mLettersBox = mCanvasBox.isEmpty() ? AzTabPolicy.EMPTY : new AzTabPolicy.Box(
+            mCanvasBox.left + letters.left, mCanvasBox.top + letters.top,
+            mCanvasBox.left + letters.right, mCanvasBox.top + letters.bottom);
         mTab.setVisual(placement.visual.left - placement.touch.left,
             placement.visual.top - placement.touch.top,
             placement.visual.right - placement.touch.left,
             placement.visual.bottom - placement.touch.top,
-            mEdge, rtl, AzTabPolicy.TAB_RADIUS_DP * density);
+            placement.side, AzTabPolicy.TAB_RADIUS_DP * density);
     }
 
     private static int exactly(float sizePx) {
@@ -257,13 +353,37 @@ public final class AzPullTabLayer extends FrameLayout {
         child.layout(left, top, left + child.getMeasuredWidth(), top + child.getMeasuredHeight());
     }
 
-    /** Everything the layer draws stays inside the canvas: the letters slide out from its edge. */
+    /**
+     * The tab stands on the screen's side, which is where the system's back swipe starts: the
+     * platform is told to leave its touch area to it, as the floating keyboard's grip does.
+     */
+    private void publishExclusion(@NonNull AzTabPolicy.Box touch) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        List<Rect> rects;
+        if (touch.isEmpty()) {
+            rects = Collections.emptyList();
+        } else {
+            mExclusion.set(Math.round(touch.left), Math.round(touch.top),
+                Math.round(touch.right), Math.round(touch.bottom));
+            rects = Collections.singletonList(new Rect(mExclusion));
+        }
+        setSystemGestureExclusionRects(rects);
+    }
+
+    /**
+     * The letters stay inside the canvas, so they come out from behind its edge; the tab is
+     * outside it, on the screen's side, and is drawn unclipped.
+     */
     @Override
-    protected void dispatchDraw(Canvas canvas) {
+    protected boolean drawChild(@NonNull Canvas canvas, @NonNull View child, long drawingTime) {
+        if (child != mHost) return super.drawChild(canvas, child, drawingTime);
+        if (mCanvasBox.isEmpty()) return false;
         int saved = canvas.save();
-        canvas.clipRect(0, 0, getWidth(), getHeight());
-        super.dispatchDraw(canvas);
+        mClip.set(mCanvasBox.left, mCanvasBox.top, mCanvasBox.right, mCanvasBox.bottom);
+        canvas.clipRect(mClip);
+        boolean more = super.drawChild(canvas, child, drawingTime);
         canvas.restoreToCount(saved);
+        return more;
     }
 
     // ------------------------------------------------------------------------ touch
@@ -273,12 +393,16 @@ public final class AzPullTabLayer extends FrameLayout {
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
             mOwnsTouch = false;
-            // Anywhere but the tab is the content's, refused here so it goes on to the pane.
+            // Anywhere but the tab is someone else's, refused here so it goes on to them.
             if (mPlacement == null || mRow == null || mRow.getParent() != mHost
                 || !mPlacement.hit(event.getX(), event.getY()) || !mReveal.press()) {
                 return false;
             }
             mOwnsTouch = true;
+            float[] shift = AzTabPolicy.shiftOntoLetters(mEdge, mLettersBox, event.getX(),
+                event.getY());
+            mShiftX = shift[0];
+            mShiftY = shift[1];
             ViewParent parent = getParent();
             if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
             // Out before the letters hear the touch, so they are on screen to be measured.
@@ -296,16 +420,28 @@ public final class AzPullTabLayer extends FrameLayout {
         return true;
     }
 
-    /** The event as the letters would have had it, had the finger landed on them. */
+    /**
+     * The event as the letters would have had it, had the finger landed on their middle line: the
+     * same point along the edge, moved across onto them by the shift the DOWN settled. Built
+     * afresh rather than copied, so the screen position the scrub reads is moved as well as the
+     * local one. A second finger is part of this one's stream and is not passed on.
+     */
     private void forwardToRow(@NonNull MotionEvent event) {
         AzScrubRowView row = mRow;
         if (row == null || row.getParent() != mHost) return;
-        MotionEvent local = MotionEvent.obtain(event);
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_POINTER_DOWN || action == MotionEvent.ACTION_POINTER_UP)
+            return;
+        MotionEvent moved = MotionEvent.obtain(event.getDownTime(), event.getEventTime(), action,
+            event.getRawX() + mShiftX, event.getRawY() + mShiftY, event.getMetaState());
+        moved.setSource(event.getSource());
         // Their resting place, not wherever the slide has them: the finger's position along the
         // letters is the same either way, and the scrub measures the bar where it will stand.
-        local.offsetLocation(-(mHost.getLeft() + row.getLeft()), -(mHost.getTop() + row.getTop()));
-        row.dispatchTouchEvent(local);
-        local.recycle();
+        getLocationOnScreen(mLocation);
+        moved.offsetLocation(-(mLocation[0] + mHost.getLeft() + row.getLeft()),
+            -(mLocation[1] + mHost.getTop() + row.getTop()));
+        row.dispatchTouchEvent(moved);
+        moved.recycle();
     }
 
     private void cancelRowGesture() {
@@ -386,58 +522,60 @@ public final class AzPullTabLayer extends FrameLayout {
     // ------------------------------------------------------------------------ the tab itself
 
     /**
-     * The pill: the dock's glass, a hairline rim, the letter A at the leading end and the six-dot
-     * grip at the trailing one, as the Layout editor draws it. The view is the whole touch area;
-     * the pill is drawn inside it.
+     * The half-pill: the dock's glass, or its base made solid where there is no glass, flat
+     * against the screen's side and rounded on the other, with a hairline rim and the letter A.
+     * The view is the whole touch area; the half-pill is drawn inside it.
      */
     static final class TabView extends View {
 
         /** The rim's alpha out of 255: there, but not a drawn border. */
         private static final int RIM_ALPHA = 60;
-        /** The grip's dots at the design's 45%. */
-        private static final int GRIP_ALPHA = 115;
-        /** Where the A and the grip stand along the pill: the design's 12.9 and 35 of 48. */
-        private static final float GLYPH_AT = 0.268f;
-        private static final float GRIP_AT = 0.729f;
-        private static final float GLYPH_SP = 11f;
-        private static final float DOT_RADIUS_DP = 1.6f;
-        /** The design's grip: two dots 6 apart along the pill, three 5 apart across it. */
-        private static final float DOT_PITCH_ALONG_DP = 6f;
-        private static final float DOT_PITCH_ACROSS_DP = 5f;
+        private static final float GLYPH_SP = 12f;
 
         private final RectF mVisual = new RectF();
-        private final RectF mScratch = new RectF();
-        private final Path mClip = new Path();
+        private final Path mShape = new Path();
+        private final float[] mRadii = new float[8];
+        private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint mRim = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint mGlyph = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Paint mDot = new Paint(Paint.ANTI_ALIAS_FLAG);
         @Nullable private Drawable mGlass;
+        private int mFillColor;
         private int mInk = Color.WHITE;
-        @NonNull private Edge mEdge = Edge.BOTTOM;
-        private boolean mRtl;
-        private float mRadius;
 
         TabView(@NonNull Context context) {
             super(context);
+            mFill.setStyle(Paint.Style.FILL);
             mRim.setStyle(Paint.Style.STROKE);
             mRim.setStrokeWidth(getResources().getDisplayMetrics().density);
             mGlyph.setTextAlign(Paint.Align.CENTER);
             mGlyph.setTypeface(Typeface.DEFAULT_BOLD);
-            mDot.setStyle(Paint.Style.FILL);
         }
 
-        void setVisual(float left, float top, float right, float bottom, @NonNull Edge edge,
-                       boolean rtl, float radiusPx) {
+        void setVisual(float left, float top, float right, float bottom, @NonNull Edge side,
+                       float radiusPx) {
             mVisual.set(left, top, right, bottom);
-            mEdge = edge;
-            mRtl = rtl;
-            mRadius = radiusPx;
-            mClip.reset();
+            // Round only the corners away from the screen's side.
+            float radius = Math.max(0f,
+                Math.min(radiusPx, Math.min(mVisual.width(), mVisual.height() / 2f)));
+            boolean flatOnLeft = side == Edge.LEFT;
+            float topLeft = flatOnLeft ? 0f : radius;
+            float topRight = flatOnLeft ? radius : 0f;
+            mRadii[0] = topLeft;
+            mRadii[1] = topLeft;
+            mRadii[2] = topRight;
+            mRadii[3] = topRight;
+            mRadii[4] = topRight;
+            mRadii[5] = topRight;
+            mRadii[6] = topLeft;
+            mRadii[7] = topLeft;
+            mShape.reset();
+            if (!mVisual.isEmpty()) mShape.addRoundRect(mVisual, mRadii, Path.Direction.CW);
             invalidate();
         }
 
-        void setGlass(@Nullable Drawable glass) {
+        void setGlass(@Nullable Drawable glass, int fillColor) {
             mGlass = glass;
+            mFillColor = fillColor;
             invalidate();
         }
 
@@ -450,61 +588,27 @@ public final class AzPullTabLayer extends FrameLayout {
         @Override
         protected void onDraw(@NonNull Canvas canvas) {
             if (mVisual.isEmpty()) return;
-            float radius = Math.min(mRadius, Math.min(mVisual.width(), mVisual.height()) / 2f);
+            int saved = canvas.save();
+            canvas.clipPath(mShape);
+            if (Color.alpha(mFillColor) > 0) {
+                mFill.setColor(mFillColor);
+                canvas.drawRect(mVisual, mFill);
+            }
             if (mGlass != null) {
-                mClip.reset();
-                mClip.addRoundRect(mVisual, radius, radius, Path.Direction.CW);
-                int saved = canvas.save();
-                canvas.clipPath(mClip);
                 mGlass.setBounds(Math.round(mVisual.left), Math.round(mVisual.top),
                     Math.round(mVisual.right), Math.round(mVisual.bottom));
                 mGlass.draw(canvas);
-                canvas.restoreToCount(saved);
             }
-            float half = mRim.getStrokeWidth() / 2f;
-            mScratch.set(mVisual.left + half, mVisual.top + half, mVisual.right - half,
-                mVisual.bottom - half);
+            canvas.restoreToCount(saved);
             mRim.setColor(withAlpha(mInk, RIM_ALPHA));
-            canvas.drawRoundRect(mScratch, radius, radius, mRim);
+            canvas.drawPath(mShape, mRim);
 
-            boolean column = mEdge.isOnSide();
-            float length = column ? mVisual.height() : mVisual.width();
-            float across = column ? mVisual.width() : mVisual.height();
-            float glyphAlong = alongAt(GLYPH_AT, length);
-            float gripAlong = alongAt(GRIP_AT, length);
-
-            float density = getResources().getDisplayMetrics().density;
             float textSize = Math.min(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP,
-                GLYPH_SP, getResources().getDisplayMetrics()), across * 0.5f);
+                GLYPH_SP, getResources().getDisplayMetrics()), mVisual.width() * 0.62f);
             mGlyph.setTextSize(textSize);
             mGlyph.setColor(mInk);
-            float gx = column ? mVisual.centerX() : mVisual.left + glyphAlong;
-            float gy = column ? mVisual.top + glyphAlong : mVisual.centerY();
-            canvas.drawText("A", gx, gy - (mGlyph.ascent() + mGlyph.descent()) / 2f, mGlyph);
-
-            mDot.setColor(withAlpha(mInk, GRIP_ALPHA));
-            float dot = DOT_RADIUS_DP * density;
-            float pitchAlong = DOT_PITCH_ALONG_DP * density;
-            float pitchAcross = DOT_PITCH_ACROSS_DP * density;
-            float cx = column ? mVisual.centerX() : mVisual.left + gripAlong;
-            float cy = column ? mVisual.top + gripAlong : mVisual.centerY();
-            // Two dots along the pill and three across it, the way the design's grip stands on a
-            // row; turned with the pill on a column.
-            for (int a = 0; a < 2; a++) {
-                for (int c = -1; c <= 1; c++) {
-                    float along = (a - 0.5f) * pitchAlong;
-                    float acrossOffset = c * pitchAcross;
-                    float x = column ? cx + acrossOffset : cx + along;
-                    float y = column ? cy + along : cy + acrossOffset;
-                    canvas.drawCircle(x, y, dot, mDot);
-                }
-            }
-        }
-
-        /** A point {@code fraction} of the way along the pill from its leading end. */
-        private float alongAt(float fraction, float length) {
-            boolean mirrored = mRtl && !mEdge.isOnSide();
-            return (mirrored ? 1f - fraction : fraction) * length;
+            canvas.drawText("A", mVisual.centerX(),
+                mVisual.centerY() - (mGlyph.ascent() + mGlyph.descent()) / 2f, mGlyph);
         }
 
         private static int withAlpha(int color, int alpha) {
