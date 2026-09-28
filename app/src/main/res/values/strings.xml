@@ -1441,6 +1441,7 @@
         <string name="tai_bench_device_title">This phone</string>
         <string name="tai_bench_device_reading">Reading the phone…</string>
         <string name="tai_bench_device_soc">Chip</string>
+        <string name="tai_bench_device_gpu">GPU</string>
         <string name="tai_bench_device_ram">RAM</string>
         <string name="tai_bench_device_ram_class">%1$d GB class</string>
         <string name="tai_bench_device_free_ram">Free RAM</string>

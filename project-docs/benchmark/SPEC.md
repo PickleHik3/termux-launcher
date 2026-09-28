@@ -101,7 +101,6 @@ Known gaps after slice 3:
 
 - The Safety table's "Leaving pauses at the end of the current step; Resume on return" is not
   implemented: the run goes on in the session while the screen is away. The Check sheet says so.
-- The device card has no GPU line: nothing cheap and reliable names the GPU without a GL context.
 - The Choose screen's "Tight" (SLOW) fit and the storage rule use `TaiImportFit` and the file
   size plus 10%; the per-model `TaiLoadBudget` decision is the runtime's at load time, and a
   model it refuses is skipped with the reason in the Run stepper rather than hidden here.
