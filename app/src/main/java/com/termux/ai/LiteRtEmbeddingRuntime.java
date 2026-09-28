@@ -33,6 +33,7 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
     /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
     @Nullable private final Context appContext;
     @Nullable private Interpreter interpreter;
+    @Nullable private TaiXnnpackDelegate xnnpackDelegate;
     @Nullable private SentencePieceBpeTokenizer tokenizer;
     @Nullable private String loadedModelId;
     @Nullable private String loadedModelPath;
@@ -138,7 +139,12 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
         }
         close();
         tokenizer = SentencePieceBpeTokenizer.fromModelFile(tokenizerFile);
-        Interpreter.Options options = new Interpreter.Options().setNumThreads(DEFAULT_THREADS);
+        // Stock Interpreter XNNPACK never gets worker threads (one core on pong, as Whisper found);
+        // the JNI shim's delegate spawns a real pthreadpool. See TaiXnnpackDelegate.
+        xnnpackDelegate = TaiXnnpackDelegate.create(DEFAULT_THREADS);
+        Interpreter.Options options = xnnpackDelegate != null
+            ? new Interpreter.Options().setNumThreads(DEFAULT_THREADS).setUseXNNPACK(false).addDelegate(xnnpackDelegate)
+            : new Interpreter.Options().setNumThreads(DEFAULT_THREADS).setUseXNNPACK(true);
         // The same MemAvailable meter a chat load runs, across the interpreter's construction only.
         TaiLoadMeter meter = TaiLoadMeter.start(appContext);
         long measured;
@@ -292,6 +298,10 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
         if (interpreter != null) {
             interpreter.close();
             interpreter = null;
+        }
+        if (xnnpackDelegate != null) {
+            xnnpackDelegate.close();
+            xnnpackDelegate = null;
         }
         tokenizer = null;
         if (loadedModelId != null) residency.deregister(TaiResidency.Kind.EMBEDDING, loadedModelId);
