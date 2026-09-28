@@ -213,6 +213,171 @@ public class BorderDragTest {
         assertEquals("nothing to abandon", BorderDrag.Claim.NONE, none.abandon());
     }
 
+    // ---- The keyboard swipe ------------------------------------------------------------------
+
+    private static final float REACH = 48f;          // KEYBOARD_REACH_DP at 3x
+    private static final float COMMIT = 96f;         // KEYBOARD_COMMIT_DP at 3x
+    private static final float FLING = 1500f;        // KEYBOARD_FLING_DP_PER_SEC at 3x
+
+    private static BorderDrag keyboardArmed(float x, float y, boolean canPage) {
+        BorderDrag drag = new BorderDrag();
+        drag.down(x, y, LEFT, TOP, RIGHT, BOTTOM, BAND, CORNER, SLOP, canPage, REACH);
+        return drag;
+    }
+
+    @Test
+    public void theShippedKeyboardNumbersAreWhatTheseTestsAssume() {
+        assertEquals(REACH, BorderDrag.KEYBOARD_REACH_DP * DENSITY, 0.01f);
+        assertEquals(COMMIT, BorderDrag.KEYBOARD_COMMIT_DP * DENSITY, 0.01f);
+        assertEquals(FLING, BorderDrag.KEYBOARD_FLING_DP_PER_SEC * DENSITY, 0.01f);
+        assertTrue("the reach inside is no wider than the band",
+            BorderDrag.KEYBOARD_REACH_DP <= BorderDrag.BAND_DP);
+    }
+
+    @Test
+    public void anUpSwipeFromTheBottomBorderIsTheKeyboardsAndOpensIt() {
+        BorderDrag drag = keyboardArmed(550f, BOTTOM - 10f, true);
+        assertEquals(BorderDrag.Claim.PENDING, drag.claim());
+        // Inside the slop it is still undecided.
+        assertEquals(BorderDrag.Claim.PENDING, drag.move(550f, BOTTOM - 10f - SLOP));
+        assertEquals(BorderDrag.Claim.KEYBOARD, drag.move(555f, BOTTOM - 10f - SLOP - 1f));
+        assertTrue(drag.isKeyboardSwipe());
+        assertFalse(drag.isPaging());
+        assertFalse("claimed before the hold, the hold claims nothing", drag.holdElapsed());
+        assertEquals(BorderDrag.Claim.KEYBOARD, drag.move(700f, BOTTOM - 400f));
+        assertEquals(BorderDrag.KeyboardSwipe.OPEN,
+            drag.keyboardRelease(BOTTOM - 10f - COMMIT, 0f, COMMIT, FLING));
+    }
+
+    @Test
+    public void aDownSwipeClosesItFromEitherSideOfTheLine() {
+        // From just inside the line.
+        BorderDrag inside = keyboardArmed(550f, BOTTOM - 10f, true);
+        assertEquals(BorderDrag.Claim.KEYBOARD, inside.move(550f, BOTTOM + 30f));
+        assertEquals(BorderDrag.KeyboardSwipe.CLOSE,
+            inside.keyboardRelease(BOTTOM - 10f + COMMIT, 0f, COMMIT, FLING));
+        // From the air just below it, the whole band out.
+        BorderDrag outside = keyboardArmed(550f, BOTTOM + BAND - 1f, true);
+        assertEquals(BorderDrag.Border.BOTTOM, outside.border());
+        assertEquals(BorderDrag.Claim.KEYBOARD, outside.move(550f, BOTTOM + BAND + 40f));
+        assertEquals(BorderDrag.KeyboardSwipe.CLOSE,
+            outside.keyboardRelease(BOTTOM + BAND - 1f + COMMIT, 0f, COMMIT, FLING));
+    }
+
+    @Test
+    public void aShortSwipeNeedsAFlingTheSameWay() {
+        float downY = BOTTOM - 10f;
+        float shortUp = downY - COMMIT / 2f;
+        BorderDrag drag = keyboardArmed(550f, downY, true);
+        assertEquals(BorderDrag.Claim.KEYBOARD, drag.move(550f, shortUp));
+        assertEquals("short and slow is nothing", BorderDrag.KeyboardSwipe.NONE,
+            drag.keyboardRelease(shortUp, -FLING / 2f, COMMIT, FLING));
+        assertEquals("short and flicked on up opens", BorderDrag.KeyboardSwipe.OPEN,
+            drag.keyboardRelease(shortUp, -FLING - 1f, COMMIT, FLING));
+        assertEquals("far but flicked back down is a change of mind",
+            BorderDrag.KeyboardSwipe.NONE,
+            drag.keyboardRelease(downY - COMMIT * 2f, FLING + 1f, COMMIT, FLING));
+        assertEquals("back where it started is nothing", BorderDrag.KeyboardSwipe.NONE,
+            drag.keyboardRelease(downY, -FLING * 2f, COMMIT, FLING));
+    }
+
+    @Test
+    public void aSidewaysStartFromTheBottomBorderStaysTheContents() {
+        BorderDrag drag = keyboardArmed(550f, BOTTOM - 10f, true);
+        assertEquals(BorderDrag.Claim.ABANDONED, drag.move(550f + SLOP + 5f, BOTTOM - 10f - 4f));
+        assertFalse(drag.isKeyboardSwipe());
+        assertFalse(drag.holdElapsed());
+        // A diagonal exactly as much across as up is not a clear vertical swipe either.
+        BorderDrag diagonal = keyboardArmed(550f, BOTTOM - 10f, true);
+        assertEquals(BorderDrag.Claim.ABANDONED, diagonal.move(550f + 30f, BOTTOM - 10f - 30f));
+        assertEquals(BorderDrag.KeyboardSwipe.NONE,
+            diagonal.keyboardRelease(BOTTOM - 10f - COMMIT, 0f, COMMIT, FLING));
+    }
+
+    @Test
+    public void theHoldWinsOverALaterVerticalMove() {
+        BorderDrag drag = keyboardArmed(550f, BOTTOM - 10f, true);
+        assertTrue(drag.holdElapsed());
+        assertEquals("held first, a vertical move is the drag's", BorderDrag.Claim.PAGING,
+            drag.move(550f, BOTTOM - 200f));
+        assertEquals(BorderDrag.KeyboardSwipe.NONE,
+            drag.keyboardRelease(BOTTOM - 200f, 0f, COMMIT, FLING));
+        // And a hold then a sideways drag still pages by the sideways travel.
+        assertEquals(-300f, drag.travel(250f), 0.01f);
+    }
+
+    @Test
+    public void onlyTheBottomBorderCarriesTheKeyboard() {
+        float[][] presses = {{550f, TOP + 10f}, {LEFT + 10f, 1000f}, {RIGHT - 10f, 1000f}};
+        for (float[] press : presses) {
+            BorderDrag up = keyboardArmed(press[0], press[1], true);
+            assertEquals(BorderDrag.Claim.ABANDONED, up.move(press[0], press[1] - 200f));
+            BorderDrag down = keyboardArmed(press[0], press[1], true);
+            assertEquals(BorderDrag.Claim.ABANDONED, down.move(press[0], press[1] + 200f));
+        }
+    }
+
+    @Test
+    public void theBandReachesOnlyARowInsideTheLine() {
+        // Inside the border band but above the keyboard's reach: the border drag's, not the swipe's.
+        float y = BOTTOM - REACH - 1f;
+        BorderDrag drag = keyboardArmed(550f, y, true);
+        assertEquals(BorderDrag.Border.BOTTOM, drag.border());
+        assertEquals(BorderDrag.Claim.ABANDONED, drag.move(550f, y - 200f));
+        // At the reach it is.
+        BorderDrag edge = keyboardArmed(550f, BOTTOM - REACH, true);
+        assertEquals(BorderDrag.Claim.KEYBOARD, edge.move(550f, BOTTOM - REACH - 200f));
+    }
+
+    @Test
+    public void theCornersStayTheCornerTabsForTheKeyboardToo() {
+        BorderDrag left = keyboardArmed(LEFT + 10f, BOTTOM - 10f, true);
+        assertFalse(left.isArmed());
+        assertEquals(BorderDrag.Claim.NONE, left.move(LEFT + 10f, BOTTOM - 300f));
+        BorderDrag right = keyboardArmed(RIGHT - 10f, BOTTOM + 10f, true);
+        assertFalse(right.isArmed());
+    }
+
+    @Test
+    public void withoutAKeyboardReachTheBottomBorderOnlyPages() {
+        BorderDrag drag = armed(550f, BOTTOM - 10f);
+        assertEquals(BorderDrag.Claim.ABANDONED, drag.move(550f, BOTTOM - 300f));
+    }
+
+    @Test
+    public void aWallThatCannotPageArmsOnlyTheBottomBandAndLeavesAHoldToTheContent() {
+        BorderDrag top = keyboardArmed(550f, TOP + 10f, false);
+        assertFalse("no page to go to: the top border arms nothing", top.isArmed());
+        assertEquals(BorderDrag.Border.NONE, top.border());
+        BorderDrag above = keyboardArmed(550f, BOTTOM - REACH - 1f, false);
+        assertFalse(above.isArmed());
+
+        BorderDrag swipe = keyboardArmed(550f, BOTTOM - 10f, false);
+        assertTrue(swipe.isArmed());
+        assertEquals(BorderDrag.Claim.KEYBOARD, swipe.move(550f, BOTTOM - 200f));
+
+        BorderDrag held = keyboardArmed(550f, BOTTOM - 10f, false);
+        assertFalse("a still finger is the content's long press", held.holdElapsed());
+        assertEquals(BorderDrag.Claim.ABANDONED, held.claim());
+        assertEquals("and a move after the hold is still the content's",
+            BorderDrag.Claim.ABANDONED, held.move(550f, BOTTOM - 200f));
+    }
+
+    @Test
+    public void aSecondFingerOrAnAbandonEndsTheKeyboardSwipe() {
+        BorderDrag pinch = keyboardArmed(550f, BOTTOM - 10f, true);
+        assertEquals(BorderDrag.Claim.ABANDONED, pinch.secondPointer());
+        assertEquals(BorderDrag.Claim.ABANDONED, pinch.move(550f, BOTTOM - 300f));
+
+        BorderDrag claimed = keyboardArmed(550f, BOTTOM - 10f, true);
+        assertEquals(BorderDrag.Claim.KEYBOARD, claimed.move(550f, BOTTOM - 300f));
+        assertEquals("a finger joining a claimed swipe changes nothing",
+            BorderDrag.Claim.KEYBOARD, claimed.secondPointer());
+        assertEquals(BorderDrag.Claim.ABANDONED, claimed.abandon());
+        assertEquals(BorderDrag.KeyboardSwipe.NONE,
+            claimed.keyboardRelease(BOTTOM - 300f, 0f, COMMIT, FLING));
+    }
+
     @Test
     public void resetPutsTheDragBackToNothing() {
         BorderDrag drag = armed(550f, TOP + 10f);

@@ -742,6 +742,309 @@ public class PaneWallLayoutTest {
         assertEquals(PlankTilt.angleDeg(-300f, WIDTH), terminal.getRotationY(), EPS);
     }
 
+    // ---- The sink ------------------------------------------------------------------------------
+
+    /** Lets every spring and slide run out. */
+    private static void letTheMotionSettle() {
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(2000L));
+    }
+
+    @Test
+    public void aHeldBorderSinksThePageInEveryModeAndTheLiftSpringsItBack() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        final List<Float> frameScales = new ArrayList<>();
+        // No plank: the sink is not a Fancier Glass motion.
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public void onPageSinkChanged(PaneWallPage page, float scale) {
+                if (page == PaneWallPage.TERMINAL) frameScales.add(scale);
+            }
+        });
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        assertNull("not before the hold", wall.sinkPage());
+        letTheHoldElapse();
+        assertEquals(terminal, wall.sinkPage());
+        letTheMotionSettle();
+        assertEquals(1f, wall.sink(), EPS);
+        assertEquals(PageSink.SCALE, terminal.getScaleX(), EPS);
+        assertEquals(PageSink.SCALE, terminal.getScaleY(), EPS);
+        assertEquals("dimmed on a layer", View.LAYER_TYPE_HARDWARE, terminal.getLayerType());
+        assertNull(wall.tiltPage());
+        assertEquals(0f, terminal.getRotationY(), EPS);
+        // Stays down through the drag.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 100f,
+            4f, 3000L));
+        assertEquals(PageSink.SCALE, terminal.getScaleX(), EPS);
+        // Let go short of the commit: back up, full size, the layer given back.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f - 100f,
+            4f, 3020L));
+        letTheMotionSettle();
+        assertNull(wall.sinkPage());
+        assertEquals(1f, terminal.getScaleX(), EPS);
+        assertEquals(1f, terminal.getScaleY(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        // The terminal's frame line was told every step, and told it was back at rest.
+        assertTrue(frameScales.contains(PageSink.SCALE));
+        assertEquals(1f, frameScales.get(frameScales.size() - 1), EPS);
+    }
+
+    @Test
+    public void underFancierGlassAHeldSideBorderPushesThatSideIn() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+        });
+        // The right border, half way down.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH - 4f,
+            HEIGHT / 2f, 0L));
+        letTheHoldElapse();
+        letTheMotionSettle();
+        assertEquals(terminal, wall.tiltPage());
+        assertEquals(PlankTilt.HOLD_TILT_DEG, terminal.getRotationY(), EPS);
+        assertTrue("the right edge goes in", terminal.getRotationY() > 0f);
+        // Dragged, the travel's tip takes over, deeper than the old twelve degrees half way out.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH - 4f - WIDTH / 2f,
+            HEIGHT / 2f, 3000L));
+        assertEquals(PlankTilt.angleDeg(-WIDTH / 2f, WIDTH, 1, 1f), terminal.getRotationY(), EPS);
+        assertTrue(Math.abs(terminal.getRotationY()) > 12f);
+        // Pulled back to rest and let go: flat, full size, the layer gone once the spring lands.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH - 4f,
+            HEIGHT / 2f, 3100L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH - 4f,
+            HEIGHT / 2f, 3400L));
+        letTheMotionSettle();
+        assertNull(wall.sinkPage());
+        assertNull(wall.tiltPage());
+        assertEquals(0f, terminal.getRotationY(), EPS);
+        assertEquals(1f, terminal.getScaleX(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
+    }
+
+    @Test
+    public void theDisplayPageSinksWithoutALayer() {
+        buildWithContent();
+        assertTrue(wall.goTo(PaneWallPage.DISPLAY, false));
+        wall.setReducedMotion(false);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        letTheHoldElapse();
+        letTheMotionSettle();
+        assertEquals(display, wall.sinkPage());
+        assertEquals(PageSink.SCALE, display.getScaleX(), EPS);
+        assertEquals("its picture is a SurfaceView a layer would strand", View.LAYER_TYPE_NONE,
+            display.getLayerType());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_CANCEL, WIDTH / 2f, 4f,
+            3000L));
+        letTheMotionSettle();
+        assertNull(wall.sinkPage());
+        assertEquals(1f, display.getScaleX(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
+    }
+
+    @Test
+    public void reducedMotionSinksNothing() {
+        buildWithContent();
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+        });
+        // buildWithContent leaves motion reduced.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH - 4f,
+            HEIGHT / 2f, 0L));
+        letTheHoldElapse();
+        assertTrue(wall.isDragging());
+        assertNull(wall.sinkPage());
+        assertNull(wall.tiltPage());
+        assertEquals(1f, terminal.getScaleX(), EPS);
+        assertEquals(0f, terminal.getRotationY(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
+    }
+
+    @Test
+    public void aJumpUnderASunkPageLandsItAtRestAtOnce() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        letTheHoldElapse();
+        letTheMotionSettle();
+        assertEquals(terminal, wall.sinkPage());
+        assertTrue(wall.goTo(PaneWallPage.WIDGETS, false));
+        assertNull(wall.sinkPage());
+        assertEquals(1f, terminal.getScaleX(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
+    }
+
+    // ---- The keyboard swipe off the bottom border --------------------------------------------
+
+    private final List<Boolean> keyboardSwipes = new ArrayList<>();
+
+    /** A listener that wants the keyboard swipe, as the wall's controller does. */
+    private void listenForKeyboardSwipes() {
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isBorderKeyboardSwipeEnabled() { return true; }
+            @Override public void onBorderKeyboardSwipe(boolean open) { keyboardSwipes.add(open); }
+        });
+    }
+
+    @Test
+    public void anUpSwipeOffTheBottomBorderOpensTheKeyboardAndCancelsTheContent() {
+        buildWithContent();
+        listenForKeyboardSwipes();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 204f, 50L));
+        assertEquals(BorderDrag.Claim.KEYBOARD, wall.borderDragClaim());
+        assertEquals("claimed at once: the content forgets the touch", Arrays.asList(
+            android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_CANCEL),
+            content.actions);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 304f, 70L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 304f, 90L));
+        assertEquals(Collections.singletonList(true), keyboardSwipes);
+        assertEquals("and hears nothing after", 2, content.actions.size());
+        assertFalse(wall.isDragging());
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(BorderDrag.Claim.NONE, wall.borderDragClaim());
+        // The hold's timer was put away with the claim: nothing pages later.
+        letTheHoldElapse();
+        assertFalse(wall.isDragging());
+    }
+
+    @Test
+    public void aDownSwipeOffTheBottomBorderClosesIt() {
+        buildWithContent();
+        listenForKeyboardSwipes();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        // Down past the wall's own edge, over the keyboard: the stream is still the wall's.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT + 150f, 50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT + 150f, 80L));
+        assertEquals(Collections.singletonList(false), keyboardSwipes);
+    }
+
+    @Test
+    public void aCancelledKeyboardSwipeAsksForNothing() {
+        buildWithContent();
+        listenForKeyboardSwipes();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 204f, 50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_CANCEL, WIDTH / 2f,
+            HEIGHT - 204f, 80L));
+        assertTrue(keyboardSwipes.isEmpty());
+        assertEquals(BorderDrag.Claim.NONE, wall.borderDragClaim());
+    }
+
+    @Test
+    public void aSidewaysSwipeOffTheBottomBorderStaysTheContents() {
+        buildWithContent();
+        listenForKeyboardSwipes();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 100f,
+            HEIGHT - 10f, 50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 150f,
+            HEIGHT - 200f, 70L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f - 150f,
+            HEIGHT - 200f, 90L));
+        assertTrue(keyboardSwipes.isEmpty());
+        assertEquals(Arrays.asList(android.view.MotionEvent.ACTION_DOWN,
+            android.view.MotionEvent.ACTION_MOVE, android.view.MotionEvent.ACTION_MOVE,
+            android.view.MotionEvent.ACTION_UP), content.actions);
+    }
+
+    @Test
+    public void aVerticalSwipeHigherUpThanTheReachStaysTheContents() {
+        buildWithContent();
+        listenForKeyboardSwipes();
+        float density = wall.getResources().getDisplayMetrics().density;
+        float y = HEIGHT - BorderDrag.KEYBOARD_REACH_DP * density - 2f;
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, y, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, y - 200f,
+            50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, y - 200f,
+            80L));
+        assertTrue("a scroll from the last rows is the terminal's", keyboardSwipes.isEmpty());
+        assertEquals(Arrays.asList(android.view.MotionEvent.ACTION_DOWN,
+            android.view.MotionEvent.ACTION_MOVE, android.view.MotionEvent.ACTION_UP),
+            content.actions);
+    }
+
+    @Test
+    public void aHoldOnTheBottomBorderStillPagesWithTheKeyboardSwipeOn() {
+        buildWithContent();
+        listenForKeyboardSwipes();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        letTheHoldElapse();
+        assertTrue(wall.isDragging());
+        // Held first, even a vertical move is the drag's, and the wall follows the sideways part.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 600f,
+            HEIGHT - 300f, 400L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f - 600f,
+            HEIGHT - 300f, 420L));
+        assertTrue(keyboardSwipes.isEmpty());
+        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+    }
+
+    @Test
+    public void aWallOfOnePlaceStillHasTheKeyboardSwipeAndLeavesHoldsToTheContent() {
+        buildWithContent();
+        wall.setPages(Collections.singletonList(PaneWallPage.TERMINAL));
+        listenForKeyboardSwipes();
+        // The swipe.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 204f, 50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 204f, 80L));
+        assertEquals(Collections.singletonList(true), keyboardSwipes);
+
+        // A hold on the bottom border has no page to go to: the content keeps it.
+        content.actions.clear();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 1000L));
+        letTheHoldElapse();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 204f, 1500L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 204f, 1520L));
+        assertEquals(Arrays.asList(android.view.MotionEvent.ACTION_DOWN,
+            android.view.MotionEvent.ACTION_MOVE, android.view.MotionEvent.ACTION_UP),
+            content.actions);
+        assertEquals("a selection drag after the hold is not the keyboard's", 1,
+            keyboardSwipes.size());
+        assertFalse(wall.isDragging());
+
+        // The top border arms nothing at all.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f,
+            2000L));
+        assertEquals(BorderDrag.Claim.NONE, wall.borderDragClaim());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, 4f, 2020L));
+    }
+
+    @Test
+    public void withGesturesOffTheBottomBorderIsTheContents() {
+        buildWithContent();
+        listenForKeyboardSwipes();
+        wall.setGesturesEnabled(false);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 204f, 50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 204f, 80L));
+        assertTrue(keyboardSwipes.isEmpty());
+        assertEquals(3, content.actions.size());
+    }
+
     @Test
     public void aPageChangeWithoutAFingerNeverTips() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);

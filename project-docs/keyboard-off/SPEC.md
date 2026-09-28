@@ -19,6 +19,7 @@ Branch: `feat/keyboard-toggle`, cut from dev f6d82b5a.
 | A text field takes focus (`keyboard.show --source focus`, X11 text focus) | raises it | ignored; the call answers 409 `unavailable` |
 | Keyboard key (extra key, `Ctrl+Alt+K`, palette **Toggle keyboard**, Display place key) | raises it | **turns it on** and raises it |
 | `keyboard.show` (manual) | raises it | **turns it on** and raises it |
+| Keyboard swipe (up off the page's bottom border, any place, any mode) | raises it | **turns it on** and raises it |
 | **Keyboard on/off** | turns it off, puts it down | turns it on, raises it |
 | App restart, activity recreate | keyboard restores as it was | stays off; the keyboard starts down |
 | Settings height editor | shows the keyboard | still shows it, since it has to show the rows being resized |
@@ -84,6 +85,14 @@ preference but does not set the disable-soft-keyboard flags until the next `setS
 - **Turning it back on.** `onToggleSoftKeyboardRequest` (keyboard key, `Ctrl+Alt+K`, palette
   toggle), the Display place's `toggleKeyboardVisibility`, and the host's `showInAppKeyboard` with
   a manual source all call `setTurnedOff(false)` first.
+- **The keyboard swipe (2026-09-28).** A swipe up off the current page's bottom border
+  (`wall/BorderDrag`, `PaneWallLayout`) reaches `TermuxActivity.applyBorderKeyboardSwipe`, which
+  goes through the host's `showInAppKeyboard(false)` — the manual `keyboard.show` path, so a
+  keyboard switched off is turned back on — and, with Android's keyboard chosen, through
+  `onToggleSoftKeyboardRequest` when that raises it. A swipe down is `hideInAppKeyboard(false)`.
+  It exists on every place and in every mode, minimal mode and a one-place wall included, so a
+  user who switched the keyboard off and put the extra keys away still has a way back that is not
+  the Layout editor.
 
 ## Known gaps
 

@@ -10276,13 +10276,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override
-        public View getRowsAboveKeyboard() {
-            // The dock's row stack: a press its bars did not take — a band inset, a hairline,
-            // the page ticks — is empty space above a docked keyboard.
-            return findViewById(R.id.accessory_row_stack);
-        }
-
-        @Override
         public void setKeyboardContainerVisible(boolean visible) {
             // Before the choreographer: a floating keyboard is staged in a host that has to be
             // visible for the reveal gate to observe destination layout at all.
@@ -16730,6 +16723,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The swipe off the pane's bottom border: the keyboard up ({@code open}) or down, on whichever
+     * place is showing and in every mode. It is a person asking by hand, so it takes the path
+     * {@code keyboard.show} and {@code keyboard.hide} take — the Display place's own routes (the
+     * phone's keyboard, mouse mode's frame) included — and opening turns a keyboard that was
+     * switched off back on, as the keyboard key does: this is the way back that is always there.
+     * With Android's keyboard chosen in Settings it is the keyboard key's own toggle, pressed only
+     * when that goes the way the swipe asked.
+     */
+    private void applyBorderKeyboardSwipe(boolean open) {
+        com.termux.app.terminal.TerminalHost host = terminalHost();
+        if (open ? host.showInAppKeyboard(false) : host.hideInAppKeyboard(false)) return;
+        TermuxTerminalViewClient client = mTermuxTerminalViewClient;
+        if (client == null) return;
+        boolean up = isImeVisible();
+        if (open ? (client.isKeyboardTurnedOff() || !up) : up) client.onToggleSoftKeyboardRequest();
+    }
+
+    /**
      * Wire the pane wall around the terminal's pane host. The terminal is its middle page and is
      * handed over untouched; the other places register themselves as the install gains them.
      */
@@ -16755,6 +16766,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public boolean isPlankTiltEnabled() {
                     return mFancierGlassLook != null
                         && !isReducedMotionEnabled() && !isLazyModeEnabled();
+                }
+                @Override public void onBorderKeyboardSwipe(boolean open) {
+                    applyBorderKeyboardSwipe(open);
+                }
+                @Override public void onPageSinkChanged(
+                        @NonNull com.termux.app.wall.PaneWallPage page, float scale) {
+                    // The terminal's frame line is laid over the wall, not carried by the page
+                    // (syncTerminalFrameLineTravel): it sinks with the page by hand. Its margins
+                    // are the pane host's less the stroke's air on every side, so the two share
+                    // a centre and one scale about it keeps the line where it frames the page.
+                    if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
+                    View borderView = findViewById(R.id.terminal_border_overlay);
+                    if (borderView == null) return;
+                    borderView.setPivotX(borderView.getWidth() / 2f);
+                    borderView.setPivotY(borderView.getHeight() / 2f);
+                    borderView.setScaleX(scale);
+                    borderView.setScaleY(scale);
                 }
                 @Override public void onWallPageSettled(
                         @NonNull com.termux.app.wall.PaneWallPage page) {

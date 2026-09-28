@@ -17,15 +17,6 @@ public interface InAppKeyboardHost extends HostActions {
     View getKeyboardContainer();
 
     /**
-     * The dock's rows standing above a docked keyboard, or null for none. A press in their
-     * non-interactive foot — the band insets and hairlines just above the keys, never a button
-     * — joins the swipe that puts the keyboard away.
-     */
-    default View getRowsAboveKeyboard() {
-        return null;
-    }
-
-    /**
      * Applies a requested keyboard visibility change. Activity hosts may stage the visible state
      * until destination geometry and visual backing are ready; simple/test hosts remain immediate.
      */
