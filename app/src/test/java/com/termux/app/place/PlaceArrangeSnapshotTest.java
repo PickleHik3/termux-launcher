@@ -82,6 +82,23 @@ public class PlaceArrangeSnapshotTest {
     }
 
     @Test
+    public void aHiddenStatusBarIsSomethingToLoseAndComesBack() {
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+        String entrySignature = entry.signature();
+
+        places.setSlot(PORTRAIT, Element.STATUS,
+            places.slot(PORTRAIT, Element.STATUS).withHidden(true));
+        assertTrue(places.resolve(PORTRAIT).slot(Element.STATUS).hidden);
+        assertNotEquals("its edge alone could not say it was gone",
+            entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+
+        entry.restore(places);
+        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+        assertFalse(places.resolve(PORTRAIT).slot(Element.STATUS).hidden);
+        assertEquals(Edge.TOP, places.statusBarEdge(PORTRAIT));
+    }
+
+    @Test
     public void aMovedBarIsSomethingToLose() {
         String entry = PlaceArrangeSnapshot.capture(places).signature();
 

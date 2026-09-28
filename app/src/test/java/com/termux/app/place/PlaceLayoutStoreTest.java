@@ -565,6 +565,28 @@ public class PlaceLayoutStoreTest {
     }
 
     @Test
+    public void theStatusBarIsStoredHiddenTheWayTheRowsAre() {
+        PlaceLayoutStore store = store();
+        store.setSlot(PlaceOrientation.PORTRAIT, Element.STATUS, Slot.hiddenFrom(Edge.BOTTOM, 3));
+        assertEquals("hidden", prefs.getString("layout.portrait.status_bar", null));
+        Slot slot = store.slot(PlaceOrientation.PORTRAIT, Element.STATUS);
+        assertTrue(slot.hidden);
+        assertEquals("the key holds nothing but hidden, so the edge is the top it started on",
+            Edge.TOP, slot.edge);
+        assertEquals(3, slot.order);
+        assertTrue(store.resolve(PlaceOrientation.PORTRAIT).slot(Element.STATUS).hidden);
+        assertFalse("the other orientation keeps its bar",
+            store.resolve(PlaceOrientation.LANDSCAPE).slot(Element.STATUS).hidden);
+        assertEquals("the edge reads as the top while the bar is away",
+            Edge.TOP, store.statusBarEdge(PlaceOrientation.PORTRAIT));
+
+        // Standing it on an edge brings it back.
+        store.setStatusBarEdge(PlaceOrientation.PORTRAIT, Edge.BOTTOM);
+        assertFalse(store.slot(PlaceOrientation.PORTRAIT, Element.STATUS).hidden);
+        assertEquals(Edge.BOTTOM, store.slot(PlaceOrientation.PORTRAIT, Element.STATUS).edge);
+    }
+
+    @Test
     public void aStoredPlacementWidensToEveryEdgeAndToHidden() {
         // The four spellings the rows have always been stored as still read, in both orientations,
         // and "top" — which the old three-way placement had no room for — reads as the top edge.

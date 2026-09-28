@@ -25,6 +25,8 @@ public final class PlaceArrangeSnapshot {
     private static final class Entry {
         final PlaceOrientation orientation;
         final PlaceLayout.Edge statusBarEdge;
+        /** The status bar put away, which its edge alone cannot say. */
+        final boolean statusHidden;
         final PlaceLayout.RowPlacement appsRow;
         final boolean azRowShown;
         final PlaceLayout.Edge azBarEdge;
@@ -42,6 +44,7 @@ public final class PlaceArrangeSnapshot {
         Entry(@NonNull PlaceLayoutStore places, @NonNull PlaceOrientation orientation) {
             this.orientation = orientation;
             statusBarEdge = places.statusBarEdge(orientation);
+            statusHidden = places.slot(orientation, Element.STATUS).hidden;
             appsRow = places.appsRow(orientation);
             azRowShown = places.azRowShown(orientation);
             azBarEdge = places.azBarEdge(orientation);
@@ -59,7 +62,8 @@ public final class PlaceArrangeSnapshot {
         }
 
         void restore(@NonNull PlaceLayoutStore places) {
-            places.setStatusBarEdge(orientation, statusBarEdge);
+            places.setSlot(orientation, Element.STATUS,
+                new Slot(statusHidden, statusBarEdge, slotOrders[Element.STATUS.ordinal()]));
             places.setAppsRow(orientation, appsRow);
             places.setAzRowShown(orientation, azRowShown);
             places.setAzBarEdge(orientation, azBarEdge);
@@ -77,7 +81,7 @@ public final class PlaceArrangeSnapshot {
 
         void appendTo(@NonNull StringBuilder out) {
             out.append(orientation.storageValue()).append(':')
-                .append(statusBarEdge).append(',')
+                .append(statusHidden ? "hidden@" : "").append(statusBarEdge).append(',')
                 .append(appsRow).append(',')
                 .append(azRowShown).append(',')
                 .append(azBarEdge).append(',')

@@ -108,7 +108,11 @@ public final class PlaceLayoutStore {
     /** A floating keyboard that has never been moved has no remembered place to come back to. */
     public static final float FLOAT_POSITION_UNSET = -1f;
 
-    /** The launcher's status-bar hide switch for the display, dropped with the hidden state. */
+    /**
+     * The launcher's old status-bar hide switch for the display alone. Dropped by the first
+     * migration rather than folded: the shared layout starts with the bar shown, and hiding it is
+     * the Layout editor's tray now, for every place at once.
+     */
     private static final String LEGACY_KEY_X11_HIDE_STATUS_BAR = "x11_hide_status_bar";
 
     private static final String[] ARRANGEMENT_KEYS = {
@@ -224,8 +228,9 @@ public final class PlaceLayoutStore {
         int order = slotOrder(orientation, element);
         switch (element) {
             case STATUS:
-                // Never hidden: the wall's pager rides it, so it only ever moves.
-                return new Slot(false, statusBarEdge(orientation), order);
+                // Spelled the way the rows have always been: an edge, or "hidden".
+                return new Slot(VALUE_HIDDEN.equals(readString(orientation, KEY_STATUS_BAR)),
+                    statusBarEdge(orientation), order);
             case AZ:
                 return new Slot(!azRowShown(orientation), azBarEdge(orientation), order);
             case APPS:
@@ -242,7 +247,7 @@ public final class PlaceLayoutStore {
                         @NonNull Slot slot) {
         switch (element) {
             case STATUS:
-                setStatusBarEdge(orientation, slot.edge);
+                writeString(orientation, KEY_STATUS_BAR, rowValue(slot));
                 break;
             case AZ:
                 setAzRowShown(orientation, !slot.hidden);
@@ -310,7 +315,9 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * Always an edge: the bar moves, it never goes away, so the wall's pager always has a grip.
+     * The edge the status bar stands on. A bar that is put away ({@link #slot}) names no edge —
+     * its key holds nothing but {@code hidden}, like the rows' — and reads as the top, where it
+     * has always started.
      *
      * <p>Every edge is offered in both orientations. A column down the side of a portrait screen
      * used to be refused here, because it takes width the terminal does not have; it is allowed
@@ -322,6 +329,7 @@ public final class PlaceLayoutStore {
         return Edge.parse(readString(orientation, KEY_STATUS_BAR), Edge.TOP);
     }
 
+    /** Stands the status bar on an edge, which also brings a hidden one back. */
     public void setStatusBarEdge(@NonNull PlaceOrientation orientation, @NonNull Edge edge) {
         writeString(orientation, KEY_STATUS_BAR, edge.storageValue());
     }
@@ -762,8 +770,8 @@ public final class PlaceLayoutStore {
                 }
             }
 
-            // There is no hidden status bar any more: the bar moves instead, so the wall's paging
-            // gesture survives every arrangement.
+            // The display's own hide switch is not carried over: the shared layout starts with
+            // the bar shown, and the Layout editor's tray is where it is put away now.
             editor.remove(LEGACY_KEY_X11_HIDE_STATUS_BAR);
 
             if (mStore.contains(TERMUX_APP.KEY_X11_KEYBOARD_SHOWN)) {

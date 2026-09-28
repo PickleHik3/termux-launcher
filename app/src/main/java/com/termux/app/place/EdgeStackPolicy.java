@@ -28,11 +28,12 @@ import java.util.List;
  * what the Layout-freedom work replaced with an order the user can set; every other arrangement
  * the old model could express comes out byte-for-byte the same.
  *
- * <p>One rule is kept from the old model and is not ours to change: the status bar is never hidden,
- * because the wall's pager rides it. The other — the alphabets index following the pinned apps row
- * about — is gone: the index rides that row only while the two of them hold the same edge
- * ({@link PlaceChromePolicy#azRidesAppsRow}), so every element here draws on the edge its own slot
- * names and a row moved on its own leaves the index where it stood.
+ * <p>Two rules of the old model are gone. The status bar was never hidden, because the wall's
+ * pager rode its swipe; paging is the border drag now, so the bar hides like every other element
+ * and a place with no status bar simply starts where the next band does. And the alphabets index
+ * no longer follows the pinned apps row about: the index rides that row only while the two of them
+ * hold the same edge ({@link PlaceChromePolicy#azRidesAppsRow}), so every element here draws on
+ * the edge its own slot names and a row moved on its own leaves the index where it stood.
  *
  * <p>One rule is a renderer fact rather than a policy one, recorded here so the next reader does
  * not look for it: only a status bar standing on {@link Edge#TOP} gets the system-bar glass strip
@@ -244,7 +245,7 @@ public final class EdgeStackPolicy {
 
     /** Whether an element is on screen at all: hidden puts it away, and nothing else does. */
     public static boolean isShown(@NonNull PlaceLayout layout, @NonNull Element element) {
-        return element == Element.STATUS || !layout.slot(element).hidden;
+        return !layout.slot(element).hidden;
     }
 
     /**
@@ -434,7 +435,8 @@ public final class EdgeStackPolicy {
 
     /**
      * The arrangement putting one element away leaves. It keeps the edge and the position it would
-     * come back to, and the status bar — which the wall's pager rides — is never put away at all.
+     * come back to. An element that may not hide ({@link Element#hideAllowed}) is left as it is;
+     * none refuses today.
      */
     @NonNull
     public static PlaceLayout withAway(@NonNull PlaceLayout layout, @NonNull Element element) {

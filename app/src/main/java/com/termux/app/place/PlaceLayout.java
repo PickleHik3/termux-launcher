@@ -18,7 +18,7 @@ import java.util.Map;
  */
 public final class PlaceLayout {
 
-    /** A screen edge. The status bar always stands on one of them — it is never hidden. */
+    /** A screen edge. Every element stands on one of them, or is put away. */
     public enum Edge {
         TOP, BOTTOM, LEFT, RIGHT;
 
@@ -184,8 +184,6 @@ public final class PlaceLayout {
         for (Element element : Element.values()) {
             Slot slot = slots.get(element);
             if (slot == null) slot = Slot.on(Edge.BOTTOM, element);
-            // The status bar is never hidden; the wall's pager needs something to ride.
-            if (element == Element.STATUS && slot.hidden) slot = slot.withHidden(false);
             copy.put(element, slot);
         }
         mSlots = Collections.unmodifiableMap(copy);

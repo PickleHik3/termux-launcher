@@ -14,9 +14,11 @@
      leaves it, so a short screen at a large font scale still reaches the rows and the way out. The
      rows keep a scroller of their own inside it, capped to the room the canvas leaves.
 
-     In portrait it is a sheet rather than a panel: it comes up from the bottom edge and stops
+     In portrait it is a sheet rather than a panel: it comes up from the bottom edge and rests
      about a fifth of the screen down, so the place it is editing keeps its status strip and its
-     chip row in view above it. The handle at the top says which way it came from. -->
+     chip row in view above it. The handle at the top, or the header, is pulled to grow the card
+     toward the top inset — the miniature grows first, then the rows — and pulled down to bring it
+     back, or further to close it; LayoutEditorController drives that on a spring. -->
 <androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/layout_editor_card"
@@ -39,17 +41,16 @@
         android:paddingEnd="16dp"
         android:paddingBottom="10dp">
 
-        <!-- The sheet's handle: the one mark that says the card came up from the bottom edge and
-             goes back down there. Decorative — nothing is dragged by it — so it is not announced.
-             LayoutEditorController paints it from the theme's on-surface colour. -->
+        <!-- The sheet's handle: the mark that says the card came up from the bottom edge, and
+             the grip that pulls it up to the top of the screen or back down. The view is the
+             touch slot; LayoutEditorController paints the 32x4 bar centred in it from the
+             theme's on-surface colour, names it for a screen reader, and makes a tap on it
+             toggle the card between its two heights. -->
         <View
             android:id="@+id/layout_editor_sheet_handle"
-            android:layout_width="32dp"
-            android:layout_height="4dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="8dp"
-            android:layout_marginBottom="6dp"
-            android:importantForAccessibility="no" />
+            android:layout_width="64dp"
+            android:layout_height="24dp"
+            android:layout_gravity="center_horizontal" />
 
         <include
                 layout="@layout/editor_shell_header" />

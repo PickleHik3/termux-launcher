@@ -58,8 +58,11 @@ placement on the live screen goes away.
   launcher activity so the live place stays visible behind them. Only one editor is open at a time.
 - **Canvas.** The Layout editor hosts the existing miniature view, legend off, one orientation at a
   time, driven by the existing drop policy and drop callback. The orientation toggle above it
-  re-binds the miniature; it does not touch the live place. Portrait frame height is about 55% of
-  the screen; the landscape frame fills the width. The rows section beneath scrolls.
+  re-binds the miniature; it does not touch the live place. The portrait frame stands at 42% of
+  the screen's height while the card rests (the sheet takes 80% of a portrait screen) and grows
+  to 54% as the card is pulled up by its handle or header toward the top inset, the rows taking
+  whatever the pull adds beyond that (`LayoutEditorPlan`, `LayoutEditorSheet`, 2026-09-28); the
+  landscape frame fills the width. The rows section beneath scrolls.
 - **Rows.** The existing layout chooser row model supplies keyboard form, keyboard on enter,
   keyboard mode and grid counters, filtered to the current place and orientation. Three slider rows
   are added for dock height, keyboard height and keyboard chin, using the editor row kinds that

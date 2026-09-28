@@ -411,16 +411,33 @@ public class EdgeStackPolicyTest {
     }
 
     @Test
-    public void onlyTheStatusBarRefusesTheTray() {
+    public void everyElementMayBePutAway() {
+        // The status bar was the one that could not, while the wall's pager rode its swipe.
         PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
             RowPlacement.BOTTOM);
-        for (EdgeStackPolicy.Drop drop
-            : EdgeStackPolicy.targets(layout, Element.STATUS, PlaceOrientation.PORTRAIT))
-            assertFalse(drop.toString(), drop.hideAllowed);
-        for (Element element : new Element[] {Element.APPS, Element.EXTRA_KEYS, Element.AZ})
+        for (Element element : Element.values())
             for (EdgeStackPolicy.Drop drop
                 : EdgeStackPolicy.targets(layout, element, PlaceOrientation.PORTRAIT))
                 assertTrue(element + " " + drop, drop.hideAllowed);
+    }
+
+    @Test
+    public void aHiddenStatusBarIsOffItsEdgeAndCostsNothing() {
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        PlaceLayout away = EdgeStackPolicy.withAway(layout, Element.STATUS);
+        assertTrue(away.slot(Element.STATUS).hidden);
+        assertFalse(EdgeStackPolicy.isShown(away, Element.STATUS));
+        assertTrue("the top is bare", EdgeStackPolicy.stack(away, Edge.TOP).isEmpty());
+        assertEquals("the bottom is untouched", EdgeStackPolicy.stack(layout, Edge.BOTTOM),
+            EdgeStackPolicy.stack(away, Edge.BOTTOM));
+        EdgeStackPolicy.Metrics metrics = EdgeStackPolicy.Metrics.builder()
+            .status(40, 32).apps(60, 50).az(20, 18).extraKeys(44, 40).build();
+        assertEquals("nothing is given up along the top", 0,
+            EdgeStackPolicy.contentInsets(away, metrics).top);
+        // It keeps the edge and the position it comes back to.
+        assertEquals(Edge.TOP, away.slot(Element.STATUS).edge);
+        assertEquals(layout.slot(Element.STATUS).order, away.slot(Element.STATUS).order);
     }
 
     @Test
@@ -564,12 +581,12 @@ public class EdgeStackPolicyTest {
     }
 
     @Test
-    public void onlyABarThatMayHideIsPutAway() {
+    public void putAwayKeepsTheEdgeABarComesBackTo() {
         PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
             RowPlacement.BOTTOM);
         assertTrue(EdgeStackPolicy.withAway(layout, Element.APPS).slot(Element.APPS).hidden);
-        assertEquals("the wall's pager rides the status bar, so it never goes away",
-            layout, EdgeStackPolicy.withAway(layout, Element.STATUS));
+        assertTrue("the status bar goes away like any other bar now",
+            EdgeStackPolicy.withAway(layout, Element.STATUS).slot(Element.STATUS).hidden);
         // It keeps the edge it would come back to.
         assertEquals(Edge.BOTTOM,
             EdgeStackPolicy.withAway(layout, Element.APPS).slot(Element.APPS).edge);
