@@ -446,7 +446,6 @@ public class LayoutEditorPlanTest {
         assertEquals("home's grid counts join the card", 9, plan.rows().size());
     }
 
-
     // ----------------------------------------------------------------------- the three sizes
 
     @Test
@@ -550,70 +549,70 @@ public class LayoutEditorPlanTest {
     }
 
     @Test
-    public void theRowsSectionKeepsWhateverTheCanvasLeavesAndNeverLessThanItsFloor() {
-        assertEquals("the room left under the canvas",
-            400, LayoutEditorPlan.rowsHeightCapPx(2400, 1800, 200, 120));
-        assertEquals("a canvas that took it all still leaves a list to scroll in",
-            120, LayoutEditorPlan.rowsHeightCapPx(2400, 2300, 200, 120));
-    }
-
-    @Test
-    public void thePortraitCanvasIsTwoFifthsOfTheScreenAndTheLandscapeOneStopsAtTheRoomLeft() {
+    public void thePortraitCanvasIsTwoFifthsOfTheScreenAndTheLandscapeOneAsWideAsTheCard() {
         int reserved = 60;
         float portraitAspect = 9f / 19.5f;
         float landscapeAspect = 19.5f / 9f;
+        int column = 933;
 
-        int resting = LayoutEditorPlan.cardBudgetPx(1080, 2400);
-        int portrait = LayoutEditorPlan.miniatureHeightPx(PORTRAIT, 1080, 2400,
-            portraitAspect, reserved, 400, resting);
+        int resting = LayoutEditorPlan.restingCardHeightPx(1080, 2400, 2300);
+        int portrait = LayoutEditorPlan.miniatureHeightPx(PORTRAIT, 2400, portraitAspect,
+            reserved, column, 400, resting);
         assertEquals("42% of the screen, plus the room the tray keeps",
             Math.round(0.42f * 2400) + reserved, portrait);
         // A card whose chrome has grown — a large font scale, both notices showing — does not take
         // the fifth of the screen the sheet is leaving the live place. The picture gives way.
-        assertEquals("the sheet keeps its budget and the frame takes what is left",
-            Math.round(0.80f * 2400) - 1600,
-            LayoutEditorPlan.miniatureHeightPx(PORTRAIT, 1080, 2400,
-                portraitAspect, reserved, 1600, resting));
+        assertEquals("the sheet keeps its height and the frame takes what is left",
+            resting - 1600, LayoutEditorPlan.miniatureHeightPx(PORTRAIT, 2400, portraitAspect,
+                reserved, column, 1600, resting));
+
+        // The landscape layout shown on a portrait phone: a frame as wide as the card, and no
+        // taller than that width allows — the height a screen-wide frame asked for beyond it was
+        // dead air above and below the picture.
+        assertEquals("as wide as the card's column",
+            Math.round(column / landscapeAspect) + reserved,
+            LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, 2400, landscapeAspect, reserved,
+                column, 400, resting));
 
         // The landscape viewport is that phone turned: 2400 wide, 1080 tall. A frame as wide as
-        // the screen is then taller than the screen, which is the whole defect: owe the canvas
-        // nothing and it takes everything, rows and all.
-        assertTrue("a full-width landscape frame does not fit the screen it came from",
-            Math.round(2400 / landscapeAspect) + reserved > 1080);
-        int wideOpen = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, 2400, 1080,
-            landscapeAspect, reserved, 0, LayoutEditorPlan.cardBudgetPx(2400, 1080));
-        assertEquals("with nothing owed room below it the canvas claims the whole screen",
-            1080, wideOpen);
-
-        int onACard = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, 2400, 1080,
-            landscapeAspect, reserved, 400, LayoutEditorPlan.cardBudgetPx(2400, 1080));
-        assertEquals("and only what is left once the chrome and the rows have theirs",
-            1080 - 400, onACard);
-        assertTrue("which is less than the frame asked for", onACard < wideOpen);
+        // the column is then taller than the card, so it stops at what the chrome and the rows'
+        // peek leave it.
+        int landscapeRest = LayoutEditorPlan.restingCardHeightPx(2400, 1080, 1000);
+        int onACard = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, 1080, landscapeAspect,
+            reserved, 2300, 400, landscapeRest);
+        assertEquals("only what is left once the chrome and the rows' peek have theirs",
+            landscapeRest - 400, onACard);
+        assertTrue("which is less than the frame asked for",
+            onACard < Math.round(2300 / landscapeAspect) + reserved);
     }
 
     @Test
-    public void everyLandscapeViewportLeavesTheRowsTheirFloor() {
-        // The two the landscape review reproduced on. The card's chrome and the rows' floor are
-        // dp, so only the density moves them; the font scale moves what stands inside the rows,
-        // which is the scroller's business and not this sum's.
+    public void everyLandscapeViewportKeepsTheFrameInsideTheCardAndTheRowsInView() {
+        // The two the landscape review reproduced on. The card's chrome and the rows' peek are dp,
+        // so only the density moves them; the font scale moves what stands inside the rows, which
+        // is the list's business and not this sum's.
         for (float density : new float[]{180f / 160f, 260f / 160f}) {
             int chooser = Math.round(density * EditorShellMetrics.CHOOSER_DP);
-            int padding = Math.round(density * 10f);
-            int floor = Math.round(density * LayoutEditorController.ROWS_FLOOR_DP);
+            int padding = Math.round(density * 16f);
+            int peek = Math.round(density * LayoutEditorController.ROWS_PEEK_DP);
             int reserved = Math.round(density * 48f);
+            float aspect = PlaceMiniatureView.frameAspect(LANDSCAPE);
             for (int[] viewport : LANDSCAPE_VIEWPORTS) {
+                int rest = LayoutEditorPlan.restingCardHeightPx(viewport[0], viewport[1],
+                    viewport[1] - Math.round(density * 42f));
+                int column = Math.min(EditorShellMetrics.contentWidthPx(viewport[0], density),
+                    EditorShellMetrics.px(EditorShellMetrics.ROW_MAX_INNER_DP, density));
                 // The worst case: both notices showing, which is the most chrome there is.
-                int chrome = LayoutEditorController.cardChromePx(viewport[1], chooser, padding, 2,
+                int chrome = LayoutEditorController.cardChromePx(rest, chooser, padding, 2,
                     density);
-                int height = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, viewport[0],
-                    viewport[1], PlaceMiniatureView.frameAspect(LANDSCAPE), reserved,
-                    chrome + floor, LayoutEditorPlan.cardBudgetPx(viewport[0], viewport[1]));
+                int height = LayoutEditorPlan.miniatureHeightPx(LANDSCAPE, viewport[1], aspect,
+                    reserved, column, chrome + peek, rest);
                 String where = viewport[0] + "x" + viewport[1] + " at " + density + "x";
-                int left = viewport[1] - height - chrome;
-                assertTrue("the rows keep their floor at " + where, left >= floor);
-                assertEquals("and the cap hands them room that is really there at " + where,
-                    left, LayoutEditorPlan.rowsHeightCapPx(viewport[1], height, chrome, floor));
+                int frame = height - reserved;
+                assertTrue("the frame is no wider than the card at " + where,
+                    frame * aspect <= column + aspect);
+                assertTrue("and leaves the chrome and the rows' peek their room at " + where,
+                    frame <= Math.max(0, rest - chrome - peek - reserved));
             }
         }
     }
@@ -645,119 +644,66 @@ public class LayoutEditorPlanTest {
         return Math.round(dp * PONG_DENSITY);
     }
 
+    /** pong's host under its status inset, less the sheet's top air and its bottom margin. */
+    private static int pongExpanded() {
+        int hostPx = PONG_HEIGHT_PX - pongPx(24f);
+        return LayoutEditorPlan.expandedCardBudgetPx(hostPx - pongPx(
+            LayoutEditorController.SHEET_TOP_AIR_DP + LayoutEditorController.SHEET_BOTTOM_MARGIN_DP));
+    }
+
     @Test
-    public void theSheetLeavesTheLivePlaceTheTopOfPongsScreenAndTheRowsTheirFloor() {
+    public void theRestingSheetLeavesTheLivePlaceTheTopOfPongsScreenAndShowsTheFirstRows() {
         // Worked the way LayoutEditorController.applyCanvasHeight works it out, on the Terminal
         // place in portrait: nothing is warned about, so there are no notice lines.
+        int rest = LayoutEditorPlan.restingCardHeightPx(PONG_WIDTH_PX, PONG_HEIGHT_PX,
+            pongExpanded());
         int chooser = pongPx(EditorShellMetrics.CHOOSER_DP);
-        int padding = pongPx(10f);
-        int floor = pongPx(LayoutEditorController.ROWS_FLOOR_DP);
+        int padding = pongPx(16f);
+        int peek = pongPx(LayoutEditorController.ROWS_PEEK_DP);
         int reserved = pongPx(48f);
-        int chrome = LayoutEditorController.cardChromePx(PONG_HEIGHT_PX, chooser, padding, 0,
+        int chrome = LayoutEditorController.cardChromePx(pongExpanded(), chooser, padding, 0,
             PONG_DENSITY);
-        int budget = LayoutEditorPlan.cardBudgetPx(PONG_WIDTH_PX, PONG_HEIGHT_PX);
-        int miniature = LayoutEditorPlan.miniatureHeightPx(PORTRAIT, PONG_WIDTH_PX,
-            PONG_HEIGHT_PX, PlaceMiniatureView.frameAspect(PORTRAIT), reserved, chrome + floor,
-            budget);
-        int rows = LayoutEditorPlan.rowsHeightCapPx(budget, miniature, chrome, floor);
+        int column = EditorShellMetrics.contentWidthPx(PONG_WIDTH_PX, PONG_DENSITY);
+        int miniature = LayoutEditorPlan.miniatureHeightPx(PORTRAIT, PONG_HEIGHT_PX,
+            PlaceMiniatureView.frameAspect(PORTRAIT), reserved, column, chrome + peek, rest);
 
-        assertEquals("the sheet stands in four fifths of the screen",
-            Math.round(0.80f * PONG_HEIGHT_PX), budget);
-        assertEquals("and never grows past it", budget, chrome + miniature + rows);
-        assertTrue("the rows keep at least their floor", rows >= floor);
+        assertEquals("the sheet rests in four fifths of the screen",
+            Math.round(0.80f * PONG_HEIGHT_PX), rest);
+        assertEquals("with the picture at its full two fifths",
+            Math.round(0.42f * PONG_HEIGHT_PX) + reserved, miniature);
+        assertTrue("and the first rows in view under it before anything scrolls",
+            rest - chrome - miniature >= peek);
 
         // What the user sees above the card: the live place, with its status strip and chip row.
-        // The card's own 12dp margin from the bottom edge, from layout_editor.xml.
-        int cardTop = PONG_HEIGHT_PX - (chrome + miniature + rows) - pongPx(12f);
+        int cardTop = PONG_HEIGHT_PX - rest
+            - pongPx(LayoutEditorController.SHEET_BOTTOM_MARGIN_DP);
         assertTrue("about a fifth of the screen of live place above the sheet, not a sliver: "
                 + (cardTop / PONG_DENSITY) + "dp",
             cardTop >= pongPx(150f));
     }
 
     @Test
-    public void aLandscapeScreenHasNoHeightToGiveAwayAndKeepsTheWholeCard() {
-        assertEquals("a portrait screen keeps a fifth of itself for the place behind the sheet",
-            Math.round(0.80f * 2400), LayoutEditorPlan.cardBudgetPx(1080, 2400));
-        assertEquals("a landscape screen is already the short edge",
-            1080, LayoutEditorPlan.cardBudgetPx(2400, 1080));
-        assertEquals("and has no travel for a pull",
-            1080, LayoutEditorPlan.expandedCardBudgetPx(2400, 1080, 1000));
-        assertEquals(1080, LayoutEditorPlan.cardBudgetPx(2400, 1080, 1080, 1f));
-    }
-
-    // ------------------------------------------------------------------------- the pulled-up sheet
-
-    /** pong's host under its status inset, less the sheet's top air and its bottom margin. */
-    private static int pongExpandedBudget() {
-        int hostPx = PONG_HEIGHT_PX - pongPx(24f);
-        return LayoutEditorPlan.expandedCardBudgetPx(PONG_WIDTH_PX, PONG_HEIGHT_PX,
-            hostPx - pongPx(LayoutEditorController.SHEET_TOP_AIR_DP
-                + LayoutEditorController.SHEET_SIDE_MARGIN_DP));
-    }
-
-    @Test
-    public void theExpandedBudgetIsTheRoomUnderTheTopInsetAndNeverLessThanRest() {
-        int resting = LayoutEditorPlan.cardBudgetPx(PONG_WIDTH_PX, PONG_HEIGHT_PX);
-        int expanded = pongExpandedBudget();
-        assertTrue("the pull has somewhere to go on a portrait screen", expanded > resting);
+    public void theSheetPullsUpToTheRoomUnderTheTopInset() {
+        int rest = LayoutEditorPlan.restingCardHeightPx(PONG_WIDTH_PX, PONG_HEIGHT_PX,
+            pongExpanded());
+        int expanded = pongExpanded();
         assertEquals("all the way up is the room the host gave, exactly",
-            PONG_HEIGHT_PX - pongPx(24f) - pongPx(20f), expanded);
-        assertEquals("a host with less room than the resting card leaves the card where it is",
-            resting, LayoutEditorPlan.expandedCardBudgetPx(PONG_WIDTH_PX, PONG_HEIGHT_PX, 100));
-
-        assertEquals("at rest the budget is the resting one", resting,
-            LayoutEditorPlan.cardBudgetPx(PONG_WIDTH_PX, PONG_HEIGHT_PX, expanded, 0f));
-        assertEquals("pulled all the way it is the expanded one", expanded,
-            LayoutEditorPlan.cardBudgetPx(PONG_WIDTH_PX, PONG_HEIGHT_PX, expanded, 1f));
-        assertEquals("and half way it is half way",
-            resting + Math.round(0.5f * (expanded - resting)),
-            LayoutEditorPlan.cardBudgetPx(PONG_WIDTH_PX, PONG_HEIGHT_PX, expanded, 0.5f));
-        assertEquals("a pull past the ends is clamped", expanded,
-            LayoutEditorPlan.cardBudgetPx(PONG_WIDTH_PX, PONG_HEIGHT_PX, expanded, 3f));
-        assertEquals(resting,
-            LayoutEditorPlan.cardBudgetPx(PONG_WIDTH_PX, PONG_HEIGHT_PX, expanded, -1f));
+            PONG_HEIGHT_PX - pongPx(24f) - pongPx(18f), expanded);
+        assertTrue("the pull is worth having on a portrait screen: over an inch of list",
+            expanded - rest >= pongPx(96f));
+        assertEquals("a host with less room than the resting card leaves the card that tall",
+            100, LayoutEditorPlan.restingCardHeightPx(PONG_WIDTH_PX, PONG_HEIGHT_PX, 100));
+        assertEquals("and no room is no room", 0, LayoutEditorPlan.expandedCardBudgetPx(-40));
     }
 
     @Test
-    public void thePullGoesToTheMiniatureFirstUpToItsCapAndThenToTheRows() {
-        int chooser = pongPx(EditorShellMetrics.CHOOSER_DP);
-        int padding = pongPx(10f);
-        int floor = pongPx(LayoutEditorController.ROWS_FLOOR_DP);
-        int reserved = pongPx(48f);
-        int chrome = LayoutEditorController.cardChromePx(PONG_HEIGHT_PX, chooser, padding, 0,
-            PONG_DENSITY);
-        float aspect = PlaceMiniatureView.frameAspect(PORTRAIT);
-        int resting = LayoutEditorPlan.cardBudgetPx(PONG_WIDTH_PX, PONG_HEIGHT_PX);
-        int expanded = pongExpandedBudget();
-        int capPx = Math.round((LayoutEditorPlan.PORTRAIT_FRAME_EXPANDED_SCREEN_FRACTION
-            - LayoutEditorPlan.PORTRAIT_FRAME_SCREEN_FRACTION) * PONG_HEIGHT_PX);
-        assertTrue("pong's pull is longer than the frame's cap, so the rows get some of it",
-            expanded - resting > capPx);
-
-        int atRest = LayoutEditorPlan.miniatureHeightPx(PORTRAIT, PONG_WIDTH_PX, PONG_HEIGHT_PX,
-            aspect, reserved, chrome + floor, resting);
-        int rowsAtRest = LayoutEditorPlan.rowsHeightCapPx(resting, atRest, chrome, floor);
-
-        // A short pull: every pixel of it goes to the picture.
-        int shortPull = resting + capPx / 2;
-        int halfWay = LayoutEditorPlan.miniatureHeightPx(PORTRAIT, PONG_WIDTH_PX,
-            PONG_HEIGHT_PX, aspect, reserved, chrome + floor, shortPull);
-        assertEquals("the picture took the whole pull", atRest + capPx / 2, halfWay);
-        assertEquals("and the rows kept exactly what they had", rowsAtRest,
-            LayoutEditorPlan.rowsHeightCapPx(shortPull, halfWay, chrome, floor));
-
-        // All the way up: the picture stops at its cap and the rows take the rest.
-        int allTheWay = LayoutEditorPlan.miniatureHeightPx(PORTRAIT, PONG_WIDTH_PX,
-            PONG_HEIGHT_PX, aspect, reserved, chrome + floor, expanded);
-        assertEquals("the frame stands at its expanded share of the screen",
-            Math.round(LayoutEditorPlan.PORTRAIT_FRAME_EXPANDED_SCREEN_FRACTION
-                * PONG_HEIGHT_PX) + reserved, allTheWay, 1f);
-        int rowsAllTheWay = LayoutEditorPlan.rowsHeightCapPx(expanded, allTheWay, chrome, floor);
-        assertTrue("the rows grew by what the picture left", rowsAllTheWay > rowsAtRest);
-        assertEquals("and nothing is lost between them", expanded,
-            chrome + allTheWay + rowsAllTheWay);
-        assertTrue("the picture is worth the pull: over an inch taller",
-            allTheWay - atRest >= pongPx(96f));
+    public void aLandscapeScreenHasNoHeightToGiveAwayAndKeepsTheWholeRoom() {
+        assertEquals("a portrait screen keeps a fifth of itself for the place behind the sheet",
+            Math.round(0.80f * 2400), LayoutEditorPlan.restingCardHeightPx(1080, 2400, 2300));
+        assertEquals("a landscape screen is already the short edge, so the card rests at the "
+                + "room it has and a pull has no travel",
+            1000, LayoutEditorPlan.restingCardHeightPx(2400, 1080, 1000));
+        assertEquals(1080, LayoutEditorPlan.cardBudgetPx(2400, 1080));
     }
 
     // ------------------------------------------------------------------------- the two-pane body

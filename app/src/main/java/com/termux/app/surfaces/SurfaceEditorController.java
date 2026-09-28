@@ -36,6 +36,7 @@ import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.core.widget.NestedScrollView;
 
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
@@ -47,6 +48,7 @@ import com.termux.app.editorshell.EditorShellHeader;
 import com.termux.app.editorshell.EditorShellMetrics;
 import com.termux.app.editorshell.EditorShellPaint;
 import com.termux.app.editorshell.EditorShellRows;
+import com.termux.app.editorshell.EditorShellSheet;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.notice.AppNoticeItem;
@@ -78,12 +80,12 @@ import java.util.Map;
  * <p>It opens with nothing but the outlines — the surfaces it can edit, breathing in a slow accent
  * glow — and a small floating pill at the foot of the free room: a palette and a ✓. The palette opens
  * the card on the shared layer — the presets, the two style pills, and the few numbers that move
- * every surface at once. Touching an outline instead opens the card on that surface, or slides it
- * there if it is already up, and swaps the body for that surface's own rows; the header then names
- * the surface. The card's ✕ puts it away again, back to the outlines and the pill. The card never
- * covers the surface it is editing, and never overlaps the status bar, the dock or the keyboard: it
- * lives in the free room between them and scrolls inside its own height cap when a raised keyboard
- * shortens that room.
+ * every surface at once. Touching an outline instead opens the card on that surface, or swaps the
+ * body of a card already up for that surface's own rows; the header then names the surface. The
+ * card's ✕, or a firm pull down on it, puts it away again, back to the outlines and the pill. The
+ * card never covers the surface it is editing, and never overlaps the status bar, the dock or the
+ * keyboard: it is the shell's sheet ({@link EditorShellSheet}), standing at the foot of the free
+ * room between them, and pulled up it grows to the top of that room before its list scrolls.
  *
  * <p>Every panel is the same list in the same order — opacity, blur, grain, corners, margin, then
  * whatever else that surface owns. A row the current state makes inert is dropped rather than drawn
@@ -331,7 +333,11 @@ public final class SurfaceEditorController {
      */
     private static final class Panel {
         final View host;
-        final LinearLayout root;
+        /** The card: the shell's sheet, a header over one scrolling list. */
+        final EditorShellSheet root;
+        /** The list, the card's one scroller. */
+        final NestedScrollView scroller;
+        final View handle;
         final View header;
         final ImageView glyph;
         final TextView title;
@@ -356,10 +362,13 @@ public final class SurfaceEditorController {
         /** Last heading pushed in; a restate that changes nothing skips its layout pass. */
         String shownTitle;
 
-        Panel(View host, LinearLayout root, View floatRoot) {
+        Panel(View host, EditorShellSheet root, View floatRoot) {
             this.host = host;
             this.root = root;
             this.floatRoot = floatRoot;
+            scroller = root.body() instanceof NestedScrollView
+                ? (NestedScrollView) root.body() : null;
+            handle = root.handle();
             header = root.findViewById(R.id.editor_shell_header);
             glyph = root.findViewById(R.id.editor_shell_header_glyph);
             title = root.findViewById(R.id.editor_shell_header_title);
@@ -382,7 +391,8 @@ public final class SurfaceEditorController {
         }
 
         boolean complete() {
-            return header != null && glyph != null && title != null && save != null
+            return scroller != null && handle != null
+                && header != null && glyph != null && title != null && save != null
                 && reset != null && done != null && close != null && chooserSlot != null
                 && presets != null && pills != null && shapeRow != null && materialRow != null
                 && shape != null && material != null && shapeHost != null
@@ -392,15 +402,12 @@ public final class SurfaceEditorController {
     }
 
     @Nullable private Panel mPanel;
-    /** The body's scroller, height-capped so the card never grows past the room it lives in. */
-    @Nullable private ScrollView mRowsScroller;
+    /** The rows' column, in the card's one list. */
     @Nullable private LinearLayout mRows;
     /** The second column, on a card wide enough for two whole rows and the gutter between them. */
-    @Nullable private ScrollView mRowsScrollerTrailing;
     @Nullable private LinearLayout mRowsTrailing;
     /** The two columns side by side; one column when the card has room for only one. */
     @Nullable private LinearLayout mPaneRow;
-    private int mRowsMaxHeightPx;
     /** How many ways the body is divided right now, so the rebuild knows where a section goes. */
     private int mPaneCount = 1;
     /** What the glass can currently read as the wallpaper, as of the last {@link #rebuildRows()}. */
@@ -420,7 +427,7 @@ public final class SurfaceEditorController {
         if (host == null)
             return null;
         LayoutInflater inflater = LayoutInflater.from(mHost.context());
-        LinearLayout root = host.findViewById(R.id.surface_editor_pill);
+        View root = host.findViewById(R.id.surface_editor_pill);
         if (root == null) {
             inflater.inflate(R.layout.surface_editor_pill, host, true);
             root = host.findViewById(R.id.surface_editor_pill);
@@ -430,9 +437,9 @@ public final class SurfaceEditorController {
             inflater.inflate(R.layout.surface_editor_float, host, true);
             floatRoot = host.findViewById(R.id.surface_editor_float);
         }
-        if (root == null || floatRoot == null)
+        if (!(root instanceof EditorShellSheet) || floatRoot == null)
             return null;
-        Panel panel = new Panel(host, root, floatRoot);
+        Panel panel = new Panel(host, (EditorShellSheet) root, floatRoot);
         if (!panel.complete())
             return null;
         mPanel = panel;
@@ -491,7 +498,7 @@ public final class SurfaceEditorController {
         setSurfaceTuningGestureOverlayVisible(true);
         registerSurfaceEditorLayoutListener(panel.host);
         panel.host.post(() -> {
-            applyRowsCap();
+            applySheetHeights();
             parkPanel(false);
             parkFloat();
             positionSelectionRings(false);
@@ -661,6 +668,27 @@ public final class SurfaceEditorController {
         EditorShellPaint.applyCardElevation(panel.root,
             mHost.context().getResources().getDisplayMetrics().density);
         panel.floatRoot.setBackground(buildFloatBackground());
+        panel.handle.setBackground(EditorShellPaint.handleBar(
+            mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+                R.color.termux_on_surface),
+            mHost.context().getResources().getDisplayMetrics().density));
+        // A long list scrolls under the header with the shell's fade and its quiet scrollbar.
+        EditorShellRows.applyBodyScroller(panel.scroller);
+        // The pull is the sheet's own. Pushed down past rest it follows the finger, and pushed far
+        // enough it goes down the way ✕ puts it down: nothing is lost, so nothing is asked.
+        panel.root.setCallback(new EditorShellSheet.Callback() {
+            @Override public void onSheetOvershoot(float overshootPx) {
+                if (mCardShown)
+                    panel.root.setTranslationY(overshootPx);
+            }
+
+            @Override public boolean onSheetDismissRequested(float overshootPx) {
+                if (!mCardShown)
+                    return false;
+                hideCard(true);
+                return true;
+            }
+        });
         setIcon(panel.save, R.drawable.ic_symbol_save, false);
         // Which editor this is. The surface under it is what the card is pointed at.
         EditorShellHeader.applyEyebrow(panel.header, R.string.action_appearance_editor);
@@ -792,7 +820,10 @@ public final class SurfaceEditorController {
         Panel panel = mPanel;
         panel.root.animate().cancel();
         if (animate && panel.root.getVisibility() == View.VISIBLE) {
-            panel.root.animate().alpha(0f).translationY(dpToPx(SURFACE_EDITOR_REVEAL_RISE_DP))
+            // A card pulled down to close carries on down from where the finger let it go.
+            float sink = Math.max(panel.root.getTranslationY(),
+                dpToPx(SURFACE_EDITOR_REVEAL_RISE_DP));
+            panel.root.animate().alpha(0f).translationY(sink)
                 .setDuration(SURFACE_EDITOR_REVEAL_DURATION_MS)
                 .setInterpolator(Motion.settle())
                 .withEndAction(() -> {
@@ -819,6 +850,8 @@ public final class SurfaceEditorController {
             return;
         panel.root.animate().cancel();
         panel.root.setVisibility(View.VISIBLE);
+        // Every raise comes up at rest; a pull is for this visit.
+        panel.root.snapToRest();
         // A card raised while a surface drag is already running under it arrives at peek alpha,
         // so the drag never has to fight a reveal for the card's opacity.
         float alpha = mPanelPeeking ? SURFACE_TUNING_PEEK_ALPHA : 1f;
@@ -1010,7 +1043,7 @@ public final class SurfaceEditorController {
         }
         int inLeadingPane = mPaneCount < 2 ? Integer.MAX_VALUE
             : EditorShellMetrics.sectionsInLeadingPane(sectionSizes(controls, shared));
-        mRowsScrollerTrailing.setVisibility(mPaneCount < 2 ? View.GONE : View.VISIBLE);
+        trailing.setVisibility(mPaneCount < 2 ? View.GONE : View.VISIBLE);
 
         Section heading = null;
         int sectionIndex = -1;
@@ -1032,7 +1065,7 @@ public final class SurfaceEditorController {
             addControlRow(context, column, control, mSelectedSlot, syncs);
         }
         rememberAndRestoreScroll();
-        applyRowsCap();
+        applySheetHeights();
     }
 
     /** How many rows each section brings, in order, for the pane split to balance against. */
@@ -1064,33 +1097,23 @@ public final class SurfaceEditorController {
      * not the list that was there.
      */
     private final Map<String, Integer> mPanelScroll = new LinkedHashMap<>();
-    /** Which panel the scroller is showing, so the outgoing one can be remembered. */
+    /** Which panel the list is showing, so the outgoing one can be remembered. */
     @Nullable private String mScrollKey;
 
     private void rememberAndRestoreScroll() {
+        Panel panel = mPanel;
+        if (panel == null)
+            return;
         String key = mSelectedSlot == null ? "all" : mSelectedSlot.name();
         boolean samePanel = key.equals(mScrollKey);
-        if (mScrollKey != null && !samePanel) {
-            mPanelScroll.put(mScrollKey + ".0", scrollYOf(mRowsScroller));
-            mPanelScroll.put(mScrollKey + ".1", scrollYOf(mRowsScrollerTrailing));
-        }
-        if (samePanel) {
-            mPanelScroll.remove(key + ".0");
-            mPanelScroll.remove(key + ".1");
-        }
+        if (mScrollKey != null && !samePanel)
+            mPanelScroll.put(mScrollKey, panel.scroller.getScrollY());
+        if (samePanel)
+            mPanelScroll.remove(key);
         mScrollKey = key;
-        restoreScroll(mRowsScroller, mPanelScroll.get(key + ".0"));
-        restoreScroll(mRowsScrollerTrailing, mPanelScroll.get(key + ".1"));
-    }
-
-    private static int scrollYOf(@Nullable ScrollView scroller) {
-        return scroller == null ? 0 : scroller.getScrollY();
-    }
-
-    private static void restoreScroll(@Nullable ScrollView scroller, @Nullable Integer remembered) {
-        if (scroller == null)
-            return;
+        NestedScrollView scroller = panel.scroller;
         scroller.scrollTo(0, 0);
+        Integer remembered = mPanelScroll.get(key);
         int target = remembered == null ? 0 : remembered;
         if (target > 0)
             scroller.post(() -> scroller.scrollTo(0, target));
@@ -1108,12 +1131,12 @@ public final class SurfaceEditorController {
     }
 
     /**
-     * The body's columns, created on first use: wrap up to the cap, then scroll inside.
+     * The body's columns, created on first use, in the card's one list.
      *
      * <p>Two of them, side by side at equal weight, because the card's own width is declared as two
      * panes and a gutter — so the weights come out at exactly the pane width the metrics asked
      * for without either column being told a number. The trailing one is gone while the card has
-     * room for only one.
+     * room for only one. They scroll together, as the one list they are.
      */
     private void ensureRowViews(@NonNull Panel panel) {
         if (mPaneRow != null)
@@ -1122,59 +1145,41 @@ public final class SurfaceEditorController {
         mPaneRow = new LinearLayout(context);
         mPaneRow.setOrientation(LinearLayout.HORIZONTAL);
         mPaneRow.setBaselineAligned(false);
-        mRowsScroller = buildBodyScroller(context);
-        mRows = (LinearLayout) mRowsScroller.getChildAt(0);
-        mRowsScrollerTrailing = buildBodyScroller(context);
-        mRowsTrailing = (LinearLayout) mRowsScrollerTrailing.getChildAt(0);
-        mPaneRow.addView(mRowsScroller, new LinearLayout.LayoutParams(0,
+        mRows = new LinearLayout(context);
+        mRows.setOrientation(LinearLayout.VERTICAL);
+        mRowsTrailing = new LinearLayout(context);
+        mRowsTrailing.setOrientation(LinearLayout.VERTICAL);
+        mPaneRow.addView(mRows, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         LinearLayout.LayoutParams trailing = new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         trailing.setMarginStart(dp(EditorShellMetrics.GUTTER_DP));
-        mPaneRow.addView(mRowsScrollerTrailing, trailing);
-        mRowsScrollerTrailing.setVisibility(View.GONE);
+        mPaneRow.addView(mRowsTrailing, trailing);
+        mRowsTrailing.setVisibility(View.GONE);
         panel.rowsHost.addView(mPaneRow, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
-    @NonNull
-    private ScrollView buildBodyScroller(@NonNull Context context) {
-        ScrollView scroller = new ScrollView(EditorShellRows.scrollerContext(context)) {
-            @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-                int room = Math.max(dp(80), mRowsMaxHeightPx);
-                super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
-                    room, View.MeasureSpec.AT_MOST));
-                // Now that the rows have measured, take the cut back to the last whole one.
-                int whole = EditorShellRows.wholeRowCapPx(this, room,
-                    getResources().getDisplayMetrics().density);
-                if (whole < room)
-                    super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
-                        whole, View.MeasureSpec.AT_MOST));
-            }
-        };
-        scroller.setClipToPadding(false);
-        // A cramped region caps the list short of its last row or two; the fade and the scrollbar
-        // are what say so. A list that simply stops at the card's edge reads as the whole list.
-        EditorShellRows.applyBodyScroller(scroller);
-        LinearLayout rows = new LinearLayout(context);
-        rows.setOrientation(LinearLayout.VERTICAL);
-        scroller.addView(rows, new ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        return scroller;
-    }
+    /** The most of the list a resting card shows before it has to be pulled up or scrolled. */
+    private static final float SURFACE_EDITOR_REST_BODY_MAX_DP = 420f;
+    /** The least, however squeezed the free room: a strip of list rather than none. */
+    private static final float SURFACE_EDITOR_REST_BODY_MIN_DP = 80f;
 
     /**
-     * How tall the body may grow, and whether the chooser can afford to stay pinned above it.
+     * The two heights the card stands at, and its width.
      *
-     * <p>The chrome is counted from what the shell <em>declares</em> — the header at its own height,
-     * the chooser at its measured one, the card's padding — and never by subtracting the scroller
-     * from the card. Subtraction is a loop: the cap sets the scroller's height, the scroller's
-     * height sets the derived chrome, and the chrome sets the cap again, so quantising the cap to
-     * whole rows would never settle.
+     * <p>At rest the card is its chrome and as much of the list as the free room gives it, up to a
+     * ceiling that keeps a short list's card from filling a tablet and leaves the terminal above it
+     * in one piece to be touched. Pulled up it takes the whole free room, standoff to standoff:
+     * never over the status bar, the dock or the keyboard it is there to edit.
+     *
+     * <p>The chrome is counted from what the shell <em>declares</em> — the handle and the header at
+     * their own heights — and never by subtracting the list from the card: the card's height is
+     * what the pull changes, and a chrome read back from it would move with every frame.
      */
-    private void applyRowsCap() {
+    private void applySheetHeights() {
         Panel panel = mPanel;
-        if (panel == null || mRowsScroller == null)
+        if (panel == null)
             return;
         int[] region = pillRegion();
         int regionPx = region[1] - region[0];
@@ -1184,33 +1189,12 @@ public final class SurfaceEditorController {
 
         int cardRoomPx = Math.max(0, regionPx - (2 * standoffPx));
         EditorShellHeader.apply(panel.header, cardRoomPx);
-        int headerPx = EditorShellMetrics.headerHeightPx(cardRoomPx, density);
-        int paddingPx = panel.root.getPaddingTop() + panel.root.getPaddingBottom();
-        // The presets row's own height, which is what stands in this card's chooser slot: a tile,
-        // its name under it, and the air around them. Not the shell's chooser height, which is the
-        // Layout editor's compact pill and shorter than a tile.
-        int chooserPx = panel.presets.getVisibility() == View.GONE ? 0
-            : Math.max(panel.presets.getHeight(), dp(EditorShellMetrics.PRESET_ROW_DP));
-
-        // Asked of the body the card would have with the chooser pinned: unpinning is what a body
-        // too short to carry 60dp of chrome does, and the answer must not depend on the last one.
-        int bodyWithChooserPx = SurfaceEditorPillMetrics.bodyCapPx(regionPx,
-            headerPx + paddingPx + chooserPx, standoffPx, dp(80), dp(360));
-        boolean pinned = chooserPx == 0
-            || EditorShellMetrics.chooserPinned(bodyWithChooserPx, density);
-        EditorShellHeader.applyChooserPin(panel.presets, panel.chooserSlot, mRows, pinned);
-
-        int chromePx = headerPx + paddingPx + (pinned ? chooserPx : 0);
-        int available = SurfaceEditorPillMetrics.bodyCapPx(regionPx, chromePx, standoffPx,
-            dp(80), dp(360));
-        // The room the rows have, and only that: where it cuts is the scroller's own business,
-        // because that is the only moment the rows' real heights are known.
-        if (available == mRowsMaxHeightPx)
-            return;
-        mRowsMaxHeightPx = available;
-        mRowsScroller.requestLayout();
-        if (mRowsScrollerTrailing != null)
-            mRowsScrollerTrailing.requestLayout();
+        int chromePx = EditorShellMetrics.headerHeightPx(cardRoomPx, density)
+            + dp(EditorShellPaint.HANDLE_SLOT_HEIGHT_DP)
+            + panel.root.getPaddingTop() + panel.root.getPaddingBottom();
+        int restPx = chromePx + SurfaceEditorPillMetrics.bodyCapPx(regionPx, chromePx, standoffPx,
+            dp(SURFACE_EDITOR_REST_BODY_MIN_DP), dp(SURFACE_EDITOR_REST_BODY_MAX_DP));
+        panel.root.setHeights(restPx, Math.max(restPx, cardRoomPx));
     }
 
     /**
@@ -1234,7 +1218,7 @@ public final class SurfaceEditorController {
         params.width = width;
         if (params instanceof FrameLayout.LayoutParams) {
             FrameLayout.LayoutParams frame = (FrameLayout.LayoutParams) params;
-            frame.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+            frame.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         }
         panel.root.setLayoutParams(params);
     }
@@ -1988,53 +1972,43 @@ public final class SurfaceEditorController {
     }
 
     /**
-     * Travels the card to its park position.
+     * Travels the card to its park: the foot of the free room, one standoff above whatever bounds
+     * it below, for every target.
      *
-     * <p>Placement is computed from the selected surface's anchor and a constant standoff, never
-     * from what else is on screen: raising the keyboard moves the ring's neighbours but must not
-     * move a card parked against the status bar. The card translates rather than fading out and in,
-     * so a pick reads as the same card moving.
+     * <p>The foot leaves the terminal above the card free in one piece to be touched, and it is the
+     * one edge a sheet can grow up from: the card is anchored by its bottom, so a pull makes it
+     * taller toward the top of the free room without its bottom ever reaching the dock or the
+     * keyboard. The status bar, the one surface at the top, is then as far from the card as the
+     * room allows. Placement never reads the card's own height, so a pull does not move the park.
      */
     private void parkPanel(boolean animate) {
         Panel panel = mPanel;
         if (panel == null || !mSurfaceEditorOpen || !mCardShown)
             return;
-        int height = panel.root.getHeight();
-        if (height <= 0) {
+        int[] region = pillRegion();
+        int standoff = dp(SURFACE_EDITOR_STANDOFF_DP);
+        int hostHeight = panel.host.getHeight();
+        if (hostHeight <= 0) {
             panel.root.post(() -> parkPanel(false));
             return;
         }
-        int[] region = pillRegion();
-        int standoff = dp(SURFACE_EDITOR_STANDOFF_DP);
-        int[] anchor = anchorRect(mSelectedSlot);
-        int top;
-        if (anchor == null) {
-            // The shared layer and the canvas are the region rather than a band inside it, and a
-            // surface that is off screen has no edge to stand off from; all of them sit at the
-            // region's foot, which leaves the terminal above them free in one piece to be touched.
-            top = SurfaceEditorPillMetrics.parkRegionFootTopPx(height, standoff, region[0],
-                region[1]);
-        } else {
-            // Only a surface fixed to the top of the screen is stood off downward; the same bar
-            // standing on the bottom edge is approached from above, like the dock.
-            top = SurfaceEditorPillMetrics.parkTopPx(anchor[1], anchor[3],
-                scene().surfaceIsAtTop(mSelectedSlot), height, standoff, region[0], region[1]);
-        }
+        int bottom = SurfaceEditorPillMetrics.parkBottomMarginPx(hostHeight, standoff, region[0],
+            region[1]);
         ViewGroup.LayoutParams params = panel.root.getLayoutParams();
         if (!(params instanceof ViewGroup.MarginLayoutParams))
             return;
         ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
-        if (margins.topMargin == top)
+        if (margins.bottomMargin == bottom && margins.topMargin == 0)
             return;
+        float delta = bottom - margins.bottomMargin;
+        margins.topMargin = 0;
+        margins.bottomMargin = bottom;
+        panel.root.setLayoutParams(margins);
         if (!animate) {
-            margins.topMargin = top;
-            panel.root.setLayoutParams(margins);
             panel.root.setTranslationY(0f);
             return;
         }
-        float delta = margins.topMargin - top;
-        margins.topMargin = top;
-        panel.root.setLayoutParams(margins);
+        // Put back by the delta, so it starts where it stood and slides to the new foot.
         panel.root.setTranslationY(delta);
         panel.root.animate().cancel();
         panel.root.animate().translationY(0f)
@@ -2621,7 +2595,7 @@ public final class SurfaceEditorController {
             // And it can add or drop rows on the card that stays: syncPanel rebuilds the body
             // only when the editable set has actually moved.
             syncPanel();
-            applyRowsCap();
+            applySheetHeights();
             parkPanel(false);
             parkFloat();
             syncGlow();
@@ -2641,7 +2615,8 @@ public final class SurfaceEditorController {
         signature = mixAnchor(signature,
             stack != null ? surfaceEditorStackTopPx(stack, parentHeight) : -1);
         signature = mixAnchor(signature, overlay != null ? overlay.getWidth() : -1);
-        signature = mixAnchor(signature, mPanel == null ? -1 : mPanel.root.getHeight());
+        // Not the card's own height: the card is parked by its bottom edge, and a pull on it
+        // changes its height every frame without moving anything this pass places.
         signature = mixAnchor(signature, mPanel == null ? -1 : mPanel.floatRoot.getHeight());
         signature = mixAnchor(signature, mCardShown ? 1 : 0);
         signature = mixAnchor(signature,
