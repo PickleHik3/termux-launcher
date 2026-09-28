@@ -22,8 +22,9 @@ import com.termux.app.place.PlaceLayout.Edge;
  * those two edges are the system bars' and the chrome's. Along that side it stands at the index's
  * leading end of the canvas — its top, or its bottom for a bottom row — just past the corner square
  * the corner tab keeps ({@link CornerZones#PANE_SIZE_DP}), so a hold on the corner is never the
- * tab's. Its visible half-pill is 48 &times; 20 dp; the area that takes a touch is 56 dp along the
- * side and 48 dp in from it, the platform's minimum target. That area is exactly what the tab
+ * tab's. Its visible half-pill is 48 &times; 20 dp — slimmer for a top row, which leads from where
+ * a terminal's text begins ({@link #visualThicknessPx}); the area that takes a touch is 56 dp along
+ * the side and 48 dp in from it, the platform's minimum target. That area is exactly what the tab
  * takes from whatever is under it, and nothing else.
  *
  * <p>The letters come out as the same bar they are on any edge — the letter band and its chin —
@@ -53,6 +54,15 @@ public final class AzTabPolicy {
     public static final float TOUCH_THICKNESS_DP = 48f;
     /** The air between the corner's square and the tab's touch area. */
     public static final float CORNER_GAP_DP = 8f;
+    /**
+     * A row along the top keeps its half-pill slim: it leads from the canvas's top, which is where
+     * a terminal's text begins, and at the full {@link #TAB_THICKNESS_DP} it covered the first
+     * characters of the lines beside it. It stands in the side gap the canvas keeps from the
+     * screen's edge and reaches this far past it over the pane, never thinner than
+     * {@link #TOP_TAB_MIN_THICKNESS_DP} so it can still be seen and read.
+     */
+    public static final float TOP_TAB_REACH_DP = 4f;
+    public static final float TOP_TAB_MIN_THICKNESS_DP = 10f;
 
     /**
      * The least opacity the tab and the letters' sheet are glazed at. Both stand over live
@@ -173,7 +183,8 @@ public final class AzTabPolicy {
         float touchDepth = Math.min(TOUCH_THICKNESS_DP * d, screenWidthPx);
         float start = Math.max(0f, Math.min(leadInPx(d), length - touchLength));
         float visualLength = Math.min(TAB_LENGTH_DP * d, touchLength);
-        float visualDepth = Math.min(TAB_THICKNESS_DP * d, touchDepth);
+        float visualDepth = Math.min(visualThicknessPx(edge, side, canvas, screenWidthPx, d),
+            touchDepth);
 
         // Along the side, from the index's leading end of the canvas.
         float touchTop = edge == Edge.BOTTOM
@@ -190,6 +201,24 @@ public final class AzTabPolicy {
             : new Box(screenWidthPx - visualDepth, visualTop, screenWidthPx,
                 visualTop + visualLength);
         return new Placement(edge, touch, visual, side);
+    }
+
+    /**
+     * How deep the half-pill stands in from the screen's side: {@link #TAB_THICKNESS_DP} for a
+     * column and a bottom row, and for a top row only the canvas's side gap and
+     * {@link #TOP_TAB_REACH_DP} past it — between {@link #TOP_TAB_MIN_THICKNESS_DP} and the full
+     * thickness. The one tab that cannot keep wholly off the pane there keeps its footprint on it
+     * to a sliver.
+     */
+    public static float visualThicknessPx(@NonNull Edge edge, @NonNull Edge side,
+                                          @NonNull Box canvas, float screenWidthPx,
+                                          float density) {
+        float d = Math.max(0f, density);
+        float full = TAB_THICKNESS_DP * d;
+        if (edge != Edge.TOP) return full;
+        float gap = side == Edge.LEFT ? canvas.left : screenWidthPx - canvas.right;
+        float wanted = Math.max(0f, gap) + TOP_TAB_REACH_DP * d;
+        return Math.min(full, Math.max(TOP_TAB_MIN_THICKNESS_DP * d, wanted));
     }
 
     /**
