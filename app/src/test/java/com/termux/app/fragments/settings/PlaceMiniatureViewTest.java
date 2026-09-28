@@ -19,7 +19,6 @@ import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
-import androidx.core.graphics.ColorUtils;
 
 import com.termux.R;
 import com.termux.app.place.Element;
@@ -840,19 +839,21 @@ public class PlaceMiniatureViewTest {
     // ---- The paint: the miniature shows what the screen shows -----------------------------------
 
     @Test
-    public void everyStripIsTheScreensOwnGlassAndNotARoleColour() {
+    public void everyStripIsTheThemesRaisedContainerAndNotARoleColour() {
+        // The artwork maps its placeholders to theme roles: the surface for the phone and the
+        // pane, the raised container for every strip. No strip wears an accent of its own.
         Context app = RuntimeEnvironment.getApplication();
         int surface = ContextCompat.getColor(app, R.color.termux_surface_base);
+        int container = ContextCompat.getColor(app, R.color.termux_surface_panel_high);
         int[] roles = {R.color.termux_primary, R.color.termux_secondary,
             R.color.termux_accent_container, R.color.termux_tertiary_container};
         for (PlaceMiniatureView.Block bar : new PlaceMiniatureView.Block[]{
             PlaceMiniatureView.Block.STATUS_BAR, PlaceMiniatureView.Block.APPS_ROW,
             PlaceMiniatureView.Block.ALPHABETS_ROW, PlaceMiniatureView.Block.EXTRA_KEYS}) {
             int fill = PlaceMiniatureView.blockColor(app, bar);
-            assertEquals(bar + " is the surface, not a colour of its own",
-                surface & 0xFFFFFF, fill & 0xFFFFFF);
-            assertTrue(bar + " reads as glass over the screen",
-                Color.alpha(fill) < 255 && Color.alpha(fill) > 180);
+            assertEquals(bar + " is the raised container", container, fill);
+            assertEquals(bar + " is opaque: a card, not glass", 255, Color.alpha(fill));
+            assertNotEquals(bar + " stands off the surface", surface, fill);
             for (int role : roles) {
                 assertNotEquals(bar + " does not wear a role colour",
                     ContextCompat.getColor(app, role) & 0xFFFFFF, fill & 0xFFFFFF);
@@ -863,7 +864,7 @@ public class PlaceMiniatureViewTest {
     }
 
     @Test
-    public void everyStripCarriesTheSameGlass() {
+    public void everyStripCarriesTheSameContainer() {
         Context app = RuntimeEnvironment.getApplication();
         int status = PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.STATUS_BAR);
         assertEquals(status, PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.APPS_ROW));
@@ -871,19 +872,86 @@ public class PlaceMiniatureViewTest {
             PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.ALPHABETS_ROW));
         assertEquals(status,
             PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.EXTRA_KEYS));
-        assertEquals("and it is the surface laid over the canvas",
-            ColorUtils.setAlphaComponent(
-                ContextCompat.getColor(app, R.color.termux_surface_base), Color.alpha(status)),
-            status);
     }
 
     @Test
-    public void thePhoneHasAPhonesCornerAndAHairlineEdge() {
+    public void thePhoneIsDrawnInUnitsOfItsOwnShortSide() {
+        // The artwork is laid out on a 240-wide phone; whatever size the editor gives the frame,
+        // its corner and its rim are the design's, scaled by that unit.
         PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        RectF canvas = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        assertNotNull(canvas);
+        float unit = view.unitPx();
+        assertTrue("one unit is a 240th of the short side, so under a px here", unit < 1f);
+        assertEquals("the corner is the design's 24 units", 24f * unit, view.frameRadiusPx(), 0.01f);
+        assertEquals("the rim is the design's 1.5 units", 1.5f * unit, view.frameStrokePx(), 0.01f);
+
+        // A larger view scales the unit with it: the picture grows rather than the gaps.
+        PlaceMiniatureView larger = sized(1000, 800);
+        larger.setLegendVisible(false);
+        larger.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        assertTrue(larger.unitPx() > unit * 1.8f);
+    }
+
+    @Test
+    public void theKeyboardBlockStandsAlongTheBottomWhereThePlaceShowsIt() {
+        PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        PlaceLayout arrangement = layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM);
+
+        view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        RectF keyboard = view.keyboardRect();
+        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF canvas = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        assertNotNull("the terminal shows its keyboard", keyboard);
+        assertNotNull(keys);
+        assertNotNull(canvas);
+        assertTrue("it is the outermost block along the bottom: the dock lifts above it",
+            keys.bottom <= keyboard.top + 0.5f);
+        assertTrue("and it takes a real share of the phone", keyboard.height() > canvas.height() * 0.3f);
+
+        view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.WIDGETS);
+        assertNull("Home's keyboard opens over the page, so the picture keeps the page",
+            view.keyboardRect());
+
+        view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.DISPLAY);
+        assertNotNull("a keyboard that shrinks the display is a block of it", view.keyboardRect());
+        view.setLayout(new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM, KeyboardMode.OVERLAY, KeyboardForm.DOCKED, 4, 5),
+            PlaceOrientation.PORTRAIT, PaneWallPage.DISPLAY);
+        assertNull("one that floats is drawn on the pane instead", view.keyboardRect());
+
+        view.setLayout(arrangement.withKeyboardShown(false), PlaceOrientation.PORTRAIT,
+            PaneWallPage.TERMINAL);
+        assertNull("the keyboard element off is no keyboard at all", view.keyboardRect());
+        RectF taller = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        assertNotNull(taller);
+        assertTrue("and the pane takes the room it left", taller.height() > canvas.height());
+    }
+
+    @Test
+    public void theGripSitsAtTheUpperTrailingCornerAndTakesAFingertip() {
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        RectF band = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
+        RectF grip = view.gripRect(PlaceMiniatureView.Block.STATUS_BAR);
+        assertNotNull(band);
+        assertNotNull(grip);
+        assertTrue("at the trailing end", grip.centerX() > band.centerX() + band.width() * 0.3f);
+        assertTrue("and the upper half", grip.centerY() <= band.centerY() + 1f);
+
+        // The target is the platform's 48dp around the glyph, not the glyph itself: a touch a
+        // little off the dots, across the band, still lifts the bar.
         float density = view.getResources().getDisplayMetrics().density;
-        assertEquals("the corner is a phone's, not a diagram's",
-            18f * density, view.frameRadiusPx(), 0.01f);
-        assertEquals("the edge is a hairline", 1f * density, view.frameStrokePx(), 0.01f);
+        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY() + 20f * density);
+        assertEquals(PlaceMiniatureView.Block.STATUS_BAR, view.draggedBar());
+        touch(view, MotionEvent.ACTION_UP, grip.centerX(), grip.centerY() + 20f * density);
     }
 
     @Test
