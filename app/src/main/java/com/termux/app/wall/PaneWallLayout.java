@@ -1,8 +1,12 @@
 package com.termux.app.wall;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.SystemClock;
 import android.os.Trace;
 import android.util.AttributeSet;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
@@ -18,6 +22,7 @@ import android.animation.ValueAnimator;
 
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.terminal.Motion;
+import com.termux.view.HoldTiming;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -31,13 +36,13 @@ import java.util.Map;
  * terminal never resizes for the wall and {@code TerminalPaneController} never learns the wall
  * exists.
  *
- * <p>Not a {@code ViewPager2}: the wall's touches arrive from the status bar rather than from
- * these pages, its pages must never be recycled (a recreated terminal or X surface is a lost
- * session), and its centre page runs its own {@code requestDisallowInterceptTouchEvent} traffic.
- * Three children, one offset and one spring is the whole mechanism. The one touch the wall reads
- * for itself is a minimal place's edge swipe ({@link MinimalEdgeSwipe}): a sideways drag that
- * starts in the band along the current page's top or bottom edge, which drives the very same
- * drag the status bar does.
+ * <p>Not a {@code ViewPager2}: its pages must never be recycled (a recreated terminal or X
+ * surface is a lost session), and its centre page runs its own
+ * {@code requestDisallowInterceptTouchEvent} traffic. Three children, one offset and one spring
+ * is the whole mechanism. The one touch the wall reads for itself is the border drag
+ * ({@link BorderDrag}): a press held on the current page's border, then dragged sideways, which
+ * is how a finger pages the wall on every place and in every mode. The window strip's overswipe
+ * drives the same drag from outside.
  *
  * <p>Every page is laid out at the host's size and moved with {@code translationX}, so a page
  * change and a whole drag cost no layout work. Only the pages on screen are laid out at all: a
@@ -93,14 +98,8 @@ public final class PaneWallLayout extends ViewGroup {
          */
         default void onWallDragInterrupted() { }
         /**
-         * Whether the band along the current page's top and bottom edge pages the wall right now
-         * ({@link MinimalEdgeSwipe}): only on a minimal place, where the pane is the screen and
-         * the bar is a strip. Asked on every DOWN.
-         */
-        default boolean isEdgePagingEnabled() { return false; }
-        /**
-         * Whether the page a finger drags tips like a plank ({@link PlankTilt}) — Fancier Glass on
-         * a minimal place, with the phone animating. Asked when a drag begins, for the page the
+         * Whether the page a border drag pulls tips like a plank ({@link PlankTilt}) — Fancier
+         * Glass, with the phone animating. Asked as the drag claims the finger, for the page the
          * wall rests on.
          */
         default boolean isPlankTiltEnabled(@NonNull PaneWallPage page) { return false; }
@@ -128,10 +127,21 @@ public final class PaneWallLayout extends ViewGroup {
      * stands rather than only on a change from some assumed starting state.
      */
     @Nullable private Boolean mTerminalOffScreen;
-    /** The edge swipe under way, if any; one instance, so a gesture allocates nothing. */
-    private final MinimalEdgeSwipe mEdgeSwipe = new MinimalEdgeSwipe();
-    /** Held from an armed DOWN to the lift, for the release velocity the settle reads. */
-    @Nullable private VelocityTracker mEdgeVelocity;
+    /** The border drag under way, if any; one instance, so a gesture allocates nothing. */
+    private final BorderDrag mBorderDrag = new BorderDrag();
+    /** Where the armed finger landed, in the wall's coordinates: what the child's cancel says. */
+    private float mBorderDownX;
+    private float mBorderDownY;
+    /** Held from the claim to the lift, for the release velocity the settle reads. */
+    @Nullable private VelocityTracker mBorderVelocity;
+    /**
+     * Its own handler rather than {@link View#postDelayed}: a detached view queues those until
+     * it is attached, and the hold has to fire or be cancelled on its own clock.
+     */
+    private final Handler mHoldHandler = new Handler(Looper.getMainLooper());
+    private final Runnable mHoldElapsed = this::onBorderHoldElapsed;
+    /** True only inside {@link #cancelChildGesture()}: that cancel is the child's, not the stream's. */
+    private boolean mCancellingChild;
     /**
      * The page tipping under the drag ({@link PlankTilt}), from the drag's start to the wall's
      * settle; null while no plank is engaged. Its angle is written beside its translation in
@@ -335,16 +345,25 @@ public final class PaneWallLayout extends ViewGroup {
         return goTo(PaneWallPolicy.neighbour(mPages, mCurrent, steps), animate);
     }
 
-    // ---- Dragging (driven from the status bar) ---------------------------------------------
+    // ---- Dragging (the border drag, and the window strip's overswipe from outside) ----------
 
+    /** Take a drag from outside — the window strip's overswipe. The page slides flat. */
     public void beginDrag() {
+        beginDrag(false);
+    }
+
+    /**
+     * @param plank whether the page under the finger tips ({@link PlankTilt}), which is the
+     *              border drag's own motion: a finger on the pane's edge pressing it sideways
+     */
+    private void beginDrag(boolean plank) {
         if (!mGesturesEnabled) return;
         Trace.beginSection("Wall.beginDrag");
         try {
             mDragging = true;
             stopSlide();
             stopNudge();
-            engagePlank();
+            if (plank) engagePlank();
         } finally {
             Trace.endSection();
         }
@@ -370,6 +389,7 @@ public final class PaneWallLayout extends ViewGroup {
         if (!mDragging) return;
         mDragging = false;
         int steps = PaneWallPolicy.settle(mOffsetPx, velocityPxPerSec, getWidth(),
+            getResources().getDisplayMetrics().density,
             PaneWallPolicy.hasNeighbour(mPages, mCurrent, -1),
             PaneWallPolicy.hasNeighbour(mPages, mCurrent, 1));
         if (steps == 0) {
@@ -395,142 +415,180 @@ public final class PaneWallLayout extends ViewGroup {
     private void interruptDrag() {
         if (!mDragging) return;
         mDragging = false;
-        // The wall's own edge swipe is a claimant like the others: the rest of its finger's
+        // The wall's own border drag is a claimant like the others: the rest of its finger's
         // travel is swallowed and moves nothing.
-        mEdgeSwipe.abandon();
+        mBorderDrag.abandon();
         if (mListener != null) mListener.onWallDragInterrupted();
     }
 
-    // ---- The edge swipe (a minimal place's pane edge) --------------------------------------
+    // ---- The border drag ---------------------------------------------------------------------
 
     /**
-     * A finger down in the band along the current page's top or bottom edge arms the edge swipe
-     * ({@link MinimalEdgeSwipe}); the claim is made on a later move, past the slop, here or in
-     * {@link #onTouchEvent} when nothing under the finger took the DOWN. Claiming cancels the
-     * child's gesture — the terminal answers that cancel by releasing whatever mouse button or
-     * hold it had begun — and the rest of the stream lands in {@link #onTouchEvent}.
+     * Every touch on the wall passes through here, whoever ends up with it. A finger down on the
+     * current page's border arms the drag ({@link BorderDrag}) and starts the hold's timer; the
+     * child under it gets the DOWN and everything after, exactly as if the border were not there,
+     * until the hold fires on a finger that has held still. The claim is made by the timer, not
+     * by a touch, and it is made here rather than in {@code onInterceptTouchEvent} because the
+     * pane's own overlay forbids interception for the whole of a gesture it starts, and a border
+     * drag has to be able to begin over it.
+     *
+     * <p>Once claimed, the stream is the wall's: the child was told to forget it
+     * ({@link #cancelChildGesture}), so the terminal has released whatever mouse button or hold
+     * it had begun, and every later event is read here and goes no further.
      */
     @Override
-    public boolean onInterceptTouchEvent(MotionEvent event) {
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (mCancellingChild) return super.dispatchTouchEvent(event);
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                armEdgeSwipe(event);
-                return false;
+                armBorderDrag(event);
+                break;
             case MotionEvent.ACTION_MOVE:
-                return claimEdgeSwipe(event);
+                if (mBorderDrag.isPaging()) {
+                    if (mBorderVelocity != null) mBorderVelocity.addMovement(event);
+                    dragTo(mBorderDrag.travel(event.getX()));
+                    return true;
+                }
+                if (mBorderDrag.move(event.getX(), event.getY()) == BorderDrag.Claim.ABANDONED) {
+                    mHoldHandler.removeCallbacks(mHoldElapsed);
+                }
+                break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                mEdgeSwipe.secondPointer();
-                return false;
+                if (mBorderDrag.isPaging()) return true;
+                if (mBorderDrag.secondPointer() == BorderDrag.Claim.ABANDONED) {
+                    mHoldHandler.removeCallbacks(mHoldElapsed);
+                }
+                break;
+            case MotionEvent.ACTION_POINTER_UP:
+                if (mBorderDrag.isPaging()) return true;
+                break;
             case MotionEvent.ACTION_UP:
+                if (mBorderDrag.isPaging()) {
+                    float velocity = 0f;
+                    if (mBorderVelocity != null) {
+                        mBorderVelocity.addMovement(event);
+                        mBorderVelocity.computeCurrentVelocity(1000);
+                        velocity = mBorderVelocity.getXVelocity();
+                    }
+                    releaseBorderDrag();
+                    endDrag(velocity);
+                    return true;
+                }
+                break;
             case MotionEvent.ACTION_CANCEL:
-                releaseEdgeSwipe();
-                return false;
+                if (mBorderDrag.isPaging()) {
+                    releaseBorderDrag();
+                    cancelDrag();
+                    return true;
+                }
+                break;
             default:
-                return false;
+                break;
         }
+        boolean handled = super.dispatchTouchEvent(event);
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            releaseBorderDrag();
+        }
+        return handled;
     }
 
+    /**
+     * A DOWN nothing under the finger took — the air around the pages, which is the wall's own —
+     * is kept only while the drag is armed, so a press on a border from just outside the page
+     * can still hold. Anything else that lands here belongs to an armed finger whose child has
+     * already been cancelled, and is swallowed.
+     */
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
-                // Nothing under the finger took the DOWN (the DOWN itself was read by
-                // onInterceptTouchEvent): the stream is kept only while the swipe is armed.
-                return mEdgeSwipe.isArmed();
-            case MotionEvent.ACTION_MOVE:
-                if (mEdgeSwipe.claim() == MinimalEdgeSwipe.Claim.PENDING) {
-                    claimEdgeSwipe(event);
-                } else if (mEdgeSwipe.claim() == MinimalEdgeSwipe.Claim.PAGING) {
-                    if (mEdgeVelocity != null) mEdgeVelocity.addMovement(event);
-                    dragTo(mEdgeSwipe.travel(event.getX()));
-                }
-                return mEdgeSwipe.isArmed();
-            case MotionEvent.ACTION_POINTER_DOWN:
-                mEdgeSwipe.secondPointer();
-                return mEdgeSwipe.isArmed();
-            case MotionEvent.ACTION_UP: {
-                boolean paging = mEdgeSwipe.claim() == MinimalEdgeSwipe.Claim.PAGING;
-                boolean armed = mEdgeSwipe.isArmed();
-                if (paging) {
-                    float velocity = 0f;
-                    if (mEdgeVelocity != null) {
-                        mEdgeVelocity.addMovement(event);
-                        mEdgeVelocity.computeCurrentVelocity(1000);
-                        velocity = mEdgeVelocity.getXVelocity();
-                    }
-                    releaseEdgeSwipe();
-                    endDrag(velocity);
-                } else {
-                    releaseEdgeSwipe();
-                }
-                return armed;
-            }
-            case MotionEvent.ACTION_CANCEL: {
-                boolean paging = mEdgeSwipe.claim() == MinimalEdgeSwipe.Claim.PAGING;
-                boolean armed = mEdgeSwipe.isArmed();
-                releaseEdgeSwipe();
-                if (paging) cancelDrag();
-                return armed;
-            }
-            default:
-                return false;
-        }
+        if (mCancellingChild) return false;
+        return mBorderDrag.isArmed();
     }
 
-    private void armEdgeSwipe(@NonNull MotionEvent event) {
-        releaseEdgeSwipe();
-        if (mListener == null || !mListener.isEdgePagingEnabled()) return;
+    private void armBorderDrag(@NonNull MotionEvent event) {
+        releaseBorderDrag();
         if (!mGesturesEnabled || mPages.size() <= 1) return;
         View page = mPageViews.get(mCurrent);
         if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
         float density = getResources().getDisplayMetrics().density;
         float left = page.getLeft() + page.getTranslationX();
         float top = page.getTop();
-        boolean armed = mEdgeSwipe.down(event.getX(), event.getY(),
+        boolean armed = mBorderDrag.down(event.getX(), event.getY(),
             left, top, left + page.getWidth(), top + page.getHeight(),
-            MinimalEdgeSwipe.BAND_DP * density,
+            BorderDrag.BAND_DP * density,
             CornerZones.clampSize(CornerZones.paneSizePx(density), page.getWidth(), page.getHeight()),
             ViewConfiguration.get(getContext()).getScaledTouchSlop());
         if (!armed) return;
-        mEdgeVelocity = VelocityTracker.obtain();
-        mEdgeVelocity.addMovement(event);
+        mBorderDownX = event.getX();
+        mBorderDownY = event.getY();
+        mHoldHandler.postDelayed(mHoldElapsed, HoldTiming.holdTimeoutMs());
     }
 
     /**
-     * One move of an armed swipe. True on the move that claims it: the drag begins, and the wall
-     * is moved by the finger's travel so far — the slop's worth, the same first step a swipe
-     * along the bar takes.
+     * The hold time passed with the finger still on the border. The wall takes the gesture from
+     * here: the child is told its touch is over, the hand is told the hold was heard, and the
+     * drag begins where the finger stands, so the first move after the hold is the first pixel
+     * of travel. The velocity tracker starts here too: the hold's stillness is not the flick's.
      */
-    private boolean claimEdgeSwipe(@NonNull MotionEvent event) {
-        if (mEdgeSwipe.claim() != MinimalEdgeSwipe.Claim.PENDING) return false;
-        if (mEdgeVelocity != null) mEdgeVelocity.addMovement(event);
-        if (mEdgeSwipe.move(event.getX(), event.getY()) != MinimalEdgeSwipe.Claim.PAGING) {
-            return false;
-        }
+    private void onBorderHoldElapsed() {
+        if (!mBorderDrag.holdElapsed()) return;
         if (!mGesturesEnabled || mPages.size() <= 1) {
-            mEdgeSwipe.abandon();
-            return false;
+            mBorderDrag.abandon();
+            return;
         }
-        beginDrag();
-        dragTo(mEdgeSwipe.travel(event.getX()));
-        return true;
+        cancelChildGesture();
+        performHapticFeedback(HapticFeedbackConstants.GESTURE_START);
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+        mBorderVelocity = VelocityTracker.obtain();
+        beginDrag(true);
+        dragTo(0f);
     }
 
-    private void releaseEdgeSwipe() {
-        mEdgeSwipe.reset();
-        if (mEdgeVelocity != null) {
-            mEdgeVelocity.recycle();
-            mEdgeVelocity = null;
+    /**
+     * Tell whichever child holds the stream that its touch is over, the moment the border claims
+     * it. A cancel is the one ending that leaves nothing behind — no tap, no selection, no mouse
+     * button left down — which is what a finger that turned out to be a border hold owes the
+     * content. Waiting for the next event is not the same thing: a finger holding still sends
+     * none, and the terminal's own hold fired into the gap. Down the wall's own dispatch, so the
+     * wall stops being a touch target for it in the bargain and the rest of the stream lands
+     * here.
+     */
+    private void cancelChildGesture() {
+        long now = SystemClock.uptimeMillis();
+        MotionEvent cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL,
+            mBorderDownX, mBorderDownY, 0);
+        mCancellingChild = true;
+        try {
+            super.dispatchTouchEvent(cancel);
+        } finally {
+            mCancellingChild = false;
+            cancel.recycle();
         }
+    }
+
+    private void releaseBorderDrag() {
+        mHoldHandler.removeCallbacks(mHoldElapsed);
+        mBorderDrag.reset();
+        if (mBorderVelocity != null) {
+            mBorderVelocity.recycle();
+            mBorderVelocity = null;
+        }
+    }
+
+    /** The border drag's claim, for tests. */
+    @NonNull
+    BorderDrag.Claim borderDragClaim() {
+        return mBorderDrag.claim();
     }
 
     // ---- The plank ---------------------------------------------------------------------------
 
     /**
-     * A finger began dragging the wall: the page it rests on becomes the plank, if the listener
-     * lets it, until the settle lays it flat. A hardware layer for the length of the motion, so
-     * the page — a screen of glyphs and glass — is drawn flat once per change and the tilt is a
-     * textured quad per frame rather than every glyph re-rendered under a perspective matrix.
+     * A border drag claimed the finger: the page the wall rests on becomes the plank, if the
+     * listener lets it, until the settle lays it flat. A hardware layer for the length of the
+     * motion, so the page — a screen of glyphs and glass — is drawn flat once per change and the
+     * tilt is a textured quad per frame rather than every glyph re-rendered under a perspective
+     * matrix.
      */
     private void engagePlank() {
         if (mTiltPage != null || mReducedMotion || getWidth() <= 0) return;
@@ -791,7 +849,7 @@ public final class PaneWallLayout extends ViewGroup {
         mSliding = false;
         stopSlide();
         stopNudge();
-        releaseEdgeSwipe();
+        releaseBorderDrag();
         releasePlank();
     }
 }

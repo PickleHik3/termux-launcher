@@ -47,13 +47,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         default void onWallOutlineAlphaChanged(float alpha) { }
         /**
-         * Whether the chrome on screen is minimal mode's: the pane lends the wall the band along
-         * its top and bottom edge ({@link MinimalEdgeSwipe}). Asked on every DOWN on the wall.
-         */
-        default boolean isEdgePagingEnabled() { return false; }
-        /**
-         * Whether a page dragged by a finger tips like a plank ({@link PlankTilt}): Fancier Glass
-         * on, on a minimal place, with the phone animating. Asked as a drag begins.
+         * Whether a page pulled by a border drag tips like a plank ({@link PlankTilt}): Fancier
+         * Glass on, with the phone animating. Asked as the drag claims the finger.
          */
         default boolean isPlankTiltEnabled() { return false; }
     }
@@ -246,9 +241,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mWall.goTo(PaneWallPolicy.homePage(), animate);
     }
 
-    // ---- Dragging, from the status bar ------------------------------------------------------
+    // ---- Dragging, from the window strip's overswipe ----------------------------------------
 
-    /** True while a sideways drag on the status bar has anywhere to take the wall. */
+    /** True while a drag has anywhere to take the wall. */
     public boolean canDrag() {
         return mWall.areGesturesEnabled() && mWall.pages().size() > 1;
     }
@@ -344,11 +339,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onTerminalOffScreenChanged(boolean offScreen) {
         mHost.onTerminalOffScreenChanged(offScreen);
-    }
-
-    @Override
-    public boolean isEdgePagingEnabled() {
-        return mHost.isEdgePagingEnabled();
     }
 
     @Override

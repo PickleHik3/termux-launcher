@@ -16622,14 +16622,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The Display place is on the wall only while the display is switched on: off,
                 // nothing of it is built, and the wall is the places that are left.
                 @Override public boolean isDisplayEnabled() { return isX11DisplayEnabled(); }
-                // In minimal mode the pane is the screen and there is no bar, so the pane's own
-                // top and bottom edge page the wall (MinimalEdgeSwipe). Off the mode, every
-                // place keeps the pane's edges for its content.
-                @Override public boolean isEdgePagingEnabled() { return isChromeMinimal(); }
                 // The plank (PlankTilt) is a Fancier Glass motion: the look as the last apply
-                // resolved it, on a minimal place, with nothing telling the phone to hold still.
+                // resolved it, with nothing telling the phone to hold still.
                 @Override public boolean isPlankTiltEnabled() {
-                    return isChromeMinimal() && mFancierGlassLook != null
+                    return mFancierGlassLook != null
                         && !isReducedMotionEnabled() && !isLazyModeEnabled();
                 }
                 @Override public void onWallPageSettled(
