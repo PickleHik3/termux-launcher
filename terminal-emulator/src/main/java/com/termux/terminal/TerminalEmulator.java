@@ -305,6 +305,15 @@ public final class TerminalEmulator {
     private static final int DECSET_BIT_IN_BAND_RESIZE_NOTIFICATIONS = 1 << 15;
 
     /**
+     * DECSET 7727 - dictation marks, a private mode of this terminal. While it is set (together with
+     * bracketed paste) the launcher's voice dictation announces itself to the program with OSC 7727
+     * marks around its pastes, so the program can tell dictated phrases from typing. The emulator
+     * only keeps the bit; the marks are written by the dictation code, see
+     * {@link #isDictationMarksEnabled()}.
+     */
+    private static final int DECSET_BIT_DICTATION_MARKS = 1 << 16;
+
+    /**
      * How long a synchronized update may hold the screen. The hold is a promise the program has to
      * keep, and a program that dies, blocks or simply forgets between "begin" and "end" would
      * otherwise freeze the pane for good; after this long the held frame is delivered and the mode
@@ -827,6 +836,8 @@ public final class TerminalEmulator {
                 return DECSET_BIT_COLOR_PREFERENCE_NOTIFICATIONS;
             case 2048:
                 return DECSET_BIT_IN_BAND_RESIZE_NOTIFICATIONS;
+            case 7727:
+                return DECSET_BIT_DICTATION_MARKS;
             default:
                 return -1;
         }
@@ -1123,6 +1134,19 @@ public final class TerminalEmulator {
 
     public boolean isCursorEnabled() {
         return isDecsetInternalBitSet(DECSET_BIT_CURSOR_ENABLED);
+    }
+
+    /** Whether DECSET 2004, bracketed paste, is set. */
+    public boolean isBracketedPasteMode() {
+        return isDecsetInternalBitSet(DECSET_BIT_BRACKETED_PASTE_MODE);
+    }
+
+    /**
+     * Whether DECSET 7727, dictation marks, is set. Marks are only worth sending while
+     * {@link #isBracketedPasteMode()} holds as well: the paste brackets are what bound a phrase.
+     */
+    public boolean isDictationMarksEnabled() {
+        return isDecsetInternalBitSet(DECSET_BIT_DICTATION_MARKS);
     }
 
     public boolean shouldCursorBeVisible() {
@@ -2443,6 +2467,9 @@ public final class TerminalEmulator {
                 // program that just asked does not have to wait for a resize to learn it.
                 if (setting)
                     sendInBandResizeReport();
+                break;
+            case 7727:
+                // Dictation marks - setting bit is enough, the dictation code reads it.
                 break;
             default:
                 unknownParameter(externalBit);
