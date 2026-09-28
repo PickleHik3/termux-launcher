@@ -1153,7 +1153,7 @@
         <string name="termux_ai_import_internal_name_hint">Internal name (optional)</string>
         <string name="termux_ai_import_add_action">Add model</string>
         <string name="termux_ai_import_too_big_confirm_title">Add it anyway?</string>
-        <string name="termux_ai_import_too_big_confirm_message">%1$s. TAI\'s own catalog lists files this size for phones with %2$d GB of RAM or more. You can still add it and try.</string>
+        <string name="termux_ai_import_too_big_confirm_message">%1$s. On-device AI\'s own catalog lists files this size for phones with %2$d GB of RAM or more. You can still add it and try.</string>
         <string name="termux_ai_import_add_anyway">Add anyway</string>
         <!-- Step 4: progress. -->
         <string name="termux_ai_import_adding_title">Adding %1$s…</string>
@@ -1208,16 +1208,16 @@
         <string name="termux_ai_model_tune_saved">Model override saved</string>
         <string name="termux_ai_model_tune_invalid">Value is outside the allowed range</string>
         <string name="termux_ai_model_tune_range">Allowed range: %1$.2f - %2$.2f, or auto for global default</string>
-        <string name="termux_ai_runtime_action_failed">TAI runtime action failed</string>
+        <string name="termux_ai_runtime_action_failed">On-device AI runtime action failed</string>
         <string name="termux_ai_runtime_cancel_requested">Cancel requested</string>
         <string name="termux_ai_runtime_unloaded">Runtime unloaded</string>
         <string name="termux_ai_model_delete_title">Delete %1$s</string>
-        <string name="termux_ai_model_delete_message">Remove the downloaded or imported TAI model entry and any app-private downloaded files for this model.</string>
+        <string name="termux_ai_model_delete_message">Remove the downloaded or imported On-device AI model entry and any app-private downloaded files for this model.</string>
         <string name="termux_ai_model_delete_action">Delete</string>
         <string name="termux_ai_model_delete_action_loaded">Delete (unload first)</string>
         <string name="termux_ai_model_delete_loaded_warning">Unload the model before deleting it.</string>
         <!-- The grouped download notification: one summary, one child per model. -->
-        <string name="termux_ai_download_notification_title">TAI model downloads</string>
+        <string name="termux_ai_download_notification_title">On-device AI model downloads</string>
         <string name="termux_ai_download_notification_preparing">Preparing…</string>
         <string name="termux_ai_download_notification_done">Downloads finished</string>
         <plurals name="termux_ai_download_notification_downloading">
@@ -1247,7 +1247,7 @@
         <string name="termux_ai_download_notification_cancel">Cancel</string>
         <string name="termux_ai_model_deleted">Model entry deleted</string>
         <string name="termux_ai_model_delete_missing">No downloaded model entry found</string>
-        <string name="termux_ai_model_action_failed">TAI model action failed</string>
+        <string name="termux_ai_model_action_failed">On-device AI model action failed</string>
         <string name="termux_ai_auto_model_default">Auto / Gallery default</string>
         <string name="termux_ai_accelerator_auto_gpu_preferred">Auto / model profile</string>
         <string name="termux_ai_enabled">Enabled</string>

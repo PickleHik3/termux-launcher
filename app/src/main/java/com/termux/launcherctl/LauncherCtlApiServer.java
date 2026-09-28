@@ -1918,7 +1918,7 @@ public class LauncherCtlApiServer {
         data.put("embeddingsNote", "Embeddings support is model-capability dependent; check /v1/models _capabilities for text_embeddings.");
         data.put("audioOutputNote", "/v1/audio/speech speaks with the installed voice model (KittenTTS nano, on the CPU in :tai_runtime): input (up to 4096 characters), voice (Bruno, Hugo, Jasper, Rosie or an OpenAI voice name), speed (0.5-2.0), response_format wav (whole file) or pcm (24 kHz 16-bit mono, streamed per sentence).");
         data.put("audioInputNote", "/v1/audio/transcriptions runs the installed speech model (Parakeet or Whisper ACFT, the one voice input uses) on the CPU; multipart file (WAV or raw PCM16 16 kHz mono), model, language, prompt, response_format json|text.");
-        data.put("modelFormatNote", "TAI supports LiteRT-LM and MNN model packages only; GGUF/raw weights are not supported by this APK.");
+        data.put("modelFormatNote", "On-device AI supports LiteRT-LM and MNN model packages only; GGUF/raw weights are not supported by this APK.");
         if (includeToken) {
             data.put("token", settings.getOrCreateApiToken());
         }
@@ -1966,7 +1966,7 @@ public class LauncherCtlApiServer {
             "set -eu\n" +
             "print_help() {\n" +
             "  cat <<'EOF'\n" +
-            "TAI / Termux AI - local multi-backend model host\n" +
+            "On-device AI - local multi-backend model host\n" +
             "\n" +
             "Usage:\n" +
             "  tai --json <command>\n" +
@@ -1994,7 +1994,7 @@ public class LauncherCtlApiServer {
             "  tai speak --stop\n" +
             "  tai doctor\n" +
             "\n" +
-            "TAI is authenticated through ~/.launcherctl and runs native AI in the isolated :tai_runtime process.\n" +
+            "On-device AI is authenticated through ~/.launcherctl and runs native AI in the isolated :tai_runtime process.\n" +
             "LiteRT-LM and MNN load in :tai_runtime after ABI/API/library/model/memory preflight.\n" +
             "MNN models route through the bundled MNN backend when supported by the installed APK.\n" +
             "GGUF/raw weight files are not supported by this APK.\n" +
@@ -2028,7 +2028,7 @@ public class LauncherCtlApiServer {
             "Parakeet detects the language itself).\n" +
             "tai speak reads text aloud on the phone with the voice model (Model centre > Speech > Voice\n" +
             "output): the text from the command line or stdin, the voice and speed from the options or\n" +
-            "TAI settings. Speech starts after the first sentence; Ctrl-C or tai speak --stop stops it.\n" +
+            "On-device AI settings. Speech starts after the first sentence; Ctrl-C or tai speak --stop stops it.\n" +
             "--out file.wav saves the audio instead of playing it.\n" +
             "OpenAI-compatible endpoints (default bind mode is localhost):\n" +
             "  /v1/models\n" +

@@ -501,7 +501,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
     @Nullable
     private JSONObject ensureLoadedForGenerationLocked(@NonNull String modelId) throws JSONException {
         if (session == null || loadedModelId == null || !loadedModelId.equals(modelId)) {
-            return errorLocked(409, "model_not_loaded", "Load the downloaded MNN model first with tai load " + modelId + " or from the TAI settings UI.");
+            return errorLocked(409, "model_not_loaded", "Load the downloaded MNN model first with tai load " + modelId + " or from the On-device AI settings UI.");
         }
         return null;
     }

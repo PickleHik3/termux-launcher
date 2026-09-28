@@ -782,7 +782,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     @Nullable
     private JSONObject ensureLoadedForGenerationLocked(@NonNull String modelId) throws JSONException {
         if (engine == null || loadedModelId == null || !loadedModelId.equals(modelId)) {
-            return error(409, "model_not_loaded", "Load the downloaded model first with tai load " + modelId + " or from the TAI settings UI.");
+            return error(409, "model_not_loaded", "Load the downloaded model first with tai load " + modelId + " or from the On-device AI settings UI.");
         }
         return null;
     }

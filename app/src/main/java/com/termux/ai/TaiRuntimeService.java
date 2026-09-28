@@ -304,7 +304,7 @@ public final class TaiRuntimeService extends Service {
         try {
             String payload = body != null ? body : readBodyFile(bodyFile);
             if (isForegroundOperation(operation)) {
-                ensureForeground("TAI runtime", speech ? "Speaking" : bench ? "Benchmarking" : "Preparing " + operation);
+                ensureForeground("On-device AI runtime", speech ? "Speaking" : bench ? "Benchmarking" : "Preparing " + operation);
             }
             if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
                 || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)
@@ -370,7 +370,7 @@ public final class TaiRuntimeService extends Service {
             case TaiRuntimeIpc.OP_TTS_STOP:
                 return manager.stopSpeaking();
             default:
-                return error(400, "bad_runtime_operation", "Unknown TAI runtime operation: " + operation);
+                return error(400, "bad_runtime_operation", "Unknown On-device AI runtime operation: " + operation);
         }
     }
 
@@ -440,9 +440,9 @@ public final class TaiRuntimeService extends Service {
             boolean chat = chatActive(state);
             if (ttsInFlight.get() > 0) {
                 // Speaking: stay in the foreground whatever else finished just now.
-                ensureForeground("TAI runtime", chat ? state.status : "Speaking");
+                ensureForeground("On-device AI runtime", chat ? state.status : "Speaking");
             } else if (chat) {
-                ensureForeground("TAI runtime", state.status);
+                ensureForeground("On-device AI runtime", state.status);
             } else if (foreground) {
                 stopForeground(true);
                 foreground = false;
@@ -718,8 +718,8 @@ public final class TaiRuntimeService extends Service {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager == null || manager.getNotificationChannel(CHANNEL_ID) != null) return;
-        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "TAI runtime", NotificationManager.IMPORTANCE_LOW);
-        channel.setDescription("Termux AI model runtime process");
+        NotificationChannel channel = new NotificationChannel(CHANNEL_ID, "On-device AI runtime", NotificationManager.IMPORTANCE_LOW);
+        channel.setDescription("On-device AI model runtime process");
         manager.createNotificationChannel(channel);
     }
 

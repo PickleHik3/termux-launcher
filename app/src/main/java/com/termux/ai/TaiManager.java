@@ -137,13 +137,13 @@ public final class TaiManager {
 
     @NonNull
     private JSONObject runtimeRequest(@NonNull String operation, @Nullable String body) throws JSONException {
-        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "TAI runtime service client is unavailable.");
+        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "On-device AI runtime service client is unavailable.");
         return runtimeClient.request(operation, body == null ? "{}" : body);
     }
 
     @NonNull
     private JSONObject runtimeRequest(@NonNull String operation, @Nullable String body, long timeoutMs) throws JSONException {
-        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "TAI runtime service client is unavailable.");
+        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "On-device AI runtime service client is unavailable.");
         return runtimeClient.request(operation, body == null ? "{}" : body, timeoutMs);
     }
 
@@ -165,7 +165,7 @@ public final class TaiManager {
 
     @NonNull
     private TaiRuntime localRuntime() {
-        if (runtime == null) throw new IllegalStateException("TAI native runtime is only available in " + TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
+        if (runtime == null) throw new IllegalStateException("On-device AI native runtime is only available in " + TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
         return runtime;
     }
 
@@ -180,7 +180,7 @@ public final class TaiManager {
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("name", "TAI");
-        data.put("displayName", "Termux AI");
+        data.put("displayName", "On-device AI");
         data.put("runtime", state.toJson());
         data.put("settings", settings.toJson());
         data.put("appProcessRuntime", false);
@@ -219,7 +219,7 @@ public final class TaiManager {
         data.put("settings", settings.toJson());
         data.put("appProcessRuntime", false);
         data.put("runtimeProcess", TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
-        data.put("backendPolicy", "TAI loads native LiteRT-LM/MNN backends in an isolated Android process after preflight checks.");
+        data.put("backendPolicy", "On-device AI loads native LiteRT-LM/MNN backends in an isolated Android process after preflight checks.");
         data.put("runtimeHistory", TaiRuntimeHistory.summary(appContext));
         appendCrashMarker(data);
         appendDeviceCompatibility(data, state);
@@ -324,7 +324,7 @@ public final class TaiManager {
             );
         } catch (IllegalArgumentException e) {
             return error(400, "unsupported_model_format",
-                "TAI can import LiteRT-LM packages and MNN config packages only. GGUF/raw weights require a backend this APK does not include.");
+                "On-device AI can import LiteRT-LM packages and MNN config packages only. GGUF/raw weights require a backend this APK does not include.");
         }
         TaiModelProfile runtimeProfile = TaiModelProfile.fromRequest(request, TaiModelProfile.forModel(baseSpec));
         TaiModelSpec spec = new TaiModelSpec(
@@ -358,7 +358,7 @@ public final class TaiManager {
         data.put("model", spec.toJson());
         data.put("requiresUserApprovedPath", true);
         data.put("copiedIntoAppPrivateStorage", false);
-        data.put("message", "Model path registered. Load it with TAI to run through the isolated Android LiteRT-LM runtime when preflight passes.");
+        data.put("message", "Model path registered. Load it with On-device AI to run through the isolated Android LiteRT-LM runtime when preflight passes.");
         return data;
     }
 
@@ -574,7 +574,7 @@ public final class TaiManager {
         JSONObject request = parseBody(body);
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
+        if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         if (spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
                 && !spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
             return error(400, "embedding_model_not_loadable",
@@ -650,7 +650,7 @@ public final class TaiManager {
         String fallbackModel = state.loadedModelId != null ? state.loadedModelId : settings.getDefaultAssistantModel();
         String modelId = requestedModelId(request, fallbackModel);
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
+        if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         int minutes = request.optInt("minutes", request.optInt("keepWarmMinutes", 0));
         if (minutes <= 0) minutes = settings.getIdleUnloadMinutes() > 0 ? settings.getIdleUnloadMinutes() : 30;
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
@@ -823,7 +823,7 @@ public final class TaiManager {
 
     private void benchRunDelegated(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
         if (runtimeClient == null) {
-            emitBenchError(sink, error(503, "tai_runtime_unavailable", "TAI runtime service client is unavailable."));
+            emitBenchError(sink, error(503, "tai_runtime_unavailable", "On-device AI runtime service client is unavailable."));
             return;
         }
         JSONObject prepared = prepareBenchRequest(parseBody(body));
@@ -904,7 +904,7 @@ public final class TaiManager {
         JSONArray prepared = new JSONArray();
         for (String id : ids) {
             TaiModelSpec spec = resolveModel(id);
-            if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + id);
+            if (spec == null) return error(404, "model_not_found", "Unknown model: " + id);
             if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
                 return error(400, "capability_not_supported", "Model " + id + " is not a chat model.");
             }
@@ -969,7 +969,7 @@ public final class TaiManager {
             String id = model.optString("model", "");
             TaiModelSpec spec = resolveModel(model, id);
             if (spec == null) {
-                emitBenchError(sink, error(404, "model_not_found", "Unknown TAI model: " + id));
+                emitBenchError(sink, error(404, "model_not_found", "Unknown model: " + id));
                 return;
             }
             TaiRuntimeOptions options = runtimeOptionsFromRequest(model, spec);
@@ -1219,7 +1219,7 @@ public final class TaiManager {
         JSONObject request = parseBody(body);
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
+        if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
             return error(400, "capability_not_supported", "Model " + modelId + " is not a chat model.");
         }
@@ -1451,7 +1451,7 @@ public final class TaiManager {
 
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return openAiError(error(404, "model_not_found", "Unknown TAI model: " + modelId));
+        if (spec == null) return openAiError(error(404, "model_not_found", "Unknown model: " + modelId));
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
             return openAiError(generationCapabilityError(spec));
         }
@@ -1530,7 +1530,7 @@ public final class TaiManager {
 
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return openAiError(error(404, "model_not_found", "Unknown TAI model: " + modelId));
+        if (spec == null) return openAiError(error(404, "model_not_found", "Unknown model: " + modelId));
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
             return openAiError(generationCapabilityError(spec));
         }
@@ -1574,7 +1574,7 @@ public final class TaiManager {
     public void openAiChatCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
         if (shouldDelegateRuntime()) {
             if (runtimeClient == null) {
-                emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "TAI runtime service client is unavailable."));
+                emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "On-device AI runtime service client is unavailable."));
                 return;
             }
             runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM, delegatedRuntimeBody(body), sink);
@@ -1598,7 +1598,7 @@ public final class TaiManager {
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) {
-            emitOpenAiError(sink, error(404, "model_not_found", "Unknown TAI model: " + modelId));
+            emitOpenAiError(sink, error(404, "model_not_found", "Unknown model: " + modelId));
             return;
         }
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
@@ -1725,7 +1725,7 @@ public final class TaiManager {
     public void openAiCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
         if (shouldDelegateRuntime()) {
             if (runtimeClient == null) {
-                emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "TAI runtime service client is unavailable."));
+                emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "On-device AI runtime service client is unavailable."));
                 return;
             }
             runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM, delegatedRuntimeBody(body), sink);
@@ -1749,7 +1749,7 @@ public final class TaiManager {
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) {
-            emitOpenAiError(sink, error(404, "model_not_found", "Unknown TAI model: " + modelId));
+            emitOpenAiError(sink, error(404, "model_not_found", "Unknown model: " + modelId));
             return;
         }
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) {
@@ -2127,7 +2127,7 @@ public final class TaiManager {
         }
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) {
-            return openAiRequestError(404, "model_not_found", "Unknown TAI model: " + modelId, "model");
+            return openAiRequestError(404, "model_not_found", "Unknown model: " + modelId, "model");
         }
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) {
             return openAiRequestError(501, "capability_not_supported",
@@ -2178,7 +2178,7 @@ public final class TaiManager {
         String input = request.optString("input", "");
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) {
-            return openAiRequestError(404, "model_not_found", "Unknown TAI model: " + modelId, "model");
+            return openAiRequestError(404, "model_not_found", "Unknown model: " + modelId, "model");
         }
         if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) {
             return openAiRequestError(501, "capability_not_supported",
@@ -2437,7 +2437,7 @@ public final class TaiManager {
             if (failure[0] != null) throw failure[0];
             return result;
         }
-        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "TAI runtime service client is unavailable.");
+        if (runtimeClient == null) return error(500, "runtime_client_unavailable", "On-device AI runtime service client is unavailable.");
         final JSONObject[] summary = new JSONObject[1];
         try {
             runtimeClient.stream(TaiRuntimeIpc.OP_TTS_SYNTHESIZE, delegatedTtsBody(parsed, spec), new OpenAiStreamSink() {
@@ -2568,7 +2568,7 @@ public final class TaiManager {
             return openAiRequestError(400, "tts_model_not_installed", "Model '" + modelId + "' is not installed.", "model");
         }
         return openAiRequestError(400, "tts_model_not_installed",
-            "No voice model is installed. Get one in TAI settings > Model centre > Speech > Voice output.", "model");
+            "No voice model is installed. Get one in On-device AI settings > Model centre > Speech > Voice output.", "model");
     }
 
     /** The runtime-process body: the parsed request with the resolved spec riding along. */
@@ -2665,10 +2665,10 @@ public final class TaiManager {
         String modelId = speechModelIdFor(request);
         if (modelId.isEmpty()) {
             return openAiRequestError(400, "stt_model_not_configured",
-                "No speech-to-text model is installed. Get one in TAI settings > Model centre > Speech.", "model");
+                "No speech-to-text model is installed. Get one in On-device AI settings > Model centre > Speech.", "model");
         }
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return openAiRequestError(404, "model_not_found", "Unknown TAI model: " + modelId, "model");
+        if (spec == null) return openAiRequestError(404, "model_not_found", "Unknown model: " + modelId, "model");
         return openAiRequestError(400, "not_a_speech_model", "Model '" + modelId + "' is not a speech-to-text model.", "model");
     }
 
@@ -2723,7 +2723,7 @@ public final class TaiManager {
         JSONObject request = parseBody(body);
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null) return error(404, "model_not_found", "Unknown TAI model: " + modelId);
+        if (spec == null) return error(404, "model_not_found", "Unknown model: " + modelId);
         String requestedBackend = request.optString("backend", "").trim();
         if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
             return error(409, "backend_mismatch", "Model " + modelId + " requires backend " + spec.backend + ".");
@@ -2754,7 +2754,7 @@ public final class TaiManager {
         }
         if (!settings.isOpenAiAutoLoadEnabled()) {
             JSONObject data = error(409, "model_not_loaded",
-                "Model is not loaded. Load it explicitly with tai load or from TAI settings.");
+                "Model is not loaded. Load it explicitly with tai load or from On-device AI settings.");
             data.put("autoLoadEnabled", false);
             return data;
         }
@@ -3203,7 +3203,7 @@ public final class TaiManager {
         String code = nestedSourceError == null
             ? source.optString("error", source.optString("code", "tai_error"))
             : nestedSourceError.optString("code", source.optString("code", "tai_error"));
-        String message = source.optString("message", "TAI request failed");
+        String message = source.optString("message", "On-device AI request failed");
         JSONObject error = new JSONObject();
         error.put("message", message);
         error.put("type", "invalid_request_error");
@@ -3479,7 +3479,7 @@ public final class TaiManager {
         limitations.put("/v1/models lists endpoint capabilities for loadable LiteRT-LM/MNN models only; source model-card capabilities are informational.");
         limitations.put("GGUF/raw weight files are not supported because this APK does not include a GGUF/llama.cpp backend.");
         limitations.put("Audio output is not available from the local LiteRT-LM or MNN runners.");
-        limitations.put("OpenAI function tools are returned for client-side execution; TAI does not automatically execute shell commands or device actions.");
+        limitations.put("OpenAI function tools are returned for client-side execution; On-device AI does not automatically execute shell commands or device actions.");
         return limitations;
     }
 
@@ -3573,7 +3573,7 @@ public final class TaiManager {
                 @NonNull
                 @Override
                 public String execute(@NonNull String paramsJsonString) {
-                    throw new UnsupportedOperationException("TAI uses client-side tool execution.");
+                    throw new UnsupportedOperationException("On-device AI uses client-side tool execution.");
                 }
             }));
         }

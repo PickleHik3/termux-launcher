@@ -347,7 +347,7 @@ public final class TaiCliFormatter {
     @NonNull
     private static String formatError(@NonNull JSONObject data) {
         StringBuilder out = new StringBuilder();
-        out.append("TAI error");
+        out.append("On-device AI error");
         String message = clean(data.optString("message", ""));
         if (!message.isEmpty()) out.append(": ").append(message);
         out.append('\n');
@@ -361,7 +361,7 @@ public final class TaiCliFormatter {
     @NonNull
     private static String formatStatus(@NonNull JSONObject data) {
         StringBuilder out = new StringBuilder();
-        out.append("TAI status\n");
+        out.append("On-device AI status\n");
         JSONObject runtime = data.optJSONObject("runtime");
         if (runtime != null) {
             appendValue(out, "Runtime", runtime.optString("runtimeName", ""));
@@ -405,7 +405,7 @@ public final class TaiCliFormatter {
     @NonNull
     private static String formatRuntime(@NonNull JSONObject data) {
         StringBuilder out = new StringBuilder();
-        out.append("TAI runtime\n");
+        out.append("On-device AI runtime\n");
         JSONObject runtime = data.optJSONObject("runtime");
         if (runtime != null) appendRuntimeState(out, runtime);
         appendCompatibility(out, data);
@@ -428,7 +428,7 @@ public final class TaiCliFormatter {
     @NonNull
     private static String formatModels(@NonNull JSONObject data) {
         StringBuilder out = new StringBuilder();
-        out.append("TAI models\n");
+        out.append("On-device AI models\n");
         appendValue(out, "Storage", data.optString("storageDirectory", ""));
         appendValue(out, "Bundled model files", data.optBoolean("bundledModelFiles", false) ? "yes" : "no");
 
@@ -483,7 +483,7 @@ public final class TaiCliFormatter {
     @NonNull
     private static String formatDownloads(@NonNull JSONObject data) {
         StringBuilder out = new StringBuilder();
-        out.append("TAI downloads\n");
+        out.append("On-device AI downloads\n");
         JSONArray downloads = data.optJSONArray("downloads");
         if (downloads == null || downloads.length() == 0) {
             out.append("  none\n");

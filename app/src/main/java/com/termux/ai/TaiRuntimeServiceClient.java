@@ -62,14 +62,14 @@ public final class TaiRuntimeServiceClient {
         try {
             if (!request.done.await(timeoutMs, TimeUnit.MILLISECONDS)) {
                 pending.remove(request.requestId);
-                return runtimeUnavailable("tai_runtime_timeout", "TAI runtime service timed out.");
+                return runtimeUnavailable("tai_runtime_timeout", "On-device AI runtime service timed out.");
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             pending.remove(request.requestId);
-            return runtimeUnavailable("tai_runtime_interrupted", "TAI runtime request interrupted.");
+            return runtimeUnavailable("tai_runtime_interrupted", "On-device AI runtime request interrupted.");
         }
-        if (request.result == null) return runtimeUnavailable("tai_runtime_unavailable", "TAI runtime service did not return a result.");
+        if (request.result == null) return runtimeUnavailable("tai_runtime_unavailable", "On-device AI runtime service did not return a result.");
         return request.result;
     }
 
@@ -88,7 +88,7 @@ public final class TaiRuntimeServiceClient {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             pending.remove(request.requestId);
-            emitRuntimeError(sink, runtimeUnavailable("tai_runtime_interrupted", "TAI runtime stream interrupted."));
+            emitRuntimeError(sink, runtimeUnavailable("tai_runtime_interrupted", "On-device AI runtime stream interrupted."));
             return;
         } catch (IOException | RuntimeException e) {
             // Client disconnected or write failed: stop tracking so late events are dropped.
@@ -111,7 +111,7 @@ public final class TaiRuntimeServiceClient {
     ) throws JSONException {
         if (ensureConnected() == null) {
             PendingRequest failed = new PendingRequest(UUID.randomUUID().toString(), operation, stream, sink);
-            failed.result = runtimeUnavailable("tai_runtime_unavailable", "TAI runtime service is not connected.");
+            failed.result = runtimeUnavailable("tai_runtime_unavailable", "On-device AI runtime service is not connected.");
             failed.signalEnd();
             failed.done.countDown();
             return failed;
@@ -149,7 +149,7 @@ public final class TaiRuntimeServiceClient {
                         service.send(message);
                     } catch (RemoteException e) {
                         pending.remove(requestId);
-                        pendingRequest.result = runtimeCrashed("tai_runtime_send_failed", "TAI runtime service disconnected while starting the request.");
+                        pendingRequest.result = runtimeCrashed("tai_runtime_send_failed", "On-device AI runtime service disconnected while starting the request.");
                         pendingRequest.signalEnd();
                         pendingRequest.done.countDown();
                     }
@@ -157,7 +157,7 @@ public final class TaiRuntimeServiceClient {
                 }
             }
             if (rebound || ensureConnected() == null) {
-                pendingRequest.result = runtimeUnavailable("tai_runtime_unavailable", "TAI runtime service is not connected.");
+                pendingRequest.result = runtimeUnavailable("tai_runtime_unavailable", "On-device AI runtime service is not connected.");
                 pendingRequest.signalEnd();
                 pendingRequest.done.countDown();
                 return pendingRequest;
@@ -372,7 +372,7 @@ public final class TaiRuntimeServiceClient {
         if (bytes.length <= INLINE_BODY_LIMIT_BYTES) return new TransportBody(body, null);
         File dir = new File(appContext.getCacheDir(), "tai-ipc");
         if (!dir.isDirectory() && !dir.mkdirs()) {
-            throw new IOException("Could not create TAI IPC cache directory.");
+            throw new IOException("Could not create On-device AI IPC cache directory.");
         }
         File file = new File(dir, requestId + ".json");
         try (FileOutputStream output = new FileOutputStream(file)) {
@@ -384,7 +384,7 @@ public final class TaiRuntimeServiceClient {
     private void emitRuntimeError(@NonNull TaiManager.OpenAiStreamSink sink, @NonNull JSONObject source)
         throws JSONException, IOException {
         JSONObject error = new JSONObject();
-        error.put("message", source.optString("message", "TAI runtime failed"));
+        error.put("message", source.optString("message", "On-device AI runtime failed"));
         error.put("type", "invalid_request_error");
         error.put("code", source.optString("error", "tai_runtime_error"));
         JSONObject response = new JSONObject();
@@ -401,7 +401,7 @@ public final class TaiRuntimeServiceClient {
             error.put("ok", false);
             error.put("error", code);
             error.put("message", message == null || message.trim().isEmpty()
-                ? "TAI runtime service is unavailable." : message);
+                ? "On-device AI runtime service is unavailable." : message);
             error.put("runtimeProcess", TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
             error.put("_statusCode", 503);
         } catch (JSONException ignored) {
