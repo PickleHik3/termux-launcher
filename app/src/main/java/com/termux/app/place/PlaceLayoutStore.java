@@ -58,6 +58,13 @@ public final class PlaceLayoutStore {
     private static final String KEY_APPS_ROW = Element.APPS.storageKey();
     private static final String KEY_AZ_ROW = "az_row";
     private static final String KEY_AZ_BAR = Element.AZ.storageKey();
+    /**
+     * Whether a shown alphabets index stands as its pull tab, beside {@code az_row}: the
+     * three-way On / Minimised / Off is the two of them together, so an install that has only
+     * ever stored {@code az_row} reads exactly as it did — true is On, false is Off — and nothing
+     * has to be migrated for it.
+     */
+    private static final String KEY_AZ_MINIMISED = "az_minimised";
     private static final String KEY_EXTRA_KEYS = Element.EXTRA_KEYS.storageKey();
 
     /**
@@ -116,7 +123,8 @@ public final class PlaceLayoutStore {
     private static final String LEGACY_KEY_X11_HIDE_STATUS_BAR = "x11_hide_status_bar";
 
     private static final String[] ARRANGEMENT_KEYS = {
-        KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_EXTRA_KEYS, KEY_KEYBOARD_MODE,
+        KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_AZ_MINIMISED, KEY_EXTRA_KEYS,
+        KEY_KEYBOARD_MODE,
         KEY_KEYBOARD_FORM, KEY_WIDGET_COLUMNS, KEY_WIDGET_ROWS,
         KEY_DOCK_HEIGHT, KEY_KEYBOARD_HEIGHT, KEY_KEYBOARD_CHIN,
         // The stack positions ride with the placements they belong to, so the Layout editor's
@@ -187,6 +195,7 @@ public final class PlaceLayoutStore {
             keyboardMode(orientation),
             keyboardForm(orientation),
             isKeyboardShown(),
+            azMinimised(orientation),
             widgetColumns(orientation),
             widgetRows(orientation));
     }
@@ -374,6 +383,50 @@ public final class PlaceLayoutStore {
 
     public void setAzRowShown(@NonNull PlaceOrientation orientation, boolean shown) {
         writeBoolean(layoutKey(orientation, KEY_AZ_ROW), shown);
+    }
+
+    /**
+     * Whether the alphabets index, while it is shown, stands minimised as a pull tab on its edge
+     * rather than as a band of its own. False until the user asks: every install that predates
+     * the tab keeps the band it had.
+     */
+    public boolean azMinimised(@NonNull PlaceOrientation orientation) {
+        return mStore != null
+            && mStore.getBoolean(layoutKey(orientation, KEY_AZ_MINIMISED), false);
+    }
+
+    public void setAzMinimised(@NonNull PlaceOrientation orientation, boolean minimised) {
+        writeBoolean(layoutKey(orientation, KEY_AZ_MINIMISED), minimised);
+    }
+
+    /** The Layout editor's three-way choice for the index: a band, the pull tab, or put away. */
+    @NonNull
+    public PlaceLayout.AzIndexMode azIndexMode(@NonNull PlaceOrientation orientation) {
+        if (!azRowShown(orientation)) return PlaceLayout.AzIndexMode.OFF;
+        return azMinimised(orientation)
+            ? PlaceLayout.AzIndexMode.MINIMISED : PlaceLayout.AzIndexMode.ON;
+    }
+
+    /**
+     * Writes the three-way choice. Off leaves the minimised flag where it was, the way putting a
+     * bar away keeps the edge it comes back to, so a tab dragged back out of the Hidden tray
+     * returns as a tab.
+     */
+    public void setAzIndexMode(@NonNull PlaceOrientation orientation,
+                               @NonNull PlaceLayout.AzIndexMode mode) {
+        switch (mode) {
+            case OFF:
+                setAzRowShown(orientation, false);
+                return;
+            case MINIMISED:
+                setAzMinimised(orientation, true);
+                setAzRowShown(orientation, true);
+                return;
+            case ON:
+            default:
+                setAzMinimised(orientation, false);
+                setAzRowShown(orientation, true);
+        }
     }
 
     /**

@@ -573,6 +573,17 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:visibility="gone" />
+
+                <!-- The minimised A–Z index: a pull tab on its edge, over the canvas, and the
+                     letters it slides out over the canvas while held. Last, so a touch on the tab
+                     reaches it before the pane wall (and its border hold-drag) sees the stream; a
+                     touch anywhere else is refused and goes on to the wall. It claims no band.
+                     syncAzBarHosts() configures and shows it. -->
+                <com.termux.app.AzPullTabLayer
+                    android:id="@+id/place_az_tab_layer"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone" />
             </FrameLayout>
 
             <com.termux.app.place.EdgeStackView

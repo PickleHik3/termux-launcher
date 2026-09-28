@@ -52,21 +52,38 @@ public final class PlaceChromePolicy {
     }
 
     /**
-     * The alphabets row is its own index. With an apps row to ride the matches land in that row;
-     * without one they ride a floating strip above the letters, so the switch is the only thing
-     * that decides whether the row is there.
+     * The alphabets row as a band of its own on its edge. With an apps row to ride the matches
+     * land in that row; without one they ride a floating strip above the letters. A minimised
+     * index is not a row: it is the pull tab ({@link #azTabShown}), which claims no band.
      */
     public static boolean azRowShown(@NonNull PlaceLayout layout) {
+        return EdgeStackPolicy.claimsBand(layout, Element.AZ);
+    }
+
+    /**
+     * The alphabets index minimised to its pull tab: a small tab on its edge over the content
+     * that slides the letters out, over the content too, while a finger holds it. It never rides
+     * the apps row, so its matches always ride the floating strip.
+     */
+    public static boolean azTabShown(@NonNull PlaceLayout layout) {
+        return EdgeStackPolicy.isShown(layout, Element.AZ) && layout.azMinimised;
+    }
+
+    /**
+     * Whether the index is on screen in either form, which is what keeps the scrub, the catalogue
+     * and the letters' ink alive.
+     */
+    public static boolean azIndexShown(@NonNull PlaceLayout layout) {
         return EdgeStackPolicy.isShown(layout, Element.AZ);
     }
 
     /**
      * The index standing on its own, with no apps row to fill: the scrub shows its matches on a
      * floating strip instead of in the row. A rail leaves it standing alone, which is what
-     * landscape has always done, and so does an edge of its own.
+     * landscape has always done, and so does an edge of its own, and so does the pull tab.
      */
     public static boolean azIndexStandsAlone(@NonNull PlaceLayout layout) {
-        return azRowShown(layout) && !azRidesAppsRow(layout);
+        return azIndexShown(layout) && !azRidesAppsRow(layout);
     }
 
     /**

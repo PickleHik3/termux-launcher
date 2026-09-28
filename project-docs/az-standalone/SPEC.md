@@ -64,3 +64,25 @@ strip stacked beside them, gesture and dismiss. Unit-test verified only: plank c
 letters and the drawer lift (cannot be provoked over adb without hitting a control on the glass).
 Installed on pong but not yet exercised there (screen was off). Open polish: on a side column the
 letter wave pushes the active letters into the strip's edge by a few dp.
+
+## Round 3: the minimised index (2026-09-28)
+
+The developer asked for a minimised form of the index: a pull tab on its edge that brings the
+letters out while it is dragged.
+
+| Item | Rule |
+|---|---|
+| Three-way choice | The Layout editor's A–Z pill is **On / Minimised / Off** (values `shown` / `minimised` / `hidden`, so the two-way spellings still read). Minimised is a new per-orientation key `layout.<o>.az_minimised` beside `az_row`; the three-way is the two together, so an install that only ever stored `az_row` (or the legacy global switch) reads exactly as before and nothing is migrated. Off keeps the flag, so a tab put in the Hidden tray comes back a tab. `clear()` and the Discard snapshot (`PlaceArrangeSnapshot`) carry it. The Position pill stays while the index is On or Minimised. |
+| Model | `PlaceLayout.azMinimised`, value-equal and kept by `withSlot`. A minimised index is shown but claims no band (`EdgeStackPolicy.claimsBand`): it is in no stack, costs no inset and puts nothing on the dock. `PlaceChromePolicy.azRowShown` is the band only; `azTabShown` the tab; `azIndexShown` either. The tab never rides the apps row, so `AzPreviewTargetPolicy` gives it the floating strip. Minimal mode hides it like every other element. |
+| Tab on the screen | `AzPullTabLayer`, last child of `terminal_surface_host` (the canvas). The pill is the design's 48 × 28 dp, radius 10, 6 dp off the edge, with an upright A at the leading end and the six-dot grip at the trailing one; its touch area is 56 × 48 dp, reaching the canvas edge. It stands at the leading end of the index's edge (left, right in RTL rows, top on columns), starting past the corner square (`CornerZones.PANE_SIZE_DP` + 8 dp). Glass: the dock's `dockSurface`, with an opacity floor of 0.85 (`AzTabPolicy.MIN_GLASS_OPACITY`) because it stands over live content. Geometry is `AzTabPolicy`. |
+| Gesture | The layer refuses any DOWN off the tab, so the pane gets it untouched. A DOWN on the tab is the tab's at once — no slop, no hold — and since the layer is above the pane wall, `PaneWallLayout.dispatchTouchEvent` never sees the stream: the border hold-drag (whose ±24 dp band the tab sits in) and the corner tab cannot claim it. Every event is handed to an ordinary `AzScrubRowView` in the layer's reveal frame, offset to its resting position, so touch → slide along → scrub is one gesture through the unchanged callback, strip and launch-on-release. The activity skips the terminal plank tilt and the keybind hint's terminal-tap for a stream that began on the tab. |
+| Reveal | `AzTabReveal` state machine: tucked → out on the DOWN → returning on UP/CANCEL (after the scrub has had the release and launched) → tucked when the slide comes home; a DOWN on the way back takes it out again. The letters come out as the bar every edge uses (band + chin, 10 dp air, row inset like the dock) and slide from one bar's travel past the canvas edge on a critically damped `Spring` (k 900, d 60); instant under reduced motion. The layer clips to the canvas so they come out from behind its edge. The tab fades as they arrive. The scrub's bar bounds and glass sampling subtract the in-flight slide, so the finger is judged against where the bar will stand. |
+| Edges, keyboard, minimal | Row edges (top, bottom) and side columns alike; the letters on a side are the vertical row. The canvas shrinks above the in-app keyboard, so the tab rides above it. Minimal mode hides the tab. The dock's chin/crown is never pushed onto a bottom tab's letters. |
+| Miniature | The Codex `alphabets_tab` asset: 48 × 28 units, radius 10, laid over the pane at the leading end of its edge, 8 units in from the pane's edge, as in `miniature_portrait_terminal`. It is a block with a grip, so it lifts and drops on any edge (staying minimised) or into the tray. Legend and spoken description say "minimised". |
+
+Build: one branch, four commits (model, pure policies, the layer and its wiring, the miniature)
+plus docs. Unit tests: `AzIndexModeTest` (store migration, three-way round trip, chrome answers,
+minimal mode, drop, pill, Discard), `AzTabPolicyTest` (placement, touch target, corner and border
+clearance, RTL, reveal box, slide), `AzTabRevealTest`, `PlaceMiniatureTabTest`. Not built or run
+by the worker; device checks owed: the tab and slide on every edge, a scrub that starts on the tab
+and launches, the border drag and corner tab beside it, keyboard up, landscape columns, RTL.

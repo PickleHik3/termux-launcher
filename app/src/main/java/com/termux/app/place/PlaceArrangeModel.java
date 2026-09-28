@@ -1,6 +1,7 @@
 package com.termux.app.place;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
 import com.termux.R;
@@ -175,8 +176,12 @@ public final class PlaceArrangeModel {
         return min + (max - min) * step / SCALE_STEPS;
     }
 
-    /** The value the A–Z index's shown/hidden pill stores; the edge is a value of its own. */
+    /**
+     * The values the A–Z index's On / Minimised / Off pill stores; the edge is a value of its own.
+     * On and Off keep the spellings the two-way pill had.
+     */
     private static final String AZ_SHOWN = "shown";
+    private static final String AZ_MINIMISED = "minimised";
     private static final String AZ_HIDDEN = "hidden";
 
     private static final String[] EDGE_VALUES = {"top", "bottom", "left", "right"};
@@ -195,9 +200,10 @@ public final class PlaceArrangeModel {
     private static final int[] ROW_LABELS_PORTRAIT = {
         R.string.settings_x11_extra_keys_side_bottom, R.string.settings_layout_row_hidden};
 
-    private static final String[] AZ_VALUES = {AZ_SHOWN, AZ_HIDDEN};
+    private static final String[] AZ_VALUES = {AZ_SHOWN, AZ_MINIMISED, AZ_HIDDEN};
     private static final int[] AZ_LABELS = {
-        R.string.settings_layout_row_shown, R.string.settings_layout_row_hidden};
+        R.string.settings_layout_az_on, R.string.settings_layout_az_minimised,
+        R.string.settings_layout_az_off};
 
     private static final String[] FORM_VALUES = {"docked", "floating", "split"};
     private static final int[] FORM_LABELS = {
@@ -247,14 +253,14 @@ public final class PlaceArrangeModel {
                         RowPlacement.parse(value, RowPlacement.BOTTOM))));
                 return groups;
             case AZ_INDEX: {
-                boolean shown = places.azRowShown(orientation);
+                PlaceLayout.AzIndexMode mode = places.azIndexMode(orientation);
                 groups.add(new Pills(R.string.settings_layout_miniature_alphabets, AZ_VALUES,
-                    AZ_LABELS, shown ? AZ_SHOWN : AZ_HIDDEN,
-                    value -> places.setAzRowShown(orientation, AZ_SHOWN.equals(value))));
+                    AZ_LABELS, azValue(mode),
+                    value -> places.setAzIndexMode(orientation, azMode(value))));
                 // The edge is the bar's own wherever it stands: on the pinned apps row's edge it
                 // rides that row, on any other it gets a bar of its own, and this is the control
-                // that moves it between the two.
-                if (shown)
+                // that moves it between the two. Minimised, it is the edge the tab stands on.
+                if (mode != PlaceLayout.AzIndexMode.OFF)
                     groups.add(edgePills(R.string.settings_layout_alphabets_edge_title, orientation,
                         places.azBarEdge(orientation),
                         value -> places.setAzBarEdge(orientation,
@@ -345,6 +351,25 @@ public final class PlaceArrangeModel {
                               @NonNull FloatWriter writer) {
         return new Size(labelRes, Unit.PERCENT, 0, SCALE_STEPS, scaleProgress(value, min, max),
             progress -> writer.write(scaleValue(progress, min, max)));
+    }
+
+    /** The pill value one index mode is spelled as. */
+    @NonNull
+    static String azValue(@NonNull PlaceLayout.AzIndexMode mode) {
+        switch (mode) {
+            case MINIMISED: return AZ_MINIMISED;
+            case OFF: return AZ_HIDDEN;
+            case ON:
+            default: return AZ_SHOWN;
+        }
+    }
+
+    /** The index mode a pill value names; anything unknown is On, the shipped default. */
+    @NonNull
+    static PlaceLayout.AzIndexMode azMode(@Nullable String value) {
+        if (AZ_MINIMISED.equals(value)) return PlaceLayout.AzIndexMode.MINIMISED;
+        if (AZ_HIDDEN.equals(value)) return PlaceLayout.AzIndexMode.OFF;
+        return PlaceLayout.AzIndexMode.ON;
     }
 
     /** Where a bar may stand: every edge in landscape, and only top or bottom in portrait. */

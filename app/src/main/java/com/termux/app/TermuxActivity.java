@@ -119,6 +119,7 @@ import com.termux.app.launcher.az.AzBarHostGeometry;
 import com.termux.app.launcher.az.AzFloatingStripPolicy;
 import com.termux.app.launcher.az.AzPreviewTargetPolicy;
 import com.termux.app.launcher.az.AzScrubGesture;
+import com.termux.app.launcher.az.AzTabPolicy;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.drawer.AppDrawerGestureArbiter;
 import com.termux.app.launcher.drawer.AppDrawerPullGeometry;
@@ -858,6 +859,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.statusbar.StatusBarSurfaceOutlineProvider();
     /** Whether the index is a band of the shared plank rather than a capsule of its own. */
     private boolean mAzBarOnPlank;
+    /** The minimised index's pull tab over the canvas, and the letters it slides out. */
+    @Nullable private AzPullTabLayer mAzTabLayer;
+    @Nullable private AzScrubRowView mAzTabRowView;
+    /** Whether the index stood minimised on the last host pass. */
+    private boolean mAzTabShown;
+    /** Whether the touch stream in progress began on the pull tab, which is the letters' alone. */
+    private boolean mAzTabTouch;
     /** The plank's glass height as last sized, which its corner radius is clamped to. */
     private int mOffDockPlankGlassHeightPx;
     /** The edge the shared off-dock plank is standing on, as last applied from the place. */
@@ -2100,9 +2108,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public boolean dispatchTouchEvent(MotionEvent ev) {
         Trace.beginSection("Touch.dispatch");
         try {
+            // A finger on the A-Z pull tab is the letters' and nothing else's: the pane under the
+            // tab neither tilts for it nor reads it as a tap on the terminal.
+            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                mAzTabTouch = mAzTabLayer != null
+                    && mAzTabLayer.isOnTab(ev.getRawX(), ev.getRawY());
+            }
             feedDockPlank(ev);
-            feedTerminalPlank(ev);
-            if (touchBeganOverTerminal(ev)) mKeybindHintPresenter.onTerminalTouch(ev);
+            if (!mAzTabTouch) feedTerminalPlank(ev);
+            if (!mAzTabTouch && touchBeganOverTerminal(ev))
+                mKeybindHintPresenter.onTerminalTouch(ev);
             notifyKeybindHintPanelTouch(ev);
             return super.dispatchTouchEvent(ev);
         } finally {
@@ -6688,7 +6703,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The letters keep their scrub without the apps row — it just shows its matches on the
             // floating strip instead — so only drop the gesture when the letters are gone too.
             // Standing on another edge is not gone: the row here is empty, the bar is elsewhere.
-            if (!isAzRowEnabled()) {
+            if (!isAzIndexEnabled()) {
                 resetAzGestureState(true);
             }
         }
@@ -8067,9 +8082,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             isX11DisplayEnabled());
     }
 
-    /** The letters row is the place's, not the launcher's: one switch per arrangement. */
-    private boolean isAzRowEnabled() {
-        return mPreferences != null && PlaceChromePolicy.azRowShown(currentPlaceLayout());
+    /**
+     * The letters are the place's, not the launcher's: one choice per arrangement. True for the
+     * index in either form — a band of its own, or minimised to its pull tab — since both scrub
+     * the same way; what claims a band is {@link PlaceChromePolicy#azRowShown}'s to say.
+     */
+    private boolean isAzIndexEnabled() {
+        return mPreferences != null && PlaceChromePolicy.azIndexShown(currentPlaceLayout());
     }
 
     /**
@@ -8146,22 +8165,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * a band of that row's plank and the glass under both of them is the plank's, so the capsule
      * this host carries everywhere else is put away.
      *
+     * <p>Minimised, the index has no band anywhere: the dock's row and this host both go, and the
+     * letters live in the pull tab's layer over the canvas ({@link AzPullTabLayer}), which is where
+     * the one scrub callback moves to.
+     *
      * @return whether a host appeared or went, which the content's edge padding is derived from
      */
     private boolean syncAzBarHosts() {
         FrameLayout host = findViewById(R.id.place_az_bar_host);
         if (host == null) return false;
-        boolean lettersShown = isAzRowEnabled();
-        PlaceLayout.Edge edge = lettersShown ? azBarEdge() : PlaceLayout.Edge.BOTTOM;
+        PlaceLayout layout = currentPlaceLayout();
+        boolean tabShown = mPreferences != null && PlaceChromePolicy.azTabShown(layout);
+        boolean lettersShown = mPreferences != null && PlaceChromePolicy.azRowShown(layout);
+        PlaceLayout.Edge edge = lettersShown || tabShown ? azBarEdge() : PlaceLayout.Edge.BOTTOM;
         boolean wantHost = lettersShown && edge != PlaceLayout.Edge.BOTTOM;
         // Riding a row that is itself off the dock, the index is one of two bars on a shared
         // plank: its own capsule goes, the plank's glass is the one sheet under both of them.
-        boolean onPlank = wantHost && offDockPlankElements(currentPlaceLayout(), edge)
-            .contains(Element.AZ);
+        boolean onPlank = wantHost && offDockPlankElements(layout, edge).contains(Element.AZ);
         boolean changed = mAzBarEdge != edge || mAzBarOnPlank != onPlank
-            || (host.getVisibility() == View.VISIBLE) != wantHost;
+            || (host.getVisibility() == View.VISIBLE) != wantHost
+            || mAzTabShown != tabShown;
         mAzBarEdge = edge;
         mAzBarOnPlank = onPlank;
+        mAzTabShown = tabShown;
 
         if (wantHost) {
             mAzBarHostRowView = installAzBarRow(host, mAzBarHostRowView);
@@ -8170,8 +8196,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View ownGlass = findViewById(R.id.place_az_bar_host_glass);
         if (ownGlass != null) ownGlass.setVisibility(onPlank ? View.GONE : View.VISIBLE);
         host.setVisibility(wantHost ? View.VISIBLE : View.GONE);
+        syncAzTabLayer(tabShown, edge);
 
-        AzScrubRowView next = wantHost ? mAzBarHostRowView
+        AzScrubRowView next = tabShown ? mAzTabRowView
+            : wantHost ? mAzBarHostRowView
             : findViewById(R.id.apps_bar_az_row);
         if (next != null) {
             if (next != mAzScrubRowView) {
@@ -8200,11 +8228,69 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The minimised index's pull tab: shown on the index's edge over the canvas, with the letters'
+     * own view installed in the frame it slides out of, or taken away with the letters tucked.
+     * The tab is sized like a bar off the dock — the same thickness, the same air, a row inset
+     * like the dock — so the letters that come out are the bar every other edge has.
+     */
+    private void syncAzTabLayer(boolean shown, @NonNull PlaceLayout.Edge edge) {
+        if (mAzTabLayer == null) mAzTabLayer = findViewById(R.id.place_az_tab_layer);
+        AzPullTabLayer layer = mAzTabLayer;
+        if (layer == null) return;
+        if (shown) {
+            int thicknessPx = azBarThicknessPx();
+            mAzTabRowView = installAzBarRow(layer.revealHost(), mAzTabRowView);
+            layer.setRow(mAzTabRowView);
+            layer.configure(edge, thicknessPx, azBarHostMarginPx(),
+                edge.isOnSide() ? 0 : getDockLayout().horizontalInsetPx,
+                getDockLayout().capsuleCornerRadiusPx(thicknessPx));
+            layer.setReducedMotion(isReducedMotionEnabled());
+        }
+        layer.setTabShown(shown);
+    }
+
+    /**
+     * The tab and the letters' sheet wear the dock's glass. They stand over live content rather
+     * than over the wallpaper the dock's opacity is tuned against, so they keep a floor under it
+     * ({@link AzTabPolicy#MIN_GLASS_OPACITY}) for the letters to read on.
+     */
+    private void refreshAzTabGlass() {
+        AzPullTabLayer layer = mAzTabLayer;
+        if (layer == null || layer.getVisibility() != View.VISIBLE) return;
+        float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity() / 100f;
+        opacity = Math.max(opacity, AzTabPolicy.MIN_GLASS_OPACITY);
+        layer.setGlass(mChrome.glass().dockSurface(opacity, 0f, 1f, false),
+            mChrome.glass().dockSurface(opacity, 0f, 1f, false));
+    }
+
+    /**
+     * The letters' rectangle as the scrub measures it: where the view stands on the screen, less
+     * whatever part of the pull tab's slide is still in flight, so a finger that took the tab is
+     * judged against the bar where it is about to stand rather than where the spring has it now.
+     */
+    private void populateAzRowRawBounds() {
+        populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
+        if (mAzRowRawBounds.isEmpty()) return;
+        mAzRowRawBounds.offset(-azRowSlideX(), -azRowSlideY());
+    }
+
+    private float azRowSlideX() {
+        return mAzTabLayer != null && mAzScrubRowView != null
+            && mAzScrubRowView == mAzTabRowView ? mAzTabLayer.slideOffsetX() : 0f;
+    }
+
+    private float azRowSlideY() {
+        return mAzTabLayer != null && mAzScrubRowView != null
+            && mAzScrubRowView == mAzTabRowView ? mAzTabLayer.slideOffsetY() : 0f;
+    }
+
+    /**
      * The material behind every sheet off the dock while it is up, re-read from the dock's own
      * surface tuning: the shared plank a lying-down row stands on, and the index's own capsule
      * wherever it is not on that plank.
      */
     private void refreshOffDockGlass() {
+        refreshAzTabGlass();
         View plank = findViewById(R.id.place_off_dock_plank_host);
         if (plank != null && plank.getVisibility() == View.VISIBLE) {
             applyOffDockPlankGlass(R.id.place_off_dock_plank_glass,
@@ -8346,7 +8432,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean isLauncherCatalogEnabled() {
-        return isSuggestionBarEnabled() || isAzRowEnabled();
+        return isSuggestionBarEnabled() || isAzIndexEnabled();
     }
 
     public boolean shouldProcessSuggestionBarKeyEvent(int keyCode) {
@@ -8598,7 +8684,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void syncAzScrubLettersAndTint() {
-        if (!isAzRowEnabled() || mAzScrubRowView == null || mSuggestionBarView == null) return;
+        if (!isAzIndexEnabled() || mAzScrubRowView == null || mSuggestionBarView == null) return;
         Set<Character> letters = new LinkedHashSet<>(mSuggestionBarView.getAvailableAzLetters());
         mAzScrubRowView.setVisibleLetters(letters);
         int base = resolveAzGestureAccentColor();
@@ -8609,6 +8695,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mAzScrubRowView.getCurrentTextColor() != letterInk) {
             mAzScrubRowView.setTextColor(letterInk);
         }
+        // The pull tab's A and grip are the same letters' ink.
+        if (mAzTabLayer != null && mAzScrubRowView == mAzTabRowView) mAzTabLayer.setInk(letterInk);
         mAzScrubRowView.setGlassBackdrop(glass == null ? Color.TRANSPARENT : glass.surface);
         mAzScrubRowView.setInteractionAccentColor(base);
         mAzScrubRowView.setInteractionMode(AzScrubRowView.InteractionMode.WAVE_TRACK);
@@ -8682,12 +8770,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long eventTimeMs,
         @NonNull AzScrubRowView.GesturePhase phase
     ) {
-        if (!isAzRowEnabled() || mSuggestionBarView == null || mAzScrubRowView == null) {
+        if (!isAzIndexEnabled() || mSuggestionBarView == null || mAzScrubRowView == null) {
             return;
         }
 
         boolean standalone = isAzIndexStandalone();
-        populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
+        populateAzRowRawBounds();
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
         populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
         // The icon track: the apps row where the place has one, the floating strip where it does
@@ -8954,9 +9042,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private AzScrubGesture.Bounds azBarScreenBounds() {
         if (mAzScrubRowView == null) return AzScrubGesture.Bounds.EMPTY;
         mAzScrubRowView.getLocationOnScreen(mAzViewLocation);
-        return new AzScrubGesture.Bounds(mAzViewLocation[0], mAzViewLocation[1],
-            mAzViewLocation[0] + mAzScrubRowView.getWidth(),
-            mAzViewLocation[1] + mAzScrubRowView.getHeight());
+        // Where the bar rests, not where the pull tab's slide has carried it this frame.
+        float left = mAzViewLocation[0] - azRowSlideX();
+        float top = mAzViewLocation[1] - azRowSlideY();
+        return new AzScrubGesture.Bounds(left, top, left + mAzScrubRowView.getWidth(),
+            top + mAzScrubRowView.getHeight());
     }
 
     @NonNull
@@ -8974,13 +9064,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void updateAzOverlayState(@Nullable SuggestionBarView.AzDragFocusResult focusResult, char activeLetter) {
-        if (!isAzRowEnabled()) {
+        if (!isAzIndexEnabled()) {
             return;
         }
         if (mLauncherAzGestureFxUnderlayView == null && mLauncherAzGestureFxOverlayView == null) {
             return;
         }
-        populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
+        populateAzRowRawBounds();
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
         populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
         boolean standalone = isAzIndexStandalone();
@@ -9067,7 +9157,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if ((mLauncherAzGestureFxUnderlayView == null && mLauncherAzGestureFxOverlayView == null) || mSuggestionBarView == null) {
             return;
         }
-        populateRawBounds(mAzScrubRowView, mAzRowRawBounds);
+        populateAzRowRawBounds();
         populateRawBounds(mSuggestionBarView, mAppsRowRawBounds);
         populateRawBounds(mAzTerminalToolbarView, mExtraKeysRawBounds);
         applyAzFxRowBounds(isAzIndexStandalone());
@@ -9152,7 +9242,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void updateAzEdgePagingLoop(@Nullable SuggestionBarView.AzDragFocusResult focusResult) {
-        if (!isAzRowEnabled() || focusResult == null || mSuggestionBarView == null) {
+        if (!isAzIndexEnabled() || focusResult == null || mSuggestionBarView == null) {
             stopAzEdgePagingLoop();
             return;
         }
@@ -9282,7 +9372,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void scheduleAzOverflowRefresh() {
-        if (!isAzRowEnabled()) {
+        if (!isAzIndexEnabled()) {
             return;
         }
         cancelAzOverflowRefresh();
@@ -9370,8 +9460,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (row == null) row = findViewById(R.id.accessory_surface_host);
         if (row == null || row.getWidth() <= 0 || row.getHeight() <= 0) return false;
         row.getLocationOnScreen(mAzGlassLocation);
-        out.set(mAzGlassLocation[0], mAzGlassLocation[1],
-            mAzGlassLocation[0] + row.getWidth(), mAzGlassLocation[1] + row.getHeight());
+        // The pull tab's letters are measured where they stand when out, not tucked past the edge.
+        int left = mAzGlassLocation[0];
+        int top = mAzGlassLocation[1];
+        if (row == mAzScrubRowView) {
+            left -= Math.round(azRowSlideX());
+            top -= Math.round(azRowSlideY());
+        }
+        out.set(left, top, left + row.getWidth(), top + row.getHeight());
         return true;
     }
 
@@ -9411,7 +9507,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void lockScreenFromAzDoubleTap() {
-        if (!isAzRowEnabled()) {
+        if (!isAzIndexEnabled()) {
             return;
         }
         String method = mPreferences.getAppLauncherAzLockMethod();
@@ -11449,8 +11545,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // content then keeps just the cutout on that side like any other edge.
         int appsColumnPx = isDockRailShown() ? dockLayout.railBandPx + indicatorBandPx : 0;
         // Off the dock the index gets a host of its own; on it, it is the dock's own row.
-        boolean lettersOffDock = isAzRowEnabled() && azBarEdge() != PlaceLayout.Edge.BOTTOM;
+        // The pull tab claims no band, so only a band of the index's own counts here.
         PlaceLayout layout = currentPlaceLayout();
+        boolean lettersOffDock = mPreferences != null && PlaceChromePolicy.azRowShown(layout)
+            && azBarEdge() != PlaceLayout.Edge.BOTTOM;
         List<Element> onPlank = offDockPlankElements(layout, offDockPlankEdge(layout));
         // The plank carries the air either side of it once, for both bars: the row's band grows by
         // it and the index riding the plank claims only the letters themselves. The ticks stand in
@@ -12258,8 +12356,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         moved |= updateViewHeight(R.id.apps_bar_indicator_band, layout.indicatorBandHeightPx);
         moved |= updateViewHeight(R.id.apps_bar_az_row, layout.azRowHeightPx);
         // The dock's chin is the dock's row's; a bar standing elsewhere carries the one its own
-        // host was sized for, and must not have it taken away because the dock has no row.
-        if (mAzScrubRowView != null && mAzBarEdge == PlaceLayout.Edge.BOTTOM) {
+        // host was sized for, and must not have it taken away because the dock has no row. The
+        // pull tab's letters on the bottom edge are such a bar: they keep their own chin.
+        if (mAzScrubRowView != null && mAzBarEdge == PlaceLayout.Edge.BOTTOM
+            && mAzScrubRowView != mAzTabRowView) {
             moved |= layout.azRowChinPaddingPx != mAppliedAzRowChinPaddingPx;
             mAppliedAzRowChinPaddingPx = layout.azRowChinPaddingPx;
             mAzScrubRowView.setChinPaddingPx(layout.azRowChinPaddingPx);

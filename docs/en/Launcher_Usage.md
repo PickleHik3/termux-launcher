@@ -164,6 +164,14 @@ Scrub horizontally across the A–Z row to jump to installed apps beginning with
 a browsing control, not a text field. It can be hidden in the Layout editor, on the place
 you want it hidden for.
 
+Set it to **Minimised** in the Layout editor and the index folds into a small tab on its edge,
+laid over the terminal, the widgets or the display without taking any room from them. Put a thumb
+on the tab and slide: the letters come out along the edge and you are already scrubbing them, with
+the matching apps floating beside the letters as they do whenever the index stands without the
+pinned apps row. Slide onto an app and let go to open it; let go anywhere else and the letters
+tuck back behind the tab. The tab stays clear of the corner, so the corner tab and the border drag
+work as everywhere else, and minimal mode puts it away with the rest of the chrome.
+
 ### Search from the shell prompt
 
 At an idle prompt, type the app-search prefix followed by a query:

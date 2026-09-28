@@ -249,6 +249,16 @@ public final class EdgeStackPolicy {
     }
 
     /**
+     * Whether an element takes a band on its edge: shown, and not the alphabets index standing
+     * minimised. The minimised index is a pull tab laid over the content ({@link
+     * PlaceLayout#azMinimised}) — on screen, but claiming nothing — so it is in no stack, costs
+     * the content no inset and puts nothing on the dock.
+     */
+    public static boolean claimsBand(@NonNull PlaceLayout layout, @NonNull Element element) {
+        return isShown(layout, element) && !(element == Element.AZ && layout.azMinimised);
+    }
+
+    /**
      * What stands on one edge, outermost first. Ties in {@code order} — two elements can hold the
      * same number, since each keeps its own — are broken by {@link Element#defaultOrder}, so the
      * answer never depends on which element was asked about first.
@@ -257,7 +267,7 @@ public final class EdgeStackPolicy {
     public static List<Element> stack(@NonNull PlaceLayout layout, @NonNull Edge edge) {
         List<Element> on = new ArrayList<>(4);
         for (Element element : Element.values()) {
-            if (!isShown(layout, element)) continue;
+            if (!claimsBand(layout, element)) continue;
             if (edgeOf(layout, element) != edge) continue;
             on.add(element);
         }
