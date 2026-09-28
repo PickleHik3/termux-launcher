@@ -495,21 +495,29 @@ public class PaneWallLayoutTest {
     }
 
     /**
-     * The plank (PlankTilt): a finger's drag tips the page the wall rests on when the listener
-     * allows it, by the angle its position says, on a hardware layer for the length of the
-     * motion; the settle lays it flat and drops the layer. The page arriving is never tilted.
+     * The plank (PlankTilt): a held border's drag tips the page the wall rests on when the
+     * listener allows it, by the angle its position says, on a hardware layer for the length of
+     * the motion; the settle lays it flat and drops the layer. The page arriving is never tilted,
+     * and a drag taken from outside (the window strip's overswipe) slides flat.
      */
     @Test
     public void aDragTipsThePlankAndTheSettleLaysItFlat() {
-        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        buildWithContent();
         wall.setReducedMotion(false);
         wall.setListener(new PaneWallLayout.Listener() {
             @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
         });
+        // The window strip's overswipe: the same leave, but nothing tips.
         wall.beginDrag();
+        assertNull(wall.tiltPage());
+        assertTrue(wall.goTo(PaneWallPage.TERMINAL, false));
+
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        letTheHoldElapse();
         assertEquals(terminal, wall.tiltPage());
         assertEquals(View.LAYER_TYPE_HARDWARE, terminal.getLayerType());
-        wall.dragTo(-300f);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 300f,
+            40f, 400L));
         assertEquals(PlankTilt.angleDeg(-300f, WIDTH), terminal.getRotationY(), EPS);
         assertTrue("dragged left, the left edge goes in", terminal.getRotationY() < 0f);
         assertEquals(0f, display.getRotationY(), EPS);
