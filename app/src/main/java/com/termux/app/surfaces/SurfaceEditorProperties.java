@@ -78,6 +78,11 @@ public final class SurfaceEditorProperties {
      */
     public enum Section {
         MATERIAL(R.string.termux_surface_editor_material),
+        /**
+         * Fancier Glass's three knobs, on the shared layer only and only while it is on: how the
+         * glass bends what is behind it is a property of the one material, never of a surface.
+         */
+        REFRACTION(R.string.termux_surface_editor_section_refraction),
         SHAPE(R.string.termux_surface_editor_shape),
         WALLPAPER(R.string.termux_surface_editor_wallpaper_dim),
         APPS(R.string.termux_dock_tuning_icons),
@@ -185,6 +190,10 @@ public final class SurfaceEditorProperties {
     public static final String ID_KEYBOARD_INTENSITY = "keyboard_intensity";
     public static final String ID_CHIP_RADIUS = "chip_radius";
     public static final String ID_WALLPAPER = "wallpaper";
+    /** Fancier Glass's three knobs; see {@link com.termux.app.chrome.GlassRefraction.Look}. */
+    public static final String ID_BEND = "bend";
+    public static final String ID_EDGE_WIDTH = "edge_width";
+    public static final String ID_EDGE_LIGHT = "edge_light";
 
     /**
      * The shared layer's rows. Same five names with an {@code all_} prefix, because they are the
@@ -205,6 +214,8 @@ public final class SurfaceEditorProperties {
         ID_OPACITY, ID_ALL_OPACITY, ID_KEYBOARD_INTENSITY,
         ID_BLUR, ID_ALL_BLUR,
         ID_GRAIN, ID_ALL_GRAIN,
+        // Fancier Glass refines the material, so its knobs read on from grain and before the shape.
+        ID_BEND, ID_EDGE_WIDTH, ID_EDGE_LIGHT,
         ID_CORNERS, ID_ALL_CORNERS,
         ID_MARGIN, ID_ALL_MARGIN));
 
@@ -274,6 +285,25 @@ public final class SurfaceEditorProperties {
             prefs -> prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN),
             (prefs, value) -> prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, value),
             PREVIEW_GLASS | PREVIEW_SURFACES | PREVIEW_KEYBOARD),
+        // Fancier Glass. Offered only while it is on (the controller drops them otherwise): the
+        // glass pass re-dresses the dock, the strip, the keyboard and every frost, and the
+        // surfaces pass the pane slabs, so a tick lands everywhere in one frame and nothing is
+        // re-blurred for it.
+        own(ID_BEND, R.string.termux_surface_editor_bend, Section.REFRACTION,
+            Kind.SLIDER, Unit.DP, TERMUX_APP.MAX_FANCIER_GLASS_BEND,
+            TermuxAppSharedPreferences::getFancierGlassBendDp,
+            TermuxAppSharedPreferences::setFancierGlassBendDp,
+            PREVIEW_GLASS | PREVIEW_SURFACES),
+        own(ID_EDGE_WIDTH, R.string.termux_surface_editor_edge_width, Section.REFRACTION,
+            Kind.SLIDER, Unit.DP, TERMUX_APP.MAX_FANCIER_GLASS_EDGE_WIDTH,
+            TermuxAppSharedPreferences::getFancierGlassEdgeWidthDp,
+            TermuxAppSharedPreferences::setFancierGlassEdgeWidthDp,
+            PREVIEW_GLASS | PREVIEW_SURFACES),
+        own(ID_EDGE_LIGHT, R.string.termux_surface_editor_edge_light, Section.REFRACTION,
+            Kind.SLIDER, Unit.PERCENT, TERMUX_APP.MAX_FANCIER_GLASS_EDGE_LIGHT,
+            TermuxAppSharedPreferences::getFancierGlassEdgeLightPercent,
+            TermuxAppSharedPreferences::setFancierGlassEdgeLightPercent,
+            PREVIEW_GLASS | PREVIEW_SURFACES),
         // The terminal rounds by its own knob in either style, and every pane in it reads that
         // knob, so the shared radius has to carry it too — otherwise "round everything" leaves one
         // square hole in the middle of the screen.
@@ -467,6 +497,11 @@ public final class SurfaceEditorProperties {
     @NonNull
     public static List<Control> panel(@NonNull SurfaceSlot slot) {
         return PANELS.get(slot);
+    }
+
+    /** Whether a row is one of Fancier Glass's three knobs, which stand only while it is on. */
+    public static boolean isRefractionRow(@NonNull String id) {
+        return ID_BEND.equals(id) || ID_EDGE_WIDTH.equals(id) || ID_EDGE_LIGHT.equals(id);
     }
 
     /** The rows of one target: a surface's, or the shared layer's for a null slot. */

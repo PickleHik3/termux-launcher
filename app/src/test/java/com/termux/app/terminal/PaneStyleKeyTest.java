@@ -37,6 +37,7 @@ public class PaneStyleKeyTest {
         int gap = 6;
         Bitmap wallBehind;
         int wallBehindColor = 0x40000000;
+        com.termux.app.chrome.GlassRefraction.Look refraction;
         int grainLayersBuilt;
 
         @Override public boolean isPaneGlassActive() { return glass; }
@@ -54,6 +55,9 @@ public class PaneStyleKeyTest {
         @Override public int paneGapDp() { return gap; }
         @Nullable @Override public Bitmap wallBehindFrame() { return wallBehind; }
         @Override public int wallBehindColor() { return wallBehindColor; }
+        @Nullable @Override public com.termux.app.chrome.GlassRefraction.Look paneGlassRefraction() {
+            return refraction;
+        }
     }
 
     @Test
@@ -113,6 +117,14 @@ public class PaneStyleKeyTest {
         style.wallBehindColor = 0;
         assertNotEquals(base, PaneStyleKey.of(style));
         style.wallBehindColor = 0x40000000;
+
+        // Fancier Glass switching on, and a knob moving while it is on, each re-dress the slabs.
+        style.refraction = com.termux.app.chrome.GlassRefraction.Look.DEFAULT;
+        assertNotEquals(base, PaneStyleKey.of(style));
+        PaneStyleKey refracting = PaneStyleKey.of(style);
+        style.refraction = new com.termux.app.chrome.GlassRefraction.Look(9, 20, 60);
+        assertNotEquals(refracting, PaneStyleKey.of(style));
+        style.refraction = null;
 
         assertEquals("and back where it started", base, PaneStyleKey.of(style));
     }

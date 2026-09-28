@@ -86,6 +86,17 @@ public final class PlaceChromeTravel {
      */
     public static final float LANDING = 0.08f;
 
+    /**
+     * Where on the way a keyboard being put away has gone: it retracts over the first half of the
+     * slide, from {@link #LANDING} to here, rather than over the same stretch it rises on. A
+     * keyboard that retracted in step with the page stayed over the incoming place for its last
+     * 200 ms (pong, 2026-09-28); one that rises still lands with the page. Which of the two a
+     * frame is showing is decided by the place the chrome is committed to — the one being left,
+     * constant for a whole gesture — so a drag that reverses still reads one function of position,
+     * and the two windows meet at rest, where both read all-or-nothing.
+     */
+    public static final float KEYBOARD_HIDE_END = 0.5f;
+
     /** The chrome for one frame of the wall's motion. */
     public static final class Frame {
         /** The place on the near side of the frame: the one whose state the fraction starts from. */
@@ -96,20 +107,29 @@ public final class PlaceChromeTravel {
         public final float fraction;
         /** How far across the chrome is: {@link #fraction} with {@link #LANDING} taken off each end. */
         public final float chromeFraction;
+        /**
+         * How far across from {@link #from} to {@link #toward} the keyboard is: the chrome's way
+         * while it rises, its own shorter way ({@link #KEYBOARD_HIDE_END}) while it is put away.
+         */
+        public final float keyboardFraction;
         public final float keyboardReveal;
         public final float dockReveal;
         public final float statusReveal;
         /** Whether either side of the frame shows the keyboard, or the dock: what a pre-roll is for. */
         public final boolean keyboardInPlay;
         public final boolean dockInPlay;
+        /** Whether the two sides of the frame differ in the keyboard: what the rows follow then. */
+        final boolean keyboardMoves;
 
         Frame(@NonNull PaneWallPage from, @NonNull PaneWallPage toward, float fraction,
-              float keyboardReveal, float dockReveal, float statusReveal,
-              boolean keyboardInPlay, boolean dockInPlay) {
+              float keyboardFraction, float keyboardReveal, float dockReveal, float statusReveal,
+              boolean keyboardInPlay, boolean dockInPlay, boolean keyboardMoves) {
             this.from = from;
             this.toward = toward;
             this.fraction = fraction;
             this.chromeFraction = chromeFraction(fraction);
+            this.keyboardFraction = keyboardFraction;
+            this.keyboardMoves = keyboardMoves;
             this.keyboardReveal = keyboardReveal;
             this.dockReveal = dockReveal;
             this.statusReveal = statusReveal;
@@ -129,6 +149,26 @@ public final class PlaceChromeTravel {
     }
 
     /**
+     * How far a keyboard being put away has gone, 0 to 1, for a screen {@code away} of the way
+     * from the place whose keyboard it is: nothing over the first {@link #LANDING}, all of it by
+     * {@link #KEYBOARD_HIDE_END}.
+     */
+    public static float keyboardHideFraction(float away) {
+        return clamp01((away - LANDING) / (KEYBOARD_HIDE_END - LANDING));
+    }
+
+    /**
+     * The chrome for the wall standing {@code offsetPx} from {@code current}'s rest, with the
+     * keyboard on the chrome's way in both directions: see {@link #at(List, PaneWallPage, float,
+     * int, States, PaneWallPage)} for the one that puts it away early.
+     */
+    @NonNull
+    public static Frame at(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
+                           float offsetPx, int widthPx, @NonNull States states) {
+        return at(pages, current, offsetPx, widthPx, states, null);
+    }
+
+    /**
      * The chrome for the wall standing {@code offsetPx} from {@code current}'s rest. The offset is
      * the wall's own ({@code PaneWallLayout#offsetPx}): positive while the pages sit to the right
      * of where they land, so the place to the left of {@code current} is the one coming into view.
@@ -138,10 +178,15 @@ public final class PlaceChromeTravel {
      * blend of the same two places on either side of it, so the chrome does not jump there either.
      * A drag past an outer page has no neighbour to blend toward, and resists at the page's own
      * state.
+     *
+     * @param leaving the place the chrome is committed to for this gesture, whose keyboard — when
+     *                the other side of the frame has none — is put away over the first half of the
+     *                way ({@link #KEYBOARD_HIDE_END}); null reads the keyboard on the chrome's way
      */
     @NonNull
     public static Frame at(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
-                           float offsetPx, int widthPx, @NonNull States states) {
+                           float offsetPx, int widthPx, @NonNull States states,
+                           @Nullable PaneWallPage leaving) {
         if (widthPx <= 0 || offsetPx == 0f || Float.isNaN(offsetPx)) {
             return rest(current, states.restOf(current));
         }
@@ -162,22 +207,35 @@ public final class PlaceChromeTravel {
             // Snap the degenerate cases, so a frame between two places that look the same is
             // exactly their state rather than a rounding of it.
             float f = fraction <= 0f ? 0f : fraction;
-            return new Frame(from, toward, f, a.keyboardReveal(), a.dockReveal(),
-                a.statusReveal(), keyboardInPlay, dockInPlay);
+            return new Frame(from, toward, f, chromeFraction(f), a.keyboardReveal(),
+                a.dockReveal(), a.statusReveal(), keyboardInPlay, dockInPlay, false);
         }
         // The chrome lands before the wall does (LANDING): the reveals read the shortened way.
         float t = chromeFraction(fraction);
-        return new Frame(from, toward, fraction,
-            lerp(a.keyboardReveal(), b.keyboardReveal(), t),
+        boolean keyboardMoves = a.keyboardReveal() != b.keyboardReveal();
+        float keyboardT = t;
+        if (keyboardMoves && (leaving == from || leaving == toward)) {
+            Rest left = leaving == from ? a : b;
+            Rest other = leaving == from ? b : a;
+            if (left.keyboardReveal() > 0f && other.keyboardReveal() <= 0f) {
+                // The committed place's keyboard is being put away: it goes over the first half
+                // of the way out from that place, whichever side of the frame the place is.
+                float hidden = keyboardHideFraction(leaving == from ? fraction : 1f - fraction);
+                keyboardT = leaving == from ? hidden : 1f - hidden;
+            }
+        }
+        return new Frame(from, toward, fraction, keyboardT,
+            lerp(a.keyboardReveal(), b.keyboardReveal(), keyboardT),
             lerp(a.dockReveal(), b.dockReveal(), t),
-            lerp(a.statusReveal(), b.statusReveal(), t), keyboardInPlay, dockInPlay);
+            lerp(a.statusReveal(), b.statusReveal(), t), keyboardInPlay, dockInPlay,
+            keyboardMoves);
     }
 
     /** The chrome of a place at rest. */
     @NonNull
     public static Frame rest(@NonNull PaneWallPage place, @NonNull Rest state) {
-        return new Frame(place, place, 0f, state.keyboardReveal(), state.dockReveal(),
-            state.statusReveal(), state.keyboardReveal() > 0f, state.dockReveal() > 0f);
+        return new Frame(place, place, 0f, 0f, state.keyboardReveal(), state.dockReveal(),
+            state.statusReveal(), state.keyboardReveal() > 0f, state.dockReveal() > 0f, false);
     }
 
     /**
@@ -246,13 +304,16 @@ public final class PlaceChromeTravel {
      * How far, 0 to 1, the chrome has travelled toward {@code place}: the frame's
      * {@link Frame#chromeFraction} when the place is the frame's far side, the rest of it when the
      * place is the near side, and 0 for a place the frame does not touch. On the chrome's way
-     * rather than the wall's, so what follows it — the terminal's rows — lands with the keyboard.
+     * rather than the wall's, so what follows it — the terminal's rows — lands with the keyboard;
+     * and on the keyboard's own way ({@link Frame#keyboardFraction}) when the keyboard is what
+     * moves between the two places, so the rows still land with it when it is put away early.
      * A drag that springs back reads back down to 0 through the same number.
      */
     public static float progressToward(@NonNull Frame frame, @NonNull PaneWallPage place) {
         if (frame.toward == frame.from) return 0f;
-        if (place == frame.toward) return frame.chromeFraction;
-        if (place == frame.from) return 1f - frame.chromeFraction;
+        float way = frame.keyboardMoves ? frame.keyboardFraction : frame.chromeFraction;
+        if (place == frame.toward) return way;
+        if (place == frame.from) return 1f - way;
         return 0f;
     }
 

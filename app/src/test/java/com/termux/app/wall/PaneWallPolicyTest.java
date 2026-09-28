@@ -180,6 +180,42 @@ public class PaneWallPolicyTest {
     }
 
     @Test
+    public void thePagesOutlinesFadeOutOverTheFirstStretchAndBackInOverTheLast() {
+        float fade = PaneWallPolicy.OUTLINE_FADE_FRACTION;
+        // At rest, and at the other rest a tap starts from, every outline shows.
+        assertEquals(1f, PaneWallPolicy.outlineAlpha(0f, WIDTH), EPS);
+        assertEquals(1f, PaneWallPolicy.outlineAlpha(WIDTH, WIDTH), EPS);
+        assertEquals(1f, PaneWallPolicy.outlineAlpha(-WIDTH, WIDTH), EPS);
+        // Half way through the fade, half the outline; past it, none, for the whole middle.
+        assertEquals(0.5f, PaneWallPolicy.outlineAlpha(WIDTH * fade / 2f, WIDTH), EPS);
+        assertEquals(0.5f, PaneWallPolicy.outlineAlpha(-WIDTH * (1f - fade / 2f), WIDTH), EPS);
+        assertEquals(0f, PaneWallPolicy.outlineAlpha(WIDTH * fade, WIDTH), EPS);
+        assertEquals(0f, PaneWallPolicy.outlineAlpha(WIDTH * 0.5f, WIDTH), EPS);
+        assertEquals(0f, PaneWallPolicy.outlineAlpha(-WIDTH * 0.7f, WIDTH), EPS);
+        // The commit at release moves the offset by a width and the number not at all.
+        assertEquals(PaneWallPolicy.outlineAlpha(WIDTH * 0.95f, WIDTH),
+            PaneWallPolicy.outlineAlpha(WIDTH * 0.95f - WIDTH, WIDTH), EPS);
+        // Before the first layout there is nothing to fade.
+        assertEquals(1f, PaneWallPolicy.outlineAlpha(300f, 0), EPS);
+    }
+
+    @Test
+    public void onlyAWallShowingTwoPlacesFadesTheOutlines() {
+        List<PaneWallPage> ring = all();
+        assertTrue(PaneWallPolicy.blendsPlaces(ring, PaneWallPage.TERMINAL, 200f));
+        assertTrue(PaneWallPolicy.blendsPlaces(ring, PaneWallPage.TERMINAL, -200f));
+        // On the ring every page has a neighbour either side; after the commit toward Home the
+        // page the wall left is the neighbour on the other side.
+        assertTrue(PaneWallPolicy.blendsPlaces(ring, PaneWallPage.WIDGETS, -800f));
+        assertFalse(PaneWallPolicy.blendsPlaces(ring, PaneWallPage.TERMINAL, 0f));
+        // A two-page line has an outer edge: pressed into it, the page is alone on screen.
+        List<PaneWallPage> line = PaneWallPolicy.availablePages(false, false, true);
+        assertFalse(PaneWallPolicy.blendsPlaces(line, PaneWallPage.TERMINAL, 200f));
+        assertTrue(PaneWallPolicy.blendsPlaces(line, PaneWallPage.TERMINAL, -200f));
+        assertFalse(PaneWallPolicy.blendsPlaces(line, PaneWallPage.DISPLAY, -200f));
+    }
+
+    @Test
     public void wallGoCannotReachAPageThisInstallDoesNotHave() {
         List<PaneWallPage> pages = PaneWallPolicy.availablePages(true, true, false);
         assertNull(PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, "widgets"));

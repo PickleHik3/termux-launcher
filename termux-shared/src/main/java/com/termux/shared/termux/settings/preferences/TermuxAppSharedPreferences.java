@@ -494,6 +494,56 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TermuxPreferenceConstants.TERMUX_APP.KEY_LAZY_MODE, value, false);
     }
 
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS}. The switch alone; whether it takes effect is the chrome's call. */
+    public boolean isFancierGlassEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_FANCIER_GLASS, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS}. */
+    public void setFancierGlassEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS, value, false);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_BEND}. Clamped, in dp. */
+    public int getFancierGlassBendDp() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_FANCIER_GLASS_BEND, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_BEND),
+            TERMUX_APP.MIN_FANCIER_GLASS_BEND, TERMUX_APP.MAX_FANCIER_GLASS_BEND);
+    }
+
+    public void setFancierGlassBendDp(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_BEND,
+            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_BEND, TERMUX_APP.MAX_FANCIER_GLASS_BEND),
+            false);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_EDGE_WIDTH}. Clamped, in dp. */
+    public int getFancierGlassEdgeWidthDp() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_WIDTH),
+            TERMUX_APP.MIN_FANCIER_GLASS_EDGE_WIDTH, TERMUX_APP.MAX_FANCIER_GLASS_EDGE_WIDTH);
+    }
+
+    public void setFancierGlassEdgeWidthDp(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH,
+            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_EDGE_WIDTH,
+                TERMUX_APP.MAX_FANCIER_GLASS_EDGE_WIDTH), false);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_EDGE_LIGHT}. Clamped, a percentage. */
+    public int getFancierGlassEdgeLightPercent() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_LIGHT),
+            TERMUX_APP.MIN_FANCIER_GLASS_EDGE_LIGHT, TERMUX_APP.MAX_FANCIER_GLASS_EDGE_LIGHT);
+    }
+
+    public void setFancierGlassEdgeLightPercent(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT,
+            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_EDGE_LIGHT,
+                TERMUX_APP.MAX_FANCIER_GLASS_EDGE_LIGHT), false);
+    }
+
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_SHOW_KEY_HINTS}. */
     public boolean isShowKeyHintsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,

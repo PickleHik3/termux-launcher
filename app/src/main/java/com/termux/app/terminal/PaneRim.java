@@ -53,6 +53,13 @@ public final class PaneRim {
     private int mCurrentTint;
     private float mRadiusPx;
     private ValueAnimator mAnimator;
+    /** The alpha the focus state asks for, before the wall's travel takes its share. */
+    private int mBaseAlpha;
+    /**
+     * How much of the rim the wall's travel leaves showing, 1 at rest: a page mid-slide draws
+     * no outline, so two frames are never seen side by side (PaneWallPolicy#outlineAlpha).
+     */
+    private float mTravelAlpha = 1f;
 
     /** How far an unfocused glass rim dims, which depends on what the pane is standing on. */
     private static int glassUnfocusedAlpha() {
@@ -127,7 +134,7 @@ public final class PaneRim {
             mCurrentTint = active ? focusedTint : unfocusedTint;
             mDrawable = new com.termux.app.GlassRimDrawable(
                 frame.getResources().getDisplayMetrics().density, radius, mCurrentTint);
-            mDrawable.setAlpha(active ? GLASS_FOCUSED_ALPHA : glassUnfocusedAlpha());
+            setBaseAlpha(active ? GLASS_FOCUSED_ALPHA : glassUnfocusedAlpha());
         } else {
             Drawable border = ContextCompat.getDrawable(frame.getContext(),
                 R.drawable.pane_active_border);
@@ -138,12 +145,35 @@ public final class PaneRim {
                 // the shape's own fixed radius.
                 if (border instanceof GradientDrawable)
                     ((GradientDrawable) border).setCornerRadius(radius);
-                border.setAlpha(active ? STOCK_FOCUSED_ALPHA : STOCK_UNFOCUSED_ALPHA);
             }
             mDrawable = border;
+            setBaseAlpha(active ? STOCK_FOCUSED_ALPHA : STOCK_UNFOCUSED_ALPHA);
         }
         frame.setForeground(mDrawable);
         return mDrawable != null;
+    }
+
+    /**
+     * How much of the rim the wall's slide leaves showing, 0 to 1. Composed with the focus alpha
+     * rather than written over it, so a focus crossfade under way keeps its course and the rim
+     * comes back at settle at exactly the strength it had. Cheap when nothing changes, which is
+     * every frame of a slide but the ones at its two ends.
+     */
+    public void setTravelAlpha(float alpha) {
+        float clamped = Float.isNaN(alpha) ? 1f : Math.max(0f, Math.min(1f, alpha));
+        if (mTravelAlpha == clamped) return;
+        mTravelAlpha = clamped;
+        if (mDrawable != null) mDrawable.setAlpha(travelScaled(mBaseAlpha));
+    }
+
+    /** Sets the focus state's alpha and draws the rim at the travel's share of it. */
+    private void setBaseAlpha(int alpha) {
+        mBaseAlpha = alpha;
+        if (mDrawable != null) mDrawable.setAlpha(travelScaled(alpha));
+    }
+
+    private int travelScaled(int alpha) {
+        return Math.round(alpha * mTravelAlpha);
     }
 
     /** Take the rim off {@code frame} and stop any crossfade. */
@@ -172,8 +202,9 @@ public final class PaneRim {
         if (border == null) return;
         // Read the mid-flight values before cancelling: a reversed crossfade continues from
         // wherever the rim currently is. The superseded animator's end listener checks mAnimator
-        // so it cannot stamp its own end state over these.
-        final int fromAlpha = border.getAlpha();
+        // so it cannot stamp its own end state over these. The focus alpha is read from its own
+        // record, not off the drawable, which is drawn at the travel's share of it.
+        final int fromAlpha = mBaseAlpha;
         final int fromTint = mCurrentTint;
         cancel();
         final int toAlpha = mGlass
@@ -182,7 +213,7 @@ public final class PaneRim {
         final int toTint = mActive ? mFocusedTint : mUnfocusedTint;
         final boolean tinted = mGlass && border instanceof com.termux.app.GlassRimDrawable;
         if (!animationsEnabled()) {
-            border.setAlpha(toAlpha);
+            setBaseAlpha(toAlpha);
             if (tinted) {
                 mCurrentTint = toTint;
                 ((com.termux.app.GlassRimDrawable) border).setTint(toTint);
@@ -194,7 +225,7 @@ public final class PaneRim {
         animator.setInterpolator(PaneMotionOverlayView.standardInterpolator());
         animator.addUpdateListener(a -> {
             float fraction = (float) a.getAnimatedValue();
-            border.setAlpha(Math.round(fromAlpha + (toAlpha - fromAlpha) * fraction));
+            setBaseAlpha(Math.round(fromAlpha + (toAlpha - fromAlpha) * fraction));
             if (tinted) {
                 mCurrentTint = ColorUtils.blendARGB(fromTint, toTint, fraction);
                 ((com.termux.app.GlassRimDrawable) border).setTint(mCurrentTint);
@@ -205,7 +236,7 @@ public final class PaneRim {
             public void onAnimationEnd(android.animation.Animator animation) {
                 if (mAnimator != animation) return; // superseded by a newer crossfade
                 mAnimator = null;
-                border.setAlpha(toAlpha);
+                setBaseAlpha(toAlpha);
                 if (tinted) {
                     mCurrentTint = toTint;
                     ((com.termux.app.GlassRimDrawable) border).setTint(toTint);

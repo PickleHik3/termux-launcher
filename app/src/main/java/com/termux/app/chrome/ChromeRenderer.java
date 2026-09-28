@@ -108,6 +108,24 @@ public final class ChromeRenderer {
             return null;
         }
 
+        /**
+         * Fancier Glass: the refraction every frost draws the shared frame through, or null for
+         * the plain frost — the switch off, a wallpaper the launcher did not set, a phone below
+         * API 33. See {@link FancierGlassPolicy}.
+         */
+        @Nullable
+        default GlassRefraction.Look fancierGlassLook() {
+            return null;
+        }
+
+        /**
+         * The corner a full-pane plane's glass — the palette, the sheet, the drawer — is clipped
+         * to, in px, so a plane's rim can follow its outline. 0 where the planes are square.
+         */
+        default float planeGlassCornerRadiusPx() {
+            return 0f;
+        }
+
         /** The dock's effective blur radius (0 while a live wallpaper or the slider disables it). */
         int effectiveDockBlurRadiusDp();
 

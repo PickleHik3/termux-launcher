@@ -40,6 +40,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         /** The Terminal page just went fully off screen, or just came back; see
          *  {@link PaneWallLayout.Listener#onTerminalOffScreenChanged}. */
         default void onTerminalOffScreenChanged(boolean offScreen) { }
+        /**
+         * How much of the pages' outlines the slide leaves showing changed
+         * ({@link PaneWallPolicy#outlineAlpha}). The wall's own pages take it themselves; the
+         * terminal's panes draw their rims through their controller, which the host owns.
+         */
+        default void onWallOutlineAlphaChanged(float alpha) { }
     }
 
     /** Saved-instance-state key for the page the wall is showing. */
@@ -50,6 +56,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Nullable private WidgetPaneFrame mWidgetsPage;
     @Nullable private com.termux.app.x11.X11PaneFrame mDisplayPage;
     @Nullable private PaneSurfaceStyle mStyle;
+    /** How much of the pages' outlines the last frame left showing; 1 at rest. */
+    private float mOutlineAlpha = 1f;
 
     public PaneWallController(@NonNull PaneWallLayout wall, @NonNull Host host) {
         mWall = wall;
@@ -289,7 +297,24 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         // translation, which never redraws a child: each page re-aims its slab for this frame.
         if (mWidgetsPage != null) mWidgetsPage.onWallMoved();
         if (mDisplayPage != null) mDisplayPage.onWallMoved();
+        syncOutlineAlpha(offsetPx);
         mHost.onWallOffsetChanged(offsetPx);
+    }
+
+    /**
+     * The pages' outlines fade out over the first stretch of a slide and back in over the last,
+     * so one edge shows while two pages share the screen. Written only when the number moves,
+     * which is a few frames at either end; a page pressed into a line's outer edge keeps its
+     * outline, since it is alone on screen.
+     */
+    private void syncOutlineAlpha(float offsetPx) {
+        float alpha = PaneWallPolicy.blendsPlaces(mWall.pages(), mWall.currentPage(), offsetPx)
+            ? PaneWallPolicy.outlineAlpha(offsetPx, mWall.getWidth()) : 1f;
+        if (alpha == mOutlineAlpha) return;
+        mOutlineAlpha = alpha;
+        if (mWidgetsPage != null) mWidgetsPage.setOutlineTravelAlpha(alpha);
+        if (mDisplayPage != null) mDisplayPage.setOutlineTravelAlpha(alpha);
+        mHost.onWallOutlineAlphaChanged(alpha);
     }
 
     @Override

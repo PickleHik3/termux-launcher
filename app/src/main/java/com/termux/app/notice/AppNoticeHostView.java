@@ -307,6 +307,15 @@ public final class AppNoticeHostView extends LinearLayout {
         leaveAndAdvance();
     }
 
+    /**
+     * Takes down a read-out whose subject has landed — the wall's slide, whose destination the
+     * pill was naming — ahead of its hold. A no-op when something else has the pill.
+     */
+    public void clearReadout() {
+        if (mActive == null || !mActive.fleeting) return;
+        leaveAndAdvance();
+    }
+
     /** Puts the pill back where it rests, cancelling whatever it was in the middle of. */
     private void settleAtRest() {
         animate().cancel();

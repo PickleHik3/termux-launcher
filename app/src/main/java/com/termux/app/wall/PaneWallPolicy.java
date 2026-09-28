@@ -22,6 +22,14 @@ public final class PaneWallPolicy {
     public static final float DRAG_COMMIT_VELOCITY_PAGES = 2.0f;
     /** How much of a drag past the outer page survives as movement. */
     public static final float EDGE_RESISTANCE = 0.35f;
+    /**
+     * The stretch of the way, from either rest, over which a page's outline fades. Each page draws
+     * its own rounded frame, and mid-slide two of them showed side by side; the outlines go over
+     * the first few percent of the slide and come back over the last, so there is one edge on
+     * screen while the wall moves and the resting look is untouched. Longer than the chrome's
+     * landing ({@code PlaceChromeTravel.LANDING}) so the fade reads as a fade and not a blink.
+     */
+    public static final float OUTLINE_FADE_FRACTION = 0.12f;
 
     private PaneWallPolicy() {}
 
@@ -153,6 +161,31 @@ public final class PaneWallPolicy {
         if (offsetPx >= commitPx) return previousExists ? -1 : 0;
         if (offsetPx <= -commitPx) return nextExists ? 1 : 0;
         return 0;
+    }
+
+    /**
+     * How much of every page's outline shows for the wall standing {@code offsetPx} from a rest,
+     * 0 to 1: all of it at either rest, none once the wall is {@link #OUTLINE_FADE_FRACTION} of a
+     * width from both. A function of position alone, so a drag, a fling, a reversal and the
+     * commit at release (which moves the offset by a whole width) all read the same number.
+     */
+    public static float outlineAlpha(float offsetPx, int widthPx) {
+        if (widthPx <= 0 || Float.isNaN(offsetPx)) return 1f;
+        float way = Math.abs(offsetPx) / widthPx;
+        way -= (float) Math.floor(way);
+        float fromNearestRest = Math.min(way, 1f - way);
+        return 1f - Math.max(0f, Math.min(1f, fromNearestRest / OUTLINE_FADE_FRACTION));
+    }
+
+    /**
+     * Whether the wall standing {@code offsetPx} from {@code current}'s rest shows two places: a
+     * drag into a line's outer edge shows the page alone, resisting, and its outline stays.
+     */
+    public static boolean blendsPlaces(@NonNull List<PaneWallPage> pages,
+                                       @NonNull PaneWallPage current, float offsetPx) {
+        if (offsetPx == 0f || Float.isNaN(offsetPx)) return false;
+        // Pages sitting to the right of their rest show the place to the left of the current one.
+        return hasNeighbour(pages, current, offsetPx > 0f ? -1 : 1);
     }
 
     /** Resolves the {@code page=} argument of {@code wall.go}, or null when it names nothing. */
