@@ -140,7 +140,7 @@ public class MnnTaiRuntimeConfigTest {
     }
 
     @Test
-    public void mergedConfig_eagleSpeculativeTypeSurvivesAutoAndIsDroppedOnlyWhenExplicitlyOff() throws Exception {
+    public void mergedConfig_eagleSpeculativeTypeIsOffByDefaultAndOnlyExplicitTrueKeepsIt() throws Exception {
         File dir = new File(context.getCacheDir(), "mnn-config-eagle");
         dir.mkdirs();
         File config = new File(dir, "config.json");
@@ -155,14 +155,14 @@ public class MnnTaiRuntimeConfigTest {
         MnnTaiRuntime runtime = new MnnTaiRuntime(context);
         TaiModelSpec spec = model(config);
 
-        // Auto (null): the package's own Eagle setup is untouched.
+        // Auto (null): off by default, same as explicit false, since Eagle measured slower on-device.
         TaiRuntimeOptions auto = new TaiRuntimeOptions(null, null, null, null,
             null, null, null, null, null, null, null, null);
         JSONObject autoMerged = new JSONObject((String) invokeMergedConfig(runtime, config, spec, auto));
-        assertEquals("eagle", autoMerged.getString("speculative_type"));
+        assertEquals("", autoMerged.getString("speculative_type"));
         assertTrue(autoMerged.getBoolean("hidden_states"));
 
-        // Explicit true on a package that already has it: a no-op, same as auto.
+        // Explicit true on a package that already has it: keeps the package's own Eagle setup.
         TaiRuntimeOptions on = new TaiRuntimeOptions(null, null, null, null,
             null, null, null, null, null, null, true, null);
         JSONObject onMerged = new JSONObject((String) invokeMergedConfig(runtime, config, spec, on));

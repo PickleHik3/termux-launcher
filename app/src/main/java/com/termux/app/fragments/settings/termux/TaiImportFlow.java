@@ -268,6 +268,11 @@ final class TaiImportFlow {
      * cardRecommends}, from {@link TaiImportCard#annotate}) wins, as long as it fits or its size is
      * not listed: litert-community's Granite card says "On phones we recommend int8", and the
      * largest-that-fits rule alone would pick its fp16 file.
+     *
+     * <p>An EAGLE-3 draft-model package ({@code speculative: "eagle"}, set on the candidate in
+     * {@code TaiHuggingFace.candidates}) also loses ties within the same fit tier to a plain build:
+     * speculative decoding is off by default (measured slower on-device), so a repository offering
+     * both should hand the user the plain file.
      */
     static int preselect(@NonNull JSONArray candidates, long deviceMemoryBytes) {
         int recommended = cardPick(candidates, deviceMemoryBytes);
@@ -294,14 +299,17 @@ final class TaiImportFlow {
 
     /**
      * A candidate's place in the default order: twice its fit (0 fits, 1 size unknown, 2 one RAM
-     * class short, 3 more), plus one for a full-precision, GPU-named or chip-bound build.
+     * class short, 3 more), plus one for a full-precision, GPU-named or chip-bound build, or an
+     * EAGLE-3 draft-model package ({@code speculative: "eagle"}) offered alongside a plain one.
      */
     private static int rank(@NonNull JSONObject candidate, long deviceMemoryBytes) {
         String file = candidate.optString("file", "");
         TaiImportFit fit = TaiImportFit.check(candidate.optLong("sizeBytes", -1L), deviceMemoryBytes, isEmbeddingFile(file));
         int tier = fit.verdict == TaiImportFit.Verdict.YES ? 0 : fit.verdict == TaiImportFit.Verdict.UNKNOWN ? 1
             : fit.verdict == TaiImportFit.Verdict.SLOW ? 2 : 3;
-        return tier * 2 + (TaiImportNames.isFullPrecision(file) || TaiImportProfiles.deprioritised(file) ? 1 : 0);
+        boolean deprioritised = TaiImportNames.isFullPrecision(file) || TaiImportProfiles.deprioritised(file)
+            || "eagle".equals(candidate.optString("speculative", ""));
+        return tier * 2 + (deprioritised ? 1 : 0);
     }
 
     /** The first portable file the card recommends that fits or has no listed size, or {@code -1}. */
