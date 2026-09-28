@@ -8,6 +8,7 @@
 
     <ListPreference
         app:key="app_launcher_use_case_mode"
+        app:icon="@drawable/ic_symbol_stacks"
         app:title="@string/settings_use_as_title"
         app:dialogTitle="@string/settings_use_as_dialog_title" />
 

@@ -259,7 +259,7 @@
     <string name="settings_terminal_key_row_header">Terminal extra keys</string>
     <string name="settings_extra_keys_all_caps_title">Capitalize key labels</string>
     <string name="settings_extra_keys_all_caps_summary">Show ESC and TAB in capitals rather than as written.</string>
-    <string name="settings_use_as_title">Use as</string>
+    <string name="settings_use_as_title">Mode</string>
     <string name="settings_use_as_dialog_title">How will you use it?</string>
     <string name="settings_use_as_terminal">Terminal</string>
     <string name="settings_use_as_terminal_description">Just the terminal</string>

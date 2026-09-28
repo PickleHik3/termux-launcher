@@ -7,7 +7,7 @@ This map uses the current top-level labels. Use **Search settings** at the top w
 want but not where it lives. Search indexes the preferences inside every destination, so `fonts`,
 `ligatures`, or `Shizuku` can find the containing section.
 
-## Use as
+## Mode
 
 The first row of Settings, above the pages, says what this install is: **Terminal** (just the
 terminal), **Terminal + Home screen** (apps, widgets and the app drawer) or **Terminal + Home
@@ -295,7 +295,7 @@ built-in one. Keyboard height is remembered separately for portrait and landscap
 
 ## Apps
 
-- **Edit pinned apps**. (What this app is for moved to the **Use as** row at the top of Settings.)
+- **Edit pinned apps**. (What this app is for moved to the **Mode** row at the top of Settings.)
 - **App drawer:** swipe down on the pinned row to open it; choose the drawer layout. **Open the
   keyboard with the drawer** brings the keyboard up as the drawer opens; **Search with the Android
   keyboard** searches through your Android keyboard, with its suggestions and swipe typing. With the
@@ -322,7 +322,7 @@ from the long-press menu on that place.
 The Linux display has its own page: the **Display** switch runs a Linux desktop or X11 apps
 as the third place of the home screen — see [The Linux display](X11_Display.md). It takes effect
 as soon as you return to the launcher: on, the Display place appears; off, it goes, and a display
-that is running asks whether to stop first. The switch also moves **Use as** between Terminal +
+that is running asks whether to stop first. The switch also moves **Mode** between Terminal +
 Home screen and the display mode. Under it sit touch
 mode, **OSK auto-show** — the keyboard opens when you tap a text field on the
 display and closes when you tap elsewhere, on by default and available in Touchscreen touch mode —
