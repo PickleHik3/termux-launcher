@@ -198,6 +198,23 @@ public class TaiBenchStoreTest {
     }
 
     @Test
+    public void leaderboardMemoryPrefersTheProcessPssOverMemAvailable() throws Exception {
+        JSONObject withPss = record("qwen", "cpu", false, 21.0, 200.0, true);
+        withPss.getJSONObject("phases").getJSONObject("load").put("pssBytes", 900_000_000L);
+        JSONObject older = record("gemma", "cpu", false, 12.0, 300.0, true);
+        JSONObject unreadable = record("smol", "cpu", false, 8.0, 300.0, true);
+        unreadable.getJSONObject("phases").getJSONObject("load").put("pssBytes", -1L);
+        JSONArray records = new JSONArray().put(withPss).put(older).put(unreadable);
+        JSONArray ranked = TaiBenchStore.leaderboard(records, TaiBenchSuite.BENCH_VERSION).getJSONArray("ranked");
+        assertEquals(900_000_000L, ranked.getJSONObject(0).getLong("memBytes"));
+        // A record from before the PSS was measured still reads its MemAvailable figure.
+        assertEquals(1_600_000_000L, ranked.getJSONObject(1).getLong("memBytes"));
+        // An unreadable PSS falls back the same way.
+        assertEquals(1_600_000_000L, ranked.getJSONObject(2).getLong("memBytes"));
+        assertEquals(-1L, TaiBenchStore.memoryBytes(new JSONObject().put("ms", 10L)));
+    }
+
+    @Test
     public void clearRemovesEverythingOrOneModel() throws Exception {
         TaiBenchStore store = store();
         store.append(record("qwen", "cpu", false, 21.0, 200.0, true));

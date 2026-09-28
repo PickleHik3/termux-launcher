@@ -73,6 +73,13 @@ final class TaiBenchHarness {
          * which one it is calling.
          */
         void clearMmapCache(@NonNull TaiBenchSuite.EntryPlan entry);
+        /**
+         * The runtime process's own proportional set size right now, in bytes, or {@code -1}
+         * when it cannot be read. Taken after the load and the warm-up, it is what the model
+         * really costs the phone: {@link TaiLoadMeter}'s MemAvailable difference is meaningless
+         * for an mmap'd MNN package, whose pages are counted only as they are touched.
+         */
+        long processPssBytes();
     }
 
     interface Sink {
@@ -235,8 +242,15 @@ final class TaiBenchHarness {
             Generation warmup = generate(entry, TaiBenchSuite.PHASE_WARMUP, 1, 1,
                 TaiBenchSuite.WARMUP_PROMPT, TaiBenchSuite.WARMUP_MAX_TOKENS, 0L);
             if (!warmup.ok && !record.noteFailure(TaiBenchSuite.PHASE_WARMUP, warmup)) return record.finish();
+            // The weights are all touched once the warm-up has run: the process's PSS now is the
+            // model's real footprint, for both backends alike.
+            try {
+                record.pssBytes = host.processPssBytes();
+            } catch (RuntimeException ignored) {
+                record.pssBytes = -1L;
+            }
             emit(event("phase_done").put("phase", TaiBenchSuite.PHASE_WARMUP).put("status", warmup.status())
-                .put("reply", warmup.reply()).put("metrics", new JSONObject()));
+                .put("reply", warmup.reply()).put("metrics", new JSONObject().put("pssBytes", record.pssBytes)));
 
             if (!runReading(entry, record)) return record.finish();
             if (!runFirstWord(entry, record)) return record.finish();
@@ -668,6 +682,8 @@ final class TaiBenchHarness {
         final long startedMs = System.currentTimeMillis();
         long loadMs = -1L;
         long memBytes = -1L;
+        /** The runtime process's PSS after load and warm-up; {@code -1} until measured or when unreadable. */
+        long pssBytes = -1L;
         @Nullable JSONObject loadResult;
         final TaiBenchStats.Series reading = new TaiBenchStats.Series();
         int readingTokens;
@@ -713,7 +729,7 @@ final class TaiBenchHarness {
             JSONObject describe = host.describe(entry);
             JSONObject phases = new JSONObject();
             phases.put("load", loadMs < 0L ? JSONObject.NULL
-                : new JSONObject().put("ms", loadMs).put("memBytes", memBytes));
+                : new JSONObject().put("ms", loadMs).put("memBytes", memBytes).put("pssBytes", pssBytes));
             phases.put("reading", orNull(reading.toJson() == null ? null : reading.toJson().put("promptTokens", readingTokens)));
             phases.put("firstWord", orNull(firstWord.toJson()));
             phases.put("writing", orNull(writing.toJson() == null ? null : writing.toJson().put("tokens", writingTokens)));
