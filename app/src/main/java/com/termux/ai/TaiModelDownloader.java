@@ -59,6 +59,10 @@ public final class TaiModelDownloader {
         "tokenizer.model",
         "spiece.model"
     };
+    // Window-routing brief item 8: an EmbeddingGemma primary graph (seq512, seq1024, seq2048) also
+    // gets the smaller seq256/seq512 windows fetched alongside it, best effort, so a short input
+    // never has to pay a big graph's inference cost. Never a window bigger than the primary.
+    private static final int[] LITERT_EMBEDDING_SIBLING_WINDOWS = new int[] {256, 512};
 
     /** Progress writes to preferences happen this often; the callback fires more often than that. */
     private static final long PERSIST_EVERY_BYTES = 1024L * 1024L;
@@ -590,6 +594,8 @@ public final class TaiModelDownloader {
             if (requiresLiteRtEmbeddingTokenizer(output, capabilities)) {
                 installedBytes += downloadLiteRtEmbeddingSidecars(run, url, output, authToken,
                     output.length(), expectedSizeBytes);
+                installedBytes += downloadLiteRtEmbeddingWindowSiblings(run, url, output, authToken,
+                    installedBytes, expectedSizeBytes);
             }
             if (!sidecars.isEmpty()) {
                 installedBytes += downloadCatalogSidecars(run, output, sidecars, authToken,
@@ -1066,6 +1072,127 @@ public final class TaiModelDownloader {
         }
         throw new IllegalStateException("LiteRT embedding model is missing a SentencePiece tokenizer "
             + "(looked for sentencepiece.model, tokenizer.model, spiece.model next to the .tflite).");
+    }
+
+    /**
+     * The seq256/seq512 sibling's file name beside {@code primaryFileName} (an EmbeddingGemma
+     * graph like {@code embeddinggemma-300M_seq1024_mixed-precision.tflite}): the same name with
+     * its window swapped for {@code candidateWindow}, same {@code _mixed-precision}/chip suffix as
+     * {@link TaiImportProfiles#siblingWindowGraphs} expects to find on disk. {@code null} when the
+     * primary carries no window, or {@code candidateWindow} is not smaller than it — a sibling only
+     * ever adds a faster, smaller graph, never a bigger fallback the primary already covers.
+     */
+    @Nullable
+    static String siblingWindowFileName(@NonNull String primaryFileName, int candidateWindow) {
+        int primaryWindow = TaiImportProfiles.sequenceWindowOf(primaryFileName);
+        if (primaryWindow <= 0 || candidateWindow >= primaryWindow) return null;
+        String lower = primaryFileName.toLowerCase(Locale.ROOT);
+        String needle = "seq" + primaryWindow;
+        int index = lower.indexOf(needle);
+        if (index < 0) return null;
+        return primaryFileName.substring(0, index) + "seq" + candidateWindow
+            + primaryFileName.substring(index + needle.length());
+    }
+
+    /**
+     * Best-effort fetch of the smaller window graphs beside a downloaded EmbeddingGemma primary
+     * (window-routing brief item 8): {@link LiteRtEmbeddingRuntime} routes a short input to
+     * whichever installed window is smallest that still fits it, so these smaller siblings make a
+     * big-window install fast for short queries too, once they land. Run after the primary file and
+     * its {@code sentencepiece.model} sidecar. A missing (404) or otherwise failing sibling is not
+     * a download failure — it just means that window is not offered yet — but a pause or cancel
+     * ({@link Interrupted}) still propagates so the queue can resume it later.
+     */
+    private long downloadLiteRtEmbeddingWindowSiblings(@NonNull Run run, @NonNull String url, @NonNull File output,
+                                                       @Nullable String authToken, long currentBytes,
+                                                       long expectedSizeBytes) throws Interrupted {
+        File modelDir = output.getParentFile();
+        if (modelDir == null) return 0L;
+        long addedBytes = 0L;
+        for (int candidateWindow : LITERT_EMBEDDING_SIBLING_WINDOWS) {
+            String siblingName = siblingWindowFileName(output.getName(), candidateWindow);
+            if (siblingName == null) continue;
+            try {
+                addedBytes += downloadOneLiteRtEmbeddingWindowSibling(run, url, modelDir, siblingName, authToken,
+                    currentBytes + addedBytes, expectedSizeBytes);
+            } catch (Interrupted e) {
+                throw e; // a pause or cancel must still take effect immediately
+            } catch (Exception e) {
+                // Best effort: a missing sibling, a transient network fault, or any other fetch
+                // problem here must not fail the whole download — the primary graph and its
+                // tokenizer already landed, and this window simply isn't offered yet.
+            }
+        }
+        return addedBytes;
+    }
+
+    /** One sibling window graph for {@link #downloadLiteRtEmbeddingWindowSiblings}; returns the bytes added. */
+    private long downloadOneLiteRtEmbeddingWindowSibling(@NonNull Run run, @NonNull String url, @NonNull File modelDir,
+                                                          @NonNull String siblingName, @Nullable String authToken,
+                                                          long currentBytes, long expectedSizeBytes) throws Exception {
+        String siblingUrl = baseUrlFromUrl(url) + encodeHuggingFacePath(siblingName);
+        File siblingOutput = new File(modelDir, siblingName);
+        long packageTotalBytes = expectedSizeBytes > 0L ? expectedSizeBytes : -1L;
+
+        // A cheap probe (headers only, body untouched until getInputStream()) to learn whether the
+        // sibling exists at all and, if so, its size — so a sibling already fully downloaded in an
+        // earlier attempt is recognised and skipped without re-fetching it (isFileAlreadyComplete).
+        HttpURLConnection probe = open(siblingUrl, authToken, 0);
+        long expectedSiblingSize;
+        try {
+            int probeStatus = probe.getResponseCode();
+            if (probeStatus < 200 || probeStatus >= 300) return 0L; // not published for this variant — not an error
+            expectedSiblingSize = probe.getContentLengthLong();
+        } finally {
+            probe.disconnect();
+        }
+        if (isFileAlreadyComplete(siblingOutput, expectedSiblingSize)) return 0L;
+
+        File siblingPartial = new File(siblingOutput.getAbsolutePath() + ".part");
+        long offset = resumeOffset(siblingPartial, siblingUrl);
+        HttpURLConnection connection = open(siblingUrl, authToken, offset);
+        int status = connection.getResponseCode();
+        if (status == 416 && offset > 0) {
+            connection.disconnect();
+            connection = open(siblingUrl, authToken, 0);
+            status = connection.getResponseCode();
+            offset = 0;
+        }
+        boolean resume = offset > 0 && status == 206 && validContentRange(connection.getHeaderField("Content-Range"), offset);
+        if (status == 206 && !resume) {
+            connection.disconnect();
+            return 0L;
+        }
+        if (!resume) offset = 0;
+        if (status < 200 || status >= 300) {
+            connection.disconnect();
+            return 0L;
+        }
+        long addedBytes = offset;
+        currentBytes += offset;
+        run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), siblingName));
+        try (InputStream input = new BufferedInputStream(connection.getInputStream());
+             FileOutputStream out = new FileOutputStream(siblingPartial, resume)) {
+            byte[] buffer = new byte[1024 * 64];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                run.control().checkpoint();
+                out.write(buffer, 0, read);
+                currentBytes += read;
+                addedBytes += read;
+                if (currentBytes % PERSIST_EVERY_BYTES < read) {
+                    run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), siblingName));
+                } else {
+                    run.report(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), siblingName));
+                }
+            }
+        } finally {
+            connection.disconnect();
+        }
+        if (siblingOutput.exists() && !siblingOutput.delete()) return addedBytes; // best effort; keep the .part for next time
+        if (!siblingPartial.renameTo(siblingOutput)) return addedBytes;
+        clearResumeMarker(siblingPartial);
+        return addedBytes;
     }
 
     /** A Hugging Face repository's directory listing, kept around for MNN package selection:

@@ -116,8 +116,18 @@ public final class TaiResidency {
         /** An embedding interpreter; both backends run these on the CPU. */
         @NonNull
         public static Entry embedding(@NonNull TaiModelSpec spec, int sequenceLength) {
+            return embedding(spec, sequenceLength, embeddingEstimateBytes(spec));
+        }
+
+        /**
+         * An embedding interpreter with an explicit estimate, for a LiteRT install that keeps
+         * several window graphs resident at once: the caller sums each loaded graph's own
+         * estimate (or measurement) rather than the single-file default {@link #embedding(TaiModelSpec, int)} uses.
+         */
+        @NonNull
+        public static Entry embedding(@NonNull TaiModelSpec spec, int sequenceLength, long estimatedBytes) {
             return new Entry(spec.id, Kind.EMBEDDING, spec.backend, "cpu", sequenceLength,
-                embeddingEstimateBytes(spec), null, System.currentTimeMillis(), false);
+                estimatedBytes, null, System.currentTimeMillis(), false);
         }
 
         /** A Whisper interpreter on the CPU; {@code windowSeconds} is the graph's audio window (5 or 10). */

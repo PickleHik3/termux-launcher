@@ -2,13 +2,16 @@ package com.termux.ai;
 
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The pure math behind dawn brief items 1 and 2: task-prefix text and in-window token budgeting,
- * without needing a loaded TFLite interpreter.
+ * The pure math behind dawn brief items 1 and 2 (task-prefix text and in-window token budgeting)
+ * and the window-routing brief's window selection, all without needing a loaded TFLite interpreter.
  */
 public class LiteRtEmbeddingRuntimeBudgetTest {
 
@@ -71,5 +74,32 @@ public class LiteRtEmbeddingRuntimeBudgetTest {
         assertEquals(3, budget.prefixTokens);
         assertEquals(5, budget.bodyTokens);
         assertFalse(budget.truncated);
+    }
+
+    // ---- window selection (window-routing brief) ----
+
+    @Test
+    public void pickWindow_choosesTheSmallestWindowThatFits() {
+        assertEquals(256, LiteRtEmbeddingRuntime.pickWindow(Arrays.asList(256, 512, 1024), 100));
+        assertEquals(512, LiteRtEmbeddingRuntime.pickWindow(Arrays.asList(256, 512, 1024), 300));
+        assertEquals(1024, LiteRtEmbeddingRuntime.pickWindow(Arrays.asList(256, 512, 1024), 600));
+    }
+
+    @Test
+    public void pickWindow_atExactBoundary_fitsWithoutGoingUpAWindow() {
+        // needed == 256 exactly must still route to the 256 window, not the next one up.
+        assertEquals(256, LiteRtEmbeddingRuntime.pickWindow(Arrays.asList(256, 512, 1024), 256));
+    }
+
+    @Test
+    public void pickWindow_whenNothingFits_fallsBackToTheLargestWindow() {
+        assertEquals(1024, LiteRtEmbeddingRuntime.pickWindow(Arrays.asList(256, 512, 1024), 5000));
+    }
+
+    @Test
+    public void pickWindow_withOneGraphInstalled_behavesExactlyAsToday() {
+        // A one-graph model has nothing to route between: every input, fitting or not, uses it.
+        assertEquals(512, LiteRtEmbeddingRuntime.pickWindow(Collections.singletonList(512), 10));
+        assertEquals(512, LiteRtEmbeddingRuntime.pickWindow(Collections.singletonList(512), 5000));
     }
 }

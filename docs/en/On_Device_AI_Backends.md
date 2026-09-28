@@ -74,6 +74,15 @@ with `Retry-After` and `code: "embedding_memory"` rather than the chat path's `4
 (`{model, input}` → `{tokens: n}`) uses the same tokenizer with no prefix, for splitting text on
 real token counts.
 
+EmbeddingGemma installs a fixed-shape graph per context window (`seq256`/`seq512`/`seq1024`/
+`seq2048`), and a short input on a big window still pays that window's full inference cost. A
+download of `seq1024` or bigger also fetches the smaller `seq256`/`seq512` siblings, best effort,
+and TAI then routes each input to the smallest installed window it fits (prefix + body +
+BOS/EOS), falling back to the largest window (with truncation, as always) only when nothing fits.
+This is per input within one batch, transparent in the response shape; `/v1/models` reports every
+installed window ascending in `_endpoint_windows`, and the largest of them in
+`_endpoint_context_window`.
+
 ## Model IDs
 
 Use the exact IDs returned by:

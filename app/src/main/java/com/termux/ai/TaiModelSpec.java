@@ -525,6 +525,25 @@ public final class TaiModelSpec {
     }
 
     /**
+     * The installed window graphs beside {@code localPath}, sorted ascending, for a LiteRT
+     * EmbeddingGemma-style install ({@code ..._seqNNNN_...}): {@code [256, 512, 1024]} once the
+     * downloader has fetched the smaller siblings next to a seq1024 primary. Empty when the file
+     * is missing, unreadable, or its name carries no window at all (a non-EmbeddingGemma embedder,
+     * or one imported under a renamed file). Not cached like {@link #revisionFor}: it is a single
+     * directory listing, and the directory changing (a sibling finishing a background download) is
+     * exactly the case {@code /v1/models} needs to see on its very next call.
+     */
+    @NonNull
+    public static int[] windowsFor(@Nullable String localPath) {
+        if (localPath == null || localPath.trim().isEmpty()) return new int[0];
+        java.util.Map<Integer, File> siblings = TaiImportProfiles.siblingWindowGraphs(new File(localPath));
+        int[] windows = new int[siblings.size()];
+        int i = 0;
+        for (Integer window : siblings.keySet()) windows[i++] = window; // TreeMap: already ascending
+        return windows;
+    }
+
+    /**
      * A stable, cheap revision for {@code /v1/models}: a hash of the model file's name, size and
      * mtime, never its bytes, so a 300 MB file is never re-read. Cached per (path, size, mtime)
      * triple so repeat {@code /v1/models} calls for the same unchanged file skip the digest too.

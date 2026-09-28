@@ -411,6 +411,45 @@ public class EmbeddingsEndpointTest {
         assertEquals(128, dims.getInt(dims.length() - 1));
     }
 
+    @Test
+    public void models_embeddingGemmaWithInstalledSiblings_reportsEveryWindow() throws Exception {
+        // A downloaded seq1024 primary with its smaller seq256/seq512 siblings already on disk
+        // (window-routing brief item 7): _endpoint_windows lists all three, ascending, and
+        // _endpoint_context_window is the largest of them, not just the primary's own file name.
+        File primary = File.createTempFile("embeddinggemma-300M_seq1024_mixed-precision", ".tflite");
+        primary.deleteOnExit();
+        File dir = primary.getParentFile();
+        String stem = primary.getName().replace("seq1024", "seq256");
+        File seq256 = new File(dir, stem);
+        seq256.createNewFile();
+        seq256.deleteOnExit();
+        stem = primary.getName().replace("seq1024", "seq512");
+        File seq512 = new File(dir, stem);
+        seq512.createNewFile();
+        seq512.deleteOnExit();
+
+        manager.importModel(new JSONObject()
+            .put("path", primary.getAbsolutePath())
+            .put("modelId", "embeddinggemma-300m-windows")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .toString());
+
+        HttpURLConnection conn = get("/v1/models");
+        assertEquals(200, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        JSONObject entry = findModel(response, "embeddinggemma-300m-windows");
+        assertTrue("embeddinggemma entry must be present", entry != null);
+        assertEquals(1024, entry.getInt("_endpoint_context_window"));
+        JSONArray windows = entry.getJSONArray("_endpoint_windows");
+        assertEquals(3, windows.length());
+        assertEquals(256, windows.getInt(0));
+        assertEquals(512, windows.getInt(1));
+        assertEquals(1024, windows.getInt(2));
+
+        seq256.delete();
+        seq512.delete();
+    }
+
     private static JSONObject findModel(JSONObject modelsResponse, String id) throws Exception {
         JSONArray data = modelsResponse.getJSONArray("data");
         for (int i = 0; i < data.length(); i++) {

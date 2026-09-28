@@ -3,11 +3,14 @@ package com.termux.ai;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -273,6 +276,48 @@ public final class TaiImportProfiles {
         if (fileName == null) return 0;
         Integer seq = firstNumber(SEQ_TOKEN, fileName.toLowerCase(java.util.Locale.ROOT));
         return seq == null ? 0 : seq;
+    }
+
+    /** Matches the {@code seqNNNN} token anywhere in a file name, for sibling-window comparisons. */
+    private static final Pattern SEQ_ANY = Pattern.compile("seq\\d+");
+
+    /**
+     * {@code fileName} with its {@code seqNNNN} token replaced by a fixed placeholder, so two
+     * files whose names are identical apart from the window number normalise to the same string.
+     * Used only to compare siblings; {@link #sequenceWindowOf} still reads the real number.
+     */
+    @NonNull
+    private static String seqNormalizedName(@NonNull String fileName) {
+        return SEQ_ANY.matcher(fileName.toLowerCase(Locale.ROOT)).replaceFirst("seqn");
+    }
+
+    /**
+     * The window graphs installed beside {@code primaryFile} (an EmbeddingGemma-style
+     * {@code ..._seqNNNN_...} model): every file in the same directory whose name is identical to
+     * {@code primaryFile}'s apart from the {@code seqNNNN} number — same {@code _mixed-precision}
+     * marker, same chip variant suffix (or none on either side) — keyed by window, ascending. The
+     * primary itself is always included when its own name carries a window. A chip-specific build
+     * ({@code .google_tensor_g5.tflite}) never matches a portable one: their normalised names
+     * differ by that suffix, so they are never mixed into the same routing table.
+     */
+    @NonNull
+    static Map<Integer, File> siblingWindowGraphs(@NonNull File primaryFile) {
+        TreeMap<Integer, File> result = new TreeMap<>();
+        int primaryWindow = sequenceWindowOf(primaryFile.getName());
+        if (primaryWindow > 0) result.put(primaryWindow, primaryFile);
+        File dir = primaryFile.getParentFile();
+        if (dir == null) return result;
+        File[] candidates = dir.listFiles();
+        if (candidates == null) return result;
+        String primaryNormalized = seqNormalizedName(primaryFile.getName());
+        for (File candidate : candidates) {
+            if (!candidate.isFile() || candidate.equals(primaryFile)) continue;
+            int window = sequenceWindowOf(candidate.getName());
+            if (window <= 0) continue;
+            if (!seqNormalizedName(candidate.getName()).equals(primaryNormalized)) continue;
+            result.put(window, candidate);
+        }
+        return result;
     }
 
     // ---- builds tied to one chip ----

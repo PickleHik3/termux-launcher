@@ -1973,14 +1973,23 @@ public final class TaiManager {
      * dimensions, the Matryoshka sizes {@code dimensions} may truncate to, a stable revision so
      * dawn knows when to rebuild its index, that vectors are L2-normalised, and the largest batch
      * {@code /v1/embeddings} accepts (item 4). Context window is already covered by the existing
-     * {@code _endpoint_context_window}, overridden here by the file's {@code seqNNNN} because a
-     * catalogue install records the catalogue's window rather than the graph's.
+     * {@code _endpoint_context_window}, overridden here by the largest installed window graph
+     * because a catalogue install records the catalogue's window rather than the graph's; the
+     * window-routing brief (item 7) also adds {@code _endpoint_windows}, every installed window
+     * sorted ascending, when more than the primary graph is on disk.
      */
     private static void putEmbedderFields(@NonNull JSONObject item, @NonNull JSONObject model) throws JSONException {
         String id = model.optString("id", "");
         String localPath = model.isNull("localPath") ? null : model.optString("localPath", null);
-        int seqWindow = localPath == null ? 0 : TaiImportProfiles.sequenceWindowOf(new File(localPath).getName());
-        if (seqWindow > 0) item.put("_endpoint_context_window", seqWindow);
+        // Window-routing brief item 7: several installed graphs beside one another, keyed by their
+        // own seqNNNN, override the single-file window a catalogue install otherwise records.
+        int[] windows = localPath == null ? new int[0] : TaiModelSpec.windowsFor(localPath);
+        if (windows.length > 0) {
+            item.put("_endpoint_context_window", windows[windows.length - 1]);
+            JSONArray windowsArray = new JSONArray();
+            for (int window : windows) windowsArray.put(window);
+            item.put("_endpoint_windows", windowsArray);
+        }
         int dimensions = TaiModelSpec.embeddingDimensionsFor(id, localPath);
         if (dimensions > 0) item.put("_endpoint_dimensions", dimensions);
         int[] matryoshka = TaiModelSpec.embeddingMatryoshkaDimsFor(id, localPath);
