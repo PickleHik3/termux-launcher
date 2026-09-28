@@ -153,7 +153,7 @@ public class KeyboardPreferencesFragmentTest {
         assertEquals("600", store.getString("keyboard_voice_pause_ms", null));
         assertEquals("10000", store.getString("keyboard_voice_silence_timeout_ms", null));
         assertTrue(store.getBoolean("keyboard_voice_sounds", false));
-        assertTrue(!store.getBoolean("keyboard_voice_polish", true));
+        assertTrue(store.getBoolean("keyboard_voice_polish", false));
         assertEquals("polished", store.getString("keyboard_voice_polish_level", null));
 
         KeyboardPreferencesFragment fragment = launch();

@@ -262,8 +262,9 @@ Open-Meteo attribution.
   handle in its bottom-left corner: out to the left makes it wider, up makes its rows taller, and
   the edges you are not holding stay where they are. It writes the same two values.
 - **Layout documentation** and **Supported key values**.
-- **Voice input:** **Speech engine** (**Android system**, the default, or **On-device (Whisper)**),
-  **Voice language**, **Polish dictation with local model** (off by default) with its **Cleanup
+- **Voice input:** **Speech engine** (**Android system** or **On-device**; unpicked, it goes
+  on-device once a speech model is installed), **Voice language**, **Polish dictation with local
+  model** (on by default) with its **Cleanup
   model** and **Cleanup level**, **Pause that ends a phrase**, **Silence auto-stop**, **Voice
   sounds**, and **Speech model**, which also holds the **Voice output** voice and speed for Read
   aloud. See [Voice input](Voice_Input.md) and [Text to speech](Text_To_Speech.md).

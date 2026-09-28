@@ -116,7 +116,7 @@
             app:key="keyboard_voice_polish"
             app:title="@string/settings_keyboard_voice_polish_title"
             app:summary="@string/settings_keyboard_voice_polish_summary"
-            android:defaultValue="false" />
+            android:defaultValue="true" />
         <Preference
             app:key="keyboard_voice_polish_model"
             app:persistent="false"

@@ -6,16 +6,17 @@ once at the cursor, copy it, or throw it away.
 
 There are two engines. **On-device** runs a speech model you download (Whisper or Parakeet) in the
 launcher's own AI runtime, and the audio never leaves the phone. **Android system** hands the
-microphone to the phone's own speech recognizer, which types its result straight away. A fresh
-install uses **Android system** until you choose **On-device** in **Settings → Keyboard → Voice
-input → Speech engine** and have a speech model installed.
+microphone to the phone's own speech recognizer, which types its result straight away. Until you
+pick one in **Settings → Keyboard → Voice input → Speech engine**, the launcher uses **Android
+system**, then switches to **On-device** by itself as soon as a speech model is installed. Once you
+pick an engine, your choice sticks.
 
 ## Quick start
 
 1. Open **Settings → Services & permissions → TAI · Termux AI → Model centre**, go to **Speech**,
    and install a speech model (see [Speech models](#speech-models)).
-2. Open **Settings → Keyboard → Voice input** and set **Speech engine** to **On-device (Whisper)**.
-   The same choice is used for Parakeet.
+2. That's it: with a speech model installed, the voice key uses it. (If you picked **Android system**
+   earlier, set **Settings → Keyboard → Voice input → Speech engine** back to **On-device**.)
 3. Swipe up on the built-in keyboard's Enter key and speak. Allow the microphone the first time.
 4. Tap the pill's pause, or just stop talking; after the silence auto-stop (10 s by default) the
    dictation stops by itself.
@@ -97,8 +98,9 @@ fixes punctuation, capitals and fillers, and resolves self-corrections ("at five
 struck through, fading to plain text after a moment. ✓ and Copy use the cleaned text; undo takes it
 back.
 
-Cleanup is **off by default**. Turn it on with **Polish dictation with local model** in **Settings →
-Keyboard → Voice input**. Two more rows then apply:
+Cleanup is **on by default** and needs a Gemma chat model installed. Turn it off with **Polish
+dictation with local model** in **Settings → Keyboard → Voice input**. While it is on, two more rows
+apply:
 
 | Setting | Choices | Default |
 | --- | --- | --- |
@@ -262,8 +264,9 @@ of an upload. Without a speech model installed, the route answers `stt_model_not
 ## Troubleshooting
 
 - **The voice key opens Google's (or another) recognizer.** **Speech engine** is set to **Android
-  system**, the default. Choose **On-device (Whisper)**. If no speech model is installed, choosing it
-  opens the **Speech model** screen.
+  system**, either because you picked it or because no speech model is installed yet. Install one,
+  or choose **On-device**. If no speech model is installed, choosing it opens the **Speech model**
+  screen.
 - **"No speech model installed — using the Android recognizer".** Install one from **Model centre →
   Speech**.
 - **Microphone permission.** The first on-device dictation asks for the microphone with **Allow** or
@@ -285,8 +288,8 @@ of an upload. Without a speech model installed, the route answers `stt_model_not
   **Automatic** (E2B) as the cleanup model, or turn cleanup off. **Unload after idle** frees the speech
   model between dictations.
 - **The text is "Kept as heard" every time.** Check that a Gemma chat model is installed and that
-  **Polish dictation with local model** is on. Dictations under four words and commands are always
-  kept as heard. See [Cleanup](#cleanup).
+  **Polish dictation with local model** is on. Dictations under four words are always
+  kept as heard, and commands are formatted by fixed rules rather than the model. See [Cleanup](#cleanup).
 
 For the models themselves and the rest of the local API, see [TAI / Termux AI](Termux_AI.md). To hear
 text read aloud, see [Text to speech](Text_To_Speech.md).

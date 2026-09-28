@@ -1293,6 +1293,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE.equals(getInAppKeyboardVoiceEngine());
     }
 
+    /** Whether the speech engine was ever picked; unpicked, the app goes on-device once a speech model is installed. */
+    public boolean isInAppKeyboardVoiceEngineChosen() {
+        return mSharedPreferences.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_VOICE_ENGINE);
+    }
+
     /** {@code auto} or an ISO 639-1 code, lowercased. */
     public String getInAppKeyboardVoiceLanguage() {
         String value = SharedPreferenceUtils.getString(mSharedPreferences,

@@ -1905,11 +1905,11 @@
     <string name="settings_keyboard_voice_header">Voice input</string>
     <string name="settings_keyboard_voice_engine_title">Speech engine</string>
     <string name="settings_keyboard_voice_engine_system">Android system</string>
-    <string name="settings_keyboard_voice_engine_on_device">On-device (Whisper)</string>
+    <string name="settings_keyboard_voice_engine_on_device">On-device</string>
     <string name="settings_keyboard_voice_language_title">Voice language</string>
     <string name="settings_keyboard_voice_language_auto">Auto</string>
     <string name="settings_keyboard_voice_polish_title">Polish dictation with local model</string>
-    <string name="settings_keyboard_voice_polish_summary">When you stop dictating, a local chat model cleans up the whole text in one pass and the panel marks what changed before you insert or copy it; short commands stay as heard. Off: the text waits exactly as heard. Needs a model installed</string>
+    <string name="settings_keyboard_voice_polish_summary">When you stop dictating, a local chat model cleans up the whole text in one pass and the panel marks what changed before you insert or copy it; shell commands are formatted by fixed rules instead (ls dash la becomes ls -la). Off: the text waits exactly as heard. Needs a model installed</string>
     <string name="settings_keyboard_voice_polish_model_title">Cleanup model</string>
     <string name="settings_keyboard_voice_polish_level_title">Cleanup level</string>
     <string name="settings_keyboard_voice_polish_level_light">Light: punctuation, capitals and fillers</string>
