@@ -59,10 +59,23 @@ placement on the live screen goes away.
 - **Canvas.** The Layout editor hosts the existing miniature view, legend off, one orientation at a
   time, driven by the existing drop policy and drop callback. The orientation toggle above it
   re-binds the miniature; it does not touch the live place. The portrait frame stands at 42% of
-  the screen's height while the card rests (the sheet takes 80% of a portrait screen) and grows
-  to 54% as the card is pulled up by its handle or header toward the top inset, the rows taking
-  whatever the pull adds beyond that (`LayoutEditorPlan`, `LayoutEditorSheet`, 2026-09-28); the
-  landscape frame fills the width. The rows section beneath scrolls.
+  the screen's height and the landscape frame is as wide as the card's column, each bounded by
+  what the resting card leaves once its chrome and a 96dp peek of the rows have theirs
+  (`LayoutEditorPlan.miniatureHeightPx`). The frame is sized from the resting card only: the pull
+  never reshapes it.
+- **The card is one scrolling sheet** (2026-09-28, shared with Appearance as `EditorShellSheet`).
+  The handle and the shell header stay at the top; the orientation toggle, the notices, the
+  miniature with its Hidden tray, and every row are one `NestedScrollView` under them — no pinned
+  chooser and no separately capped rows window. The card wraps its content up to its resting
+  height (80% of a portrait screen; the room under the top inset in landscape, where it has no
+  travel) and a pull grows it toward the top inset. Drags on the handle, the header or the card's
+  air always move the sheet; drags on the list move it only when pulling up a card that can still
+  grow or pulling down a list at its top (`EditorShellSheetPolicy.claimsDrag`, BottomSheetBehavior's
+  rule); a flick or half the travel decides the snap, a tap on the handle toggles, and a firm pull
+  past rest is the Back press (closes clean, asks when dirty). A miniature grip disallows intercept,
+  so a bar drag never scrolls or pulls the sheet. The custom spring was kept over
+  `BottomSheetBehavior`: the host is a FrameLayout, the Appearance card floats above the dock rather
+  than at the window edge, and dismissal must route through each editor's own close path.
 - **Rows.** The existing layout chooser row model supplies keyboard form, keyboard on enter,
   keyboard mode and grid counters, filtered to the current place and orientation. Three slider rows
   are added for dock height, keyboard height and keyboard chin, using the editor row kinds that

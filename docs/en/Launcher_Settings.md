@@ -53,11 +53,17 @@ places is the border drag, on every place, and never the bar's own gesture. A co
 edge with the pinned apps and the extra keys when those stand there too, in the order you stacked
 them.
 
-Pull the handle at the top of the card upward to enlarge the miniature — the card grows toward the
-top of the screen and the picture grows with it, the rows taking what is left — and pull it down
-to bring the card back to its resting size. A firm pull down past that closes the editor the way
-Back does: straight away when nothing has changed, and with the keep-or-discard question when
-something has.
+The card is a sheet from the bottom of the screen, like the Appearance card. Its header — the
+title, Undo, Discard and Done — stays at the top, and everything under it (the Portrait/Landscape
+toggle, the miniature and its Hidden tray, and every row below) scrolls as one list. It rests
+low enough to leave the top of the real screen in view; pull it up by the handle, the header or
+the list itself and it grows toward the top of the screen before the list starts scrolling, and a
+tap on the handle does the same. Pulling down on the list when it is back at its top brings the
+card down again. A firm pull down past its resting size closes the editor the way Back does:
+straight away when nothing has changed, and with the keep-or-discard question when something has.
+While you drag a bar by its grip, the card stays still.
+
+The rows under the miniature:
 - **Dock height** and **Keyboard height**: how tall the dock and the built-in keyboard stand, and
   **Keyboard bottom padding** for the clearance it leaves below the keyboard, each set separately
   per orientation; upgrading carries your terminal's values over unchanged.
@@ -96,7 +102,11 @@ Use this section for visible surfaces and colors:
 - **Appearance** (from a corner tab or the long-press menu): tune the dock, keyboard, status panel, and terminal while looking at the real
   home screen. Tap the floating palette to style every surface at once, or tap a surface to style
   it on its own. Home, Terminal and Display wear the same look, so what you change here changes all
-  three.
+  three. The card is the same kind of sheet as the Layout card: it stands just above the dock and
+  keyboard with the header on top and one list under it, and pulling it up by the handle, the
+  header or the list grows it to the top of the free room — never over the status bar, the dock or
+  the keyboard — before the list scrolls. Pull it down firmly, or tap its ✕, to put it away; your
+  changes stay on screen until you tap Done.
   The keyboard's **BG opacity** applies to the keyboard docked under the terminal — a floating,
   split, or overlaying keyboard is a solid panel and ignores it — while its **Edges** apply to
   every keyboard.

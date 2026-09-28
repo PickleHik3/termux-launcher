@@ -67,6 +67,33 @@ public final class EditorShellPaint {
         return background;
     }
 
+    /** The sheet handle's bar, Material's 32 x 4 dp, and its strength over the card's ink. */
+    public static final int HANDLE_WIDTH_DP = 32;
+    public static final int HANDLE_HEIGHT_DP = 4;
+    public static final float HANDLE_ALPHA = 0.28f;
+    /** The slot the bar is centred in, which is what both cards' layouts declare. */
+    public static final int HANDLE_SLOT_WIDTH_DP = 64;
+    public static final int HANDLE_SLOT_HEIGHT_DP = 24;
+
+    /**
+     * The handle at the top of either card: a quiet bar of the card's own ink, centred in the
+     * touch slot the layout gives it. A mark first — the pull it takes is the header's and the
+     * body's too — so it never shouts.
+     */
+    @NonNull
+    public static Drawable handleBar(@ColorInt int onSurface, float density) {
+        GradientDrawable bar = new GradientDrawable();
+        bar.setShape(GradientDrawable.RECTANGLE);
+        bar.setCornerRadius(EditorShellMetrics.px(HANDLE_HEIGHT_DP / 2f, density));
+        bar.setSize(EditorShellMetrics.px(HANDLE_WIDTH_DP, density),
+            EditorShellMetrics.px(HANDLE_HEIGHT_DP, density));
+        bar.setColor(ColorUtils.setAlphaComponent(onSurface, Math.round(HANDLE_ALPHA * 255f)));
+        int side = EditorShellMetrics.px((HANDLE_SLOT_WIDTH_DP - HANDLE_WIDTH_DP) / 2f, density);
+        int vertical = EditorShellMetrics.px(
+            (HANDLE_SLOT_HEIGHT_DP - HANDLE_HEIGHT_DP) / 2f, density);
+        return new android.graphics.drawable.InsetDrawable(bar, side, vertical, side, vertical);
+    }
+
     /**
      * Stands the card off the screen behind it, with a shadow soft enough to read as depth rather
      * than as a second outline.

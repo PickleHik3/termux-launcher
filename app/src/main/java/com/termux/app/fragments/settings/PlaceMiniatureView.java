@@ -2274,7 +2274,14 @@ public final class PlaceMiniatureView extends View {
                 return true;
             }
             case MotionEvent.ACTION_MOVE:
-                if (mDraggedBar != null && !mSpringingBack) moveDrag(event.getX(), event.getY());
+                if (mDraggedBar != null && !mSpringingBack) {
+                    // The editor's card is a sheet that scrolls and pulls; while a bar is in the
+                    // air neither may take the finger, so the claim is restated on every move in
+                    // case anything between here and the sheet let it go.
+                    ViewParent parent = getParent();
+                    if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+                    moveDrag(event.getX(), event.getY());
+                }
                 return true;
             case MotionEvent.ACTION_UP:
                 if (mDraggedBar != null) {

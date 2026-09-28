@@ -3,18 +3,12 @@ package com.termux.app.layouteditor;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.InsetDrawable;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
-import android.view.MotionEvent;
-import android.view.VelocityTracker;
 import android.view.View;
-import android.view.ViewConfiguration;
 import android.view.ViewGroup;
-import android.view.ViewParent;
 import android.widget.FrameLayout;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -40,6 +34,7 @@ import com.termux.app.editorshell.EditorShellHeader;
 import com.termux.app.editorshell.EditorShellMetrics;
 import com.termux.app.editorshell.EditorShellPaint;
 import com.termux.app.editorshell.EditorShellRows;
+import com.termux.app.editorshell.EditorShellSheet;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
 import com.termux.app.place.PlaceArrangeModel;
@@ -67,14 +62,13 @@ import java.util.Map;
  *
  * <p>Beneath the picture stand the rows for what no bar can be dragged into — the dock's and the
  * keyboard's height, the keyboard's own choices and its chin, and Home's grid. They write through
- * the same way a drop does, and scroll inside whatever room the canvas above them has left. The
- * card is a scroller of its own around all of it, for the short screen at the large font scale
- * where even the bounded canvas and the rows' floor do not both fit.
+ * the same way a drop does. The toggle, the picture and the rows are one list under the header,
+ * scrolling as one, the way an Android sheet's content does.
  *
- * <p>On a portrait screen the card is a sheet: it rests about a fifth of the screen down and is
- * pulled up by its handle or its header to the top inset, the miniature growing first and the
- * rows taking what is left; pulled down it comes back, and pulled firmly past its resting height
- * it closes the way Back does. {@link LayoutEditorSheet} decides where a pull settles.
+ * <p>The card is the shell's sheet ({@link EditorShellSheet}), the same one the Appearance editor
+ * stands in: on a portrait screen it rests about a fifth of the screen down, a pull on its handle,
+ * its header or its list grows it toward the top inset before the list scrolls, and a firm pull
+ * past its resting height closes it the way Back does.
  *
  * <p>✓ keeps the edits, Discard and the revert glyph put every bar back where the editor found it,
  * and Back with something moved asks rather than choosing for the user — the live write-through
@@ -125,9 +119,11 @@ public final class LayoutEditorController {
     /** The editor's fixed views, inflated once per process. */
     private static final class Card {
         final ViewGroup host;
-        /** The card itself: a scroller, so a screen too short for the column still reaches it. */
-        final ViewGroup root;
-        /** The column inside the scroller, which is where the card's own padding lives. */
+        /** The card itself: the shell's sheet, a header over one scrolling list. */
+        final EditorShellSheet root;
+        /** The list, the card's one scroller. */
+        final NestedScrollView scroller;
+        /** The column inside the list, which is where its bottom air lives. */
         final ViewGroup column;
         /** The mark at the top that says the sheet came up from the bottom edge. */
         final View handle;
@@ -144,13 +140,16 @@ public final class LayoutEditorController {
         final LinearLayout body;
         final PlaceMiniatureView miniature;
         final TextView narrowNotice;
-        final ViewGroup rowsHost;
+        /** The rows' own column, in the list under the picture or in the pane beside it. */
+        final LinearLayout rowsHost;
 
-        Card(ViewGroup host, ViewGroup root) {
+        Card(ViewGroup host, EditorShellSheet root) {
             this.host = host;
             this.root = root;
+            scroller = root.body() instanceof NestedScrollView
+                ? (NestedScrollView) root.body() : null;
             column = root.findViewById(R.id.layout_editor_card_column);
-            handle = root.findViewById(R.id.layout_editor_sheet_handle);
+            handle = root.handle();
             header = root.findViewById(R.id.editor_shell_header);
             title = root.findViewById(R.id.editor_shell_header_title);
             revert = root.findViewById(R.id.editor_shell_header_revert);
@@ -168,7 +167,8 @@ public final class LayoutEditorController {
         }
 
         boolean complete() {
-            return column != null && handle != null && header != null && title != null
+            return scroller != null && column != null && handle != null && header != null
+                && title != null
                 && revert != null && discard != null
                 && done != null && chooserSlot != null && orientationRow != null
                 && orientationHost != null && orientation != null && orientationNotice != null
@@ -182,15 +182,10 @@ public final class LayoutEditorController {
     private boolean mRestatingToggle;
     /** The track a finger is on, which no restatement may move under it. */
     @Nullable private SeekBar mDraggedSlider;
-    /** The rows' own scroller and column, built on first use and refilled per place. */
-    @Nullable private NestedScrollView mRowsScroller;
-    @Nullable private LinearLayout mRows;
     /** Restates every row from the store; run after anything that can move what one says. */
     @NonNull private final List<Runnable> mRowSyncs = new ArrayList<>(5);
     /** The place and orientation the rows standing there were built for, or null for none. */
     @Nullable private String mRowsKey;
-    /** How tall the rows may grow before they scroll, from the room the canvas left. */
-    private int mRowsCapPx;
     /**
      * The sheet's own channel: 1 is the card parked below the bottom edge, 0 is the card in place.
      * One spring for both directions, so a card closed while it is still opening turns round from
@@ -199,14 +194,8 @@ public final class LayoutEditorController {
     @NonNull private final Spring mSheet = new Spring(1f, 420f, 41f);
     private boolean mSheetAnimating;
     private long mSheetLastFrameNanos;
-    /**
-     * The sheet's height channel: 0 is the card resting at its collapsed budget, 1 is the card
-     * grown to the expanded one. A finger on the handle writes it directly; letting go springs it
-     * to whichever end {@link LayoutEditorSheet#settle} picks, on the same loop as the travel.
-     */
-    @NonNull private final Spring mExpand = new Spring(0f, 420f, 41f);
-    /** The pull in flight on the handle or the header, or null while there is none. */
-    @Nullable private SheetPull mPull;
+    /** How far a pull has pushed the card below its resting height, from {@link EditorShellSheet}. */
+    private float mOvershootPx;
     /** The wash over the live place behind the card, built with the card and never blurred. */
     @Nullable private View mScrim;
     /** Whether the card is up or coming up; false the moment something asks it to leave. */
@@ -263,7 +252,8 @@ public final class LayoutEditorController {
         if (!mShowing) {
             mShowing = true;
             // The card comes up at its resting height every time; a pull is for this visit.
-            mExpand.reset(0f);
+            card.root.snapToRest();
+            mOvershootPx = 0f;
             startSheet(card);
         }
     }
@@ -278,14 +268,14 @@ public final class LayoutEditorController {
             return null;
         if (mScrim == null)
             mScrim = addScrim(host);
-        ViewGroup root = host.findViewById(R.id.layout_editor_card);
+        View root = host.findViewById(R.id.layout_editor_card);
         if (root == null) {
             LayoutInflater.from(mHost.context()).inflate(R.layout.layout_editor, host, true);
             root = host.findViewById(R.id.layout_editor_card);
         }
-        if (root == null)
+        if (!(root instanceof EditorShellSheet))
             return null;
-        Card card = new Card(host, root);
+        Card card = new Card(host, (EditorShellSheet) root);
         if (!card.complete())
             return null;
         mCard = card;
@@ -306,14 +296,24 @@ public final class LayoutEditorController {
                 R.color.termux_on_primary));
         card.revert.setContentDescription(
             mHost.context().getString(R.string.termux_layout_editor_revert));
-        card.handle.setBackground(handleBar());
-        // The handle is the pull, and a tap on it is the pull's short form; the header takes the
-        // same pull anywhere its buttons are not.
-        card.handle.setContentDescription(
-            mHost.context().getString(R.string.termux_layout_editor_sheet_handle));
-        card.handle.setOnClickListener(view -> toggleSheet());
-        card.handle.setOnTouchListener(this::onSheetTouch);
-        card.header.setOnTouchListener(this::onSheetTouch);
+        card.handle.setBackground(EditorShellPaint.handleBar(
+            mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+                R.color.termux_on_surface),
+            mHost.context().getResources().getDisplayMetrics().density));
+        // The pull itself is the sheet's; what a pull below rest means is this editor's.
+        card.root.setCallback(new EditorShellSheet.Callback() {
+            @Override public void onSheetOvershoot(float overshootPx) {
+                mOvershootPx = overshootPx;
+                if (!mSheetAnimating)
+                    applySheetProgress(card, mSheet.value);
+            }
+
+            @Override public boolean onSheetDismissRequested(float overshootPx) {
+                return dismissFromPull(card, overshootPx);
+            }
+        });
+        // A long list scrolls under the header with the shell's fade and its quiet scrollbar.
+        EditorShellRows.applyBodyScroller(card.scroller);
         // The chooser is a pill sized to its own two words, not a control column stretched to
         // whatever the card had left.
         ViewGroup.LayoutParams pill = card.orientationHost.getLayoutParams();
@@ -447,29 +447,39 @@ public final class LayoutEditorController {
     }
 
     /**
-     * Sizes the canvas to the frame the shown orientation asks for, and decides whether the rows
-     * stand beside it or beneath it.
+     * Sizes the canvas to the frame the shown orientation asks for, decides whether the rows stand
+     * beside it or beneath it, and tells the sheet the two heights it stands at.
+     *
+     * <p>The canvas is sized once, from the resting card, and never from the pull: pulling the
+     * sheet up shows more of the list, it does not reshape the picture in it. The frame is bounded
+     * by the card's width — a landscape frame as wide as the screen in a card a row wide was a
+     * frame with dead air above and below it — and by what the resting card leaves once its chrome
+     * and a peek of the rows have theirs, so the first rows are in view before anything scrolls.
      *
      * <p>A portrait miniature on a landscape screen was a ~150px frame in a 1300px card with two
-     * ~550px empty gutters around it and the rows clipped off the bottom. Beside it there is room
-     * for a whole row of controls, and the frame gets the body's whole height instead of the body
-     * minus the floor the rows are owed.
+     * ~550px empty gutters around it. Beside it there is room for a whole row of controls, and the
+     * frame gets the body's whole height instead.
      */
     private void applyCanvasHeight(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
         DisplayMetrics metrics = mHost.context().getResources().getDisplayMetrics();
         float density = metrics.density;
-        EditorShellHeader.apply(card.header, metrics.heightPixels);
-        int floorPx = Math.round(dpToPx(ROWS_FLOOR_DP));
+        // What the card stands in: the room under the top inset pulled all the way up, and at rest
+        // a sheet's share of a portrait screen, so the place it is a picture of stays visible
+        // above it until asked; a landscape screen has no height to give away.
+        int expandedPx = expandedBudgetPx(card, metrics);
+        int restPx = LayoutEditorPlan.restingCardHeightPx(metrics.widthPixels,
+            metrics.heightPixels, expandedPx);
+        card.root.setHeights(restPx, expandedPx);
+        // The header is sized from the height the card can stand in, the same question the
+        // Appearance card asks: compact only where even the pulled-up card is short.
+        EditorShellHeader.apply(card.header, expandedPx);
+
+        int floorPx = Math.round(dpToPx(ROWS_PEEK_DP));
         int chooserPx = Math.max(card.orientationRow.getHeight(),
             Math.round(dpToPx(EditorShellMetrics.CHOOSER_DP)));
-        int chromePx = cardChromePx(metrics.heightPixels, chooserPx,
+        int chromePx = cardChromePx(expandedPx, chooserPx,
             card.column.getPaddingTop() + card.column.getPaddingBottom(), noticeLines(plan),
             density);
-        // What the card may stand in: the whole screen where the screen is already short, and a
-        // sheet's share of a portrait one — plus however far the sheet has been pulled up toward
-        // the top inset — so the place it is a picture of stays visible above it until asked.
-        int budgetPx = LayoutEditorPlan.cardBudgetPx(metrics.widthPixels, metrics.heightPixels,
-            expandedBudgetPx(card, metrics), mExpand.value);
         float frameAspect = PlaceMiniatureView.frameAspect(plan.shownOrientation());
         int reservedPx = Math.round(card.miniature.reservedHeightPx());
 
@@ -478,28 +488,14 @@ public final class LayoutEditorController {
         EditorShellMetrics.PaneSplit split = EditorShellMetrics.paneSplit(
             EditorShellMetrics.contentWidthPx(metrics.widthPixels, density), naturalPx, density);
         boolean twoPanes = rowsBesideMiniature(naturalPx, split, density);
-        applyCardWidth(card, metrics.widthPixels, split, density, twoPanes);
+        int columnPx = applyCardWidth(card, metrics.widthPixels, split, density, twoPanes);
 
-        int bodyPx = Math.max(floorPx, budgetPx - chromePx);
         int height = twoPanes
             ? LayoutEditorPlan.miniatureHeightInPanePx(frameAspect, reservedPx,
-                split.leadingWidthPx, bodyPx)
-            : LayoutEditorPlan.miniatureHeightPx(plan.shownOrientation(), metrics.widthPixels,
-                metrics.heightPixels, frameAspect, reservedPx, chromePx + floorPx, budgetPx);
+                split.leadingWidthPx, Math.max(floorPx, restPx - chromePx))
+            : LayoutEditorPlan.miniatureHeightPx(plan.shownOrientation(), metrics.heightPixels,
+                frameAspect, reservedPx, columnPx, chromePx + floorPx, restPx);
         applyBodyPanes(card, split, twoPanes, height);
-
-        int available = twoPanes ? bodyPx
-            : LayoutEditorPlan.rowsHeightCapPx(budgetPx, height, chromePx, floorPx);
-        boolean pinned = EditorShellMetrics.chooserPinned(available, density);
-        EditorShellHeader.applyChooserPin(card.orientationRow, card.chooserSlot, mRows, pinned);
-        if (!pinned && !twoPanes)
-            available = LayoutEditorPlan.rowsHeightCapPx(budgetPx, height,
-                chromePx - chooserPx, floorPx);
-        // The room the rows have, and only that. Where it cuts is the scroller's own business:
-        // it is the only place the rows' real heights are known, and this runs before they exist.
-        mRowsCapPx = available;
-        if (mRowsScroller != null)
-            mRowsScroller.requestLayout();
         ViewGroup.LayoutParams params = card.miniature.getLayoutParams();
         if (params == null || params.height == height)
             return;
@@ -552,35 +548,39 @@ public final class LayoutEditorController {
         view.setLayoutParams(pane);
     }
 
-    /** The air the sheet keeps at each side, which is what {@code layout_editor.xml} declares. */
-    @VisibleForTesting static final int SHEET_SIDE_MARGIN_DP = 12;
+    /**
+     * The air the sheet keeps under its bottom edge: the shell's card margin, the same at every
+     * side, which is what {@code layout_editor.xml} declares.
+     */
+    @VisibleForTesting static final int SHEET_BOTTOM_MARGIN_DP =
+        EditorShellMetrics.CARD_SIDE_MARGIN_DP;
 
     /**
      * The card stops inheriting the screen's width. What is left over is symmetric air with the
      * live place showing through it, which is the thing the editor is a picture of.
+     *
+     * @return the width one column of the card's body has, which is what a canvas under the header
+     *     can be as wide as
      */
-    private void applyCardWidth(@NonNull Card card, int screenWidthPx,
-                                @NonNull EditorShellMetrics.PaneSplit split, float density,
-                                boolean twoPanes) {
+    private int applyCardWidth(@NonNull Card card, int screenWidthPx,
+                               @NonNull EditorShellMetrics.PaneSplit split, float density,
+                               boolean twoPanes) {
         // One column wide enough for one whole row, or two panes and the gutter between them.
         EditorShellMetrics.PaneSplit shown = twoPanes ? split
             : EditorShellMetrics.paneSplit(Math.min(
                 EditorShellMetrics.contentWidthPx(screenWidthPx, density),
                 EditorShellMetrics.px(EditorShellMetrics.ROW_MAX_INNER_DP, density)), 0, density);
-        // The sheet keeps a little more air at its sides than the shell's own margin, so its
-        // corners read as a card lifted off the place rather than as the screen's own edges.
-        int width = Math.min(EditorShellMetrics.cardWidthPx(screenWidthPx, shown, density),
-            Math.max(0, screenWidthPx
-                - EditorShellMetrics.px(2 * SHEET_SIDE_MARGIN_DP, density)));
+        int width = EditorShellMetrics.cardWidthPx(screenWidthPx, shown, density);
         ViewGroup.LayoutParams params = card.root.getLayoutParams();
-        if (params == null || params.width == width)
-            return;
-        params.width = width;
-        if (params instanceof FrameLayout.LayoutParams) {
-            FrameLayout.LayoutParams frame = (FrameLayout.LayoutParams) params;
-            frame.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        if (params != null && params.width != width) {
+            params.width = width;
+            if (params instanceof FrameLayout.LayoutParams) {
+                FrameLayout.LayoutParams frame = (FrameLayout.LayoutParams) params;
+                frame.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+            }
+            card.root.setLayoutParams(params);
         }
-        card.root.setLayoutParams(params);
+        return Math.max(0, width - card.root.getPaddingStart() - card.root.getPaddingEnd());
     }
 
     // --------------------------------------------------------------------------------- the rows
@@ -590,30 +590,27 @@ public final class LayoutEditorController {
         R.id.editor_shell_row_segment_0, R.id.editor_shell_row_segment_1,
         R.id.editor_shell_row_segment_2, R.id.editor_shell_row_segment_3};
 
-    /** The handle at the top of the sheet: its touch slot, which is what layout_editor.xml declares. */
-    @VisibleForTesting static final float HANDLE_SLOT_DP = 24f;
     /** The gaps the miniature stands between: above it, and above the rows under it. */
-    @VisibleForTesting static final float GAPS_DP = 10f;
+    @VisibleForTesting static final float GAPS_DP = 16f;
     /** One line of notice under the chooser, and the air above it. */
     @VisibleForTesting static final float NOTICE_LINE_DP = 22f;
 
     /**
-     * Everything on the card that is not the canvas or the rows, at the height the card has.
+     * Everything on the resting card that is not the canvas or the rows: the handle, the header,
+     * the chooser, the gaps and the notices.
      *
-     * <p>Declared rather than derived: the rows' cap is what sets the scroller's height, so a
-     * chrome read back by subtracting the scroller from the card is a layout-pass loop that never
-     * settles once the cap is quantised to whole rows. The notices are counted rather than
-     * allowed for, because the sheet's whole budget is now the thing being divided up: reserving
-     * two lines that are usually not there costs the rows a whole row of the little they have.
+     * <p>Declared rather than derived, so the canvas's size is a question about the arrangement
+     * and the card's height and never about a view measured in the pass that is sizing it. The
+     * notices are counted rather than allowed for: reserving two lines that are usually not there
+     * costs the picture the room it is owed.
      *
-     * @param noticeLines how many lines of notice the plan says apply, which is a question about
-     *     the arrangement and never about a measured view — so it cannot start a layout loop
+     * @param noticeLines how many lines of notice the plan says apply
      */
     @VisibleForTesting
     static int cardChromePx(int cardHeightPx, int chooserPx, int paddingPx, int noticeLines,
                             float density) {
         return EditorShellMetrics.headerHeightPx(cardHeightPx, density) + chooserPx + paddingPx
-            + EditorShellMetrics.px(HANDLE_SLOT_DP + GAPS_DP, density)
+            + EditorShellMetrics.px(EditorShellPaint.HANDLE_SLOT_HEIGHT_DP + GAPS_DP, density)
             + (Math.max(0, noticeLines) * EditorShellMetrics.px(NOTICE_LINE_DP, density));
     }
 
@@ -627,8 +624,12 @@ public final class LayoutEditorController {
             lines++;
         return lines;
     }
-    /** The rows keep at least this much even where the canvas would have taken it all. */
-    @VisibleForTesting static final float ROWS_FLOOR_DP = 96f;
+
+    /**
+     * How much of the rows the resting card keeps in view under the canvas, however tall the
+     * canvas would like to be: the list's first rows are what say there is more to scroll to.
+     */
+    @VisibleForTesting static final float ROWS_PEEK_DP = 96f;
 
     /**
      * The rows for the place and orientation on show. They are rebuilt only when one of those two
@@ -646,7 +647,7 @@ public final class LayoutEditorController {
     }
 
     private void rebuildRows(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
-        LinearLayout rows = rowsColumn(card);
+        LinearLayout rows = card.rowsHost;
         rows.removeAllViews();
         mRowSyncs.clear();
         // The tracks being replaced are gone, finger or no finger, and the reference would outlive
@@ -665,7 +666,7 @@ public final class LayoutEditorController {
             else if (row.group instanceof PlaceArrangeModel.Track)
                 addTrackRow(context, rows, row, (PlaceArrangeModel.Track) row.group);
         }
-        restoreScroll(plan);
+        restoreScroll(card, plan);
     }
 
     /**
@@ -673,55 +674,20 @@ public final class LayoutEditorController {
      * comes back to where the user was, rather than to the top of a list they had scrolled past.
      */
     private final Map<String, Integer> mPanelScroll = new LinkedHashMap<>();
+    /** Which place-and-orientation the list is scrolled for, so the outgoing one is kept. */
+    @Nullable private String mScrollKey;
 
-    private void restoreScroll(@NonNull LayoutEditorPlan plan) {
-        NestedScrollView scroller = mRowsScroller;
-        if (scroller == null)
-            return;
-        if (mRowsKey != null)
-            mPanelScroll.put(mRowsKey, scroller.getScrollY());
+    private void restoreScroll(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
+        NestedScrollView scroller = card.scroller;
+        if (mScrollKey != null)
+            mPanelScroll.put(mScrollKey, scroller.getScrollY());
         String key = plan.place().name() + '.' + plan.shownOrientation().name();
+        mScrollKey = key;
         Integer remembered = mPanelScroll.get(key);
         int target = remembered == null ? 0 : remembered;
         scroller.scrollTo(0, 0);
         if (target > 0)
             scroller.post(() -> scroller.scrollTo(0, target));
-    }
-
-    /** The column the rows stand in, inside a scroller that grows only to the room it was left. */
-    @NonNull
-    private LinearLayout rowsColumn(@NonNull Card card) {
-        if (mRows != null)
-            return mRows;
-        Context context = mHost.context();
-        // Nested rather than a plain ScrollView: the card is a scroller too, and a list that has
-        // reached its end has to hand the rest of the drag on rather than swallow it.
-        NestedScrollView scroller = new NestedScrollView(EditorShellRows.scrollerContext(context)) {
-            @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-                int room = Math.max(1, mRowsCapPx);
-                super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
-                    room, View.MeasureSpec.AT_MOST));
-                // Now that the rows have measured, take the cut back to the last whole one.
-                int whole = EditorShellRows.wholeRowCapPx(this, room,
-                    getResources().getDisplayMetrics().density);
-                if (whole < room)
-                    super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(
-                        whole, View.MeasureSpec.AT_MOST));
-            }
-        };
-        scroller.setClipToPadding(false);
-        // A list cut short by a tall canvas needs the fade and the scrollbar to say so; one that
-        // simply stops at the card's edge reads as the whole list.
-        EditorShellRows.applyBodyScroller(scroller);
-        LinearLayout rows = new LinearLayout(context);
-        rows.setOrientation(LinearLayout.VERTICAL);
-        scroller.addView(rows, new ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        card.rowsHost.addView(scroller, new ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        mRowsScroller = scroller;
-        mRows = rows;
-        return rows;
     }
 
     @StringRes
@@ -977,11 +943,6 @@ public final class LayoutEditorController {
         mRowsKey = null;
         mDraggedSlider = null;
         mShowing = false;
-        // A finger still on the handle is the live place's problem now, not the sheet's.
-        if (mPull != null) {
-            mPull.velocity.recycle();
-            mPull = null;
-        }
         if (mCard != null) {
             fadeChrome(mCard.revert, false);
             fadeChrome(mCard.discard, false);
@@ -1059,12 +1020,8 @@ public final class LayoutEditorController {
                 : Spring.clampDelta((now - mSheetLastFrameNanos) / 1_000_000_000f);
             mSheetLastFrameNanos = now;
             boolean moving = mSheet.tick(false, dt);
-            // The height channel rides the same loop: a card let go part-way up settles on it.
-            boolean growing = mExpand.tick(false, dt);
-            if (growing)
-                applyExpansion(card);
             applySheetProgress(card, mSheet.value);
-            if (moving || growing) {
+            if (moving) {
                 card.root.postOnAnimation(this);
                 return;
             }
@@ -1075,17 +1032,27 @@ public final class LayoutEditorController {
     };
 
     /**
-     * The card at one point of its travel: 1 is parked below the bottom edge, 0 is in place. The
-     * travel is the card's own height, or the screen's while it has not been laid out yet — which
-     * is only ever the first frame of the first open, and off screen either way.
+     * How far the card travels between in place and parked below the bottom edge: its own height
+     * and the margin under it, or the screen's while it has not been laid out yet — which is only
+     * ever the first frame of the first open, and off screen either way.
+     */
+    private float slideTravelPx(@NonNull Card card) {
+        return card.root.getHeight() > 0
+            ? card.root.getHeight() + dpToPx(SHEET_BOTTOM_MARGIN_DP)
+            : mHost.context().getResources().getDisplayMetrics().heightPixels;
+    }
+
+    /**
+     * The card at one point of its travel: 1 is parked below the bottom edge, 0 is in place, and a
+     * pull below rest adds its own push on top. The wash behind the card fades with both.
      */
     private void applySheetProgress(@NonNull Card card, float progress) {
         float at = Math.max(0f, Math.min(1f, progress));
-        int travel = card.root.getHeight() > 0 ? card.root.getHeight()
-            : mHost.context().getResources().getDisplayMetrics().heightPixels;
-        card.root.setTranslationY(at * travel);
+        float travel = slideTravelPx(card);
+        float translation = Math.min(travel, at * travel + Math.max(0f, mOvershootPx));
+        card.root.setTranslationY(translation);
         if (mScrim != null)
-            mScrim.setAlpha((1f - at) * SCRIM_ALPHA);
+            mScrim.setAlpha((1f - translation / Math.max(1f, travel)) * SCRIM_ALPHA);
     }
 
     /** The card has finished leaving. */
@@ -1096,177 +1063,33 @@ public final class LayoutEditorController {
             mScrim.setAlpha(0f);
     }
 
-    // ---------------------------------------------------------------------------------- the pull
+    /**
+     * A pull far enough below rest to close: the Back press. With nothing to lose the editor
+     * closes at once, the card carrying on down from where the finger let it go; with something to
+     * lose the question is asked, and the sheet brings the card back to rest under it rather than
+     * leaving it hanging half off the screen.
+     */
+    private boolean dismissFromPull(@NonNull Card card, float overshootPx) {
+        LayoutEditorPlan plan = mPlan;
+        if (plan == null)
+            return false;
+        if (plan.isDirty()) {
+            requestClose();
+            return false;
+        }
+        mSheet.reset(Math.min(1f, Math.max(0f, overshootPx) / slideTravelPx(card)));
+        mOvershootPx = 0f;
+        exit();
+        return true;
+    }
+
+    // -------------------------------------------------------------------------------- the sheet
 
     /** The air the sheet keeps between its top and the top inset when pulled all the way up. */
     @VisibleForTesting static final int SHEET_TOP_AIR_DP = 8;
 
-    /** One pull on the handle or the header, from touch-down to letting go. */
-    private static final class SheetPull {
-        /** Where the finger went down, in window coordinates: the card moves under it. */
-        float downRawY;
-        /** The sheet's offset above its resting height when the finger went down. */
-        float offsetAtDownPx;
-        /** How far the card may grow on this pull; 0 on a landscape screen. */
-        float travelPx;
-        /** The card's own height, which is as far down as it can be pushed. */
-        float heightPx;
-        float slopPx;
-        /** Whether the finger has moved past the slop; a pull that never does is a tap. */
-        boolean moved;
-        @NonNull final VelocityTracker velocity = VelocityTracker.obtain();
-    }
-
     /**
-     * The pull, on the handle and on the header. A touch-down owns the gesture from the card's
-     * own scroller — the card is a scroller for the short screen, and it would otherwise take a
-     * vertical drag for itself — and the header only sees the touches its buttons did not take.
-     */
-    private boolean onSheetTouch(@NonNull View view, @NonNull MotionEvent event) {
-        Card card = mCard;
-        if (card == null || mPlan == null)
-            return false;
-        switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
-                beginSheetPull(card, view, event);
-                return true;
-            case MotionEvent.ACTION_MOVE:
-                if (mPull == null)
-                    return false;
-                moveSheetPull(card, event);
-                return true;
-            case MotionEvent.ACTION_UP: {
-                if (mPull == null)
-                    return false;
-                boolean tap = !mPull.moved;
-                endSheetPull(card, event, false);
-                // A tap on the handle is the pull's short form, and the click is what a screen
-                // reader activates.
-                if (tap && view == card.handle)
-                    view.performClick();
-                return true;
-            }
-            case MotionEvent.ACTION_CANCEL:
-                if (mPull == null)
-                    return false;
-                endSheetPull(card, event, true);
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    private void beginSheetPull(@NonNull Card card, @NonNull View view,
-                                @NonNull MotionEvent event) {
-        ViewParent parent = view.getParent();
-        if (parent != null)
-            parent.requestDisallowInterceptTouchEvent(true);
-        // Whatever the springs were doing, the finger has them now; they keep their values.
-        card.root.removeCallbacks(mSheetFrame);
-        mSheetAnimating = false;
-        DisplayMetrics metrics = mHost.context().getResources().getDisplayMetrics();
-        SheetPull pull = new SheetPull();
-        pull.downRawY = event.getRawY();
-        pull.travelPx = sheetTravelPx(card, metrics);
-        pull.heightPx = sheetHeightPx(card, metrics);
-        pull.offsetAtDownPx = mExpand.value * pull.travelPx - mSheet.value * pull.heightPx;
-        pull.slopPx = ViewConfiguration.get(mHost.context()).getScaledTouchSlop();
-        pull.velocity.addMovement(event);
-        mPull = pull;
-    }
-
-    private void moveSheetPull(@NonNull Card card, @NonNull MotionEvent event) {
-        SheetPull pull = mPull;
-        if (pull == null)
-            return;
-        pull.velocity.addMovement(event);
-        float pulledUp = pull.downRawY - event.getRawY();
-        if (!pull.moved && Math.abs(pulledUp) < pull.slopPx)
-            return;
-        pull.moved = true;
-        applySheetOffset(card, LayoutEditorSheet.clampOffsetPx(pull.offsetAtDownPx + pulledUp,
-            pull.travelPx, pull.heightPx), pull.travelPx, pull.heightPx);
-    }
-
-    /** The finger let go, or the system took the touch: the sheet settles from where it is. */
-    private void endSheetPull(@NonNull Card card, @NonNull MotionEvent event, boolean cancelled) {
-        SheetPull pull = mPull;
-        if (pull == null)
-            return;
-        mPull = null;
-        pull.velocity.addMovement(event);
-        pull.velocity.computeCurrentVelocity(1000);
-        float velocityUp = -pull.velocity.getYVelocity();
-        pull.velocity.recycle();
-        float density = mHost.context().getResources().getDisplayMetrics().density;
-        float offset = mExpand.value * pull.travelPx - mSheet.value * pull.heightPx;
-        LayoutEditorSheet.Snap snap = cancelled
-            ? LayoutEditorSheet.settle(Math.max(0f, offset), pull.travelPx, 0f, 0f, 0f)
-            : LayoutEditorSheet.settle(offset, pull.travelPx, velocityUp,
-                LayoutEditorSheet.FLING_DP_PER_S * density,
-                Math.max(LayoutEditorSheet.DISMISS_MIN_DP * density,
-                    LayoutEditorSheet.DISMISS_FRACTION * pull.heightPx));
-        settleSheet(card, snap);
-    }
-
-    /** A tap on the handle: the far end of the pull from wherever the card is. */
-    private void toggleSheet() {
-        Card card = mCard;
-        if (card == null || mPlan == null || mPull != null)
-            return;
-        DisplayMetrics metrics = mHost.context().getResources().getDisplayMetrics();
-        settleSheet(card, LayoutEditorSheet.toggled(mExpand.target, sheetTravelPx(card, metrics)));
-    }
-
-    /**
-     * Runs the sheet to where the pull settled. A dismissal is the Back press: the editor closes
-     * at once with nothing to lose, and asks first with something — and while it asks, the card
-     * comes back to rest under the dialog rather than hanging half off the screen.
-     */
-    private void settleSheet(@NonNull Card card, @NonNull LayoutEditorSheet.Snap snap) {
-        if (snap == LayoutEditorSheet.Snap.DISMISS) {
-            requestClose();
-            // exit() has taken the sheet down and cleared the plan; otherwise the question is up.
-            if (mPlan == null)
-                return;
-        }
-        mExpand.target = snap == LayoutEditorSheet.Snap.EXPANDED ? 1f : 0f;
-        mSheet.target = 0f;
-        if (ReducedMotion.isEnabled(mHost.context())) {
-            mExpand.reset(mExpand.target);
-            mSheet.reset(0f);
-            applyExpansion(card);
-            applySheetProgress(card, 0f);
-            return;
-        }
-        card.root.removeCallbacks(mSheetFrame);
-        mSheetAnimating = true;
-        mSheetLastFrameNanos = 0L;
-        card.root.postOnAnimation(mSheetFrame);
-    }
-
-    /** The finger's offset, written straight to the two channels and drawn. */
-    private void applySheetOffset(@NonNull Card card, float offsetPx, float travelPx,
-                                  float heightPx) {
-        float expansion = LayoutEditorSheet.expansionOf(offsetPx, travelPx);
-        boolean grew = Math.abs(expansion - mExpand.value) > 0.0005f;
-        mExpand.reset(expansion);
-        mSheet.reset(heightPx > 0f ? LayoutEditorSheet.overshootOf(offsetPx) / heightPx : 0f);
-        if (grew)
-            applyExpansion(card);
-        applySheetProgress(card, mSheet.value);
-    }
-
-    /** The card re-laid at the height channel's current value. */
-    private void applyExpansion(@NonNull Card card) {
-        LayoutEditorPlan plan = mPlan;
-        if (plan == null)
-            return;
-        applyCanvasHeight(card, plan);
-    }
-
-    /**
-     * The card's expanded budget: what the host has under the top inset, less the air the sheet
+     * The card's expanded height: what the host has under the top inset, less the air the sheet
      * keeps up there and its own bottom margin. Read off the host rather than the screen, because
      * the host is what the card actually stands in; where it reaches under the system's status
      * bar, that much is taken back off.
@@ -1279,44 +1102,11 @@ public final class LayoutEditorController {
         int statusTop = insets == null ? 0
             : insets.getInsets(WindowInsetsCompat.Type.statusBars()).top;
         int underInset = Math.max(0, statusTop - location[1]);
-        int roomPx = hostPx - underInset - EditorShellMetrics.px(
-            SHEET_TOP_AIR_DP + SHEET_SIDE_MARGIN_DP, metrics.density);
-        return LayoutEditorPlan.expandedCardBudgetPx(metrics.widthPixels, metrics.heightPixels,
-            roomPx);
-    }
-
-    /** How far the card may grow: the expanded budget over the resting one, in px. */
-    private float sheetTravelPx(@NonNull Card card, @NonNull DisplayMetrics metrics) {
-        return Math.max(0, expandedBudgetPx(card, metrics)
-            - LayoutEditorPlan.cardBudgetPx(metrics.widthPixels, metrics.heightPixels));
-    }
-
-    /** The card's own height, or the screen's before it has been laid out. */
-    private float sheetHeightPx(@NonNull Card card, @NonNull DisplayMetrics metrics) {
-        return card.root.getHeight() > 0 ? card.root.getHeight() : metrics.heightPixels;
+        return LayoutEditorPlan.expandedCardBudgetPx(hostPx - underInset - EditorShellMetrics.px(
+            SHEET_TOP_AIR_DP + SHEET_BOTTOM_MARGIN_DP, metrics.density));
     }
 
     // -------------------------------------------------------------------------------- the chrome
-
-    /**
-     * The handle: a 32x4 bar of the card's own on-surface colour, centred in the touch slot the
-     * layout gives it. Quiet, because it is a mark first: the pull it takes is the header's too.
-     */
-    @NonNull
-    private Drawable handleBar() {
-        float density = mHost.context().getResources().getDisplayMetrics().density;
-        GradientDrawable bar = new GradientDrawable();
-        bar.setShape(GradientDrawable.RECTANGLE);
-        bar.setCornerRadius(2f * density);
-        bar.setSize(Math.round(32f * density), Math.round(4f * density));
-        int onSurface = mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurface,
-            R.color.termux_on_surface);
-        bar.setColor(Color.argb(Math.round(0.28f * 255f), Color.red(onSurface),
-            Color.green(onSurface), Color.blue(onSurface)));
-        int sideInset = Math.round(16f * density);
-        int verticalInset = Math.round(10f * density);
-        return new InsetDrawable(bar, sideInset, verticalInset, sideInset, verticalInset);
-    }
 
     @NonNull
     private Drawable cardBackground() {

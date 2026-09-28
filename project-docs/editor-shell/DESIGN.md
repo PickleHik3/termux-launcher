@@ -17,6 +17,20 @@ Captures this was measured against: `.lavish/landscape-review/31-appearance.png`
 Those two devices are the design's two reference cases throughout. **Wide** = 1155 × 533 dp at
 1.0×. **Short** = 800 × 369 dp at 1.3×. Every number below is checked against both.
 
+> **Superseded in part, 2026-09-28: both cards are one scrolling sheet.** The developer, on the
+> device: the Layout card's rows lived in "this small window at the bottom", the miniature was
+> "gated" in a fixed slot, the menu was "a fixed item at the top", and the Appearance card "does
+> not extend upwards". Both cards are now `EditorShellSheet`: the handle and the header (§4) stay
+> put, and everything else — the chooser, the notices, the miniature, every row — is one
+> `NestedScrollView` under them. So the chooser's pin/unpin rule (§4, `chooserPinned`, the 200 dp
+> threshold) and the whole-row cut of a capped body (§5, `bodyCap`, `wholeRowCapPx`, the 16 dp peek)
+> are gone; the fade and the fading scrollbar (§5) stay on the one list. The card wraps its
+> content up to a resting height and a pull grows it (`EditorShellSheetPolicy`: which drags are the
+> sheet's, where a pull settles). The Appearance card parks at the foot of the free room for every
+> target (`SurfaceEditorPillMetrics.parkBottomMarginPx`; `parkTopPx` is gone), rests at its chrome
+> plus up to 420 dp of list and pulls up to the top of the free room. The control kit (§2), the
+> section model (§3), the header (§4) and the width rules (§6.1–6.3) are unchanged.
+
 ---
 
 ## 1. The diagnosis
