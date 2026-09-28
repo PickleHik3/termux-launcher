@@ -720,6 +720,13 @@ public final class TaiManager {
         return result;
     }
 
+    /** An exception's message, or its class name when it has none (an IOException often does not). */
+    @NonNull
+    private static String message(@NonNull Exception e) {
+        String text = e.getMessage();
+        return text == null || text.isEmpty() ? e.getClass().getSimpleName() : text;
+    }
+
     /**
      * Runs bench v1 over {@code models} and streams {@link TaiBenchHarness} events into
      * {@code sink}. Request: {@code {models: [id…] | model, preset: quick|standard|thorough,
