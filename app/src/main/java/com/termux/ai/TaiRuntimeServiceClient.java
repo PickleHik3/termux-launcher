@@ -44,6 +44,8 @@ public final class TaiRuntimeServiceClient {
     @Nullable private Messenger service;
     @Nullable private CountDownLatch connectingLatch;
     private boolean binding;
+    /** A {@code bindService} of ours is registered; only then is there a binding to release. */
+    private boolean bound;
 
     public TaiRuntimeServiceClient(@NonNull Context context) {
         appContext = context.getApplicationContext();
@@ -183,6 +185,7 @@ public final class TaiRuntimeServiceClient {
                     if (connectingLatch != null) connectingLatch.countDown();
                     return null;
                 }
+                this.bound = true;
             }
         }
 
@@ -208,6 +211,7 @@ public final class TaiRuntimeServiceClient {
             synchronized (connectionLock) {
                 service = new Messenger(binder);
                 binding = false;
+                bound = true;
                 if (connectingLatch != null) connectingLatch.countDown();
             }
         }
@@ -240,11 +244,7 @@ public final class TaiRuntimeServiceClient {
     private void onIdleExitRequested() {
         synchronized (connectionLock) {
             if (service == null || !pending.isEmpty()) return;
-            try {
-                appContext.unbindService(connection);
-            } catch (IllegalArgumentException ignored) {
-                // Not bound from this context's point of view; there is nothing to release.
-            }
+            releaseBindingLocked();
             service = null;
             binding = false;
         }
@@ -265,11 +265,7 @@ public final class TaiRuntimeServiceClient {
             service = null;
             binding = false;
             if (connectingLatch != null) connectingLatch.countDown();
-            try {
-                appContext.unbindService(connection);
-            } catch (IllegalArgumentException ignored) {
-                // Not bound from this context's point of view; there is nothing to release.
-            }
+            releaseBindingLocked();
         }
         for (PendingRequest request : pending.values()) {
             request.result = runtimeDied(request.operation);
@@ -279,6 +275,20 @@ public final class TaiRuntimeServiceClient {
             request.done.countDown();
         }
         pending.clear();
+    }
+
+    /**
+     * Unbinds once. Guarded by {@link #bound} so a disconnect callback that follows our own unbind
+     * (Robolectric delivers one; a second unbind would recurse) releases nothing twice.
+     */
+    private void releaseBindingLocked() {
+        if (!bound) return;
+        bound = false;
+        try {
+            appContext.unbindService(connection);
+        } catch (IllegalArgumentException ignored) {
+            // Not bound from this context's point of view; there is nothing to release.
+        }
     }
 
     /** The death of the runtime process as the request it interrupted sees it; nothing is retried. */
