@@ -22,6 +22,7 @@ goes to `scripts/voice-eval/out/` (git-ignored).
 | `vad_compare.py` | Runs each VAD over every variant and writes `out/segments.jsonl` with per-clip metrics. |
 | `stt_engines.py` | Parakeet and Whisper (the rig's own Python runtimes, imported from `scripts/`), moonshine-tiny (ONNX). |
 | `stt_compare.py` | Cuts each variant by each VAD's segments, applies VoiceGain, transcribes with each STT, scores WER with `voice_eval_score.wer`, counts hallucinations and measures RTF. `out/stt_results.jsonl`, transcript cache in `out/stt_cache/`. |
+| `sensitivity_probe.py` | Quiet speech against office noise on the Silero path: the developer's real clips (6 and 10 dB down) and synthetic phrases at -52/-58/-62 dBFS, then 120 s each of room, babble, TV, fan and keyboard clicks, through the same Segmenter with Silero shown a floor-referenced lift of each frame (the app's `VoiceMicSensitivity`). Prints missed phrases and false phrases a minute; writes nothing. The numbers behind the "Mic sensitivity" setting. |
 | `convert_silero.py` | Builds the app's bundled `app/src/main/assets/vad/silero_vad_v5.tflite` from `silero_vad.onnx` (hand rebuild in TensorFlow, builtin ops only) and checks it against the ONNX model chunk by chunk. Needs its own Python 3.12 venv with TensorFlow; the pinned versions are in its docstring. |
 | `report.py` | `out/report.md`: VAD table, VAD × STT × noise table, clean WER per room condition, top hallucinated strings, automatic verdict. |
 

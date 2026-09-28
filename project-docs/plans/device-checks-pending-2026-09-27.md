@@ -119,3 +119,45 @@ if it reaches the cleanup; normally it never does.
 5. **Waveform rest.** On pause, the bars ease down to a dim line in about a third of a second, and
    they rise again on resume. With animations off (developer options) they jump. At rest, GPU
    profiling or gfxinfo shows no ongoing frames from the pill.
+
+## Round 2 results
+Checks 1–5 pass (the developer, 2026-09-28).
+
+## Round 3 checks (voice pill and panel, branch voice-round3)
+1. **As heard vs cleaned.** With cleanup on, dictate a few phrases with an "um". While listening and
+   cleaning, the text is italic and dimmer (secondary colour); once cleaned, it turns upright in the
+   normal text colour, with the change marks fading as before. Undo brings back the italic as-heard
+   text, and redo the upright cleaned text. With cleanup off, and after "Kept as heard", the text is
+   upright and normal. Check the light theme, the dark theme, and the glass (wallpaper) look: the
+   italic text must stay readable on each.
+2. **Action pill.** Undo, copy and ✓ sit together in one long rounded bar across the bottom of the
+   panel, spread evenly, in a slightly raised surface colour. They never leave it. Without undo, copy
+   and ✓ share the bar. There is no bin. TalkBack still reads each control.
+3. **Pill width.** While listening, with no text yet, the pill hugs the waveform, "Listening…", pause and ×: no empty
+   stretch between "Listening…" and pause. It stays 36 dp tall, and "Warming up" still fits. With the
+   panel up, the pill row sits at the end of the card, on the side the card hangs from.
+4. **Mic sensitivity.** Keyboard → Voice input → Mic sensitivity shows Normal and High (default
+   Normal). Logcat `VoiceInputSession` says `mic sensitivity normal|high` at every start.
+   - a. Normal, quiet office: speak softly at arm's length. It should pick up at least as often as
+     before; compare with a normal voice.
+   - b. High: soft speech comes through. With a colleague talking or a video playing near the phone,
+     count the phrases that appear without you speaking; they are expected on High, rarer on Normal.
+   - c. Keyboard clicks, a fan or the air conditioning alone must not open a phrase on either setting.
+5. **Screen stays on.** Set the phone's screen timeout to 30 s.
+   - a. Dictate, then let a long cleanup run and land: the screen does not dim while listening,
+      cleaning, or while the text waits.
+   - b. Leave the waiting text untouched: after about 3 minutes the screen dims and sleeps normally,
+      and the text is still in the panel when you come back.
+   - c. Touch the pill (not a button) while it waits: the 3 minutes start over.
+   - d. ×, ✓, Copy, a swipe, and leaving the app each let the screen time out normally at once
+      (30 s after the last touch).
+6. **Drag handle.** A short grab handle, the floating keyboard's, shows under the panel once there
+   is text.
+   - a. Drag it: the pill and panel follow the finger and stay inside the place, under the status
+      bar and above the keyboard. Swiping the handle sideways moves the card; it never discards it.
+   - b. Let go low on the screen: new lines grow the panel upward, and it never goes off the screen
+      (fewer lines with the keyboard up).
+   - c. Start the next dictation: the pill comes back where it was left. Rotate: landscape has its own
+      place (the corner until moved there).
+   - d. Double-tap the handle: back to the top right corner, and the next dictation starts there.
+   - e. Swiping the card itself (not the handle) sideways still discards.

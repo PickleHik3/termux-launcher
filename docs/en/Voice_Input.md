@@ -1,7 +1,7 @@
 # Voice input
 
-Voice input turns speech into text on the phone. What you say collects in a small panel at the top
-right; nothing is typed while you speak. When you stop, you decide what happens to the text: type it
+Voice input turns speech into text on the phone. What you say collects in a small panel, at the top
+right until you move it; nothing is typed while you speak. When you stop, you decide what happens to the text: type it
 once at the cursor, copy it, or throw it away.
 
 There are two engines. **On-device** runs a speech model you download (Whisper or Parakeet) in the
@@ -42,7 +42,8 @@ Leaving the app stops listening. The text heard so far stays in the panel.
 ## The pill and the panel
 
 While a dictation is up, a pill sits at the top right of the place, under the status bar, in the
-same corner on Home, Terminal and Display. It holds:
+same corner on Home, Terminal and Display (you can move it; see
+[Moving the pill](#moving-the-pill)). The pill is as long as what it holds, and no longer:
 
 - a scrolling **waveform** of your voice, resting as a dim line whenever the microphone is closed;
 - the state: **Listening…**, **Transcribing…**, **Cleaning up…**, then what became of the text
@@ -58,7 +59,13 @@ same corner on Home, Terminal and Display. It holds:
 The pill grows downward into the **panel**, which shows the dictation's text: seven lines, the
 oldest scrolling off the top (fewer lines where there is less room, such as landscape with the
 keyboard up). A shimmer line stands in for a phrase while it transcribes, then its words type out.
-Under the text sit three icons:
+
+The text shows which version it is at a glance. **As heard**, while a cleanup is still to come and
+again after undo, it is *italic* in the dimmer secondary text colour. **Cleaned**, it is upright in
+the normal text colour. Text that is final as heard (cleanup off, or **Kept as heard**) has nothing
+to be told apart from and shows upright too.
+
+At the bottom of the panel, one long rounded bar holds three controls, spread evenly across it:
 
 - **undo** (**Undo the cleanup**), there only when a cleanup or command formatting changed
   something. It puts back the text as it went in, and turns into redo;
@@ -73,6 +80,17 @@ the press is carried out as soon as the text is final. Afterwards the pill says 
 Nothing reaches the terminal while you dictate. The panel is the only place the text lives until
 you use it. Starting a new dictation while text is still waiting carries on from that text, so it
 is not lost.
+
+### Moving the pill
+
+Under the panel sits a short grab handle, the same one the floating keyboard has. Drag it to put
+the pill and its panel anywhere on the place: it stays under the status bar and the top bars and
+above the keyboard. The pill comes back there on the next dictation. Portrait and landscape each
+remember their own spot. **Double-tap the handle** to put the pill back in the top right corner.
+
+Placed low, the panel grows upward instead of down, and shows fewer lines if the room is short, so
+it never runs off the screen. The handle shows only while the panel does; a pill with no text yet
+stays where it was left.
 
 ### Where ✓ types
 
@@ -207,19 +225,26 @@ All in **Settings → Keyboard → Voice input**:
 | --- | --- | --- | --- |
 | **Pause that ends a phrase** | 400 ms, 600 ms, 800 ms, 1.2 s | 600 ms | How long a pause closes a phrase and sends it to be transcribed. Longer suits slow speakers; shorter shows text sooner. |
 | **Silence auto-stop** | 5 s, 10 s, 30 s, **Until tap** | 10 s | How long without speech stops the dictation. **Until tap** only stops on a tap, the keyboard going down, or a failure. |
+| **Mic sensitivity** | **Normal: keeps background talk out** or **High: for speaking softly; may hear a TV or people nearby** | Normal | How readily quiet speech counts as speech. Choose **High** if soft speech in a quiet office is missed; stay on **Normal** where other people talk nearby. |
 | **Voice sounds** | on or off | on | A short blip when the microphone opens and when listening ends. |
 
 Speech detection uses **Silero VAD**, a small voice-activity model bundled with the app, to tell
-speech from room noise. If it cannot load, a simpler loudness detector takes over. A phrase with
-less than about 0.3 s of speech is dropped, and captions a model writes for non-speech (`[Music]`,
+speech from room noise. Silero hears quiet speech less well, so the launcher raises the level of
+what it hears to match the room: a little on **Normal**, up to four times as much on **High**. Fans,
+air conditioning and keyboard clicks are not taken for speech at either setting, but other people's
+voices and a TV are, more often on **High**. If Silero cannot load, a simpler loudness detector takes
+over, and **Mic sensitivity** does not change it. A phrase with less than about 0.3 s of speech
+(0.42 s on **High**) is dropped, and captions a model writes for non-speech (`[Music]`,
 `[BLANK_AUDIO]`) are removed.
 
 The blips play at the volume of the phone's touch sounds, and the first 180 ms after the microphone
 opens are dropped so the blip is never transcribed. Haptics (a tick on open, a confirm on stop, a
 double buzz on a failure) follow the keyboard's **Haptic feedback** setting.
 
-While the dictation is listening, transcribing or cleaning up, the screen stays on. Once the text
-is waiting in the panel, the phone's normal screen timeout applies again.
+The screen stays on for as long as the pill is up: while the dictation listens, transcribes or
+cleans up, and while the text waits for you. If the waiting text is left untouched for 3 minutes,
+the screen may sleep as usual; the text stays in the panel, and touching the pill keeps the screen on
+again. Closing the pill, or leaving the app, lets the screen sleep at once.
 
 ## From the terminal: `tai transcribe`
 
@@ -275,8 +300,11 @@ of an upload. Without a speech model installed, the route answers `stt_model_not
   Launcher → **Permissions** → **Microphone**. The microphone is used only while a dictation is
   listening.
 - **Nothing heard.** When no phrase came through, the pill closes by itself. Start speaking just after
-  the blip, hold the phone nearer, and avoid single very short words. A room with a fan or TV can hide
-  quiet speech; try the **Small** model, which recovers far-field speech that **Base** loses.
+  the blip, hold the phone nearer, and avoid single very short words. If you speak softly, set **Mic
+  sensitivity** to **High**. A room with a fan or TV can hide quiet speech; try the **Small** model,
+  which recovers far-field speech that **Base** loses.
+- **Phrases appear that you did not say.** On **Mic sensitivity: High**, a TV or people talking near
+  the phone can be heard as speech. Set it back to **Normal**.
 - **Media playing.** Voice input does not pause music or videos, and the microphone hears them. Music
   can keep a phrase open or be transcribed as words, and the silence auto-stop may never fire. Pause
   the media while you dictate.
