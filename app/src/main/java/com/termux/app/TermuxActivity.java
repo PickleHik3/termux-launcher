@@ -658,6 +658,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mChromeTravelMoved;
     /** The accessory stack's share of its translationY that the wall's travel owns. */
     private float mDockTravelTranslationPx;
+    /**
+     * The keyboard's part of that travel: how much of its height is still below where it is laid
+     * out. The bands standing under the keyboard are held back up by it, so they stay on the
+     * bottom edge while the keyboard rises out from between them and the dock.
+     */
+    private float mKeyboardTravelSharePx;
     /** The share that the system IME's lift owns (applyDockImeOffset); the two are summed. */
     private float mDockImeLiftPx;
     /**
@@ -7172,6 +7178,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
             if (keyboardHost != null && keyboardHost.getBackground() != null) keyboardHost.invalidate();
         }
+        applyUnderKeyboardTravel();
         int travel = Math.round(Math.max(0f, mDockTravelTranslationPx));
         if (travel <= 0) {
             if (accessoryContainer.getClipBounds() != null) accessoryContainer.setClipBounds(null);
@@ -7192,6 +7199,47 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Scratch for the travel clip; setClipBounds copies it. */
     private final Rect mTmpTravelClip = new Rect();
+    /** Scratch for the keyboard's own clip while it rises from behind the bands under it. */
+    private final Rect mTmpKeyboardTravelClip = new Rect();
+
+    /**
+     * The bands standing under the keyboard ({@code accessory_under_keyboard_stack}) while the
+     * keyboard travels: the stack slides the keyboard down by its share of the travel, and the
+     * bands under it would go with it; they are held back up by that share instead, so they stay
+     * on the bottom edge and the keyboard rises out from between them and the dock rows, clipped
+     * where the bands begin. The dock's own share still takes them with it. Nothing to do, and
+     * nothing left behind, while no band stands there or the keyboard is not in the column.
+     */
+    private void applyUnderKeyboardTravel() {
+        View under = findViewById(R.id.accessory_under_keyboard_stack);
+        View keyboard = findViewById(R.id.inapp_keyboard_container);
+        boolean holds = under != null && under.getVisibility() == View.VISIBLE
+            && keyboard != null && keyboard.getVisibility() != View.GONE
+            && keyboard.getParent() == findViewById(R.id.accessory_keyboard_column);
+        float share = holds ? Math.max(0f, mKeyboardTravelSharePx) : 0f;
+        if (under != null && under.getTranslationY() != -share) {
+            under.setTranslationY(-share);
+            // Its sheet samples the wallpaper where it is drawn; a transform alone redraws nothing.
+            if (under.getBackground() != null) under.invalidate();
+        }
+        if (keyboard == null) return;
+        int hidden = Math.round(share);
+        if (hidden <= 0) {
+            if (keyboard.getClipBounds() != null) keyboard.setClipBounds(null);
+            return;
+        }
+        // Generous to the sides and above, as the stack's own clip is: only the bottom is cut. A
+        // keyboard pre-rolled this frame has not been laid out yet and has no width of its own.
+        int width = Math.max(keyboard.getWidth(), getResources().getDisplayMetrics().widthPixels);
+        // The height it is about to be laid out at: a pre-roll has just measured it, and the
+        // traversal that lays it out runs before this frame draws.
+        int measured = mKeyboardGeometry.desiredHeightPx();
+        int height = measured > 0 ? measured : Math.max(0, keyboard.getHeight());
+        mTmpKeyboardTravelClip.set(-width, -Math.max(height,
+            getResources().getDisplayMetrics().heightPixels), 2 * width,
+            Math.max(0, height - hidden));
+        keyboard.setClipBounds(mTmpKeyboardTravelClip);
+    }
 
     /**
      * IME lift for the dock, owned by insets only while system bars are hidden (fullscreen property
@@ -16285,6 +16333,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void doSyncChromeTravel(float offsetPx) {
         if (mPaneWallController == null) return;
+        // A keyboard swipe drives the same travel by its finger while the wall stands still; the
+        // layout passes it causes must not write the wall's resting frame over it.
+        if (mKeyboardSwipeTravel) return;
         com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
         // At rest there is nothing to travel: the settle that follows the last frame owns the
         // chrome, and a wall that never moved has no transforms to put back.
@@ -16324,6 +16375,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             keyboardPx, dockPx);
         if (translation != 0f || mDockTravelTranslationPx != 0f) mChromeTravelMoved = true;
         mDockTravelTranslationPx = translation;
+        mKeyboardTravelSharePx = keyboardPx
+            * (1f - Math.max(0f, Math.min(1f, frame.keyboardReveal)));
         applyAccessoryStackTranslation();
         // A keyboard up on both places crosses from one material to the other with the wall.
         syncKeyboardMaterialTravel(frame);
@@ -16384,10 +16437,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * place would show it at settle — only earlier, and quietly.
      */
     private void preRollTravelKeyboard(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame) {
+        preRollTravelKeyboard(frame.toward != mLastWallPage
+            && chromeRestOf(frame.toward).keyboardReveal() > 0f ? frame.toward : frame.from);
+    }
+
+    /**
+     * The same, for the keyboard of {@code target}: the place a slide is travelling toward, or the
+     * place on screen for a keyboard swipe that raises it under the finger.
+     */
+    private void preRollTravelKeyboard(@NonNull com.termux.app.wall.PaneWallPage target) {
         if (mInAppKeyboard == null) return;
         Trace.beginSection("Wall.preRollKeyboard");
-        com.termux.app.wall.PaneWallPage target = frame.toward != mLastWallPage
-            && chromeRestOf(frame.toward).keyboardReveal() > 0f ? frame.toward : frame.from;
         beginTravelHold();
         mTravelKeyboardPreRolled = true;
         mTravelKeyboardPlace = target;
@@ -16427,13 +16487,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
                                         boolean toolbarShown) {
         com.termux.app.place.PlaceChromeTravel.Rest rest = chromeRestOf(place);
-        boolean keyboardShown = rest.keyboardReveal() > 0f;
+        return travelRestReservationPx(place, toolbarShown, rest.keyboardReveal() > 0f,
+            rest.minimal);
+    }
+
+    /** The same, for the place with its keyboard up or down as {@code keyboardShown} says. */
+    private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
+                                        boolean toolbarShown, boolean keyboardShown,
+                                        boolean minimal) {
         int flushPadding = place == com.termux.app.wall.PaneWallPage.TERMINAL
             && place == mLastWallPage && !keyboardShown ? mAppliedTerminalFlushPaddingPx : 0;
         return KeyboardOverlayPolicy.restReservationPx(mAppliedDockContentHeightPx, flushPadding,
             keyboardShown, KeyboardOverlayPolicy.overlays(place, currentPlaceLayout()),
             Math.max(0, mKeyboardGeometry.desiredHeightPx()),
-            resolveAccessoryStackBottomMarginPx(toolbarShown, keyboardShown, rest.minimal));
+            resolveAccessoryStackBottomMarginPx(toolbarShown, keyboardShown, minimal));
     }
 
     /**
@@ -16601,6 +16668,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void doSettlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page) {
+        // A keyboard swipe still landing lands first: it owns the same travel state.
+        settleKeyboardSwipeTravelNow();
         boolean leavingKeyboardUp = committedKeyboardVisible();
         boolean keyboardPreRolled = mTravelKeyboardPreRolled;
         boolean dockPreRolled = mTravelDockPreRolled;
@@ -16616,6 +16685,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTravelRoomArriving = null;
         mChromeTravelMoved = false;
         mDockTravelTranslationPx = 0f;
+        mKeyboardTravelSharePx = 0f;
         mTravelHeldOverlapPx = 0;
         // The material blend, if one ran, has landed on the arriving place's material; the pass
         // below paints that material plainly, and the blend's layers go with it.
@@ -16837,6 +16907,148 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (open ? (client.isKeyboardTurnedOff() || !up) : up) client.onToggleSoftKeyboardRequest();
     }
 
+    // ---- The keyboard swipe under the finger (wall/KeyboardReveal) --------------------------
+    // The same reveal the wall's slide draws the keyboard through between two places
+    // (PlaceChromeTravel): the keyboard pre-rolled below the screen, the content held at its room,
+    // the stack slid by the part not yet shown, the pane clipped where the chrome's live edge
+    // stands and its rows drawn toward the size they will land at. Here one place's two keyboard
+    // states are the two ends, and the finger, then its settle, says how far between them.
+
+    /** A keyboard swipe owns the chrome's travel: from its claim until its settle lands. */
+    private boolean mKeyboardSwipeTravel;
+    /** Whether the keyboard was up when that swipe began. */
+    private boolean mKeyboardSwipeFromOpen;
+    /** How much more room the content has with the keyboard where the swipe is taking it. */
+    private int mKeyboardSwipeRoomChangePx;
+
+    /**
+     * A keyboard swipe was claimed, going up ({@code opening}) or down: take the keyboard for the
+     * finger, and answer the height it travels over. 0 leaves the swipe to its release
+     * ({@link #applyBorderKeyboardSwipe}) wherever the keyboard is not one band of the stack that
+     * can be slid: a floating keyboard, the phone's own keyboard, the Display place's own routes
+     * (the phone's keyboard there, mouse mode's frame), a keyboard switched off (the release turns
+     * it back on), one already where the swipe points, the editors and the drawer owning the
+     * stack, and reduced motion.
+     */
+    private int beginKeyboardSwipeTravel(boolean opening) {
+        if (mKeyboardSwipeTravel || mPaneWallController == null || mInAppKeyboard == null) return 0;
+        com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+        if (wall.isMoving() || wall.offsetPx() != 0f || mTravelHoldsContent
+            || mTravelKeyboardPreRolled || mChromeTravelMoved) return 0;
+        if (isReducedMotionEnabled() || isAppDrawerEngaged() || mSurfaceEditor.isActive()
+            || mAppliedContentReservationPx < 0) return 0;
+        if (!canPreRollTravelKeyboard() || mInAppKeyboard.isTurnedOff()
+            || displayTakesSystemKeyboard() || isDisplayTouchpadFrame()) return 0;
+        boolean up = committedKeyboardVisible();
+        if (opening == up) return 0;
+        mKeyboardSwipeTravel = true;
+        mKeyboardSwipeFromOpen = up;
+        // The room the content has now, read before anything moves; the other end is read once
+        // the keyboard it depends on has been measured.
+        int fromReservationPx = keyboardSwipeReservationPx(up);
+        if (opening) {
+            preRollTravelKeyboard(mLastWallPage);
+            mKeyboardSwipeRoomChangePx = fromReservationPx - keyboardSwipeReservationPx(true);
+        } else {
+            // Down: the content is given the room the keyboard gives back now, under a paused
+            // grid, and the stack slides away from over it.
+            mKeyboardSwipeRoomChangePx = fromReservationPx - keyboardSwipeReservationPx(false);
+            beginTravelHold();
+            if (mKeyboardSwipeRoomChangePx > 0) preRollTravelContent(mKeyboardSwipeRoomChangePx);
+        }
+        int travelPx = travelKeyboardLaidOutPx();
+        if (travelPx <= 0 || !isInAppKeyboardShown()) {
+            // Nothing laid out to slide: back as it was, and the release asks instead.
+            finishKeyboardSwipeTravel(up);
+            return 0;
+        }
+        setKeyboardSwipeTravel(up ? 1f : 0f);
+        return travelPx;
+    }
+
+    /** The room a place's chrome leaves the content with the keyboard up or down, at rest. */
+    private int keyboardSwipeReservationPx(boolean keyboardUp) {
+        return travelRestReservationPx(mLastWallPage, buildChromeSpec().toolbarShown, keyboardUp,
+            isMinimalMode());
+    }
+
+    /**
+     * One frame of the keyboard swipe: {@code reveal} of the keyboard shows, 0 to 1. Transforms
+     * only, as for the wall's travel: the stack's translation, the pane's clip under it and the
+     * rows' displacement.
+     */
+    private void setKeyboardSwipeTravel(float reveal) {
+        if (!mKeyboardSwipeTravel) return;
+        float shown = Math.max(0f, Math.min(1f, reveal));
+        float translation = travelKeyboardLaidOutPx() * (1f - shown);
+        mChromeTravelMoved = true;
+        mDockTravelTranslationPx = translation;
+        mKeyboardTravelSharePx = translation;
+        applyAccessoryStackTranslation();
+        if (!mTravelHoldsContent) return;
+        com.termux.view.TerminalView view = mPaneController == null ? null
+            : mPaneController.soleTiledPaneView();
+        if (view != null) {
+            view.setTravelDisplacement(mKeyboardSwipeRoomChangePx,
+                mKeyboardSwipeFromOpen ? 1f - shown : shown);
+        }
+        syncTerminalTravelCover(translation);
+    }
+
+    /**
+     * The keyboard swipe's settle landed, up ({@code open}) or down. The travel's transforms come
+     * off, as the wall's settle takes them off; a swipe that went through is then the person's own
+     * show or hide — the keyboard key's path, heard by everything that listens for one — and one
+     * that came back undoes its pre-roll quietly. One geometry pass gives the content the room it
+     * landed on.
+     */
+    private void finishKeyboardSwipeTravel(boolean open) {
+        if (!mKeyboardSwipeTravel) return;
+        mKeyboardSwipeTravel = false;
+        boolean keyboardPreRolled = mTravelKeyboardPreRolled;
+        boolean contentPreRolled = mTravelContentPreRolled;
+        boolean held = mTravelHoldsContent;
+        mTravelHoldsContent = false;
+        mTravelKeyboardPreRolled = false;
+        mTravelKeyboardPlace = null;
+        mTravelContentPreRolled = false;
+        mTravelRoomArriving = null;
+        mChromeTravelMoved = false;
+        mDockTravelTranslationPx = 0f;
+        mKeyboardTravelSharePx = 0f;
+        mTravelHeldOverlapPx = 0;
+        applyAccessoryStackTranslation();
+        if (held && mPaneController != null) mPaneController.setTravelBottomCoverPx(0);
+        if (open != mKeyboardSwipeFromOpen) {
+            // The pre-rolled keyboard, up already, becomes the one the person asked for; the
+            // display's policy hears it here, since the keyboard itself saw no change to report.
+            applyBorderKeyboardSwipe(open);
+            if (open && mX11Display != null && !mRaisingDisplayFrameKeyboard)
+                mX11Display.onUserKeyboardIntent(true);
+        } else if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+            mQuietKeyboardChange = true;
+            try {
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                    .HideReason.WALL_PAGE);
+            } finally {
+                mQuietKeyboardChange = false;
+            }
+        }
+        if (held) applyAccessoryGeometryIfNeeded(true, "keyboard-swipe:settle");
+        if (contentPreRolled) finishTravelContentResizeAfterLayout();
+        if (held) settleTerminalTravelDisplacement();
+        mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+    }
+
+    /** Lands a keyboard swipe still under way, before something else moves the chrome. */
+    private void settleKeyboardSwipeTravelNow() {
+        if (!mKeyboardSwipeTravel) return;
+        if (mPaneWallController != null) mPaneWallController.wall().settleKeyboardRevealNow();
+        // The wall hands the keyboard back through onKeyboardRevealEnd; if it had nothing
+        // engaged, the travel goes back to where it began.
+        finishKeyboardSwipeTravel(mKeyboardSwipeFromOpen);
+    }
+
     /**
      * Wire the pane wall around the terminal's pane host. The terminal is its middle page and is
      * handed over untouched; the other places register themselves as the install gains them.
@@ -16866,6 +17078,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onBorderKeyboardSwipe(boolean open) {
                     applyBorderKeyboardSwipe(open);
+                }
+                // The keyboard swipe tied to the finger: the reveal the wall's slide already
+                // draws the keyboard through, driven by the finger instead of the wall.
+                @Override public int onKeyboardRevealBegin(boolean opening) {
+                    return beginKeyboardSwipeTravel(opening);
+                }
+                @Override public void onKeyboardRevealProgress(float reveal) {
+                    setKeyboardSwipeTravel(reveal);
+                }
+                @Override public void onKeyboardRevealEnd(boolean open) {
+                    finishKeyboardSwipeTravel(open);
                 }
                 @Override public void onPageSinkChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page, float scale) {

@@ -43,8 +43,8 @@ import java.util.Map;
  * is the whole mechanism. The one touch the wall reads for itself is the border drag
  * ({@link BorderDrag}): a press held on the current page's border, then dragged sideways, which
  * is how a finger pages the wall on every place and in every mode — and, on the bottom border, a
- * vertical swipe without the hold, which opens and closes the keyboard. The window strip's
- * overswipe drives the same drag from outside.
+ * vertical swipe without the hold, which carries the keyboard up or down under the finger
+ * ({@link KeyboardReveal}). The window strip's overswipe drives the same drag from outside.
  *
  * <p>Every page is laid out at the host's size and moved with {@code translationX}, so a page
  * change and a whole drag cost no layout work. Only the pages on screen are laid out at all: a
@@ -119,8 +119,28 @@ public final class PaneWallLayout extends ViewGroup {
          * ({@link BorderDrag#KEYBOARD_REACH_DP}); asked as each finger lands.
          */
         default boolean isBorderKeyboardSwipeEnabled() { return false; }
-        /** A swipe off the bottom border asked for the keyboard: up to open, down to close. */
+        /**
+         * A swipe off the bottom border asked for the keyboard, up to open and down to close:
+         * the release-only path, for a swipe the keyboard could not follow
+         * ({@link #onKeyboardRevealBegin} answered 0).
+         */
         default void onBorderKeyboardSwipe(boolean open) { }
+        /**
+         * A keyboard swipe was just claimed, going up ({@code opening}) or down: the keyboard
+         * is to follow the finger from here ({@link KeyboardReveal}). Answers the height in px
+         * the finger drives it over — the keyboard's own — or 0 where it cannot follow (a
+         * floating keyboard, the phone's own, one switched off, one already where the swipe
+         * points), and then the release asks through {@link #onBorderKeyboardSwipe} as it always
+         * has. Answering more than 0 takes the keyboard until {@link #onKeyboardRevealEnd}.
+         */
+        default int onKeyboardRevealBegin(boolean opening) { return 0; }
+        /** How much of the keyboard shows for this frame of the swipe or its settle, 0 to 1. */
+        default void onKeyboardRevealProgress(float reveal) { }
+        /**
+         * The keyboard the swipe drove came to rest, up ({@code open}) or down: where it began
+         * for a swipe let go short or cancelled, the other state for one that went through.
+         */
+        default void onKeyboardRevealEnd(boolean open) { }
         /**
          * The page a held border sank ({@link PageSink}) is drawn at {@code scale} about its
          * centre, 1 once it is back at rest: for chrome drawn outside the page that frames it.
@@ -186,6 +206,22 @@ public final class PaneWallLayout extends ViewGroup {
      */
     @Nullable private View mWeightPage;
     private float mWeightOffsetPx;
+    /**
+     * The keyboard's height the finger drives the reveal over ({@link KeyboardReveal}), from a
+     * keyboard swipe the listener took ({@link Listener#onKeyboardRevealBegin}) until the settle
+     * lands; 0 while no reveal is engaged.
+     */
+    private int mRevealTravelPx;
+    /** Whether the keyboard was up when the engaged reveal began. */
+    private boolean mRevealFromOpen;
+    /** How much of the keyboard shows: 0 down, 1 up. */
+    private float mReveal;
+    /** The reveal, and the finger's y, the finger is measured from. */
+    private float mRevealStart;
+    private float mRevealAnchorY;
+    /** Where the settle running is taking the keyboard. */
+    private boolean mRevealTarget;
+    @Nullable private ValueAnimator mRevealSpring;
     /**
      * The page a held border sank ({@link PageSink}), from the hold's claim until it has sprung
      * back to rest after the lift, and its place; null while none is.
@@ -368,8 +404,10 @@ public final class PaneWallLayout extends ViewGroup {
     /** Off while another surface owns the gesture (the surface editor, for one). */
     public void setGesturesEnabled(boolean enabled) {
         mGesturesEnabled = enabled;
-        // A keyboard swipe under way asks for nothing once another surface owns the gesture.
+        // A keyboard swipe under way asks for nothing once another surface owns the gesture, and
+        // a keyboard it was carrying lands at once where it was going.
         if (!enabled && mBorderDrag.isKeyboardSwipe()) mBorderDrag.abandon();
+        if (!enabled) settleKeyboardRevealNow();
         if (enabled || !mDragging) return;
         // The claimant is told to let go, and the wall goes back to rest on its own — nothing
         // else is going to release this drag now.
@@ -396,6 +434,8 @@ public final class PaneWallLayout extends ViewGroup {
     private boolean goTo(@NonNull PaneWallPage page, boolean animate, float velocityPxPerSec) {
         if (!mPages.contains(page)) return false;
         interruptDrag();
+        // The wall is about to move: a keyboard still settling from a swipe lands first.
+        settleKeyboardRevealNow();
         if (page == mCurrent && mOffsetPx == 0f) return true;
         stopNudge();
         // Carry the current visual position across the page change: the new page's rest is one
@@ -436,6 +476,8 @@ public final class PaneWallLayout extends ViewGroup {
         if (!mGesturesEnabled) return;
         Trace.beginSection("Wall.beginDrag");
         try {
+            // A keyboard still settling from a swipe lands before the wall moves.
+            settleKeyboardRevealNow();
             mDragging = true;
             stopSlide();
             stopNudge();
@@ -521,7 +563,9 @@ public final class PaneWallLayout extends ViewGroup {
      *
      * <p>The keyboard swipe is claimed the same way, by the move rather than by the timer: a
      * finger that sets off up or down from the bottom border before the hold is the keyboard's
-     * ({@link BorderDrag#move}), and its lift asks the listener to open or close it.
+     * ({@link BorderDrag#move}). Where the listener can move the keyboard with it, the keyboard
+     * follows the finger and the lift settles it ({@link KeyboardReveal}); elsewhere the lift
+     * asks the listener to open or close it.
      */
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
@@ -538,6 +582,7 @@ public final class PaneWallLayout extends ViewGroup {
                 }
                 if (mBorderDrag.isKeyboardSwipe()) {
                     if (mBorderVelocity != null) mBorderVelocity.addMovement(event);
+                    trackKeyboardReveal(event.getY());
                     return true;
                 }
                 BorderDrag.Claim claim = mBorderDrag.move(event.getX(), event.getY());
@@ -582,8 +627,9 @@ public final class PaneWallLayout extends ViewGroup {
                     return true;
                 }
                 if (mBorderDrag.isKeyboardSwipe()) {
-                    // Cancelled from above: the keyboard stays as it was.
+                    // Cancelled from above: the keyboard goes back to how it was.
                     releaseBorderDrag();
+                    if (mRevealTravelPx > 0) settleKeyboardReveal(mRevealFromOpen, 0f);
                     return true;
                 }
                 break;
@@ -685,8 +731,9 @@ public final class PaneWallLayout extends ViewGroup {
 
     /**
      * A finger set off up or down from the bottom border before the hold: the content is told its
-     * touch is over, exactly as for the border drag, and the rest of the stream is read here for
-     * its release. Nothing moves under it; the keyboard animates on its own once asked.
+     * touch is over, exactly as for the border drag, and the rest of the stream is read here.
+     * Where the listener can move the keyboard with the finger, it does from this move on
+     * ({@link #engageKeyboardReveal}); where it cannot, nothing moves until the release asks.
      */
     private void claimKeyboardSwipe(@NonNull MotionEvent event) {
         mHoldHandler.removeCallbacks(mHoldElapsed);
@@ -694,9 +741,14 @@ public final class PaneWallLayout extends ViewGroup {
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         mBorderVelocity = VelocityTracker.obtain();
         mBorderVelocity.addMovement(event);
+        engageKeyboardReveal(event.getY());
     }
 
-    /** The keyboard swipe's finger lifted: up opens the keyboard, down closes it, short is nothing. */
+    /**
+     * The keyboard swipe's finger lifted. A keyboard following the finger settles on the spring
+     * from where the finger left it, open or closed as {@link KeyboardReveal#settlesOpen} says;
+     * otherwise up opens the keyboard, down closes it, and short is nothing.
+     */
     private void releaseKeyboardSwipe(@NonNull MotionEvent event) {
         float velocity = 0f;
         if (mBorderVelocity != null) {
@@ -705,6 +757,15 @@ public final class PaneWallLayout extends ViewGroup {
             velocity = mBorderVelocity.getYVelocity();
         }
         float density = getResources().getDisplayMetrics().density;
+        if (mRevealTravelPx > 0) {
+            trackKeyboardReveal(event.getY());
+            float revealVelocity = KeyboardReveal.revealVelocity(velocity, mRevealTravelPx);
+            boolean open = KeyboardReveal.settlesOpen(mRevealFromOpen, mReveal, revealVelocity,
+                KeyboardReveal.FLING_DP_PER_SEC * density / mRevealTravelPx);
+            releaseBorderDrag();
+            settleKeyboardReveal(open, revealVelocity);
+            return;
+        }
         BorderDrag.KeyboardSwipe swipe = mBorderDrag.keyboardRelease(event.getY(), velocity,
             BorderDrag.KEYBOARD_COMMIT_DP * density,
             BorderDrag.KEYBOARD_FLING_DP_PER_SEC * density);
@@ -712,6 +773,151 @@ public final class PaneWallLayout extends ViewGroup {
         if (swipe != BorderDrag.KeyboardSwipe.NONE && mListener != null) {
             mListener.onBorderKeyboardSwipe(swipe == BorderDrag.KeyboardSwipe.OPEN);
         }
+    }
+
+    // ---- The keyboard under the finger -------------------------------------------------------
+
+    /**
+     * The keyboard swipe was claimed with the finger at {@code y}. A settle still running from the
+     * last swipe is taken back by this finger where it stands; otherwise the listener is asked
+     * whether the keyboard can follow ({@link Listener#onKeyboardRevealBegin}) — up opens, down
+     * closes — and from here the reveal is the finger's. Reduced motion follows nothing: the
+     * release asks, and the keyboard jumps.
+     */
+    private void engageKeyboardReveal(float y) {
+        if (mRevealTravelPx > 0) {
+            stopRevealSpring();
+            mRevealStart = mReveal;
+            mRevealAnchorY = y;
+            return;
+        }
+        if (mReducedMotion || mListener == null) return;
+        boolean opening = y < mBorderDownY;
+        int travel = mListener.onKeyboardRevealBegin(opening);
+        if (travel <= 0) return;
+        mRevealTravelPx = travel;
+        mRevealFromOpen = !opening;
+        mRevealTarget = mRevealFromOpen;
+        mReveal = opening ? 0f : 1f;
+        mRevealStart = mReveal;
+        // From where the finger landed, so the keyboard is already as far along as the finger.
+        mRevealAnchorY = mBorderDownY;
+        trackKeyboardReveal(y);
+    }
+
+    /**
+     * One move of the keyboard swipe's finger: the reveal is where the finger says, and crossing
+     * the point past which the release would go on (or back) is felt as one light tick.
+     */
+    private void trackKeyboardReveal(float y) {
+        if (mRevealTravelPx <= 0) return;
+        float before = mReveal;
+        float reveal = KeyboardReveal.reveal(mRevealStart, y - mRevealAnchorY, mRevealTravelPx);
+        if (KeyboardReveal.crossesCommit(mRevealFromOpen, before, reveal)) {
+            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        }
+        setReveal(reveal);
+    }
+
+    private void setReveal(float reveal) {
+        if (reveal == mReveal) return;
+        mReveal = reveal;
+        if (mListener != null) mListener.onKeyboardRevealProgress(reveal);
+    }
+
+    /**
+     * Settle the keyboard up ({@code open}) or down on a spring that starts where the reveal
+     * stands and at {@code velocityPerSec}, the finger's own speed in the reveal's units. The
+     * animator is only the ticker; the spring says where the reveal is at each frame, on the
+     * slide's own bounded clock ({@link WallSlideClock}), and landing hands the keyboard back.
+     */
+    private void settleKeyboardReveal(final boolean open, float velocityPerSec) {
+        stopRevealSpring();
+        if (mRevealTravelPx <= 0) return;
+        mRevealTarget = open;
+        final float target = open ? 1f : 0f;
+        if (mReducedMotion || (mReveal == target && velocityPerSec == 0f)) {
+            endKeyboardReveal();
+            return;
+        }
+        final SettleSpring spring = SettleSpring.of(mReveal - target, velocityPerSec,
+            KeyboardReveal.SETTLE_OMEGA, KeyboardReveal.SETTLE_MAX_OMEGA);
+        final long duration = spring.durationMs(KeyboardReveal.SETTLE_REST_PX / mRevealTravelPx);
+        ValueAnimator ticker = ValueAnimator.ofFloat(0f, 1f);
+        ticker.setDuration(duration * SLIDE_STRETCH_CEILING);
+        ticker.setInterpolator(null);
+        ticker.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            private long mLastPlayTimeMs;
+            private long mElapsedMs;
+            private boolean mEnding;
+
+            @Override public void onAnimationUpdate(ValueAnimator animation) {
+                if (mEnding) return;
+                long playTime = animation.getCurrentPlayTime();
+                mElapsedMs = WallSlideClock.advance(mElapsedMs, playTime - mLastPlayTimeMs);
+                mLastPlayTimeMs = playTime;
+                float reveal = target + spring.displacementAt(Math.min(duration, mElapsedMs)
+                    / 1000f);
+                setReveal(Math.max(0f, Math.min(1f, reveal)));
+                if (mElapsedMs >= duration && mRevealSpring == animation) {
+                    mEnding = true;
+                    animation.end();
+                }
+            }
+        });
+        ticker.addListener(new AnimatorListenerAdapter() {
+            private boolean mCancelled;
+            @Override public void onAnimationCancel(Animator animation) { mCancelled = true; }
+            @Override public void onAnimationEnd(Animator animation) {
+                if (mRevealSpring == animation) mRevealSpring = null;
+                if (!mCancelled) endKeyboardReveal();
+            }
+        });
+        mRevealSpring = ticker;
+        ticker.start();
+    }
+
+    private void stopRevealSpring() {
+        ValueAnimator spring = mRevealSpring;
+        mRevealSpring = null;
+        if (spring != null) spring.cancel();
+    }
+
+    /** The reveal is where it was going: the keyboard is the listener's again. */
+    private void endKeyboardReveal() {
+        stopRevealSpring();
+        if (mRevealTravelPx <= 0) return;
+        boolean open = mRevealTarget;
+        mRevealTravelPx = 0;
+        setReveal(open ? 1f : 0f);
+        if (mListener != null) mListener.onKeyboardRevealEnd(open);
+    }
+
+    /**
+     * Land a keyboard the finger is carrying, or a settle still running, at once: the settle's
+     * own destination, or where the swipe began for a finger still down, whose rest is then
+     * swallowed. For whatever is about to move the chrome another way — the wall, another surface
+     * taking the gestures, the place's own settle.
+     */
+    public void settleKeyboardRevealNow() {
+        if (mRevealTravelPx <= 0) return;
+        if (mBorderDrag.isKeyboardSwipe()) {
+            mBorderDrag.abandon();
+            mRevealTarget = mRevealFromOpen;
+        } else if (mRevealSpring == null) {
+            mRevealTarget = mRevealFromOpen;
+        }
+        endKeyboardReveal();
+    }
+
+    /** True from a keyboard swipe the listener let the keyboard follow until it has landed. */
+    public boolean isKeyboardRevealEngaged() {
+        return mRevealTravelPx > 0;
+    }
+
+    /** How much of the keyboard the engaged reveal shows, for tests. */
+    float keyboardReveal() {
+        return mReveal;
     }
 
     private void releaseBorderDrag() {
@@ -1213,6 +1419,8 @@ public final class PaneWallLayout extends ViewGroup {
         mSliding = false;
         stopSlide();
         stopNudge();
+        // A keyboard the finger or its settle was carrying lands where it was going.
+        settleKeyboardRevealNow();
         releaseBorderDrag();
         finishSink();
         releasePlank();

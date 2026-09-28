@@ -1157,6 +1157,194 @@ public class PaneWallLayoutTest {
         assertEquals(3, content.actions.size());
     }
 
+    // ---- The keyboard under the finger -------------------------------------------------------
+
+    private static final int KEYBOARD = 900;
+    private final List<Boolean> revealBegins = new ArrayList<>();
+    private final List<Float> reveals = new ArrayList<>();
+    private final List<Boolean> revealEnds = new ArrayList<>();
+
+    /** A listener whose keyboard can follow the finger, as the activity's docked one can. */
+    private void listenForKeyboardReveals(final int travelPx) {
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isBorderKeyboardSwipeEnabled() { return true; }
+            @Override public void onBorderKeyboardSwipe(boolean open) { keyboardSwipes.add(open); }
+            @Override public int onKeyboardRevealBegin(boolean opening) {
+                revealBegins.add(opening);
+                return travelPx;
+            }
+            @Override public void onKeyboardRevealProgress(float reveal) { reveals.add(reveal); }
+            @Override public void onKeyboardRevealEnd(boolean open) { revealEnds.add(open); }
+        });
+    }
+
+    private float lastReveal() {
+        return reveals.get(reveals.size() - 1);
+    }
+
+    @Test
+    public void theKeyboardRisesUnderTheFingerAndAFlingOnOpensIt() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        listenForKeyboardReveals(KEYBOARD);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 4f - 300f, 50L));
+        assertEquals(BorderDrag.Claim.KEYBOARD, wall.borderDragClaim());
+        assertEquals("asked once, going up", Collections.singletonList(true), revealBegins);
+        assertTrue(wall.isKeyboardRevealEngaged());
+        // One to one over the keyboard's height, from where the finger landed.
+        assertEquals(300f / KEYBOARD, lastReveal(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 4f - 450f, 70L));
+        assertEquals(0.5f, lastReveal(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 4f - 450f, 90L));
+        assertTrue("the release-only path is not asked", keyboardSwipes.isEmpty());
+        assertTrue("nothing lands at the lift: it settles", revealEnds.isEmpty());
+        letTheMotionSettle();
+        assertEquals(Collections.singletonList(true), revealEnds);
+        assertEquals(1f, lastReveal(), EPS);
+        assertFalse(wall.isKeyboardRevealEngaged());
+        // Up all the way, without a step back on the way.
+        for (int i = 1; i < reveals.size(); i++) {
+            assertTrue(reveals.get(i) >= reveals.get(i - 1) - EPS);
+        }
+    }
+
+    @Test
+    public void aShortSlowSwipeDownIsTakenBack() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        listenForKeyboardReveals(KEYBOARD);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 4f + 100f, 1000L));
+        assertEquals("asked once, going down", Collections.singletonList(false), revealBegins);
+        assertEquals(1f - 100f / KEYBOARD, lastReveal(), EPS);
+        // Held still, then let go: short of a third and not flung, it goes back up.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 4f + 100f, 2000L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 4f + 100f, 3000L));
+        letTheMotionSettle();
+        assertEquals(Collections.singletonList(true), revealEnds);
+        assertEquals(1f, lastReveal(), EPS);
+    }
+
+    @Test
+    public void aSwipeDownPastAThirdClosesItWithoutAFullSwipe() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        listenForKeyboardReveals(KEYBOARD);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 4f + 320f, 1000L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 4f + 320f, 2000L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 4f + 320f, 3000L));
+        letTheMotionSettle();
+        assertEquals(Collections.singletonList(false), revealEnds);
+        assertEquals(0f, lastReveal(), EPS);
+    }
+
+    @Test
+    public void aCancelledSwipeTakesTheKeyboardBackToHowItWas() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        listenForKeyboardReveals(KEYBOARD);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 4f - 600f, 50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_CANCEL, WIDTH / 2f,
+            HEIGHT - 4f - 600f, 60L));
+        assertEquals(BorderDrag.Claim.NONE, wall.borderDragClaim());
+        letTheMotionSettle();
+        assertEquals("far past a third, a cancel still goes back", Collections.singletonList(false),
+            revealEnds);
+        assertEquals(0f, lastReveal(), EPS);
+        assertTrue(keyboardSwipes.isEmpty());
+    }
+
+    @Test
+    public void aKeyboardThatCannotFollowIsAskedAtTheRelease() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        // Floating, the phone's own, switched off: the listener answers 0.
+        listenForKeyboardReveals(0);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 204f, 50L));
+        assertEquals(Collections.singletonList(true), revealBegins);
+        assertFalse(wall.isKeyboardRevealEngaged());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 204f, 80L));
+        assertEquals(Collections.singletonList(true), keyboardSwipes);
+        assertTrue(reveals.isEmpty());
+        assertTrue(revealEnds.isEmpty());
+    }
+
+    @Test
+    public void reducedMotionNeverTiesTheKeyboardToTheFinger() {
+        buildWithContent();
+        listenForKeyboardReveals(KEYBOARD);
+        // buildWithContent leaves motion reduced.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 204f, 50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 204f, 80L));
+        assertTrue(revealBegins.isEmpty());
+        assertEquals(Collections.singletonList(true), keyboardSwipes);
+    }
+
+    @Test
+    public void theWallMovingLandsAKeyboardStillSettling() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        listenForKeyboardReveals(KEYBOARD);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 4f - 600f, 1000L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 4f - 600f, 2000L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 4f - 600f, 3000L));
+        assertTrue(wall.isKeyboardRevealEngaged());
+        // A tile or wall.go before the settle lands: the keyboard lands first, where it was going.
+        wall.goTo(PaneWallPage.WIDGETS, false);
+        assertEquals(Collections.singletonList(true), revealEnds);
+        assertEquals(1f, lastReveal(), EPS);
+        assertFalse(wall.isKeyboardRevealEngaged());
+    }
+
+    @Test
+    public void gesturesTakenAwayMidSwipePutTheKeyboardBack() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        listenForKeyboardReveals(KEYBOARD);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f,
+            HEIGHT - 4f - 600f, 50L));
+        wall.setGesturesEnabled(false);
+        assertEquals(Collections.singletonList(false), revealEnds);
+        assertEquals(0f, lastReveal(), EPS);
+        // The rest of that finger asks for nothing.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 4f - 600f, 80L));
+        assertEquals(1, revealEnds.size());
+        assertTrue(keyboardSwipes.isEmpty());
+    }
+
     @Test
     public void aPageChangeWithoutAFingerNeverTips() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
