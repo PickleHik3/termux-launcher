@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="152dp" android:viewportWidth="48" android:viewportHeight="152">
+  <path android:pathData="M 17,1 H 31 Q 47,1 47,17 V 135 Q 47,151 31,151 H 17 Q 1,151 1,135 V 17 Q 1,1 17,1 Z" android:fillColor="#404040" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 30.4,11 a 1.6,1.6 0 1,0 3.2,0 a 1.6,1.6 0 1,0 -3.2,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 30.4,16 a 1.6,1.6 0 1,0 3.2,0 a 1.6,1.6 0 1,0 -3.2,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 30.4,21 a 1.6,1.6 0 1,0 3.2,0 a 1.6,1.6 0 1,0 -3.2,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 36.4,11 a 1.6,1.6 0 1,0 3.2,0 a 1.6,1.6 0 1,0 -3.2,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 36.4,16 a 1.6,1.6 0 1,0 3.2,0 a 1.6,1.6 0 1,0 -3.2,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 36.4,21 a 1.6,1.6 0 1,0 3.2,0 a 1.6,1.6 0 1,0 -3.2,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 14,37 a 9,9 0 1,0 18,0 a 9,9 0 1,0 -18,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 19,37 L 27,37" android:strokeColor="#202020" android:strokeWidth="1.5" />
+  <path android:pathData="M 14,61 a 9,9 0 1,0 18,0 a 9,9 0 1,0 -18,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 21,58 H 25 Q 26,58 26,59 V 63 Q 26,64 25,64 H 21 Q 20,64 20,63 V 59 Q 20,58 21,58 Z" android:fillColor="#202020" />
+  <path android:pathData="M 14,85 a 9,9 0 1,0 18,0 a 9,9 0 1,0 -18,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 19,85 L 27,85" android:strokeColor="#202020" android:strokeWidth="1.5" />
+  <path android:pathData="M 14,109 a 9,9 0 1,0 18,0 a 9,9 0 1,0 -18,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 21,106 H 25 Q 26,106 26,107 V 111 Q 26,112 25,112 H 21 Q 20,112 20,111 V 107 Q 20,106 21,106 Z" android:fillColor="#202020" />
+  <path android:pathData="M 14,133 a 9,9 0 1,0 18,0 a 9,9 0 1,0 -18,0" android:fillColor="#FF00FF" />
+  <path android:pathData="M 19,133 L 27,133" android:strokeColor="#202020" android:strokeWidth="1.5" />
+</vector>

@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="496dp" android:height="24dp" android:viewportWidth="496" android:viewportHeight="24">
+  <path android:pathData="M 11,1 H 485 Q 495,1 495,11 V 13 Q 495,23 485,23 H 11 Q 1,23 1,13 V 11 Q 1,1 11,1 Z" android:fillColor="#404040" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 478.4,7 a 1.6,1.6 0 1,0 3.2,0 a 1.6,1.6 0 1,0 -3.2,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 478.4,12 a 1.6,1.6 0 1,0 3.2,0 a 1.6,1.6 0 1,0 -3.2,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 478.4,17 a 1.6,1.6 0 1,0 3.2,0 a 1.6,1.6 0 1,0 -3.2,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 484.4,7 a 1.6,1.6 0 1,0 3.2,0 a 1.6,1.6 0 1,0 -3.2,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 484.4,12 a 1.6,1.6 0 1,0 3.2,0 a 1.6,1.6 0 1,0 -3.2,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 484.4,17 a 1.6,1.6 0 1,0 3.2,0 a 1.6,1.6 0 1,0 -3.2,0" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 9,13 L 11,12" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 11,12 L 11,19" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 15.5,12 L 20.5,12" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 20.5,12 L 20.5,15" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 20.5,15 L 15.5,19" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 15.5,19 L 20.5,19" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 25.5,14 L 25.5,14.8" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 25.5,17 L 25.5,17.8" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 30.5,12 L 30.5,16" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 30.5,16 L 35.5,16" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 34.5,12 L 34.5,19" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 38,12 L 43,12" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 43,12 L 43,19" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 43,19 L 38,19" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 38,19 L 38,12" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 441,18 H 441 Q 442,18 442,19 V 19 Q 442,20 441,20 H 441 Q 440,20 440,19 V 19 Q 440,18 441,18 Z" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 445,16 H 445 Q 446,16 446,17 V 19 Q 446,20 445,20 H 445 Q 444,20 444,19 V 17 Q 444,16 445,16 Z" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 449,14 H 449 Q 450,14 450,15 V 19 Q 450,20 449,20 H 449 Q 448,20 448,19 V 15 Q 448,14 449,14 Z" android:fillColor="#808080" android:fillAlpha="0.45" />
+  <path android:pathData="M 457,12 H 464 Q 465,12 465,13 V 18 Q 465,19 464,19 H 457 Q 456,19 456,18 V 13 Q 456,12 457,12 Z" android:strokeColor="#808080" android:strokeWidth="1" android:strokeAlpha="0.45" />
+  <path android:pathData="M 458.5,14 H 461.5 Q 462,14 462,14.5 V 16.5 Q 462,17 461.5,17 H 458.5 Q 458,17 458,16.5 V 14.5 Q 458,14 458.5,14 Z" android:fillColor="#808080" android:fillAlpha="0.45" />
+</vector>
