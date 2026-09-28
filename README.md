@@ -1,5 +1,12 @@
 # Termux Launcher
 
+> [!TIP]
+> **Termux Launcher v1.0 is out!**
+>
+> It's been exactly almost a year since I asked GPT-5 Codex (god bless its soul) to add sixel image drawing to [TEL](https://github.com/t-e-l/tel). A few too many “just one more feature”s later, the launcher I'd always pictured in my head is finally here for you all.
+>
+> [Get the release](https://github.com/PickleHik3/termux-launcher/releases/tag/v1.0.0) · [Read the full story](project-docs/release-notes-v1.0.0.md#the-long-read)
+
 > [!NOTE]
 > **This project is entirely vibe-coded.**
 > I’ve been daily-driving it as a launcher on a Nothing Phone (2), and it has been stable so far, does not appear to have any noticeable impact on battery life, and uses about ~350 MB of RAM at idle (for reference, something like smart launcher uses about 250 on fresh install).
@@ -133,4 +140,20 @@ project. See [LICENSE](LICENSE), [license exceptions](LICENSE-EXCEPTIONS.md), an
 Bundled assets carry their own licenses: the weather animations are
 [Meteocons](https://github.com/basmilius/meteocons) (MIT, Copyright 2020-present Bas Milius), the
 voice key's speech detector is [Silero VAD](https://github.com/snakers4/silero-vad) (MIT, Copyright
-2020-present Silero Team), and the icon font is [Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts) (SIL OFL 1.1).
+2020-present Silero Team), and the icon font is [Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts) (MIT for the Symbols-only font, with separate licenses for its glyph sources).
+
+### Thanks to the projects behind the launcher
+
+Alongside Termux, Termux:Monet and TEL, a huge thank you to
+[Termux:X11](https://github.com/termux/termux-x11) for the Linux display,
+[Unexpected Keyboard](https://github.com/Julow/Unexpected-Keyboard) for the embedded keyboard,
+[kitty](https://github.com/kovidgoyal/kitty) for its terminal protocols and the code adapted here,
+[Noctalia](https://github.com/noctalia-dev/noctalia-shell) for the theme templates, and
+[herdr](https://github.com/herdrdev/herdr) for the agent-detection rules.
+
+[Ghostty](https://github.com/ghostty-org/ghostty), [Hyprland](https://github.com/hyprwm/Hyprland)
+and [focus.nvim](https://github.com/nvim-focus/focus.nvim) inspired the terminal padding, pane
+tiling and focused-pane behaviour. Thanks also to the speech-model authors, Google AI Edge and
+the LiteRT conversion contributors, and the authors of dawn, fastfetch, sigye and the other
+[tlstore tools](https://github.com/PickleHik3/tlstore). This launcher would not exist without
+all that work. The [notices](THIRD_PARTY_NOTICES.md) describe what is included and adapted.
