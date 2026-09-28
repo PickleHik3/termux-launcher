@@ -578,6 +578,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.statusbar.StatusCardHost mStatusCardHost =
         new com.termux.app.statusbar.StatusCardHost();
     @Nullable private android.animation.ValueAnimator mStatusBarCollapseAnimator;
+    /**
+     * A finger is folding the bar (dragTopStatusBar): the thickness it started from and the
+     * resize lease the drag holds, carried into the landing so the panes hear one size at its end.
+     */
+    private boolean mStatusBarFoldDragging;
+    private int mStatusBarFoldDragStartHeight;
+    private int mStatusBarFoldDragResizeGeneration;
     private int mStatusBarTerminalResizeGeneration;
     private final com.termux.app.statusbar.StatusBarSurfaceOutlineProvider
         mStatusBarSurfaceOutline =
@@ -4088,7 +4095,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : (mStatusBarEdge == PlaceLayout.Edge.TOP ? outerMargin : 0);
             int bottomMargin = vertical ? 0
                 : (mStatusBarEdge == PlaceLayout.Edge.BOTTOM ? outerMargin : 0);
-            boolean sizeStale = mStatusBarCollapseAnimator == null
+            boolean sizeStale = !isStatusBarFoldInteractive()
                 && (vertical ? mlp.width != targetThickness : mlp.height != targetThickness);
             if (mlp.leftMargin != leftMargin || mlp.rightMargin != rightMargin
                 || mlp.topMargin != topMargin || mlp.bottomMargin != bottomMargin || sizeStale) {
@@ -4096,7 +4103,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mlp.rightMargin = rightMargin;
                 mlp.topMargin = topMargin;
                 mlp.bottomMargin = bottomMargin;
-                if (mStatusBarCollapseAnimator == null) {
+                if (!isStatusBarFoldInteractive()) {
                     if (vertical) mlp.width = targetThickness;
                     else mlp.height = targetThickness;
                 }
@@ -4110,7 +4117,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     widgetParams.height = targetWidgetHeight;
                     topWidgets.setLayoutParams(widgetParams);
                 }
-                if (mStatusBarCollapseAnimator == null) {
+                if (!isStatusBarFoldInteractive()) {
                     topWidgets.setAlpha(1f);
                     topWidgets.setTranslationY(0f);
                     // A column carries the stacked clock instead of the row's widget slot.
@@ -4118,7 +4125,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
             }
             View stackedClock = findViewById(R.id.terminal_status_column_clock);
-            if (stackedClock != null && mStatusBarCollapseAnimator == null) {
+            if (stackedClock != null && !isStatusBarFoldInteractive()) {
                 stackedClock.setAlpha(1f);
                 stackedClock.setVisibility(vertical && !collapsed ? View.VISIBLE : View.GONE);
                 // The column's glass starts where the canvas does, so its clock starts at the top
@@ -4137,9 +4144,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // While a spring or animator drives the pane, applyFrame's
             // applyInteractiveStatusRowGeometry() is the sole writer of status-row geometry —
             // the same ownership rule the host-height and top-slot writes above already follow.
-            // A live collapse/expand animator owns the row's position; a refresh mid-animation
-            // must not re-anchor it to its rest rule and park it where the gesture is not.
-            boolean interactiveGeometryOwnsRow = mStatusBarCollapseAnimator != null;
+            // A live collapse/expand animator owns the row's position, as does the finger folding
+            // the bar; a refresh mid-animation must not re-anchor it to its rest rule and park it
+            // where the gesture is not.
+            boolean interactiveGeometryOwnsRow = isStatusBarFoldInteractive();
 
             // Keep the bottom chip corners inside the capsule's 26dp outline. At the former 4dp
             // inset, the rounded host clip intersected the session and weather chip backgrounds.
@@ -11413,9 +11421,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (isStatusBarVertical()) applyStatusBarStyle(host);
             return;
         }
-        if (edgeChanged && mStatusBarCollapseAnimator != null) {
-            mStatusBarCollapseAnimator.cancel();
-            mStatusBarCollapseAnimator = null;
+        if (edgeChanged) {
+            // A fold under way on the old edge — animated or under a finger — is dropped; the new
+            // edge is laid out at rest below. The drag's lease is returned with it.
+            cancelTopStatusBarAnimator();
+            int dragLease = endTopStatusBarDrag();
+            if (dragLease >= 0 && host != null) finishStatusBarTerminalResizeAfterLayout(host, dragLease);
         }
         mStatusBarEdge = edge;
         boolean first = !mStatusBarEdgeApplied;
@@ -16598,7 +16609,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Nothing to keep clear of: a column stands in the canvas band, which already starts
             // below the system status bar and ends above the navigation bar.
             lens.setAlongInsets(0, 0);
-            if (mStatusBarCollapseAnimator == null) {
+            if (!isStatusBarFoldInteractive()) {
                 lens.setExpansion(isStatusBarCompact()
                     ? 0f : 1f);
             }
@@ -18154,6 +18165,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     }
                     setTopStatusBarCollapsed(collapsed, true);
                 }
+                @Override public void onCollapsedStateRequested(boolean collapsed,
+                                                                float towardOpenVelocityPxPerSec) {
+                    // The fold lands from wherever the finger left the bar, at the speed it let go.
+                    if (isChromeMinimal()) onCollapsedStateRequested(collapsed);
+                    else setTopStatusBarCollapsed(collapsed, true, towardOpenVelocityPxPerSec);
+                }
+                @Override public void onFoldDrag(float towardOpenPx) {
+                    // A minimal place's strip does not open under a finger; its release above
+                    // still leaves minimal mode.
+                    if (!isChromeMinimal()) dragTopStatusBar(towardOpenPx);
+                }
+                @Override public void onFoldDragCancelled() {
+                    // Back to the form the bar had, from wherever the finger left it.
+                    if (mStatusBarFoldDragging) setTopStatusBarCollapsed(isStatusBarCompact(), true, 0f);
+                }
                 @Override public boolean isStatusGestureBlocked() {
                     // A live COMPACT/EXPANDED animator is deliberately eligible for takeover.
                     return isCommandPaletteOpen() || isAppDrawerEngaged() || mSurfaceEditor.isActive();
@@ -18239,9 +18265,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // stretch the row has not reached — its own top down to the row's crown. It slides in
             // the way the bar is growing: down out of a top bar, up out of a bottom one.
             float sign = com.termux.app.statusbar.StatusBarGesturePolicy.expandSign(mStatusBarEdge);
+            // The clock and the cards show only once the bar has the height to hold them, rising
+            // the last of the way in (StatusBarFoldMotion.CONTENT_REVEAL_START): a function of the
+            // height, so a fold reads the same curve down and half-drawn content never shows. The
+            // clock's own flip to the current time after it is revealed is its own behaviour.
+            float content = com.termux.app.statusbar.StatusBarFoldMotion.contentAlpha(expansion);
             topWidgets.setVisibility(View.VISIBLE);
-            topWidgets.setAlpha(expansion);
-            topWidgets.setTranslationY(-sign * dpToPx(8) * (1f - expansion));
+            topWidgets.setAlpha(content);
+            topWidgets.setTranslationY(-sign * dpToPx(8) * (1f - content));
             int clipRight = Math.max(1, Math.max(host.getWidth(), topWidgets.getWidth()));
             int widgetHeight = topWidgets.getHeight() > 0
                 ? topWidgets.getHeight() : rowGeometry.clockClipBottom;
@@ -18345,7 +18376,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void setTopStatusBarCollapsed(boolean requestedCollapsed, boolean animate) {
+        setTopStatusBarCollapsed(requestedCollapsed, animate, 0f);
+    }
+
+    /**
+     * Lands the bar in one of its two forms. The fold's arithmetic — the landing's time, when the
+     * open bar's content shows — is {@link com.termux.app.statusbar.StatusBarFoldMotion}'s; the
+     * curve is the shared settle curve. A fold the finger was driving ({@link #dragTopStatusBar})
+     * ends here whichever way the call lands the bar, from wherever the finger left it.
+     *
+     * @param towardOpenVelocityPxPerSec how fast the finger that asked was moving across the bar,
+     *                                   positive the way the bar opens; 0 with no finger behind it
+     */
+    private void setTopStatusBarCollapsed(boolean requestedCollapsed, boolean animate,
+                                          float towardOpenVelocityPxPerSec) {
         if (mPreferences == null) return;
+        int dragLease = endTopStatusBarDrag();
         // A bar down a side never rests expanded; isStatusBarCompact() already reflects that, so
         // this coercion never lands on a preference write below — it only refuses the request.
         boolean collapsed = requestedCollapsed
@@ -18368,10 +18414,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 topWidgets.setVisibility(collapsed || isStatusBarVertical()
                     ? View.GONE : View.VISIBLE);
             }
-            // Nothing began a resize here, so nothing is finished either: closing a lease this
-            // call never opened would end the keyboard's or an animation's early and let panes
-            // settle on a size they never reported.
+            // Nothing began a resize here, so nothing is finished either — except the lease a
+            // finger's fold took, which ends with the fold: closing a lease this call never
+            // opened would end the keyboard's or an animation's early and let panes settle on a
+            // size they never reported.
             refreshTerminalWindowBar();
+            if (host != null && dragLease >= 0) finishStatusBarTerminalResizeAfterLayout(host, dragLease);
             return;
         }
         if (preferenceChanged) setStatusBarCompact(collapsed);
@@ -18380,33 +18428,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             refreshTerminalWindowBar();
             return;
         }
-        if (!animate) {
-            int resizeGeneration = beginStatusBarTerminalResize();
+        if (!animate || isReducedMotionEnabled()) {
+            int resizeGeneration = dragLease >= 0 ? dragLease : beginStatusBarTerminalResize();
             refreshTerminalWindowBar();
             finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
             return;
         }
 
-        if (mStatusBarCollapseAnimator != null) mStatusBarCollapseAnimator.cancel();
-        final int resizeGeneration = beginStatusBarTerminalResize();
+        cancelTopStatusBarAnimator();
+        final int resizeGeneration = dragLease >= 0 ? dragLease : beginStatusBarTerminalResize();
         int startHeight = currentTopStatusBarHeight(host);
         if (startHeight <= 0) startHeight = targetStatusBarHeightPx(capsule, !collapsed);
         applyTopStatusBarInteractiveHeight(host, topWidgets, startHeight, capsule);
-        mStatusBarCollapseAnimator = android.animation.ValueAnimator.ofInt(startHeight, targetHeight);
         int fullDistance = Math.max(1, targetStatusBarHeightPx(capsule, false)
             - targetStatusBarHeightPx(capsule, true));
-        long settleDuration = Math.max(90L,
-            Math.round(260f * Math.abs(targetHeight - startHeight) / fullDistance));
-        mStatusBarCollapseAnimator.setDuration(settleDuration);
-        mStatusBarCollapseAnimator.setInterpolator(Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-            ? new android.view.animation.PathInterpolator(.16f, 1f, .3f, 1f)
-            : new android.view.animation.DecelerateInterpolator(1.8f));
-        mStatusBarCollapseAnimator.addUpdateListener(animation -> {
+        // The finger's speed toward the form it asked for, in whole ways a second; a release
+        // moving the other way lends the landing nothing.
+        float towardTarget = (collapsed ? -towardOpenVelocityPxPerSec : towardOpenVelocityPxPerSec)
+            / fullDistance;
+        long settleDuration = com.termux.app.statusbar.StatusBarFoldMotion.durationMs(
+            Math.abs(targetHeight - startHeight) / (float) fullDistance, towardTarget);
+        android.animation.ValueAnimator fold =
+            android.animation.ValueAnimator.ofInt(startHeight, targetHeight);
+        fold.setDuration(settleDuration);
+        fold.setInterpolator(com.termux.app.terminal.Motion.settle());
+        fold.addUpdateListener(animation -> {
             int height = (Integer) animation.getAnimatedValue();
             applyTopStatusBarInteractiveHeight(host, topWidgets, height, capsule);
         });
-        mStatusBarCollapseAnimator.addListener(new android.animation.AnimatorListenerAdapter() {
+        fold.addListener(new android.animation.AnimatorListenerAdapter() {
+            private boolean mCancelled;
+            @Override public void onAnimationCancel(android.animation.Animator animation) {
+                mCancelled = true;
+            }
             @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (mStatusBarCollapseAnimator == animation) mStatusBarCollapseAnimator = null;
+                if (mCancelled) {
+                    // Taken over — by a finger, another landing, or a new edge — from wherever the
+                    // bar stands: whoever took over owns its geometry now, and only the lease
+                    // this landing held is returned.
+                    finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
+                    return;
+                }
                 if (topWidgets != null) {
                     topWidgets.setClipBounds(null);
                     topWidgets.setAlpha(1f);
@@ -18414,12 +18477,60 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     topWidgets.setVisibility(collapsed || isStatusBarVertical()
                         ? View.GONE : View.VISIBLE);
                 }
-                mStatusBarCollapseAnimator = null;
                 refreshTerminalWindowBar();
                 finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
             }
         });
-        mStatusBarCollapseAnimator.start();
+        mStatusBarCollapseAnimator = fold;
+        fold.start();
+    }
+
+    /** Whether a finger or an animator is driving the bar's fold, and so owns its geometry. */
+    private boolean isStatusBarFoldInteractive() {
+        return mStatusBarCollapseAnimator != null || mStatusBarFoldDragging;
+    }
+
+    /** Stops a landing under way where it stands; its end listener returns its lease. */
+    private void cancelTopStatusBarAnimator() {
+        android.animation.ValueAnimator fold = mStatusBarCollapseAnimator;
+        if (fold == null) return;
+        mStatusBarCollapseAnimator = null;
+        fold.cancel();
+    }
+
+    /** Ends a finger's fold, returning the resize lease it held, or -1 when none was under way. */
+    private int endTopStatusBarDrag() {
+        if (!mStatusBarFoldDragging) return -1;
+        mStatusBarFoldDragging = false;
+        return mStatusBarFoldDragResizeGeneration;
+    }
+
+    /**
+     * A finger is folding the bar: it stands at the height the finger has taken it to, between
+     * its two forms ({@link com.termux.app.statusbar.StatusBarFoldMotion#heightForDrag}), and the
+     * release — {@link #setTopStatusBarCollapsed(boolean, boolean, float)} — lands it from there.
+     * The first frame takes the resize lease a landing would, so the panes hear one size at the
+     * landing rather than one a frame, and takes over from any landing still running.
+     */
+    private void dragTopStatusBar(float towardOpenPx) {
+        if (mPreferences == null || isChromeMinimal()
+            || !com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
+            return;
+        }
+        View host = findViewById(R.id.terminal_window_bar_host);
+        if (host == null) return;
+        View topWidgets = findViewById(R.id.terminal_top_widget_area);
+        boolean capsule = isRoundedDockStyle();
+        if (!mStatusBarFoldDragging) {
+            cancelTopStatusBarAnimator();
+            mStatusBarFoldDragging = true;
+            mStatusBarFoldDragStartHeight = currentTopStatusBarHeight(host);
+            mStatusBarFoldDragResizeGeneration = beginStatusBarTerminalResize();
+        }
+        int height = com.termux.app.statusbar.StatusBarFoldMotion.heightForDrag(
+            mStatusBarFoldDragStartHeight, towardOpenPx, targetStatusBarHeightPx(capsule, true),
+            targetStatusBarHeightPx(capsule, false));
+        applyTopStatusBarInteractiveHeight(host, topWidgets, height, capsule);
     }
 
     /** Refresh visibility, labels, selection and the shared dock/keyboard glass treatment. */
