@@ -106,3 +106,11 @@ main session; pong install only on the user's word.
 ## Out of scope
 - GPU inside a container, Electron sandbox handling (unchanged), Fedora/Alpine, launcherctl
   routes, storing any password.
+
+## Addendum 2026-09-28: the usage card
+
+See `project-docs/usage-mode/SPEC.md`. The run gains a `usage_mode` choice card between the last
+lesson and `home_choice`, with the three modes as its buttons (two in a build without the display);
+`RUN_VERSION` is 5 and a v4 run in progress is mapped by card name. The permissions card's Linux
+display row is shown only under the display mode; a fresh install is asked about the display by
+the usage card instead. Choosing Terminal drops `home_choice` from the rest of the run.

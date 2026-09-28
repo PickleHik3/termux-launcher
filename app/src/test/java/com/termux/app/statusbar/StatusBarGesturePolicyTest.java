@@ -115,6 +115,20 @@ public class StatusBarGesturePolicyTest {
             wallPolicy(false, true).move(60, 12));
     }
 
+    /** A wall of one place — terminal mode — leaves the fold its plain slop and dominance. */
+    @Test public void withNoWallTheFoldAsksForOneSlopNotTheWallsTwo() {
+        // From the down at (10, 10): nine across on a slop of eight, past the plain slop, short of
+        // the wall's doubled one.
+        assertEquals(StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE,
+            wallPolicy(false, false).move(14, 1));
+        assertEquals("the same drag with the wall in reach is still undecided",
+            StatusBarGesturePolicy.Claim.PENDING, wallPolicy(true, false).move(14, 1));
+        // And across need only beat along, not double it.
+        assertEquals(StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE,
+            wallPolicy(false, false).move(18, 0));
+        assertEquals(StatusBarGesturePolicy.Claim.PENDING, wallPolicy(true, false).move(18, 0));
+    }
+
     @Test public void theWallNeverStealsAVerticalDrag() {
         assertEquals(StatusBarGesturePolicy.Claim.COLLAPSE_SWIPE,
             wallPolicy(true, false).move(12, -60));

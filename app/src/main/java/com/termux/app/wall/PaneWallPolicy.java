@@ -35,11 +35,14 @@ public final class PaneWallPolicy {
 
     /**
      * The places this install has, in spatial order. The terminal is always there — it is the
-     * home screen.
+     * home screen. The usage mode decides the rest: terminal mode is the terminal alone; a home
+     * screen adds the Widgets place while the widget pane is on; the display mode adds the
+     * Display place. A place is on the wall only while its own switch is on — the Display place
+     * is not built at all while the display is off, whatever the build carries.
      *
-     * @param terminalOnly   the terminal-only use case: no home surfaces at all
-     * @param widgetsEnabled the widgets feature is on
-     * @param displayEnabled the embedded display is built in and switched on
+     * @param terminalOnly   the terminal-only usage mode: no home surfaces at all
+     * @param widgetsEnabled the widget pane is switched on
+     * @param displayEnabled the embedded display is built into this edition and switched on
      */
     @NonNull
     public static List<PaneWallPage> availablePages(boolean terminalOnly, boolean widgetsEnabled,

@@ -129,6 +129,20 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
+     * Take the Display place off the wall: the page's view goes, and the X view's native context
+     * goes with it when the view leaves the window. The wall is told about its places first, so
+     * one resting on the Display page hands over to the terminal while the page is still there.
+     */
+    public void detachDisplayPage() {
+        com.termux.app.x11.X11PaneFrame page = mDisplayPage;
+        if (page == null) return;
+        mDisplayPage = null;
+        refreshPages();
+        mWall.setPageView(PaneWallPage.DISPLAY, null);
+        mWall.removeView(page);
+    }
+
+    /**
      * Dress every non-terminal page from the surface style. The terminal pages dress themselves
      * through {@code TerminalPaneController}; this is the same pass for the rest of the wall, and
      * it runs on the same triggers — a wallpaper change, a blur change, an editor slider tick.

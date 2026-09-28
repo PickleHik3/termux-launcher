@@ -183,10 +183,11 @@ public final class StatusBarGesturePolicy {
             }
         } else if (aAlong > down.touchSlop && aAlong > aAcross) {
             // The wall takes the drag along the bar wherever it has a place to go: moving between
-            // the terminal and the places beside it is what a swipe along the bar means. With no
-            // wall — a terminal-only install — it means nothing; it used to fold and unfold the
-            // bar, and that older meaning surfacing under a wall drag is how a place change kept
-            // undoing the form the user had chosen.
+            // the terminal and the places beside it is what a swipe along the bar means. With a
+            // wall of one place — terminal mode, or a home screen with the widgets and the
+            // display switched off — the wall is not in reach, and the drag is the chip strip's
+            // to scroll: it never folds the bar, which is the drag across it, and that fold then
+            // asks for the plain slop rather than the wall's doubled one (the form gesture above).
             if (down.wallEligible) {
                 pagingDelta = along;
                 claim = Claim.WALL_PAGING;

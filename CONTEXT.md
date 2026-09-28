@@ -11,8 +11,10 @@ product model.
 
 **Place**:
 One of the three full-screen pages the launcher swipes between: Home (widgets), Terminal, Display.
-Layout and appearance are shared by all places (one layout per orientation). What differs per place
-is state only: whether the keyboard is up, and minimal mode.
+The usage mode decides which places exist: Terminal alone, Terminal with Home, or all three with
+the Display; a place that is off is not built at all. Layout and appearance are shared by all
+places (one layout per orientation). What differs per place is state only: whether the keyboard is
+up, and minimal mode.
 _Avoid_: screen, page, wall page, tab
 
 **Surface**:

@@ -6,6 +6,11 @@
         app:title="@string/settings_search_hint"
         app:persistent="false" />
 
+    <ListPreference
+        app:key="app_launcher_use_case_mode"
+        app:title="@string/settings_use_as_title"
+        app:dialogTitle="@string/settings_use_as_dialog_title" />
+
     <PreferenceCategory app:title="@string/settings_root_launcher_header">
 
         <Preference

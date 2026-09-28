@@ -137,8 +137,9 @@
 
 ### First launch
 
-- A fresh install opens on one card that asks for what the launcher needs — reading your wallpaper, the Linux display, the weather's location — a row each, with one Continue, instead of a stack of system prompts.
+- A fresh install opens on one card that asks for what the launcher needs — reading your wallpaper, the weather's location, and the Linux display when you already use it — a row each, with one Continue, instead of a stack of system prompts.
 - After it comes a welcome card and five short lessons that point at the real controls: where help is, pinning an app, the app drawer, the keyboard and the command palette.
+- After the lessons the tour asks how you will use Termux Launcher — the terminal alone, with the home screen, or with the Linux display too — and sets the launcher up that way; the terminal alone skips the home-screen question.
 - The closing card says where to go next for shortcuts, customising, extras and GUI apps.
 - Someone updating is offered the tour once, and can walk out of it at any card; Settings ▸ About & support ▸ Play the tour again starts it whenever you like.
 - Someone updating with an extra-keys row of their own is asked once whether to take the new one. Either way the other row is waiting under Settings ▸ Keyboard ▸ Extra keys ▸ Presets, as "Before the update".
@@ -152,6 +153,9 @@
 - The pull-down status pane is gone; the widget grid it held is the Widgets place of the home screen.
 - The status bar's own edge lines are gone; it wears the same thin rim as the dock.
 - Settings opens on a list of pages — Layout, Look, Terminal, Status bar, Keyboard, Display, Apps, Services & permissions, Advanced & diagnostics, About & support — with a search field over them. The Linux display has its own page rather than sitting under the apps one.
+- The first row of Settings, Use as, says what this install is: Terminal, Terminal + Home screen, or Terminal + Home screen + Linux display, each a preset you can adjust afterwards, with the row reading Custom once you have. It replaces the launcher / terminal-only switch that v0.2.39 put on the Launcher & apps page (its notes said Settings → Launcher & apps; the page was Apps).
+- A place that is switched off is really off: the terminal alone runs no app catalogue, no widget host and no display, and the Linux display is only built while its switch is on.
+- The Linux display switch on Settings ▸ Display takes effect when you come back to the launcher, and asks before a running display is stopped.
 - The shipped extra-keys row is keyboard, mouse, Widgets, Terminal, Display, split pane and session browser, with a second action on the swipe of the last three.
 - Keyboards that lie over a place — floating, split, and the docked keyboard on the Display and Widgets places — are solid panels in the theme's colour. The terminal's docked keyboard keeps its glass, and the Keyboard surface's opacity applies to it alone.
 - The magnifying loupe on a terminal hold is gone; a hold now aims the mouse, and a longer one opens Copy and Paste.
@@ -168,6 +172,7 @@
 - Swiping across the window pills no longer slides the next place in once the pills run out.
 - The clock's seconds keep one width, so the minutes and the cards beside them stop shifting every second.
 - The settings search keeps the cursor in the field while the list filters under it.
+- The Linux display switch on Settings ▸ Display changed nothing until the app was next started from cold.
 - Editing pinned apps: the search field and the app list stay above the keyboard, and the list scrolls instead of closing the editor.
 - A large custom wallpaper no longer freezes the launcher while its blur is prepared.
 - TAI's Add a model dialog keeps its Import and Cancel buttons on screen.

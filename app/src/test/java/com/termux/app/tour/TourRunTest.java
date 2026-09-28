@@ -15,8 +15,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The run as data: five lessons, a question and a closing card, each naming its own stages, copy,
- * controls and clearing signals.
+ * The run as data: five lessons, three questions and a closing card, each naming its own stages,
+ * copy, controls and clearing signals.
  *
  * <p>The rule the whole run is built on is asserted here rather than read: nothing in the basics
  * opens a shell, a window or a session, so no lesson may be cleared by a signal about one.
@@ -29,6 +29,9 @@ public class TourRunTest {
     private static final TourRun.RunContext HOME = new TourRun.RunContext(true, false);
     /** Someone updating who has a row of keys of their own and has not been asked about it. */
     private static final TourRun.RunContext OWN_ROW = new TourRun.RunContext(false, true, true);
+    /** A build made without the display server. */
+    private static final TourRun.RunContext NO_DISPLAY =
+        new TourRun.RunContext(false, true, false, false);
 
     private static TourStep step(String id) {
         return step(GUEST, id);
@@ -53,10 +56,11 @@ public class TourRunTest {
     }
 
     @Test
-    public void theRunIsTheFiveLessonsTheHomeQuestionAndTheClosingCardInOrder() {
-        assertEquals(8, TourRun.steps(GUEST).size());
+    public void theRunIsTheFiveLessonsTheThreeQuestionsAndTheClosingCardInOrder() {
+        assertEquals(9, TourRun.steps(GUEST).size());
         String[] order = {TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEY_ROW,
-            TourRun.KEYBOARD, TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING};
+            TourRun.KEYBOARD, TourRun.FIND_ACTION, TourRun.USAGE_MODE, TourRun.HOME_CHOICE,
+            TourRun.CLOSING};
         for (int i = 0; i < order.length; i++)
             assertEquals("card " + i, order[i], TourRun.steps(GUEST).get(i).id);
     }
@@ -261,6 +265,28 @@ public class TourRunTest {
             choice.actions());
     }
 
+    /** The usage question: three answers, or two in a build with no display to offer. */
+    @Test
+    public void theUsageQuestionOffersTheThreeModesRightBeforeTheHomeQuestion() {
+        TourStep card = step(GUEST, TourRun.USAGE_MODE);
+        assertEquals(TourStep.Kind.CHOICE, card.kind);
+        assertTrue(card.isChoiceCard());
+        assertEquals(0, card.signalCount());
+        assertEquals(TourTargets.NONE, card.targetIdAt(0));
+        assertEquals(Arrays.asList(TourAction.USE_TERMINAL, TourAction.USE_HOME,
+            TourAction.USE_DISPLAY), card.actions());
+        assertEquals(indexOf(GUEST, TourRun.HOME_CHOICE) - 1, indexOf(GUEST, TourRun.USAGE_MODE));
+        assertFalse(TourRun.lessons().contains(TourRun.USAGE_MODE));
+    }
+
+    @Test
+    public void aBuildWithoutTheDisplayOffersTwoModesAndSaysNothingOfTheThird() {
+        TourStep card = step(NO_DISPLAY, TourRun.USAGE_MODE);
+        assertEquals(Arrays.asList(TourAction.USE_TERMINAL, TourAction.USE_HOME), card.actions());
+        assertNotEquals(step(GUEST, TourRun.USAGE_MODE).copyRes, card.copyRes);
+        assertEquals(TourRun.steps(GUEST).size(), TourRun.steps(NO_DISPLAY).size());
+    }
+
     @Test
     public void aPhoneThatIsAlreadySetUpThisWayIsToldSoRatherThanAsked() {
         TourStep already = step(HOME, TourRun.HOME_CHOICE);
@@ -363,6 +389,7 @@ public class TourRunTest {
         for (String id : TourRun.lessons())
             assertTrue(id + " should be taught on the terminal", step(id).taughtOnTheTerminal());
         assertFalse(step(TourRun.KEY_ROW).taughtOnTheTerminal());
+        assertFalse(step(TourRun.USAGE_MODE).taughtOnTheTerminal());
         assertFalse(step(TourRun.HOME_CHOICE).taughtOnTheTerminal());
         assertFalse(step(TourRun.CLOSING).taughtOnTheTerminal());
     }
@@ -374,7 +401,7 @@ public class TourRunTest {
             steps.remove(0);
             throw new AssertionError("the run should not be editable");
         } catch (UnsupportedOperationException expected) {
-            assertEquals(8, TourRun.steps(GUEST).size());
+            assertEquals(9, TourRun.steps(GUEST).size());
         }
     }
 }
