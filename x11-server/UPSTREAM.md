@@ -112,6 +112,21 @@ screen is to own the server. See `project-docs/plans/pane-wall-x11-study.md`.
 - **`LorieView.onCursorNameChanged(String)` (new)** is the Java end of that event: it keeps the
   last name (`getCursorName()`) and forwards it to an optional `CursorNameListener`. Upstream has
   no such method, so a nightly merge must carry it forward with the native patch.
+- **`LorieView.nativeDestroy` and `surfaceChanged` are plain natives**, not `@FastNative` as
+  upstream declares them. Both block on the renderer thread (`Renderer::destroy` joins it,
+  `Renderer::setWindow` waits for it to release the EGL surface), and `@FastNative` keeps the
+  calling thread Runnable, which ART's suspend-all cannot stop. The renderer is a JNI-attached
+  thread that must pass a JNI transition to finish (`reportViewport`'s `CallVoidMethod`, and
+  `DetachCurrentThread` on its way out); with a GC pending it parks there until the suspend-all
+  completes, which needs the main thread to stop, which is joining the renderer. The runtime
+  aborts after its suspend timeout (`SuspendAll timeout; remaining threads: main`). Seen on a
+  Nothing Phone (2), Android 16, when a wallpaper change made the launcher `recreate()` with the
+  Display page attached; any recreate with the page attached can reach it. Upstream never sees
+  it because its activity holds the view for the life of the process. The native side is
+  untouched — the C signature of a `@FastNative` and a plain native are the same — so this needs
+  no rebuild of `libXlorie.so`. A nightly merge must keep the two annotations off. The remaining
+  `@FastNative` entries only take `stateLock` briefly or `write()` a socket; `sendTextEvent` sleeps
+  2.5 ms per character and is the one to watch if a long paste ever stalls the GC.
 - **`stub/`** is upstream's `shell-loader/stub` — compile-only declarations of the hidden
   framework classes `CmdEntryPoint` reaches for while it runs outside an app process.
 - Only `res/values/arrays.xml` and `res/xml/preferences.xml` are vendored from upstream's
