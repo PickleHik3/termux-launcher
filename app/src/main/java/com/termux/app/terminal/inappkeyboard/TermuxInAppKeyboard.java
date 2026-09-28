@@ -1276,6 +1276,10 @@ public final class TermuxInAppKeyboard {
         mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
         mTapCorrection.setLayoutId(mSelectedLayoutId);
         mKeyboardView.setTapResolver(mTapCorrection);
+        // Swipe down from the strip above the first row puts the keyboard away through the hide
+        // key's own path, so every place, dock and wall sees the hide it already knows.
+        mKeyboardView.setTopEdgeTouchDelegate(new KeyboardHideSwipeGesture(mKeyboardView,
+            () -> mVisible && !mHeightAdjusting, mHost::hideKeyboard));
         applyKeyboardToView(getSelectedLayoutData());
         applyCustomColorScheme();
         mHost.attachKeyboardView(mKeyboardView);

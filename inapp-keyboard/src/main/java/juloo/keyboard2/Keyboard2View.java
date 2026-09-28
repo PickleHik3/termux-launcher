@@ -128,6 +128,32 @@ public class Keyboard2View extends View
   private TapResolver _tapResolver;
   private TapGeometry _tapGeometry;
 
+  /**
+   * Host hook for presses that land in the strip above the first row of keys.
+   * Local addition, see UPSTREAM.md. Upstream treats that strip as no key at
+   * all (its slop begins at [Config.marginTopPx]); the host may claim a press
+   * there for a gesture of its own, after which the rest of that pointer's
+   * stream goes to the delegate and never reaches [Pointers]. A press on a key
+   * is never offered, so key swipes are untouched.
+   */
+  public interface TopEdgeTouchDelegate
+  {
+    /**
+     * A primary press landed above the drawn top of the first row's caps.
+     * [nullBandPx] is where upstream's key slop begins (the strip above it
+     * hits no key), [firstCapTopPx] where the first row's caps are drawn; both
+     * are view y coordinates. Return true to take the stream.
+     */
+    boolean onTopEdgeTouchDown(MotionEvent event, float nullBandPx,
+        float firstCapTopPx);
+
+    /** Every later event of a taken stream, up to and including UP or CANCEL. */
+    void onTopEdgeTouchEvent(MotionEvent event);
+  }
+
+  private TopEdgeTouchDelegate _topEdgeDelegate;
+  private boolean _topEdgeOwnsStream;
+
   private static final long PRESS_RAMP_MS = 60L;
   private static final long RELEASE_FADE_MS = 150L;
   private static final long LAUNCH_WAVE_TRAVEL_MS = 250L;
@@ -638,6 +664,65 @@ public class Keyboard2View extends View
     requireMainThread();
     _tapResolver = resolver;
     _tapGeometry = null;
+  }
+
+  /** Offer presses above the first row to [delegate]; null drops the hook. */
+  public void setTopEdgeTouchDelegate(TopEdgeTouchDelegate delegate)
+  {
+    requireMainThread();
+    _topEdgeDelegate = delegate;
+    _topEdgeOwnsStream = false;
+  }
+
+  /** Where upstream's key slop begins: above this y no key is hit. */
+  public float topEdgeNullBandPx()
+  {
+    return getPaddingTop() + _config.marginTopPx;
+  }
+
+  /**
+   * The y at which the first row's caps are drawn, mirroring [onDraw]: the
+   * slop between here and [topEdgeNullBandPx] presses the first row while
+   * showing no key. Falls back to the null band before measurement.
+   */
+  public float topEdgeFirstCapTopPx()
+  {
+    if (_keyboard == null || _tc == null || _keyboard.rows.isEmpty())
+      return topEdgeNullBandPx();
+    KeyboardData.Row first = _keyboard.rows.get(0);
+    return getPaddingTop() + _tc.margin_top + first.shift * _tc.row_height;
+  }
+
+  /**
+   * Routes a stream the top-edge delegate owns, or offers a fresh primary
+   * press above the first row's caps. Returns true when the event was the
+   * delegate's; false hands it to the ordinary key path.
+   */
+  private boolean onTopEdgeTouch(MotionEvent event)
+  {
+    if (_topEdgeDelegate == null)
+      return false;
+    int action = event.getActionMasked();
+    if (_topEdgeOwnsStream)
+    {
+      _topEdgeDelegate.onTopEdgeTouchEvent(event);
+      if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
+      {
+        _topEdgeOwnsStream = false;
+        requestDisallowIntercept(false);
+      }
+      return true;
+    }
+    if (action != MotionEvent.ACTION_DOWN)
+      return false;
+    float firstCapTop = topEdgeFirstCapTopPx();
+    if (event.getY() >= firstCapTop)
+      return false;
+    if (!_topEdgeDelegate.onTopEdgeTouchDown(event, topEdgeNullBandPx(), firstCapTop))
+      return false;
+    _topEdgeOwnsStream = true;
+    requestDisallowIntercept(true);
+    return true;
   }
 
   /** Opaque/translucent color used by an activity-owned navigation-inset continuation surface. */
@@ -1449,6 +1534,8 @@ public class Keyboard2View extends View
   {
     if (_keyPaintListener != null)
       return onPaintTouch(event);
+    if (onTopEdgeTouch(event))
+      return true;
     int p;
     switch (event.getActionMasked())
     {
@@ -2085,6 +2172,7 @@ public class Keyboard2View extends View
       _hintPulseWave = 0f;
     }
     resetInputStateInternal(true);
+    _topEdgeOwnsStream = false;
     requestDisallowIntercept(false);
     super.onDetachedFromWindow();
   }
