@@ -1166,4 +1166,28 @@ public class PlaceMiniatureViewTest {
         assertEquals("unsqueezed they keep the design's size", 2.2f,
             PlaceMiniatureView.gripDotRadiusPx(2.2f, 7.7f), 0.001f);
     }
+
+    // ---- The keyboard's form ----------------------------------------------------------------------
+
+    @Test
+    public void aFloatingKeyboardIsASmallerCardInsideItsBlock() {
+        RectF block = new RectF(0f, 300f, 200f, 380f);
+        RectF card = new RectF();
+        PlaceMiniatureView.floatingKeyboardCardInto(block, card);
+        assertTrue(card.width() < block.width() && card.height() < block.height());
+        assertEquals(block.centerX(), card.centerX(), 0.001f);
+        assertEquals(block.centerY(), card.centerY(), 0.001f);
+    }
+
+    @Test
+    public void aSplitKeyboardIsTwoHalvesWithThePartingBetween() {
+        RectF block = new RectF(0f, 300f, 200f, 380f);
+        RectF left = new RectF();
+        RectF right = new RectF();
+        PlaceMiniatureView.splitKeyboardHalvesInto(block, left, right);
+        assertEquals(block.left, left.left, 0.001f);
+        assertEquals(block.right, right.right, 0.001f);
+        assertTrue("a gap between the halves", right.left - left.right >= block.width() * 0.19f);
+        assertEquals(left.width(), right.width(), 0.001f);
+    }
 }

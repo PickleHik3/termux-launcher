@@ -259,6 +259,10 @@ public final class PlaceMiniatureView extends View {
     /** The one corner radius every band and the keyboard share, in design units. */
     private float mSurfaceRadiusU;
     private final Path mClipPath = new Path();
+    /** The floating keyboard's card, or a split keyboard's halves and the whole they cut. */
+    private final RectF mKeyboardPartA = new RectF();
+    private final RectF mKeyboardPartB = new RectF();
+    private final RectF mKeyboardWhole = new RectF();
     /** Reused scratch rects for whatever a draw call is computing right now; never read across
      *  two different shapes, only within one draw-then-move-on sequence. */
     private final RectF mScratchRectA = new RectF();
@@ -1838,11 +1842,75 @@ public final class PlaceMiniatureView extends View {
 
     // ---- Keyboard -----------------------------------------------------------------------------
 
-    /** The keyboard's block along the bottom of the phone, while the place shows one. */
+    /**
+     * The keyboard's block along the bottom of the phone, while the place shows one, drawn in the
+     * form the place types with: docked across the block, floating as a smaller card lifted off
+     * it, split as two halves with the parting between them. The block itself is the same in all
+     * three, so the drop targets around it do not move with the form.
+     */
     private void drawKeyboardBlock(@NonNull Canvas canvas) {
         if (mKeyboardRect.isEmpty()) return;
         cardOf(mKeyboardRect, mScratchRectC);
-        drawKeyboardCard(canvas, mScratchRectC);
+        PlaceLayout.KeyboardForm form = mLayout == null
+            ? PlaceLayout.KeyboardForm.DOCKED : mLayout.keyboardForm;
+        switch (form) {
+            case FLOATING: {
+                RectF card = mKeyboardPartA;
+                floatingKeyboardCardInto(mScratchRectC, card);
+                // The raise a lifted card wears, so it reads as over the place, not in it.
+                mScratchRectB.set(card);
+                mScratchRectB.offset(0f, u(LIFT_OFFSET_U) / 2f);
+                float radius = cardRadius(card);
+                mFillPaint.setColor(ColorUtils.setAlphaComponent(onVariant(), PLACEHOLDER_ALPHA));
+                canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
+                drawKeyboardCard(canvas, card);
+                break;
+            }
+            case SPLIT: {
+                RectF left = mKeyboardPartA;
+                RectF right = mKeyboardPartB;
+                splitKeyboardHalvesInto(mScratchRectC, left, right);
+                // The card pass reuses the scratch rects; the whole keyboard is held apart.
+                mKeyboardWhole.set(mScratchRectC);
+                drawKeyboardHalf(canvas, mKeyboardWhole, left);
+                drawKeyboardHalf(canvas, mKeyboardWhole, right);
+                break;
+            }
+            case DOCKED:
+            default:
+                drawKeyboardCard(canvas, mScratchRectC);
+                break;
+        }
+    }
+
+    /** The floating keyboard's card: 72% of the block's width and 82% of its height, centred. */
+    @VisibleForTesting
+    static void floatingKeyboardCardInto(@NonNull RectF block, @NonNull RectF out) {
+        float width = block.width() * 0.72f;
+        float height = block.height() * 0.82f;
+        out.set(block.centerX() - width / 2f, block.centerY() - height / 2f,
+            block.centerX() + width / 2f, block.centerY() + height / 2f);
+    }
+
+    /** The split keyboard's two halves: 40% of the block's width each, at its two ends. */
+    @VisibleForTesting
+    static void splitKeyboardHalvesInto(@NonNull RectF block, @NonNull RectF left,
+                                        @NonNull RectF right) {
+        float half = block.width() * 0.4f;
+        left.set(block.left, block.top, block.left + half, block.bottom);
+        right.set(block.right - half, block.top, block.right, block.bottom);
+    }
+
+    /** One half of a split keyboard: its own card, and the whole keyboard's keys that fall on it. */
+    private void drawKeyboardHalf(@NonNull Canvas canvas, @NonNull RectF whole,
+                                  @NonNull RectF half) {
+        int saved = canvas.save();
+        mClipPath.reset();
+        float radius = cardRadius(half);
+        mClipPath.addRoundRect(half, radius, radius, Path.Direction.CW);
+        canvas.clipPath(mClipPath);
+        drawKeyboardCard(canvas, whole, half);
+        canvas.restoreToCount(saved);
     }
 
     /**
@@ -1851,6 +1919,15 @@ public final class PlaceMiniatureView extends View {
      * 216x128 viewport and scaled to fit whatever card it is given.
      */
     private void drawKeyboardCard(@NonNull Canvas canvas, @NonNull RectF card) {
+        drawKeyboardCard(canvas, card, card);
+    }
+
+    /**
+     * The same, with the keys laid out over {@code keys} and the card drawn at {@code card}: a
+     * split half is the half's card with the whole keyboard's keys under its clip.
+     */
+    private void drawKeyboardCard(@NonNull Canvas canvas, @NonNull RectF keys,
+                                  @NonNull RectF card) {
         float radius = cardRadius(card);
         mFillPaint.setColor(surface());
         canvas.drawRoundRect(card, radius, radius, mFillPaint);
@@ -1863,10 +1940,10 @@ public final class PlaceMiniatureView extends View {
         mLinePaint.setStrokeWidth(u(CARD_STROKE_U));
         canvas.drawRoundRect(card, radius, radius, mLinePaint);
 
-        float k = Math.max(0.01f, Math.min(card.width() / KEYBOARD_DESIGN_W,
-            card.height() / KEYBOARD_DESIGN_H));
-        float x0 = card.centerX() - KEYBOARD_DESIGN_W * k / 2f;
-        float y0 = card.centerY() - KEYBOARD_DESIGN_H * k / 2f;
+        float k = Math.max(0.01f, Math.min(keys.width() / KEYBOARD_DESIGN_W,
+            keys.height() / KEYBOARD_DESIGN_H));
+        float x0 = keys.centerX() - KEYBOARD_DESIGN_W * k / 2f;
+        float y0 = keys.centerY() - KEYBOARD_DESIGN_H * k / 2f;
         mFillPaint.setColor(dim());
         // The grabber: the one part of the keyboard that is not a key, and not the layout grip.
         mScratchRectB.set(x0 + 90f * k, y0 + 8f * k, x0 + 126f * k, y0 + 11f * k);
