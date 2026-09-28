@@ -822,6 +822,19 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_POLISH_LEVEL = IN_APP_KEYBOARD_VOICE_POLISH_LEVEL_POLISHED;
 
         /**
+         * How readily quiet speech opens a phrase in on-device dictation: {@code normal} (the
+         * default, which keeps background talk out) or {@code high} (for speaking softly; it may
+         * hear a TV or a conversation close by). See {@code VoiceMicSensitivity}.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY = "keyboard_voice_mic_sensitivity";
+
+        public static final String IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY_NORMAL = "normal";
+
+        public static final String IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY_HIGH = "high";
+
+        public static final String DEFAULT_IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY = IN_APP_KEYBOARD_VOICE_MIC_SENSITIVITY_NORMAL;
+
+        /**
          * Defines the key for the absolute path of a user-imported label font file,
          * or an empty string for the system default typeface.
          */

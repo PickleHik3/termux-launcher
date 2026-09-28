@@ -82,10 +82,13 @@ public final class VoiceInputSession {
         public final boolean soundsEnabled;
         /** The keyboard's key-haptics setting, which the voice cues follow. */
         public final boolean hapticsEnabled;
+        /** The "Mic sensitivity" setting: how far quiet speech is lifted for the voiced decision. */
+        @NonNull public final VoiceMicSensitivity micSensitivity;
 
         public Config(@NonNull String modelId, @Nullable String language,
                       int pauseMs, int windowSeconds, int silenceTimeoutMs,
-                      boolean soundsEnabled, boolean hapticsEnabled) {
+                      boolean soundsEnabled, boolean hapticsEnabled,
+                      @NonNull VoiceMicSensitivity micSensitivity) {
             this.modelId = modelId;
             this.language = language;
             this.pauseMs = pauseMs;
@@ -93,6 +96,7 @@ public final class VoiceInputSession {
             this.silenceTimeoutMs = silenceTimeoutMs;
             this.soundsEnabled = soundsEnabled;
             this.hapticsEnabled = hapticsEnabled;
+            this.micSensitivity = micSensitivity;
         }
     }
 
@@ -276,8 +280,9 @@ public final class VoiceInputSession {
         // tone's lead-in, which is dropped anyway.
         long speechLoadStart = System.nanoTime();
         SileroVoiceDecider speech = SileroVad.openDecider(appContext);
-        Logger.logDebug(LOG_TAG, String.format(Locale.ROOT, "voiced decision: %s (%d ms to load)",
-            speech != null ? "silero" : "energy", (System.nanoTime() - speechLoadStart) / 1_000_000));
+        Logger.logDebug(LOG_TAG, String.format(Locale.ROOT, "voiced decision: %s (%d ms to load), mic sensitivity %s",
+            speech != null ? "silero" : "energy", (System.nanoTime() - speechLoadStart) / 1_000_000,
+            config.micSensitivity.storageValue));
         warmedPart();
         VoiceActivityDetector detector = new VoiceActivityDetector(new VoiceActivityDetector.Listener() {
             // One debug line per second of what the detector saw, for tuning it on a device.
@@ -316,7 +321,7 @@ public final class VoiceInputSession {
             public void onSilenceTimeout() {
                 stop(EndReason.SILENCE);
             }
-        }, config.pauseMs, config.windowSeconds, config.silenceTimeoutMs, speech);
+        }, config.pauseMs, config.windowSeconds, config.silenceTimeoutMs, speech, config.micSensitivity);
         // In front of the detector, not inside it: frames dropped here never reach the pre-roll.
         VoiceLeadInDiscard leadIn = new VoiceLeadInDiscard(
             feedback.playsTones() ? VoiceLeadInDiscard.START_TONE_MS : 0, VoiceActivityDetector.SAMPLE_RATE);

@@ -155,6 +155,7 @@ import com.termux.app.terminal.inappkeyboard.voice.VoiceDictation;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceInputSession;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceLanguage;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceListeningIndicator;
+import com.termux.app.terminal.inappkeyboard.voice.VoiceMicSensitivity;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceSessionCleanup;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceTextPolisher;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceTextSanitizer;
@@ -14071,7 +14072,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.getInAppKeyboardVoicePauseMs(), windowSeconds,
             mPreferences.getInAppKeyboardVoiceSilenceTimeoutMs(),
             mPreferences.isInAppKeyboardVoiceSoundsEnabled(),
-            mPreferences.isInAppKeyboardHapticsEnabled());
+            mPreferences.isInAppKeyboardHapticsEnabled(),
+            VoiceMicSensitivity.fromStorage(mPreferences.getInAppKeyboardVoiceMicSensitivity()));
         VoiceInputSession session = new VoiceInputSession(this, config, mVoiceInputHost);
         mVoiceSpeechWarming = true;
         if (!session.start()) {
