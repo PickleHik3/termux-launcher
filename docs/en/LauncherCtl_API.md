@@ -454,7 +454,7 @@ The embedder's `/v1/models` entry additionally carries `_endpoint_dimensions` (t
 | POST | `/api/embeddings` | Legacy alias: `{model, prompt}` in, `{embedding: [...]}` out |
 | POST | `/api/pull` `/api/create` `/api/push` `/api/copy` `/api/delete` | Return HTTP 501 (not emulated) |
 
-Ollama `/api/chat` and `/api/generate` stream newline-delimited JSON (NDJSON) by default. Ollama registry operations (`pull`, `create`, `push`, `copy`, `delete`) are not emulated because Ollama/GGUF packages are not LiteRT-LM or MNN packages. Install models from the TAI catalog or import flow instead.
+Ollama `/api/chat` and `/api/generate` stream newline-delimited JSON (NDJSON) by default. Ollama registry operations (`pull`, `create`, `push`, `copy`, `delete`) are not emulated because Ollama/GGUF packages are not LiteRT-LM or MNN packages. Install models from the On-device AI catalog or import flow instead.
 
 ### Model management
 
