@@ -3353,8 +3353,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void showTerminalActionHint(@NonNull String toolName) {
         LauncherToolRegistry.ToolMetadata tool = LauncherToolRegistry.getInstance().getTool(toolName);
         if (tool == null || tool.titleRes == 0 || tool.selfEvident) return;
+        // A place change names its destination for as long as the page is on its way there: the
+        // read-out comes up as the wall commits and is taken down by the settle
+        // (onWallPageSettled), so it reads as one motion with the page rather than a clock of its
+        // own. A second wall tool mid-slide swaps the label in place, and the same settle clears it.
+        if (LauncherToolRegistry.CATEGORY_WALL.equals(tool.category) && mPaneWallController != null
+                && mPaneWallController.wall().isMoving()) {
+            mWallReadoutShowing = true;
+            com.termux.app.notice.AppNotice.readout(this, getString(tool.titleRes),
+                WALL_READOUT_CEILING_MS);
+            return;
+        }
         com.termux.app.notice.AppNotice.readout(this, getString(tool.titleRes));
     }
+
+    /** A wall tool's read-out is up, naming the place the slide is heading for, until the settle. */
+    private boolean mWallReadoutShowing;
+    /** How long that read-out may stand without a settle to take it down. */
+    private static final long WALL_READOUT_CEILING_MS = 3000L;
 
     private int resolveAccessoryGlassBaseColor() {
         // In dark wallpaper mode the glass base deliberately reads the framework's Material You
@@ -16373,6 +16389,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (mPreferences != null) mPreferences.setWallLastPage(page.name());
                     dismissHelpOverlay();
                     if (mFirstBootTour != null) mFirstBootTour.onPlaceSettled(page.name());
+                    // The "Go to …" read-out lands with the page (showTerminalActionHint).
+                    if (mWallReadoutShowing) {
+                        mWallReadoutShowing = false;
+                        com.termux.app.notice.AppNotice.clearReadout(TermuxActivity.this);
+                    }
                 }
                 @Override public void onWallOffsetChanged(float offsetPx) {
                     Trace.beginSection("Wall.offsetChanged");
