@@ -112,6 +112,17 @@ public class TaiImportFlowTest {
     }
 
     @Test
+    public void anEagleDraftPackageLosesToAPlainBuildOfTheSameFit() throws Exception {
+        // A repo offering both an EAGLE-3 draft package and a plain build of the same size class:
+        // speculative decoding is off by default (measured slower on-device), so the plain file wins.
+        JSONArray candidates = new JSONArray()
+            .put(new JSONObject().put("file", "model-eagle3.mnn").put("sizeBytes", 2_000_000_000L).put("speculative", "eagle"))
+            .put(new JSONObject().put("file", "model.mnn").put("sizeBytes", 2_000_000_000L));
+        assertEquals(1, TaiImportFlow.preselect(candidates, 8L * GIB));
+        assertEquals(1, TaiImportFlow.preselect(candidates, 16L * GIB));
+    }
+
+    @Test
     public void gpuFailuresOfferTheProcessor() throws Exception {
         assertTrue(TaiImportFlow.gpuFailure(new JSONObject().put("error", "accelerator_not_supported_by_device")
             .put("message", "GPU delegate could not initialise")));

@@ -1135,8 +1135,7 @@
         <string name="termux_ai_import_cap_code">Code</string>
         <string name="termux_ai_import_cap_reasoning">Reasoning</string>
         <string name="termux_ai_import_cap_multilingual">Multilingual</string>
-        <string name="termux_ai_import_cap_speculative">Faster replies</string>
-        <string name="termux_ai_import_cap_speculative_detail">A small draft model predicts ahead; same answers, quicker.</string>
+        <string name="termux_ai_import_cap_speculative">Draft model (experimental)</string>
         <string name="termux_ai_import_no_capability">Tick at least one thing this model can do.</string>
         <string name="termux_ai_import_processor_label">Runs on</string>
         <string name="termux_ai_import_processor_auto">Let the app decide</string>
