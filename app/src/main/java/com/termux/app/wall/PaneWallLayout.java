@@ -23,7 +23,6 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 
 import com.termux.app.chrome.CornerZones;
-import com.termux.app.terminal.Motion;
 import com.termux.view.HoldTiming;
 
 import java.util.ArrayList;
@@ -44,8 +43,9 @@ import java.util.Map;
  * is the whole mechanism. The one touch the wall reads for itself is the border drag
  * ({@link BorderDrag}): a press held on the current page's border, then dragged sideways, which
  * is how a finger pages the wall on every place and in every mode — and, on the bottom border, a
- * vertical swipe without the hold, which opens and closes the keyboard. The window strip's
- * overswipe drives the same drag from outside.
+ * vertical swipe without the hold, which carries the keyboard up or down under the finger
+ * ({@link KeyboardReveal}) and is marked by a small grabber ({@link KeyboardGrabber}). The window
+ * strip's overswipe drives the same drag from outside.
  *
  * <p>Every page is laid out at the host's size and moved with {@code translationX}, so a page
  * change and a whole drag cost no layout work. Only the pages on screen are laid out at all: a
@@ -63,14 +63,23 @@ import java.util.Map;
 public final class PaneWallLayout extends ViewGroup {
 
     /**
-     * A slide is the terminal's own window pan: the same settle curve over the same time for a
-     * full width, shortened in proportion when the wall has less far to go, so a release near
-     * rest lands quickly and a tap from one place to the next travels like a window switch. The
-     * same time whatever the destination, too: the slide keeps its own clock
-     * ({@link WallSlideClock}), so the frames an arrival costs stretch it rather than skip it.
+     * A slide is a spring ({@link SettleSpring}) that starts where the finger let go and at the
+     * finger's own speed, so the release has no seam, and lands without passing its rest. From
+     * still — a tile, a key, {@code wall.go} — a whole width takes about the 560 ms the terminal's
+     * window pan takes; a flick is carried on by its own speed, and one thrown hard near its rest
+     * stiffens the spring rather than overshooting. The same time whatever the destination, too:
+     * the slide keeps its own clock ({@link WallSlideClock}), so the frames an arrival costs
+     * stretch it rather than skip it.
      */
-    private static final long SLIDE_FULL_MS = 560L;
-    private static final long SLIDE_MIN_MS = 180L;
+    static final float SLIDE_OMEGA = 18f;
+    static final float SLIDE_MAX_OMEGA = 60f;
+    /** How close to rest, in px, the slide counts as landed. */
+    private static final float SLIDE_REST_PX = 0.5f;
+    /**
+     * The fastest release, in px per second, the slide carries on from: a stray tracker reading
+     * is not a throw.
+     */
+    private static final float SLIDE_MAX_VELOCITY_PX_PER_SEC = 12000f;
     /**
      * How much longer than its way the slide's ticker is allowed to run before the slide is cut
      * short and settles where it stands: the ceiling under which a run of long frames can stretch
@@ -101,18 +110,39 @@ public final class PaneWallLayout extends ViewGroup {
          */
         default void onWallDragInterrupted() { }
         /**
-         * Whether the page a border drag pulls tips like a plank ({@link PlankTilt}) — Fancier
+         * Whether {@code page} tips like a plank ({@link PlankTilt}) under a border drag — Fancier
          * Glass, with the phone animating. Asked as the drag claims the finger, for the page the
-         * wall rests on.
+         * wall rests on and each page beside it, since the page arriving tips too.
          */
         default boolean isPlankTiltEnabled(@NonNull PaneWallPage page) { return false; }
         /**
          * Whether a vertical swipe off the current page's bottom border is the keyboard's
-         * ({@link BorderDrag#KEYBOARD_REACH_DP}); asked as each finger lands.
+         * ({@link BorderDrag#KEYBOARD_REACH_DP}); asked as each finger lands, and by the grabber
+         * that marks the border ({@link KeyboardGrabber}), which is drawn only while it is.
          */
         default boolean isBorderKeyboardSwipeEnabled() { return false; }
-        /** A swipe off the bottom border asked for the keyboard: up to open, down to close. */
+        /**
+         * A swipe off the bottom border asked for the keyboard, up to open and down to close:
+         * the release-only path, for a swipe the keyboard could not follow
+         * ({@link #onKeyboardRevealBegin} answered 0).
+         */
         default void onBorderKeyboardSwipe(boolean open) { }
+        /**
+         * A keyboard swipe was just claimed, going up ({@code opening}) or down: the keyboard
+         * is to follow the finger from here ({@link KeyboardReveal}). Answers the height in px
+         * the finger drives it over — the keyboard's own — or 0 where it cannot follow (a
+         * floating keyboard, the phone's own, one switched off, one already where the swipe
+         * points), and then the release asks through {@link #onBorderKeyboardSwipe} as it always
+         * has. Answering more than 0 takes the keyboard until {@link #onKeyboardRevealEnd}.
+         */
+        default int onKeyboardRevealBegin(boolean opening) { return 0; }
+        /** How much of the keyboard shows for this frame of the swipe or its settle, 0 to 1. */
+        default void onKeyboardRevealProgress(float reveal) { }
+        /**
+         * The keyboard the swipe drove came to rest, up ({@code open}) or down: where it began
+         * for a swipe let go short or cancelled, the other state for one that went through.
+         */
+        default void onKeyboardRevealEnd(boolean open) { }
         /**
          * The page a held border sank ({@link PageSink}) is drawn at {@code scale} about its
          * centre, 1 once it is back at rest: for chrome drawn outside the page that frames it.
@@ -158,11 +188,47 @@ public final class PaneWallLayout extends ViewGroup {
     /** True only inside {@link #cancelChildGesture()}: that cancel is the child's, not the stream's. */
     private boolean mCancellingChild;
     /**
-     * The page tipping under the drag ({@link PlankTilt}), from the drag's start to the wall's
-     * settle; null while no plank is engaged. Its angle is written beside its translation in
-     * {@link #applyPagePositions}, so the tilt and the slide are one motion.
+     * The places whose pages tip under this drag ({@link PlankTilt}): the one the wall rests on
+     * and the ones beside it that the listener lets tip, from the drag's claim to the wall's
+     * settle; empty while no plank is engaged.
      */
-    @Nullable private View mTiltPage;
+    private final java.util.EnumSet<PaneWallPage> mPlankPlaces =
+        java.util.EnumSet.noneOf(PaneWallPage.class);
+    /**
+     * Those places' pages that are tipping now, each on a hardware layer. A page joins once it
+     * has been laid out, since its pivot is its own centre. Their angles are written beside their
+     * translations in {@link #applyPagePositions}, so the tilt and the slide are one motion.
+     */
+    private final List<View> mTiltPages = new ArrayList<>(3);
+    /**
+     * The page the finger held and how far from its centre line it pressed, in px: the weight
+     * every plank leans toward ({@link PlankTilt#lean}). It stays where it pressed on that page,
+     * so after the lift it travels with the page and the planks keep leaning the same way while
+     * the settle lays them flat.
+     */
+    @Nullable private View mWeightPage;
+    private float mWeightOffsetPx;
+    /** The keyboard swipe's grabber on the current page's bottom border. */
+    @NonNull private final KeyboardGrabber mGrabber;
+    /** The wall offset and sink the grabber was last drawn for, so a still wall redraws nothing. */
+    private float mGrabberDrawnOffsetPx = Float.NaN;
+    private float mGrabberDrawnSink = Float.NaN;
+    /**
+     * The keyboard's height the finger drives the reveal over ({@link KeyboardReveal}), from a
+     * keyboard swipe the listener took ({@link Listener#onKeyboardRevealBegin}) until the settle
+     * lands; 0 while no reveal is engaged.
+     */
+    private int mRevealTravelPx;
+    /** Whether the keyboard was up when the engaged reveal began. */
+    private boolean mRevealFromOpen;
+    /** How much of the keyboard shows: 0 down, 1 up. */
+    private float mReveal;
+    /** The reveal, and the finger's y, the finger is measured from. */
+    private float mRevealStart;
+    private float mRevealAnchorY;
+    /** Where the settle running is taking the keyboard. */
+    private boolean mRevealTarget;
+    @Nullable private ValueAnimator mRevealSpring;
     /**
      * The page a held border sank ({@link PageSink}), from the hold's claim until it has sprung
      * back to rest after the lift, and its place; null while none is.
@@ -193,6 +259,7 @@ public final class PaneWallLayout extends ViewGroup {
         super(context, attrs);
         setClipChildren(false);
         setClipToPadding(false);
+        mGrabber = new KeyboardGrabber(this);
     }
 
     public void setListener(@Nullable Listener listener) {
@@ -211,7 +278,10 @@ public final class PaneWallLayout extends ViewGroup {
     public void setPageView(@NonNull PaneWallPage page, @Nullable View view) {
         View previous = mPageViews.get(page);
         if (previous != null && previous == mSinkPage && previous != view) finishSink();
-        if (previous != null && previous == mTiltPage && previous != view) releasePlank();
+        if (previous != null && previous != view && mTiltPages.contains(previous)) {
+            releasePlankPage(previous);
+        }
+        if (previous != null && previous != view && previous == mWeightPage) mWeightPage = null;
         if (view == null) mPageViews.remove(page);
         else mPageViews.put(page, view);
         applyPagePositions();
@@ -341,15 +411,20 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** Off while another surface owns the gesture (the surface editor, for one). */
     public void setGesturesEnabled(boolean enabled) {
+        boolean changed = enabled != mGesturesEnabled;
         mGesturesEnabled = enabled;
-        // A keyboard swipe under way asks for nothing once another surface owns the gesture.
+        // The grabber marks a gesture that is on: it goes and comes back with it.
+        if (changed) invalidate();
+        // A keyboard swipe under way asks for nothing once another surface owns the gesture, and
+        // a keyboard it was carrying lands at once where it was going.
         if (!enabled && mBorderDrag.isKeyboardSwipe()) mBorderDrag.abandon();
+        if (!enabled) settleKeyboardRevealNow();
         if (enabled || !mDragging) return;
         // The claimant is told to let go, and the wall goes back to rest on its own — nothing
         // else is going to release this drag now.
         interruptDrag();
         if (mReducedMotion) settleImmediately();
-        else startSlide();
+        else startSlide(0f);
     }
 
     public boolean areGesturesEnabled() {
@@ -360,8 +435,18 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** Go to {@code page}, sliding unless {@code animate} is false or motion is reduced. */
     public boolean goTo(@NonNull PaneWallPage page, boolean animate) {
+        return goTo(page, animate, 0f);
+    }
+
+    /**
+     * The same, with the slide starting at {@code velocityPxPerSec}: a released drag's own speed,
+     * so its settle carries on from the finger rather than from still.
+     */
+    private boolean goTo(@NonNull PaneWallPage page, boolean animate, float velocityPxPerSec) {
         if (!mPages.contains(page)) return false;
         interruptDrag();
+        // The wall is about to move: a keyboard still settling from a swipe lands first.
+        settleKeyboardRevealNow();
         if (page == mCurrent && mOffsetPx == 0f) return true;
         stopNudge();
         // Carry the current visual position across the page change: the new page's rest is one
@@ -376,7 +461,7 @@ public final class PaneWallLayout extends ViewGroup {
             finishSink();
             settleImmediately();
         } else {
-            startSlide();
+            startSlide(velocityPxPerSec);
         }
         return true;
     }
@@ -390,21 +475,24 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** Take a drag from outside — the window strip's overswipe. The page slides flat. */
     public void beginDrag() {
-        beginDrag(false);
+        beginDrag(false, 0f);
     }
 
     /**
-     * @param plank whether the page under the finger tips ({@link PlankTilt}), which is the
-     *              border drag's own motion: a finger on the pane's edge pressing it sideways
+     * @param plank whether the pages under the finger tip ({@link PlankTilt}), which is the
+     *              border drag's own motion: a finger on the pane's edge pressing its weight in
+     * @param fingerX where that finger pressed, in the wall's coordinates
      */
-    private void beginDrag(boolean plank) {
+    private void beginDrag(boolean plank, float fingerX) {
         if (!mGesturesEnabled) return;
         Trace.beginSection("Wall.beginDrag");
         try {
+            // A keyboard still settling from a swipe lands before the wall moves.
+            settleKeyboardRevealNow();
             mDragging = true;
             stopSlide();
             stopNudge();
-            if (plank) engagePlank();
+            if (plank) engagePlank(fingerX);
         } finally {
             Trace.endSection();
         }
@@ -431,16 +519,19 @@ public final class PaneWallLayout extends ViewGroup {
         mDragging = false;
         // The finger let go: a sunk page springs back up as the wall carries it.
         riseSink();
+        boolean previousExists = PaneWallPolicy.hasNeighbour(mPages, mCurrent, -1);
+        boolean nextExists = PaneWallPolicy.hasNeighbour(mPages, mCurrent, 1);
         int steps = PaneWallPolicy.settle(mOffsetPx, velocityPxPerSec, getWidth(),
-            getResources().getDisplayMetrics().density,
-            PaneWallPolicy.hasNeighbour(mPages, mCurrent, -1),
-            PaneWallPolicy.hasNeighbour(mPages, mCurrent, 1));
+            getResources().getDisplayMetrics().density, previousExists, nextExists);
+        // The wall's own speed at the release, which the settle carries on from.
+        float velocity = PaneWallPolicy.wallVelocity(mOffsetPx, velocityPxPerSec, previousExists,
+            nextExists);
         if (steps == 0) {
             if (mReducedMotion) settleImmediately();
-            else startSlide();
+            else startSlide(velocity);
             return;
         }
-        goBy(steps, true);
+        goTo(PaneWallPolicy.neighbour(mPages, mCurrent, steps), true, velocity);
     }
 
     /** The claimant let go without a release (its stream was cancelled). */
@@ -449,7 +540,7 @@ public final class PaneWallLayout extends ViewGroup {
         mDragging = false;
         riseSink();
         if (mReducedMotion) settleImmediately();
-        else startSlide();
+        else startSlide(0f);
     }
 
     /**
@@ -483,11 +574,20 @@ public final class PaneWallLayout extends ViewGroup {
      *
      * <p>The keyboard swipe is claimed the same way, by the move rather than by the timer: a
      * finger that sets off up or down from the bottom border before the hold is the keyboard's
-     * ({@link BorderDrag#move}), and its lift asks the listener to open or close it.
+     * ({@link BorderDrag#move}). Where the listener can move the keyboard with it, the keyboard
+     * follows the finger and the lift settles it ({@link KeyboardReveal}); elsewhere the lift
+     * asks the listener to open or close it.
      */
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
         if (mCancellingChild) return super.dispatchTouchEvent(event);
+        boolean handled = dispatchBorderTouch(event);
+        // The grabber answers whatever the event made of the finger on the band.
+        syncGrabberPress(event);
+        return handled;
+    }
+
+    private boolean dispatchBorderTouch(@NonNull MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 armBorderDrag(event);
@@ -500,6 +600,7 @@ public final class PaneWallLayout extends ViewGroup {
                 }
                 if (mBorderDrag.isKeyboardSwipe()) {
                     if (mBorderVelocity != null) mBorderVelocity.addMovement(event);
+                    trackKeyboardReveal(event.getY());
                     return true;
                 }
                 BorderDrag.Claim claim = mBorderDrag.move(event.getX(), event.getY());
@@ -544,8 +645,9 @@ public final class PaneWallLayout extends ViewGroup {
                     return true;
                 }
                 if (mBorderDrag.isKeyboardSwipe()) {
-                    // Cancelled from above: the keyboard stays as it was.
+                    // Cancelled from above: the keyboard goes back to how it was.
                     releaseBorderDrag();
+                    if (mRevealTravelPx > 0) settleKeyboardReveal(mRevealFromOpen, 0f);
                     return true;
                 }
                 break;
@@ -617,8 +719,10 @@ public final class PaneWallLayout extends ViewGroup {
         cancelChildGesture();
         performHapticFeedback(HapticFeedbackConstants.GESTURE_START);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+        // The hold made the finger the wall's, not the keyboard's: the grabber goes back to rest.
+        mGrabber.setPressed(false, 0f, mReducedMotion);
         mBorderVelocity = VelocityTracker.obtain();
-        beginDrag(true);
+        beginDrag(true, mBorderDownX);
         engageSink(mBorderDrag.border());
         dragTo(0f);
     }
@@ -647,8 +751,9 @@ public final class PaneWallLayout extends ViewGroup {
 
     /**
      * A finger set off up or down from the bottom border before the hold: the content is told its
-     * touch is over, exactly as for the border drag, and the rest of the stream is read here for
-     * its release. Nothing moves under it; the keyboard animates on its own once asked.
+     * touch is over, exactly as for the border drag, and the rest of the stream is read here.
+     * Where the listener can move the keyboard with the finger, it does from this move on
+     * ({@link #engageKeyboardReveal}); where it cannot, nothing moves until the release asks.
      */
     private void claimKeyboardSwipe(@NonNull MotionEvent event) {
         mHoldHandler.removeCallbacks(mHoldElapsed);
@@ -656,9 +761,14 @@ public final class PaneWallLayout extends ViewGroup {
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         mBorderVelocity = VelocityTracker.obtain();
         mBorderVelocity.addMovement(event);
+        engageKeyboardReveal(event.getY());
     }
 
-    /** The keyboard swipe's finger lifted: up opens the keyboard, down closes it, short is nothing. */
+    /**
+     * The keyboard swipe's finger lifted. A keyboard following the finger settles on the spring
+     * from where the finger left it, open or closed as {@link KeyboardReveal#settlesOpen} says;
+     * otherwise up opens the keyboard, down closes it, and short is nothing.
+     */
     private void releaseKeyboardSwipe(@NonNull MotionEvent event) {
         float velocity = 0f;
         if (mBorderVelocity != null) {
@@ -667,6 +777,15 @@ public final class PaneWallLayout extends ViewGroup {
             velocity = mBorderVelocity.getYVelocity();
         }
         float density = getResources().getDisplayMetrics().density;
+        if (mRevealTravelPx > 0) {
+            trackKeyboardReveal(event.getY());
+            float revealVelocity = KeyboardReveal.revealVelocity(velocity, mRevealTravelPx);
+            boolean open = KeyboardReveal.settlesOpen(mRevealFromOpen, mReveal, revealVelocity,
+                KeyboardReveal.FLING_DP_PER_SEC * density / mRevealTravelPx);
+            releaseBorderDrag();
+            settleKeyboardReveal(open, revealVelocity);
+            return;
+        }
         BorderDrag.KeyboardSwipe swipe = mBorderDrag.keyboardRelease(event.getY(), velocity,
             BorderDrag.KEYBOARD_COMMIT_DP * density,
             BorderDrag.KEYBOARD_FLING_DP_PER_SEC * density);
@@ -674,6 +793,215 @@ public final class PaneWallLayout extends ViewGroup {
         if (swipe != BorderDrag.KeyboardSwipe.NONE && mListener != null) {
             mListener.onBorderKeyboardSwipe(swipe == BorderDrag.KeyboardSwipe.OPEN);
         }
+    }
+
+    // ---- The keyboard under the finger -------------------------------------------------------
+
+    /**
+     * The keyboard swipe was claimed with the finger at {@code y}. A settle still running from the
+     * last swipe is taken back by this finger where it stands; otherwise the listener is asked
+     * whether the keyboard can follow ({@link Listener#onKeyboardRevealBegin}) — up opens, down
+     * closes — and from here the reveal is the finger's. Reduced motion follows nothing: the
+     * release asks, and the keyboard jumps.
+     */
+    private void engageKeyboardReveal(float y) {
+        if (mRevealTravelPx > 0) {
+            stopRevealSpring();
+            mRevealStart = mReveal;
+            mRevealAnchorY = y;
+            return;
+        }
+        if (mReducedMotion || mListener == null) return;
+        boolean opening = y < mBorderDownY;
+        int travel = mListener.onKeyboardRevealBegin(opening);
+        if (travel <= 0) return;
+        mRevealTravelPx = travel;
+        mRevealFromOpen = !opening;
+        mRevealTarget = mRevealFromOpen;
+        mReveal = opening ? 0f : 1f;
+        mRevealStart = mReveal;
+        // From where the finger landed, so the keyboard is already as far along as the finger.
+        mRevealAnchorY = mBorderDownY;
+        trackKeyboardReveal(y);
+    }
+
+    /**
+     * One move of the keyboard swipe's finger: the reveal is where the finger says, and crossing
+     * the point past which the release would go on (or back) is felt as one light tick.
+     */
+    private void trackKeyboardReveal(float y) {
+        if (mRevealTravelPx <= 0) return;
+        float before = mReveal;
+        float reveal = KeyboardReveal.reveal(mRevealStart, y - mRevealAnchorY, mRevealTravelPx);
+        if (KeyboardReveal.crossesCommit(mRevealFromOpen, before, reveal)) {
+            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        }
+        setReveal(reveal);
+    }
+
+    private void setReveal(float reveal) {
+        if (reveal == mReveal) return;
+        mReveal = reveal;
+        if (mListener != null) mListener.onKeyboardRevealProgress(reveal);
+    }
+
+    /**
+     * Settle the keyboard up ({@code open}) or down on a spring that starts where the reveal
+     * stands and at {@code velocityPerSec}, the finger's own speed in the reveal's units. The
+     * animator is only the ticker; the spring says where the reveal is at each frame, on the
+     * slide's own bounded clock ({@link WallSlideClock}), and landing hands the keyboard back.
+     */
+    private void settleKeyboardReveal(final boolean open, float velocityPerSec) {
+        stopRevealSpring();
+        if (mRevealTravelPx <= 0) return;
+        mRevealTarget = open;
+        final float target = open ? 1f : 0f;
+        if (mReducedMotion || (mReveal == target && velocityPerSec == 0f)) {
+            endKeyboardReveal();
+            return;
+        }
+        final SettleSpring spring = SettleSpring.of(mReveal - target, velocityPerSec,
+            KeyboardReveal.SETTLE_OMEGA, KeyboardReveal.SETTLE_MAX_OMEGA);
+        final long duration = spring.durationMs(KeyboardReveal.SETTLE_REST_PX / mRevealTravelPx);
+        ValueAnimator ticker = ValueAnimator.ofFloat(0f, 1f);
+        ticker.setDuration(duration * SLIDE_STRETCH_CEILING);
+        ticker.setInterpolator(null);
+        ticker.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            private long mLastPlayTimeMs;
+            private long mElapsedMs;
+            private boolean mEnding;
+
+            @Override public void onAnimationUpdate(ValueAnimator animation) {
+                if (mEnding) return;
+                long playTime = animation.getCurrentPlayTime();
+                mElapsedMs = WallSlideClock.advance(mElapsedMs, playTime - mLastPlayTimeMs);
+                mLastPlayTimeMs = playTime;
+                float reveal = target + spring.displacementAt(Math.min(duration, mElapsedMs)
+                    / 1000f);
+                setReveal(Math.max(0f, Math.min(1f, reveal)));
+                if (mElapsedMs >= duration && mRevealSpring == animation) {
+                    mEnding = true;
+                    animation.end();
+                }
+            }
+        });
+        ticker.addListener(new AnimatorListenerAdapter() {
+            private boolean mCancelled;
+            @Override public void onAnimationCancel(Animator animation) { mCancelled = true; }
+            @Override public void onAnimationEnd(Animator animation) {
+                if (mRevealSpring == animation) mRevealSpring = null;
+                if (!mCancelled) endKeyboardReveal();
+            }
+        });
+        mRevealSpring = ticker;
+        ticker.start();
+    }
+
+    private void stopRevealSpring() {
+        ValueAnimator spring = mRevealSpring;
+        mRevealSpring = null;
+        if (spring != null) spring.cancel();
+    }
+
+    /** The reveal is where it was going: the keyboard is the listener's again. */
+    private void endKeyboardReveal() {
+        stopRevealSpring();
+        if (mRevealTravelPx <= 0) return;
+        boolean open = mRevealTarget;
+        mRevealTravelPx = 0;
+        setReveal(open ? 1f : 0f);
+        if (mListener != null) mListener.onKeyboardRevealEnd(open);
+    }
+
+    /**
+     * Land a keyboard the finger is carrying, or a settle still running, at once: the settle's
+     * own destination, or where the swipe began for a finger still down, whose rest is then
+     * swallowed. For whatever is about to move the chrome another way — the wall, another surface
+     * taking the gestures, the place's own settle.
+     */
+    public void settleKeyboardRevealNow() {
+        if (mRevealTravelPx <= 0) return;
+        if (mBorderDrag.isKeyboardSwipe()) {
+            mBorderDrag.abandon();
+            mRevealTarget = mRevealFromOpen;
+        } else if (mRevealSpring == null) {
+            mRevealTarget = mRevealFromOpen;
+        }
+        endKeyboardReveal();
+    }
+
+    /** True from a keyboard swipe the listener let the keyboard follow until it has landed. */
+    public boolean isKeyboardRevealEngaged() {
+        return mRevealTravelPx > 0;
+    }
+
+    /** How much of the keyboard the engaged reveal shows, for tests. */
+    float keyboardReveal() {
+        return mReveal;
+    }
+
+    // ---- The grabber -------------------------------------------------------------------------
+
+    /**
+     * Whether the grabber is drawn: while the keyboard swipe is on and the wall's gestures are
+     * its own.
+     */
+    boolean isGrabberShown() {
+        return mGesturesEnabled && mListener != null && mListener.isBorderKeyboardSwipeEnabled();
+    }
+
+    /**
+     * A finger on the keyboard swipe's band — pending there or holding the swipe — lights the
+     * grabber and draws it a little way along; anything else puts it back at rest.
+     */
+    private void syncGrabberPress(@NonNull MotionEvent event) {
+        boolean pressed = mBorderDrag.isKeyboardSwipe()
+            || (mBorderDrag.claim() == BorderDrag.Claim.PENDING && mBorderDrag.isKeyboardEligible());
+        float dy = pressed && mBorderDrag.isKeyboardSwipe() ? event.getY() - mBorderDownY : 0f;
+        mGrabber.setPressed(pressed && isGrabberShown(), dy, mReducedMotion);
+    }
+
+    /** Re-read the grabber's accent, after a theme or scheme change. */
+    public void refreshGrabberColor() {
+        mGrabber.refreshColor();
+    }
+
+    /** The grabber, for tests. */
+    @NonNull
+    KeyboardGrabber grabber() {
+        return mGrabber;
+    }
+
+    /**
+     * The pages first, then the grabber over the bottom border of each page on screen: faded with
+     * the page's own outline as it leaves its rest, so a slide shows one, and scaled with a sunk
+     * page about its centre, so it stays on the edge it marks.
+     */
+    @Override
+    protected void dispatchDraw(android.graphics.Canvas canvas) {
+        super.dispatchDraw(canvas);
+        mGrabberDrawnOffsetPx = mOffsetPx;
+        mGrabberDrawnSink = mSink;
+        if (!isGrabberShown()) return;
+        int width = getWidth();
+        for (PaneWallPage place : mPages) {
+            View page = mPageViews.get(place);
+            if (page == null || page.getVisibility() != VISIBLE || page.getWidth() <= 0) continue;
+            float visibility = PaneWallPolicy.pageOutlineAlpha(page.getTranslationX(), width);
+            if (!(visibility > 0f)) continue;
+            float centreX = page.getLeft() + page.getTranslationX() + page.getPivotX()
+                + (page.getWidth() / 2f - page.getPivotX()) * page.getScaleX();
+            float bottomY = page.getTop() + page.getTranslationY() + page.getPivotY()
+                + (page.getHeight() - page.getPivotY()) * page.getScaleY();
+            mGrabber.draw(canvas, centreX, bottomY, page.getScaleY(), visibility);
+        }
+    }
+
+    /** The grabber follows its page: a frame that moved the wall or sank the page redraws it. */
+    private void invalidateGrabberIfMoved() {
+        if (!isGrabberShown()) return;
+        if (mOffsetPx == mGrabberDrawnOffsetPx && mSink == mGrabberDrawnSink) return;
+        invalidate();
     }
 
     private void releaseBorderDrag() {
@@ -694,36 +1022,78 @@ public final class PaneWallLayout extends ViewGroup {
     // ---- The plank ---------------------------------------------------------------------------
 
     /**
-     * A border drag claimed the finger: the page the wall rests on becomes the plank, if the
-     * listener lets it, until the settle lays it flat. A hardware layer for the length of the
-     * motion, so the page — a screen of glyphs and glass — is drawn flat once per change and the
-     * tilt is a textured quad per frame rather than every glyph re-rendered under a perspective
-     * matrix.
+     * A border drag claimed the finger at {@code fingerX}: the page the wall rests on and the
+     * pages beside it become planks, each one the listener lets tip, until the settle lays them
+     * flat — the page arriving tips with the page leaving, toward the same finger. The Display
+     * page never does (see {@code PaneWallController#isPlankTiltEnabled}). Each tipping page is on
+     * a hardware layer for the length of the motion, so a screen of glyphs and glass is drawn flat
+     * once per change and the tilt is a textured quad per frame rather than every glyph
+     * re-rendered under a perspective matrix.
      */
-    private void engagePlank() {
-        if (mReducedMotion || getWidth() <= 0) return;
-        if (mListener == null || !mListener.isPlankTiltEnabled(mCurrent)) return;
-        View page = mPageViews.get(mCurrent);
-        if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
-        if (page == mTiltPage) return;
-        // A plank still lying down on the page the last drag left is laid flat first.
+    private void engagePlank(float fingerX) {
+        if (mReducedMotion || getWidth() <= 0 || mListener == null) return;
+        View held = mPageViews.get(mCurrent);
+        if (held == null || held.getWidth() <= 0 || held.getHeight() <= 0) return;
+        // Planks still lying down from the last drag are laid flat first.
         releasePlank();
-        mTiltPage = page;
-        page.setPivotX(page.getWidth() / 2f);
-        page.setPivotY(page.getHeight() / 2f);
-        page.setCameraDistance(PlankTilt.CAMERA_DISTANCE_DP
-            * getResources().getDisplayMetrics().density);
-        syncPageLayer(page);
+        for (int steps = -1; steps <= 1; steps++) {
+            PaneWallPage place = PaneWallPolicy.neighbour(mPages, mCurrent, steps);
+            if (steps != 0 && place == mCurrent) continue;
+            // Never the Display page, whatever the listener says: its picture is a SurfaceView,
+            // which a rotation leaves flat and a layer would strand (as for the sink's dim).
+            if (place == PaneWallPage.DISPLAY) continue;
+            if (mListener.isPlankTiltEnabled(place)) mPlankPlaces.add(place);
+        }
+        if (mPlankPlaces.isEmpty()) return;
+        // The weight stays where it pressed on the page it held.
+        mWeightPage = held;
+        mWeightOffsetPx = fingerX - (held.getLeft() + held.getTranslationX() + held.getWidth() / 2f);
+        applyPlanks();
     }
 
     /**
-     * The wall is at rest and any sunk page is back up, or the plank's page is going away: flat,
-     * and the layer dropped unless the sink still dims it.
+     * Every engaged place's page at the angle its position and the finger's weight say
+     * ({@link PlankTilt}), plus the held side's press on a sunk page. A page joins the planks the
+     * first time it has a size, since it tips about its own centre.
+     */
+    private void applyPlanks() {
+        if (mPlankPlaces.isEmpty()) return;
+        int width = getWidth();
+        View weightPage = mWeightPage;
+        float weightPx = (weightPage == null ? 0f : weightPage.getTranslationX()) + mWeightOffsetPx;
+        for (PaneWallPage place : mPlankPlaces) {
+            View page = mPageViews.get(place);
+            if (page == null || !mPages.contains(place)) continue;
+            if (!mTiltPages.contains(page)) {
+                if (page.getWidth() <= 0 || page.getHeight() <= 0) continue;
+                mTiltPages.add(page);
+                page.setPivotX(page.getWidth() / 2f);
+                page.setPivotY(page.getHeight() / 2f);
+                page.setCameraDistance(PlankTilt.CAMERA_DISTANCE_DP
+                    * getResources().getDisplayMetrics().density);
+                syncPageLayer(page);
+            }
+            float x = page.getTranslationX();
+            boolean sunk = page == mSinkPage;
+            page.setRotationY(PlankTilt.angleDeg(x, width, PlankTilt.lean(x, weightPx, width),
+                sunk ? mSinkSide : 0, sunk ? mSink : 0f));
+        }
+    }
+
+    /**
+     * The wall is at rest and any sunk page is back up: every plank flat, and each layer dropped
+     * unless the sink still dims that page.
      */
     private void releasePlank() {
-        View page = mTiltPage;
-        if (page == null) return;
-        mTiltPage = null;
+        mPlankPlaces.clear();
+        mWeightPage = null;
+        mWeightOffsetPx = 0f;
+        while (!mTiltPages.isEmpty()) releasePlankPage(mTiltPages.get(mTiltPages.size() - 1));
+    }
+
+    /** One plank's page is going away, or the planks are laid down: flat, and its layer settled. */
+    private void releasePlankPage(@NonNull View page) {
+        mTiltPages.remove(page);
         page.setRotationY(0f);
         syncPageLayer(page);
     }
@@ -734,17 +1104,17 @@ public final class PaneWallLayout extends ViewGroup {
      */
     private void syncPageLayer(@NonNull View page) {
         boolean dimmed = page == mSinkPage && mSinkLayered;
-        if (page == mTiltPage || dimmed) {
+        if (mTiltPages.contains(page) || dimmed) {
             page.setLayerType(View.LAYER_TYPE_HARDWARE, dimmed ? mSinkPaint : null);
         } else {
             page.setLayerType(View.LAYER_TYPE_NONE, null);
         }
     }
 
-    /** The page tipping under a drag, for tests; null while none is. */
-    @Nullable
-    View tiltPage() {
-        return mTiltPage;
+    /** The pages tipping under a drag, for tests; empty while none is. */
+    @NonNull
+    List<View> tiltPages() {
+        return Collections.unmodifiableList(new ArrayList<>(mTiltPages));
     }
 
     // ---- The sink ----------------------------------------------------------------------------
@@ -828,10 +1198,8 @@ public final class PaneWallLayout extends ViewGroup {
         page.setScaleX(scale);
         page.setScaleY(scale);
         if (mSinkLayered) applySinkDim(page, sink);
-        if (page == mTiltPage) {
-            page.setRotationY(PlankTilt.angleDeg(page.getTranslationX(), getWidth(), mSinkSide,
-                sink));
-        }
+        if (mTiltPages.contains(page)) applyPlanks();
+        invalidateGrabberIfMoved();
         if (mListener != null && mSinkPlace != null) mListener.onPageSinkChanged(mSinkPlace, scale);
     }
 
@@ -877,10 +1245,11 @@ public final class PaneWallLayout extends ViewGroup {
         mSinkPaint.setColorFilter(null);
         page.setScaleX(1f);
         page.setScaleY(1f);
-        if (page == mTiltPage) {
-            page.setRotationY(PlankTilt.angleDeg(page.getTranslationX(), getWidth()));
-        }
-        if (layered || page == mTiltPage) syncPageLayer(page);
+        boolean tipping = mTiltPages.contains(page);
+        // The press lies down with the sink; the travel's own tip stays where the wall is.
+        if (tipping) applyPlanks();
+        if (layered || tipping) syncPageLayer(page);
+        invalidateGrabberIfMoved();
         if (mListener != null && place != null) mListener.onPageSinkChanged(place, 1f);
         if (!isMoving()) releasePlank();
     }
@@ -898,17 +1267,22 @@ public final class PaneWallLayout extends ViewGroup {
 
     // ---- Motion ----------------------------------------------------------------------------
 
-    private void startSlide() {
+    /**
+     * Slide the wall from where it stands to its rest on the settle spring ({@link SettleSpring}),
+     * starting at {@code velocityPxPerSec}: a released finger's own speed, or 0 for a slide with
+     * no finger on it. Any planks ride the same motion, since their angle is the pages' position.
+     */
+    private void startSlide(float velocityPxPerSec) {
         if (mOffsetPx == 0f) {
             settleImmediately();
             return;
         }
         stopSlide();
-        int width = Math.max(1, getWidth());
-        float fraction = Math.min(1f, Math.abs(mOffsetPx) / width);
-        final long duration = Math.max(SLIDE_MIN_MS, Math.round(SLIDE_FULL_MS * fraction));
-        final float from = mOffsetPx;
-        final android.view.animation.Interpolator curve = Motion.settle();
+        float velocity = Math.max(-SLIDE_MAX_VELOCITY_PX_PER_SEC,
+            Math.min(SLIDE_MAX_VELOCITY_PX_PER_SEC, velocityPxPerSec));
+        final SettleSpring spring = SettleSpring.of(mOffsetPx, velocity, SLIDE_OMEGA,
+            SLIDE_MAX_OMEGA);
+        final long duration = spring.durationMs(SLIDE_REST_PX);
         // The animator is the ticker only. The slide reads its own clock off the ticker's play
         // time, a bounded step per frame (WallSlideClock), so the first frame — which pre-rolls
         // the arriving place's chrome and lays its page out — cannot swallow the take-off. The
@@ -927,8 +1301,8 @@ public final class PaneWallLayout extends ViewGroup {
                 long playTime = animation.getCurrentPlayTime();
                 mElapsedMs = WallSlideClock.advance(mElapsedMs, playTime - mLastPlayTimeMs);
                 mLastPlayTimeMs = playTime;
-                float t = curve.getInterpolation(WallSlideClock.fraction(mElapsedMs, duration));
-                mOffsetPx = from * (1f - t);
+                mOffsetPx = mElapsedMs >= duration ? 0f
+                    : spring.displacementAt(mElapsedMs / 1000f);
                 applyPagePositions();
                 if (mElapsedMs >= duration && mSlide == animation) {
                     mEnding = true;
@@ -1010,14 +1384,6 @@ public final class PaneWallLayout extends ViewGroup {
                 * (float) width + mOffsetPx
                 + (entry.getKey() == mNudgePage ? mNudgePx : 0f);
             view.setTranslationX(x);
-            // The plank's angle is a function of where the page stands, so the drag, the spring
-            // back and the carry-out all read the same number and it is flat wherever it rests —
-            // plus the held side's press, while the page is sunk.
-            if (view == mTiltPage) {
-                boolean sunk = view == mSinkPage;
-                view.setRotationY(PlankTilt.angleDeg(x, width, sunk ? mSinkSide : 0,
-                    sunk ? mSink : 0f));
-            }
             boolean onScreen = width <= 0 || Math.abs(x) < width;
             if (entry.getKey() == PaneWallPage.TERMINAL) {
                 view.setVisibility(VISIBLE);
@@ -1037,6 +1403,12 @@ public final class PaneWallLayout extends ViewGroup {
                 if (onScreen && !wasOnScreen && !isInLayout()) view.requestLayout();
             }
         }
+        // The planks' angles are a function of where the pages stand, so the drag, the spring
+        // back and the carry-out all read the same number and they are flat wherever they rest —
+        // plus the held side's press, while the page is sunk. After every page has moved, since
+        // each leans toward the weight on the page the finger held.
+        applyPlanks();
+        invalidateGrabberIfMoved();
         if (mListener != null) mListener.onWallOffsetChanged(mOffsetPx);
     }
 
@@ -1134,8 +1506,11 @@ public final class PaneWallLayout extends ViewGroup {
         mSliding = false;
         stopSlide();
         stopNudge();
+        // A keyboard the finger or its settle was carrying lands where it was going.
+        settleKeyboardRevealNow();
         releaseBorderDrag();
         finishSink();
         releasePlank();
+        mGrabber.reset();
     }
 }

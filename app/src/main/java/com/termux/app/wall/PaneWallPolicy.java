@@ -182,6 +182,21 @@ public final class PaneWallPolicy {
     }
 
     /**
+     * How fast the wall itself is moving for a finger released at {@code velocityPxPerSec},
+     * which is what its settle carries on from: the finger's own speed, except toward a page
+     * that does not exist, where the wall only ever took {@link #EDGE_RESISTANCE} of the finger's
+     * travel ({@link #offsetForDrag}) and so of its speed too.
+     *
+     * @param offsetPx the wall's offset at the release, as {@link #offsetForDrag} returned it
+     */
+    public static float wallVelocity(float offsetPx, float velocityPxPerSec,
+                                     boolean previousExists, boolean nextExists) {
+        if (Float.isNaN(velocityPxPerSec)) return 0f;
+        boolean resisting = offsetPx > 0f ? !previousExists : offsetPx < 0f && !nextExists;
+        return resisting ? velocityPxPerSec * EDGE_RESISTANCE : velocityPxPerSec;
+    }
+
+    /**
      * How much of every page's outline shows for the wall standing {@code offsetPx} from a rest,
      * 0 to 1: all of it at either rest, none once the wall is {@link #OUTLINE_FADE_FRACTION} of a
      * width from both. A function of position alone, so a drag, a fling, a reversal and the

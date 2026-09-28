@@ -92,14 +92,19 @@ finger, and the page rises again as you let go. A short drag returns to the plac
 while a longer one, or a quick flick, lands on the next place. The corners are not the border;
 they hold the corner tab. A tap, or a sideways swipe on the border without the hold, is the page's
 own — a program's mouse drag, a scroll, a text selection — so nothing under it changes. The same
-gesture works in every mode, minimal mode included, and with Fancier Glass on the page tips like a
-plank under your finger as it goes, then lies flat on the place that arrives; the Display place
-slides without the tip.
+gesture works in every mode, minimal mode included, and with Fancier Glass on the page you hold and
+the page coming in both tip toward your finger, as if it were pressing into them, then lie flat as
+the new place settles; the Display place slides without the tip. The slide after you let go keeps
+your finger's speed, so a flick carries through and a slow drag eases in.
 
-The bottom border also opens and closes the keyboard: swipe up from it to bring the keyboard up,
-and down from it to put the keyboard away. No hold, just a short swipe that starts on the line or
-just below it. It works on every place and in every mode, minimal mode included, and it turns the
-keyboard back on if you switched it off, so there is always a way back to it.
+The bottom border also opens and closes the keyboard, and a small pill in the middle of it marks
+the spot. Swipe up from it and the keyboard rises with your finger; swipe down and it goes down
+with it. No hold, just a swipe that starts on the line or just below it. Let go past about a third
+of the way, or with a quick flick, and it finishes on its own; let go earlier and it goes back. A
+light tick tells you when you have gone far enough. It works on every place and in every mode,
+minimal mode included, and it turns the keyboard back on if you switched it off, so there is
+always a way back to it. A floating keyboard, or Android's own, opens and closes when you let go
+instead of following your finger.
 
 The dock's rows normally stand over the keyboard. In the Layout editor you can drop the apps row,
 the A–Z index or the extra keys into the slot under the keyboard instead, so they stay at the
@@ -353,7 +358,8 @@ Open **Settings → Keyboard** to change input method, layouts, typing, feedback
 Look** now.
 
 Swipe up from the bottom border of the terminal, the widgets or the display to open the keyboard,
-and swipe down from it to put the keyboard away. A hidden keyboard also comes back the next time
+and swipe down from it to put the keyboard away; the keyboard follows your finger as you swipe.
+A hidden keyboard also comes back the next time
 you tap the terminal. To keep it shut, run **Keyboard
 on/off** from the command palette, or put `tool:keyboard.toggle_enabled` on the extra-keys row.
 While the keyboard is off, taps and text fields no longer open it, and it stays off after a

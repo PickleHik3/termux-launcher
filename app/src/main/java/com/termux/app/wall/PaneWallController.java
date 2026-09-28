@@ -47,16 +47,28 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         default void onWallOutlineAlphaChanged(float alpha) { }
         /**
-         * Whether a page pulled by a border drag tips like a plank ({@link PlankTilt}): Fancier
+         * Whether the pages a border drag pulls tip like planks ({@link PlankTilt}): Fancier
          * Glass on, with the phone animating. Asked as the drag claims the finger.
          */
         default boolean isPlankTiltEnabled() { return false; }
         /**
          * A vertical swipe off the page's bottom border asked for the keyboard: {@code open} up,
          * closed down. On every place and in every mode, and it turns a keyboard switched off
-         * back on, as the keyboard key does: it is the one way back that is always there.
+         * back on, as the keyboard key does: it is the one way back that is always there. Only
+         * for a swipe the keyboard could not follow ({@link #onKeyboardRevealBegin}).
          */
         default void onBorderKeyboardSwipe(boolean open) { }
+        /**
+         * The keyboard swipe was claimed, going up ({@code opening}) or down, and the keyboard is
+         * to follow the finger: the keyboard's height in px the finger drives it over, or 0 where
+         * it cannot follow, and the swipe then asks through {@link #onBorderKeyboardSwipe} on
+         * release. See {@link PaneWallLayout.Listener#onKeyboardRevealBegin}.
+         */
+        default int onKeyboardRevealBegin(boolean opening) { return 0; }
+        /** How much of the keyboard a swipe it follows shows this frame, 0 down to 1 up. */
+        default void onKeyboardRevealProgress(float reveal) { }
+        /** The keyboard a swipe carried came to rest, up ({@code open}) or down. */
+        default void onKeyboardRevealEnd(boolean open) { }
         /**
          * A page sunk under a held border ({@link PageSink}) is drawn at {@code scale} about its
          * centre; 1 once it is back up. The terminal's frame line is drawn outside its page and
@@ -166,6 +178,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;
+        // The grabber wears the rims' accent; a re-dress is where a scheme change arrives.
+        mWall.refreshGrabberColor();
         if (mWidgetsPage != null) mWidgetsPage.applyStyle(style);
         if (mDisplayPage != null) mDisplayPage.applyStyle(style);
     }
@@ -361,6 +375,21 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onBorderKeyboardSwipe(boolean open) {
         mHost.onBorderKeyboardSwipe(open);
+    }
+
+    @Override
+    public int onKeyboardRevealBegin(boolean opening) {
+        return mHost.onKeyboardRevealBegin(opening);
+    }
+
+    @Override
+    public void onKeyboardRevealProgress(float reveal) {
+        mHost.onKeyboardRevealProgress(reveal);
+    }
+
+    @Override
+    public void onKeyboardRevealEnd(boolean open) {
+        mHost.onKeyboardRevealEnd(open);
     }
 
     @Override

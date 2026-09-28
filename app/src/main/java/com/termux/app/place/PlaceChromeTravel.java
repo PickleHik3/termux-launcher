@@ -78,8 +78,9 @@ public final class PlaceChromeTravel {
     /**
      * The stretch of the way, at either end, over which the chrome already rests: the reveals
      * move over the middle {@code 1 - 2 * LANDING} of a step and sit at the far place's state
-     * for the last {@code LANDING} of it. The slide's curve ({@code Motion.settle}) spends its
-     * last ~300 ms on the last few percent of the way, and a keyboard still creeping up over the
+     * for the last {@code LANDING} of it. The slide's settle (a spring, {@code wall/SettleSpring};
+     * {@code Motion.settle} before it) spends its last ~300 ms on the last few percent of the
+     * way, and a keyboard still creeping up over the
      * text while the page's edge creeps at the screen's edge read as the keyboard landing late
      * (pong, 2026-09-27). The same margin at both ends, so a reversal and a drag that springs
      * back still read one function of position.

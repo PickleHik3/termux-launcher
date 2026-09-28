@@ -265,6 +265,22 @@ public class PaneWallPolicyTest {
     }
 
     @Test
+    public void theSettleCarriesOnFromTheWallsOwnSpeed() {
+        // Toward a page that exists, the wall moves with the finger, and so does its settle.
+        assertEquals(-1800f, PaneWallPolicy.wallVelocity(-300f, -1800f, true, true), EPS);
+        assertEquals(900f, PaneWallPolicy.wallVelocity(300f, 900f, true, true), EPS);
+        // Into a line's outer edge the wall only took the resisted share of the finger's travel,
+        // and only that share of its speed.
+        assertEquals(900f * PaneWallPolicy.EDGE_RESISTANCE,
+            PaneWallPolicy.wallVelocity(200f, 900f, false, true), EPS);
+        assertEquals(-900f * PaneWallPolicy.EDGE_RESISTANCE,
+            PaneWallPolicy.wallVelocity(-200f, -900f, true, false), EPS);
+        // At rest, or with nothing to read, the finger's own speed or none.
+        assertEquals(500f, PaneWallPolicy.wallVelocity(0f, 500f, false, false), EPS);
+        assertEquals(0f, PaneWallPolicy.wallVelocity(-200f, Float.NaN, true, true), EPS);
+    }
+
+    @Test
     public void wallGoCannotReachAPageThisInstallDoesNotHave() {
         List<PaneWallPage> pages = PaneWallPolicy.availablePages(true, true, false);
         assertNull(PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, "widgets"));

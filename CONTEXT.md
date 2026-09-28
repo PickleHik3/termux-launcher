@@ -51,8 +51,9 @@ bottom border is the keyboard swipe. The border is always drawn while the
 border preference is on (the slab's rim on glass, the plain stroke otherwise), on the terminal,
 the Widgets page and the Display page alike, so the gesture has a line to find. The hold sinks
 the page away from the user until the finger lets go, in every mode unless motion is reduced;
-under Fancier Glass the page also tips like a plank, pushed in on a held side and leading with
-the side it moves toward; the Display place sinks but slides flat. The status bar does
+under Fancier Glass the page held and the page arriving both tip like planks toward the finger,
+as if it pressed its weight into them, and lie flat as the settle lands; the Display place sinks
+but slides flat. The release's settle carries on at the finger's speed. The status bar does
 not page; its own drag is the fold across it.
 _Avoid_: edge swipe, status bar swipe, page swipe
 
@@ -62,6 +63,9 @@ from the current page's bottom border — the frame line or just below it, less 
 — before the border drag's hold. Up opens the keyboard, down closes it; opening turns a keyboard
 that was switched off back on, as the keyboard key does. It is claimed as soon as it moves, so the
 content under the line is told its touch is over; a sideways start and a hold stay as they were.
+A docked keyboard follows the finger and the release finishes it past a third of the way or on a
+flick, and takes it back otherwise; a floating keyboard, Android's, and one switched off answer
+the release alone. A small **grabber** pill on the bottom border marks it.
 The keyboard itself carries no swipe of its own.
 _Avoid_: pull-up, keyboard gesture, hide swipe (the retired swipe on the keyboard's top edge)
 
