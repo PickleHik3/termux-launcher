@@ -25,6 +25,15 @@ final class TaiMnnPackage {
             if (name.indexOf('/') < 0 && (name.equals("llm_config.json") || name.equals("llm.mnn.json")
                 || name.startsWith("visual.") || name.startsWith("audio.") || name.startsWith("embeddings_"))) add(result, name);
         }
+        // An EAGLE-3 package loads its draft graphs by MNN's default names (llmconfig.hpp eagle_*),
+        // which config.json only sets through speculative_type. Without them the load fails.
+        if ("eagle".equals(config.optString("speculative_type", ""))) {
+            for (String graph : new String[]{config.optString("eagle_model", "eagle.mnn"),
+                    config.optString("eagle_fc", "eagle_fc.mnn"), config.optString("eagle_d2t", "eagle_d2t.mnn")}) {
+                add(result, graph);
+                if (available.contains(graph + ".weight")) add(result, graph + ".weight");
+            }
+        }
         return result;
     }
 

@@ -25,6 +25,17 @@ public class TaiMnnPackageTest {
         assertFalse(files.contains("q8/llm.mnn"));
     }
 
+    @Test public void eagleSpeculativePackageIncludesItsDraftGraphs() throws Exception {
+        JSONObject config = new JSONObject().put("speculative_type", "eagle").put("hidden_states", true);
+        Set<String> files = TaiMnnPackage.files(config, new LinkedHashSet<>(Arrays.asList(
+            "llm.mnn", "llm.mnn.weight", "tokenizer.txt", "eagle.mnn", "eagle.mnn.weight",
+            "eagle_fc.mnn", "eagle_fc.mnn.weight", "eagle_d2t.mnn")));
+        assertTrue(files.containsAll(Arrays.asList("eagle.mnn", "eagle.mnn.weight",
+            "eagle_fc.mnn", "eagle_fc.mnn.weight", "eagle_d2t.mnn")));
+        assertFalse(files.contains("eagle_d2t.mnn.weight"));
+        assertFalse(TaiMnnPackage.files(new JSONObject(), new LinkedHashSet<>(Arrays.asList("eagle.mnn"))).contains("eagle.mnn"));
+    }
+
     @Test public void rejectsDependenciesOutsidePackage() throws Exception {
         try {
             TaiMnnPackage.files(new JSONObject().put("llm_model", "../other.mnn"), new LinkedHashSet<>());
