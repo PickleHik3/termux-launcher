@@ -35,7 +35,9 @@ per orientation.
 **Minimal mode**:
 A place shown with only its pane: the status bar shrinks to a thin strip, the apps bar and keyboard
 go away, and the pane is maximised in either orientation. Available on Display and Terminal, turned
-on from the corner tab and remembered per place until turned off.
+on from the corner tab and remembered per place until turned off. A sideways swipe along the pane's
+top or bottom edge pages the wall from a minimal place, and under Fancier Glass the pane tips like a
+plank as it goes.
 _Avoid_: full screen, focus mode, zen mode
 
 **Managed wallpaper**:

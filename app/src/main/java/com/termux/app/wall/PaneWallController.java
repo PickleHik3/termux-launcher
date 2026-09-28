@@ -46,6 +46,16 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          * terminal's panes draw their rims through their controller, which the host owns.
          */
         default void onWallOutlineAlphaChanged(float alpha) { }
+        /**
+         * Whether the chrome on screen is minimal mode's: the pane lends the wall the band along
+         * its top and bottom edge ({@link MinimalEdgeSwipe}). Asked on every DOWN on the wall.
+         */
+        default boolean isEdgePagingEnabled() { return false; }
+        /**
+         * Whether a page dragged by a finger tips like a plank ({@link PlankTilt}): Fancier Glass
+         * on, on a minimal place, with the phone animating. Asked as a drag begins.
+         */
+        default boolean isPlankTiltEnabled() { return false; }
     }
 
     /** Saved-instance-state key for the page the wall is showing. */
@@ -334,5 +344,18 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onTerminalOffScreenChanged(boolean offScreen) {
         mHost.onTerminalOffScreenChanged(offScreen);
+    }
+
+    @Override
+    public boolean isEdgePagingEnabled() {
+        return mHost.isEdgePagingEnabled();
+    }
+
+    @Override
+    public boolean isPlankTiltEnabled(@NonNull PaneWallPage page) {
+        // The Display page's picture is a SurfaceView, composited outside the view hierarchy: a
+        // rotation on its frame tips the rim and the glass and leaves the picture flat, stretched
+        // into the tilted frame's bounding box. That place pages plain.
+        return page != PaneWallPage.DISPLAY && mHost.isPlankTiltEnabled();
     }
 }

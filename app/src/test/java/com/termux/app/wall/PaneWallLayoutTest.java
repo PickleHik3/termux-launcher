@@ -2,6 +2,7 @@ package com.termux.app.wall;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -491,5 +492,71 @@ public class PaneWallLayoutTest {
         wall.nudgePage(PaneWallPage.WIDGETS, 300f, 380L, null, () -> ended[0]++);
         assertEquals(1, ended[0]);
         assertEquals(0f, terminal.getTranslationX(), EPS);
+    }
+
+    /**
+     * The plank (PlankTilt): a finger's drag tips the page the wall rests on when the listener
+     * allows it, by the angle its position says, on a hardware layer for the length of the
+     * motion; the settle lays it flat and drops the layer. The page arriving is never tilted.
+     */
+    @Test
+    public void aDragTipsThePlankAndTheSettleLaysItFlat() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.setReducedMotion(false);
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+        });
+        wall.beginDrag();
+        assertEquals(terminal, wall.tiltPage());
+        assertEquals(View.LAYER_TYPE_HARDWARE, terminal.getLayerType());
+        wall.dragTo(-300f);
+        assertEquals(PlankTilt.angleDeg(-300f, WIDTH), terminal.getRotationY(), EPS);
+        assertTrue("dragged left, the left edge goes in", terminal.getRotationY() < 0f);
+        assertEquals(0f, display.getRotationY(), EPS);
+        // A jump lands the wall at rest: flat, and the layer gone.
+        assertTrue(wall.goTo(PaneWallPage.DISPLAY, false));
+        assertNull(wall.tiltPage());
+        assertEquals(0f, terminal.getRotationY(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
+    }
+
+    @Test
+    public void thePlankNeedsTheListenersLeaveAndThePhoneAnimating() {
+        // The default listener gives no leave: the drag moves the page and nothing tips.
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.setReducedMotion(false);
+        wall.beginDrag();
+        wall.dragTo(-300f);
+        assertNull(wall.tiltPage());
+        assertEquals(-300f, terminal.getTranslationX(), EPS);
+        assertEquals(0f, terminal.getRotationY(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
+        assertTrue(wall.goTo(PaneWallPage.TERMINAL, false));
+
+        // With leave but the phone told to hold still, the same: reduced motion tips nothing.
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+        });
+        wall.setReducedMotion(true);
+        wall.beginDrag();
+        wall.dragTo(-300f);
+        assertNull(wall.tiltPage());
+        assertEquals(0f, terminal.getRotationY(), EPS);
+        wall.cancelDrag();
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+    }
+
+    @Test
+    public void aPageChangeWithoutAFingerNeverTips() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.setReducedMotion(false);
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+        });
+        // A tile, a key or wall.go slides the wall with no finger on it: no plank.
+        assertTrue(wall.goTo(PaneWallPage.WIDGETS, true));
+        assertNull(wall.tiltPage());
+        assertEquals(0f, terminal.getRotationY(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
     }
 }

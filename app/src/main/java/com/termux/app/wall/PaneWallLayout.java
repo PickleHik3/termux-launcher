@@ -3,7 +3,10 @@ package com.termux.app.wall;
 import android.content.Context;
 import android.os.Trace;
 import android.util.AttributeSet;
+import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
@@ -13,6 +16,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 
+import com.termux.app.chrome.CornerZones;
 import com.termux.app.terminal.Motion;
 
 import java.util.ArrayList;
@@ -30,7 +34,10 @@ import java.util.Map;
  * <p>Not a {@code ViewPager2}: the wall's touches arrive from the status bar rather than from
  * these pages, its pages must never be recycled (a recreated terminal or X surface is a lost
  * session), and its centre page runs its own {@code requestDisallowInterceptTouchEvent} traffic.
- * Three children, one offset and one spring is the whole mechanism.
+ * Three children, one offset and one spring is the whole mechanism. The one touch the wall reads
+ * for itself is a minimal place's edge swipe ({@link MinimalEdgeSwipe}): a sideways drag that
+ * starts in the band along the current page's top or bottom edge, which drives the very same
+ * drag the status bar does.
  *
  * <p>Every page is laid out at the host's size and moved with {@code translationX}, so a page
  * change and a whole drag cost no layout work. Only the pages on screen are laid out at all: a
@@ -85,6 +92,18 @@ public final class PaneWallLayout extends ViewGroup {
          * holding a gesture nobody answers.
          */
         default void onWallDragInterrupted() { }
+        /**
+         * Whether the band along the current page's top and bottom edge pages the wall right now
+         * ({@link MinimalEdgeSwipe}): only on a minimal place, where the pane is the screen and
+         * the bar is a strip. Asked on every DOWN.
+         */
+        default boolean isEdgePagingEnabled() { return false; }
+        /**
+         * Whether the page a finger drags tips like a plank ({@link PlankTilt}) — Fancier Glass on
+         * a minimal place, with the phone animating. Asked when a drag begins, for the page the
+         * wall rests on.
+         */
+        default boolean isPlankTiltEnabled(@NonNull PaneWallPage page) { return false; }
     }
 
     private final Map<PaneWallPage, View> mPageViews = new EnumMap<>(PaneWallPage.class);
@@ -109,6 +128,16 @@ public final class PaneWallLayout extends ViewGroup {
      * stands rather than only on a change from some assumed starting state.
      */
     @Nullable private Boolean mTerminalOffScreen;
+    /** The edge swipe under way, if any; one instance, so a gesture allocates nothing. */
+    private final MinimalEdgeSwipe mEdgeSwipe = new MinimalEdgeSwipe();
+    /** Held from an armed DOWN to the lift, for the release velocity the settle reads. */
+    @Nullable private VelocityTracker mEdgeVelocity;
+    /**
+     * The page tipping under the drag ({@link PlankTilt}), from the drag's start to the wall's
+     * settle; null while no plank is engaged. Its angle is written beside its translation in
+     * {@link #applyPagePositions}, so the tilt and the slide are one motion.
+     */
+    @Nullable private View mTiltPage;
 
     public PaneWallLayout(@NonNull Context context) {
         this(context, null);
@@ -134,6 +163,8 @@ public final class PaneWallLayout extends ViewGroup {
      * layout file, the others are added by their controllers).
      */
     public void setPageView(@NonNull PaneWallPage page, @Nullable View view) {
+        View previous = mPageViews.get(page);
+        if (previous != null && previous == mTiltPage && previous != view) releasePlank();
         if (view == null) mPageViews.remove(page);
         else mPageViews.put(page, view);
         applyPagePositions();
@@ -313,6 +344,7 @@ public final class PaneWallLayout extends ViewGroup {
             mDragging = true;
             stopSlide();
             stopNudge();
+            engagePlank();
         } finally {
             Trace.endSection();
         }
@@ -363,7 +395,169 @@ public final class PaneWallLayout extends ViewGroup {
     private void interruptDrag() {
         if (!mDragging) return;
         mDragging = false;
+        // The wall's own edge swipe is a claimant like the others: the rest of its finger's
+        // travel is swallowed and moves nothing.
+        mEdgeSwipe.abandon();
         if (mListener != null) mListener.onWallDragInterrupted();
+    }
+
+    // ---- The edge swipe (a minimal place's pane edge) --------------------------------------
+
+    /**
+     * A finger down in the band along the current page's top or bottom edge arms the edge swipe
+     * ({@link MinimalEdgeSwipe}); the claim is made on a later move, past the slop, here or in
+     * {@link #onTouchEvent} when nothing under the finger took the DOWN. Claiming cancels the
+     * child's gesture — the terminal answers that cancel by releasing whatever mouse button or
+     * hold it had begun — and the rest of the stream lands in {@link #onTouchEvent}.
+     */
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                armEdgeSwipe(event);
+                return false;
+            case MotionEvent.ACTION_MOVE:
+                return claimEdgeSwipe(event);
+            case MotionEvent.ACTION_POINTER_DOWN:
+                mEdgeSwipe.secondPointer();
+                return false;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                releaseEdgeSwipe();
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                // Nothing under the finger took the DOWN (the DOWN itself was read by
+                // onInterceptTouchEvent): the stream is kept only while the swipe is armed.
+                return mEdgeSwipe.isArmed();
+            case MotionEvent.ACTION_MOVE:
+                if (mEdgeSwipe.claim() == MinimalEdgeSwipe.Claim.PENDING) {
+                    claimEdgeSwipe(event);
+                } else if (mEdgeSwipe.claim() == MinimalEdgeSwipe.Claim.PAGING) {
+                    if (mEdgeVelocity != null) mEdgeVelocity.addMovement(event);
+                    dragTo(mEdgeSwipe.travel(event.getX()));
+                }
+                return mEdgeSwipe.isArmed();
+            case MotionEvent.ACTION_POINTER_DOWN:
+                mEdgeSwipe.secondPointer();
+                return mEdgeSwipe.isArmed();
+            case MotionEvent.ACTION_UP: {
+                boolean paging = mEdgeSwipe.claim() == MinimalEdgeSwipe.Claim.PAGING;
+                boolean armed = mEdgeSwipe.isArmed();
+                if (paging) {
+                    float velocity = 0f;
+                    if (mEdgeVelocity != null) {
+                        mEdgeVelocity.addMovement(event);
+                        mEdgeVelocity.computeCurrentVelocity(1000);
+                        velocity = mEdgeVelocity.getXVelocity();
+                    }
+                    releaseEdgeSwipe();
+                    endDrag(velocity);
+                } else {
+                    releaseEdgeSwipe();
+                }
+                return armed;
+            }
+            case MotionEvent.ACTION_CANCEL: {
+                boolean paging = mEdgeSwipe.claim() == MinimalEdgeSwipe.Claim.PAGING;
+                boolean armed = mEdgeSwipe.isArmed();
+                releaseEdgeSwipe();
+                if (paging) cancelDrag();
+                return armed;
+            }
+            default:
+                return false;
+        }
+    }
+
+    private void armEdgeSwipe(@NonNull MotionEvent event) {
+        releaseEdgeSwipe();
+        if (mListener == null || !mListener.isEdgePagingEnabled()) return;
+        if (!mGesturesEnabled || mPages.size() <= 1) return;
+        View page = mPageViews.get(mCurrent);
+        if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
+        float density = getResources().getDisplayMetrics().density;
+        float left = page.getLeft() + page.getTranslationX();
+        float top = page.getTop();
+        boolean armed = mEdgeSwipe.down(event.getX(), event.getY(),
+            left, top, left + page.getWidth(), top + page.getHeight(),
+            MinimalEdgeSwipe.BAND_DP * density,
+            CornerZones.clampSize(CornerZones.paneSizePx(density), page.getWidth(), page.getHeight()),
+            ViewConfiguration.get(getContext()).getScaledTouchSlop());
+        if (!armed) return;
+        mEdgeVelocity = VelocityTracker.obtain();
+        mEdgeVelocity.addMovement(event);
+    }
+
+    /**
+     * One move of an armed swipe. True on the move that claims it: the drag begins, and the wall
+     * is moved by the finger's travel so far — the slop's worth, the same first step a swipe
+     * along the bar takes.
+     */
+    private boolean claimEdgeSwipe(@NonNull MotionEvent event) {
+        if (mEdgeSwipe.claim() != MinimalEdgeSwipe.Claim.PENDING) return false;
+        if (mEdgeVelocity != null) mEdgeVelocity.addMovement(event);
+        if (mEdgeSwipe.move(event.getX(), event.getY()) != MinimalEdgeSwipe.Claim.PAGING) {
+            return false;
+        }
+        if (!mGesturesEnabled || mPages.size() <= 1) {
+            mEdgeSwipe.abandon();
+            return false;
+        }
+        beginDrag();
+        dragTo(mEdgeSwipe.travel(event.getX()));
+        return true;
+    }
+
+    private void releaseEdgeSwipe() {
+        mEdgeSwipe.reset();
+        if (mEdgeVelocity != null) {
+            mEdgeVelocity.recycle();
+            mEdgeVelocity = null;
+        }
+    }
+
+    // ---- The plank ---------------------------------------------------------------------------
+
+    /**
+     * A finger began dragging the wall: the page it rests on becomes the plank, if the listener
+     * lets it, until the settle lays it flat. A hardware layer for the length of the motion, so
+     * the page — a screen of glyphs and glass — is drawn flat once per change and the tilt is a
+     * textured quad per frame rather than every glyph re-rendered under a perspective matrix.
+     */
+    private void engagePlank() {
+        if (mTiltPage != null || mReducedMotion || getWidth() <= 0) return;
+        if (mListener == null || !mListener.isPlankTiltEnabled(mCurrent)) return;
+        View page = mPageViews.get(mCurrent);
+        if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
+        mTiltPage = page;
+        page.setPivotX(page.getWidth() / 2f);
+        page.setPivotY(page.getHeight() / 2f);
+        page.setCameraDistance(PlankTilt.CAMERA_DISTANCE_DP
+            * getResources().getDisplayMetrics().density);
+        page.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+    }
+
+    /** The wall is at rest, or the plank's page is going away: flat, and the layer dropped. */
+    private void releasePlank() {
+        View page = mTiltPage;
+        if (page == null) return;
+        mTiltPage = null;
+        page.setRotationY(0f);
+        page.setLayerType(View.LAYER_TYPE_NONE, null);
+    }
+
+    /** The page tipping under a drag, for tests; null while none is. */
+    @Nullable
+    View tiltPage() {
+        return mTiltPage;
     }
 
     // ---- Motion ----------------------------------------------------------------------------
@@ -432,6 +626,7 @@ public final class PaneWallLayout extends ViewGroup {
             stopSlide();
             mOffsetPx = 0f;
             applyPagePositions();
+            releasePlank();
             if (mListener != null) mListener.onWallPageSettled(mCurrent);
         } finally {
             Trace.endSection();
@@ -477,6 +672,9 @@ public final class PaneWallLayout extends ViewGroup {
                 * (float) width + mOffsetPx
                 + (entry.getKey() == mNudgePage ? mNudgePx : 0f);
             view.setTranslationX(x);
+            // The plank's angle is a function of where the page stands, so the drag, the spring
+            // back and the carry-out all read the same number and it is flat wherever it rests.
+            if (view == mTiltPage) view.setRotationY(PlankTilt.angleDeg(x, width));
             boolean onScreen = width <= 0 || Math.abs(x) < width;
             if (entry.getKey() == PaneWallPage.TERMINAL) {
                 view.setVisibility(VISIBLE);
@@ -593,5 +791,7 @@ public final class PaneWallLayout extends ViewGroup {
         mSliding = false;
         stopSlide();
         stopNudge();
+        releaseEdgeSwipe();
+        releasePlank();
     }
 }
