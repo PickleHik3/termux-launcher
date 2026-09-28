@@ -43,6 +43,7 @@
     <string name="settings_layout_orientation_portrait">Portrait</string>
     <string name="settings_layout_orientation_landscape">Landscape</string>
     <string name="settings_layout_edge_top">Top</string>
+    <string name="settings_layout_edge_under_keyboard">Under the keyboard</string>
     <string name="settings_layout_row_hidden">Hidden</string>
     <string name="settings_layout_row_shown">Shown</string>
     <string name="settings_layout_az_on">On</string>

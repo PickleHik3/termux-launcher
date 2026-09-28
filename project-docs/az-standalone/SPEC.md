@@ -86,3 +86,20 @@ minimal mode, drop, pill, Discard), `AzTabPolicyTest` (placement, touch target, 
 clearance, RTL, reveal box, slide), `AzTabRevealTest`, `PlaceMiniatureTabTest`. Not built or run
 by the worker; device checks owed: the tab and slide on every edge, a scrub that starts on the tab
 and launches, the border drag and corner tab beside it, keyboard up, landscape columns, RTL.
+
+## Round 3b: the tab on the screen's edge (2026-09-28)
+
+From the device review: the tab was a dim card inside the pane's border, over terminal text, and
+its "A" read poorly. It moves to the physical screen's edge; its reveal and pull are unchanged.
+
+| Item | Rule |
+|---|---|
+| Where | A half-pill flush against the screen's side, outside the pane's border: the index's own side for a column, the row's leading side (left, right in RTL) for a top or bottom row, since those two edges belong to the system bars and the chrome (`AzTabPolicy.screenSide`). Along that side it stands at the index's leading end of the canvas — from its top for a column or a top row, from its bottom for a bottom row — past the corner square as before (`AzTabPolicy.placeOnScreen`). Visible 48 × 20 dp, flat on the screen side, radius 20 on the inner side only; touch area 56 × 48 dp from the screen's edge, published as a system-gesture exclusion rect so the back swipe leaves it alone. Where the side gap is narrower than the half-pill it overlaps the pane by the difference, and a rail on the same side is overlapped the same way. |
+| Layer | `AzPullTabLayer` is now a full-screen child of `activity_termux_root_relative_layout`, after the accessory stack and under the floating keyboard, editors and sheets. It follows the canvas (`terminal_surface_host`, `setCanvas`) through a layout listener; the letters are laid out and clipped to the canvas as before, the tab is drawn unclipped. |
+| Gesture | Unchanged in shape: a DOWN on the tab is the tab's, anything else is refused. The finger is handed to the letters moved across onto their middle line and not along it (`AzTabPolicy.shiftOntoLetters`, fixed at the DOWN), as a freshly built event so the raw position the scrub reads moves too. A second finger is not passed on. |
+| Look | Glass (the dock's `dockSurface`, opacity floor 0.85) wherever the dock's glass is — its blur on; solid (`AzTabPolicy.tabFill`, the glass base made opaque) where it is not: the Solid material, or a wallpaper nothing blurs. No live blur of its own. The "A" is alone (the grip dots are gone), 12 sp bold, in the letters' ink moved to body-text contrast on the glass base (`AzTabPolicy.glyphInk`, `GlassInk.legible`). |
+| Tour | `TourViewTargets` answers `AZ_ROW` with the tab's half-pill (`AzPullTabLayer.tabRectOnScreen`) while the index is minimised. |
+
+Unchanged: the miniature still draws the tab over the pane at the leading end of its edge. Device
+checks owed: every edge in both orientations and RTL, the back gesture beside a side tab, a rail
+on the tab's side, keyboard up with a bottom index, reduced motion.

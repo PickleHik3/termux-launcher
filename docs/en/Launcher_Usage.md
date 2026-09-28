@@ -101,6 +101,11 @@ and down from it to put the keyboard away. No hold, just a short swipe that star
 just below it. It works on every place and in every mode, minimal mode included, and it turns the
 keyboard back on if you switched it off, so there is always a way back to it.
 
+The dock's rows normally stand over the keyboard. In the Layout editor you can drop the apps row,
+the A–Z index or the extra keys into the slot under the keyboard instead, so they stay at the
+bottom of the screen with the keyboard opening above them; with the keyboard down they sit at the
+bottom of the dock with the rest.
+
 The status bar shows where you are. The icon beside the clock names the place you are on — a
 house for Widgets, a prompt for Terminal, a screen for Display — and the other two peek in from
 the bar's edges on the side each place slides in from; the icons move with the places as you
@@ -171,13 +176,16 @@ Scrub horizontally across the A–Z row to jump to installed apps beginning with
 a browsing control, not a text field. It can be hidden in the Layout editor, on the place
 you want it hidden for.
 
-Set it to **Minimised** in the Layout editor and the index folds into a small tab on its edge,
-laid over the terminal, the widgets or the display without taking any room from them. Put a thumb
-on the tab and slide: the letters come out along the edge and you are already scrubbing them, with
-the matching apps floating beside the letters as they do whenever the index stands without the
-pinned apps row. Slide onto an app and let go to open it; let go anywhere else and the letters
-tuck back behind the tab. The tab stays clear of the corner, so the corner tab and the border drag
-work as everywhere else, and minimal mode puts it away with the rest of the chrome.
+Set it to **Minimised** in the Layout editor and the index folds into a small tab against the edge
+of the screen, outside the terminal, the widgets or the display, taking no room from them. A
+side index keeps its tab on its own side; an index along the top or the bottom keeps it on the
+left (the right in a right-to-left language), next to where its letters start. Put a thumb on the
+tab and slide: the letters come out along their edge and you are already scrubbing them, with the
+matching apps floating beside the letters as they do whenever the index stands without the pinned
+apps row. Slide onto an app and let go to open it; let go anywhere else and the letters tuck back
+away. The tab is glass like the dock, or solid when the dock is, and stays clear of the corner, so
+the corner tab and the border drag work as everywhere else. Minimal mode puts it away with the
+rest of the chrome.
 
 ### Search from the shell prompt
 

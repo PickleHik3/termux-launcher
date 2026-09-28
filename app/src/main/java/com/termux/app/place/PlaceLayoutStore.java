@@ -75,6 +75,13 @@ public final class PlaceLayoutStore {
      */
     private static final String ORDER_SUFFIX = "_order";
 
+    /**
+     * Whether a bottom band stands under the keyboard rather than over it, beside its order:
+     * {@code layout.<orientation>.<placement key>_under_keyboard}. Absent is over it, which is
+     * where every band has always stood, so nothing is written for an install that predates it.
+     */
+    private static final String UNDER_KEYBOARD_SUFFIX = "_under_keyboard";
+
     /** A row placement that is not an edge at all. */
     private static final String VALUE_HIDDEN = "hidden";
     private static final String KEY_KEYBOARD_MODE = "keyboard_mode";
@@ -130,7 +137,9 @@ public final class PlaceLayoutStore {
         // The stack positions ride with the placements they belong to, so the Layout editor's
         // Discard and its reset put a re-order back the same way they put a move back.
         orderKeyName(Element.STATUS), orderKeyName(Element.APPS), orderKeyName(Element.AZ),
-        orderKeyName(Element.EXTRA_KEYS)
+        orderKeyName(Element.EXTRA_KEYS),
+        underKeyboardKeyName(Element.APPS), underKeyboardKeyName(Element.AZ),
+        underKeyboardKeyName(Element.EXTRA_KEYS)
     };
 
     /**
@@ -146,6 +155,13 @@ public final class PlaceLayoutStore {
     @NonNull
     static String orderKeyName(@NonNull Element element) {
         return element.storageKey() + ORDER_SUFFIX;
+    }
+
+    /** The unscoped key saying whether one element stands under the keyboard. */
+    @VisibleForTesting
+    @NonNull
+    static String underKeyboardKeyName(@NonNull Element element) {
+        return element.storageKey() + UNDER_KEYBOARD_SUFFIX;
     }
 
     @NonNull private final TermuxAppSharedPreferences mPreferences;
@@ -235,19 +251,20 @@ public final class PlaceLayoutStore {
     @NonNull
     public Slot slot(@NonNull PlaceOrientation orientation, @NonNull Element element) {
         int order = slotOrder(orientation, element);
+        boolean under = slotUnderKeyboard(orientation, element);
         switch (element) {
             case STATUS:
                 // Spelled the way the rows have always been: an edge, or "hidden".
                 return new Slot(VALUE_HIDDEN.equals(readString(orientation, KEY_STATUS_BAR)),
                     statusBarEdge(orientation), order);
             case AZ:
-                return new Slot(!azRowShown(orientation), azBarEdge(orientation), order);
+                return new Slot(!azRowShown(orientation), azBarEdge(orientation), order, under);
             case APPS:
             case EXTRA_KEYS:
             default:
                 return new Slot(VALUE_HIDDEN.equals(readString(orientation,
                     element == Element.APPS ? KEY_APPS_ROW : KEY_EXTRA_KEYS)),
-                    elementEdge(orientation, element), order);
+                    elementEdge(orientation, element), order, under);
         }
     }
 
@@ -276,6 +293,26 @@ public final class PlaceLayoutStore {
                 break;
         }
         setSlotOrder(orientation, element, slot.order);
+        // Written only once it is asked for or taken back, so a store that never had it keeps
+        // reading as it always did.
+        if (slot.underKeyboard || slotUnderKeyboard(orientation, element))
+            setSlotUnderKeyboard(orientation, element, slot.underKeyboard);
+    }
+
+    /**
+     * Whether an element stands under the keyboard on the bottom edge. False for an install that
+     * never put one there, and always for the status bar, which may not.
+     */
+    public boolean slotUnderKeyboard(@NonNull PlaceOrientation orientation,
+                                     @NonNull Element element) {
+        return element.underKeyboardAllowed() && mStore != null
+            && mStore.getBoolean(layoutKey(orientation, underKeyboardKeyName(element)), false);
+    }
+
+    public void setSlotUnderKeyboard(@NonNull PlaceOrientation orientation,
+                                     @NonNull Element element, boolean under) {
+        if (!element.underKeyboardAllowed()) return;
+        writeBoolean(layoutKey(orientation, underKeyboardKeyName(element)), under);
     }
 
     /**

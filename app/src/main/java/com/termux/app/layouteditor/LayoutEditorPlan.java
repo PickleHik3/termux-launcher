@@ -254,7 +254,15 @@ public final class LayoutEditorPlan {
     @NonNull
     public Drop drop(@NonNull MiniatureDragPolicy.Bar bar, @Nullable PlaceLayout.Edge edge,
                      int index) {
-        if (!LayoutChooserModel.applyDrop(mPlaces, mShownOrientation, bar, edge, index))
+        return drop(bar, edge, index, false);
+    }
+
+    /** A bar dropped on either side of the keyboard; {@code underKeyboard} is the far one. */
+    @NonNull
+    public Drop drop(@NonNull MiniatureDragPolicy.Bar bar, @Nullable PlaceLayout.Edge edge,
+                     int index, boolean underKeyboard) {
+        if (!LayoutChooserModel.applyDrop(mPlaces, mShownOrientation, bar, edge, index,
+            underKeyboard))
             return Drop.NONE;
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }

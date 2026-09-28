@@ -148,6 +148,23 @@ palette's toggle come undone on a rotation. The keyboard has no edge and no orde
 its type puts it — so it is not a bar on the miniature and not in the hide tray; the miniature does
 not draw the docked keyboard today and this adds no drawing.
 
+## Amendment: the slot under the keyboard (2026-09-28)
+
+The bottom edge gains a second side: the dock's rows — pinned apps, A–Z index, extra keys — may
+stand under the keyboard instead of over it. The status bar may not (`Element.underKeyboardAllowed`).
+
+| Item | Rule |
+|---|---|
+| Model | `Slot.underKeyboard`, meaningful only on `Edge.BOTTOM` (the constructor drops it on any other edge) and kept while the element is hidden, so it comes back where it went. `EdgeStackPolicy.stack(BOTTOM)` lists the bands under the keyboard first, as the outermost, each side in its own order; `underKeyboard(layout)` and `overKeyboard(layout)` are the two sides. Every other question (`appsRowShown`, `dockShown`, the dock's combined height, crown and chin) still reads the one bottom stack, so with the keyboard down the edge is one stack exactly as before. |
+| Store | `layout.<o>.<element key>_under_keyboard`, beside `_order`. Absent is over the keyboard, so every existing store reads unchanged and nothing is migrated; `setSlot` writes it only once it is asked for or taken back. It is in `ARRANGEMENT_KEYS` (reset) and in `PlaceArrangeSnapshot` (Discard, dirtiness). |
+| Drops | `EdgeStackPolicy.targets` keeps offering the gaps over the keyboard on the bottom (same counts as before when nothing is under it); `underKeyboardTargets` offers the gaps under it, none for the status bar or the minimised index. `withDrop(…, underKeyboard)` renumbers only the side it lands on. The miniature's listener gains a four-argument `onBarDropped` whose default hears every drop as over the keyboard; `LayoutChooserModel.applyDrop` and `LayoutEditorPlan.drop` carry the flag. |
+| Miniature | The bands under the keyboard claim their strips first, then the keyboard block, then everything else. While a bar is lifted and the keyboard block is drawn, the gaps under it are laid from the phone's bottom up to the keyboard's middle and the bottom's own gaps from the keyboard's middle up, each outlined as its own region. With no keyboard drawn (Home, or the keyboard element off) no under-keyboard gap is offered; bands already under it draw as the bottom's outermost. The spoken description says "Under the keyboard". |
+| Screen | `accessory_keyboard_column` (bottom-anchored vertical `LinearLayout`) holds `inapp_keyboard_container` and, below it, `accessory_under_keyboard_stack` (an `EdgeStackView`). The dock's row stack, its glass and the two A–Z FX layers are `layout_above` the column instead of the keyboard, so with the keyboard closed or lifted out by the floating form the rows sit straight on the bands under it — no hole — and with nothing under it the column is exactly the keyboard. `applyEdgeStacks` stands the under side in that stack, hides it while empty and hands a host that left the bottom back to the row stack. The dock's glass runs the whole container when bands stand under a keyboard that is not docked between them; with it docked, the unified dock-and-keyboard surface already covers them, and otherwise they wear the dock's tint on their own inset sheet. |
+
+Device checks owed: the keyboard's open and close with bands under it (reveal gate, crops, the
+under-pill nav strip), the floating and split forms, the plank physics, the Display place's
+overlaying keyboard, Floating (capsule) dock style.
+
 ## Build plan
 
 | Phase | Branch | Deliverable | Depends on |

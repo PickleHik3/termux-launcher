@@ -9,6 +9,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.AzPullTabLayer;
 import com.termux.app.AzScrubRowView;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.terminal.PaneContentFrame;
@@ -143,8 +144,15 @@ public final class TourViewTargets implements TourTargets {
                 return rectInOverlay(firstShown(R.id.apps_bar_viewpager, R.id.place_apps_bar_host),
                     "neither the dock nor the landscape rail is on screen");
             // The row lives in the dock, above the content or down a side column, one at a time.
-            case AZ_ROW:
-                return rectInOverlay(azRowView(), "the A-Z row is switched off or not on screen");
+            // Minimised, its letters are tucked away and the tab on the screen's side is the index.
+            case AZ_ROW: {
+                View row = azRowView();
+                if (row == null) {
+                    Rect tab = azTabRect();
+                    if (tab != null) return tab;
+                }
+                return rectInOverlay(row, "the A-Z row is switched off or not on screen");
+            }
             case NONE:
                 return miss("this card points at nothing");
             default:
@@ -305,6 +313,23 @@ public final class TourViewTargets implements TourTargets {
             if (fallback == null) fallback = host;
         }
         return fallback;
+    }
+
+    /**
+     * The minimised index's tab in the overlay's space, or null while the index is not minimised.
+     * The layer that draws it covers the whole screen, so its bounds say nothing: it measures the
+     * half-pill itself.
+     */
+    @Nullable
+    private Rect azTabRect() {
+        View layer = mFinder.findTourView(R.id.place_az_tab_layer);
+        if (!(layer instanceof AzPullTabLayer)) return null;
+        Rect onScreen = new Rect();
+        if (!((AzPullTabLayer) layer).tabRectOnScreen(onScreen) || onScreen.isEmpty())
+            return null;
+        mOverlay.getLocationOnScreen(mLocation);
+        onScreen.offset(-mLocation[0], -mLocation[1]);
+        return onScreen;
     }
 
     @Nullable

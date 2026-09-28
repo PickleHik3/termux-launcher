@@ -3,110 +3,185 @@ package com.termux.app.launcher.az;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import android.app.Application;
+import android.graphics.Color;
+import android.os.Build;
+
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.chrome.OnGlass;
 import com.termux.app.place.PlaceLayout.Edge;
-import com.termux.app.wall.BorderDrag;
 
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
-/** Where the minimised index's pull tab stands, what takes it, and where the letters slide. */
+/**
+ * Where the minimised index's pull tab stands, what takes it, and where the letters slide.
+ * Robolectric only for the colour arithmetic the tab's letter is made legible with.
+ */
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class AzTabPolicyTest {
 
     private static final float D = 2f;
-    private static final float W = 400f * D;
-    private static final float H = 700f * D;
+    private static final float SCREEN_W = 400f * D;
+    /** The canvas inside the screen: a side gap each side, the status bar over, the dock under. */
+    private static final AzTabPolicy.Box CANVAS =
+        new AzTabPolicy.Box(8f * D, 60f * D, 392f * D, 640f * D);
+    private static final float W = CANVAS.width();
+    private static final float H = CANVAS.height();
 
     @Test
-    public void aBottomTabRestsOnTheEdgeAtTheLeadingEndPastTheCorner() {
-        AzTabPolicy.Placement tab = AzTabPolicy.place(Edge.BOTTOM, false, W, H, D);
-        assertEquals(AzTabPolicy.leadInPx(D), tab.touch.left, 0f);
-        assertEquals(H, tab.touch.bottom, 0f);
-        assertEquals(AzTabPolicy.TOUCH_LENGTH_DP * D, tab.touch.width(), 0f);
-        assertEquals(AzTabPolicy.TOUCH_THICKNESS_DP * D, tab.touch.height(), 0f);
-        // The pill is the design's 48 x 28, inside the touch area, off the edge by its gap.
-        assertEquals(AzTabPolicy.TAB_LENGTH_DP * D, tab.visual.width(), 0f);
-        assertEquals(AzTabPolicy.TAB_THICKNESS_DP * D, tab.visual.height(), 0f);
-        assertEquals(H - AzTabPolicy.TAB_EDGE_GAP_DP * D, tab.visual.bottom, 0f);
-        assertTrue(tab.touch.left <= tab.visual.left && tab.visual.right <= tab.touch.right);
+    public void aSideIndexHugsItsOwnSideOfTheScreenPastTheCanvasCorner() {
+        AzTabPolicy.Placement right = AzTabPolicy.placeOnScreen(Edge.RIGHT, false, CANVAS,
+            SCREEN_W, D);
+        assertSame(Edge.RIGHT, right.side);
+        assertEquals("flush against the screen's edge", SCREEN_W, right.visual.right, 0f);
+        assertEquals(SCREEN_W, right.touch.right, 0f);
+        assertEquals(AzTabPolicy.TAB_THICKNESS_DP * D, right.visual.width(), 0f);
+        assertEquals(AzTabPolicy.TAB_LENGTH_DP * D, right.visual.height(), 0f);
+        assertEquals(CANVAS.top + AzTabPolicy.leadInPx(D), right.touch.top, 0f);
+        assertTrue(right.touch.top <= right.visual.top
+            && right.visual.bottom <= right.touch.bottom);
+
+        AzTabPolicy.Placement left = AzTabPolicy.placeOnScreen(Edge.LEFT, true, CANVAS,
+            SCREEN_W, D);
+        assertSame("a column keeps its own side whichever way text runs", Edge.LEFT, left.side);
+        assertEquals(0f, left.visual.left, 0f);
+        assertEquals(0f, left.touch.left, 0f);
+    }
+
+    @Test
+    public void aRowIndexHugsItsLeadingSideAtItsOwnEndOfTheCanvas() {
+        AzTabPolicy.Placement bottom = AzTabPolicy.placeOnScreen(Edge.BOTTOM, false, CANVAS,
+            SCREEN_W, D);
+        assertSame(Edge.LEFT, bottom.side);
+        assertEquals(0f, bottom.visual.left, 0f);
+        assertEquals("a bottom row leads from the dock's end",
+            CANVAS.bottom - AzTabPolicy.leadInPx(D), bottom.touch.bottom, 0f);
+
+        AzTabPolicy.Placement top = AzTabPolicy.placeOnScreen(Edge.TOP, true, CANVAS,
+            SCREEN_W, D);
+        assertSame("a right-to-left row leads from the right", Edge.RIGHT, top.side);
+        assertEquals(SCREEN_W, top.visual.right, 0f);
+        assertEquals(CANVAS.top + AzTabPolicy.leadInPx(D), top.touch.top, 0f);
+    }
+
+    @Test
+    public void theTabStandsOutsideTheCanvasAsFarAsItsSideGapAllows() {
+        // The side gap is 8dp and the half-pill 20dp: it reaches 12dp over the pane and no more.
+        AzTabPolicy.Placement right = AzTabPolicy.placeOnScreen(Edge.RIGHT, false, CANVAS,
+            SCREEN_W, D);
+        assertEquals((AzTabPolicy.TAB_THICKNESS_DP - 8f) * D,
+            CANVAS.right - right.visual.left, 1e-3f);
     }
 
     @Test
     public void theTouchAreaIsAFullTargetEveryWay() {
         for (Edge edge : Edge.values()) {
-            AzTabPolicy.Placement tab = AzTabPolicy.place(edge, false, W, H, D);
-            assertTrue(edge + " is 48dp at least",
-                Math.min(tab.touch.width(), tab.touch.height()) >= 48f * D);
-        }
-    }
-
-    @Test
-    public void theTabNeverTouchesTheCornerSquare() {
-        float corner = CornerZones.paneSizePx(D);
-        for (Edge edge : Edge.values()) {
             for (boolean rtl : new boolean[] {false, true}) {
-                AzTabPolicy.Placement tab = AzTabPolicy.place(edge, rtl, W, H, D);
-                for (int c = 0; c < 4; c++) {
-                    float x = CornerZones.isLeft(c) ? corner / 2f : W - corner / 2f;
-                    float y = CornerZones.isTop(c) ? corner / 2f : H - corner / 2f;
-                    assertFalse(edge + " rtl=" + rtl + " corner " + c, tab.hit(x, y));
-                }
-                // And the whole touch area is clear of the corner squares.
-                boolean inCornerColumn = tab.touch.left < corner || tab.touch.right > W - corner;
-                boolean inCornerRow = tab.touch.top < corner || tab.touch.bottom > H - corner;
-                assertFalse(edge + " rtl=" + rtl, inCornerColumn && inCornerRow);
+                AzTabPolicy.Placement tab = AzTabPolicy.placeOnScreen(edge, rtl, CANVAS,
+                    SCREEN_W, D);
+                assertTrue(edge + " is 48dp at least",
+                    Math.min(tab.touch.width(), tab.touch.height()) >= 48f * D);
             }
         }
     }
 
     @Test
-    public void theTabSitsInTheBorderBandSoItHasToTakeTheTouchFirst() {
-        // The border hold-drag reaches 24dp either side of the page's edge: the tab is on it, which
-        // is why the tab's view takes the DOWN before the wall ever sees it.
-        AzTabPolicy.Placement tab = AzTabPolicy.place(Edge.BOTTOM, false, W, H, D);
-        float x = tab.touch.left + tab.touch.width() / 2f;
-        float y = H - 4f * D;
-        assertTrue(tab.hit(x, y));
-        assertEquals(BorderDrag.Border.BOTTOM, BorderDrag.borderAt(x, y, 0f, 0f, W, H,
-            BorderDrag.BAND_DP * D, CornerZones.paneSizePx(D)));
-    }
-
-    @Test
-    public void aRightToLeftRowLeadsFromTheRightAndAColumnAlwaysFromTheTop() {
-        AzTabPolicy.Placement rtl = AzTabPolicy.place(Edge.TOP, true, W, H, D);
-        assertEquals(W - AzTabPolicy.leadInPx(D), rtl.touch.right, 0f);
-        assertEquals(0f, rtl.touch.top, 0f);
-
-        AzTabPolicy.Placement left = AzTabPolicy.place(Edge.LEFT, true, W, H, D);
-        assertEquals(AzTabPolicy.leadInPx(D), left.touch.top, 0f);
-        assertEquals(0f, left.touch.left, 0f);
-        assertEquals(AzTabPolicy.TAB_THICKNESS_DP * D, left.visual.width(), 0f);
-        assertEquals(AzTabPolicy.TAB_LENGTH_DP * D, left.visual.height(), 0f);
-
-        AzTabPolicy.Placement right = AzTabPolicy.place(Edge.RIGHT, false, W, H, D);
-        assertEquals(W, right.touch.right, 0f);
-        assertEquals(W - AzTabPolicy.TAB_EDGE_GAP_DP * D, right.visual.right, 0f);
+    public void theTabNeverTouchesTheCanvasCornerSquares() {
+        float corner = CornerZones.paneSizePx(D);
+        for (Edge edge : Edge.values()) {
+            for (boolean rtl : new boolean[] {false, true}) {
+                AzTabPolicy.Placement tab = AzTabPolicy.placeOnScreen(edge, rtl, CANVAS,
+                    SCREEN_W, D);
+                assertTrue(edge + " rtl=" + rtl + " clear of the top corners",
+                    tab.touch.top >= CANVAS.top + corner);
+                assertTrue(edge + " rtl=" + rtl + " clear of the bottom corners",
+                    tab.touch.bottom <= CANVAS.bottom - corner);
+            }
+        }
     }
 
     @Test
     public void aShortCanvasGivesUpTheLeadInBeforeTheTab() {
-        float length = 70f * D;
-        AzTabPolicy.Placement tab = AzTabPolicy.place(Edge.BOTTOM, false, length, H, D);
-        assertEquals(AzTabPolicy.TOUCH_LENGTH_DP * D, tab.touch.width(), 0f);
-        assertEquals(length, tab.touch.right, 0f);
+        AzTabPolicy.Box shortCanvas = new AzTabPolicy.Box(0f, 100f * D, W, 170f * D);
+        AzTabPolicy.Placement tab = AzTabPolicy.placeOnScreen(Edge.LEFT, false, shortCanvas,
+            SCREEN_W, D);
+        assertEquals(AzTabPolicy.TOUCH_LENGTH_DP * D, tab.touch.height(), 0f);
+        assertEquals(shortCanvas.bottom, tab.touch.bottom, 0f);
 
-        AzTabPolicy.Placement tiny = AzTabPolicy.place(Edge.BOTTOM, false, 30f * D, H, D);
-        assertEquals(0f, tiny.touch.left, 0f);
-        assertEquals(30f * D, tiny.touch.right, 0f);
-        assertTrue(tiny.visual.width() <= 30f * D);
+        AzTabPolicy.Box tiny = new AzTabPolicy.Box(0f, 100f * D, W, 130f * D);
+        AzTabPolicy.Placement small = AzTabPolicy.placeOnScreen(Edge.LEFT, false, tiny,
+            SCREEN_W, D);
+        assertEquals(tiny.top, small.touch.top, 0f);
+        assertEquals(tiny.bottom, small.touch.bottom, 0f);
+        assertTrue(small.visual.height() <= 30f * D);
     }
 
     @Test
     public void anEmptyCanvasHasNothingToHit() {
-        AzTabPolicy.Placement tab = AzTabPolicy.place(Edge.BOTTOM, false, 0f, 0f, D);
+        AzTabPolicy.Placement tab = AzTabPolicy.placeOnScreen(Edge.BOTTOM, false,
+            AzTabPolicy.EMPTY, SCREEN_W, D);
         assertTrue(tab.touch.isEmpty());
         assertFalse(tab.hit(0f, 0f));
+    }
+
+    @Test
+    public void aFingerOnTheTabIsHandedToTheLettersMiddleLine() {
+        float thickness = 29f * D;
+        float margin = 10f * D;
+        for (Edge edge : Edge.values()) {
+            AzTabPolicy.Placement tab = AzTabPolicy.placeOnScreen(edge, false, CANVAS,
+                SCREEN_W, D);
+            AzTabPolicy.Box inCanvas = AzTabPolicy.revealBox(edge, W, H, thickness, margin,
+                12f * D);
+            AzTabPolicy.Box letters = new AzTabPolicy.Box(CANVAS.left + inCanvas.left,
+                CANVAS.top + inCanvas.top, CANVAS.left + inCanvas.right,
+                CANVAS.top + inCanvas.bottom);
+            float x = (tab.visual.left + tab.visual.right) / 2f;
+            float y = (tab.visual.top + tab.visual.bottom) / 2f;
+            float[] shift = AzTabPolicy.shiftOntoLetters(edge, letters, x, y);
+            float heardX = x + shift[0];
+            float heardY = y + shift[1];
+            if (edge.isOnSide()) {
+                assertEquals(edge + ": along the column the finger stays put", y, heardY, 0f);
+                assertEquals((letters.left + letters.right) / 2f, heardX, 1e-3f);
+            } else {
+                assertEquals(edge + ": along the row the finger stays put", x, heardX, 0f);
+                assertEquals((letters.top + letters.bottom) / 2f, heardY, 1e-3f);
+            }
+        }
+        assertArrayEquals(new float[] {0f, 0f},
+            AzTabPolicy.shiftOntoLetters(Edge.BOTTOM, AzTabPolicy.EMPTY, 3f, 4f), 0f);
+    }
+
+    @Test
+    public void withoutGlassTheTabIsItsBaseMadeSolid() {
+        int base = Color.argb(120, 30, 40, 50);
+        assertEquals("glass is the material, nothing under it", 0,
+            AzTabPolicy.tabFill(true, base));
+        assertEquals(OnGlass.opaque(base), AzTabPolicy.tabFill(false, base));
+        assertEquals(255, Color.alpha(AzTabPolicy.tabFill(false, base)));
+    }
+
+    @Test
+    public void theTabsLetterReadsAsBodyTextOnItsBase() {
+        int[] bases = {Color.rgb(20, 22, 28), Color.rgb(240, 240, 236), Color.rgb(90, 110, 140)};
+        // Seeds the letters might have been given for the dock's glass over a wallpaper: some of
+        // them all but invisible on the tab's own base.
+        int[] seeds = {Color.rgb(30, 30, 30), Color.rgb(235, 235, 235), Color.rgb(100, 120, 150)};
+        for (int base : bases) {
+            for (int seed : seeds) {
+                int ink = AzTabPolicy.glyphInk(base, seed);
+                assertTrue(Integer.toHexString(base) + "/" + Integer.toHexString(seed),
+                    OnGlass.ratio(OnGlass.opaque(ink), base) >= OnGlass.TARGET_BODY_TEXT - 0.05d);
+            }
+        }
     }
 
     @Test
@@ -125,20 +200,6 @@ public class AzTabPolicyTest {
         AzTabPolicy.Box column = AzTabPolicy.revealBox(Edge.RIGHT, W, H, thickness, margin, inset);
         assertEquals(new AzTabPolicy.Box(W - margin - thickness, margin, W - margin, H - margin),
             column);
-    }
-
-    @Test
-    public void theLettersCoverTheTabWhenTheyAreOut() {
-        float thickness = 29f * D;
-        float margin = 10f * D;
-        for (Edge edge : Edge.values()) {
-            AzTabPolicy.Placement tab = AzTabPolicy.place(edge, false, W, H, D);
-            AzTabPolicy.Box row = AzTabPolicy.revealBox(edge, W, H, thickness, margin, 12f * D);
-            float cx = (tab.visual.left + tab.visual.right) / 2f;
-            float cy = (tab.visual.top + tab.visual.bottom) / 2f;
-            assertTrue(edge + ": a finger resting on the tab is on the letters",
-                row.contains(cx, cy));
-        }
     }
 
     @Test
