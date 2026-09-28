@@ -1418,6 +1418,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private void scrollSelectedIntoView(int selectedIndex) {
         if (selectedIndex < 0 || selectedIndex >= mTabs.getChildCount()) return;
         post(() -> {
+            // The list can be rebuilt shorter before this runs (an X11 app opening and closing
+            // windows in a burst), so the index is checked again against the row as it is now.
+            if (selectedIndex >= mTabs.getChildCount()) return;
             View selected = mTabs.getChildAt(selectedIndex);
             int target = Math.max(0, selected.getLeft() - dp(5));
             if (target == getScrollX()) return;

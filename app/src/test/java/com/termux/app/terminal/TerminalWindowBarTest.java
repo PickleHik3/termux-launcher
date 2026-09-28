@@ -62,6 +62,21 @@ public class TerminalWindowBarTest {
     }
 
     @Test
+    public void aShorterListBeforeTheScrollRunsDoesNotCrash() {
+        // Attached, as on the phone: a detached view holds its posts until it is attached.
+        android.app.Activity activity = org.robolectric.Robolectric.buildActivity(android.app.Activity.class).setup().get();
+        TerminalWindowBar bar = new TerminalWindowBar(activity, null);
+        activity.setContentView(bar);
+        bar.setWindows(Arrays.asList(
+            new TerminalWindowBar.WindowItem("one", "one"),
+            new TerminalWindowBar.WindowItem("two", "two"),
+            new TerminalWindowBar.WindowItem("three", "three")), 2);
+        bar.setWindows(Collections.singletonList(new TerminalWindowBar.WindowItem("one", "one")), 0);
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
+        assertEquals(0, bar.getScrollX());
+    }
+
+    @Test
     public void addWindowIcon_isGeometricallyCenteredWithoutTextPadding() {
         TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
         bar.setWindows(Arrays.asList(new TerminalWindowBar.WindowItem("home", "home")), 0);
