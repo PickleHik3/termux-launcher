@@ -311,4 +311,43 @@ final class TaiBenchLeaderboard {
         }
         return latest;
     }
+
+    /**
+     * The Model centre's speed pill: the best (highest) writing speed the ranked leaderboard
+     * shows per model, across every accelerator that model was measured on. A broken entry
+     * carries no speed and is ignored. Pure over the same JSON {@link #read} takes, so the
+     * Model centre can compute it off the main thread without building a full {@link Board}.
+     */
+    @NonNull
+    static Map<String, Double> bestSpeedByModel(@Nullable JSONObject benchmarks) {
+        Map<String, Double> best = new HashMap<>();
+        JSONObject leaderboard = benchmarks == null ? null : benchmarks.optJSONObject("leaderboard");
+        JSONArray ranked = leaderboard == null ? null : leaderboard.optJSONArray("ranked");
+        if (ranked == null) return best;
+        for (int i = 0; i < ranked.length(); i++) {
+            JSONObject row = ranked.optJSONObject(i);
+            if (row == null) continue;
+            String modelId = row.optString("modelId", "");
+            if (modelId.isEmpty()) continue;
+            double writingTps = row.optDouble("writingTps", 0.0);
+            if (writingTps <= 0.0) continue;
+            Double current = best.get(modelId);
+            if (current == null || writingTps > current) best.put(modelId, writingTps);
+        }
+        return best;
+    }
+
+    /**
+     * The quiet speed pill's number, without a unit: rounded to an integer at 10 and above, one
+     * decimal place below it (so a slow model still reads as more than "0"). The caller wraps it
+     * in {@code R.string.tai_bench_tps} for the unit, same as {@code TaiBenchViews.tps}.
+     */
+    @NonNull
+    static String formatTpsValue(double writingTps) {
+        if (writingTps >= 10.0) return String.valueOf(Math.round(writingTps));
+        double rounded = Math.round(writingTps * 10.0) / 10.0;
+        return rounded == Math.rint(rounded)
+            ? String.format(java.util.Locale.US, "%.0f", rounded)
+            : String.format(java.util.Locale.US, "%.1f", rounded);
+    }
 }
