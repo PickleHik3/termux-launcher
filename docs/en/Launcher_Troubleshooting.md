@@ -180,10 +180,10 @@ edition: `com.termux` for standard or `io.vaj.tl` for VAJ.
 
 Loss of Shizuku must not stop ordinary terminal, dock, pane, workspace, or app-launch behavior.
 
-## TAI does not start or a client cannot connect
+## On-device AI does not start or a client cannot connect
 
-Open **Settings → Services & permissions → TAI · Termux AI** and check the service status, selected
-model, port, and authentication setting. Then run:
+Open **Settings → On-device AI** and check the service status, selected model, port, and
+authentication setting. Then run:
 
 ```sh
 tai status
@@ -193,7 +193,7 @@ tai doctor
 ```
 
 Localhost and LAN security rules differ; LAN bind mode always requires the token. Continue with the
-[TAI user guide](Termux_AI.md) or [LauncherCtl API reference](LauncherCtl_API.md).
+[On-device AI user guide](On_Device_AI.md) or [LauncherCtl API reference](LauncherCtl_API.md).
 
 ## fastfetch does not start after tlstore install
 

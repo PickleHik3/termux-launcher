@@ -6,7 +6,7 @@ the OpenAI-compatible `/v1/audio/speech` route. No text leaves the device.
 
 ## Quick start
 
-1. Open **Settings → Services & permissions → TAI · Termux AI → Model centre**, go to **Speech**, and
+1. Open **Settings → On-device AI → Model centre**, go to **Speech**, and
    install **KittenTTS Nano 0.8** under **Voice output** (about 90 MB).
 2. Long-press text in the terminal to select it, then tap **Read aloud** in the selection toolbar.
 3. Or, in a shell:
@@ -137,4 +137,4 @@ again.
 - **Non-English text sounds wrong.** The voice model reads English only.
 
 To turn speech into text instead, see [Voice input](Voice_Input.md). For the rest of the local API,
-see [TAI / Termux AI](Termux_AI.md).
+see [On-device AI](On_Device_AI.md).

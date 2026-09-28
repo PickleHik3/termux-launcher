@@ -129,8 +129,8 @@ None of these are required for the basic launcher and terminal:
   **Settings → Look → Terminal fonts**.
 - **Shizuku:** optional privileged backend for features such as the Shizuku lock method. Normal
   launching, panes, workspaces, and the terminal do not need it.
-- **TAI / Termux AI:** optional local model host under **Settings → Services & permissions → TAI ·
-  Termux AI**. See the [TAI user guide](Termux_AI.md).
+- **On-device AI:** optional local model host under **Settings → On-device AI**. See the
+  [On-device AI user guide](On_Device_AI.md).
 - **`tlstore`:** the launcher's own tool store. `tlstore shell` installs fish with a wallpaper-matched
   prompt, `eza` and `zoxide`; `tlstore install` opens a picker for everything else — a Neovim colour
   scheme that follows your wallpaper, the showcase binaries (sigye, fastfetch, kitten), and Claude
