@@ -39,7 +39,8 @@ import com.termux.view.HoldTiming;
  *
  * <p>A <em>hold</em> on one of the page's four corners drops the same tab the Display page's
  * corners drop, with the page's own buttons: the pencil that starts editing the widgets, the plus
- * that adds a page, and the three doors every place carries — Appearance, Layout and Wallpaper.
+ * that adds a page, and the four doors every place carries — Appearance, Layout, Wallpaper and
+ * minimal mode.
  * It comes out of the corner that was touched, so the tab lands under the thumb that asked for it.
  * While a widget is being edited those buttons are replaced by the grid's size, which opens the
  * wheels that change it. Everything between the corners is the widgets': a grid that reaches the
@@ -58,6 +59,10 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         default void openLayoutEditor() {}
         /** The wallpaper glyph: open the in-app wallpaper picker, as every corner tab does. */
         default void openWallpaperPicker() {}
+        /** Whether the launcher is in minimal mode, which the tab's glyph shows. */
+        default boolean isMinimalMode() { return false; }
+        /** The minimal-mode glyph: turn minimal mode on or off, as every corner tab does. */
+        default void toggleMinimalMode() {}
         /** The columns the grid is showing now. */
         int widgetGridColumns();
         /** The rows the grid is showing now. */
@@ -79,6 +84,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     /** The plus: another widgets page, which the pane turns to. */
     private static final int ACTION_ADD_PAGE = 8;
     private static final int ACTION_WALLPAPER = 9;
+    /** Minimal mode on or off; the glyph shows which. The same button every place's tab has. */
+    private static final int ACTION_MINIMAL = 10;
 
     private final PaneRim mRim = new PaneRim();
     @Nullable private PaneGlassBackdropView mGlass;
@@ -215,7 +222,16 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
             PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT),
             PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER),
+            // Minimal mode is one mode for every place, so Home carries the same door in and
+            // out as the terminal and the display; the mark reads the state as it draws.
+            PaneControlsView.Action.drawn(ACTION_MINIMAL, com.termux.app.chrome.MinimalModeGlyph
+                .mark(getContext(), () -> mHost != null && mHost.isMinimalMode())),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
+    }
+
+    /** Redraws the tab, whose minimal-mode glyph follows the launcher's state. */
+    public void invalidateControls() {
+        if (mControls != null) mControls.invalidate();
     }
 
     /**
@@ -297,6 +313,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
         else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
         else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
+        else if (id == ACTION_MINIMAL) { dismissControls(); mHost.toggleMinimalMode(); }
         else if (id == ACTION_EDIT) mHost.editWidgets();
     }
 

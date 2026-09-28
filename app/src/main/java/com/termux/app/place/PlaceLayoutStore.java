@@ -24,17 +24,19 @@ import java.util.Set;
  * property of the orientation, and one arrangement per orientation is shared by every place — the
  * widget grid, the terminal and the Linux display all stand in the same chrome (ADR 0003).
  *
- * <p>Keys are {@code layout.<portrait|landscape>.<key>} for the arrangement and
- * {@code place.<home|terminal|display>.<key>} for the two things a place still remembers of its own:
- * whether it was left with the keyboard up, and whether it is in minimal mode. A missing arrangement key falls back to the shared value
- * the launcher used to keep globally, and then to the shipped default, so nothing has to be written
- * before the chrome reads the way it always looked.
+ * <p>Keys are {@code layout.<portrait|landscape>.<key>} for the arrangement,
+ * {@code place.<home|terminal|display>.<key>} for the one thing a place still remembers of its own
+ * — whether it was left with the keyboard up — and {@code place.minimal} for minimal mode, which
+ * is one mode for the whole launcher rather than a place's. A missing arrangement key falls back
+ * to the shared value the launcher used to keep globally, and then to the shipped default, so
+ * nothing has to be written before the chrome reads the way it always looked.
  *
  * <p>The arrangement used to be kept per place as well as per orientation. Version 6 of the
  * migration folds that into the shared keys, seeding each orientation from the place the value
  * showed on — the terminal's for everything the terminal draws — and then drops every place's own
  * copy. The same step folds the place-scoped look overrides into the shared look, since those were
- * kept in this file's key scheme too.
+ * kept in this file's key scheme too. Version 7 folds the per-place minimal flags into the one
+ * launcher-wide flag.
  *
  * <p>No Android views here, on purpose: this is a resolver over {@link SharedPreferences} and it is
  * tested as one.
@@ -42,7 +44,7 @@ import java.util.Set;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the current ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 6;
+    @VisibleForTesting static final int MIGRATION_VERSION = 7;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -86,7 +88,10 @@ public final class PlaceLayoutStore {
     private static final boolean LANDSCAPE_RESTS_COMPACT = true;
 
     private static final String KEY_KEYBOARD_OPEN = "keyboard_open";
-    /** Minimal mode, kept beside the keyboard memory it overrides: {@code place.<p>.minimal}. */
+    /**
+     * Minimal mode, one flag for the whole launcher: {@code place.minimal}. Before version 7 each
+     * place kept its own under {@code place.<p>.minimal}, which is the same unscoped key.
+     */
     private static final String KEY_MINIMAL = "minimal";
     private static final String KEY_KEYBOARD_FLOAT_X = "keyboard_float_x";
     private static final String KEY_KEYBOARD_FLOAT_Y = "keyboard_float_y";
@@ -535,20 +540,25 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * Whether the place is in minimal mode (CONTEXT.md). Remembered per place until it is turned
-     * off, like the keyboard beside it, and never for Home, which has no pane to give the screen
-     * to ({@link MinimalMode#available}). It does not overwrite the keyboard memory: a minimal
-     * place simply comes back with the keyboard down, and turning the mode off brings back what
-     * the place remembered.
+     * Whether the launcher is in minimal mode (CONTEXT.md). One flag for every place, remembered
+     * until it is turned off: paging to another place never leaves the mode, since the mode is
+     * not any place's. It does not overwrite the keyboard memory: a place simply comes back with
+     * the keyboard down while the mode is on, and turning it off brings back what the place
+     * remembered.
      */
-    public boolean isMinimal(@NonNull PaneWallPage place) {
-        if (!MinimalMode.available(place)) return false;
-        return mStore != null && mStore.getBoolean(memoryKey(place, KEY_MINIMAL), false);
+    public boolean isMinimal() {
+        return mStore != null && mStore.getBoolean(minimalKey(), false);
     }
 
-    public void setMinimal(@NonNull PaneWallPage place, boolean minimal) {
-        if (!MinimalMode.available(place)) return;
-        writeBoolean(memoryKey(place, KEY_MINIMAL), minimal);
+    public void setMinimal(boolean minimal) {
+        writeBoolean(minimalKey(), minimal);
+    }
+
+    /** {@code place.minimal}: the launcher's, not a place's. */
+    @VisibleForTesting
+    @NonNull
+    static String minimalKey() {
+        return PREFIX + KEY_MINIMAL;
     }
 
     /**
@@ -676,9 +686,26 @@ public final class PlaceLayoutStore {
         }
         SharedPreferences.Editor editor = mStore.edit();
         if (fromVersion < 6) migrateToSharedLayout(editor);
+        if (fromVersion < 7) migrateToOneMinimalMode(editor);
         editor.putInt(KEY_MIGRATED, MIGRATION_VERSION);
         editor.apply();
         mRevision++;
+    }
+
+    /**
+     * Version 7: one minimal mode for the whole launcher. The terminal's own flag decides, since
+     * the terminal is the place the mode was built for and the one a launch comes back to; a
+     * terminal that never stored one defers to the display's. Every place's own flag then goes.
+     */
+    private void migrateToOneMinimalMode(@NonNull SharedPreferences.Editor editor) {
+        String terminal = memoryKey(PaneWallPage.TERMINAL, KEY_MINIMAL);
+        String display = memoryKey(PaneWallPage.DISPLAY, KEY_MINIMAL);
+        Boolean minimal = null;
+        if (mStore.contains(terminal)) minimal = mStore.getBoolean(terminal, false);
+        else if (mStore.contains(display)) minimal = mStore.getBoolean(display, false);
+        if (minimal != null) editor.putBoolean(minimalKey(), minimal);
+        for (PaneWallPage place : PaneWallPage.values())
+            editor.remove(memoryKey(place, KEY_MINIMAL));
     }
 
     /** Versions 1 to 5, exactly as they ran when the arrangement was still kept per place. */

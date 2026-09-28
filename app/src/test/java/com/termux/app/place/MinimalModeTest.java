@@ -8,7 +8,6 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
@@ -29,14 +28,6 @@ public class MinimalModeTest {
     private static PlaceLayout landscape() {
         return new PlaceLayout(Edge.TOP, RowPlacement.LEFT, true, Edge.TOP,
             RowPlacement.BOTTOM, KeyboardMode.OVERLAY, KeyboardForm.DOCKED, 6, 3);
-    }
-
-    @Test
-    public void onlyTheTerminalAndTheDisplayCanBeMinimal() {
-        assertTrue(MinimalMode.available(PaneWallPage.TERMINAL));
-        assertTrue(MinimalMode.available(PaneWallPage.DISPLAY));
-        assertFalse("Home has no pane to give the screen to",
-            MinimalMode.available(PaneWallPage.WIDGETS));
     }
 
     @Test
@@ -84,34 +75,14 @@ public class MinimalModeTest {
         assertFalse(MinimalMode.keyboardOnEnter(false, true));
     }
 
-    @Test
-    public void theStripIsThinButNeverNothing() {
-        assertEquals(12, MinimalMode.stripThicknessPx(1f));
-        assertEquals(36, MinimalMode.stripThicknessPx(3f));
-        assertEquals(1, MinimalMode.stripThicknessPx(0f));
-    }
-
     /**
-     * The strip lies over the pane's edge rather than beside it: the stack it stands in gives the
-     * strip's thickness back, and no other stack gives anything.
+     * The status bar reserves nothing while the mode is on — there is no strip to swipe out of
+     * the mode from any more — and exactly what it rests at otherwise.
      */
     @Test
-    public void theStripsStackGivesItsThicknessBackToThePane() {
-        assertEquals(36, MinimalMode.stripOverlapPx(true, Edge.TOP, Edge.TOP, 36));
-        assertEquals(36, MinimalMode.stripOverlapPx(true, Edge.LEFT, Edge.LEFT, 36));
-        assertEquals(36, MinimalMode.stripOverlapPx(true, Edge.RIGHT, Edge.RIGHT, 36));
-        assertEquals("another stack reserves what it did",
-            0, MinimalMode.stripOverlapPx(true, Edge.TOP, Edge.LEFT, 36));
-        assertEquals("the bar moved edge: the stack it left gives nothing back",
-            0, MinimalMode.stripOverlapPx(true, Edge.LEFT, Edge.TOP, 36));
-    }
-
-    @Test
-    public void theStripGivesNothingBackOffMinimalModeOrAlongTheBottom() {
-        assertEquals(0, MinimalMode.stripOverlapPx(false, Edge.TOP, Edge.TOP, 36));
-        // A bottom bar is a band of the dock's stack, whose height is the accessory geometry's
-        // arithmetic rather than the layout's; it keeps its band.
-        assertEquals(0, MinimalMode.stripOverlapPx(true, Edge.BOTTOM, Edge.BOTTOM, 36));
-        assertEquals(0, MinimalMode.stripOverlapPx(true, Edge.TOP, Edge.TOP, -5));
+    public void theStatusBarReservesNothingInMinimalMode() {
+        assertEquals(0, MinimalMode.statusBarThicknessPx(true, 96));
+        assertEquals(96, MinimalMode.statusBarThicknessPx(false, 96));
+        assertEquals(0, MinimalMode.statusBarThicknessPx(false, -5));
     }
 }

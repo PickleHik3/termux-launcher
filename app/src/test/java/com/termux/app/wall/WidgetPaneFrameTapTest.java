@@ -53,8 +53,8 @@ public class WidgetPaneFrameTapTest {
     private static final int HEIGHT = 800;
     /** The square each corner keeps, the same one a terminal pane holds. */
     private static final float CORNER_DP = CornerZones.PANE_SIZE_DP;
-    /** The resting tab: six 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
-    private static final float TAB_WIDTH_DP = 230f;
+    /** The resting tab: seven 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
+    private static final float TAB_WIDTH_DP = 268f;
     private static final float TAB_INSET_DP = 0f;
     /** One button and the gap after it. */
     private static final float TAB_STEP_DP = 38f;
@@ -69,6 +69,9 @@ public class WidgetPaneFrameTapTest {
         @Override public void openSurfaceEditor() { log.add("appearance"); }
         @Override public void openLayoutEditor() { log.add("layout"); }
         @Override public void openWallpaperPicker() { log.add("wallpaper"); }
+        boolean minimal;
+        @Override public boolean isMinimalMode() { return minimal; }
+        @Override public void toggleMinimalMode() { minimal = !minimal; log.add("minimal"); }
         @Override public int widgetGridColumns() { return columns; }
         @Override public int widgetGridRows() { return rows; }
         @Override public void setWidgetGrid(int newColumns, int newRows) {
@@ -138,6 +141,11 @@ public class WidgetPaneFrameTapTest {
     /** The fifth button: the wallpaper glyph, one button and gap past Layout. */
     private static float wallpaperX(Activity activity) {
         return buttonX(activity, 4);
+    }
+
+    /** The sixth button: minimal mode, the same door every place's tab carries. */
+    private static float minimalX(Activity activity) {
+        return buttonX(activity, 5);
     }
 
     private static float tabCentreY(Activity activity) {
@@ -469,6 +477,32 @@ public class WidgetPaneFrameTapTest {
         holdCorner(page);
         tap(page, wallpaperX(activity), bounds.centerY());
         assertEquals(Arrays.asList("appearance", "layout", "wallpaper"), calls.log);
+        assertFalse(page.isControlsTabShown());
+    }
+
+    /**
+     * Minimal mode is one mode for every place, so Home's tab carries the same button in and
+     * out of it as the terminal's and the display's: a tap flips it and puts the tab away, and
+     * the next tap flips it back.
+     */
+    @Test
+    public void theTabCarriesTheMinimalModeButton() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        WidgetPaneFrame page = page(activity);
+        Calls calls = new Calls();
+        page.setHost(calls);
+        holdCorner(page);
+        RectF bounds = new RectF();
+        page.controlsTab().tabBounds(bounds);
+        tap(page, minimalX(activity), bounds.centerY());
+        assertEquals(Collections.singletonList("minimal"), calls.log);
+        assertTrue(calls.minimal);
+        assertFalse(page.isControlsTabShown());
+
+        holdCorner(page);
+        tap(page, minimalX(activity), bounds.centerY());
+        assertEquals(Arrays.asList("minimal", "minimal"), calls.log);
+        assertFalse("the same button is the way back", calls.minimal);
         assertFalse(page.isControlsTabShown());
     }
 

@@ -121,18 +121,21 @@ covers turning it on, its menu, the touchpad and GPU acceleration.
 
 ### Minimal mode
 
-The terminal and the Display place each have a minimal mode, which gives the pane the whole
-screen: the status bar shrinks to a thin strip, the pinned apps, the A–Z index, the extra keys and
-the keyboard go away, and the pane takes the room in portrait and landscape alike. On the terminal
-a split shows its active pane maximised. Hold a pane's corner and tap the four outward corners to
-turn it on; the same button, now pointing inward, turns it off, and so does swiping down on the
-strip. A place stays minimal until you turn it off, and the keyboard comes back as it was.
+Minimal mode gives every place the whole screen: the status bar, the pinned apps, the A–Z index,
+the extra keys and the keyboard go away, and the widgets, the terminal or the display take the
+room in portrait and landscape alike. On the terminal a split shows its active pane maximised. It
+is one mode for the whole launcher, not a setting of one place: turn it on from Widgets and the
+terminal and the display are minimal too, and moving between places never turns it off. Hold a
+corner and tap the four outward corners to turn it on; the same button, now pointing inward, turns
+it off, and nothing else does. It stays on until you turn it off, across restarts, and the keyboard
+comes back as each place last had it. You can still bring the keyboard up while it is on: a tap on
+the terminal raises it as usual, and it goes down again when you move to another place.
 
-To move to another place from a minimal one, swipe sideways along the pane's top or bottom edge;
-the strip pages too. A swipe that starts anywhere else, or that turns up or down first, is the
-pane's own — a program's mouse drag, a scroll, a text selection — and the corners stay the corner
-tab's. With Fancier Glass on, the pane tips like a plank under your finger as it goes, and lies
-flat again on the place that arrives; the Display place slides without the tip.
+To move to another place while minimal, swipe sideways along the page's top or bottom edge. A
+swipe that starts anywhere else, or that turns up or down first, is the page's own — a program's
+mouse drag, a scroll, a text selection — and the corners stay the corner tab's. With Fancier Glass
+on, the terminal pane tips like a plank under your finger as it goes, and lies flat again on the
+place that arrives; the Display place slides without the tip.
 
 Swiping between places moves the dock and the keyboard with the wall: coming from Widgets to a
 terminal left with its keyboard up, the keys rise with the slide and the dock rides up on them.
