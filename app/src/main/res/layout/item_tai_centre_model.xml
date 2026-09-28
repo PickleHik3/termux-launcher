@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Model centre model row (an installed model, or a catalogue entry to install): the nested card
-     with the kind icon, name over "speech · 586 MB · voice input", the In use / Default pills,
-     then either an Install pill (with a ring while the request runs) or the row's overflow menu.
-     A note line underneath carries a RAM warning or the "Needs 3.7 GB, 1.2 GB free" refusal. -->
+     with the kind icon, name over "speech · 586 MB · voice input", a quiet backend pill (LiteRT,
+     MNN) then the In use / Default pills, then either an Install pill (with a ring while the
+     request runs) or the row's overflow menu. A note line underneath carries a RAM warning or the
+     "Needs 3.7 GB, 1.2 GB free" refusal. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -79,10 +80,24 @@
                 </LinearLayout>
 
                 <TextView
-                    android:id="@+id/tai_centre_pill_primary"
+                    android:id="@+id/tai_centre_pill_backend"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
+                    android:background="@drawable/tai_centre_pill"
+                    android:fontFamily="sans-serif-medium"
+                    android:paddingStart="9dp"
+                    android:paddingTop="3dp"
+                    android:paddingEnd="9dp"
+                    android:paddingBottom="3dp"
+                    android:textSize="10.5sp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tai_centre_pill_primary"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="4dp"
                     android:background="@drawable/tai_centre_pill"
                     android:fontFamily="sans-serif-medium"
                     android:paddingStart="9dp"

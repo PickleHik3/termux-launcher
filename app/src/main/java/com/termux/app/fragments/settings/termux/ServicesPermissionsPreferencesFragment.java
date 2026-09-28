@@ -14,8 +14,6 @@ import androidx.core.app.NotificationManagerCompat;
 import androidx.preference.Preference;
 
 import com.termux.R;
-import com.termux.ai.TaiManager;
-import com.termux.ai.TaiSettings;
 import com.termux.app.TermuxActivity;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.StatusActionPreference;
@@ -61,35 +59,12 @@ public final class ServicesPermissionsPreferencesFragment extends MaterialPrefer
     }
 
     private void refresh(@NonNull Context context) {
-        refreshTai(context);
         refreshShizuku();
         setPermission(STORAGE, PermissionUtils.checkAndRequestLegacyOrManageExternalStoragePermission(context, -1, true, false));
         refreshWallpaperRead(context);
         setPermission(NOTIFICATION_ACCESS, LauncherNotificationAccess.isEnabled(context));
         setPermission(ACCESSIBILITY, LauncherLockAccessibilityAccess.isEnabled(context));
         setPermission(NOTIFICATIONS, NotificationManagerCompat.from(context).areNotificationsEnabled());
-    }
-
-    private void refreshTai(@NonNull Context context) {
-        Preference row = findPreference("service_tai");
-        if (!(row instanceof StatusActionPreference)) return;
-        TaiManager manager = TaiManager.getInstance(context);
-        String model = new TaiSettings(context).getDefaultAssistantModel();
-        boolean configured = model != null && !model.isEmpty() && manager.isModelAvailable(model);
-        ((StatusActionPreference) row).setState(getString(configured ? R.string.settings_status_stopped
-            : R.string.settings_status_not_configured), getString(R.string.settings_manage_action),
-            StatusActionPreference.Tone.NEUTRAL);
-        new Thread(() -> {
-            boolean running = manager.getRuntimeState().loaded;
-            if (isAdded() && getActivity() != null) getActivity().runOnUiThread(() -> {
-                Preference current = findPreference("service_tai");
-                if (current instanceof StatusActionPreference) ((StatusActionPreference) current).setState(
-                    getString(running ? R.string.settings_status_running : configured
-                        ? R.string.settings_status_stopped : R.string.settings_status_not_configured),
-                    getString(R.string.settings_manage_action), running
-                        ? StatusActionPreference.Tone.POSITIVE : StatusActionPreference.Tone.NEUTRAL);
-            });
-        }).start();
     }
 
     private void refreshShizuku() {

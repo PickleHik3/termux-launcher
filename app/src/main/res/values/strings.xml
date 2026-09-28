@@ -78,8 +78,9 @@
     <string name="settings_destination_display_summary">Linux display on or off, touch, resolution, clipboard, and how it starts</string>
     <string name="settings_destination_launcher_apps">Apps</string>
     <string name="settings_destination_launcher_apps_summary">Pinned apps, drawer, search, notifications, and home behavior</string>
+    <string name="settings_destination_on_device_ai_summary">Models, voice, and the local AI server</string>
     <string name="settings_destination_services_permissions">Services &amp; permissions</string>
-    <string name="settings_destination_services_permissions_summary">TAI, Shizuku, Termux:API, files, notifications, and accessibility</string>
+    <string name="settings_destination_services_permissions_summary">Shizuku, Termux:API, files, notifications, and accessibility</string>
     <string name="settings_destination_advanced_diagnostics">Advanced &amp; diagnostics</string>
     <string name="settings_destination_advanced_diagnostics_summary">Logging, tests, diagnostics, terminal internals, and developer tools</string>
     <string name="settings_destination_about_support">About &amp; support</string>
@@ -410,7 +411,7 @@
     <string name="settings_key_popup_title">Key popup</string>
     <string name="settings_keyboard_credits_header">Keyboard credits</string>
     <string name="settings_connected_services_header">Connected services</string>
-    <string name="settings_tai_service_title">TAI · Termux AI</string>
+    <string name="settings_tai_service_title">On-device AI</string>
     <string name="settings_shizuku_service_title">Shizuku</string>
     <string name="settings_termux_api_service_title">Termux:API</string>
     <string name="settings_service_manage_summary">Manage the local AI service and models.</string>
@@ -1051,7 +1052,7 @@
 
         <string name="termux_privileged_access_preferences_title">Shizuku</string>
 
-        <string name="termux_ai_preferences_title">TAI · Termux AI</string>
+        <string name="termux_ai_preferences_title">On-device AI</string>
         <string name="termux_ai_zone_runtime_title">Runtime</string>
         <string name="termux_ai_zone_models_title">Models</string>
         <string name="termux_ai_zone_server_title">Server</string>
@@ -1341,6 +1342,8 @@
         <string name="tai_centre_action_more">More actions for %1$s</string>
         <string name="tai_centre_pill_in_use">In use</string>
         <string name="tai_centre_pill_default">Default</string>
+        <string name="tai_centre_pill_backend_litert">LiteRT</string>
+        <string name="tai_centre_pill_backend_mnn">MNN</string>
         <string name="tai_centre_pill_loaded">Loaded</string>
         <string name="tai_centre_pill_installed">Installed</string>
         <string name="tai_centre_installed_banner">%1$s installed</string>
