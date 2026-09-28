@@ -1,6 +1,6 @@
 # Fancier Glass — spec (2026-09-27)
 
-Status: agreed with the developer on 2026-09-27. Nothing here has been built yet.
+Status: agreed with the developer on 2026-09-27. Built since: §4's refraction (ADR 0005) and M8.
 Motion mockups: `.lavish/fancier-glass-motion.html`. Prototype wallpaper pack: `~/Projects/termux-launcher/wallpaper-packs/proto-01/`.
 Measurements behind the bug list: pong session 2026-09-27; see `project-docs/plans/perf-home-terminal-idle-handoff-2026-09-27.md`.
 
@@ -101,6 +101,7 @@ Bug fixes (all versions, API 26+):
 | M4 | Portrait ↔ landscape | The chrome frosts and dims during rotation, and the new layout thaws in. The wallpaper stays sharp | Crossfade |
 | M5 | App launch from the dock | The icon's lens swells, the dock gives, and the launch uses `ActivityOptions.makeClipRevealAnimation` from the icon's bounds. Return plays in reverse | Lens (current) |
 | M6 | Page slide | The glass is registered to the wallpaper at its true position. Side-edge refraction grows with slide speed | Registration fix only |
+| M8 | Minimal-mode edge paging (built 2026-09-28) | A sideways swipe along the pane's top or bottom edge, or the strip, drags the wall. The page under the finger tips about its vertical centre line like a plank — the leading side dips, peaking at 12° half a width out — and lies flat as the wall's own settle carries it out or brings it back (`wall/PlankTilt`, `wall/MinimalEdgeSwipe`). A hardware layer for the length of the gesture; no capture. The Display place slides flat: its picture is a `SurfaceView` a rotation cannot carry | Plain page change, no tilt |
 
 M7 (a sheet dropping out of the touch point) is out for now.
 

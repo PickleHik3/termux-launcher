@@ -128,6 +128,12 @@ a split shows its active pane maximised. Hold a pane's corner and tap the four o
 turn it on; the same button, now pointing inward, turns it off, and so does swiping down on the
 strip. A place stays minimal until you turn it off, and the keyboard comes back as it was.
 
+To move to another place from a minimal one, swipe sideways along the pane's top or bottom edge;
+the strip pages too. A swipe that starts anywhere else, or that turns up or down first, is the
+pane's own — a program's mouse drag, a scroll, a text selection — and the corners stay the corner
+tab's. With Fancier Glass on, the pane tips like a plank under your finger as it goes, and lies
+flat again on the place that arrives; the Display place slides without the tip.
+
 Swiping between places moves the dock and the keyboard with the wall: coming from Widgets to a
 terminal left with its keyboard up, the keys rise with the slide and the dock rides up on them.
 
