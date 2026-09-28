@@ -300,14 +300,9 @@ public class TextSelectionCursorController implements CursorController {
                     x1 = x2;
                     x2 = tmp;
                 }
-                int terminalBottom = terminalView.getBottom();
-                int top = y1 + terminalView.mRenderer.getFontLineSpacingAndAscent();
-                int bottom = y2 + mHandleHeight;
-                if (top > terminalBottom)
-                    top = terminalBottom;
-                if (bottom > terminalBottom)
-                    bottom = terminalBottom;
-                outRect.set(x1, top, x2, bottom);
+                int[] span = clampToView(y1 + terminalView.mRenderer.getFontLineSpacingAndAscent(),
+                    y2 + mHandleHeight, terminalView.getHeight());
+                outRect.set(x1, span[0], x2, span[1]);
             }
         }, ActionMode.TYPE_FLOATING);
     }
@@ -488,5 +483,17 @@ public class TextSelectionCursorController implements CursorController {
      */
     public boolean isSelectionEndDragged() {
         return mEndHandle.isDragging();
+    }
+
+    /**
+     * The selection toolbar's content rect, top and bottom, kept inside the view. The rect is in
+     * the view's own coordinates, so the bound is the view's own height: {@code getBottom()} is
+     * the parent's, and a pane frame's top margin (or a pane shortened by a rising keyboard)
+     * would let the rect run off the view.
+     */
+    static int[] clampToView(int top, int bottom, int viewHeight) {
+        int clampedTop = Math.max(0, Math.min(top, viewHeight));
+        int clampedBottom = Math.max(clampedTop, Math.min(bottom, viewHeight));
+        return new int[] {clampedTop, clampedBottom};
     }
 }
