@@ -743,7 +743,7 @@ public final class LayoutEditorController {
             if (current.values[picked].equals(current.selected))
                 return;
             current.writer.write(current.values[picked]);
-            afterRowWrite();
+            afterRowWrite(row);
         });
         mRowSyncs.add(() -> {
             PlaceArrangeModel.Pills current = rowPills(row);
@@ -794,7 +794,7 @@ public final class LayoutEditorController {
                 // One re-lay per tick and nothing else: the rows are left standing while the thumb
                 // is down, so the one being dragged is not rebuilt out from under it.
                 current.writer.write(picked);
-                afterRowWrite();
+                afterRowWrite(row);
             }
 
             @Override public void onStartTrackingTouch(SeekBar bar) {
@@ -834,13 +834,17 @@ public final class LayoutEditorController {
         }
     }
 
-    /** A row wrote through: the place behind the card follows when it is the one on screen. */
-    private void afterRowWrite() {
+    /**
+     * A row wrote through: the place behind the card follows when the orientation on the
+     * miniature is the one on screen, or when the row is one both orientations share — the
+     * keyboard's on/off switch, which puts the keyboard down on that pass.
+     */
+    private void afterRowWrite(@NonNull LayoutEditorPlan.Row row) {
         Card card = mCard;
         LayoutEditorPlan plan = mPlan;
         if (card == null || plan == null)
             return;
-        if (plan.liveFollows()) mHost.applyPlaceArrangement();
+        if (plan.follows(row)) mHost.applyPlaceArrangement();
         for (Runnable sync : mRowSyncs) sync.run();
         syncDirty(card, plan);
     }

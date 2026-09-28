@@ -156,6 +156,15 @@ public final class LayoutEditorPlan {
         return mShownOrientation == mDeviceOrientation;
     }
 
+    /**
+     * Whether a pick on this row lands on the live place: any row while the miniature shows the
+     * phone's orientation, and a row shared by both orientations — the keyboard's on/off switch
+     * — whichever one it shows.
+     */
+    public boolean follows(@NonNull Row row) {
+        return liveFollows() || row.group.sharedByOrientations;
+    }
+
     /** The arrangement the miniature draws: the shown orientation's, resolved. */
     @NonNull
     public PlaceLayout shownLayout() {

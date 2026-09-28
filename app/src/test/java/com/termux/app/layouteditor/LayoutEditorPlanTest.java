@@ -313,7 +313,7 @@ public class LayoutEditorPlanTest {
     public void homeOffersTheKeyboardsFormAndTheGridsTwoCounts() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, PORTRAIT);
 
-        assertEquals(labels(plan), Arrays.asList("Height", "Type", "Height",
+        assertEquals(labels(plan), Arrays.asList("Height", "Keyboard on/off", "Type", "Height",
             "Bottom padding", "Grid columns", "Grid rows"));
         assertTrue("the grid's counts are counters",
             row(plan, "Grid columns").group instanceof PlaceArrangeModel.Counter);
@@ -324,15 +324,38 @@ public class LayoutEditorPlanTest {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
         assertEquals(labels(plan),
-            Arrays.asList("Height", "Type", "Height", "Bottom padding"));
+            Arrays.asList("Height", "Keyboard on/off", "Type", "Height", "Bottom padding"));
+    }
+
+    /**
+     * The keyboard's on/off switch is one value for both orientations, so a pick on it lands on
+     * the live place whichever orientation the miniature shows; every other row follows the
+     * orientation on the toggle.
+     */
+    @Test
+    public void theKeyboardSwitchFollowsLiveOnEitherOrientation() {
+        LayoutEditorPlan plan = enterOnTerminalInPortrait();
+        assertTrue(plan.follows(row(plan, "Keyboard on/off")));
+        assertTrue(plan.follows(row(plan, "Type")));
+
+        plan.showOrientation(LANDSCAPE);
+        assertTrue("shared by both orientations", plan.follows(row(plan, "Keyboard on/off")));
+        assertFalse("the type is landscape's alone here", plan.follows(row(plan, "Type")));
+
+        pick(plan, "Keyboard on/off", "off");
+        assertFalse(places.isKeyboardShown());
+        assertTrue("as unsaved as a moved bar", plan.isDirty());
+        plan.revert();
+        assertTrue(places.isKeyboardShown());
+        assertFalse(plan.isDirty());
     }
 
     @Test
     public void onlyTheDisplayOffersTheKeyboardMode() {
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.DISPLAY, PORTRAIT);
 
-        assertEquals(labels(plan), Arrays.asList("Height", "Type", "Keyboard mode",
-            "Height", "Bottom padding"));
+        assertEquals(labels(plan), Arrays.asList("Height", "Keyboard on/off", "Type",
+            "Keyboard mode", "Height", "Bottom padding"));
     }
 
     @Test
