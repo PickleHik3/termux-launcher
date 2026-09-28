@@ -12,11 +12,25 @@ import org.tensorflow.lite.Interpreter;
 
 import java.io.File;
 import java.util.List;
+import java.util.Locale;
 
 final class LiteRtEmbeddingRuntime implements AutoCloseable {
     /** Gemma sentencepiece control ids; the sentencepiece4j binding does not expose bosId()/eosId(). */
     private static final int TOKEN_BOS = 2;
     private static final int TOKEN_EOS = 1;
+
+    /** {@code input_type: "query"} — EmbeddingGemma's trained retrieval-query task prefix. */
+    static final String INPUT_TYPE_QUERY = "query";
+    /** {@code input_type: "document"} (the default) — the trained document/passage task prefix. */
+    static final String INPUT_TYPE_DOCUMENT = "document";
+    private static final String QUERY_PREFIX = "task: search result | query: ";
+    private static final String DOCUMENT_PREFIX_FORMAT = "title: %s | text: ";
+
+    /** Threads for a request that runs while a chat generation is not active. */
+    private static final int DEFAULT_THREADS = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
+    /** Threads for a request that shares the CPU with an active chat generation; see item 5 of the
+     *  dawn embedding brief: don't slow a live reply. */
+    private static final int THROTTLED_THREADS = 1;
 
     private final TaiResidency residency;
     /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
@@ -40,6 +54,21 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
 
     @NonNull
     synchronized JSONObject embed(@NonNull TaiModelSpec spec, @NonNull List<String> inputs, int dimensions) throws JSONException {
+        return embed(spec, inputs, dimensions, INPUT_TYPE_DOCUMENT, null, false);
+    }
+
+    /**
+     * @param inputType {@link #INPUT_TYPE_QUERY} or {@link #INPUT_TYPE_DOCUMENT} (default); selects
+     *                  the task prefix EmbeddingGemma was trained with (dawn brief item 1).
+     * @param title     an optional document heading, folded into the document prefix in place of
+     *                  {@code none}; ignored for {@code input_type: "query"}.
+     * @param throttled true while a chat generation is running elsewhere in this process: runs the
+     *                  interpreter at {@link #THROTTLED_THREADS} instead of {@link #DEFAULT_THREADS}
+     *                  so embedding batches don't slow the live reply (dawn brief item 5).
+     */
+    @NonNull
+    synchronized JSONObject embed(@NonNull TaiModelSpec spec, @NonNull List<String> inputs, int dimensions,
+                                   @NonNull String inputType, @Nullable String title, boolean throttled) throws JSONException {
         if (spec.localPath == null || spec.localPath.trim().isEmpty()) {
             return error(404, "model_file_missing", "Embedding model file is missing.");
         }
@@ -65,9 +94,10 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
             JSONArray data = new JSONArray();
             int promptTokens = 0;
             residency.setBusy(TaiResidency.Kind.EMBEDDING, spec.id, true);
+            if (interpreter != null) interpreter.setNumThreads(throttled ? THROTTLED_THREADS : DEFAULT_THREADS);
             try {
                 for (int i = 0; i < inputs.size(); i++) {
-                    Embedding embedding = embedOne(inputs.get(i), effectiveDimensions);
+                    Embedding embedding = embedOne(inputs.get(i), effectiveDimensions, inputType, title);
                     promptTokens += embedding.tokens;
                     JSONObject item = new JSONObject();
                     item.put("object", "embedding");
@@ -75,10 +105,15 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
                     JSONArray vector = new JSONArray();
                     for (float value : embedding.vector) vector.put((double) value);
                     item.put("embedding", vector);
+                    // The count before any body truncation, prefix included (see buildPrefix); the
+                    // body alone is never reported separately, matching dawn brief item 2.
+                    item.put("tokens", embedding.tokens);
+                    item.put("truncated", embedding.truncated);
                     data.put(item);
                 }
             } finally {
                 residency.setBusy(TaiResidency.Kind.EMBEDDING, spec.id, false);
+                if (interpreter != null) interpreter.setNumThreads(DEFAULT_THREADS);
             }
             JSONObject usage = new JSONObject();
             usage.put("prompt_tokens", promptTokens);
@@ -106,8 +141,7 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
         }
         close();
         tokenizer = SentencePieceBpeTokenizer.fromModelFile(tokenizerFile);
-        Interpreter.Options options = new Interpreter.Options()
-            .setNumThreads(Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors())));
+        Interpreter.Options options = new Interpreter.Options().setNumThreads(DEFAULT_THREADS);
         // The same MemAvailable meter a chat load runs, across the interpreter's construction only.
         TaiLoadMeter meter = TaiLoadMeter.start(appContext);
         long measured;
@@ -141,23 +175,88 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
     }
 
     @NonNull
-    private Embedding embedOne(@NonNull String text, int dimensions) {
+    private Embedding embedOne(@NonNull String text, int dimensions, @NonNull String inputType, @Nullable String title) {
         if (interpreter == null || tokenizer == null) throw new IllegalStateException("Embedding runtime is not loaded.");
-        int[] ids = tokenizer.encode(text);
-        // Truncate the encoded body, never the framing: BOS and EOS must both survive.
-        int bodyTokens = Math.max(0, Math.min(ids.length, sequenceLength - 2));
-        int usedTokens = bodyTokens + 2;
+        String prefix = buildPrefix(inputType, title);
+        int[] prefixIds = prefix.isEmpty() ? new int[0] : tokenizer.encode(prefix);
+        int[] bodyIds = tokenizer.encode(text);
+        Budget budget = computeBudget(sequenceLength, prefixIds.length, bodyIds.length);
         int[][] tokenIds = new int[1][sequenceLength];
-        tokenIds[0][0] = TOKEN_BOS;
-        for (int i = 0; i < bodyTokens; i++) tokenIds[0][i + 1] = ids[i];
-        tokenIds[0][bodyTokens + 1] = TOKEN_EOS;
+        int cursor = 0;
+        tokenIds[0][cursor++] = TOKEN_BOS;
+        for (int i = 0; i < budget.prefixTokens; i++) tokenIds[0][cursor++] = prefixIds[i];
+        for (int i = 0; i < budget.bodyTokens; i++) tokenIds[0][cursor++] = bodyIds[i];
+        tokenIds[0][Math.min(cursor, sequenceLength - 1)] = TOKEN_EOS;
         float[][] output = new float[1][outputDimensions];
         interpreter.run(tokenIds, output);
         float[] vector = output[0];
-        if (dimensions == vector.length) return new Embedding(normalize(vector), usedTokens);
-        float[] truncated = new float[dimensions];
-        System.arraycopy(vector, 0, truncated, 0, dimensions);
-        return new Embedding(normalize(truncated), usedTokens);
+        if (dimensions == vector.length) return new Embedding(normalize(vector), budget.reportedTokens, budget.truncated);
+        float[] shortened = new float[dimensions];
+        System.arraycopy(vector, 0, shortened, 0, dimensions);
+        return new Embedding(normalize(shortened), budget.reportedTokens, budget.truncated);
+    }
+
+    /**
+     * EmbeddingGemma's trained task prefixes (google/embeddinggemma-300m model card): a query gets
+     * {@code "task: search result | query: "}; a document gets {@code "title: <title or none> | text: "}.
+     * Other embedding families ignore {@code input_type} entirely (they never call this).
+     */
+    @NonNull
+    static String buildPrefix(@NonNull String inputType, @Nullable String title) {
+        if (INPUT_TYPE_QUERY.equals(inputType)) return QUERY_PREFIX;
+        String heading = title == null || title.trim().isEmpty() ? "none" : title.trim();
+        return String.format(Locale.ROOT, DOCUMENT_PREFIX_FORMAT, heading);
+    }
+
+    /**
+     * How many prefix and body tokens fit inside {@code sequenceLength} once BOS and EOS each take
+     * a slot: the prefix is counted inside the window and is never the part that is cut (dawn brief
+     * item 1); only the body is trimmed to make room, and never below zero tokens. {@code
+     * reportedTokens} is prefix + body before any cut — item 2's "count before cutting" — and {@code
+     * truncated} is whether the body itself had to be shortened to fit.
+     */
+    @NonNull
+    static Budget computeBudget(int sequenceLength, int prefixLength, int bodyLength) {
+        int framingBudget = Math.max(0, sequenceLength - 2);
+        int prefixTokens = Math.min(prefixLength, framingBudget);
+        int bodyBudget = Math.max(0, framingBudget - prefixTokens);
+        boolean truncated = bodyLength > bodyBudget;
+        int bodyTokens = Math.min(bodyLength, bodyBudget);
+        int reportedTokens = prefixLength + bodyLength;
+        return new Budget(prefixTokens, bodyTokens, reportedTokens, truncated);
+    }
+
+    /** See {@link #computeBudget}. */
+    static final class Budget {
+        final int prefixTokens;
+        final int bodyTokens;
+        final int reportedTokens;
+        final boolean truncated;
+
+        Budget(int prefixTokens, int bodyTokens, int reportedTokens, boolean truncated) {
+            this.prefixTokens = prefixTokens;
+            this.bodyTokens = bodyTokens;
+            this.reportedTokens = reportedTokens;
+            this.truncated = truncated;
+        }
+    }
+
+    /**
+     * Raw tokenizer output for {@code /v1/tokenize} (dawn brief, "nice to have"): no task prefix and
+     * no BOS/EOS framing, just the count dawn's own splitter would otherwise have to estimate.
+     */
+    synchronized int tokenCount(@NonNull TaiModelSpec spec, @NonNull String text) throws Exception {
+        if (spec.localPath == null || spec.localPath.trim().isEmpty()) {
+            throw new IllegalStateException("Embedding model file is missing.");
+        }
+        File modelFile = new File(spec.localPath);
+        File tokenizerFile = tokenizerFileFor(modelFile);
+        if (tokenizerFile == null) {
+            throw new IllegalStateException("EmbeddingGemma requires sentencepiece.model next to the .tflite model file.");
+        }
+        ensureLoaded(spec, modelFile, tokenizerFile);
+        if (tokenizer == null) throw new IllegalStateException("Embedding runtime is not loaded.");
+        return tokenizer.encode(text).length;
     }
 
     @NonNull
@@ -209,10 +308,12 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
     private static final class Embedding {
         @NonNull final float[] vector;
         final int tokens;
+        final boolean truncated;
 
-        private Embedding(@NonNull float[] vector, int tokens) {
+        private Embedding(@NonNull float[] vector, int tokens, boolean truncated) {
             this.vector = vector;
             this.tokens = tokens;
+            this.truncated = truncated;
         }
     }
 }

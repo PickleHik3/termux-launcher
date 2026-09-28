@@ -71,6 +71,7 @@ OpenAI-compatible endpoints (default bind mode is localhost):
   /v1/chat/completions
   /v1/completions
   /v1/embeddings
+  /v1/tokenize
   /v1/audio/transcriptions
   /v1/audio/speech
 Ollama-compatible endpoints: /api/tags /api/chat /api/generate /api/embed /api/embeddings /api/show /api/ps /api/version
@@ -84,6 +85,10 @@ If token authentication is disabled in settings, any placeholder API key works o
 Security notes:
   LAN mode (opt-in via settings) exposes the API to your local network and always requires the token.
   /v1/embeddings is model-capability dependent. Not all models support embeddings.
+  /v1/embeddings accepts input_type ("query" or "document", default "document"), an
+  optional document title, dimensions (Matryoshka truncation) and encoding_format ("float"
+  or "base64"). Each returned item reports tokens and truncated. /v1/tokenize returns
+  {tokens: n} for {model, input} using the same tokenizer, with no task prefix applied.
   /v1/audio/speech speaks with the installed voice model: input, voice, speed, response_format wav|pcm.
   Check /v1/models for capability metadata (for example, _backend and _capabilities per model).
 

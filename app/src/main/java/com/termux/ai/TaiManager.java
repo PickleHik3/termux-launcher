@@ -196,6 +196,7 @@ public final class TaiManager {
         endpoints.put("/v1/responses");
         endpoints.put("/v1/completions");
         endpoints.put("/v1/embeddings");
+        endpoints.put("/v1/tokenize");
         endpoints.put("/v1/audio/transcriptions");
         data.put("openAiCompatibleEndpoints", endpoints);
         data.put("ollamaCompatibleEndpoints", new JSONArray()
@@ -212,7 +213,9 @@ public final class TaiManager {
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("runtime", state.toJson());
-        data.put("residents", residentsJson(remote));
+        JSONArray residents = residentsJson(remote);
+        data.put("residents", residents);
+        data.put("embedder", embedderStateJson(residents));
         data.put("settings", settings.toJson());
         data.put("appProcessRuntime", false);
         data.put("runtimeProcess", TaiRuntimeIpc.RUNTIME_PROCESS_SUFFIX);
@@ -221,6 +224,35 @@ public final class TaiManager {
         appendCrashMarker(data);
         appendDeviceCompatibility(data, state);
         return data;
+    }
+
+    /**
+     * Dawn brief item 6: whether an embedder is resident right now, next to the chat model's own
+     * {@code runtime.loaded} — read off the resident table so it works identically whether this
+     * call answers locally or through {@link #shouldDelegateRuntime}'s round trip. Dawn runs quiet
+     * background indexing only while this is cheap, i.e. the embedder is already resident.
+     */
+    @NonNull
+    private static JSONObject embedderStateJson(@NonNull JSONArray residents) throws JSONException {
+        JSONObject embedder = new JSONObject();
+        JSONObject embedding = null;
+        for (int i = 0; i < residents.length(); i++) {
+            JSONObject entry = residents.optJSONObject(i);
+            if (entry != null && "embedding".equals(entry.optString("kind", ""))) {
+                embedding = entry;
+                break;
+            }
+        }
+        embedder.put("loaded", embedding != null);
+        if (embedding != null) {
+            embedder.put("modelId", embedding.optString("id", ""));
+            embedder.put("backend", embedding.optString("backend", ""));
+            long bytes = embedding.isNull("measuredBytes") ? embedding.optLong("estimatedBytes", 0L)
+                : embedding.optLong("measuredBytes", 0L);
+            embedder.put("residentMb", bytes / (1024L * 1024L));
+            embedder.put("busy", embedding.optBoolean("busy", false));
+        }
+        return embedder;
     }
 
     /** The resident table: the runtime process's own, or the one its status reply carried. */
@@ -1814,7 +1846,36 @@ public final class TaiManager {
             }
         }
         installed.put("models", models);
-        return applyAudioHistoryGates(openAiModelsFromTaiModels(installed), device);
+        JSONObject response = applyAudioHistoryGates(openAiModelsFromTaiModels(installed), device);
+        applyEmbeddingThrottleState(response);
+        return response;
+    }
+
+    /**
+     * Dawn brief item 5: tells dawn which embedder entries are running throttled right now (a chat
+     * generation is active) and how, so it can pause its own background indexing instead of
+     * guessing from latency. Read live off the runtime, so it is skipped when there is none to ask
+     * (the delegating app process, or a runtime that has not started).
+     */
+    private void applyEmbeddingThrottleState(@NonNull JSONObject response) throws JSONException {
+        // /v1/models answers from local catalog state without an IPC round trip to :tai_runtime, so
+        // this is only knowable when this call is already running in that process; from the app
+        // process it is left out rather than paying a status round trip on every models list.
+        if (!(runtime instanceof MultiBackendTaiRuntime)) return;
+        MultiBackendTaiRuntime local = (MultiBackendTaiRuntime) runtime;
+        JSONArray data = response.optJSONArray("data");
+        if (data == null) return;
+        LinkedHashMap<String, TaiModelSpec> availableModels = new LinkedHashMap<>();
+        availableModels.putAll(modelStore.getDownloadedReadableModels());
+        availableModels.putAll(modelStore.getInstalledUserModels());
+        for (int i = 0; i < data.length(); i++) {
+            JSONObject item = data.optJSONObject(i);
+            if (item == null || !contains(item.optJSONArray("_capabilities"), TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) continue;
+            TaiModelSpec spec = availableModels.get(item.optString("id", ""));
+            if (spec == null) continue;
+            String reason = local.embeddingThrottleReason(spec);
+            if (reason != null) item.put("_endpoint_throttled_while_generating", reason);
+        }
     }
 
     @NonNull
@@ -1919,6 +1980,9 @@ public final class TaiManager {
                 toolMode = inferredToolMode == null ? "" : inferredToolMode;
             }
             if (!toolMode.isEmpty()) item.put("_tool_mode", toolMode);
+            if (contains(endpointCapabilities, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) {
+                putEmbedderFields(item, model);
+            }
             data.put(item);
         }
 
@@ -1927,6 +1991,30 @@ public final class TaiManager {
         response.put("data", data);
         response.put("models", codexModels(data));
         return response;
+    }
+
+    /**
+     * The embedder-specific fields dawn's brief asks {@code /v1/models} for (item 3): output
+     * dimensions, the Matryoshka sizes {@code dimensions} may truncate to, a stable revision so
+     * dawn knows when to rebuild its index, that vectors are L2-normalised, and the largest batch
+     * {@code /v1/embeddings} accepts (item 4). Context window is already covered by the existing
+     * {@code _endpoint_context_window} (the file's {@code seqNNNN}, via {@link TaiImportProfiles}).
+     */
+    private static void putEmbedderFields(@NonNull JSONObject item, @NonNull JSONObject model) throws JSONException {
+        String id = model.optString("id", "");
+        String localPath = model.isNull("localPath") ? null : model.optString("localPath", null);
+        int dimensions = TaiModelSpec.embeddingDimensionsFor(id, localPath);
+        if (dimensions > 0) item.put("_endpoint_dimensions", dimensions);
+        int[] matryoshka = TaiModelSpec.embeddingMatryoshkaDimsFor(id, localPath);
+        if (matryoshka.length > 0) {
+            JSONArray sizes = new JSONArray();
+            for (int size : matryoshka) sizes.put(size);
+            item.put("_endpoint_matryoshka_dims", sizes);
+        }
+        String revision = TaiModelSpec.revisionFor(localPath);
+        if (revision != null) item.put("_revision", revision);
+        item.put("_endpoint_normalized", true);
+        item.put("_endpoint_max_batch", EMBEDDINGS_MAX_BATCH);
     }
 
     @NonNull
@@ -2010,25 +2098,42 @@ public final class TaiManager {
         return false;
     }
 
+    /** {@code /v1/embeddings} accepts at most this many inputs per request (dawn brief item 4);
+     *  a larger batch is refused with 413, not silently truncated or dropped. Dawn is told the
+     *  number through {@code _endpoint_max_batch} on the embedder's {@code /v1/models} entry. */
+    static final int EMBEDDINGS_MAX_BATCH = 64;
+
     @NonNull
     public JSONObject embeddings(@NonNull String body) throws JSONException {
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_EMBEDDINGS, delegatedRuntimeBody(body));
         JSONObject request = parseBody(body);
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         String encodingFormat = request.optString("encoding_format", "float");
-        if (!encodingFormat.isEmpty() && !"float".equalsIgnoreCase(encodingFormat)) {
+        boolean base64 = "base64".equalsIgnoreCase(encodingFormat);
+        if (!encodingFormat.isEmpty() && !"float".equalsIgnoreCase(encodingFormat) && !base64) {
             return openAiRequestError(400, "unsupported_encoding_format",
-                "Only encoding_format:\"float\" is supported for local embeddings.", "encoding_format");
+                "Only encoding_format:\"float\" or \"base64\" is supported for local embeddings.", "encoding_format");
         }
         boolean hasDimensions = request.has("dimensions");
         int dimensions = hasDimensions ? request.optInt("dimensions", -1) : 0;
         if (hasDimensions && dimensions <= 0) {
             return openAiRequestError(400, "invalid_dimensions", "Embedding dimensions must be positive.", "dimensions");
         }
+        String inputType = request.optString("input_type", LiteRtEmbeddingRuntime.INPUT_TYPE_DOCUMENT);
+        if (!LiteRtEmbeddingRuntime.INPUT_TYPE_QUERY.equals(inputType)
+                && !LiteRtEmbeddingRuntime.INPUT_TYPE_DOCUMENT.equals(inputType)) {
+            return openAiRequestError(400, "invalid_input_type",
+                "input_type must be \"query\" or \"document\".", "input_type");
+        }
+        String title = request.has("title") && !request.isNull("title") ? request.optString("title", null) : null;
         List<String> inputs = embeddingInputs(request);
         if (inputs == null) {
             return openAiRequestError(400, "unsupported_embedding_input",
                 "Embeddings input must be a string or an array of strings.", "input");
+        }
+        if (inputs.size() > EMBEDDINGS_MAX_BATCH) {
+            return openAiRequestError(413, "batch_too_large",
+                "At most " + EMBEDDINGS_MAX_BATCH + " inputs are accepted per /v1/embeddings request.", "input");
         }
         TaiModelSpec spec = resolveModel(request, modelId);
         if (spec == null) {
@@ -2043,7 +2148,48 @@ public final class TaiManager {
             JSONObject refusal = decideEmbeddingLoad(spec, runtimeOptionsFromRequest(request, spec));
             if (refusal != null) return refusal;
         }
-        return local.embed(spec, inputs, dimensions);
+        JSONObject result = local.embed(spec, inputs, dimensions, inputType, title);
+        if (base64 && result.optInt("_statusCode", 200) < 400) applyBase64Encoding(result);
+        return result;
+    }
+
+    /** In place: swaps every {@code data[i].embedding} float array for the little-endian float32
+     *  base64 string OpenAI's {@code encoding_format: "base64"} sends (dawn brief, "nice to have"). */
+    private static void applyBase64Encoding(@NonNull JSONObject result) throws JSONException {
+        JSONArray data = result.optJSONArray("data");
+        if (data == null) return;
+        for (int i = 0; i < data.length(); i++) {
+            JSONObject item = data.optJSONObject(i);
+            JSONArray vector = item == null ? null : item.optJSONArray("embedding");
+            if (item == null || vector == null) continue;
+            java.nio.ByteBuffer buffer = java.nio.ByteBuffer.allocate(vector.length() * 4)
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+            for (int j = 0; j < vector.length(); j++) buffer.putFloat((float) vector.optDouble(j, 0.0));
+            item.put("embedding", Base64.getEncoder().encodeToString(buffer.array()));
+        }
+    }
+
+    /**
+     * {@code POST /v1/tokenize}: {@code {model, input}} in, {@code {tokens: n}} out (dawn brief,
+     * "nice to have") — the installed embedding model's own tokenizer, so dawn can split notes on
+     * real token counts instead of estimating from characters.
+     */
+    @NonNull
+    public JSONObject tokenize(@NonNull String body) throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_TOKENIZE, delegatedRuntimeBody(body));
+        JSONObject request = parseBody(body);
+        String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
+        String input = request.optString("input", "");
+        TaiModelSpec spec = resolveModel(request, modelId);
+        if (spec == null) {
+            return openAiRequestError(404, "model_not_found", "Unknown TAI model: " + modelId, "model");
+        }
+        if (!spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) {
+            return openAiRequestError(501, "capability_not_supported",
+                "Tokenize is only supported for embedding models today.", "model");
+        }
+        MultiBackendTaiRuntime local = (MultiBackendTaiRuntime) localRuntime();
+        return local.tokenize(spec, input);
     }
 
     @Nullable
@@ -2723,10 +2869,32 @@ public final class TaiManager {
             : TaiLoadBudget.Estimate.ratio(TaiResidency.embeddingEstimateBytes(spec), 0L);
         TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
             device.memoryThresholdBytes, TaiResidency.evictionCandidates(residents, TaiResidency.Kind.EMBEDDING, spec.backend));
-        if (!plan.fits) return openAiError(insufficientMemory(spec.displayName, plan));
+        if (!plan.fits) {
+            JSONObject envelope = openAiError(embeddingMemoryRefusal(spec.displayName, plan));
+            envelope.put("_retryAfterSeconds", EMBEDDING_MEMORY_RETRY_AFTER_SECONDS);
+            return envelope;
+        }
         evict(plan);
         return null;
     }
+
+    /**
+     * Insufficient memory for an embedding load, dawn brief item 5's shape: {@code 503}, a
+     * {@code Retry-After} the server layer turns into a header (see {@code _retryAfterSeconds} in
+     * {@link com.termux.launcherctl.LauncherCtlApiServer#jsonResponse}), and the stable
+     * {@code embedding_memory} code so dawn can back off without guessing at a message string.
+     */
+    @NonNull
+    static JSONObject embeddingMemoryRefusal(@NonNull String displayName, @NonNull TaiLoadBudget.Plan plan) throws JSONException {
+        JSONObject refusal = insufficientMemory(displayName, plan);
+        refusal.put("error", "embedding_memory");
+        refusal.put("_statusCode", 503);
+        refusal.put("_retryAfterSeconds", EMBEDDING_MEMORY_RETRY_AFTER_SECONDS);
+        return refusal;
+    }
+
+    /** How long dawn should wait before retrying an embedding request refused for memory. */
+    private static final int EMBEDDING_MEMORY_RETRY_AFTER_SECONDS = 20;
 
     /**
      * The budget for a speech model that is not resident yet, the embedding decision's twin: the

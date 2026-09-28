@@ -270,6 +270,7 @@ public final class TaiRuntimeService extends Service {
             || TaiRuntimeIpc.OP_OPENAI_COMPLETION.equals(operation)
             || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)
             || TaiRuntimeIpc.OP_EMBEDDINGS.equals(operation)
+            || TaiRuntimeIpc.OP_TOKENIZE.equals(operation)
             || TaiRuntimeIpc.OP_BENCHMARK.equals(operation)
             || TaiRuntimeIpc.OP_BENCH_RUN.equals(operation);
     }
@@ -352,6 +353,8 @@ public final class TaiRuntimeService extends Service {
                 return manager.openAiCompletions(body);
             case TaiRuntimeIpc.OP_EMBEDDINGS:
                 return manager.embeddings(body);
+            case TaiRuntimeIpc.OP_TOKENIZE:
+                return manager.tokenize(body);
             case TaiRuntimeIpc.OP_PREFLIGHT:
                 return manager.preflight(body);
             case TaiRuntimeIpc.OP_BENCHMARK:

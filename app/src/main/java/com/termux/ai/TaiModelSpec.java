@@ -500,4 +500,65 @@ public final class TaiModelSpec {
     private static String normalizedIdentity(@Nullable String value) {
         return value == null ? "" : value.replaceAll("[^A-Za-z0-9]", "").toLowerCase(Locale.ROOT);
     }
+
+    /** EmbeddingGemma's native output width and its Matryoshka truncation points (768/512/256/128). */
+    private static final int EMBEDDINGGEMMA_DIMENSIONS = 768;
+    private static final int[] EMBEDDINGGEMMA_MATRYOSHKA_DIMS = {768, 512, 256, 128};
+
+    private static boolean isEmbeddingGemma(@NonNull String id, @Nullable String localPath) {
+        String probe = (id + " " + (localPath == null ? "" : localPath)).toLowerCase(Locale.ROOT);
+        return probe.contains("embeddinggemma");
+    }
+
+    /**
+     * The model's native embedding output width for {@code /v1/models}, or 0 when this family is
+     * not recognised (an MNN embedding package reports its own dimensions only once loaded).
+     */
+    public static int embeddingDimensionsFor(@NonNull String id, @Nullable String localPath) {
+        return isEmbeddingGemma(id, localPath) ? EMBEDDINGGEMMA_DIMENSIONS : 0;
+    }
+
+    /** The Matryoshka truncation sizes this embedding model supports via {@code dimensions}, largest first. */
+    @NonNull
+    public static int[] embeddingMatryoshkaDimsFor(@NonNull String id, @Nullable String localPath) {
+        return isEmbeddingGemma(id, localPath) ? EMBEDDINGGEMMA_MATRYOSHKA_DIMS.clone() : new int[0];
+    }
+
+    /**
+     * A stable, cheap revision for {@code /v1/models}: a hash of the model file's name, size and
+     * mtime, never its bytes, so a 300 MB file is never re-read. Cached per (path, size, mtime)
+     * triple so repeat {@code /v1/models} calls for the same unchanged file skip the digest too.
+     * {@code null} when the file cannot be stat'd.
+     */
+    @Nullable
+    public static String revisionFor(@Nullable String localPath) {
+        if (localPath == null || localPath.trim().isEmpty()) return null;
+        File file = new File(localPath);
+        if (!file.exists()) return null;
+        long size = file.isDirectory() ? 0L : file.length();
+        long mtime = file.lastModified();
+        String cacheKey = localPath + '|' + size + '|' + mtime;
+        String cached = revisionCache.get(cacheKey);
+        if (cached != null) return cached;
+        String revision = hashRevision(file.getName(), size, mtime);
+        revisionCache.put(cacheKey, revision);
+        return revision;
+    }
+
+    private static final java.util.concurrent.ConcurrentHashMap<String, String> revisionCache =
+        new java.util.concurrent.ConcurrentHashMap<>();
+
+    @NonNull
+    private static String hashRevision(@NonNull String name, long size, long mtime) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            digest.update((name + '|' + size + '|' + mtime).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            byte[] hash = digest.digest();
+            StringBuilder hex = new StringBuilder(16);
+            for (int i = 0; i < 8; i++) hex.append(String.format(Locale.ROOT, "%02x", hash[i]));
+            return hex.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            return Integer.toHexString((name + size + mtime).hashCode());
+        }
+    }
 }

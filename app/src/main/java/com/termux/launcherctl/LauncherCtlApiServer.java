@@ -662,6 +662,8 @@ public class LauncherCtlApiServer {
                 return jsonResponse(TaiManager.getInstance(context).openAiCompletions(request.body));
             } else if ("POST".equals(request.method) && "/v1/embeddings".equals(request.path)) {
                 return jsonResponse(TaiManager.getInstance(context).embeddings(request.body));
+            } else if ("POST".equals(request.method) && "/v1/tokenize".equals(request.path)) {
+                return jsonResponse(TaiManager.getInstance(context).tokenize(request.body));
             } else if ("POST".equals(request.method) && "/v1/audio/transcriptions".equals(request.path)) {
                 return audioTranscriptions(context, request);
             } else if ("POST".equals(request.method) && "/v1/audio/speech".equals(request.path)) {
@@ -1803,6 +1805,7 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/responses", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/completions", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/embeddings", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/v1/tokenize", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/audio/speech", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/ai/speak", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/ai/speak/stop", new SimpleRateLimiter(120, 60_000));
@@ -1899,6 +1902,7 @@ public class LauncherCtlApiServer {
         supportedEndpoints.put("/v1/responses");
         supportedEndpoints.put("/v1/completions");
         supportedEndpoints.put("/v1/embeddings");
+        supportedEndpoints.put("/v1/tokenize");
         supportedEndpoints.put("/v1/audio/speech");
         supportedEndpoints.put("/v1/audio/transcriptions");
         supportedEndpoints.put("/v1/apps/launch");
@@ -2031,6 +2035,7 @@ public class LauncherCtlApiServer {
             "  /v1/chat/completions\n" +
             "  /v1/completions\n" +
             "  /v1/embeddings\n" +
+            "  /v1/tokenize\n" +
             "  /v1/audio/transcriptions\n" +
             "  /v1/audio/speech\n" +
             "Ollama-compatible endpoints: /api/tags /api/chat /api/generate /api/embed /api/embeddings /api/show /api/ps /api/version\n" +
@@ -2044,6 +2049,10 @@ public class LauncherCtlApiServer {
             "Security notes:\n" +
             "  LAN mode (opt-in via settings) exposes the API to your local network and always requires the token.\n" +
             "  /v1/embeddings is model-capability dependent. Not all models support embeddings.\n" +
+            "  /v1/embeddings accepts input_type (\"query\" or \"document\", default \"document\"), an\n" +
+            "  optional document title, dimensions (Matryoshka truncation) and encoding_format (\"float\"\n" +
+            "  or \"base64\"). Each returned item reports tokens and truncated. /v1/tokenize returns\n" +
+            "  {tokens: n} for {model, input} using the same tokenizer, with no task prefix applied.\n" +
             "  /v1/audio/speech speaks with the installed voice model: input, voice, speed, response_format wav|pcm.\n" +
             "  Check /v1/models for capability metadata (for example, _backend and _capabilities per model).\n" +
             "\n" +
@@ -2827,14 +2836,23 @@ public class LauncherCtlApiServer {
     private HttpResponse jsonResponse(JSONObject response) {
         int statusCode = response.optInt("_statusCode", 200);
         response.remove("_statusCode");
+        // A handler (embeddings' insufficient-memory refusal, e.g.) may ask for a Retry-After header
+        // without going through the rate limiter; see TaiManager's embedding_memory / 503 refusal.
+        int retryAfterSeconds = response.optInt("_retryAfterSeconds", 0);
+        response.remove("_retryAfterSeconds");
         if (statusCode >= 400 || (!response.optBoolean("ok", true) && response.has("error"))) {
             try {
                 withOpenAiErrorEnvelope(response, statusCode);
             } catch (JSONException ignored) {
             }
         }
+        Map<String, String> headers = null;
+        if (retryAfterSeconds > 0) {
+            headers = new HashMap<>();
+            headers.put("Retry-After", Integer.toString(retryAfterSeconds));
+        }
         return new HttpResponse(statusCode, "application/json; charset=utf-8",
-            response.toString().getBytes(StandardCharsets.UTF_8), null);
+            response.toString().getBytes(StandardCharsets.UTF_8), headers);
     }
 
     static HttpResponse ollamaJsonResponse(JSONObject response) throws JSONException {

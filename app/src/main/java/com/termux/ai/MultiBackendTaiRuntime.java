@@ -225,8 +225,25 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     // behind an embedding batch.
     @NonNull
     public JSONObject embed(@NonNull TaiModelSpec model, @NonNull List<String> inputs, int dimensions) throws JSONException {
-        if (isLiteRtEmbeddingFlatbuffer(model)) return embeddings.embed(model, inputs, dimensions);
-        if (isMnnEmbeddingModel(model)) return mnnEmbeddings.embed(model, inputs, dimensions);
+        return embed(model, inputs, dimensions, LiteRtEmbeddingRuntime.INPUT_TYPE_DOCUMENT, null);
+    }
+
+    /**
+     * @param inputType {@code "query"} or {@code "document"}; the task prefix EmbeddingGemma expects
+     *                  (dawn embedding brief item 1). Other embedding families ignore it.
+     * @param title     an optional document heading; ignored for {@code input_type: "query"}.
+     *
+     * <p>Whether a chat generation is active right now is read off {@link #activeAssistant} without
+     * the router lock — a status poll, so it is fine to be a moment stale — and passed to the
+     * embedding runtime so it runs at reduced threads/priority instead of contending with a live
+     * reply for the CPU (dawn brief item 5).
+     */
+    @NonNull
+    public JSONObject embed(@NonNull TaiModelSpec model, @NonNull List<String> inputs, int dimensions,
+                             @NonNull String inputType, @Nullable String title) throws JSONException {
+        boolean throttled = activeAssistant.getState().activeGeneration;
+        if (isLiteRtEmbeddingFlatbuffer(model)) return embeddings.embed(model, inputs, dimensions, inputType, title, throttled);
+        if (isMnnEmbeddingModel(model)) return mnnEmbeddings.embed(model, inputs, dimensions, inputType, title, throttled);
         if (inputs.size() == 1 && dimensions <= 0) return embed(model.id, inputs.get(0));
         JSONObject error = new JSONObject();
         error.put("message", "Embeddings are not available for model '" + model.id + "'.");
@@ -237,6 +254,54 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         response.put("error", error);
         response.put("_statusCode", 400);
         return response;
+    }
+
+    /**
+     * Whether the embedding path is running throttled right now (dawn brief item 5), and how:
+     * {@code "threads"} for the LiteRT backend (fewer interpreter threads), {@code "priority"} for
+     * MNN (background thread priority), or {@code null} when nothing is throttling it. Read for
+     * {@code /v1/models} and {@code /v1/ai/runtime} so dawn knows whether to pause its own indexing.
+     */
+    @Nullable
+    public String embeddingThrottleReason(@NonNull TaiModelSpec model) {
+        if (!activeAssistant.getState().activeGeneration) return null;
+        if (isLiteRtEmbeddingFlatbuffer(model)) return "threads";
+        if (isMnnEmbeddingModel(model)) return "priority";
+        return null;
+    }
+
+    /**
+     * {@code /v1/tokenize} (dawn brief, "nice to have"): the LiteRT embedding tokenizer's raw token
+     * count for {@code text}, no task prefix and no BOS/EOS framing. Only the LiteRT/EmbeddingGemma
+     * path exposes a standalone tokenizer today.
+     */
+    @NonNull
+    public JSONObject tokenize(@NonNull TaiModelSpec model, @NonNull String text) throws JSONException {
+        JSONObject response = new JSONObject();
+        if (!isLiteRtEmbeddingFlatbuffer(model)) {
+            JSONObject error = new JSONObject();
+            error.put("message", "Tokenize is only available for the installed LiteRT embedding model today.");
+            error.put("type", "invalid_request_error");
+            error.put("param", "model");
+            error.put("code", "capability_not_supported");
+            response.put("error", error);
+            response.put("_statusCode", 501);
+            return response;
+        }
+        try {
+            int tokens = embeddings.tokenCount(model, text);
+            response.put("tokens", tokens);
+            response.put("model", model.id);
+            return response;
+        } catch (Exception e) {
+            JSONObject error = new JSONObject();
+            error.put("message", "Tokenize failed: " + (e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage()));
+            error.put("type", "server_error");
+            error.put("code", "tokenize_failed");
+            response.put("error", error);
+            response.put("_statusCode", 500);
+            return response;
+        }
     }
 
     /**
