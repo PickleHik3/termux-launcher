@@ -131,37 +131,86 @@ public class PaneWallPolicyTest {
         assertEquals(-WIDTH, PaneWallPolicy.offsetForDrag(-4000f, WIDTH, true, true), EPS);
     }
 
+    /** A phone's density, so the flick thresholds below are the dp figures at 3x. */
+    private static final float DENSITY = 3f;
+    /** One over the flick's speed, in px/s. */
+    private static final float FLICK = PaneWallPolicy.DRAG_COMMIT_VELOCITY_DP_PER_SEC * DENSITY + 1f;
+    /** One over the least distance a flick must have moved the wall, in px. */
+    private static final float FLICK_DISTANCE =
+        PaneWallPolicy.DRAG_COMMIT_FLING_MIN_DISTANCE_DP * DENSITY + 1f;
+
     @Test
     public void aShortDragSpringsBack() {
-        assertEquals(0, PaneWallPolicy.settle(-200f, 0f, WIDTH, true, true));
+        assertEquals(0, PaneWallPolicy.settle(-200f, 0f, WIDTH, DENSITY, true, true));
     }
 
     @Test
     public void aDragPastTheCommitFractionChangesPage() {
         float past = -WIDTH * PaneWallPolicy.DRAG_COMMIT_FRACTION - 1f;
-        assertEquals(1, PaneWallPolicy.settle(past, 0f, WIDTH, true, true));
-        assertEquals(-1, PaneWallPolicy.settle(-past, 0f, WIDTH, true, true));
+        assertEquals(1, PaneWallPolicy.settle(past, 0f, WIDTH, DENSITY, true, true));
+        assertEquals(-1, PaneWallPolicy.settle(-past, 0f, WIDTH, DENSITY, true, true));
+    }
+
+    /**
+     * A quick flick pages short of the commit distance. The speed that counts is the pager's
+     * usual, in dp, not a share of the width: at two widths a second a 250 ms flick on a phone
+     * sprang back and only a long drag paged (pong, 2026-09-28).
+     */
+    @Test
+    public void aQuickFlickPagesShortOfTheCommitDistance() {
+        assertEquals(1, PaneWallPolicy.settle(-FLICK_DISTANCE, -FLICK, WIDTH, DENSITY, true, true));
+        assertEquals(-1, PaneWallPolicy.settle(FLICK_DISTANCE, FLICK, WIDTH, DENSITY, true, true));
+        // Two widths a second is far more than a flick needs.
+        assertEquals(1, PaneWallPolicy.settle(-FLICK_DISTANCE, -2f * WIDTH, WIDTH, DENSITY,
+            true, true));
+        // Under the speed, the distance alone decides.
+        assertEquals(0, PaneWallPolicy.settle(-FLICK_DISTANCE, -FLICK + 2f, WIDTH, DENSITY,
+            true, true));
+    }
+
+    @Test
+    public void aTwitchOfAHeldFingerIsNotAFlick() {
+        // Fast, but the wall has barely moved: a held finger's release jitter.
+        float twitch = PaneWallPolicy.DRAG_COMMIT_FLING_MIN_DISTANCE_DP * DENSITY - 1f;
+        assertEquals(0, PaneWallPolicy.settle(-twitch, -FLICK, WIDTH, DENSITY, true, true));
+        assertEquals(0, PaneWallPolicy.settle(0f, -10_000f, WIDTH, DENSITY, true, true));
     }
 
     @Test
     public void aFlickCommitsWhateverWayTheDragWasHeading() {
-        float back = WIDTH * PaneWallPolicy.DRAG_COMMIT_VELOCITY_PAGES + 1f;
         // Dragged well past the commit distance to the right, then flicked back left.
-        assertEquals(1, PaneWallPolicy.settle(WIDTH * 0.5f, -back, WIDTH, true, true));
+        assertEquals(1, PaneWallPolicy.settle(WIDTH * 0.5f, -FLICK, WIDTH, DENSITY, true, true));
     }
 
     @Test
     public void aCommitTowardsAMissingPageStaysPut() {
         float past = -WIDTH * PaneWallPolicy.DRAG_COMMIT_FRACTION - 1f;
-        assertEquals(0, PaneWallPolicy.settle(past, 0f, WIDTH, true, false));
-        assertEquals(0, PaneWallPolicy.settle(past,
-            -WIDTH * PaneWallPolicy.DRAG_COMMIT_VELOCITY_PAGES - 1f, WIDTH, true, false));
+        assertEquals(0, PaneWallPolicy.settle(past, 0f, WIDTH, DENSITY, true, false));
+        assertEquals(0, PaneWallPolicy.settle(past, -FLICK, WIDTH, DENSITY, true, false));
     }
 
     @Test
     public void aZeroWidthWallNeverCommits() {
-        assertEquals(0, PaneWallPolicy.settle(-500f, -5000f, 0, true, true));
+        assertEquals(0, PaneWallPolicy.settle(-500f, -5000f, 0, DENSITY, true, true));
         assertEquals(0f, PaneWallPolicy.offsetForDrag(-500f, 0, true, true), EPS);
+    }
+
+    /**
+     * The terminal's own frame line is chrome over the wall, not a rim the page carries, so it
+     * is faded by the page's own position: like a rim over the first stretch of the page's
+     * departure, then gone, rather than rising again for the page arriving in its place.
+     */
+    @Test
+    public void aPagesOwnFrameFadesAsThePageLeavesAndStaysGoneOnceItIsAway() {
+        assertEquals(1f, PaneWallPolicy.pageOutlineAlpha(0f, WIDTH), EPS);
+        float fade = WIDTH * PaneWallPolicy.OUTLINE_FADE_FRACTION;
+        assertEquals(0.5f, PaneWallPolicy.pageOutlineAlpha(-fade / 2f, WIDTH), EPS);
+        assertEquals(0.5f, PaneWallPolicy.pageOutlineAlpha(fade / 2f, WIDTH), EPS);
+        assertEquals(0f, PaneWallPolicy.pageOutlineAlpha(-fade, WIDTH), EPS);
+        // Where a rim's curve turns back up for the arriving page, this one stays down.
+        assertEquals(0f, PaneWallPolicy.pageOutlineAlpha(-WIDTH * 0.95f, WIDTH), EPS);
+        assertEquals(0f, PaneWallPolicy.pageOutlineAlpha(WIDTH, WIDTH), EPS);
+        assertEquals(1f, PaneWallPolicy.pageOutlineAlpha(0f, 0), EPS);
     }
 
     @Test

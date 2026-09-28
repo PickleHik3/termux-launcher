@@ -149,7 +149,7 @@ public class TerminalPaneController {
     /** Above tiled panes and the interaction overlay, below the 6dp key chord overlay. */
     private static final int FLOAT_ELEVATION_DP = 4;
     /** Matches pane_active_border.xml's stroke width: the line a corner tab lines up against. */
-    private static final float STOCK_PANE_BORDER_DP = 1f;
+    private static final float STOCK_PANE_BORDER_DP = PaneRim.STOCK_STROKE_DP;
     /** How far the resize glow reaches in from the pane's edge. */
     private static final float GLOW_DEPTH_DP = 12f;
     /** Peak alpha of the glow body, at the edge itself. */

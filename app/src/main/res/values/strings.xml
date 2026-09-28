@@ -2211,7 +2211,7 @@
     <string name="tour_card_resume_or_restart">Termux has a new, shorter introduction.</string>
     <string name="tour_card_closing_title">That is the tour</string>
     <string name="tour_card_closing">Here is what is worth knowing on the way out.</string>
-    <string name="tour_card_return_to_terminal">Swipe the status bar back to the terminal to continue.</string>
+    <string name="tour_card_return_to_terminal">Hold the page\'s border and drag back to the terminal to continue.</string>
     <string name="tour_copy">Copy</string>
     <string name="tour_copied_commands">Copied</string>
     <string name="tour_copy_commands">Commands</string>
@@ -2292,7 +2292,7 @@
     <string name="help_topic_az_action">Slide along it, then drag up to the app you want.</string>
     <string name="help_topic_az_reveal">Show the A–Z row in the Layout editor to see it.</string>
     <string name="help_topic_status_purpose">The status bar shows which place you are on.</string>
-    <string name="help_topic_status_action">Swipe along it to change place, or drag it down for the clock.</string>
+    <string name="help_topic_status_action">Drag it down for the clock; hold a page\'s border and drag to change place.</string>
     <string name="help_topic_status_reveal">Show the status bar in the Layout editor to see it.</string>
     <string name="help_topic_stats_purpose">The status widgets show how the phone is doing.</string>
     <string name="help_topic_stats_action">Tap one for details.</string>
@@ -2359,9 +2359,9 @@
     <!-- Help centre: Find your way. -->
     <string name="help_topic_places_title">Places</string>
     <string name="help_topic_places_summary">The launcher has three places: Terminal, Widgets and the Linux display.</string>
-    <string name="help_topic_places_action">Swipe along the status bar to move between them.</string>
+    <string name="help_topic_places_action">Hold the page\'s border, then drag sideways to move between them.</string>
     <string name="help_topic_places_step1">Terminal holds your shells, Widgets holds your widgets, Display runs Linux apps.</string>
-    <string name="help_topic_places_back">Swipe back along the status bar to return to where you were.</string>
+    <string name="help_topic_places_back">Hold the border and drag back to return to where you were.</string>
     <string name="help_topic_places_aliases">places, switch place, home screen, terminal, widgets, display</string>
     <string name="help_topic_corners_back">Tap away from the controls to put them away.</string>
     <string name="help_topic_corners_aliases">corner, tab, pane controls, appearance, layout, help</string>
@@ -2377,7 +2377,7 @@
     <string name="help_topic_palette_step2">An action that cannot run now says why.</string>
     <string name="help_topic_palette_back">Tap away from the palette to close it.</string>
     <string name="help_topic_palette_aliases">palette, commands, actions, find action, run</string>
-    <string name="help_topic_status_step1">Swipe along the bar to change place.</string>
+    <string name="help_topic_status_step1">Tap a peeking place icon to go there.</string>
     <string name="help_topic_status_step2">Drag it down for the clock, and up to put it away.</string>
     <string name="help_topic_status_step3">Scrolling the window strip does not change place.</string>
     <string name="help_topic_status_back">Drag the bar up to close it again.</string>

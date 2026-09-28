@@ -38,10 +38,20 @@ the extra keys and the keyboard go away, and the widgets, the pane or the displa
 either orientation. One mode for every place, not a state of one: turned on and off only from the
 corner tab's minimal button, which every place carries, and remembered until turned off; paging
 never leaves it. It is a preset of the layout's own element model — every element but the status
-bar put away — never a layout of its own. The keyboard can still be raised while it is on. A
-sideways swipe along the page's top or bottom edge pages the wall, and under Fancier Glass the
-terminal pane tips like a plank as it goes.
+bar put away — never a layout of its own. The keyboard can still be raised while it is on. Paging
+is the border drag, as everywhere.
 _Avoid_: full screen, focus mode, zen mode, zen view
+
+**Border drag**:
+The one finger gesture that pages the wall, on every place and in every mode: a press held on the
+current page's border — the frame line on any of its four sides, less the corner squares — for the
+same hold a corner takes, then dragged sideways. A tap, a swipe without the hold, a drag that sets
+off before it and a second finger all stay the content's. The border is always drawn while the
+border preference is on (the slab's rim on glass, the plain stroke otherwise), on the terminal,
+the Widgets page and the Display page alike, so the gesture has a line to find. Under Fancier
+Glass the page tips like a plank as it goes; the Display place slides flat. The status bar does
+not page; its own drag is the fold across it.
+_Avoid_: edge swipe, status bar swipe, page swipe
 
 **Managed wallpaper**:
 A wallpaper set through the launcher's own picker, of which the launcher keeps its own copy.

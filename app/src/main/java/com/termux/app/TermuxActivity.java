@@ -3043,6 +3043,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return isTerminalPaneGlassActive();
             }
 
+            @Override public boolean paneBorderEnabled() {
+                return mPreferences != null && mPreferences.isTerminalBorderEnabled();
+            }
+
             @Override @Nullable public Bitmap paneGlassBlurFrame() {
                 return obtainTerminalPaneGlassFrame();
             }
@@ -9748,7 +9752,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mPaneWallController == null) return;
             if (held) mPaneWallController.goTo(place, false);
             mPaneWallController.setGesturesEnabled(!held);
-            syncWallGestureAvailability();
         }
 
         @Override public int themeColor(int attr, int fallbackRes) {
@@ -9813,7 +9816,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void holdPaneWall(boolean held) {
             if (mPaneWallController == null) return;
             mPaneWallController.setGesturesEnabled(!held);
-            syncWallGestureAvailability();
         }
         @Override public void refreshPaneLayout() {
             if (mPaneController != null) mPaneController.refreshPaneLayout();
@@ -16622,14 +16624,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // The Display place is on the wall only while the display is switched on: off,
                 // nothing of it is built, and the wall is the places that are left.
                 @Override public boolean isDisplayEnabled() { return isX11DisplayEnabled(); }
-                // In minimal mode the pane is the screen and there is no bar, so the pane's own
-                // top and bottom edge page the wall (MinimalEdgeSwipe). Off the mode, every
-                // place keeps the pane's edges for its content.
-                @Override public boolean isEdgePagingEnabled() { return isChromeMinimal(); }
                 // The plank (PlankTilt) is a Fancier Glass motion: the look as the last apply
-                // resolved it, on a minimal place, with nothing telling the phone to hold still.
+                // resolved it, with nothing telling the phone to hold still.
                 @Override public boolean isPlankTiltEnabled() {
-                    return isChromeMinimal() && mFancierGlassLook != null
+                    return mFancierGlassLook != null
                         && !isReducedMotionEnabled() && !isLazyModeEnabled();
                 }
                 @Override public void onWallPageSettled(
@@ -16687,6 +16685,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
                         Trace.setCounter("Wall.offsetPx", Math.round(offsetPx));
                     syncPlaceBarOffset(offsetPx);
+                    // The terminal's own frame line stays put while its page leaves: it fades.
+                    syncTerminalFrameLineTravel();
                     // The dock, the keyboard and the status bar's content travel with the wall
                     // between the two places' states, as transforms only.
                     syncChromeTravel(offsetPx);
@@ -16717,11 +16717,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWallDragInterrupted() {
                     // A tile tap, wall.go or Home moved the wall under a finger that was dragging
-                    // it; both surfaces that can drive a drag let go of that finger.
-                    View host = findViewById(R.id.terminal_window_bar_host);
-                    if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
-                        ((com.termux.app.statusbar.StatusBarSwipeLayout) host).cancelWallDrag();
-                    }
+                    // it; the window strip, the one surface outside the wall that can drive a
+                    // drag, lets go of that finger (the wall's own border drag lets go itself).
                     View bar = findViewById(R.id.terminal_window_bar);
                     if (bar instanceof com.termux.app.terminal.TerminalWindowBar) {
                         ((com.termux.app.terminal.TerminalWindowBar) bar).cancelOverswipe();
@@ -16790,6 +16787,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /** The share of the terminal's frame line last drawn; 1 at rest on the terminal. */
+    private float mTerminalFrameLineAlpha = 1f;
+
+    /**
+     * The terminal's own frame line ({@code terminal_border_overlay}, the plain border around a
+     * lone pane) is chrome laid over the wall rather than a rim the page carries, so it cannot
+     * move with the page: it fades as the terminal page leaves its rest, over the same stretch the
+     * pages' rims fade, and stays away while another place rests in the frame — the Widgets and
+     * Display pages wear a line of their own ({@code PaneWallPolicy.pageOutlineAlpha}). Per frame
+     * of a slide, so nothing here but a comparison and an alpha.
+     */
+    private void syncTerminalFrameLineTravel() {
+        if (mPaneWallController == null) return;
+        View borderView = findViewById(R.id.terminal_border_overlay);
+        View paneHost = findViewById(R.id.terminal_pane_host);
+        if (borderView == null || paneHost == null) return;
+        float alpha = com.termux.app.wall.PaneWallPolicy.pageOutlineAlpha(
+            paneHost.getTranslationX(), mPaneWallController.wall().getWidth());
+        if (alpha == mTerminalFrameLineAlpha) return;
+        mTerminalFrameLineAlpha = alpha;
+        borderView.setAlpha(alpha);
+    }
+
     /**
      * The bar is the pager. Its place content — the badge and chips of the status row, the summary
      * beside the clock, the glyphs in the lens edges and the tint of the glass — belongs to the
@@ -16801,7 +16821,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController != null) {
             // A preference sync can have taken a place away or given one back.
             mPaneWallController.refreshPages();
-            syncWallGestureAvailability();
         }
         if (slotView instanceof com.termux.app.statusbar.TopPaneWidgetSlot) {
             ((com.termux.app.statusbar.TopPaneWidgetSlot) slotView).setClockAlignment(
@@ -17217,14 +17236,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 TermuxConstants.TERMUX_HOME_DIR_PATH);
         }
         syncPlaceBar();
-    }
-
-    /** Arm or disarm the status bar's sideways drag from what the wall can actually do. */
-    private void syncWallGestureAvailability() {
-        View host = findViewById(R.id.terminal_window_bar_host);
-        if (!(host instanceof com.termux.app.statusbar.StatusBarSwipeLayout)) return;
-        ((com.termux.app.statusbar.StatusBarSwipeLayout) host).setWallAvailable(
-            mPaneWallController != null && mPaneWallController.canDrag());
     }
 
     /**
@@ -18662,21 +18673,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // A live COMPACT/EXPANDED animator is deliberately eligible for takeover.
                     return isCommandPaletteOpen() || isAppDrawerEngaged() || mSurfaceEditor.isActive();
                 }
-                @Override public boolean onWallDragBegin() {
-                    if (mPaneWallController == null || !mPaneWallController.beginDrag()) return false;
-                    if (mAppDrawerController != null) mAppDrawerController.closeImmediate();
-                    if (mSuggestionBarView != null) mSuggestionBarView.dismissContextPopups();
-                    return true;
-                }
-                @Override public void onWallDrag(float dxPx) {
-                    if (mPaneWallController != null) mPaneWallController.dragTo(dxPx);
-                }
-                @Override public void onWallDragEnd(float velocityPxPerSec) {
-                    if (mPaneWallController != null) mPaneWallController.endDrag(velocityPxPerSec);
-                }
-                @Override public void onWallDragCancel() {
-                    if (mPaneWallController != null) mPaneWallController.cancelDrag();
-                }
             });
         }
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
@@ -18696,7 +18692,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         sizePx));
             }
         }
-        syncWallGestureAvailability();
         refreshTerminalWindowBar();
     }
 

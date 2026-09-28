@@ -14,6 +14,13 @@ import androidx.annotation.Nullable;
 public interface PaneSurfaceStyle {
     /** True while each pane should carry its own glass slab (frost, tint, grain, rim). */
     boolean isPaneGlassActive();
+    /**
+     * True while the border preference is on: every place's frame wears a line — the slab's lit
+     * rim on glass, the plain stroke otherwise — in every mode, so the border drag that pages the
+     * wall ({@code wall/BorderDrag}) has the same target on the Widgets and Display pages as on
+     * the terminal. Off, the pages wear a rim only as part of their glass.
+     */
+    default boolean paneBorderEnabled() { return false; }
     /** The shared pre-blurred wallpaper frame at the configured radius, or null for none. */
     @Nullable android.graphics.Bitmap paneGlassBlurFrame();
     /** That frame's rect in screen coordinates. */

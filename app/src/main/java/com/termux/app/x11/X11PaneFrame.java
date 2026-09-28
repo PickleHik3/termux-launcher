@@ -855,9 +855,13 @@ public final class X11PaneFrame extends PaneContentFrame {
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;
+        float density = getResources().getDisplayMetrics().density;
         boolean glass = PaneGlass.isActive(style);
-        float radiusPx = glass
-            ? PaneGlass.radiusPx(style, getResources().getDisplayMetrics().density) : 0f;
+        // The page's frame line, as the Widgets page's: the slab's lit rim on glass, the
+        // terminal's plain stroke while the border preference is on without it, so the border
+        // drag that pages the wall (BorderDrag) finds the same line on every place.
+        boolean border = glass || PaneRim.plainBorderWanted(style);
+        float radiusPx = border ? PaneGlass.radiusPx(style, density) : 0f;
         // The page's own slab, fed exactly as a pane's and the Widgets page's are. It stays
         // dressed while a display runs — the surface simply covers it — so the page has the glass
         // it should the moment the display stops, without a pass of its own to run then.
@@ -868,8 +872,8 @@ public final class X11PaneFrame extends PaneContentFrame {
         // wall over its outer corner and it would read as hanging out past the rounded edge.
         if (mControls != null) {
             mControls.setPaneBorder(radiusPx, glass
-                ? com.termux.app.GlassRimRenderer.strokePx(
-                    getResources().getDisplayMetrics().density) : 0f);
+                ? com.termux.app.GlassRimRenderer.strokePx(density)
+                : border ? PaneRim.stockStrokePx(density) : 0f);
             PaneGlass.dressTab(style, mControls);
         }
         // The frame must not clip to its shape here: the mask's arcs lie exactly outside the
@@ -906,7 +910,7 @@ public final class X11PaneFrame extends PaneContentFrame {
                 mCornerMask.setCornerMaskFallbackColor(style.wallBehindColor());
             }
         }
-        if (glass) mRim.apply(this, true, radiusPx, true);
+        if (border) mRim.apply(this, glass, radiusPx, true);
         else mRim.clear(this);
     }
 

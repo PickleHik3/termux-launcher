@@ -7,6 +7,7 @@ import android.os.Build;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
@@ -24,6 +25,22 @@ import com.termux.R;
  * on, at what radius, and does this frame have the focus.
  */
 public final class PaneRim {
+
+    /** The plain stroke's width: {@code pane_active_border.xml}'s, the line a corner tab lines up against. */
+    public static final float STOCK_STROKE_DP = 1f;
+
+    /** {@link #STOCK_STROKE_DP} in pixels. */
+    public static float stockStrokePx(float density) {
+        return STOCK_STROKE_DP * density;
+    }
+
+    /**
+     * Whether a page with no glass still wears the plain stroke: the border preference is on
+     * ({@link PaneSurfaceStyle#paneBorderEnabled}), so every place's frame draws its line.
+     */
+    public static boolean plainBorderWanted(@Nullable PaneSurfaceStyle style) {
+        return style != null && style.paneBorderEnabled();
+    }
 
     private static final int GLASS_FOCUSED_ALPHA = 255;
     /**

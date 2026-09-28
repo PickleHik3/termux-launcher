@@ -28,6 +28,7 @@ public class PaneStyleKeyTest {
 
     private static final class Style implements PaneSurfaceStyle {
         boolean glass = true;
+        boolean border = true;
         Bitmap frame = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888);
         final Rect frameRect = new Rect(0, 0, 1080, 2412);
         int tint = 0x80102030;
@@ -41,6 +42,7 @@ public class PaneStyleKeyTest {
         int grainLayersBuilt;
 
         @Override public boolean isPaneGlassActive() { return glass; }
+        @Override public boolean paneBorderEnabled() { return border; }
         @Nullable @Override public Bitmap paneGlassBlurFrame() { return frame; }
         @NonNull @Override public Rect paneGlassBlurFrameRect() { return frameRect; }
         @Nullable @Override public ColorFilter paneGlassFrostFilter() { return null; }
@@ -89,6 +91,11 @@ public class PaneStyleKeyTest {
         style.glass = false;
         assertNotEquals(base, PaneStyleKey.of(style));
         style.glass = true;
+
+        // The border preference dresses the pages with a plain line even with the glass off.
+        style.border = false;
+        assertNotEquals(base, PaneStyleKey.of(style));
+        style.border = true;
 
         style.tint = 0x00000000;
         assertNotEquals(base, PaneStyleKey.of(style));

@@ -546,6 +546,194 @@ public class PaneWallLayoutTest {
         assertEquals(0f, terminal.getTranslationX(), EPS);
     }
 
+    // ---- The border drag ---------------------------------------------------------------------
+
+    /** The content under a page: takes every touch and remembers what it was sent. */
+    private static final class Content extends View {
+        final List<Integer> actions = new ArrayList<>();
+
+        Content(android.content.Context context) {
+            super(context);
+        }
+
+        @Override public boolean onTouchEvent(android.view.MotionEvent event) {
+            actions.add(event.getActionMasked());
+            return true;
+        }
+    }
+
+    private Content content;
+
+    /** A wall whose terminal page holds content that takes every touch, like a terminal does. */
+    private void buildWithContent() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        wall = new PaneWallLayout(activity);
+        widgets = new FrameLayout(activity);
+        terminal = new FrameLayout(activity);
+        content = new Content(activity);
+        ((FrameLayout) terminal).addView(content, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        display = new FrameLayout(activity);
+        wall.addView(widgets);
+        wall.addView(terminal);
+        wall.addView(display);
+        wall.setReducedMotion(true);
+        wall.setPages(PaneWallPolicy.availablePages(false, true, true));
+        wall.setPageView(PaneWallPage.TERMINAL, terminal);
+        wall.setPageView(PaneWallPage.WIDGETS, widgets);
+        wall.setPageView(PaneWallPage.DISPLAY, display);
+        wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, WIDTH, HEIGHT);
+    }
+
+    private static android.view.MotionEvent touch(int action, float x, float y, long timeMs) {
+        return android.view.MotionEvent.obtain(0L, timeMs, action, x, y, 0);
+    }
+
+    /** Lets the hold's timer run out. */
+    private static void letTheHoldElapse() {
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(com.termux.view.HoldTiming.holdTimeoutMs() + 20L));
+    }
+
+    @Test
+    public void aHeldBorderTakesTheFingerFromTheContentAndDragsTheWall() {
+        buildWithContent();
+        // Down on the top border, away from the corners: the content gets it, as for a tap.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        assertEquals(Collections.singletonList(android.view.MotionEvent.ACTION_DOWN),
+            content.actions);
+        assertEquals(BorderDrag.Claim.PENDING, wall.borderDragClaim());
+        assertFalse(wall.isDragging());
+
+        letTheHoldElapse();
+        // The hold claimed it: the content was told to forget the touch, and the wall is dragging.
+        assertEquals(Arrays.asList(android.view.MotionEvent.ACTION_DOWN,
+            android.view.MotionEvent.ACTION_CANCEL), content.actions);
+        assertEquals(BorderDrag.Claim.PAGING, wall.borderDragClaim());
+        assertTrue(wall.isDragging());
+
+        // From here the finger's sideways travel is the wall's, and the content hears nothing.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 600f,
+            40f, 400L));
+        assertEquals(-600f, terminal.getTranslationX(), EPS);
+        assertEquals(WIDTH - 600f, display.getTranslationX(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f - 600f,
+            40f, 420L));
+        assertEquals(2, content.actions.size());
+        assertEquals("past the commit distance: the place on the right", PaneWallPage.DISPLAY,
+            wall.currentPage());
+        assertFalse(wall.isDragging());
+        assertEquals(BorderDrag.Claim.NONE, wall.borderDragClaim());
+    }
+
+    @Test
+    public void aFingerThatMovesBeforeTheHoldStaysTheContents() {
+        buildWithContent();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        // A swipe from the border without a hold: a scroll, a selection, a TUI's drag.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 100f,
+            4f, 50L));
+        assertEquals(BorderDrag.Claim.ABANDONED, wall.borderDragClaim());
+        letTheHoldElapse();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 400f,
+            4f, 500L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f - 400f,
+            4f, 520L));
+        assertEquals(Arrays.asList(android.view.MotionEvent.ACTION_DOWN,
+            android.view.MotionEvent.ACTION_MOVE, android.view.MotionEvent.ACTION_MOVE,
+            android.view.MotionEvent.ACTION_UP), content.actions);
+        assertEquals("the wall never moved", 0f, terminal.getTranslationX(), EPS);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+    }
+
+    @Test
+    public void aPressOffTheBorderOrInACornerNeverArms() {
+        buildWithContent();
+        // The middle of the page.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT / 2f, 0L));
+        assertEquals(BorderDrag.Claim.NONE, wall.borderDragClaim());
+        letTheHoldElapse();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT / 2f, 400L));
+        assertEquals(Arrays.asList(android.view.MotionEvent.ACTION_DOWN,
+            android.view.MotionEvent.ACTION_UP), content.actions);
+        assertFalse(wall.isDragging());
+
+        // A corner square: the corner tab's.
+        content.actions.clear();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, 4f, 1000L));
+        assertEquals(BorderDrag.Claim.NONE, wall.borderDragClaim());
+        letTheHoldElapse();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 4f, 4f, 1400L));
+        assertEquals(Arrays.asList(android.view.MotionEvent.ACTION_DOWN,
+            android.view.MotionEvent.ACTION_UP), content.actions);
+        assertFalse(wall.isDragging());
+    }
+
+    @Test
+    public void aWallMovedFromUnderAHeldBorderSwallowsTheRestOfTheFinger() {
+        buildWithContent();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 0L));
+        letTheHoldElapse();
+        assertTrue(wall.isDragging());
+        // A key or wall.go lands mid-drag.
+        wall.goTo(PaneWallPage.WIDGETS, false);
+        assertEquals(BorderDrag.Claim.ABANDONED, wall.borderDragClaim());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 300f,
+            HEIGHT - 4f, 400L));
+        assertEquals("the rest of the finger moves nothing", 0f, widgets.getTranslationX(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f - 300f,
+            HEIGHT - 4f, 420L));
+        assertEquals("and reaches no content", Arrays.asList(
+            android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_CANCEL),
+            content.actions);
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals(BorderDrag.Claim.NONE, wall.borderDragClaim());
+    }
+
+    @Test
+    public void aSystemCancelUnderAHeldBorderSpringsTheWallBack() {
+        buildWithContent();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, HEIGHT / 2f, 0L));
+        letTheHoldElapse();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 204f, HEIGHT / 2f,
+            400L));
+        assertEquals(200f, terminal.getTranslationX(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_CANCEL, 204f, HEIGHT / 2f,
+            420L));
+        assertFalse(wall.isDragging());
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+    }
+
+    @Test
+    public void theBorderDragEngagesThePlankAndAnOutsideDragDoesNot() {
+        buildWithContent();
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+        });
+        // The window strip's overswipe: the page slides flat.
+        wall.beginDrag();
+        wall.dragTo(-300f);
+        assertNull(wall.tiltPage());
+        assertEquals(0f, terminal.getRotationY(), EPS);
+        wall.cancelDrag();
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+
+        // A held border: the page tips under the finger.
+        wall.setReducedMotion(false);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        letTheHoldElapse();
+        assertEquals(terminal, wall.tiltPage());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 300f,
+            4f, 400L));
+        assertEquals(PlankTilt.angleDeg(-300f, WIDTH), terminal.getRotationY(), EPS);
+    }
+
     @Test
     public void aPageChangeWithoutAFingerNeverTips() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
