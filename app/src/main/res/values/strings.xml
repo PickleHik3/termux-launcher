@@ -1584,6 +1584,8 @@
                 <!-- The dock's and the keyboard's height rows. The heading above each one says
                      which is which, so the label column only has to say what it sets. -->
                 <string name="termux_layout_editor_height">Height</string>
+                <!-- The sheet's handle, read aloud: it is pulled or tapped to grow the card. -->
+                <string name="termux_layout_editor_sheet_handle">Expand or collapse the editor</string>
                 <string name="termux_dock_tuning_value_dp">%1$d dp</string>
                 <string name="termux_dock_tuning_value_percent">%1$d%%</string>
 

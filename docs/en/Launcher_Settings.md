@@ -47,6 +47,12 @@ is open. Whichever edge it stands on, a drag across the bar opens and closes it;
 places is the border drag, on every place, and never the bar's own gesture. A column shares its
 edge with the pinned apps and the extra keys when those stand there too, in the order you stacked
 them.
+
+Pull the handle at the top of the card upward to enlarge the miniature — the card grows toward the
+top of the screen and the picture grows with it, the rows taking what is left — and pull it down
+to bring the card back to its resting size. A firm pull down past that closes the editor the way
+Back does: straight away when nothing has changed, and with the keep-or-discard question when
+something has.
 - **Dock height** and **Keyboard height**: how tall the dock and the built-in keyboard stand, and
   **Keyboard bottom padding** for the clearance it leaves below the keyboard, each set separately
   per orientation; upgrading carries your terminal's values over unchanged.

@@ -43,17 +43,31 @@ import java.util.List;
  */
 public final class LayoutEditorPlan {
 
-    /** How much of the screen's height the portrait miniature's phone frame stands in. */
+    /**
+     * How much of the screen's height the portrait miniature's phone frame stands in while the
+     * card rests at its collapsed height.
+     */
     public static final float PORTRAIT_FRAME_SCREEN_FRACTION = 0.42f;
 
     /**
-     * How much of a portrait screen the card may stand in. The editor is a sheet from the bottom
-     * edge rather than a panel over the whole screen: what is left above it is the live place it
-     * is a picture of, still showing its status strip and its chip row, so a drop can be seen
-     * landing on the real thing rather than only on the miniature.
+     * How much of the screen's height the portrait frame may grow to as the sheet is pulled up.
+     * The room the pull adds goes to the picture first, up to this, and only then to the rows —
+     * the miniature is what the pull is for — so the frame's share climbs from
+     * {@link #PORTRAIT_FRAME_SCREEN_FRACTION} to here over the first part of the travel and the
+     * rows take the rest.
+     */
+    public static final float PORTRAIT_FRAME_EXPANDED_SCREEN_FRACTION = 0.54f;
+
+    /**
+     * How much of a portrait screen the card stands in at rest. The editor is a sheet from the
+     * bottom edge rather than a panel over the whole screen: what is left above it is the live
+     * place it is a picture of, still showing its status strip and its chip row, so a drop can be
+     * seen landing on the real thing rather than only on the miniature. The sheet can then be
+     * pulled up to {@link #expandedCardBudgetPx}, which is as far as the top inset allows.
      *
      * <p>A landscape screen has no height to give away — its card is already the short edge — so
-     * the rule is the portrait screen's alone, and {@link #cardBudgetPx} says which it is.
+     * the rule is the portrait screen's alone, and {@link #cardBudgetPx(int, int)} says which it
+     * is.
      */
     public static final float PORTRAIT_CARD_SCREEN_FRACTION = 0.80f;
 
@@ -297,8 +311,9 @@ public final class LayoutEditorPlan {
     /**
      * How tall the miniature has to be for its phone frame to stand at the size this orientation
      * asks for: {@value #PORTRAIT_FRAME_SCREEN_FRACTION} of the screen's height in portrait,
-     * and the full width of the screen in landscape, where a frame sized from the height would be
-     * a sliver.
+     * plus what the pulled-up sheet has added on top of its resting budget until the frame reaches
+     * {@value #PORTRAIT_FRAME_EXPANDED_SCREEN_FRACTION} of it, and the full width of the screen
+     * in landscape, where a frame sized from the height would be a sliver.
      *
      * <p>Either frame is then bounded by what the card has left of its budget: a landscape phone
      * is about as wide as the screen is tall, so a frame sized from the width alone asks for the
@@ -311,22 +326,32 @@ public final class LayoutEditorPlan {
      * @param reservedPx  the room the miniature keeps under the frame for the hide tray
      * @param roomBelowPx the room that has to stay for what stands around the canvas — the card's
      *     own chrome plus the floor {@link #rowsHeightCapPx} never takes the rows below
+     * @param budgetPx    the card's budget at the sheet's current height
+     *     ({@link #cardBudgetPx(int, int, int, float)}); what it holds beyond the resting budget
+     *     is the pull's extra
      */
     public static int miniatureHeightPx(@NonNull PlaceOrientation orientation, int screenWidthPx,
                                         int screenHeightPx, float frameAspect, int reservedPx,
-                                        int roomBelowPx) {
-        float frameHeight = orientation == PlaceOrientation.LANDSCAPE
-            ? screenWidthPx / Math.max(frameAspect, 0.01f)
-            : PORTRAIT_FRAME_SCREEN_FRACTION * screenHeightPx;
-        int roomForFrame = Math.max(0,
-            cardBudgetPx(screenWidthPx, screenHeightPx) - roomBelowPx - reservedPx);
+                                        int roomBelowPx, int budgetPx) {
+        float frameHeight;
+        if (orientation == PlaceOrientation.LANDSCAPE) {
+            frameHeight = screenWidthPx / Math.max(frameAspect, 0.01f);
+        } else {
+            // The pull's extra goes to the picture first, up to the frame's cap, then to the rows.
+            int extraPx = Math.max(0, budgetPx - cardBudgetPx(screenWidthPx, screenHeightPx));
+            float capPx = (PORTRAIT_FRAME_EXPANDED_SCREEN_FRACTION - PORTRAIT_FRAME_SCREEN_FRACTION)
+                * screenHeightPx;
+            frameHeight = PORTRAIT_FRAME_SCREEN_FRACTION * screenHeightPx
+                + Math.min(extraPx, Math.max(0f, capPx));
+        }
+        int roomForFrame = Math.max(0, budgetPx - roomBelowPx - reservedPx);
         return Math.round(Math.min(frameHeight, roomForFrame)) + reservedPx;
     }
 
     /**
-     * How much height the card may take: the whole screen where the screen is already short, and
-     * {@value #PORTRAIT_CARD_SCREEN_FRACTION} of it on a portrait screen, where the rest is the
-     * live place above the sheet.
+     * How much height the card takes at rest: the whole screen where the screen is already short,
+     * and {@value #PORTRAIT_CARD_SCREEN_FRACTION} of it on a portrait screen, where the rest is
+     * the live place above the sheet.
      *
      * <p>The screen's own shape decides it, not the orientation on the toggle: flipping the
      * miniature to the other orientation changes the picture, and the card it stands in is still
@@ -335,6 +360,32 @@ public final class LayoutEditorPlan {
     public static int cardBudgetPx(int screenWidthPx, int screenHeightPx) {
         return screenWidthPx >= screenHeightPx ? screenHeightPx
             : Math.round(PORTRAIT_CARD_SCREEN_FRACTION * screenHeightPx);
+    }
+
+    /**
+     * How much height the card may take pulled all the way up: everything the screen has under
+     * its top inset, less the air the sheet keeps at the top and its own bottom margin, which is
+     * {@code roomPx}. Never less than the resting budget, and on a landscape screen exactly it —
+     * the card already stands the short edge there, so the pull has no travel.
+     */
+    public static int expandedCardBudgetPx(int screenWidthPx, int screenHeightPx, int roomPx) {
+        int resting = cardBudgetPx(screenWidthPx, screenHeightPx);
+        if (screenWidthPx >= screenHeightPx) return resting;
+        return Math.max(resting, roomPx);
+    }
+
+    /**
+     * The card's budget part-way through a pull: the resting budget, plus {@code expansion} of the
+     * way to the expanded one.
+     *
+     * @param expansion 0 at rest, 1 pulled all the way up; anything outside is clamped
+     */
+    public static int cardBudgetPx(int screenWidthPx, int screenHeightPx, int expandedBudgetPx,
+                                   float expansion) {
+        int resting = cardBudgetPx(screenWidthPx, screenHeightPx);
+        int travel = Math.max(0, expandedBudgetPx - resting);
+        float at = Float.isNaN(expansion) ? 0f : Math.max(0f, Math.min(1f, expansion));
+        return resting + Math.round(at * travel);
     }
 
     /**
