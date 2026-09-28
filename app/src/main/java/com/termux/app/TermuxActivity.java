@@ -1411,7 +1411,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The keyboard's own backdrop may be the shared frame itself; recycling it under the
             // keyboard crashes its next draw exactly like recycling it under a frost would.
             return frame != null
-                && (frame == mInAppKeyboardBackdropBitmap || isSharedWallpaperBlurFrameInUse(frame));
+                && (frame == mInAppKeyboardBackdropBitmap || frame == mUnderKeyboardBackdropBitmap
+                    || isSharedWallpaperBlurFrameInUse(frame));
         }
 
         @Override public void onCacheCleared() {
@@ -3309,6 +3310,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 findViewById(R.id.terminal_window_bar_wallpaper_backdrop),
                 findViewById(R.id.accessory_blur_backdrop),
                 findViewById(R.id.inapp_keyboard_view_host),
+                findViewById(R.id.accessory_under_keyboard_stack),
                 findViewById(R.id.command_palette_wallpaper_backdrop),
                 findViewById(R.id.terminal_sheet_wallpaper_backdrop),
                 findViewById(R.id.app_drawer_wallpaper_backdrop),
@@ -4145,13 +4147,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     || params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != RelativeLayout.TRUE;
                 params.removeRule(RelativeLayout.ABOVE);
                 params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
-            } else if (!dockGlassStopsAtKeyboard(state)) {
-                // Bands under a keyboard that is not docked between them and the rows: the
-                // dock's one sheet runs the whole stack, down over them.
-                rulesChanged = params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != 0
-                    || params.getRule(RelativeLayout.ABOVE) != 0;
-                params.removeRule(RelativeLayout.ALIGN_PARENT_TOP);
-                params.removeRule(RelativeLayout.ABOVE);
+            } else if (underKeyboardBandsShown()) {
+                // Bands under the keyboard wear a sheet of their own (applyUnderKeyboardStackGlass),
+                // keyboard up or down, so the dock's sheet is pinned at both ends: the stack's top
+                // and the top of the keyboard's column. Anchoring only the bottom and sizing it by
+                // what the keyboard leaves counted the bands a second time, over the rows.
+                rulesChanged = params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != RelativeLayout.TRUE
+                    || params.getRule(RelativeLayout.ABOVE) != R.id.accessory_keyboard_column;
+                params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
+                params.addRule(RelativeLayout.ABOVE, R.id.accessory_keyboard_column);
             } else {
                 rulesChanged = params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != 0
                     || params.getRule(RelativeLayout.ABOVE) != R.id.accessory_keyboard_column;
@@ -4162,7 +4166,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (rulesChanged)
                 surface.setLayoutParams(params);
         }
-        Rect bounds = state.keyboardShown && !shouldUseUnifiedDefaultKeyboardGlassSurface(state)
+        boolean underBands = underKeyboardBandsShown();
+        Rect bounds = state.keyboardShown && !underBands
+            && !shouldUseUnifiedDefaultKeyboardGlassSurface(state)
             ? buildToolbarOnlyAccessoryBounds(state) : null;
         applyAccessoryLayerBounds(R.id.accessory_surface_host,
             withDockGlassTopInset(bounds, dockGlassTopInsetPx()));
@@ -4170,44 +4176,66 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Whether the dock's glass ends where the keyboard's column begins, as it always has. It does
-     * unless bands stand under the keyboard while the keyboard is not docked between them and the
-     * rows — closed, or lifted out by the floating form — when the dock is one stack again and
-     * its sheet runs down over them.
+     * Whether bands stand under the keyboard now: the stack below it holds one. Every arrangement
+     * without the slot answers false, and every path this gates is then exactly what it was.
      */
-    private boolean dockGlassStopsAtKeyboard(@NonNull ChromeSpec state) {
+    private boolean underKeyboardBandsShown() {
         View under = findViewById(R.id.accessory_under_keyboard_stack);
-        return under == null || under.getVisibility() != View.VISIBLE
-            || isKeyboardDockedOverUnderStack(state);
-    }
-
-    /** The keyboard up in its column, between the dock's rows and the bands under it. */
-    private boolean isKeyboardDockedOverUnderStack(@NonNull ChromeSpec state) {
-        View keyboard = findViewById(R.id.inapp_keyboard_container);
-        return state.keyboardShown && keyboard != null && keyboard.getVisibility() != View.GONE
-            && keyboard.getParent() == findViewById(R.id.accessory_keyboard_column);
+        return under != null && under.getVisibility() == View.VISIBLE;
     }
 
     /**
-     * The bands under a docked keyboard wear the dock's tint on a sheet of their own, inset like
-     * the dock's; the dock's sheet stops at the keyboard, and the unified dock-and-keyboard
-     * surface, when that is the material, already runs under them. Otherwise the stack is bare
-     * and stands on the dock's own glass.
+     * The bands under the keyboard wear the dock's own material on a card of their own
+     * ({@link com.termux.app.dock.UnderKeyboardBand}): the dock's frost where the dock blurs, its
+     * tint at the dock's opacity and grain, its faint containing rim, its side inset and its corner
+     * radius, clipped to that card. The same card with the keyboard up, down or switched off, so a
+     * keyboard swipe only opens or closes the gap between the dock's rows and it, and the settle
+     * swaps nothing. The frame is sampled where the card is drawn: the stack's travel, plus the
+     * share the card is held back by while the keyboard rises out from over it.
      */
     private void applyUnderKeyboardStackGlass(@NonNull ChromeSpec state) {
         View under = findViewById(R.id.accessory_under_keyboard_stack);
         if (under == null) return;
-        boolean ownSheet = under.getVisibility() == View.VISIBLE
-            && isKeyboardDockedOverUnderStack(state)
-            && !shouldUseUnifiedDefaultKeyboardGlassSurface(state);
-        if (!ownSheet) {
+        if (under.getVisibility() != View.VISIBLE || !state.toolbarShown) {
             if (under.getBackground() != null) under.setBackground(null);
+            mUnderKeyboardBackdropBitmap = null;
             return;
         }
-        int insetPx = getDockLayout().horizontalInsetPx;
-        under.setBackground(new android.graphics.drawable.InsetDrawable(
-            mChrome.glass().dockSurface(state.barAlpha, 0f, 1f, false), insetPx, 0, insetPx, 0));
+        DockLayout dock = getDockLayout();
+        float radiusPx = com.termux.app.dock.UnderKeyboardBand.cornerRadiusPx(dock,
+            under.getHeight() > 0 ? under.getHeight() : Integer.MAX_VALUE);
+        List<Drawable> layers = new ArrayList<>(3);
+        mUnderKeyboardBackdropBitmap = null;
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (state.blurEnabled && wallpaperFrame != null) {
+            Bitmap frame = mChrome.blurCache().obtain(state.blurRadiusDp, wallpaperFrame);
+            if (frame != null) {
+                mUnderKeyboardBackdropBitmap = frame;
+                com.termux.app.chrome.SharedFrameDrawable backdrop =
+                    new com.termux.app.chrome.SharedFrameDrawable(frame,
+                        new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+                        com.termux.app.chrome.GlassAnchor.layout(under,
+                            () -> mAccessoryStackLift.px() + under.getTranslationY()));
+                backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
+                backdrop.setRefraction(mFancierGlassLook,
+                    getResources().getDisplayMetrics().density, radiusPx, 0);
+                layers.add(backdrop);
+            }
+        }
+        layers.add(mChrome.glass().dockSurface(state.barAlpha));
+        GradientDrawable rim = new GradientDrawable();
+        rim.setColor(Color.TRANSPARENT);
+        rim.setCornerRadius(radiusPx);
+        rim.setStroke(Math.max(1, Math.round(dpToPx(1))),
+            withAlphaComponent(resolveAccessoryOutlineColor(), 18));
+        layers.add(rim);
+        under.setBackground(new com.termux.app.chrome.RoundedSheetDrawable(
+            new LayerDrawable(layers.toArray(new Drawable[0])),
+            com.termux.app.dock.UnderKeyboardBand.sideInsetPx(dock), radiusPx));
     }
+
+    /** The shared frame the under-keyboard card is drawing, for the blur cache's in-use scan. */
+    @Nullable private Bitmap mUnderKeyboardBackdropBitmap;
 
     /**
      * The dock's glass, started below a bottom status bar that kept a sheet of its own. Without
@@ -5002,7 +5030,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean shouldShowDecorNavBarSurface(@NonNull ChromeSpec state) {
         // Floating capsules leave the gesture-pill inset showing wallpaper; edge-to-edge surfaces
-        // (dock glass, or the embedded keyboard's own background) continue under the pill.
+        // (dock glass, or the embedded keyboard's own background) continue under the pill. Bands
+        // under the keyboard are a card with air under it on the bottom edge in both styles, so
+        // nothing above the pill runs down into it and the pill shows wallpaper too.
+        if (underKeyboardBandsShown()) return false;
         return shouldShowDecorNavBarSurface(state.toolbarShown, state.keyboardShown,
             mNavBarHeight, mKeyboardGeometry.lastImeVisible() || isImeVisible(), isRoundedDockStyle(),
             isInAppKeyboardCapsule());
@@ -5039,7 +5070,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // too, and for one reason: it shares no material with the dock. One material spanning the
         // dock and a split keyboard would span the parting between the halves; a floating card
         // and an overlaying keyboard lie over the content, and the dock underneath keeps the
-        // glass it has.
+        // glass it has. Bands under the keyboard wear a card of their own below it, and one
+        // material spanning the dock and the keyboard would run on down behind that card.
+        if (underKeyboardBandsShown()) return false;
         return ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(state.toolbarShown,
             state.keyboardShown, isRoundedDockStyle(), isInAppKeyboardGlassSurface())
             && !hasInAppKeyboardBackgroundOverride()
@@ -5545,7 +5578,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A floating keyboard already sits under its card's grab handle, so the capsule's top gap
         // would only push the keys further from it: the host runs straight up to the handle row
         // and keeps a thin inner rim of the one surface the card and the host share.
-        int topMargin = capsule && !floating ? Math.round(dpToPx(4)) : 0;
+        int topMargin = capsule && !floating ? com.termux.app.dock.UnderKeyboardBand
+            .keyboardGapPx(getResources().getDisplayMetrics().density) : 0;
         int innerPadding = capsule ? Math.round(dpToPx(6)) : 0;
         int innerTopPadding = floating ? Math.round(dpToPx(4)) : innerPadding;
         // The user's own chin allowance, from Settings, and it lands in a different place per shape:
@@ -6487,12 +6521,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ImageView strip = mDecorNavBarBlurBackdrop;
         if (strip != null && drawableShowsFrame(strip.getDrawable(), frame)) return true;
         View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
-        return keyboardHost != null && drawableShowsFrame(keyboardHost.getBackground(), frame);
+        if (keyboardHost != null && drawableShowsFrame(keyboardHost.getBackground(), frame))
+            return true;
+        View underKeyboard = findViewById(R.id.accessory_under_keyboard_stack);
+        return underKeyboard != null && drawableShowsFrame(underKeyboard.getBackground(), frame);
     }
 
     /** True while {@code drawable} — a shared-frame drawable, or a stack holding one — shows {@code frame}. */
     private static boolean drawableShowsFrame(@Nullable Drawable drawable, @NonNull Bitmap frame) {
         if (drawable instanceof LayoutNeutralDrawable) drawable = ((LayoutNeutralDrawable) drawable).source();
+        if (drawable instanceof com.termux.app.chrome.RoundedSheetDrawable)
+            drawable = ((com.termux.app.chrome.RoundedSheetDrawable) drawable).source();
         com.termux.app.chrome.SharedFrameDrawable shared = com.termux.app.chrome.SharedFrameDrawable.of(drawable);
         return shared != null && shared.shows(frame);
     }
@@ -6679,7 +6718,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View azFxUnderlay = findViewById(R.id.apps_bar_az_fx_underlay);
         View azFxOverlay = findViewById(R.id.apps_bar_az_fx_overlay);
         View azLabelOverlay = findViewById(R.id.apps_bar_az_label_overlay);
-        Rect toolbarOnlyBounds = state.keyboardShown ? buildToolbarOnlyAccessoryBounds(state) : null;
+        // With bands under the keyboard the column the layers stand above is the keyboard and those
+        // bands, so the layers' MATCH_PARENT above it is already exactly the dock's rows.
+        Rect toolbarOnlyBounds = state.keyboardShown && !underKeyboardBandsShown()
+            ? buildToolbarOnlyAccessoryBounds(state) : null;
         applyAccessorySurfaceBounds(state);
         applyAccessoryLayerVerticalBounds(R.id.apps_bar_az_fx_underlay, toolbarOnlyBounds);
         applyAccessoryLayerVerticalBounds(R.id.apps_bar_az_fx_overlay, toolbarOnlyBounds);
@@ -7177,6 +7219,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
             View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
             if (keyboardHost != null && keyboardHost.getBackground() != null) keyboardHost.invalidate();
+            View under = findViewById(R.id.accessory_under_keyboard_stack);
+            if (under != null && under.getBackground() != null) under.invalidate();
         }
         applyUnderKeyboardTravel();
         int travel = Math.round(Math.max(0f, mDockTravelTranslationPx));
@@ -9961,6 +10005,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isSurfaceEditorActive() {
             return mSurfaceEditor.isActive();
         }
+
+        // The dock's own corner, resolved as the dock draws it — the configured Corners value or
+        // the follow-the-style radius — unclamped, for the miniature to scale onto its cards.
+        @Override public float dockCornerRadiusDp() {
+            float density = getResources().getDisplayMetrics().density;
+            return density <= 0f ? 0f
+                : getDockLayout().capsuleCornerRadiusPx(Integer.MAX_VALUE) / density;
+        }
     }
 
     /** The activity's half of the surface editor's seam: its views, its prefs, its render pipeline. */
@@ -12046,8 +12098,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // was put. It is the same height it took off the terminal when it had a stack of its own
         // above the dock, so the ceiling above and the content below come out where they were.
         int statusBandPx = bottomStatusBandPx();
+        // Bands under the keyboard stand on a card with air above and under it, and that air is
+        // this stack's height like the rows are: the card's sheet reports no size of its own, so
+        // what is counted here is exactly what the column lays out. Zero with no band there.
+        boolean bandsUnderKeyboard = state.toolbarShown
+            && !EdgeStackPolicy.underKeyboard(currentPlaceLayout()).isEmpty();
+        int stackEdgeGapPx = ChromePolicy.bottomEdgeGapPx(isChromeMinimal(), isRoundedDockStyle(),
+            dockMetrics.capsuleBottomGapPx);
+        int underKeyboardAirPx = com.termux.app.dock.UnderKeyboardBand.airPx(dockMetrics,
+            stackEdgeGapPx, bandsUnderKeyboard);
         int projectedStackPx = computeAccessoryStackHeight(
-            dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) + statusBandPx,
+            dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) + statusBandPx
+                + underKeyboardAirPx,
             0, state.keyboardHeight);
         // The ceiling exists to keep a usable slice of content under the stack. A floating keyboard
         // takes none of that slice, so only what the stack really costs the content is measured
@@ -12057,9 +12119,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 -(projectedStackPx - keyboardOverlapPx - maxAccessoryStackPx));
         }
         boolean dockMoved = applyDockLayout(dockMetrics);
+        dockMoved |= applyUnderKeyboardBandAir(dockMetrics, stackEdgeGapPx, bandsUnderKeyboard);
         int dockContentHeightPx = (state.toolbarShown
             ? dockMetrics.combinedHeight(toolbarHeightPx, state.extraKeysRowEnabled) : 0)
-            + statusBandPx;
+            + statusBandPx + underKeyboardAirPx;
         mAppliedDockContentHeightPx = dockContentHeightPx;
         int accessoryContentHeightPx = computeAccessoryStackHeight(
             dockContentHeightPx, 0, state.keyboardHeight);
@@ -12150,6 +12213,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || keyboardShownChanged;
         if (moved) mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         return moved;
+    }
+
+    /**
+     * The card under the keyboard keeps its air as margins in the keyboard's column — above it,
+     * and under it down to the navigation area's clearance — the same figures the stack's height
+     * counts ({@link com.termux.app.dock.UnderKeyboardBand#airPx}). Its sides are its sheet's, not
+     * its margins: the rows inside keep the dock's own insets from the screen's edges.
+     *
+     * @return whether the margins moved
+     */
+    private boolean applyUnderKeyboardBandAir(@NonNull DockLayout dock, int stackEdgeGapPx,
+                                              boolean bandsUnderKeyboard) {
+        View under = findViewById(R.id.accessory_under_keyboard_stack);
+        if (under == null || !(under.getLayoutParams() instanceof ViewGroup.MarginLayoutParams))
+            return false;
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) under.getLayoutParams();
+        int top = bandsUnderKeyboard ? com.termux.app.dock.UnderKeyboardBand.topGapPx(dock) : 0;
+        int bottom = bandsUnderKeyboard
+            ? com.termux.app.dock.UnderKeyboardBand.bottomAirPx(dock, stackEdgeGapPx) : 0;
+        if (params.topMargin == top && params.bottomMargin == bottom) return false;
+        params.topMargin = top;
+        params.bottomMargin = bottom;
+        under.setLayoutParams(params);
+        return true;
     }
 
     static boolean shouldRequestTerminalResize(boolean requested, boolean heightChanged,

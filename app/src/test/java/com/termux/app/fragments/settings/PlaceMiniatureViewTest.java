@@ -1096,4 +1096,98 @@ public class PlaceMiniatureViewTest {
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         assertNull(view.underKeyboardSlotFor(0));
     }
+
+    // ---- One radius system -----------------------------------------------------------------------
+
+    @Test
+    public void theDocksRadiusIsScaledOntoThePictureByTheShortSides() {
+        // The picture's short side is 240 units, a 411dp phone's is 411dp: 24dp is 14 units.
+        assertEquals(24f * 240f / 411f, PlaceMiniatureView.surfaceRadiusUnits(24f, 411f), 0.001f);
+        assertEquals("no screen to ask: the reference phone",
+            PlaceMiniatureView.surfaceRadiusUnits(24f, 411f),
+            PlaceMiniatureView.surfaceRadiusUnits(24f, 0f), 0.001f);
+        assertEquals(0f, PlaceMiniatureView.surfaceRadiusUnits(-1f, 411f), 0.001f);
+    }
+
+    @Test
+    public void everyCardSharesTheRadiusUpToAHalfCapsuleOfItsOwn() {
+        assertEquals("a tall card keeps the whole radius", 14f,
+            PlaceMiniatureView.cardRadiusPx(14f, 200f, 80f), 0.001f);
+        assertEquals("a thin band is a capsule", 6f,
+            PlaceMiniatureView.cardRadiusPx(14f, 200f, 12f), 0.001f);
+    }
+
+    @Test
+    public void theBandsAndTheKeyboardAreRoundedFromTheDocksOneRadius() {
+        PlaceMiniatureView view = sized();
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        float before = view.surfaceRadiusPx();
+        assertTrue(before > 0f);
+        view.setDockCornerRadiusDp(PlaceMiniatureView.DEFAULT_DOCK_RADIUS_DP * 2f);
+        assertEquals("the Corners control moves every card together", before * 2f,
+            view.surfaceRadiusPx(), 0.01f);
+    }
+
+    // ---- The grip ---------------------------------------------------------------------------------
+
+    @Test
+    public void everyRowsGripStandsInTheSameSpotCentredAcrossIt() {
+        PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        Float end = null;
+        for (PlaceMiniatureView.Block bar : new PlaceMiniatureView.Block[]{
+            PlaceMiniatureView.Block.STATUS_BAR, PlaceMiniatureView.Block.APPS_ROW,
+            PlaceMiniatureView.Block.ALPHABETS_ROW, PlaceMiniatureView.Block.EXTRA_KEYS}) {
+            RectF grip = view.gripRect(bar);
+            RectF band = view.blockRect(bar);
+            assertNotNull(grip);
+            assertNotNull(band);
+            assertEquals("centred across " + bar, band.centerY(), grip.centerY(), 0.01f);
+            assertTrue("the whole grip stays on " + bar,
+                grip.top >= band.top && grip.bottom <= band.bottom);
+            float fromEnd = band.right - grip.centerX();
+            if (end == null) end = fromEnd;
+            assertEquals("the same distance from the trailing end on " + bar, end, fromEnd, 0.01f);
+        }
+    }
+
+    @Test
+    public void aThinBandSqueezesTheColumnOfDotsWithoutMergingThem() {
+        assertEquals("room to spare: the whole column", 7.7f,
+            PlaceMiniatureView.gripHalfHeightPx(7.7f, 40f, 2f), 0.001f);
+        assertEquals("a thin band: the card less its rim", 4f,
+            PlaceMiniatureView.gripHalfHeightPx(7.7f, 12f, 2f), 0.001f);
+        float radius = PlaceMiniatureView.gripDotRadiusPx(2.2f, 4f);
+        assertTrue("squeezed dots shrink", radius < 2.2f);
+        assertTrue("and still stand apart", 4f - radius >= 2.4f * radius - 0.001f);
+        assertEquals("unsqueezed they keep the design's size", 2.2f,
+            PlaceMiniatureView.gripDotRadiusPx(2.2f, 7.7f), 0.001f);
+    }
+
+    // ---- The keyboard's form ----------------------------------------------------------------------
+
+    @Test
+    public void aFloatingKeyboardIsASmallerCardInsideItsBlock() {
+        RectF block = new RectF(0f, 300f, 200f, 380f);
+        RectF card = new RectF();
+        PlaceMiniatureView.floatingKeyboardCardInto(block, card);
+        assertTrue(card.width() < block.width() && card.height() < block.height());
+        assertEquals(block.centerX(), card.centerX(), 0.001f);
+        assertEquals(block.centerY(), card.centerY(), 0.001f);
+    }
+
+    @Test
+    public void aSplitKeyboardIsTwoHalvesWithThePartingBetween() {
+        RectF block = new RectF(0f, 300f, 200f, 380f);
+        RectF left = new RectF();
+        RectF right = new RectF();
+        PlaceMiniatureView.splitKeyboardHalvesInto(block, left, right);
+        assertEquals(block.left, left.left, 0.001f);
+        assertEquals(block.right, right.right, 0.001f);
+        assertTrue("a gap between the halves", right.left - left.right >= block.width() * 0.19f);
+        assertEquals(left.width(), right.width(), 0.001f);
+    }
 }

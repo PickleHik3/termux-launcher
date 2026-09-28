@@ -81,6 +81,39 @@ public class AzTabPolicyTest {
     }
 
     @Test
+    public void aTopRowsTabIsASliverOverThePaneWhereTheTextBegins() {
+        // The side gap is 8dp: the top row's half-pill reaches 4dp past it, not the 12dp a side
+        // index's does, and the touch area stays a full target.
+        for (boolean rtl : new boolean[] {false, true}) {
+            AzTabPolicy.Placement top = AzTabPolicy.placeOnScreen(Edge.TOP, rtl, CANVAS,
+                SCREEN_W, D);
+            assertEquals("rtl=" + rtl, (8f + AzTabPolicy.TOP_TAB_REACH_DP) * D,
+                top.visual.width(), 1e-3f);
+            float overPane = rtl ? CANVAS.right - top.visual.left
+                : top.visual.right - CANVAS.left;
+            assertEquals(AzTabPolicy.TOP_TAB_REACH_DP * D, overPane, 1e-3f);
+            assertEquals(AzTabPolicy.TOUCH_THICKNESS_DP * D, top.touch.width(), 0f);
+            assertEquals(AzTabPolicy.TAB_LENGTH_DP * D, top.visual.height(), 0f);
+        }
+        AzTabPolicy.Placement bottom = AzTabPolicy.placeOnScreen(Edge.BOTTOM, false, CANVAS,
+            SCREEN_W, D);
+        assertEquals("the bottom row's tab is unchanged", AzTabPolicy.TAB_THICKNESS_DP * D,
+            bottom.visual.width(), 0f);
+    }
+
+    @Test
+    public void aTopRowsTabKeepsALegibleFloorAndNeverPassesTheFullTab() {
+        AzTabPolicy.Box flush = new AzTabPolicy.Box(0f, 60f * D, SCREEN_W, 640f * D);
+        assertEquals(AzTabPolicy.TOP_TAB_MIN_THICKNESS_DP * D,
+            AzTabPolicy.visualThicknessPx(Edge.TOP, Edge.LEFT, flush, SCREEN_W, D), 1e-3f);
+        AzTabPolicy.Box wide = new AzTabPolicy.Box(30f * D, 60f * D, SCREEN_W, 640f * D);
+        assertEquals(AzTabPolicy.TAB_THICKNESS_DP * D,
+            AzTabPolicy.visualThicknessPx(Edge.TOP, Edge.LEFT, wide, SCREEN_W, D), 1e-3f);
+        assertEquals(AzTabPolicy.TAB_THICKNESS_DP * D,
+            AzTabPolicy.visualThicknessPx(Edge.LEFT, Edge.LEFT, flush, SCREEN_W, D), 1e-3f);
+    }
+
+    @Test
     public void theTouchAreaIsAFullTargetEveryWay() {
         for (Edge edge : Edge.values()) {
             for (boolean rtl : new boolean[] {false, true}) {

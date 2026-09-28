@@ -57,11 +57,11 @@ import java.util.Map;
  * the settings page can scroll to its row.
  *
  * <p>The picture is also the editor. Every band with a placement carries a six-dot grip at its
- * upper trailing corner; a touch-down on one lifts that bar at once — no long press — and for the
- * rest of the gesture the view keeps the preference list from stealing the touch. While a bar is
- * lifted every edge it may legally stand on is outlined, the tray under the phone offers to put it
- * away, and a release over either reports the new placement. A release anywhere else springs the
- * bar back and reports nothing. {@link MiniatureDragPolicy} owns which targets exist and which one
+ * trailing end, centred across it (a column's at its top); a touch-down on one lifts that bar at
+ * once — no long press — and for the rest of the gesture the view keeps the preference list from
+ * stealing the touch. While a bar is lifted every edge it may legally stand on is outlined, the
+ * tray under the phone offers to put it away, and a release over either reports the new placement.
+ * A release anywhere else springs the bar back and reports nothing. {@link MiniatureDragPolicy} owns which targets exist and which one
  * the finger is over.
  *
  * <p>The artwork is drawn from {@code project-docs/layout-editor/miniature-material}: its
@@ -151,23 +151,35 @@ public final class PlaceMiniatureView extends View {
     /** Half the gap between two elements, taken off every block on every side. */
     private static final float CARD_PAD_U = 3f;
     /** The elements' corner radii. */
-    private static final float STATUS_RADIUS_U = 10f;
-    private static final float APPS_RADIUS_U = 16f;
-    private static final float ALPHABETS_RADIUS_U = 10f;
-    private static final float EXTRA_KEYS_RADIUS_U = 12f;
     private static final float PANE_RADIUS_U = 20f;
-    private static final float KEYBOARD_RADIUS_U = 16f;
+    /**
+     * The dock's corner until the editor says otherwise: the follow-the-style radius a Floating
+     * dock ships with. Every band and the keyboard are rounded from this one figure, scaled to the
+     * picture ({@link #surfaceRadiusUnits}); each card then stops at a true half-capsule of its own.
+     */
+    public static final float DEFAULT_DOCK_RADIUS_DP =
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+            .resolveAutoCornerRadiusDp(com.termux.shared.termux.settings.preferences
+                .TermuxAppSharedPreferences.SurfaceSlot.DOCK, true);
+    /** The short side a phone is taken to have when the view has no screen to ask: 411dp. */
+    private static final float REFERENCE_SHORT_SIDE_DP = 411f;
     /** The hairline every resting card wears, and the heavier one a lifted card does. */
     private static final float CARD_STROKE_U = 1f;
     private static final float LIFTED_STROKE_U = 1.5f;
     /** How far the lifted card's solid underlay sits below it: the tonal raise. */
     private static final float LIFT_OFFSET_U = 4f;
-    /** The six-dot grip: two columns of three, from its centre. */
-    private static final float GRIP_DOT_RADIUS_U = 1.6f;
-    private static final float GRIP_PITCH_X_U = 6f;
-    private static final float GRIP_PITCH_Y_U = 5f;
-    /** The grip's centre from the card's trailing edge, and from its top. */
+    /**
+     * The six-dot grip: two columns of three, from its centre. Big enough to find before a finger
+     * goes looking for it — the dots were 1.6 units and read as dust on a thin band.
+     */
+    private static final float GRIP_DOT_RADIUS_U = 2.2f;
+    private static final float GRIP_PITCH_X_U = 6.5f;
+    private static final float GRIP_PITCH_Y_U = 5.5f;
+    /** How far apart two dots of a squeezed column stay, in dot radii, so they never merge. */
+    private static final float GRIP_MIN_PITCH_RADII = 2.4f;
+    /** The grip's centre from the card's trailing edge; across a row it is always the middle. */
     private static final float GRIP_INSET_END_U = 13f;
+    /** A column's grip: its centre down from the column's top. */
     private static final float GRIP_INSET_TOP_U = 16f;
     /** What a band's own content keeps clear of the grip at its trailing end. */
     private static final float GRIP_CLEARANCE_U = 22f;
@@ -191,8 +203,10 @@ public final class PlaceMiniatureView extends View {
     private static final float TAB_EDGE_GAP_U = 8f;
 
     // ---- The theme's roles, as the design maps them ---------------------------------------------
-    /** Outlines, text lines, resting grips: the on-surface-variant at the design's 45%. */
+    /** Outlines and text lines: the on-surface-variant at the design's 45%. */
     private static final int DIM_ALPHA = 115;
+    /** A resting grip: the on-surface-variant at 85%, so it reads on the thinnest band. */
+    private static final int GRIP_ALPHA = 217;
     /** Text and glyphs that have to read at the real size: the same ink, less faded. */
     private static final int TEXT_ALPHA = 205;
     /** The tonal layer a lifted card or an active tray wears: the accent at 9%. */
@@ -242,7 +256,13 @@ public final class PlaceMiniatureView extends View {
     private final RectF mContentRect = new RectF();
     /** One design unit on this frame, in pixels. */
     private float mUnit = 1f;
+    /** The one corner radius every band and the keyboard share, in design units. */
+    private float mSurfaceRadiusU;
     private final Path mClipPath = new Path();
+    /** The floating keyboard's card, or a split keyboard's halves and the whole they cut. */
+    private final RectF mKeyboardPartA = new RectF();
+    private final RectF mKeyboardPartB = new RectF();
+    private final RectF mKeyboardWhole = new RectF();
     /** Reused scratch rects for whatever a draw call is computing right now; never read across
      *  two different shapes, only within one draw-then-move-on sequence. */
     private final RectF mScratchRectA = new RectF();
@@ -317,6 +337,57 @@ public final class PlaceMiniatureView extends View {
         mIconHomeGrid = loadIcon(R.drawable.ic_symbol_grid_view);
         mIconDisplay = loadIcon(R.drawable.ic_symbol_desktop_windows);
         mIconTerminal = loadIcon(R.drawable.ic_symbol_terminal);
+        mSurfaceRadiusU = surfaceRadiusUnits(DEFAULT_DOCK_RADIUS_DP, screenShortSideDp());
+    }
+
+    /**
+     * The dock's corner radius, in dp, that the bands and the keyboard are rounded from. The
+     * picture is the phone at {@value #PHONE_SHORT_SIDE_UNITS} units across its short side, so the
+     * real radius is scaled by that against the real screen's short side: the cards corner as the
+     * surfaces do, one system, rather than each band a number of its own.
+     */
+    public void setDockCornerRadiusDp(float radiusDp) {
+        float units = surfaceRadiusUnits(radiusDp, screenShortSideDp());
+        if (units == mSurfaceRadiusU) return;
+        mSurfaceRadiusU = units;
+        invalidate();
+    }
+
+    /**
+     * A real radius, in dp, in the picture's units: the phone's short side is
+     * {@value #PHONE_SHORT_SIDE_UNITS} of them, the screen's is {@code screenShortSideDp}.
+     */
+    @VisibleForTesting
+    public static float surfaceRadiusUnits(float radiusDp, float screenShortSideDp) {
+        float side = screenShortSideDp > 0f ? screenShortSideDp : REFERENCE_SHORT_SIDE_DP;
+        return Math.max(0f, radiusDp) * PHONE_SHORT_SIDE_UNITS / side;
+    }
+
+    /**
+     * The radius a card of this size is drawn at: the shared radius, no more than a true
+     * half-capsule of its shorter side. A thin band is then a capsule and a tall one — the
+     * keyboard — keeps the whole radius, which is what the real surfaces do.
+     */
+    @VisibleForTesting
+    public static float cardRadiusPx(float surfaceRadiusPx, float cardWidthPx, float cardHeightPx) {
+        float half = Math.max(0f, Math.min(cardWidthPx, cardHeightPx)) / 2f;
+        return Math.max(0f, Math.min(surfaceRadiusPx, half));
+    }
+
+    /** The shared radius in view pixels, at this frame's unit. */
+    @VisibleForTesting
+    public float surfaceRadiusPx() {
+        return u(mSurfaceRadiusU);
+    }
+
+    private float cardRadius(@NonNull RectF card) {
+        return cardRadiusPx(surfaceRadiusPx(), card.width(), card.height());
+    }
+
+    private float screenShortSideDp() {
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        if (metrics.density <= 0f) return REFERENCE_SHORT_SIDE_DP;
+        return Math.min(metrics.widthPixels, metrics.heightPixels) / metrics.density;
     }
 
     public PlaceMiniatureView(@NonNull Context context) {
@@ -788,7 +859,7 @@ public final class PlaceMiniatureView extends View {
 
     // ---- Grips, tray and slots -----------------------------------------------------------------
 
-    /** A grip at the upper trailing corner of every band the user may move; the canvas gets none. */
+    /** A grip at the trailing end of every band the user may move; the canvas gets none. */
     private void computeGrips() {
         for (Block bar : BARS) {
             RectF band = mBlockRects.get(bar);
@@ -798,10 +869,11 @@ public final class PlaceMiniatureView extends View {
     }
 
     /**
-     * The grip glyph's own rectangle: the six dots' extent, centred at the design's anchor —
-     * {@value #GRIP_INSET_END_U} units in from the card's trailing edge and
-     * {@value #GRIP_INSET_TOP_U} down from its top, or as far down as a thin band allows. A column
-     * is too narrow for a trailing corner, so its grip stands centred across it at its top.
+     * The grip glyph's own rectangle: the six dots' extent, in the one spot every row carries it —
+     * {@value #GRIP_INSET_END_U} units in from the card's trailing edge, centred across the row —
+     * squeezed to the card on a band too thin for the whole column of dots. A column is too
+     * narrow for a trailing end, so its grip stands centred across it,
+     * {@value #GRIP_INSET_TOP_U} down from its top.
      */
     @NonNull
     private RectF gripFor(@NonNull RectF band, boolean vertical) {
@@ -813,13 +885,17 @@ public final class PlaceMiniatureView extends View {
     private void gripInto(@NonNull RectF band, boolean vertical, @NonNull RectF out) {
         float pad = u(CARD_PAD_U);
         float halfWidth = u(GRIP_PITCH_X_U) / 2f + u(GRIP_DOT_RADIUS_U);
-        float halfHeight = u(GRIP_PITCH_Y_U) + u(GRIP_DOT_RADIUS_U);
         float innerHeight = Math.max(0f, band.height() - 2f * pad);
-        float cy = band.top + pad + Math.min(u(GRIP_INSET_TOP_U), innerHeight / 2f);
+        // The card's own rim and a hair of air stay clear of the dots.
+        float halfHeight = gripHalfHeightPx(u(GRIP_PITCH_Y_U) + u(GRIP_DOT_RADIUS_U),
+            innerHeight, u(CARD_STROKE_U) + u(1f));
+        float cy;
         float cx;
         if (vertical) {
+            cy = band.top + pad + Math.min(u(GRIP_INSET_TOP_U), innerHeight / 2f);
             cx = band.centerX();
         } else {
+            cy = band.centerY();
             float end = Math.min(u(GRIP_INSET_END_U), Math.max(0f, band.width() - 2f * pad) / 2f);
             cx = isRtl() ? band.left + pad + end : band.right - pad - end;
         }
@@ -1195,8 +1271,8 @@ public final class PlaceMiniatureView extends View {
     // ---- Colours -------------------------------------------------------------------------------
     // The artwork names four roles and the theme supplies them: the surface for the phone, the
     // pane and the keyboard's own card; the raised container for every strip; the on-surface
-    // variant, dimmed, for outlines, glyphs and resting grips; and the accent for what is held,
-    // chosen or about to take a drop.
+    // variant, dimmed for outlines and glyphs and stronger for resting grips; and the accent for
+    // what is held, chosen or about to take a drop.
 
     /** The band's fill; the legend swatch uses the same one so the two are read as one thing. */
     @ColorInt
@@ -1244,10 +1320,16 @@ public final class PlaceMiniatureView extends View {
             R.color.termux_on_surface_variant);
     }
 
-    /** Outlines, key silhouettes and resting grips: the ink at the design's 45%. */
+    /** Outlines and key silhouettes: the ink at the design's 45%. */
     @ColorInt
     private int dim() {
         return ColorUtils.setAlphaComponent(onVariant(), DIM_ALPHA);
+    }
+
+    /** A resting grip: the ink at readable emphasis, over any band, light or dark. */
+    @ColorInt
+    private int gripInk() {
+        return ColorUtils.setAlphaComponent(onVariant(), GRIP_ALPHA);
     }
 
     /** Text and glyphs, which have to read at the real size: the ink, a little less faded. */
@@ -1330,18 +1412,6 @@ public final class PlaceMiniatureView extends View {
         return units * mUnit;
     }
 
-    /** A band's corner radius, in the design's units. */
-    private static float bandRadiusUnits(@NonNull Block block) {
-        switch (block) {
-            case STATUS_BAR: return STATUS_RADIUS_U;
-            case APPS_ROW: return APPS_RADIUS_U;
-            case ALPHABETS_ROW: return ALPHABETS_RADIUS_U;
-            case EXTRA_KEYS: return EXTRA_KEYS_RADIUS_U;
-            case CANVAS:
-            default: return PANE_RADIUS_U;
-        }
-    }
-
     /**
      * The card an element is drawn as, inside the block it claims: the block less half the gap
      * between neighbours on every side, so two adjacent bands read as two cards with air between
@@ -1361,7 +1431,7 @@ public final class PlaceMiniatureView extends View {
         if (rect == null || rect.isEmpty() || mLayout == null) return;
         if (mDraggedBar == block) {
             cardOf(rect, mScratchRectA);
-            float radius = u(bandRadiusUnits(block));
+            float radius = cardRadius(mScratchRectA);
             mDashPaint.setPathEffect(mSlotDash);
             mDashPaint.setStrokeWidth(dp(1f));
             mDashPaint.setColor(dim());
@@ -1371,7 +1441,7 @@ public final class PlaceMiniatureView extends View {
         }
         drawBandCard(canvas, block, rect, isBarVertical(block), false);
         RectF grip = mGripRects.get(block);
-        if (grip != null) drawGrip(canvas, grip, dim());
+        if (grip != null) drawGrip(canvas, grip, gripInk());
     }
 
     /**
@@ -1384,7 +1454,7 @@ public final class PlaceMiniatureView extends View {
                               boolean vertical, boolean lifted) {
         RectF card = mScratchRectC;
         cardOf(rect, card);
-        float radius = u(bandRadiusUnits(block));
+        float radius = cardRadius(card);
         if (lifted) {
             // The raise: a solid underlay a little below, then the card with a wash of accent.
             mScratchRectB.set(card);
@@ -1772,11 +1842,75 @@ public final class PlaceMiniatureView extends View {
 
     // ---- Keyboard -----------------------------------------------------------------------------
 
-    /** The keyboard's block along the bottom of the phone, while the place shows one. */
+    /**
+     * The keyboard's block along the bottom of the phone, while the place shows one, drawn in the
+     * form the place types with: docked across the block, floating as a smaller card lifted off
+     * it, split as two halves with the parting between them. The block itself is the same in all
+     * three, so the drop targets around it do not move with the form.
+     */
     private void drawKeyboardBlock(@NonNull Canvas canvas) {
         if (mKeyboardRect.isEmpty()) return;
         cardOf(mKeyboardRect, mScratchRectC);
-        drawKeyboardCard(canvas, mScratchRectC);
+        PlaceLayout.KeyboardForm form = mLayout == null
+            ? PlaceLayout.KeyboardForm.DOCKED : mLayout.keyboardForm;
+        switch (form) {
+            case FLOATING: {
+                RectF card = mKeyboardPartA;
+                floatingKeyboardCardInto(mScratchRectC, card);
+                // The raise a lifted card wears, so it reads as over the place, not in it.
+                mScratchRectB.set(card);
+                mScratchRectB.offset(0f, u(LIFT_OFFSET_U) / 2f);
+                float radius = cardRadius(card);
+                mFillPaint.setColor(ColorUtils.setAlphaComponent(onVariant(), PLACEHOLDER_ALPHA));
+                canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
+                drawKeyboardCard(canvas, card);
+                break;
+            }
+            case SPLIT: {
+                RectF left = mKeyboardPartA;
+                RectF right = mKeyboardPartB;
+                splitKeyboardHalvesInto(mScratchRectC, left, right);
+                // The card pass reuses the scratch rects; the whole keyboard is held apart.
+                mKeyboardWhole.set(mScratchRectC);
+                drawKeyboardHalf(canvas, mKeyboardWhole, left);
+                drawKeyboardHalf(canvas, mKeyboardWhole, right);
+                break;
+            }
+            case DOCKED:
+            default:
+                drawKeyboardCard(canvas, mScratchRectC);
+                break;
+        }
+    }
+
+    /** The floating keyboard's card: 72% of the block's width and 82% of its height, centred. */
+    @VisibleForTesting
+    static void floatingKeyboardCardInto(@NonNull RectF block, @NonNull RectF out) {
+        float width = block.width() * 0.72f;
+        float height = block.height() * 0.82f;
+        out.set(block.centerX() - width / 2f, block.centerY() - height / 2f,
+            block.centerX() + width / 2f, block.centerY() + height / 2f);
+    }
+
+    /** The split keyboard's two halves: 40% of the block's width each, at its two ends. */
+    @VisibleForTesting
+    static void splitKeyboardHalvesInto(@NonNull RectF block, @NonNull RectF left,
+                                        @NonNull RectF right) {
+        float half = block.width() * 0.4f;
+        left.set(block.left, block.top, block.left + half, block.bottom);
+        right.set(block.right - half, block.top, block.right, block.bottom);
+    }
+
+    /** One half of a split keyboard: its own card, and the whole keyboard's keys that fall on it. */
+    private void drawKeyboardHalf(@NonNull Canvas canvas, @NonNull RectF whole,
+                                  @NonNull RectF half) {
+        int saved = canvas.save();
+        mClipPath.reset();
+        float radius = cardRadius(half);
+        mClipPath.addRoundRect(half, radius, radius, Path.Direction.CW);
+        canvas.clipPath(mClipPath);
+        drawKeyboardCard(canvas, whole, half);
+        canvas.restoreToCount(saved);
     }
 
     /**
@@ -1785,21 +1919,31 @@ public final class PlaceMiniatureView extends View {
      * 216x128 viewport and scaled to fit whatever card it is given.
      */
     private void drawKeyboardCard(@NonNull Canvas canvas, @NonNull RectF card) {
-        float radius = u(KEYBOARD_RADIUS_U);
+        drawKeyboardCard(canvas, card, card);
+    }
+
+    /**
+     * The same, with the keys laid out over {@code keys} and the card drawn at {@code card}: a
+     * split half is the half's card with the whole keyboard's keys under its clip.
+     */
+    private void drawKeyboardCard(@NonNull Canvas canvas, @NonNull RectF keys,
+                                  @NonNull RectF card) {
+        float radius = cardRadius(card);
         mFillPaint.setColor(surface());
         canvas.drawRoundRect(card, radius, radius, mFillPaint);
         mScratchRectB.set(card);
         mScratchRectB.inset(u(2f), u(2f));
         mFillPaint.setColor(ColorUtils.setAlphaComponent(container(), KEYBOARD_TINT_ALPHA));
-        canvas.drawRoundRect(mScratchRectB, radius - u(2f), radius - u(2f), mFillPaint);
+        float inner = Math.max(0f, radius - u(2f));
+        canvas.drawRoundRect(mScratchRectB, inner, inner, mFillPaint);
         mLinePaint.setColor(dim());
         mLinePaint.setStrokeWidth(u(CARD_STROKE_U));
         canvas.drawRoundRect(card, radius, radius, mLinePaint);
 
-        float k = Math.max(0.01f, Math.min(card.width() / KEYBOARD_DESIGN_W,
-            card.height() / KEYBOARD_DESIGN_H));
-        float x0 = card.centerX() - KEYBOARD_DESIGN_W * k / 2f;
-        float y0 = card.centerY() - KEYBOARD_DESIGN_H * k / 2f;
+        float k = Math.max(0.01f, Math.min(keys.width() / KEYBOARD_DESIGN_W,
+            keys.height() / KEYBOARD_DESIGN_H));
+        float x0 = keys.centerX() - KEYBOARD_DESIGN_W * k / 2f;
+        float y0 = keys.centerY() - KEYBOARD_DESIGN_H * k / 2f;
         mFillPaint.setColor(dim());
         // The grabber: the one part of the keyboard that is not a key, and not the layout grip.
         mScratchRectB.set(x0 + 90f * k, y0 + 8f * k, x0 + 126f * k, y0 + 11f * k);
@@ -1938,13 +2082,39 @@ public final class PlaceMiniatureView extends View {
         else local.right -= room;
     }
 
-    /** The six dots, from their rectangle's centre; the colour says whether the bar is held. */
+    /**
+     * Half the grip's height on a card with {@code innerHeightPx} of room: the whole column of
+     * dots where it fits, and no taller than the card less {@code clearancePx} on each side where
+     * it does not — the A–Z band is the one this is for.
+     */
+    @VisibleForTesting
+    static float gripHalfHeightPx(float wantedHalfPx, float innerHeightPx, float clearancePx) {
+        float room = Math.max(0f, innerHeightPx / 2f - Math.max(0f, clearancePx));
+        return Math.max(0f, Math.min(wantedHalfPx, room));
+    }
+
+    /**
+     * The dots' radius for a grip {@code halfHeightPx} tall: the design's, or — where the column
+     * has been squeezed — small enough that three rows still stand
+     * {@value #GRIP_MIN_PITCH_RADII} radii apart. Never under half a pixel.
+     */
+    @VisibleForTesting
+    static float gripDotRadiusPx(float designRadiusPx, float halfHeightPx) {
+        float fit = Math.max(0f, halfHeightPx) / (1f + GRIP_MIN_PITCH_RADII);
+        return Math.max(0.5f, Math.min(designRadiusPx, fit));
+    }
+
+    /**
+     * The six dots, filling their rectangle: two columns at its sides, three rows from its top to
+     * its bottom. The colour says whether the bar is held.
+     */
     private void drawGrip(@NonNull Canvas canvas, @NonNull RectF grip, int color) {
         float cx = grip.centerX();
         float cy = grip.centerY();
-        float pitchX = Math.min(u(GRIP_PITCH_X_U), grip.width() / 2f);
-        float pitchY = Math.min(u(GRIP_PITCH_Y_U), grip.height() / 3f);
-        float radius = Math.max(0.6f, Math.min(u(GRIP_DOT_RADIUS_U), pitchY * 0.35f));
+        float radius = gripDotRadiusPx(Math.min(u(GRIP_DOT_RADIUS_U), grip.width() / 4f),
+            grip.height() / 2f);
+        float pitchX = Math.max(0f, grip.width() - 2f * radius);
+        float pitchY = Math.max(0f, grip.height() / 2f - radius);
         mFillPaint.setColor(color);
         for (int c = -1; c <= 1; c += 2) {
             for (int r = -1; r <= 1; r++) {
@@ -2101,7 +2271,7 @@ public final class PlaceMiniatureView extends View {
 
             String name = barName(bar);
             RectF grip = mGripRects.get(bar);
-            if (grip != null) drawGrip(canvas, grip, dim());
+            if (grip != null) drawGrip(canvas, grip, gripInk());
             if (name == null) continue;
             float textLeft = chip.left + dp(8);
             float textRoom = Math.max(0f, (grip == null ? chip.right : grip.left)
