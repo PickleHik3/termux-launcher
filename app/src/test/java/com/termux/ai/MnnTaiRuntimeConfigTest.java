@@ -298,10 +298,10 @@ public class MnnTaiRuntimeConfigTest {
     @Test
     public void extraConfig_enablesPromptCacheWithStatelessHistory() throws Exception {
         MnnTaiRuntime runtime = new MnnTaiRuntime(context);
-        Method method = MnnTaiRuntime.class.getDeclaredMethod("extraConfigJson", TaiModelSpec.class);
+        Method method = MnnTaiRuntime.class.getDeclaredMethod("extraConfigJson", TaiModelSpec.class, JSONObject.class, File.class);
         method.setAccessible(true);
         File config = new File(context.getCacheDir(), "mnn-extra-config/config.json");
-        JSONObject extra = new JSONObject((String) method.invoke(runtime, model(config)));
+        JSONObject extra = new JSONObject((String) method.invoke(runtime, model(config), new JSONObject(), config));
 
         assertFalse(extra.getBoolean("keep_history"));
         assertTrue(extra.getBoolean("prompt_cache"));
@@ -470,7 +470,8 @@ public class MnnTaiRuntimeConfigTest {
     private static Object invokeMergedConfig(MnnTaiRuntime runtime, File config, TaiModelSpec model, TaiRuntimeOptions options) throws Exception {
         Method method = MnnTaiRuntime.class.getDeclaredMethod("mergedConfigJson", File.class, TaiModelSpec.class, TaiRuntimeOptions.class);
         method.setAccessible(true);
-        return method.invoke(runtime, config, model, options);
+        // mergedConfigJson returns the JSONObject (the mmap fingerprint reads it); callers here want its text.
+        return method.invoke(runtime, config, model, options).toString();
     }
 
     private static File configFile(File dir) throws Exception {
