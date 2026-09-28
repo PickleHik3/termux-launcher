@@ -230,6 +230,8 @@ Before loading a model, TAI checks:
 
 Unknown imported models default to CPU. Automatic GPU selection is conservative; you can explicitly test `tai load MODEL_ID --gpu` when the model profile supports it. A native runtime crash is isolated from the launcher, and TAI records fallback guidance for the next attempt.
 
+MNN keeps a converted-weights cache in the app's cache directory, which can grow as large as the model itself. It is rebuilt automatically after an app or runtime update, or after a load with different settings; `tai load MODEL_ID --fresh` throws it away and rebuilds it on demand, if a loaded MNN model ever starts giving degenerate replies.
+
 The active model normally unloads after 10 minutes without use. Change the idle timeout in TAI settings or use `tai keep-warm` when a client needs it available longer.
 
 ## Benchmark

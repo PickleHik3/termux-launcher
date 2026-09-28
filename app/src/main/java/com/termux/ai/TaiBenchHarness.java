@@ -66,6 +66,12 @@ final class TaiBenchHarness {
         @NonNull String readingPassage() throws IOException;
         /** The model, runtime and device stamps for an entry's record: displayName, sizeBytes, sha256, runtimeVersion. */
         @NonNull JSONObject describe(@NonNull TaiBenchSuite.EntryPlan entry) throws JSONException;
+        /**
+         * MNN only: throws away the entry's model's mmap weight cache, so the next {@link #load}
+         * rebuilds it from scratch. A no-op for other backends; the harness never needs to check
+         * which one it is calling.
+         */
+        void clearMmapCache(@NonNull TaiBenchSuite.EntryPlan entry);
     }
 
     interface Sink {
@@ -151,8 +157,67 @@ final class TaiBenchHarness {
 
     // ---- one entry ---------------------------------------------------------------------------
 
+    /**
+     * Runs one entry, and once, self-heals an MNN entry whose check phase came back broken in the
+     * shape a stale or corrupt mmap weight cache produces (see {@link MnnTaiRuntime}): every check
+     * reply degenerate — one repeated character, whitespace or empty — rather than a real, if
+     * wrong, answer. That shape rules out a merely weak model or a hard question; a model that is
+     * actually trying produces varied text even when it gets the answer wrong. On that shape the
+     * cache is cleared and the whole entry (load included) is run again from scratch; if it comes
+     * back broken the same way, it stays recorded as broken rather than retried forever.
+     */
     @NonNull
     private JSONObject runEntry(@NonNull TaiBenchSuite.EntryPlan entry) throws IOException, JSONException {
+        JSONObject record = runEntryOnce(entry);
+        if (!stopRequested() && looksLikeStaleMmapCache(entry, record)) {
+            emit(event("cache_rebuilt").put("entry", entry.toJson())
+                .put("reason", "mnn_check_degenerate"));
+            try {
+                host.clearMmapCache(entry);
+            } catch (RuntimeException ignored) {
+            }
+            JSONObject rebuilt = runEntryOnce(entry);
+            rebuilt.put("cacheRebuilt", true);
+            return rebuilt;
+        }
+        return record;
+    }
+
+    /**
+     * True when {@code record} is an MNN entry whose check phase ran (every question got a reply)
+     * but every reply was degenerate. Pure and static over the record's own JSON so it can be
+     * exercised without running a bench.
+     */
+    static boolean looksLikeStaleMmapCache(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull JSONObject record) {
+        if (!TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) return false;
+        JSONObject check = record.optJSONObject("check");
+        if (check == null) return false;
+        int total = check.optInt("total", 0);
+        int passed = check.optInt("passed", 0);
+        if (total <= 0 || passed >= total) return false;
+        JSONArray details = check.optJSONArray("details");
+        if (details == null || details.length() == 0) return false;
+        for (int i = 0; i < details.length(); i++) {
+            JSONObject detail = details.optJSONObject(i);
+            if (detail == null || !isDegenerateReply(detail.optString("reply", null))) return false;
+        }
+        return true;
+    }
+
+    /** All one repeated character, whitespace only, or empty; {@code null} counts as empty. */
+    static boolean isDegenerateReply(@Nullable String reply) {
+        if (reply == null) return true;
+        String trimmed = reply.trim();
+        if (trimmed.isEmpty()) return true;
+        char first = trimmed.charAt(0);
+        for (int i = 1; i < trimmed.length(); i++) {
+            if (trimmed.charAt(i) != first) return false;
+        }
+        return true;
+    }
+
+    @NonNull
+    private JSONObject runEntryOnce(@NonNull TaiBenchSuite.EntryPlan entry) throws IOException, JSONException {
         Record record = new Record(entry);
         try {
             // Whatever is resident goes first: a cold load is the number, and the budget credits

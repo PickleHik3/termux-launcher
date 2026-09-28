@@ -262,8 +262,9 @@ public final class MnnTaiRuntime implements TaiRuntime {
         LlmSession initialized;
         long measured;
         try {
-            String mergedConfig = mergedConfigJson(config, modelSpec, options);
-            String extraConfig = extraConfigJson(modelSpec);
+            JSONObject mergedConfigObj = mergedConfigJson(config, modelSpec, options);
+            String mergedConfig = mergedConfigObj.toString();
+            String extraConfig = extraConfigJson(modelSpec, mergedConfigObj, config);
             initialized = new LlmSession();
             // MemAvailable is sampled across native init only; the figure is booked below, so a
             // failed load never records one.
@@ -1197,7 +1198,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
-    private String mergedConfigJson(@NonNull File config, @NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options) throws JSONException {
+    private JSONObject mergedConfigJson(@NonNull File config, @NonNull TaiModelSpec modelSpec, @NonNull TaiRuntimeOptions options) throws JSONException {
         JSONObject json = readJsonFile(config);
         File modelDir = config.getParentFile();
         if (modelDir != null && json.optString("tokenizer_file", "").trim().isEmpty()) {
@@ -1226,7 +1227,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         if (options.topK != null) json.put("top_k", options.topK);
         applyThinkingOverride(json, options.thinkingEnabled);
         applySpeculativeDecodingOverride(json, options.speculativeDecodingEnabled);
-        return json.toString();
+        return json;
     }
 
     /**
@@ -1274,25 +1275,152 @@ public final class MnnTaiRuntime implements TaiRuntime {
     }
 
     @NonNull
-    private String cacheKey(@NonNull String value) {
+    static String cacheKey(@NonNull String value) {
         String key = value.replaceAll("[^A-Za-z0-9._-]", "_");
         return key.isEmpty() ? "model" : key;
     }
 
+    /** {@code <cacheDir>/tai-mnn-mmap/<modelId>}: the parent of every fingerprint dir for a model. */
     @NonNull
-    private String extraConfigJson(@NonNull TaiModelSpec modelSpec) throws JSONException {
+    private static File mmapModelRoot(@NonNull Context appContext, @NonNull String modelId) {
+        return new File(appContext.getCacheDir(), "tai-mnn-mmap/" + cacheKey(modelId));
+    }
+
+    /**
+     * Deletes a model's whole mmap cache root, fingerprint dirs and legacy flat files alike. Called
+     * on model delete and as the reset hook ({@code clearCache} on the load routes, {@code tai load
+     * --fresh}) for whenever a cache must be thrown away without waiting for it to be judged stale
+     * by its own fingerprint.
+     */
+    static void clearMmapCache(@NonNull Context context, @NonNull String modelId) {
+        deleteRecursively(mmapModelRoot(context.getApplicationContext(), modelId));
+    }
+
+    @NonNull
+    private String extraConfigJson(@NonNull TaiModelSpec modelSpec, @NonNull JSONObject mergedConfig, @NonNull File config) throws JSONException {
         JSONObject json = new JSONObject();
         json.put("is_r1", modelSpec.id.toLowerCase(Locale.ROOT).contains("r1")
             || (modelSpec.architecture != null && modelSpec.architecture.toLowerCase(Locale.ROOT).contains("r1")));
         // The native shim derives use_mmap from whether mmap_dir is non-empty and overwrites
         // any use_mmap/tmp_path in the merged config (llm_session.cpp) — so the directory must
         // be passed here, not in mergedConfigJson.
-        File mmapDir = new File(appContext.getCacheDir(), "tai-mnn-mmap/" + cacheKey(modelSpec.id));
+        //
+        // The directory is fingerprinted rather than reused as-is: on pong (2026-09-28, MNN
+        // 3.6.1) a model's mmap cache — the converted weights MNN writes into it once and then
+        // reuses whenever its sync marker is present — went bad after some unreproduced sequence
+        // of loads with different settings and two app reinstalls, and every reply after that was
+        // "!!!!!!!!" regardless of sampling. MNN never validates what it mmaps back in, so a
+        // corrupt or stale cache is silent until the output is read. Deleting the cache fixed it
+        // at once. The fingerprint folds in everything that should invalidate a cached weight set
+        // — the runtime build, the app build, the weight file's own identity, and the settings
+        // that shape what gets written — so a change in any of them lands in a fresh directory
+        // instead of reusing files that may not match, and the old ones are pruned so the cause
+        // doesn't need to be found for the fix to hold.
+        File modelRoot = mmapModelRoot(appContext, modelSpec.id);
+        String fingerprint = mmapFingerprint(mergedConfig, config, appUpdateStamp());
+        pruneMmapCacheSiblings(modelRoot, fingerprint);
+        File mmapDir = new File(modelRoot, fingerprint);
         if (!mmapDir.isDirectory()) mmapDir.mkdirs();
         json.put("mmap_dir", mmapDir.getAbsolutePath());
         json.put("keep_history", false);
         json.put("prompt_cache", true);
         return json.toString();
+    }
+
+    /**
+     * Deletes every sibling of {@code currentFingerprint} directly under {@code modelRoot}: other
+     * fingerprint directories from earlier loads, and any legacy flat file left by the
+     * pre-fingerprint layout (weights and sync markers written straight into the model's mmap
+     * root). Static and pure so it can be exercised on a temp directory without a device.
+     */
+    static void pruneMmapCacheSiblings(@NonNull File modelRoot, @NonNull String currentFingerprint) {
+        File[] children = modelRoot.listFiles();
+        if (children == null) return;
+        for (File child : children) {
+            if (child.isDirectory() && child.getName().equals(currentFingerprint)) continue;
+            deleteRecursively(child);
+        }
+    }
+
+    private static void deleteRecursively(@Nullable File file) {
+        if (file == null || !file.exists()) return;
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) deleteRecursively(child);
+        }
+        file.delete();
+    }
+
+    /**
+     * A short, stable hash of everything that should invalidate a model's mmap weight cache: the
+     * bundled MNN build, the app build that loaded it, the weight file's own size and mtime (its
+     * cheap stand-in for a content hash), and the load-affecting settings from the merged config.
+     * Pure and static: given the same inputs it always returns the same fingerprint, and changing
+     * any one of them changes it.
+     */
+    @NonNull
+    static String mmapFingerprint(
+        @NonNull JSONObject mergedConfig,
+        @NonNull File config,
+        long appUpdateStamp
+    ) {
+        File modelDir = config.getParentFile();
+        String weightFileName = mergedConfig.optString("llm_weight", "llm.mnn.weight");
+        if (weightFileName.trim().isEmpty()) weightFileName = "llm.mnn.weight";
+        File weightFile = modelDir == null ? null : new File(modelDir, weightFileName);
+        long weightSize = weightFile != null && weightFile.isFile() ? weightFile.length() : -1L;
+        long weightMtime = weightFile != null && weightFile.isFile() ? weightFile.lastModified() : -1L;
+        return mmapFingerprint(
+            RUNTIME_VERSION,
+            appUpdateStamp,
+            weightSize,
+            weightMtime,
+            mergedConfig.optString("backend_type", ""),
+            mergedConfig.optString("precision", ""),
+            mergedConfig.optString("memory", ""),
+            mergedConfig.optInt("thread_num", 0),
+            mergedConfig.optString("speculative_type", "")
+        );
+    }
+
+    @NonNull
+    static String mmapFingerprint(
+        @NonNull String runtimeVersion,
+        long appUpdateStamp,
+        long weightSize,
+        long weightMtime,
+        @NonNull String backendType,
+        @NonNull String precision,
+        @NonNull String memory,
+        int threadNum,
+        @NonNull String speculativeType
+    ) {
+        String material = runtimeVersion + '|' + appUpdateStamp + '|' + weightSize + '|' + weightMtime + '|'
+            + backendType + '|' + precision + '|' + memory + '|' + threadNum + '|' + speculativeType;
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(material.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (int i = 0; i < 8 && i < hash.length; i++) hex.append(String.format(Locale.ROOT, "%02x", hash[i]));
+            return hex.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            return Integer.toHexString(material.hashCode());
+        }
+    }
+
+    /**
+     * The app build that loaded the model, so any update starts every model's mmap cache fresh
+     * rather than trusting a converted-weight cache the new build (or a new MNN release bundled
+     * with it) never wrote. {@code lastUpdateTime} survives a reinstall at the same version code,
+     * which is exactly the case that triggered this on pong.
+     */
+    private long appUpdateStamp() {
+        try {
+            return appContext.getPackageManager()
+                .getPackageInfo(appContext.getPackageName(), 0).lastUpdateTime;
+        } catch (Exception e) {
+            return 0L;
+        }
     }
 
     @NonNull

@@ -565,6 +565,12 @@ public final class TaiManager {
         }
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_LOAD_MODEL, delegatedRuntimeBody(body));
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
+        // The reset hook (tai load --fresh, or clearCache on the load routes directly): thrown away
+        // before the load itself picks the fingerprinted directory, so the model always rebuilds
+        // its converted-weight cache from scratch instead of trusting whatever is on disk.
+        if (request.optBoolean("clearCache", false) && TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
+            MnnTaiRuntime.clearMmapCache(appContext, spec.id);
+        }
         if (hasInjectedRuntimeOverride()) {
             JSONObject result = localRuntime().load(spec, options);
             return result;
@@ -1030,6 +1036,12 @@ public final class TaiManager {
                 passage = new String(output.toByteArray(), StandardCharsets.UTF_8);
             }
             return passage;
+        }
+
+        @Override
+        public void clearMmapCache(@NonNull TaiBenchSuite.EntryPlan entry) {
+            if (!TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) return;
+            MnnTaiRuntime.clearMmapCache(appContext, spec(entry).id);
         }
 
         @NonNull

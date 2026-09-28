@@ -1974,7 +1974,7 @@ public class LauncherCtlApiServer {
             "  tai download-cancel <model-id>\n" +
             "  tai delete <model-id>\n" +
             "  tai preflight [model] [--auto|--cpu|--gpu]\n" +
-            "  tai load [model] [--auto|--cpu|--gpu]\n" +
+            "  tai load [model] [--auto|--cpu|--gpu] [--fresh]\n" +
             "  tai unload\n" +
             "  tai keep-warm [model] [--minutes N] [--auto|--cpu|--gpu]\n" +
             "  tai cancel\n" +
@@ -1993,6 +1993,9 @@ public class LauncherCtlApiServer {
             "Auto tries the GPU first and the CPU after a recorded GPU failure. Every load is sized to the memory\n" +
             "free at that moment: the context window shrinks to fit (down to 4096 tokens), and a load that\n" +
             "cannot fit is refused rather than started.\n" +
+            "--fresh on tai load throws away the model's MNN mmap weight cache before loading, so it is\n" +
+            "rebuilt from scratch instead of reused; use it if a loaded MNN model starts giving degenerate\n" +
+            "replies (repeated characters, whatever the sampling settings).\n" +
             "tai benchmark runs bench v1 on each model, timed the same way for LiteRT-LM and MNN: a cold\n" +
             "load, then reading (prompt tok/s over a fixed passage), first word (time to first token),\n" +
             "writing (decode tok/s over 128 tokens) and three check questions with known answers. Standard\n" +
@@ -2161,19 +2164,25 @@ public class LauncherCtlApiServer {
             "  load)\n" +
             "    model=\"\"\n" +
             "    accelerator=\"\"\n" +
+            "    fresh=\"\"\n" +
             "    while [ \"$#\" -gt 0 ]; do\n" +
             "      case \"$1\" in\n" +
             "        --auto) accelerator=auto ;;\n" +
             "        --cpu) accelerator=cpu ;;\n" +
             "        --gpu) accelerator=gpu ;;\n" +
-            "        --*) echo \"usage: tai load [model] [--auto|--cpu|--gpu]\" >&2; exit 2 ;;\n" +
-            "        *) [ -z \"$model\" ] || { echo \"usage: tai load [model] [--auto|--cpu|--gpu]\" >&2; exit 2; }; model=\"$1\" ;;\n" +
+            "        --fresh) fresh=1 ;;\n" +
+            "        --*) echo \"usage: tai load [model] [--auto|--cpu|--gpu] [--fresh]\" >&2; exit 2 ;;\n" +
+            "        *) [ -z \"$model\" ] || { echo \"usage: tai load [model] [--auto|--cpu|--gpu] [--fresh]\" >&2; exit 2; }; model=\"$1\" ;;\n" +
             "      esac\n" +
             "      shift\n" +
             "    done\n" +
-            "    accel_json=\"\"\n" +
-            "    if [ -n \"$accelerator\" ]; then accel_json=\",\\\"accelerator\\\":\\\"$accelerator\\\"\"; fi\n" +
-            "    if [ -n \"$model\" ]; then model_escaped=$(json_escape \"$model\"); post_json /v1/ai/runtime/load \"{\\\"model\\\":\\\"$model_escaped\\\"$accel_json}\"; elif [ -n \"$accelerator\" ]; then post_json /v1/ai/runtime/load \"{\\\"accelerator\\\":\\\"$accelerator\\\"}\"; else post_json /v1/ai/runtime/load '{}'; fi\n" +
+            "    body=\"{}\"\n" +
+            "    sep=\"\"\n" +
+            "    if [ -n \"$model\" ]; then model_escaped=$(json_escape \"$model\"); body=\"{\\\"model\\\":\\\"$model_escaped\\\"\"; sep=\",\"; fi\n" +
+            "    if [ -n \"$accelerator\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body$sep\\\"accelerator\\\":\\\"$accelerator\\\"\"; sep=\",\"; fi\n" +
+            "    if [ -n \"$fresh\" ]; then [ \"$body\" = \"{}\" ] && { body=\"{\"; sep=\"\"; }; body=\"$body${sep}\\\"clearCache\\\":true\"; sep=\",\"; fi\n" +
+            "    [ \"$body\" = \"{}\" ] || body=\"$body}\"\n" +
+            "    post_json /v1/ai/runtime/load \"$body\"\n" +
             "    ;;\n" +
             "  unload)\n" +
             "    post_json /v1/ai/runtime/unload '{}'\n" +

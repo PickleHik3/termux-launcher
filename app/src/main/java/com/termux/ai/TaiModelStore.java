@@ -306,6 +306,10 @@ public final class TaiModelStore {
 
         File modelDir = new File(getModelsDirectory(), modelId);
         deleteRecursively(modelDir);
+        // MNN's converted-weights mmap cache lives outside the model directory (the app's cacheDir,
+        // shared by both processes) and is keyed by modelId regardless of backend, so this is safe
+        // and a no-op to call even when the deleted model never used it.
+        MnnTaiRuntime.clearMmapCache(appContext, modelId);
         return DeleteResult.deleted(removed != null);
     }
 
