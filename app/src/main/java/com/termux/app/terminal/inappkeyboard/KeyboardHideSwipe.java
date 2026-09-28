@@ -2,21 +2,23 @@ package com.termux.app.terminal.inappkeyboard;
 
 /**
  * The deliberate swipe that puts the keyboard away: a press in the strip above the first row of
- * keys, pulled mostly downward past a clear distance, or flicked down. Pure geometry in pixels
- * and milliseconds so the rules can be tested without a view; {@link KeyboardHideSwipeGesture}
- * feeds it touches and moves the keyboard.
+ * keys, or in the empty space just above the keyboard, pulled mostly downward past a clear
+ * distance, or flicked down. Pure geometry in pixels and milliseconds so the rules can be tested
+ * without a view; {@link KeyboardHideSwipeGesture} feeds it touches and moves the keyboard.
  *
  * <p>Sequence: {@link #begin} arms it. Each {@link #move} either keeps it armed inside the slop,
  * abandons it (sideways first, or upward), or starts the drag, from where {@link #dragPx()} is how
- * far the keyboard follows the finger. {@link #release} answers whether the keyboard goes away or
- * springs back. An abandoned swipe eats the rest of its stream and does nothing: nothing under the
- * strip wants a press there.
+ * far the keyboard follows the finger. {@link #release} answers whether the keyboard goes away,
+ * springs back, or was only tapped, which is the cue for the hint that it can be swiped. An
+ * abandoned swipe eats the rest of its stream and does nothing: nothing under the strip wants a
+ * press there.
  */
 public final class KeyboardHideSwipe {
 
     public enum Phase { IDLE, ARMED, DRAGGING, ABANDONED }
 
-    public enum Outcome { NONE, HIDE, SPRING_BACK }
+    /** {@code TAP}: released without ever leaving the slop, so the band was only touched. */
+    public enum Outcome { NONE, HIDE, SPRING_BACK, TAP }
 
     /** Velocity is read over the last stretch of movement, no older than this. */
     static final long VELOCITY_WINDOW_MS = 100L;
@@ -62,10 +64,17 @@ public final class KeyboardHideSwipe {
         return Math.max(nullBandPx, Math.min(minBandPx, firstCapTopPx));
     }
 
-    /** Whether a press at {@code y} (view coordinates) is in the start band. */
+    /**
+     * Whether a press at {@code y} (keyboard coordinates: its top edge at zero, upward negative)
+     * is in the start band, which runs from {@code reachAbovePx} above the keyboard's top down
+     * to {@link #bandBottomPx}. Whatever lies above the keyboard is the caller's to have ruled
+     * non-interactive first; the reach only says how far up that space still counts as the
+     * keyboard's edge rather than the dock's own room.
+     */
     public static boolean bandContains(float y, float nullBandPx, float firstCapTopPx,
-                                       float minBandPx) {
-        return y >= 0f && y < bandBottomPx(nullBandPx, firstCapTopPx, minBandPx);
+                                       float minBandPx, float reachAbovePx) {
+        return y >= -Math.max(0f, reachAbovePx)
+            && y < bandBottomPx(nullBandPx, firstCapTopPx, minBandPx);
     }
 
     public Phase phase() {
@@ -118,6 +127,8 @@ public final class KeyboardHideSwipe {
             boolean flung = travelled >= mFlingMinDistancePx
                 && velocityPxPerS() >= mFlingPxPerS;
             outcome = pastThreshold || flung ? Outcome.HIDE : Outcome.SPRING_BACK;
+        } else if (mPhase == Phase.ARMED) {
+            outcome = Outcome.TAP;
         }
         mPhase = Phase.IDLE;
         return outcome;

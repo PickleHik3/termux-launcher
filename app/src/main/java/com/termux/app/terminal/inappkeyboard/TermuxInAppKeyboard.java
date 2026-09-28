@@ -98,6 +98,8 @@ public final class TermuxInAppKeyboard {
 
     private TerminalKeyEventHandler mKeyEventHandler;
     private Keyboard2View mKeyboardView;
+    /** The swipe that puts the keys away, and its hint; lives and dies with the keyboard view. */
+    @Nullable private KeyboardHideSwipeGesture mHideSwipe;
     @Nullable private KeyPopupController mKeyPopup;
     private TerminalSession mAttachedSession;
     private KeyboardData mMainKeyboardData;
@@ -293,6 +295,7 @@ public final class TermuxInAppKeyboard {
         mTapCorrection.flush();
         mLayoutExecutor.shutdown();
         destroyKeyPopup();
+        dropHideSwipe();
         mKeyboardView = null;
         mKeyEventHandler = null;
         mMainKeyboardData = null;
@@ -330,6 +333,7 @@ public final class TermuxInAppKeyboard {
         if (mKeyboardView != null) {
             mHost.detachKeyboardView();
             destroyKeyPopup();
+            dropHideSwipe();
         mKeyboardView = null;
         }
         if (mVisible)
@@ -1218,6 +1222,7 @@ public final class TermuxInAppKeyboard {
 
         mHost.detachKeyboardView();
         destroyKeyPopup();
+        dropHideSwipe();
         mKeyboardView = null;
         mKeyEventHandler = null;
 
@@ -1277,9 +1282,16 @@ public final class TermuxInAppKeyboard {
         mTapCorrection.setLayoutId(mSelectedLayoutId);
         mKeyboardView.setTapResolver(mTapCorrection);
         // Swipe down from the strip above the first row puts the keyboard away through the hide
-        // key's own path, so every place, dock and wall sees the hide it already knows.
-        mKeyboardView.setTopEdgeTouchDelegate(new KeyboardHideSwipeGesture(mKeyboardView,
-            () -> mVisible && !mHeightAdjusting, mHost::hideKeyboard));
+        // key's own path, so every place, dock and wall sees the hide it already knows. The band
+        // continues up through the keyboard's own furniture (the container) and the empty foot of
+        // the dock's rows; a tap in it, or on the keys' background, plays the hint.
+        dropHideSwipe();
+        mHideSwipe = new KeyboardHideSwipeGesture(mKeyboardView,
+            () -> mVisible && !mHeightAdjusting,
+            () -> mForm == PlaceLayout.KeyboardForm.FLOATING, mHost::hideKeyboard);
+        mKeyboardView.setTopEdgeTouchDelegate(mHideSwipe);
+        mHideSwipe.listenAbove(requireContainer());
+        mHideSwipe.listenAbove(mHost.getRowsAboveKeyboard());
         applyKeyboardToView(getSelectedLayoutData());
         applyCustomColorScheme();
         mHost.attachKeyboardView(mKeyboardView);
@@ -1305,6 +1317,14 @@ public final class TermuxInAppKeyboard {
             return;
         mKeyPopup.destroy();
         mKeyPopup = null;
+    }
+
+    /** Lets the swipe go of the views above the keys before the keyboard view is dropped. */
+    private void dropHideSwipe() {
+        if (mHideSwipe == null)
+            return;
+        mHideSwipe.release();
+        mHideSwipe = null;
     }
 
     /**
@@ -1380,6 +1400,7 @@ public final class TermuxInAppKeyboard {
             resetInputPipeline();
             mHost.detachKeyboardView();
             destroyKeyPopup();
+            dropHideSwipe();
         mKeyboardView = null;
             mKeyEventHandler = null;
             if (mVisible)
