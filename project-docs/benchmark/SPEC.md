@@ -120,18 +120,18 @@ The filter:
 4. MNN needs `mnnSupported`.
 5. GPU runs only where `supportsAccelerator` allows.
 
-The recommended downloads come from the signed remote catalogue (`TaiRemoteCatalog`), so the list changes without an app release. Starting set (each one is verified on pong before it is published):
+The recommended downloads come from the signed remote catalogue (`TaiRemoteCatalog`), so the list changes without an app release. Starting set (each one is verified on pong before it is published). Full per-model source/revision, sizes, verification steps and the signing/publish process: `project-docs/benchmark/recommended-set.md`; draft payload: `project-docs/benchmark/recommended-catalog-draft.json`.
 
 | Model | Backend | Download | Offered on | Status |
 |---|---|---|---|---|
 | Gemma 4 E2B | LiteRT | 2.4 GB | 8 GB+ | in catalogue |
 | Gemma 4 E4B | LiteRT | 3.4 GB | 12 GB+ | in catalogue |
-| Qwen3-VL 2B Instruct | MNN | 1.5 GB | 6 GB+ | measured: 21 tok/s CPU, 15 GPU on pong |
-| Qwen2.5 1.5B Instruct | LiteRT | 1.6 GB | 6 GB+ | to verify |
-| Gemma 3 1B | LiteRT | 1.0 GB | 6 GB+ | to verify |
-| Qwen2.5 0.5B Instruct | LiteRT | 0.5 GB | 4 GB+ | to verify |
-| SmolVLM 500M | MNN | ~0.5 GB | 4 GB+ | to verify |
-| Qwen3.5 2B | MNN | ~2 GB | 8 GB+ | to verify (3.6.1 fixes its fused inference) |
+| Qwen3-VL 2B Instruct | MNN | 1.5 GB | 6 GB+ | measured: 21 tok/s CPU, 15 GPU on pong — see recommended-set.md |
+| Qwen2.5 1.5B Instruct | LiteRT | 1.6 GB | 6 GB+ | see recommended-set.md |
+| Gemma 3 1B | LiteRT | 1.0 GB | 6 GB+ | see recommended-set.md |
+| Qwen2.5 0.5B Instruct | LiteRT | 0.5 GB | 4 GB+ | see recommended-set.md |
+| SmolVLM 500M | MNN | ~0.5 GB | 4 GB+ | see recommended-set.md |
+| Qwen3.5 2B | MNN | ~2 GB | 8 GB+ | see recommended-set.md (3.6.1 fixes its fused inference) |
 | Eagle3 builds | MNN | +90 MB | — | off by default; runnable as a separate entry |
 
 ## Storage
