@@ -15824,9 +15824,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isReducedMotionEnabled() || isAppDrawerEngaged() || mSurfaceEditor.isActive()
             || mAppliedContentReservationPx < 0) return;
         java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
+        // The committed place is named so its keyboard, going away, is put away over the first
+        // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
         com.termux.app.place.PlaceChromeTravel.Frame frame =
             com.termux.app.place.PlaceChromeTravel.at(pages, mPaneWallController.currentPage(),
-                offsetPx, wall.getWidth(), this::chromeRestOf);
+                offsetPx, wall.getWidth(), this::chromeRestOf, mLastWallPage);
         if (!mTravelDockPreRolled
             && com.termux.app.place.PlaceChromeTravel.needsDockPreRoll(frame, !isChromeMinimal())) {
             preRollTravelDock();
