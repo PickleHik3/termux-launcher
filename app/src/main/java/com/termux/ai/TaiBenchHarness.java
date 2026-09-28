@@ -9,6 +9,7 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Executors;
@@ -85,7 +86,6 @@ final class TaiBenchHarness {
     @NonNull private final Sink sink;
     @NonNull private final String appVersion;
     @NonNull private final JSONObject device;
-    @NonNull private final JSONObject conditions;
     private final ScheduledExecutorService watchdog = Executors.newSingleThreadScheduledExecutor(runnable -> {
         Thread thread = new Thread(runnable, "tai-bench-watchdog");
         thread.setDaemon(true);
@@ -94,12 +94,11 @@ final class TaiBenchHarness {
     @Nullable private volatile String stopReason;
 
     /**
-     * @param device     {@code {soc, ramClassGb}}
-     * @param conditions the battery/thermal stamps ({@code null}s until slice 2 fills them)
+     * @param device {@code {soc, ramClassGb}}
      */
     TaiBenchHarness(@NonNull TaiBenchSuite.Preset preset, @NonNull List<TaiBenchSuite.EntryPlan> entries,
                     @NonNull Host host, @NonNull TaiBenchGuard guard, @NonNull Sink sink,
-                    @NonNull String appVersion, @NonNull JSONObject device, @NonNull JSONObject conditions) {
+                    @NonNull String appVersion, @NonNull JSONObject device) {
         this.preset = preset;
         this.entries = entries;
         this.host = host;
@@ -107,13 +106,17 @@ final class TaiBenchHarness {
         this.sink = sink;
         this.appVersion = appVersion;
         this.device = device;
-        this.conditions = conditions;
     }
 
     /** Ends the run after the current generation; the entry in progress is recorded as stopped. */
     void requestStop(@NonNull String reason) {
         if (stopReason == null) stopReason = reason;
         host.cancel();
+    }
+
+    /** Ends the current or next cool-down wait at once; that entry's record is marked {@code warmStart}. */
+    void skipCooldown() {
+        guard.skipCooldown();
     }
 
     boolean stopRequested() {
@@ -225,6 +228,7 @@ final class TaiBenchHarness {
             host.unload();
 
             if (!consultGuard(TaiBenchSuite.PHASE_LOAD, entry, record)) return record.finish();
+            guard.entryStarted(entry);
             if (!runLoad(entry, record)) return record.finish();
 
             if (!consultGuard(TaiBenchSuite.PHASE_WARMUP, entry, record)) return record.finish();
@@ -252,6 +256,10 @@ final class TaiBenchHarness {
             return record.finish();
         } finally {
             try {
+                guard.entryFinished(entry);
+            } catch (RuntimeException ignored) {
+            }
+            try {
                 host.unload();
             } catch (JSONException | RuntimeException ignored) {
             }
@@ -273,8 +281,16 @@ final class TaiBenchHarness {
                 record.status = "stopped:" + (decision.reason == null ? "guard" : decision.reason);
                 return false;
             }
-            emit(event("paused").put("phase", phase).put("ms", decision.pauseMs)
-                .put("reason", decision.reason == null ? JSONObject.NULL : decision.reason));
+            JSONObject paused = event("paused").put("phase", phase).put("ms", decision.pauseMs)
+                .put("reason", decision.reason == null ? JSONObject.NULL : decision.reason);
+            if (decision.detail != null) {
+                Iterator<String> keys = decision.detail.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    paused.put(key, decision.detail.opt(key));
+                }
+            }
+            emit(paused);
             try {
                 Thread.sleep(decision.pauseMs);
             } catch (InterruptedException e) {
@@ -726,7 +742,7 @@ final class TaiBenchHarness {
             record.put("runtimeVersion", describe.optString("runtimeVersion", ""));
             record.put("appVersion", appVersion);
             record.put("device", device);
-            record.put("conditions", conditions);
+            record.put("conditions", guard.entryConditions(entry));
             record.put("phases", phases);
             record.put("check", check);
             record.put("status", status);

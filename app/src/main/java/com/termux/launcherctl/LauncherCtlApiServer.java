@@ -634,6 +634,9 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "benchmarks-clear", TaiManager.getInstance(context).clearBenchmarks(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/cancel".equals(request.path)) {
                 return maybeTextResponse(request, "cancel", TaiManager.getInstance(context).cancelRuntime());
+            } else if ("POST".equals(request.method) && "/v1/ai/benchmarks/skip-wait".equals(request.path)) {
+                // "Skip the wait" (spec Screen 5): ends the active bench's cool-down at once.
+                return maybeTextResponse(request, "skip-wait", TaiManager.getInstance(context).skipBenchCooldown());
             } else if ("GET".equals(request.method) && "/v1/models".equals(request.path)) {
                 return jsonResponse(TaiManager.getInstance(context).openAiModels());
             } else if ("GET".equals(request.method) && isModelRetrievePath(request.path)) {
@@ -1794,6 +1797,7 @@ public class LauncherCtlApiServer {
         rateLimiters.put("GET:/v1/ai/benchmarks", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("DELETE:/v1/ai/benchmarks", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/ai/runtime/cancel", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/v1/ai/benchmarks/skip-wait", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("GET:/v1/models", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/chat/completions", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/responses", new SimpleRateLimiter(60, 60_000));
@@ -1978,8 +1982,8 @@ public class LauncherCtlApiServer {
             "  tai unload\n" +
             "  tai keep-warm [model] [--minutes N] [--auto|--cpu|--gpu]\n" +
             "  tai cancel\n" +
-            "  tai benchmark [model...] [--preset quick|standard|thorough] [--cpu|--gpu] [--eagle]\n" +
-            "  tai benchmark --results | --clear [model]\n" +
+            "  tai benchmark [model...] [--preset quick|standard|thorough] [--cpu|--gpu] [--eagle] [--force]\n" +
+            "  tai benchmark --results | --clear [model] | --skip-wait\n" +
             "  tai benchmark --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\n" +
             "  tai transcribe <file.wav> [--model id] [--language xx] [--prompt \"words\"]\n" +
             "  tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text]\n" +
@@ -2004,9 +2008,14 @@ public class LauncherCtlApiServer {
             "load goes through the usual preflight and memory budget, and a refusal skips that entry with\n" +
             "the reason. Results are kept in files/tai/benchmarks.json: --results prints the leaderboard,\n" +
             "--clear removes them (for one model when named). Chat requests are refused while a benchmark\n" +
-            "runs; tai cancel stops it, keeping the phases that finished. --native runs LiteRT-LM's own\n" +
-            "benchmark() instead (256 prefill/256 decode tokens, 3 runs; LiteRT-LM models only), the call\n" +
-            "Google AI Edge Gallery's Benchmark screen uses, for comparing numbers with it.\n" +
+            "runs; tai cancel stops it, keeping the phases that finished. A run refuses to start below 30%\n" +
+            "battery (unless charging) or above LIGHT thermal status; while running, battery below 15% (and\n" +
+            "not charging) or SEVERE+ thermal stops it, and MODERATE thermal pauses it until it recovers.\n" +
+            "--force skips the start check only. A later model waits out a cool-down against the run's\n" +
+            "starting thermal reading before it loads; --skip-wait ends that wait at once and marks the\n" +
+            "next result \"warm start\". --native runs LiteRT-LM's own benchmark() instead (256 prefill/256\n" +
+            "decode tokens, 3 runs; LiteRT-LM models only), the call Google AI Edge Gallery's Benchmark\n" +
+            "screen uses, for comparing numbers with it.\n" +
             "tai transcribe runs the speech model voice input uses (Keyboard settings > Voice input > Speech\n" +
             "model) on a WAV file (16 kHz mono PCM16 preferred; other rates are resampled) or raw PCM16\n" +
             "16 kHz mono, on the CPU in :tai_runtime, never queued behind a chat generation. --prompt\n" +
@@ -2214,7 +2223,7 @@ public class LauncherCtlApiServer {
             "    post_json /v1/ai/runtime/cancel '{}'\n" +
             "    ;;\n" +
             "  benchmark)\n" +
-            "    usage_benchmark() { echo \"usage: tai benchmark [model...] [--preset quick|standard|thorough] [--cpu|--gpu] [--eagle] | --results | --clear [model] | --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }\n" +
+            "    usage_benchmark() { echo \"usage: tai benchmark [model...] [--preset quick|standard|thorough] [--cpu|--gpu] [--eagle] [--force] | --results | --clear [model] | --skip-wait | --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }\n" +
             "    if [ \"${1:-}\" = \"--native\" ]; then\n" +
             "      # The old path: LiteRT-LM's own benchmark(), kept so its numbers can be set against bench v1's.\n" +
             "      shift\n" +
@@ -2254,8 +2263,10 @@ public class LauncherCtlApiServer {
             "    preset=\"\"\n" +
             "    processors=\"\"\n" +
             "    eagle=\"\"\n" +
+            "    force=\"\"\n" +
             "    results=\"\"\n" +
             "    clear=\"\"\n" +
+            "    skip_wait=\"\"\n" +
             "    while [ \"$#\" -gt 0 ]; do\n" +
             "      case \"$1\" in\n" +
             "        --preset) shift; [ \"$#\" -gt 0 ] || usage_benchmark; preset=\"$1\" ;;\n" +
@@ -2263,8 +2274,10 @@ public class LauncherCtlApiServer {
             "        --cpu) processors=\"$processors,\\\"cpu\\\"\" ;;\n" +
             "        --gpu) processors=\"$processors,\\\"gpu\\\"\" ;;\n" +
             "        --eagle) eagle=true ;;\n" +
+            "        --force) force=true ;;\n" +
             "        --results) results=true ;;\n" +
             "        --clear) clear=true ;;\n" +
+            "        --skip-wait) skip_wait=true ;;\n" +
             "        --*) usage_benchmark ;;\n" +
             "        *) model_escaped=$(json_escape \"$1\"); [ -n \"$first_model\" ] || first_model=\"$model_escaped\"; models=\"$models,\\\"$model_escaped\\\"\" ;;\n" +
             "      esac\n" +
@@ -2281,10 +2294,15 @@ public class LauncherCtlApiServer {
             "      curl $CURL_COMMON -X DELETE -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" \"$@\" --data \"$body\" \"$BASE/v1/ai/benchmarks\"\n" +
             "      exit $?\n" +
             "    fi\n" +
+            "    if [ -n \"$skip_wait\" ]; then\n" +
+            "      post_json /v1/ai/benchmarks/skip-wait '{}'\n" +
+            "      exit $?\n" +
+            "    fi\n" +
             "    body=\"{\\\"preset\\\":\\\"${preset:-standard}\\\"\"\n" +
             "    [ -z \"$models\" ] || body=\"$body,\\\"models\\\":[${models#,}]\"\n" +
             "    [ -z \"$processors\" ] || body=\"$body,\\\"processors\\\":[${processors#,}]\"\n" +
             "    [ -z \"$eagle\" ] || body=\"$body,\\\"eagle\\\":true\"\n" +
+            "    [ -z \"$force\" ] || body=\"$body,\\\"force\\\":true\"\n" +
             "    # A thorough run over several models takes a good part of an hour; the stream keeps the\n" +
             "    # connection alive with a line per phase. Ctrl-C stops the runtime too, not just this command.\n" +
             "    CURL_BENCH=\"--fail-with-body -sS --connect-timeout 2 --max-time 14400\"\n" +

@@ -15,6 +15,13 @@ public class TaiRuntimeServiceDispatchTest {
         assertFalse(TaiRuntimeService.isConcurrentControlOperation(TaiRuntimeIpc.OP_LOAD_MODEL));
     }
 
+    /** Skip-wait reaches an active bench the same way cancel reaches an active generation. */
+    @Test
+    public void benchSkipWait_usesConcurrentControlLaneAndIsNeverRefusedDuringBench() {
+        assertTrue(TaiRuntimeService.isConcurrentControlOperation(TaiRuntimeIpc.OP_BENCH_SKIP_WAIT));
+        assertFalse(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_BENCH_SKIP_WAIT));
+    }
+
     /**
      * The busy rule for a running bench: chat-lane work is refused, control and status pass, and
      * speech keeps its own lanes.
