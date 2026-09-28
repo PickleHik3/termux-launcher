@@ -2,14 +2,6 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="@string/settings_use_case_header">
-        <com.termux.app.fragments.settings.SegmentedPillPreference
-            app:key="app_launcher_use_case_mode"
-            app:title="@string/settings_use_case_title"
-            app:summary="@string/settings_use_case_summary"
-            app:defaultValue="launcher" />
-    </PreferenceCategory>
-
     <PreferenceCategory app:title="@string/settings_pinned_apps_header">
         <SwitchPreferenceCompat
             app:key="app_launcher_row_haptics"

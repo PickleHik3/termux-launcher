@@ -290,16 +290,21 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_WALL_LAST_PAGE = "wall_last_page";
 
         /**
-         * Defines the key for the launcher / terminal-only use case the user picked. Stored rather
-         * than derived from the surface switches: the surfaces stay individually settable after a
-         * mode is picked, and a derived mode would jump between the two the moment one is flipped.
+         * Defines the key for the usage mode the user picked: the terminal alone, the terminal
+         * with the home screen, or both with the Linux display. Stored rather than derived from
+         * the surface switches: the surfaces stay individually settable after a mode is picked,
+         * and a derived mode would jump between presets the moment one is flipped. The value
+         * {@link #APP_LAUNCHER_USE_CASE_MODE_LAUNCHER} is what the older two-way switch wrote;
+         * it is read once and mapped by {@code LauncherUseCaseMode}, never written again.
          */
         public static final String KEY_APP_LAUNCHER_USE_CASE_MODE = "app_launcher_use_case_mode";
 
         public static final String APP_LAUNCHER_USE_CASE_MODE_LAUNCHER = "launcher";
         public static final String APP_LAUNCHER_USE_CASE_MODE_TERMINAL = "terminal";
+        public static final String APP_LAUNCHER_USE_CASE_MODE_HOME = "home";
+        public static final String APP_LAUNCHER_USE_CASE_MODE_DISPLAY = "display";
         public static final String DEFAULT_APP_LAUNCHER_USE_CASE_MODE =
-            APP_LAUNCHER_USE_CASE_MODE_LAUNCHER;
+            APP_LAUNCHER_USE_CASE_MODE_HOME;
 
         /**
          * Defines the key holding the launcher surface states captured when the user switched to

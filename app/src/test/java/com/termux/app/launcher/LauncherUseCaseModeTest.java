@@ -18,13 +18,24 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
+import java.util.Arrays;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+/**
+ * The three nested presets, the mapping of the older two-way switch's value, and the "Custom"
+ * the settings row shows once a switch below has moved the surfaces off the stored preset. Every
+ * test says whether the build offers a display, so none depends on the flavour it runs under.
+ */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class LauncherUseCaseModeTest {
+
+    private static final boolean DISPLAY_OFFERED = true;
+    private static final boolean NO_DISPLAY = false;
 
     private TermuxAppSharedPreferences preferences;
 
@@ -62,33 +73,90 @@ public class LauncherUseCaseModeTest {
         }
     }
 
+    // ------------------------------------------------------------------------ the three modes
+
     @Test
-    public void freshInstallIsLauncherMode() {
+    public void freshInstallIsHomeMode() {
         assertFalse(LauncherUseCaseMode.isTerminalOnly(preferences));
-        assertEquals(LauncherUseCaseMode.MODE_LAUNCHER, LauncherUseCaseMode.currentMode(preferences));
+        assertEquals(LauncherUseCaseMode.MODE_HOME,
+            LauncherUseCaseMode.currentMode(preferences, DISPLAY_OFFERED));
+        assertEquals(LauncherUseCaseMode.MODE_HOME,
+            LauncherUseCaseMode.summaryMode(preferences, DISPLAY_OFFERED));
     }
 
     @Test
-    public void terminalOnlyDisablesEveryHomeSurfaceAndShowsInRecents() {
-        preferences.setShowInRecentsWhenNotDefaultEnabled(false);
+    public void theDisplayModeIsOfferedOnlyWithAServerInTheBuild() {
+        assertEquals(Arrays.asList(LauncherUseCaseMode.MODE_TERMINAL, LauncherUseCaseMode.MODE_HOME,
+            LauncherUseCaseMode.MODE_DISPLAY), LauncherUseCaseMode.offeredModes(DISPLAY_OFFERED));
+        assertEquals(Arrays.asList(LauncherUseCaseMode.MODE_TERMINAL, LauncherUseCaseMode.MODE_HOME),
+            LauncherUseCaseMode.offeredModes(NO_DISPLAY));
+        // A stored display mode reads as home in such a build, and is applied as home.
+        preferences.setAppLauncherUseCaseMode(LauncherUseCaseMode.MODE_DISPLAY);
+        assertEquals(LauncherUseCaseMode.MODE_HOME,
+            LauncherUseCaseMode.currentMode(preferences, NO_DISPLAY));
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_DISPLAY, NO_DISPLAY);
+        assertFalse(preferences.isX11DisplayEnabled());
+    }
 
-        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL);
+    @Test
+    public void terminalOnlyDisablesEveryHomeSurfaceTheDisplayAndShowsInRecents() {
+        preferences.setShowInRecentsWhenNotDefaultEnabled(false);
+        preferences.setX11DisplayEnabled(true);
+
+        assertTrue(LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL,
+            DISPLAY_OFFERED));
 
         assertAppsRowEverywhere(RowPlacement.HIDDEN);
         assertFalse(preferences.isAppLauncherAzRowEnabled());
         assertFalse(preferences.isAppLauncherDrawerEnabled());
         assertFalse(preferences.isAppLauncherWidgetPaneEnabled());
+        assertFalse(preferences.isX11DisplayEnabled());
         assertTrue(preferences.isShowInRecentsWhenNotDefaultEnabled());
-        assertEquals(LauncherUseCaseMode.MODE_TERMINAL, LauncherUseCaseMode.currentMode(preferences));
+        assertEquals(LauncherUseCaseMode.MODE_TERMINAL,
+            LauncherUseCaseMode.currentMode(preferences, DISPLAY_OFFERED));
+        assertTrue(LauncherUseCaseMode.isTerminalOnly(preferences));
+    }
+
+    /** The Layout editor's own A-Z key wins over the global switch, so the mode writes both. */
+    @Test
+    public void terminalOnlyWritesTheAzRowIntoEveryOrientationsLayout() {
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            places().setAzRowShown(orientation, true);
+
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL, DISPLAY_OFFERED);
+
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            assertFalse(orientation.name(), places().azRowShown(orientation));
+
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_HOME, DISPLAY_OFFERED);
+
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            assertTrue(orientation.name(), places().azRowShown(orientation));
     }
 
     @Test
     public void terminalOnlyLeavesTheExtraKeysRowAlone() {
         preferences.setAppLauncherExtraKeysRowEnabled(true);
 
-        LauncherUseCaseMode.applyTerminalOnly(preferences, true);
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL, DISPLAY_OFFERED);
 
         assertTrue(preferences.isAppLauncherExtraKeysRowEnabled());
+    }
+
+    @Test
+    public void displayModeTurnsTheDisplayOnAndHomeModeTurnsItOff() {
+        assertTrue(LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_DISPLAY,
+            DISPLAY_OFFERED));
+        assertTrue(preferences.isX11DisplayEnabled());
+        // The home surfaces were on already; the display is the only switch that moved.
+        assertTrue(preferences.isAppLauncherDrawerEnabled());
+        assertTrue(preferences.isAppLauncherWidgetPaneEnabled());
+        assertAppsRowAtShippedDefault();
+
+        assertTrue(LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_HOME,
+            DISPLAY_OFFERED));
+        assertFalse(preferences.isX11DisplayEnabled());
+        assertTrue(preferences.isAppLauncherDrawerEnabled());
     }
 
     @Test
@@ -98,10 +166,10 @@ public class LauncherUseCaseModeTest {
         preferences.setAppLauncherWidgetPaneEnabled(false);
         preferences.setShowInRecentsWhenNotDefaultEnabled(false);
 
-        LauncherUseCaseMode.applyTerminalOnly(preferences, true);
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL, DISPLAY_OFFERED);
         assertAppsRowEverywhere(RowPlacement.HIDDEN);
 
-        LauncherUseCaseMode.applyTerminalOnly(preferences, false);
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_HOME, DISPLAY_OFFERED);
 
         assertAppsRowAtShippedDefault();
         assertFalse(preferences.isAppLauncherAzRowEnabled());
@@ -111,12 +179,28 @@ public class LauncherUseCaseModeTest {
     }
 
     @Test
+    public void terminalToDisplayRestoresTheHomeSurfacesAndTurnsTheDisplayOn() {
+        preferences.setAppLauncherDrawerEnabled(false);
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL, DISPLAY_OFFERED);
+
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_DISPLAY, DISPLAY_OFFERED);
+
+        assertAppsRowAtShippedDefault();
+        assertFalse("the snapshot's drawer choice", preferences.isAppLauncherDrawerEnabled());
+        assertTrue(preferences.isAppLauncherWidgetPaneEnabled());
+        assertTrue(preferences.isX11DisplayEnabled());
+        assertEquals(LauncherUseCaseMode.MODE_DISPLAY,
+            LauncherUseCaseMode.currentMode(preferences, DISPLAY_OFFERED));
+    }
+
+    @Test
     public void reapplyingTerminalOnlyKeepsTheOriginalSnapshot() {
         preferences.setAppLauncherAzRowEnabled(false);
 
-        LauncherUseCaseMode.applyTerminalOnly(preferences, true);
-        LauncherUseCaseMode.applyTerminalOnly(preferences, true);
-        LauncherUseCaseMode.applyTerminalOnly(preferences, false);
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL, DISPLAY_OFFERED);
+        assertFalse(LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL,
+            DISPLAY_OFFERED));
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_HOME, DISPLAY_OFFERED);
 
         assertAppsRowAtShippedDefault();
         assertFalse(preferences.isAppLauncherAzRowEnabled());
@@ -131,7 +215,7 @@ public class LauncherUseCaseModeTest {
         preferences.setAppLauncherDrawerEnabled(false);
         preferences.setAppLauncherWidgetPaneEnabled(false);
 
-        LauncherUseCaseMode.applyTerminalOnly(preferences, false);
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_HOME, DISPLAY_OFFERED);
 
         assertAppsRowAtShippedDefault();
         assertTrue(preferences.isAppLauncherAzRowEnabled());
@@ -141,26 +225,165 @@ public class LauncherUseCaseModeTest {
 
     @Test
     public void reenablingOneSurfaceKeepsTheChosenMode() {
-        LauncherUseCaseMode.applyTerminalOnly(preferences, true);
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL, DISPLAY_OFFERED);
 
         preferences.setAppLauncherDrawerEnabled(true);
 
         assertTrue(LauncherUseCaseMode.isTerminalOnly(preferences));
-        assertEquals(LauncherUseCaseMode.MODE_TERMINAL, LauncherUseCaseMode.currentMode(preferences));
+        assertEquals(LauncherUseCaseMode.MODE_TERMINAL,
+            LauncherUseCaseMode.currentMode(preferences, DISPLAY_OFFERED));
     }
 
     /** The bug this mode was rewritten for: a mid-mode surface flip must not eat the snapshot. */
     @Test
     public void surfaceFlipInTerminalModeDoesNotCostTheOtherSurfacesOnTheWayBack() {
-        LauncherUseCaseMode.applyTerminalOnly(preferences, true);
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL, DISPLAY_OFFERED);
         preferences.setAppLauncherAzRowEnabled(true);
-        LauncherUseCaseMode.applyTerminalOnly(preferences, true); // no-op, mode unchanged
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL, DISPLAY_OFFERED);
 
-        LauncherUseCaseMode.applyTerminalOnly(preferences, false);
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_HOME, DISPLAY_OFFERED);
 
         assertAppsRowAtShippedDefault();
         assertTrue(preferences.isAppLauncherDrawerEnabled());
         assertTrue(preferences.isAppLauncherWidgetPaneEnabled());
+    }
+
+    @Test
+    public void anUnknownModeIsIgnored() {
+        assertFalse(LauncherUseCaseMode.applyMode(preferences, "kiosk", DISPLAY_OFFERED));
+        assertFalse(LauncherUseCaseMode.applyMode(preferences, null, DISPLAY_OFFERED));
+        assertEquals(LauncherUseCaseMode.MODE_HOME,
+            LauncherUseCaseMode.currentMode(preferences, DISPLAY_OFFERED));
+    }
+
+    // -------------------------------------------------------------------------- the migration
+
+    @Test
+    public void theOldLauncherValueMeansDisplayWhenTheDisplayWasOnUnderIt() {
+        preferences.setAppLauncherUseCaseMode("launcher");
+        preferences.setX11DisplayEnabled(true);
+        assertEquals(LauncherUseCaseMode.MODE_DISPLAY,
+            LauncherUseCaseMode.currentMode(preferences, DISPLAY_OFFERED));
+        // ...and home in a build that has no display to be on.
+        assertEquals(LauncherUseCaseMode.MODE_HOME,
+            LauncherUseCaseMode.currentMode(preferences, NO_DISPLAY));
+    }
+
+    @Test
+    public void theOldLauncherValueMeansHomeOtherwise() {
+        preferences.setAppLauncherUseCaseMode("launcher");
+        assertEquals(LauncherUseCaseMode.MODE_HOME,
+            LauncherUseCaseMode.currentMode(preferences, DISPLAY_OFFERED));
+    }
+
+    @Test
+    public void anUnknownStoredValueMeansHome() {
+        preferences.setAppLauncherUseCaseMode("kiosk");
+        assertEquals(LauncherUseCaseMode.MODE_HOME,
+            LauncherUseCaseMode.currentMode(preferences, DISPLAY_OFFERED));
+    }
+
+    @Test
+    public void migrationWritesTheMappedValueOnceAndLeavesARecognisedOneAlone() {
+        preferences.setAppLauncherUseCaseMode("launcher");
+        preferences.setX11DisplayEnabled(true);
+        LauncherUseCaseMode.migrateIfNeeded(preferences, DISPLAY_OFFERED);
+        assertEquals(LauncherUseCaseMode.MODE_DISPLAY, preferences.getAppLauncherUseCaseMode());
+
+        // Turning the display off afterwards does not re-map: the value is a real mode now.
+        preferences.setX11DisplayEnabled(false);
+        LauncherUseCaseMode.migrateIfNeeded(preferences, DISPLAY_OFFERED);
+        assertEquals(LauncherUseCaseMode.MODE_DISPLAY, preferences.getAppLauncherUseCaseMode());
+
+        preferences.setAppLauncherUseCaseMode(LauncherUseCaseMode.MODE_TERMINAL);
+        LauncherUseCaseMode.migrateIfNeeded(preferences, DISPLAY_OFFERED);
+        assertEquals(LauncherUseCaseMode.MODE_TERMINAL, preferences.getAppLauncherUseCaseMode());
+    }
+
+    @Test
+    public void applyingTheModeAnOldValueAlreadyMeansOnlyRecordsIt() {
+        preferences.setAppLauncherUseCaseMode("launcher");
+        preferences.setAppLauncherDrawerEnabled(false);
+
+        assertFalse(LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_HOME,
+            DISPLAY_OFFERED));
+
+        assertEquals(LauncherUseCaseMode.MODE_HOME, preferences.getAppLauncherUseCaseMode());
+        assertFalse("no surface was touched", preferences.isAppLauncherDrawerEnabled());
+    }
+
+    // ------------------------------------------------------------------ what the row says
+
+    @Test
+    public void theRowNamesTheStoredModeWhileTheSwitchesStillSpellIt() {
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_DISPLAY, DISPLAY_OFFERED);
+        assertEquals(LauncherUseCaseMode.MODE_DISPLAY,
+            LauncherUseCaseMode.summaryMode(preferences, DISPLAY_OFFERED));
+
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL, DISPLAY_OFFERED);
+        assertEquals(LauncherUseCaseMode.MODE_TERMINAL,
+            LauncherUseCaseMode.summaryMode(preferences, DISPLAY_OFFERED));
+    }
+
+    @Test
+    public void aHomeSurfaceBroughtBackUnderTerminalModeReadsAsCustom() {
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL, DISPLAY_OFFERED);
+        preferences.setAppLauncherDrawerEnabled(true);
+        assertNull(LauncherUseCaseMode.summaryMode(preferences, DISPLAY_OFFERED));
+        assertEquals(LauncherUseCaseMode.MODE_HOME,
+            LauncherUseCaseMode.modeMatchingSwitches(preferences, DISPLAY_OFFERED));
+    }
+
+    @Test
+    public void oneHomeSurfaceSwitchedOffUnderHomeModeIsStillAHomeScreen() {
+        preferences.setAppLauncherWidgetPaneEnabled(false);
+        assertEquals(LauncherUseCaseMode.MODE_HOME,
+            LauncherUseCaseMode.summaryMode(preferences, DISPLAY_OFFERED));
+    }
+
+    @Test
+    public void everyHomeSurfaceSwitchedOffUnderHomeModeReadsAsCustom() {
+        preferences.setAppLauncherDrawerEnabled(false);
+        preferences.setAppLauncherWidgetPaneEnabled(false);
+        preferences.setAppLauncherAzRowEnabled(false);
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            places().setAppsRow(orientation, RowPlacement.HIDDEN);
+        assertNull(LauncherUseCaseMode.summaryMode(preferences, DISPLAY_OFFERED));
+        assertEquals(LauncherUseCaseMode.MODE_TERMINAL,
+            LauncherUseCaseMode.modeMatchingSwitches(preferences, DISPLAY_OFFERED));
+    }
+
+    @Test
+    public void theDisplayOnWithNoHomeScreenMatchesNoPreset() {
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL, DISPLAY_OFFERED);
+        preferences.setX11DisplayEnabled(true);
+        assertNull(LauncherUseCaseMode.modeMatchingSwitches(preferences, DISPLAY_OFFERED));
+        assertNull(LauncherUseCaseMode.summaryMode(preferences, DISPLAY_OFFERED));
+    }
+
+    // --------------------------------------------------------- the Display switch on its own
+
+    @Test
+    public void theDisplaySwitchMovesTheModeBetweenHomeAndDisplay() {
+        preferences.setX11DisplayEnabled(true);
+        LauncherUseCaseMode.onDisplaySwitched(preferences, true, DISPLAY_OFFERED);
+        assertEquals(LauncherUseCaseMode.MODE_DISPLAY, preferences.getAppLauncherUseCaseMode());
+        assertEquals(LauncherUseCaseMode.MODE_DISPLAY,
+            LauncherUseCaseMode.summaryMode(preferences, DISPLAY_OFFERED));
+
+        preferences.setX11DisplayEnabled(false);
+        LauncherUseCaseMode.onDisplaySwitched(preferences, false, DISPLAY_OFFERED);
+        assertEquals(LauncherUseCaseMode.MODE_HOME, preferences.getAppLauncherUseCaseMode());
+    }
+
+    @Test
+    public void theDisplaySwitchLeavesATerminalOnlyChoiceAlone() {
+        LauncherUseCaseMode.applyMode(preferences, LauncherUseCaseMode.MODE_TERMINAL, DISPLAY_OFFERED);
+        preferences.setX11DisplayEnabled(true);
+        LauncherUseCaseMode.onDisplaySwitched(preferences, true, DISPLAY_OFFERED);
+        assertEquals(LauncherUseCaseMode.MODE_TERMINAL, preferences.getAppLauncherUseCaseMode());
+        assertNull("terminal plus display is no preset",
+            LauncherUseCaseMode.summaryMode(preferences, DISPLAY_OFFERED));
     }
 
     @Test

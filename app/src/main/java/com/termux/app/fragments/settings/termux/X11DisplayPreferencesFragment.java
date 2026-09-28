@@ -208,7 +208,11 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
             }
             switch (key) {
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_ENABLED:
-                    launcher.setX11DisplayEnabled(value);
+                    // The one path the switch takes, whichever page it is on: the prefix
+                    // commands, the drawer's Linux apps, the usage mode and the launcher's own
+                    // reconcile all hang off it. Writing the preference here alone, as this used
+                    // to, changed nothing until the next cold start.
+                    TermuxStylePreferencesDataStore.getInstance(context).putBoolean(key, value);
                     break;
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DISPLAY_AUTOSTART:
                     launcher.setX11DisplayAutostartEnabled(value);

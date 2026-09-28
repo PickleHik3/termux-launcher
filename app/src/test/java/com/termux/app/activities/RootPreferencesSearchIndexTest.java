@@ -54,11 +54,42 @@ public class RootPreferencesSearchIndexTest {
         return (SettingsActivity.RootPreferencesFragment) fragment;
     }
 
+    /** The search box, then the usage mode row on its own, then the Launcher header. */
+    @Test
+    public void theUsageModeRowStandsAboveTheLauncherHeader() {
+        SettingsActivity.RootPreferencesFragment root = launch();
+        PreferenceScreen screen = root.getPreferenceScreen();
+        assertEquals("settings_search", screen.getPreference(0).getKey());
+        Preference useAs = screen.getPreference(1);
+        assertEquals("app_launcher_use_case_mode", useAs.getKey());
+        assertTrue(useAs instanceof androidx.preference.ListPreference);
+        assertEquals("a fresh install is the terminal with the home screen",
+            useAs.getContext().getString(R.string.settings_use_as_home),
+            String.valueOf(useAs.getSummary()));
+        assertTrue(screen.getPreference(2) instanceof PreferenceCategory);
+    }
+
+    @Test
+    public void searchingForUseAsFindsTheUsageModeRow() {
+        SettingsActivity.RootPreferencesFragment root = launch();
+        SettingsSearchPreference search = root.findPreference("settings_search");
+        search.getOnQueryChangedListener().onQueryChanged("use as");
+
+        assertTrue(isVisible(root, "app_launcher_use_case_mode"));
+        assertFalse("no page below carries the words", isVisible(root, "status_bar"));
+
+        search.getOnQueryChangedListener().onQueryChanged("");
+        Preference useAs = root.findPreference("app_launcher_use_case_mode");
+        assertEquals("the summary survives a cleared search",
+            useAs.getContext().getString(R.string.settings_use_as_home),
+            String.valueOf(useAs.getSummary()));
+    }
+
     @Test
     public void launcherHeaderRowsAreInTheSpecOrder() {
         SettingsActivity.RootPreferencesFragment root = launch();
         PreferenceScreen screen = root.getPreferenceScreen();
-        PreferenceCategory launcherHeader = (PreferenceCategory) screen.getPreference(1);
+        PreferenceCategory launcherHeader = (PreferenceCategory) screen.getPreference(2);
         assertEquals(EXPECTED_LAUNCHER_ROW_ORDER.length, launcherHeader.getPreferenceCount());
         for (int i = 0; i < EXPECTED_LAUNCHER_ROW_ORDER.length; i++) {
             assertEquals("row " + i, EXPECTED_LAUNCHER_ROW_ORDER[i],

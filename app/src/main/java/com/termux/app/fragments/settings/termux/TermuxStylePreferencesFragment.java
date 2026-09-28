@@ -68,6 +68,16 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
     @Nullable
     private AlertDialog mThemeTemplateSetupDialog;
 
+    /**
+     * The launcher's preference store, for a screen outside this package that writes one of its
+     * keys: the root page's usage mode row. The store class stays package-private beside the
+     * pages that own it.
+     */
+    @NonNull
+    public static PreferenceDataStore dataStore(@NonNull Context context) {
+        return TermuxStylePreferencesDataStore.getInstance(context);
+    }
+
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -607,16 +617,11 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 scheduleTermuxActivityStylingSync(true);
                 break;
             case "x11_display_enabled":
-                mPreferences.setX11DisplayEnabled(value);
-                // The commands go into the prefix with the feature and come back out with it;
-                // a running server is left alone either way.
-                if (!value) com.termux.app.x11.X11CliInstaller.uninstallAsync(mContext);
-                if (value) com.termux.app.x11.X11Defaults.applyOnce(mContext);
-                // The drawer lists Linux apps only while the display is on.
-                com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext).refreshAsync(null, null);
-                // The page and the prefix commands are set up once per activity, so turning the
-                // display on or off has to come back through a recreate.
-                scheduleTermuxActivityStylingSync(true);
+                // The Display page's own store routes here too, so this is the one path. The
+                // launcher attaches or tears the page down itself when it comes back to the
+                // front — and asks before a running server is stopped — so no recreate.
+                if (com.termux.app.x11.X11DisplaySwitch.write(mContext, mPreferences, value))
+                    scheduleTermuxActivityStylingSync(false);
                 break;
             case "app_launcher_row_haptics":
                 mPreferences.setAppLauncherRowHapticsEnabled(value);
@@ -749,10 +754,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherAzLockMethod(value);
                 break;
             case "app_launcher_use_case_mode":
-                com.termux.app.launcher.LauncherUseCaseMode.applyMode(mPreferences, value);
-                // Flips the drawer, both dock rows and the widget pane at once: recreate so every
-                // surface is rebuilt against the new state instead of restyled in place.
-                scheduleTermuxActivityStylingSync(true);
+                applyUseCaseMode(value);
                 break;
             case "app_launcher_drawer_view_type":
                 mPreferences.setAppLauncherDrawerViewType(value);
@@ -814,6 +816,27 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             default:
                 return defValue;
         }
+    }
+
+    /**
+     * The usage mode preset. It flips the drawer, both dock rows, the widget pane and the display
+     * at once, so every surface is rebuilt against the new state by a recreate rather than
+     * restyled in place; the display's own follow-ups run here because the preset wrote its
+     * switch directly, and a terminal-only install lets go of the app catalogue it no longer
+     * draws from.
+     */
+    private void applyUseCaseMode(String mode) {
+        boolean displayBefore = mPreferences.isX11DisplayEnabled();
+        if (!com.termux.app.launcher.LauncherUseCaseMode.applyMode(mPreferences, mode)) return;
+        boolean displayAfter = mPreferences.isX11DisplayEnabled();
+        if (displayBefore != displayAfter) {
+            com.termux.app.x11.X11DisplaySwitch.onWritten(mContext, mPreferences, displayAfter);
+        }
+        if (com.termux.app.launcher.LauncherUseCaseMode.MODE_TERMINAL.equals(mode)) {
+            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(mContext)
+                .invalidateIconArtwork();
+        }
+        scheduleTermuxActivityStylingSync(true);
     }
 
     private void writeTermuxPropertyToProperties(@NonNull String propertyKey, @NonNull String propertyValue) {

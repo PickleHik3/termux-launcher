@@ -931,23 +931,25 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             value == null ? TERMUX_APP.DEFAULT_X11_RUNTIME_BADGE : value.trim(), false);
     }
 
+    /**
+     * The stored usage mode as written, or null when nothing was ever stored. Raw on purpose: the
+     * older two-way switch's "launcher" and any unknown value are mapped by
+     * {@code LauncherUseCaseMode}, which is the one reader that knows what they mean.
+     */
+    @Nullable
     public String getAppLauncherUseCaseMode() {
         String value = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_MODE, true);
-        return TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(value)
-            ? TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL
-            : TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_LAUNCHER;
+            TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE, null, true);
+        return value == null || value.trim().isEmpty() ? null : value.trim();
     }
 
-    public void setAppLauncherUseCaseMode(String value) {
+    public void setAppLauncherUseCaseMode(@Nullable String value) {
         SharedPreferenceUtils.setString(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_USE_CASE_MODE,
-            TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(value)
-                ? TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL
-                : TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_LAUNCHER, false);
+            value == null ? TERMUX_APP.DEFAULT_APP_LAUNCHER_USE_CASE_MODE : value.trim(), false);
     }
 
+    /** The terminal-alone mode, read straight off the store; the mapped answer is {@code LauncherUseCaseMode}'s. */
     public boolean isTerminalOnlyUseCase() {
         return TERMUX_APP.APP_LAUNCHER_USE_CASE_MODE_TERMINAL.equals(getAppLauncherUseCaseMode());
     }
