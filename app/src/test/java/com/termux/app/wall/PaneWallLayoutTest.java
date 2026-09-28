@@ -495,10 +495,14 @@ public class PaneWallLayoutTest {
     }
 
     /**
-     * The plank (PlankTilt): a held border's drag tips the page the wall rests on when the
-     * listener allows it, by the angle its position says, on a hardware layer for the length of
-     * the motion; the settle lays it flat and drops the layer. The page arriving is never tilted,
-     * and a drag taken from outside (the window strip's overswipe) slides flat.
+     * The planks (PlankTilt): a held border's drag tips the page the wall rests on when the
+     * listener allows it, by the angle its position and the finger's weight say, on a hardware
+     * layer for the length of the motion; the settle lays it flat and drops the layer. A drag
+     * taken from outside (the window strip's overswipe) slides flat.
+     *
+     * <p>Changed with the planks' lean (2026-09-28): the page used to lead with the side it moved
+     * toward; it now dips toward the finger, and a finger on its centre line dips it toward the
+     * page arriving beside it — here the right edge, for a drag to the left.
      */
     @Test
     public void aDragTipsThePlankAndTheSettleLaysItFlat() {
@@ -509,23 +513,126 @@ public class PaneWallLayoutTest {
         });
         // The window strip's overswipe: the same leave, but nothing tips.
         wall.beginDrag();
-        assertNull(wall.tiltPage());
+        assertTrue(wall.tiltPages().isEmpty());
         assertTrue(wall.goTo(PaneWallPage.TERMINAL, false));
 
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
         letTheHoldElapse();
-        assertEquals(terminal, wall.tiltPage());
+        assertTrue(wall.tiltPages().contains(terminal));
         assertEquals(View.LAYER_TYPE_HARDWARE, terminal.getLayerType());
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 300f,
             40f, 400L));
-        assertEquals(PlankTilt.angleDeg(-300f, WIDTH), terminal.getRotationY(), EPS);
-        assertTrue("dragged left, the left edge goes in", terminal.getRotationY() < 0f);
-        assertEquals(0f, display.getRotationY(), EPS);
+        assertEquals(PlankTilt.angleDeg(-300f, WIDTH, PlankTilt.lean(-300f, -300f, WIDTH)),
+            terminal.getRotationY(), EPS);
+        assertTrue("pressed on its centre line and dragged left, it dips toward the page arriving "
+            + "on its right", terminal.getRotationY() > 0f);
+        assertEquals("the Display page never tips", 0f, display.getRotationY(), EPS);
         // A jump lands the wall at rest: flat, and the layer gone.
         assertTrue(wall.goTo(PaneWallPage.DISPLAY, false));
-        assertNull(wall.tiltPage());
+        assertTrue(wall.tiltPages().isEmpty());
         assertEquals(0f, terminal.getRotationY(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
+    }
+
+    /** Lays every page out once, as the pages a finger has visited are: a plank needs a size. */
+    private void layOutEveryPage() {
+        showAndLayOut(PaneWallPage.WIDGETS);
+        showAndLayOut(PaneWallPage.DISPLAY);
+        showAndLayOut(PaneWallPage.TERMINAL);
+    }
+
+    @Test
+    public void bothPagesTipTowardTheFingerAndTheReleaseCarriesThemFlat() {
+        buildWithContent();
+        layOutEveryPage();
+        wall.setReducedMotion(false);
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+        });
+        // Held by the left border and pulled right: the Widgets page comes in from the left, and
+        // the finger stands on the seam between the two.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, HEIGHT / 2f, 0L));
+        letTheHoldElapse();
+        letTheMotionSettle();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 304f, HEIGHT / 2f,
+            3000L));
+        assertEquals(300f, terminal.getTranslationX(), EPS);
+        assertEquals(300f - WIDTH, widgets.getTranslationX(), EPS);
+        assertTrue(wall.tiltPages().contains(terminal));
+        assertTrue(wall.tiltPages().contains(widgets));
+        assertTrue("the page leaving dips its left edge, at the finger",
+            terminal.getRotationY() < -1f);
+        assertTrue("the page arriving dips its right edge, at the finger",
+            widgets.getRotationY() > 1f);
+        assertEquals("one motion: the two tip alike", Math.abs(terminal.getRotationY()),
+            Math.abs(widgets.getRotationY()), EPS);
+        assertEquals(View.LAYER_TYPE_HARDWARE, widgets.getLayerType());
+
+        // Flung on to the Widgets page: the planks are not laid flat at the lift, but carried on
+        // the settle's spring and flat once it lands.
+        float leavingAtLift = terminal.getRotationY();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 404f, HEIGHT / 2f,
+            3016L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 404f, HEIGHT / 2f,
+            3032L));
+        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertTrue(wall.isMoving());
+        assertTrue("still tipped as the settle starts", Math.abs(terminal.getRotationY()) > 1f);
+        assertTrue(Math.signum(terminal.getRotationY()) == Math.signum(leavingAtLift));
+        letTheMotionSettle();
+        assertFalse(wall.isMoving());
+        assertEquals(0f, widgets.getTranslationX(), EPS);
+        assertTrue(wall.tiltPages().isEmpty());
+        assertEquals(0f, terminal.getRotationY(), EPS);
+        assertEquals(0f, widgets.getRotationY(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
+        assertEquals(View.LAYER_TYPE_NONE, widgets.getLayerType());
+    }
+
+    @Test
+    public void theDisplayPageNeverTipsNorTakesALayerEvenWithLeave() {
+        buildWithContent();
+        layOutEveryPage();
+        wall.setReducedMotion(false);
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+        });
+        // Held by the right border and pulled left: the Display page comes in from the right.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH - 4f,
+            HEIGHT / 2f, 0L));
+        letTheHoldElapse();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH - 304f,
+            HEIGHT / 2f, 400L));
+        assertTrue(terminal.getRotationY() > 0f);
+        assertFalse(wall.tiltPages().contains(display));
+        assertEquals(0f, display.getRotationY(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
+    }
+
+    @Test
+    public void theSlideCarriesOnFromTheReleaseAndNeverPassesItsRest() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.setReducedMotion(false);
+        wall.beginDrag();
+        wall.dragTo(-300f);
+        wall.endDrag(-3000f);
+        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        // The commit moved the record a width on; the pixels are where the finger left them.
+        assertEquals(WIDTH - 300f, wall.offsetPx(), EPS);
+        assertEquals(-300f, terminal.getTranslationX(), EPS);
+        float previous = wall.offsetPx();
+        for (int frame = 0; frame < 120 && wall.isMoving(); frame++) {
+            org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+                .idleFor(java.time.Duration.ofMillis(16L));
+            float offset = wall.offsetPx();
+            assertTrue("never past its rest: " + offset, offset >= -EPS);
+            assertTrue("never back the way it came: " + offset, offset <= previous + EPS);
+            previous = offset;
+        }
+        letTheMotionSettle();
+        assertFalse(wall.isMoving());
+        assertEquals(0f, wall.offsetPx(), EPS);
+        assertEquals(0f, display.getTranslationX(), EPS);
     }
 
     @Test
@@ -535,7 +642,7 @@ public class PaneWallLayoutTest {
         wall.setReducedMotion(false);
         wall.beginDrag();
         wall.dragTo(-300f);
-        assertNull(wall.tiltPage());
+        assertTrue(wall.tiltPages().isEmpty());
         assertEquals(-300f, terminal.getTranslationX(), EPS);
         assertEquals(0f, terminal.getRotationY(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
@@ -548,7 +655,7 @@ public class PaneWallLayoutTest {
         wall.setReducedMotion(true);
         wall.beginDrag();
         wall.dragTo(-300f);
-        assertNull(wall.tiltPage());
+        assertTrue(wall.tiltPages().isEmpty());
         assertEquals(0f, terminal.getRotationY(), EPS);
         wall.cancelDrag();
         assertEquals(0f, terminal.getTranslationX(), EPS);
@@ -727,7 +834,7 @@ public class PaneWallLayoutTest {
         // The window strip's overswipe: the page slides flat.
         wall.beginDrag();
         wall.dragTo(-300f);
-        assertNull(wall.tiltPage());
+        assertTrue(wall.tiltPages().isEmpty());
         assertEquals(0f, terminal.getRotationY(), EPS);
         wall.cancelDrag();
         assertEquals(0f, terminal.getTranslationX(), EPS);
@@ -736,10 +843,11 @@ public class PaneWallLayoutTest {
         wall.setReducedMotion(false);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
         letTheHoldElapse();
-        assertEquals(terminal, wall.tiltPage());
+        assertTrue(wall.tiltPages().contains(terminal));
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 300f,
             4f, 400L));
-        assertEquals(PlankTilt.angleDeg(-300f, WIDTH), terminal.getRotationY(), EPS);
+        assertEquals(PlankTilt.angleDeg(-300f, WIDTH, PlankTilt.lean(-300f, -300f, WIDTH)),
+            terminal.getRotationY(), EPS);
     }
 
     // ---- The sink ------------------------------------------------------------------------------
@@ -770,7 +878,7 @@ public class PaneWallLayoutTest {
         assertEquals(PageSink.SCALE, terminal.getScaleX(), EPS);
         assertEquals(PageSink.SCALE, terminal.getScaleY(), EPS);
         assertEquals("dimmed on a layer", View.LAYER_TYPE_HARDWARE, terminal.getLayerType());
-        assertNull(wall.tiltPage());
+        assertTrue(wall.tiltPages().isEmpty());
         assertEquals(0f, terminal.getRotationY(), EPS);
         // Stays down through the drag.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 100f,
@@ -802,14 +910,16 @@ public class PaneWallLayoutTest {
             HEIGHT / 2f, 0L));
         letTheHoldElapse();
         letTheMotionSettle();
-        assertEquals(terminal, wall.tiltPage());
+        assertTrue(wall.tiltPages().contains(terminal));
         assertEquals(PlankTilt.HOLD_TILT_DEG, terminal.getRotationY(), EPS);
         assertTrue("the right edge goes in", terminal.getRotationY() > 0f);
-        // Dragged, the travel's tip takes over, deeper than the old twelve degrees half way out.
+        // Dragged, the travel's tip takes over, deeper than the old twelve degrees half way out,
+        // and still toward the finger on the right edge.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH - 4f - WIDTH / 2f,
             HEIGHT / 2f, 3000L));
-        assertEquals(PlankTilt.angleDeg(-WIDTH / 2f, WIDTH, 1, 1f), terminal.getRotationY(), EPS);
-        assertTrue(Math.abs(terminal.getRotationY()) > 12f);
+        assertEquals(PlankTilt.angleDeg(-WIDTH / 2f, WIDTH, 1f, 1, 1f), terminal.getRotationY(),
+            EPS);
+        assertTrue(terminal.getRotationY() > 12f);
         // Pulled back to rest and let go: flat, full size, the layer gone once the spring lands.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH - 4f,
             HEIGHT / 2f, 3100L));
@@ -817,7 +927,7 @@ public class PaneWallLayoutTest {
             HEIGHT / 2f, 3400L));
         letTheMotionSettle();
         assertNull(wall.sinkPage());
-        assertNull(wall.tiltPage());
+        assertTrue(wall.tiltPages().isEmpty());
         assertEquals(0f, terminal.getRotationY(), EPS);
         assertEquals(1f, terminal.getScaleX(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
@@ -857,7 +967,7 @@ public class PaneWallLayoutTest {
         letTheHoldElapse();
         assertTrue(wall.isDragging());
         assertNull(wall.sinkPage());
-        assertNull(wall.tiltPage());
+        assertTrue(wall.tiltPages().isEmpty());
         assertEquals(1f, terminal.getScaleX(), EPS);
         assertEquals(0f, terminal.getRotationY(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
@@ -1056,7 +1166,7 @@ public class PaneWallLayoutTest {
         });
         // A tile, a key or wall.go slides the wall with no finger on it: no plank.
         assertTrue(wall.goTo(PaneWallPage.WIDGETS, true));
-        assertNull(wall.tiltPage());
+        assertTrue(wall.tiltPages().isEmpty());
         assertEquals(0f, terminal.getRotationY(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
     }

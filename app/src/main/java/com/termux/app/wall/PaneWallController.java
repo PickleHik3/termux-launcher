@@ -47,7 +47,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          */
         default void onWallOutlineAlphaChanged(float alpha) { }
         /**
-         * Whether a page pulled by a border drag tips like a plank ({@link PlankTilt}): Fancier
+         * Whether the pages a border drag pulls tip like planks ({@link PlankTilt}): Fancier
          * Glass on, with the phone animating. Asked as the drag claims the finger.
          */
         default boolean isPlankTiltEnabled() { return false; }

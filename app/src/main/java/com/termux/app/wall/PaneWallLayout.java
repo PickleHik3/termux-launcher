@@ -23,7 +23,6 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 
 import com.termux.app.chrome.CornerZones;
-import com.termux.app.terminal.Motion;
 import com.termux.view.HoldTiming;
 
 import java.util.ArrayList;
@@ -63,14 +62,23 @@ import java.util.Map;
 public final class PaneWallLayout extends ViewGroup {
 
     /**
-     * A slide is the terminal's own window pan: the same settle curve over the same time for a
-     * full width, shortened in proportion when the wall has less far to go, so a release near
-     * rest lands quickly and a tap from one place to the next travels like a window switch. The
-     * same time whatever the destination, too: the slide keeps its own clock
-     * ({@link WallSlideClock}), so the frames an arrival costs stretch it rather than skip it.
+     * A slide is a spring ({@link SettleSpring}) that starts where the finger let go and at the
+     * finger's own speed, so the release has no seam, and lands without passing its rest. From
+     * still — a tile, a key, {@code wall.go} — a whole width takes about the 560 ms the terminal's
+     * window pan takes; a flick is carried on by its own speed, and one thrown hard near its rest
+     * stiffens the spring rather than overshooting. The same time whatever the destination, too:
+     * the slide keeps its own clock ({@link WallSlideClock}), so the frames an arrival costs
+     * stretch it rather than skip it.
      */
-    private static final long SLIDE_FULL_MS = 560L;
-    private static final long SLIDE_MIN_MS = 180L;
+    static final float SLIDE_OMEGA = 18f;
+    static final float SLIDE_MAX_OMEGA = 60f;
+    /** How close to rest, in px, the slide counts as landed. */
+    private static final float SLIDE_REST_PX = 0.5f;
+    /**
+     * The fastest release, in px per second, the slide carries on from: a stray tracker reading
+     * is not a throw.
+     */
+    private static final float SLIDE_MAX_VELOCITY_PX_PER_SEC = 12000f;
     /**
      * How much longer than its way the slide's ticker is allowed to run before the slide is cut
      * short and settles where it stands: the ceiling under which a run of long frames can stretch
@@ -101,9 +109,9 @@ public final class PaneWallLayout extends ViewGroup {
          */
         default void onWallDragInterrupted() { }
         /**
-         * Whether the page a border drag pulls tips like a plank ({@link PlankTilt}) — Fancier
+         * Whether {@code page} tips like a plank ({@link PlankTilt}) under a border drag — Fancier
          * Glass, with the phone animating. Asked as the drag claims the finger, for the page the
-         * wall rests on.
+         * wall rests on and each page beside it, since the page arriving tips too.
          */
         default boolean isPlankTiltEnabled(@NonNull PaneWallPage page) { return false; }
         /**
@@ -158,11 +166,26 @@ public final class PaneWallLayout extends ViewGroup {
     /** True only inside {@link #cancelChildGesture()}: that cancel is the child's, not the stream's. */
     private boolean mCancellingChild;
     /**
-     * The page tipping under the drag ({@link PlankTilt}), from the drag's start to the wall's
-     * settle; null while no plank is engaged. Its angle is written beside its translation in
-     * {@link #applyPagePositions}, so the tilt and the slide are one motion.
+     * The places whose pages tip under this drag ({@link PlankTilt}): the one the wall rests on
+     * and the ones beside it that the listener lets tip, from the drag's claim to the wall's
+     * settle; empty while no plank is engaged.
      */
-    @Nullable private View mTiltPage;
+    private final java.util.EnumSet<PaneWallPage> mPlankPlaces =
+        java.util.EnumSet.noneOf(PaneWallPage.class);
+    /**
+     * Those places' pages that are tipping now, each on a hardware layer. A page joins once it
+     * has been laid out, since its pivot is its own centre. Their angles are written beside their
+     * translations in {@link #applyPagePositions}, so the tilt and the slide are one motion.
+     */
+    private final List<View> mTiltPages = new ArrayList<>(3);
+    /**
+     * The page the finger held and how far from its centre line it pressed, in px: the weight
+     * every plank leans toward ({@link PlankTilt#lean}). It stays where it pressed on that page,
+     * so after the lift it travels with the page and the planks keep leaning the same way while
+     * the settle lays them flat.
+     */
+    @Nullable private View mWeightPage;
+    private float mWeightOffsetPx;
     /**
      * The page a held border sank ({@link PageSink}), from the hold's claim until it has sprung
      * back to rest after the lift, and its place; null while none is.
@@ -211,7 +234,10 @@ public final class PaneWallLayout extends ViewGroup {
     public void setPageView(@NonNull PaneWallPage page, @Nullable View view) {
         View previous = mPageViews.get(page);
         if (previous != null && previous == mSinkPage && previous != view) finishSink();
-        if (previous != null && previous == mTiltPage && previous != view) releasePlank();
+        if (previous != null && previous != view && mTiltPages.contains(previous)) {
+            releasePlankPage(previous);
+        }
+        if (previous != null && previous != view && previous == mWeightPage) mWeightPage = null;
         if (view == null) mPageViews.remove(page);
         else mPageViews.put(page, view);
         applyPagePositions();
@@ -349,7 +375,7 @@ public final class PaneWallLayout extends ViewGroup {
         // else is going to release this drag now.
         interruptDrag();
         if (mReducedMotion) settleImmediately();
-        else startSlide();
+        else startSlide(0f);
     }
 
     public boolean areGesturesEnabled() {
@@ -360,6 +386,14 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** Go to {@code page}, sliding unless {@code animate} is false or motion is reduced. */
     public boolean goTo(@NonNull PaneWallPage page, boolean animate) {
+        return goTo(page, animate, 0f);
+    }
+
+    /**
+     * The same, with the slide starting at {@code velocityPxPerSec}: a released drag's own speed,
+     * so its settle carries on from the finger rather than from still.
+     */
+    private boolean goTo(@NonNull PaneWallPage page, boolean animate, float velocityPxPerSec) {
         if (!mPages.contains(page)) return false;
         interruptDrag();
         if (page == mCurrent && mOffsetPx == 0f) return true;
@@ -376,7 +410,7 @@ public final class PaneWallLayout extends ViewGroup {
             finishSink();
             settleImmediately();
         } else {
-            startSlide();
+            startSlide(velocityPxPerSec);
         }
         return true;
     }
@@ -390,21 +424,22 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** Take a drag from outside — the window strip's overswipe. The page slides flat. */
     public void beginDrag() {
-        beginDrag(false);
+        beginDrag(false, 0f);
     }
 
     /**
-     * @param plank whether the page under the finger tips ({@link PlankTilt}), which is the
-     *              border drag's own motion: a finger on the pane's edge pressing it sideways
+     * @param plank whether the pages under the finger tip ({@link PlankTilt}), which is the
+     *              border drag's own motion: a finger on the pane's edge pressing its weight in
+     * @param fingerX where that finger pressed, in the wall's coordinates
      */
-    private void beginDrag(boolean plank) {
+    private void beginDrag(boolean plank, float fingerX) {
         if (!mGesturesEnabled) return;
         Trace.beginSection("Wall.beginDrag");
         try {
             mDragging = true;
             stopSlide();
             stopNudge();
-            if (plank) engagePlank();
+            if (plank) engagePlank(fingerX);
         } finally {
             Trace.endSection();
         }
@@ -431,16 +466,19 @@ public final class PaneWallLayout extends ViewGroup {
         mDragging = false;
         // The finger let go: a sunk page springs back up as the wall carries it.
         riseSink();
+        boolean previousExists = PaneWallPolicy.hasNeighbour(mPages, mCurrent, -1);
+        boolean nextExists = PaneWallPolicy.hasNeighbour(mPages, mCurrent, 1);
         int steps = PaneWallPolicy.settle(mOffsetPx, velocityPxPerSec, getWidth(),
-            getResources().getDisplayMetrics().density,
-            PaneWallPolicy.hasNeighbour(mPages, mCurrent, -1),
-            PaneWallPolicy.hasNeighbour(mPages, mCurrent, 1));
+            getResources().getDisplayMetrics().density, previousExists, nextExists);
+        // The wall's own speed at the release, which the settle carries on from.
+        float velocity = PaneWallPolicy.wallVelocity(mOffsetPx, velocityPxPerSec, previousExists,
+            nextExists);
         if (steps == 0) {
             if (mReducedMotion) settleImmediately();
-            else startSlide();
+            else startSlide(velocity);
             return;
         }
-        goBy(steps, true);
+        goTo(PaneWallPolicy.neighbour(mPages, mCurrent, steps), true, velocity);
     }
 
     /** The claimant let go without a release (its stream was cancelled). */
@@ -449,7 +487,7 @@ public final class PaneWallLayout extends ViewGroup {
         mDragging = false;
         riseSink();
         if (mReducedMotion) settleImmediately();
-        else startSlide();
+        else startSlide(0f);
     }
 
     /**
@@ -618,7 +656,7 @@ public final class PaneWallLayout extends ViewGroup {
         performHapticFeedback(HapticFeedbackConstants.GESTURE_START);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         mBorderVelocity = VelocityTracker.obtain();
-        beginDrag(true);
+        beginDrag(true, mBorderDownX);
         engageSink(mBorderDrag.border());
         dragTo(0f);
     }
@@ -694,36 +732,78 @@ public final class PaneWallLayout extends ViewGroup {
     // ---- The plank ---------------------------------------------------------------------------
 
     /**
-     * A border drag claimed the finger: the page the wall rests on becomes the plank, if the
-     * listener lets it, until the settle lays it flat. A hardware layer for the length of the
-     * motion, so the page — a screen of glyphs and glass — is drawn flat once per change and the
-     * tilt is a textured quad per frame rather than every glyph re-rendered under a perspective
-     * matrix.
+     * A border drag claimed the finger at {@code fingerX}: the page the wall rests on and the
+     * pages beside it become planks, each one the listener lets tip, until the settle lays them
+     * flat — the page arriving tips with the page leaving, toward the same finger. The Display
+     * page never does (see {@code PaneWallController#isPlankTiltEnabled}). Each tipping page is on
+     * a hardware layer for the length of the motion, so a screen of glyphs and glass is drawn flat
+     * once per change and the tilt is a textured quad per frame rather than every glyph
+     * re-rendered under a perspective matrix.
      */
-    private void engagePlank() {
-        if (mReducedMotion || getWidth() <= 0) return;
-        if (mListener == null || !mListener.isPlankTiltEnabled(mCurrent)) return;
-        View page = mPageViews.get(mCurrent);
-        if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
-        if (page == mTiltPage) return;
-        // A plank still lying down on the page the last drag left is laid flat first.
+    private void engagePlank(float fingerX) {
+        if (mReducedMotion || getWidth() <= 0 || mListener == null) return;
+        View held = mPageViews.get(mCurrent);
+        if (held == null || held.getWidth() <= 0 || held.getHeight() <= 0) return;
+        // Planks still lying down from the last drag are laid flat first.
         releasePlank();
-        mTiltPage = page;
-        page.setPivotX(page.getWidth() / 2f);
-        page.setPivotY(page.getHeight() / 2f);
-        page.setCameraDistance(PlankTilt.CAMERA_DISTANCE_DP
-            * getResources().getDisplayMetrics().density);
-        syncPageLayer(page);
+        for (int steps = -1; steps <= 1; steps++) {
+            PaneWallPage place = PaneWallPolicy.neighbour(mPages, mCurrent, steps);
+            if (steps != 0 && place == mCurrent) continue;
+            // Never the Display page, whatever the listener says: its picture is a SurfaceView,
+            // which a rotation leaves flat and a layer would strand (as for the sink's dim).
+            if (place == PaneWallPage.DISPLAY) continue;
+            if (mListener.isPlankTiltEnabled(place)) mPlankPlaces.add(place);
+        }
+        if (mPlankPlaces.isEmpty()) return;
+        // The weight stays where it pressed on the page it held.
+        mWeightPage = held;
+        mWeightOffsetPx = fingerX - (held.getLeft() + held.getTranslationX() + held.getWidth() / 2f);
+        applyPlanks();
     }
 
     /**
-     * The wall is at rest and any sunk page is back up, or the plank's page is going away: flat,
-     * and the layer dropped unless the sink still dims it.
+     * Every engaged place's page at the angle its position and the finger's weight say
+     * ({@link PlankTilt}), plus the held side's press on a sunk page. A page joins the planks the
+     * first time it has a size, since it tips about its own centre.
+     */
+    private void applyPlanks() {
+        if (mPlankPlaces.isEmpty()) return;
+        int width = getWidth();
+        View weightPage = mWeightPage;
+        float weightPx = (weightPage == null ? 0f : weightPage.getTranslationX()) + mWeightOffsetPx;
+        for (PaneWallPage place : mPlankPlaces) {
+            View page = mPageViews.get(place);
+            if (page == null || !mPages.contains(place)) continue;
+            if (!mTiltPages.contains(page)) {
+                if (page.getWidth() <= 0 || page.getHeight() <= 0) continue;
+                mTiltPages.add(page);
+                page.setPivotX(page.getWidth() / 2f);
+                page.setPivotY(page.getHeight() / 2f);
+                page.setCameraDistance(PlankTilt.CAMERA_DISTANCE_DP
+                    * getResources().getDisplayMetrics().density);
+                syncPageLayer(page);
+            }
+            float x = page.getTranslationX();
+            boolean sunk = page == mSinkPage;
+            page.setRotationY(PlankTilt.angleDeg(x, width, PlankTilt.lean(x, weightPx, width),
+                sunk ? mSinkSide : 0, sunk ? mSink : 0f));
+        }
+    }
+
+    /**
+     * The wall is at rest and any sunk page is back up: every plank flat, and each layer dropped
+     * unless the sink still dims that page.
      */
     private void releasePlank() {
-        View page = mTiltPage;
-        if (page == null) return;
-        mTiltPage = null;
+        mPlankPlaces.clear();
+        mWeightPage = null;
+        mWeightOffsetPx = 0f;
+        while (!mTiltPages.isEmpty()) releasePlankPage(mTiltPages.get(mTiltPages.size() - 1));
+    }
+
+    /** One plank's page is going away, or the planks are laid down: flat, and its layer settled. */
+    private void releasePlankPage(@NonNull View page) {
+        mTiltPages.remove(page);
         page.setRotationY(0f);
         syncPageLayer(page);
     }
@@ -734,17 +814,17 @@ public final class PaneWallLayout extends ViewGroup {
      */
     private void syncPageLayer(@NonNull View page) {
         boolean dimmed = page == mSinkPage && mSinkLayered;
-        if (page == mTiltPage || dimmed) {
+        if (mTiltPages.contains(page) || dimmed) {
             page.setLayerType(View.LAYER_TYPE_HARDWARE, dimmed ? mSinkPaint : null);
         } else {
             page.setLayerType(View.LAYER_TYPE_NONE, null);
         }
     }
 
-    /** The page tipping under a drag, for tests; null while none is. */
-    @Nullable
-    View tiltPage() {
-        return mTiltPage;
+    /** The pages tipping under a drag, for tests; empty while none is. */
+    @NonNull
+    List<View> tiltPages() {
+        return Collections.unmodifiableList(new ArrayList<>(mTiltPages));
     }
 
     // ---- The sink ----------------------------------------------------------------------------
@@ -828,10 +908,7 @@ public final class PaneWallLayout extends ViewGroup {
         page.setScaleX(scale);
         page.setScaleY(scale);
         if (mSinkLayered) applySinkDim(page, sink);
-        if (page == mTiltPage) {
-            page.setRotationY(PlankTilt.angleDeg(page.getTranslationX(), getWidth(), mSinkSide,
-                sink));
-        }
+        if (mTiltPages.contains(page)) applyPlanks();
         if (mListener != null && mSinkPlace != null) mListener.onPageSinkChanged(mSinkPlace, scale);
     }
 
@@ -877,10 +954,10 @@ public final class PaneWallLayout extends ViewGroup {
         mSinkPaint.setColorFilter(null);
         page.setScaleX(1f);
         page.setScaleY(1f);
-        if (page == mTiltPage) {
-            page.setRotationY(PlankTilt.angleDeg(page.getTranslationX(), getWidth()));
-        }
-        if (layered || page == mTiltPage) syncPageLayer(page);
+        boolean tipping = mTiltPages.contains(page);
+        // The press lies down with the sink; the travel's own tip stays where the wall is.
+        if (tipping) applyPlanks();
+        if (layered || tipping) syncPageLayer(page);
         if (mListener != null && place != null) mListener.onPageSinkChanged(place, 1f);
         if (!isMoving()) releasePlank();
     }
@@ -898,17 +975,22 @@ public final class PaneWallLayout extends ViewGroup {
 
     // ---- Motion ----------------------------------------------------------------------------
 
-    private void startSlide() {
+    /**
+     * Slide the wall from where it stands to its rest on the settle spring ({@link SettleSpring}),
+     * starting at {@code velocityPxPerSec}: a released finger's own speed, or 0 for a slide with
+     * no finger on it. Any planks ride the same motion, since their angle is the pages' position.
+     */
+    private void startSlide(float velocityPxPerSec) {
         if (mOffsetPx == 0f) {
             settleImmediately();
             return;
         }
         stopSlide();
-        int width = Math.max(1, getWidth());
-        float fraction = Math.min(1f, Math.abs(mOffsetPx) / width);
-        final long duration = Math.max(SLIDE_MIN_MS, Math.round(SLIDE_FULL_MS * fraction));
-        final float from = mOffsetPx;
-        final android.view.animation.Interpolator curve = Motion.settle();
+        float velocity = Math.max(-SLIDE_MAX_VELOCITY_PX_PER_SEC,
+            Math.min(SLIDE_MAX_VELOCITY_PX_PER_SEC, velocityPxPerSec));
+        final SettleSpring spring = SettleSpring.of(mOffsetPx, velocity, SLIDE_OMEGA,
+            SLIDE_MAX_OMEGA);
+        final long duration = spring.durationMs(SLIDE_REST_PX);
         // The animator is the ticker only. The slide reads its own clock off the ticker's play
         // time, a bounded step per frame (WallSlideClock), so the first frame — which pre-rolls
         // the arriving place's chrome and lays its page out — cannot swallow the take-off. The
@@ -927,8 +1009,8 @@ public final class PaneWallLayout extends ViewGroup {
                 long playTime = animation.getCurrentPlayTime();
                 mElapsedMs = WallSlideClock.advance(mElapsedMs, playTime - mLastPlayTimeMs);
                 mLastPlayTimeMs = playTime;
-                float t = curve.getInterpolation(WallSlideClock.fraction(mElapsedMs, duration));
-                mOffsetPx = from * (1f - t);
+                mOffsetPx = mElapsedMs >= duration ? 0f
+                    : spring.displacementAt(mElapsedMs / 1000f);
                 applyPagePositions();
                 if (mElapsedMs >= duration && mSlide == animation) {
                     mEnding = true;
@@ -1010,14 +1092,6 @@ public final class PaneWallLayout extends ViewGroup {
                 * (float) width + mOffsetPx
                 + (entry.getKey() == mNudgePage ? mNudgePx : 0f);
             view.setTranslationX(x);
-            // The plank's angle is a function of where the page stands, so the drag, the spring
-            // back and the carry-out all read the same number and it is flat wherever it rests —
-            // plus the held side's press, while the page is sunk.
-            if (view == mTiltPage) {
-                boolean sunk = view == mSinkPage;
-                view.setRotationY(PlankTilt.angleDeg(x, width, sunk ? mSinkSide : 0,
-                    sunk ? mSink : 0f));
-            }
             boolean onScreen = width <= 0 || Math.abs(x) < width;
             if (entry.getKey() == PaneWallPage.TERMINAL) {
                 view.setVisibility(VISIBLE);
@@ -1037,6 +1111,11 @@ public final class PaneWallLayout extends ViewGroup {
                 if (onScreen && !wasOnScreen && !isInLayout()) view.requestLayout();
             }
         }
+        // The planks' angles are a function of where the pages stand, so the drag, the spring
+        // back and the carry-out all read the same number and they are flat wherever they rest —
+        // plus the held side's press, while the page is sunk. After every page has moved, since
+        // each leans toward the weight on the page the finger held.
+        applyPlanks();
         if (mListener != null) mListener.onWallOffsetChanged(mOffsetPx);
     }
 
