@@ -17,6 +17,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.app.wall.PaneControlsView;
 import com.termux.terminal.TerminalSession;
@@ -25,6 +26,7 @@ import com.termux.view.TerminalView;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.Shadows;
@@ -72,10 +74,13 @@ public class TerminalPaneCornerTabTapTest {
         }
         /** Minimal mode, as the launcher keeps it for the terminal place. */
         boolean minimal;
+        /** What the launcher does with the toggle: it tells the panes, which re-render. */
+        @Nullable Runnable afterToggle;
         @Override public boolean isMinimalMode() { return minimal; }
         @Override public void toggleMinimalMode() {
             minimal = !minimal;
             log.add(minimal ? "minimal on" : "minimal off");
+            if (afterToggle != null) afterToggle.run();
         }
     }
 
@@ -166,6 +171,89 @@ public class TerminalPaneCornerTabTapTest {
         assertEquals("the split is back", null,
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
         assertEquals(2, fixture.controller.tiledPaneCount());
+    }
+
+    /**
+     * The minimal glyph puts the tab away and re-lays the place out in the same tap, and that
+     * render takes the tab off the host and puts it back. The retract that was cut short used to
+     * leave the tab fully drawn and marked retracting — out for the whole of minimal mode and after
+     * it, with nothing able to put it away and every button still answering. On a window, because a
+     * view never attached is never told it has been detached.
+     */
+    @Test
+    public void theMinimalGlyphLeavesNoTabBehindWhenThePlaceReLaysOut() {
+        Fixture fixture = fixtureOnAWindow();
+        fixture.host.afterToggle = () -> {
+            fixture.controller.setMinimalPresentation(fixture.host.minimal);
+            fixture.layout();
+        };
+        fixture.showTab();
+        RectF minimalSlot = new RectF(fixture.slots()[3]);
+
+        fixture.tapSlot(3);
+        assertEquals(Arrays.asList("minimal on"), fixture.host.log);
+        assertFalse("the tab went with the tap", fixture.controls.isControlsShown());
+        assertEquals("and none of its buttons answers", PaneControlsView.ACTION_NONE,
+            fixture.controls.actionAt(minimalSlot.centerX(), minimalSlot.centerY()));
+
+        // A tap on the terminal finds nothing to put away, and the corner still answers a hold.
+        fixture.tap(WIDTH / 2f, HEIGHT / 2f);
+        assertFalse(fixture.controls.isControlsShown());
+        fixture.showTab();
+        fixture.tapSlot(3);
+        assertEquals(Arrays.asList("minimal on", "minimal off"), fixture.host.log);
+        assertFalse("and goes again on the way out", fixture.controls.isControlsShown());
+    }
+
+    /**
+     * Minimal mode holds a split maximised for the user, but it is not the user's maximise: the
+     * tab is a lone pane's there — out on a hold, away on a tap off it — rather than asserted on
+     * every render and refusing to go, which is what the way back from a maximise the user asked
+     * for needs.
+     */
+    @Test
+    public void aSplitInMinimalModeKeepsItsTabForAHoldAndGivesItUpToATap() {
+        Fixture fixture = fixture();
+        assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
+        fixture.layout();
+
+        fixture.controller.setMinimalPresentation(true);
+        fixture.layout();
+        assertFalse("minimal mode asserts no tab", fixture.controls.isControlsShown());
+
+        fixture.showTab();
+        fixture.tap(WIDTH / 2f, HEIGHT / 2f);
+        assertFalse("a tap off the tab puts it away", fixture.controls.isControlsShown());
+
+        fixture.controller.setMinimalPresentation(false);
+        fixture.layout();
+        assertFalse("and none is left out on the way back", fixture.controls.isControlsShown());
+    }
+
+    /**
+     * The sibling a maximised render took off the host keeps its frame inside the detached split
+     * container, and a view off the window answers its location with the screen's origin. Read as
+     * a pane, that put a rect the sibling's size at the host's top-left: a corner square for the
+     * finger to find and a frame for the tab to hang off, both belonging to a pane not on screen.
+     * A hold at that phantom corner — the right edge, halfway down — opens nothing.
+     */
+    @Test
+    public void aSiblingOffTheWallOffersNoCorner() {
+        Fixture fixture = fixture();
+        assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
+        fixture.layout();
+        fixture.controller.setMinimalPresentation(true);
+        fixture.layout();
+        assertEquals(1, fixture.controller.tiledPaneCount());
+
+        // The top pane is the one shown maximised; the bottom pane's frame was last laid out
+        // over the lower half, and its phantom rect's bottom-right corner is here.
+        fixture.hold(WIDTH - 2f, HEIGHT / 2f - 2f);
+        assertFalse("no tab came out of a pane that is not on screen",
+            fixture.controls.isControlsShown());
+
+        // The pane that is on screen still answers at its own corner.
+        fixture.showTab();
     }
 
     /** A pane the user maximised before minimal mode stays maximised after it. */
@@ -409,6 +497,27 @@ public class TerminalPaneCornerTabTapTest {
 
     private static Fixture fixture() {
         return fixture(WIDTH, HEIGHT);
+    }
+
+    /**
+     * A fixture whose host stands on a window, for what only a detach can show: a view that was
+     * never attached is never told it has been detached, so a render's remove-and-add of the tab
+     * is invisible to the tab off a window.
+     */
+    private static Fixture fixtureOnAWindow() {
+        Calls host = new Calls();
+        android.app.Activity activity =
+            Robolectric.buildActivity(android.app.Activity.class).setup().get();
+        FrameLayout hostView = new FrameLayout(activity);
+        activity.setContentView(hostView, new android.view.ViewGroup.LayoutParams(WIDTH, HEIGHT));
+        TerminalPaneController controller =
+            new TerminalPaneController(host, hostView, LayoutInflater.from(activity));
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        Fixture fixture = new Fixture(host, hostView, controller, window, WIDTH, HEIGHT);
+        fixture.layout();
+        fixture.idle();
+        return fixture;
     }
 
     private static Fixture fixture(int width, int height) {

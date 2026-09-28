@@ -940,6 +940,16 @@ public class TerminalPaneController {
         return mMinimalPresentation;
     }
 
+    /**
+     * Whether the user maximised the pane on screen themselves, as opposed to minimal mode holding
+     * a split maximised for them. The user's maximise keeps its tab out — the tab is the way back
+     * — while minimal mode's has the corner behave as a lone pane's: the tab comes out on a hold
+     * and goes on a tap, and the strip's swipe is the way back.
+     */
+    private boolean isUserMaximized() {
+        return mMaximizedLeaf != null && !mMaximizedForMinimal;
+    }
+
     /** Redraws the corner tab, whose minimal-mode glyph is read from the host as it draws. */
     public void invalidateControls() {
         mInteractionOverlay.applyControlActions();
@@ -3710,14 +3720,18 @@ public class TerminalPaneController {
             // What the tab carries follows the tree: a pane that has just been split has a
             // neighbour to move onto, and a maximized one has none.
             applyControlActions();
-            if (mMaximizedLeaf != null) {
+            if (isUserMaximized()) {
                 mControlLeaf = mMaximizedLeaf;
                 // A dismiss still in flight would fade the tab off a pane that has just been
-                // maximized, so this is the state asserted rather than animated towards.
+                // maximized, so this is the state asserted rather than animated towards. Minimal
+                // mode's maximise is not this: its tab is a lone pane's, out on a hold only.
                 mControls.showNow(mControls.corner());
             } else if (mControlLeaf != null
                 && (mActiveWindow == null || findLeafIn(mActiveWindow.root,
-                    mControlLeaf.session) == null)) {
+                    mControlLeaf.session) == null
+                    || paneRect(mControlLeaf, mHitPaneRect) == null)) {
+                // Gone from the tree, or still in it but off the host — the sibling a maximised
+                // render put away: a tab on a pane that is not on screen is no tab.
                 mControlLeaf = null;
                 mControls.dismissNow();
             }
@@ -3744,7 +3758,7 @@ public class TerminalPaneController {
                         return true;
                     }
 
-                    if (mControls.isControlsShown() && mMaximizedLeaf == null) dismissControls();
+                    if (mControls.isControlsShown() && !isUserMaximized()) dismissControls();
                     // A pane is taken hold of by its corners, never by an edge: the edges are the
                     // terminal's own, down to the last column. Ownership is resolved from the
                     // corner the finger is actually in, which matters for the original pane —
@@ -4212,13 +4226,20 @@ public class TerminalPaneController {
 
         /**
          * Fills {@code out} with the leaf's frame in host coordinates and returns it, or null when the
-         * leaf has no attached frame. Every per-frame and per-touch caller passes its own scratch:
+         * leaf has no frame on the host. Every per-frame and per-touch caller passes its own scratch:
          * these run inside draw and move handling, where one rect per call is one rect per frame.
+         *
+         * <p>On the host, not merely parented: a split's sibling keeps its frame inside the split
+         * container the maximised render took off the host, and a view off the window answers
+         * {@code getLocationOnScreen} with the screen's origin. Read as a frame, that put a pane the
+         * size of the sibling at the host's top-left, less the host's own offset — a corner square
+         * for the finger to find and a rect for the tab to hang off, both belonging to a pane that
+         * is not on screen.
          */
         @Nullable
         private RectF paneRect(@NonNull Leaf leaf, @NonNull RectF out) {
             FrameLayout frame = mPaneFrames.get(leaf.session);
-            if (frame == null || frame.getParent() == null) return null;
+            if (frame == null || !isOnHost(frame)) return null;
             int[] frameLocation = location(frame);
             int[] hostLocation = location(mHostView);
             float left = frameLocation[0] - hostLocation[0];
@@ -4231,6 +4252,16 @@ public class TerminalPaneController {
             int[] location = new int[2];
             view.getLocationOnScreen(location);
             return location;
+        }
+
+        /** Whether the host is an ancestor of {@code view}: a frame laid out on the wall. */
+        private boolean isOnHost(@NonNull View view) {
+            android.view.ViewParent parent = view.getParent();
+            while (parent instanceof View) {
+                if (parent == mHostView) return true;
+                parent = ((View) parent).getParent();
+            }
+            return false;
         }
 
         /**
@@ -4273,7 +4304,7 @@ public class TerminalPaneController {
         }
 
         private void dismissControls() {
-            if (mMaximizedLeaf != null) return;
+            if (isUserMaximized()) return;
             if (mControls.isControlsShown()) mHost.onPaneControlsDismissed();
             mControls.dismiss();
         }
