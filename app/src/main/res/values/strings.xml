@@ -45,6 +45,9 @@
     <string name="settings_layout_edge_top">Top</string>
     <string name="settings_layout_row_hidden">Hidden</string>
     <string name="settings_layout_row_shown">Shown</string>
+    <string name="settings_layout_az_on">On</string>
+    <string name="settings_layout_az_minimised">Minimised</string>
+    <string name="settings_layout_az_off">Off</string>
     <string name="settings_layout_keyboard_title">Keyboard</string>
     <string name="settings_layout_keyboard_switch_title">Keyboard on/off</string>
     <string name="settings_layout_keyboard_on">On</string>
@@ -68,6 +71,8 @@
     <string name="settings_layout_miniature_display">Display</string>
     <string name="settings_layout_miniature_display_overlay">Display, keyboard floats</string>
     <string name="settings_layout_miniature_hidden_format">%1$s, hidden</string>
+    <string name="settings_layout_miniature_minimised_format">%1$s, minimised</string>
+    <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
     <string name="settings_layout_drop_to_hide">Drop here to hide</string>
     <string name="settings_destination_appearance">Look</string>
     <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons, keyboard look, and sessions opacity</string>
