@@ -21,6 +21,11 @@
 - [VAJ to Nix migration](VAJ_To_Nix_Migration.md)
 - [Showcase tools](Building_Terminal_Showcase_Tools.md)
 
+## Voice
+
+- [Voice input](Voice_Input.md)
+- [Text to speech](Text_To_Speech.md)
+
 ## Local AI
 
 - [TAI / Termux AI](Termux_AI.md)

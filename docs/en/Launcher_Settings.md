@@ -262,6 +262,11 @@ Open-Meteo attribution.
   handle in its bottom-left corner: out to the left makes it wider, up makes its rows taller, and
   the edges you are not holding stay where they are. It writes the same two values.
 - **Layout documentation** and **Supported key values**.
+- **Voice input:** **Speech engine** (**Android system**, the default, or **On-device (Whisper)**),
+  **Voice language**, **Polish dictation with local model** (off by default) with its **Cleanup
+  model** and **Cleanup level**, **Pause that ends a phrase**, **Silence auto-stop**, **Voice
+  sounds**, and **Speech model**, which also holds the **Voice output** voice and speed for Read
+  aloud. See [Voice input](Voice_Input.md) and [Text to speech](Text_To_Speech.md).
 - **Haptic feedback** and **Keypress sound**.
 
 The keyboard's look — theme, colors, typeface, and bottom padding — moved to the **Look** page,
@@ -318,7 +323,7 @@ profile and keep the best, run `termux-x11-gpu-setup` in a shell.
 
 This page reports real availability and offers the appropriate fix or manage action:
 
-- **TAI · Termux AI:** local AI service, model catalog, runtime, endpoint, and token settings.
+- **TAI · Termux AI:** local AI service, the **Model centre** (chat models, speech models and the voice model), runtime, endpoint, and token settings.
 - **Shizuku:** optional privileged backend connection. See the [Shizuku guide](Shizuku.md) for
   setup, feature fallbacks, and troubleshooting.
 - **Termux:API:** configuration appears when the matching add-on is installed.

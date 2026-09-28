@@ -55,6 +55,11 @@ access; skip it if command-line tools do not need your shared files.
 - [Nix fork differences](Nix_Fork_Differences.md)
 - [Migrating from the VAJ edition](VAJ_To_Nix_Migration.md) — moving `io.vaj.tl` off the deprecated APT repo
 
+## Voice
+
+- [Voice input](Voice_Input.md) — dictate into the terminal, the palette, widgets and the display
+- [Text to speech](Text_To_Speech.md) — Read aloud, `tai speak` and `/v1/audio/speech`
+
 ## Optional local AI
 
 - [TAI / Termux AI user guide](Termux_AI.md)
