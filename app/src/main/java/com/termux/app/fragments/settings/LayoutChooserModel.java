@@ -48,7 +48,7 @@ public final class LayoutChooserModel {
         PlaceLayout layout = places.resolve(orientation);
         PlaceLayout next;
         if (edge == null) {
-            // The status bar is never hidden, so the tray is not one of its targets.
+            // An element that may not hide has no tray; none refuses today.
             if (!element.hideAllowed()) return false;
             next = EdgeStackPolicy.withAway(layout, element);
         } else if (index < 0) {

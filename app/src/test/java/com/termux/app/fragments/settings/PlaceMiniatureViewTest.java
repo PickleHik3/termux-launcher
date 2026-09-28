@@ -637,20 +637,34 @@ public class PlaceMiniatureViewTest {
     }
 
     @Test
-    public void theStatusBarIsNeverOfferedTheTray() {
+    public void theStatusBarIsOfferedTheTrayLikeAnyOtherBar() {
+        PlaceLayoutStore places = store();
         PlaceMiniatureView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
+        view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
 
         RectF grip = view.gripRect(PlaceMiniatureView.Block.STATUS_BAR);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
-        for (MiniatureDragPolicy.Slot slot : view.slots()) {
-            assertFalse("the status bar has nowhere to hide", slot.isTray());
-        }
-        assertNotNull("but it may stand on any edge", view.slotFor(Edge.TOP));
+        assertNotNull("it may stand on any edge", view.slotFor(Edge.TOP));
         assertNotNull(view.slotFor(Edge.LEFT));
+        boolean tray = false;
+        for (MiniatureDragPolicy.Slot slot : view.slots()) tray |= slot.isTray();
+        assertTrue("and the tray is where it is put away", tray);
+
+        RectF shelf = view.trayRect();
+        touch(view, MotionEvent.ACTION_MOVE, shelf.centerX(), shelf.centerY());
+        touch(view, MotionEvent.ACTION_UP, shelf.centerX(), shelf.centerY());
+        assertEquals("hidden", prefs().getString("layout.landscape.status_bar", null));
+
+        // Put away, it is a chip in the tray with a grip that brings it back.
+        view.setLayout(places.resolve(PlaceOrientation.LANDSCAPE), PlaceOrientation.LANDSCAPE);
+        assertNull(view.blockRect(PlaceMiniatureView.Block.STATUS_BAR));
+        assertNotNull(view.trayChipRect(PlaceMiniatureView.Block.STATUS_BAR));
+        assertNotNull(view.gripRect(PlaceMiniatureView.Block.STATUS_BAR));
+        assertEquals(PlaceMiniatureView.TrayState.CHIPS, view.trayState());
     }
 
     @Test
@@ -906,7 +920,7 @@ public class PlaceMiniatureViewTest {
     }
 
     @Test
-    public void theStatusBarInTheAirIsNotOfferedTheShelf() {
+    public void theShelfOffersItselfToTheStatusBarInTheAir() {
         PlaceMiniatureView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
@@ -914,6 +928,7 @@ public class PlaceMiniatureViewTest {
         RectF grip = view.gripRect(PlaceMiniatureView.Block.STATUS_BAR);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
-        assertNull("the one bar that never hides sees no shelf", view.trayState());
+        assertEquals("the status bar hides like the rest now",
+            PlaceMiniatureView.TrayState.OFFERING, view.trayState());
     }
 }

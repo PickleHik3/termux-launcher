@@ -34,8 +34,10 @@ view re-parented into a stack (the way `StatusBarEdgeArrangement.moveHost` alrea
 turns on its side via `setEdge` (`ExtraKeysView.setVertical` and the status bar already do). The
 real screen and the miniature both call `EdgeStackPolicy`.
 
-Rules kept: status bar never hidden (the wall pager rides it); only a TOP status bar gets the
-system-bar glass strip; the A–Z index may still ride the apps row (then its own slot is ignored).
+Rules kept: only a TOP status bar gets the system-bar glass strip; the A–Z index may still ride
+the apps row (then its own slot is ignored). The rule that the status bar is never hidden (the
+wall pager rode it) was lifted on 2026-09-28: paging is the border drag, so the status bar hides
+like the other bars and the real screen reclaims its band.
 
 ## Migration
 

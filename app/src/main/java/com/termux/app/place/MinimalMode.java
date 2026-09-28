@@ -23,8 +23,10 @@ public final class MinimalMode {
     /**
      * The arrangement a minimal place stands in: every element but the status bar put away, on
      * whatever edge it was, so that turning the mode off puts each one back exactly where it stood.
-     * The status bar's slot is never hidden (the model has no hidden status bar); it is drawn at
-     * no thickness instead, which is the status bar's own business rather than the arrangement's.
+     * The status bar's slot is left exactly as the layout has it — shown, or hidden by the user in
+     * the Layout editor — and the mode draws the bar at no thickness instead
+     * ({@link #statusBarThicknessPx}), so leaving the mode never has to remember whether the bar
+     * was the user's to hide.
      */
     @NonNull
     public static PlaceLayout apply(@NonNull PlaceLayout layout) {

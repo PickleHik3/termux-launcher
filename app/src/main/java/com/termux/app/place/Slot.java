@@ -18,7 +18,7 @@ import com.termux.app.place.PlaceLayout.Edge;
  */
 public final class Slot {
 
-    /** The element is put away. The status bar never is. */
+    /** The element is put away. */
     public final boolean hidden;
     /** The edge it stands on, and the one it comes back to while it is hidden. */
     @NonNull public final Edge edge;

@@ -57,6 +57,17 @@ public class MinimalModeTest {
     }
 
     @Test
+    public void aStatusBarTheUserHidStaysHiddenThroughMinimalAndBack() {
+        // The mode leaves the status slot alone either way: the bar is drawn at no thickness
+        // while the mode is on, and what the user chose in the Layout editor is still there when
+        // it is turned off.
+        PlaceLayout hidden = EdgeStackPolicy.withAway(portrait(), Element.STATUS);
+        assertTrue(MinimalMode.apply(hidden).slot(Element.STATUS).hidden);
+        assertTrue(MinimalMode.bottomOnly(hidden).slot(Element.STATUS).hidden);
+        assertEquals(hidden.slot(Element.STATUS), MinimalMode.apply(hidden).slot(Element.STATUS));
+    }
+
+    @Test
     public void theSlideAwayLaysOnlyTheBottomRowsOutAgain() {
         PlaceLayout portrait = MinimalMode.bottomOnly(portrait());
         // Everything in portrait stands in the accessory stack, so the whole dock rises.

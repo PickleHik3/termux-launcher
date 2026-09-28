@@ -22,10 +22,9 @@ import java.util.List;
  * draw the answer.
  *
  * <p>The legal set is {@link EdgeStackPolicy#targets}: every edge in both orientations, one drop
- * per gap in that edge's stack, the status bar never hidden, and the A&#8211;Z index only picking
- * an edge of its own while it is not riding the pinned apps row. This class adds nothing to that
- * but the tray — which is the view's word for hidden — and the rectangles a finger is hit-tested
- * against.
+ * per gap in that edge's stack, and the tray for every bar, the status bar included since the
+ * wall's paging left its swipe for the border drag. This class adds nothing to that but the tray
+ * — which is the view's word for hidden — and the rectangles a finger is hit-tested against.
  */
 public final class MiniatureDragPolicy {
 

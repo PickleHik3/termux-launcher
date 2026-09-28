@@ -162,14 +162,23 @@ public class LayoutEditorPlanTest {
     }
 
     @Test
-    public void aBarDroppedWhereItCannotStandWritesNothing() {
+    public void theStatusBarDroppedInTheTrayIsHiddenAndTheRevertBringsItBack() {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
-        // Every bar stands on every edge now; the status bar never hides, and that is the one
-        // drop left that cannot be made.
-        assertEquals(LayoutEditorPlan.Drop.NONE, plan.drop(Bar.STATUS_BAR, null));
-        assertNull(prefs.getString("layout.portrait.status_bar", null));
-        assertFalse("nothing was written, so there is nothing to lose", plan.isDirty());
+        // Every bar stands on every edge, and every bar may be put away — the status bar too,
+        // since the wall's paging is the border drag and nothing rides the bar's swipe.
+        assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, null));
+        assertEquals("hidden", prefs.getString("layout.portrait.status_bar", null));
+        assertTrue(places.resolve(PORTRAIT).slot(
+            com.termux.app.place.Element.STATUS).hidden);
+        assertFalse("the other orientation keeps its bar",
+            places.resolve(LANDSCAPE).slot(com.termux.app.place.Element.STATUS).hidden);
+        assertTrue("a hidden status bar is something to lose", plan.isDirty());
+
+        plan.revert();
+        assertFalse(places.resolve(PORTRAIT).slot(
+            com.termux.app.place.Element.STATUS).hidden);
+        assertFalse(plan.isDirty());
 
         assertEquals("a row on the top edge is a placement like any other",
             LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.APPS_ROW, Edge.TOP));

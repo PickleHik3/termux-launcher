@@ -62,13 +62,15 @@ public class MiniatureDragPolicyTest {
     }
 
     @Test
-    public void theStatusBarMovesBetweenEdgesAndNeverHides() {
+    public void theStatusBarMovesBetweenEdgesAndMayHideLikeTheRest() {
+        // Paging is the border drag, so nothing rides the status bar's swipe any more and the
+        // tray is one of its targets like any other bar's.
         for (RowPlacement appsRow : RowPlacement.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 Targets offered = targets(Bar.STATUS_BAR, orientation, layout(appsRow));
                 assertEquals(orientation + ": a column down the side is allowed in both",
                     EVERY_EDGE, edges(offered));
-                assertFalse("the status bar is never hidden", offered.tray);
+                assertTrue("the status bar may be put away", offered.tray);
             }
         }
     }

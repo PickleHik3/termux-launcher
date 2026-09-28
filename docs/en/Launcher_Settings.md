@@ -29,23 +29,24 @@ orientation you are arranging, since each orientation has its own layout; the re
 the editor follows what you change only for the orientation you are actually holding the phone in.
 Done and Discard let you keep or throw away everything you changed in that visit.
 
-- **Status bar** and **Apps row**: drag either on the miniature to the edge you want it on, or into
-  the hide tray to hide it. **Alphabets row** shows or hides the A–Z index below the pinned apps,
-  and only while the apps row is along the bottom. **Extra keys**: drag to where the terminal's
-  extra keys should stand, or into the tray to hide them. A column down the left or the right is a
-  landscape arrangement; in portrait the rows stand along the bottom or not at all.
+- **Status bar**, **Apps row**, **A–Z index** and **Extra keys**: every bar is dragged by the
+  six-dot grip at its corner to the edge you want it on — any of the four, in either orientation
+  — or into the **Hidden** tray under the phone to put it away. A bar in the tray is a chip with
+  the same grip, so it comes back the same way it went. Dropping a bar between two others on the
+  same edge sets the order they stack in. The A–Z index rides the pinned apps row while the two
+  share an edge; dropped on another edge it stands on a bar of its own.
 
-The status bar can stand on the top or the bottom in portrait, and on any of the four edges in
-landscape; it is never hidden, so the swipe that moves between places always has somewhere to live.
+The status bar can be hidden like the rest, which is how a full-screen layout is built by hand:
+with it away the clock, the weather and the window pills go with it, the content takes its band,
+and the corner tab is still the way into Layout to bring it back. Shown, it can stand on any edge.
 At the top it is the bar you already know. At the bottom it sits on the dock and shares its look,
 growing upward when you open it, with the clock at its foot and the window pills along its upper
-edge. On the left or the right of a landscape screen it becomes a narrow column: the place badge, one chip per window, and the system readings
-stacked down it, with the clock written hour over minutes when the column is open. Whichever edge
-it stands on, a swipe along the bar moves between places — sideways on a bar across the top or
-bottom, up and down on a column, where Home is above Terminal and Display below it — and a swipe
-across the bar opens and closes it. A column shares its edge with the pinned apps and the extra
-keys when those stand there too: the status bar takes the top of that edge and the rest follows
-underneath.
+edge. On the left or the right it becomes a narrow column: the place badge, one chip per window,
+and the system readings stacked down it, with the clock written hour over minutes when the column
+is open. Whichever edge it stands on, a drag across the bar opens and closes it; moving between
+places is the border drag, on every place, and never the bar's own gesture. A column shares its
+edge with the pinned apps and the extra keys when those stand there too, in the order you stacked
+them.
 - **Dock height** and **Keyboard height**: how tall the dock and the built-in keyboard stand, and
   **Keyboard bottom padding** for the clearance it leaves below the keyboard, each set separately
   per orientation; upgrading carries your terminal's values over unchanged.

@@ -680,7 +680,7 @@ public final class PlaceMiniatureView extends View {
         List<Block> hidden = new ArrayList<>(3);
         if (mLayout == null) return hidden;
         for (Block bar : BARS) {
-            if (bar != Block.STATUS_BAR && isBlockHidden(bar)) hidden.add(bar);
+            if (isBlockHidden(bar)) hidden.add(bar);
         }
         return hidden;
     }
@@ -1578,12 +1578,12 @@ public final class PlaceMiniatureView extends View {
     /**
      * The shelf's state: a lifted bar may be dropped on it, it holds chips for the bars that are
      * put away, or it is resting and empty. Null while there is nothing to draw — no arrangement,
-     * no room, or the status bar in the air, since that one never hides.
+     * or no room.
      */
     @VisibleForTesting
     @Nullable
     TrayState trayState() {
-        if (mLayout == null || mTrayRect.isEmpty() || mDraggedBar == Block.STATUS_BAR) return null;
+        if (mLayout == null || mTrayRect.isEmpty()) return null;
         if (isTrayOffered()) return TrayState.OFFERING;
         return mTrayChipRects.isEmpty() ? TrayState.EMPTY : TrayState.CHIPS;
     }
