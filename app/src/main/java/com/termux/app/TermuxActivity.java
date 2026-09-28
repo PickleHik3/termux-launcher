@@ -149,6 +149,7 @@ import com.termux.app.terminal.inappkeyboard.FloatingKeyboardController;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardHost;
 import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
+import com.termux.app.terminal.inappkeyboard.voice.DictationMarks;
 import com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceCommandFormatter;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceDictation;
@@ -716,6 +717,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private VoiceListeningIndicator mVoiceIndicator;
     /** The dictation in the panel: what has been heard, and the ✓ or Copy waiting for it to settle. */
     private final VoiceDictation mVoiceDictation = new VoiceDictation();
+    /**
+     * Tells a program that asked for them (mode 7727 with bracketed paste) when the microphone
+     * opens and closes and which paste is dictated; every other program gets today's bytes.
+     */
+    private final DictationMarks<TerminalSession> mDictationMarks = new DictationMarks<>(
+        new DictationMarks.Io<TerminalSession>() {
+            @Override
+            public boolean acceptsMarks(@NonNull TerminalSession session) {
+                TerminalEmulator emulator = session.getEmulator();
+                return session.isRunning() && emulator != null
+                    && emulator.isDictationMarksEnabled() && emulator.isBracketedPasteMode();
+            }
+
+            @Override
+            public void write(@NonNull TerminalSession session, @NonNull String data) {
+                session.write(data);
+            }
+        });
     /**
      * Whether the running dictation was started from the in-app keyboard's voice key, and so
      * stops when that keyboard goes down; the Dictate key's runs on with no keyboard at all.
@@ -14687,6 +14706,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void cancelVoiceInput() {
         VoiceInputSession session = mVoiceInput;
         mVoiceInput = null;
+        mDictationMarks.end(true);
         if (session != null) session.cancel(VoiceInputSession.EndReason.DESTROYED);
         closeVoicePill();
     }
@@ -14818,6 +14838,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The pill's ×, or a swipe: whatever is still transcribing is dropped with the text. */
     private void discardVoiceDictation() {
+        mDictationMarks.end(true);
         VoiceInputSession session = mVoiceInput;
         if (session != null) session.cancel(VoiceInputSession.EndReason.USER);
         closeVoicePill();
@@ -14904,7 +14925,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return false;
         TerminalSession session = getCurrentSession();
         if (session == null || !session.isRunning()) return false;
-        session.write(text);
+        mDictationMarks.type(session, text);
         return true;
     }
 
@@ -14996,6 +15017,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public void onListening() {
             if (mInAppKeyboard != null) mInAppKeyboard.setVoiceTypingActive(true);
             showVoiceIndicator();
+            // Only a shell in front can show where the words will land; the text itself goes
+            // wherever ✓ finds a taker, later.
+            mDictationMarks.listen(currentWallPage() == com.termux.app.wall.PaneWallPage.TERMINAL
+                ? getCurrentSession() : null);
         }
 
         @Override
@@ -15055,6 +15080,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public void onEnded(@NonNull VoiceInputSession.EndReason reason) {
             mVoiceInput = null;
             mVoiceSpeechWarming = false;
+            // A discard has already said cancel; this is the microphone closing on its own terms.
+            mDictationMarks.end(reason == VoiceInputSession.EndReason.FAILED
+                || reason == VoiceInputSession.EndReason.DESTROYED);
             // The voice key un-presses now; the pill stays with the text.
             if (mInAppKeyboard != null) mInAppKeyboard.setVoiceTypingActive(false);
             refreshVoiceWarmUp();
