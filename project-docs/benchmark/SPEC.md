@@ -170,7 +170,7 @@ The recommended downloads come from the signed remote catalogue (`TaiRemoteCatal
 | Qwen3-VL 2B Instruct | MNN | 1.5 GB | 6 GB+ | measured: 21 tok/s CPU, 15 GPU on pong — see recommended-set.md |
 | Qwen2.5 1.5B Instruct | LiteRT | 1.6 GB | 6 GB+ | see recommended-set.md |
 | Gemma 3 1B | LiteRT | 1.0 GB | 6 GB+ | see recommended-set.md |
-| Qwen2.5 0.5B Instruct | LiteRT | 0.5 GB | 4 GB+ | see recommended-set.md |
+| Qwen3 0.6B | LiteRT + MNN | 0.5 GB | 4 GB+ | see recommended-set.md (replaces Qwen2.5 0.5B, which has no `.litertlm`) |
 | SmolVLM 500M | MNN | ~0.5 GB | 4 GB+ | see recommended-set.md |
 | Qwen3.5 2B | MNN | ~2 GB | 8 GB+ | see recommended-set.md (3.6.1 fixes its fused inference) |
 | Eagle3 builds | MNN | +90 MB | — | off by default; runnable as a separate entry |

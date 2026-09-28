@@ -59,8 +59,8 @@ referenced file if it's also present in the repo's file listing (`available`), t
 | Qwen3-VL 2B Instruct | `taobao-mnn/Qwen3-VL-2B-Instruct-MNN` | `9e49ec71ded22500a997ed0f9961e1e92b85bbc9` | MNN | 1.48 GB (real; config.json 605 B, llm.mnn 452 KB, llm.mnn.weight 1.15 GB, visual.mnn 491 KB, visual.mnn.weight 227 MB, tokenizer.txt 3.0 MB, llm.mnn.json 950 KB, llm_config.json 6.3 KB) | 6 GB+ | **measured: 21 tok/s CPU, 15 GPU on pong** (SPEC); catalogue-download path itself unverified — see the `embeddings_int4.bin` risk above |
 | Qwen2.5 1.5B Instruct | `litert-community/Qwen2.5-1.5B-Instruct` | `19edb84c69a0212f29a6ef17ba0d6f278b6a1614` | LiteRT | 1.60 GB (`..._multi-prefill-seq_q8_ekv4096.litertlm`) | 6 GB+ | to verify |
 | Gemma 3 1B IT | `litert-community/Gemma3-1B-IT` | `a6306a4e292016480083b73b8dc6f3f939ae04c3` | LiteRT | 584 MB (`..._multi-prefill-seq_q4_ekv4096.litertlm`, the one generic/non-chip-pinned `.litertlm` build in the repo) | 6 GB+ | to verify; **gated repo — sha256 could not be fetched anonymously (HF returns 401 on `resolve` without a token); someone with an accepted-terms HF token must fetch the file and record its sha256 before this entry is signed** |
-| Qwen2.5 0.5B Instruct | *(not found in this format — see note)* | — | LiteRT | — | 4 GB+ | **left out**: `litert-community/Qwen2.5-0.5B-Instruct` only ships `.task`/`.tflite` files, no `.litertlm`; `TaiModelSpec.isSupportedBackendFormat` requires `format=litertlm`, and no other litert-community Qwen2.5-0.5B repo exists. Substituted with `litert-community/Qwen2-0.5B-Instruct` (`13aab3e522828d85fa178d885716ab858a715149`, `Qwen2_0.5B_Instruct.litertlm`, 647 MB, not gated) below — **needs a developer decision**: ship Qwen2 0.5B instead, drop this row, or wait for a Qwen2.5 litertlm export |
-| Qwen2 0.5B Instruct *(substitute, see above)* | `litert-community/Qwen2-0.5B-Instruct` | `13aab3e522828d85fa178d885716ab858a715149` | LiteRT | 647 MB | 4 GB+ | to verify; not the model SPEC names |
+| Qwen3 0.6B | `litert-community/Qwen3-0.6B` | `a3c5d805ae362dff7f580bc25f2dfb9a5a7eaa76` | LiteRT | 498 MB (`qwen3_0_6b_mixed_int4.litertlm`, sha256 `7900eb4e…8c22c1`) | 4 GB+ | to verify; replaces the Qwen2.5 0.5B slot (that repo has no `.litertlm`) |
+| Qwen3 0.6B | `taobao-mnn/Qwen3-0.6B-MNN` | `34dfccda1187ded6e07ea06426da576b0b793c6b` | MNN | 454 MB (config.json, llm.mnn, llm.mnn.weight 451 MB, llm_config.json, tokenizer.txt; tie_embeddings) | 4 GB+ | to verify; MNN 3.6.1's own showcase model |
 | SmolVLM 500M Instruct | `taobao-mnn/SmolVLM-500M-Instruct-MNN` | `9ab0218bef85c9b44c2aed87ee9bd8004d07bfb2` | MNN | 607 MB (real; config.json 291 B, llm.mnn 495 KB, llm.mnn.weight 384 MB, visual.mnn 223 KB, visual.mnn.weight 102 MB, embeddings_bf16.bin 90 MB, tokenizer.txt 868 KB, llm.mnn.json 1.0 MB) | 4 GB+ | to verify |
 | Qwen3.5 2B | `taobao-mnn/Qwen3.5-2B-MNN` | `35781816d7b6a9dcb273a6765ac9563401951c3c` | MNN | 1.39 GB (real; config.json 652 B, export_args.json 1.0 KB, llm.mnn 2.0 MB, llm.mnn.weight 1.10 GB, visual.mnn 477 KB, visual.mnn.weight 187 MB, tokenizer.txt 6.2 MB, llm.mnn.json 5.1 MB) | 8 GB+ | to verify (3.6.1 fixes its fused inference, per SPEC); this build also ships a `visual.mnn`/`visual.mnn.weight` pair the draft entry does not advertise as a capability — confirm on-device whether it's usable before adding `image_input` |
 | Eagle3 builds | *(unchanged)* | — | MNN | +90 MB | — | off by default; not a separate catalogue entry, per SPEC decision #7 |
@@ -121,7 +121,7 @@ research doc `project-docs/tai-model-ecosystem-research.md`). Signing is manual 
    doesn't need re-signing on every release (matching the existing `2027-06-08` is fine, or pick a
    fresh date).
 6. Publishing steps, once the entries are verified and the sha256/size gaps above are filled in:
-   a. Finalize `recommended-catalog-draft.json` (fill in Gemma 3 1B's sha256; resolve the Qwen2.5
+   a. Finalize `recommended-catalog-draft.json` (fill in Gemma 3 1B's sha256; (the 0.5B slot is now Qwen3 0.6B, see the table) resolve the Qwen2.5
       0.5B substitution decision; confirm the Qwen3-VL package-completeness risk).
    b. Sign the payload bytes with the Ed25519 private key (holder decides how — this task
       deliberately stops here).
@@ -135,3 +135,17 @@ research doc `project-docs/tai-model-ecosystem-research.md`). Signing is manual 
 
 `app/src/main/assets/tai-model-catalog.json` was **not** touched by this pass — it's still the
 existing empty-entries manifest, exactly as required.
+
+## 0.5B slot survey (2026-09-28)
+
+Candidates checked on huggingface.co (litert-community, taobao-mnn); Qwen3 0.6B was picked for both backends:
+best quality and multilingual coverage at this size, ungated, apache-2.0, and a purpose-built `.litertlm`
+(mixed int4, 498 MB) plus an MNN package. Qwen3 thinks by default; the check phase and chat should confirm
+the no-think template path on pong.
+
+- Lighter fallback if a sub-300 MB model is ever wanted: `taobao-mnn/gemma-3-270m-it-MNN` (~179 MB, ungated
+  mirror; the LiteRT copy is gated). Weak out-of-box chat (Google pitches 270M as a fine-tuning base).
+- Skipped: Qwen2 0.5B (superseded by Qwen3 0.6B), SmolLM2 360M (English-centric, weaker), Falcon-H1 0.5B and
+  granite-4.0-h-350m (LiteRT only, custom/hybrid, less proven), LFM2.5 230M (below the floor, custom licence),
+  Qwen3.5 0.8B (LiteRT int8 only, 963 MB; revisit when an int4 lands), Qwen2.5 0.5B / SmolLM 135M /
+  TinyLlama (no `.litertlm`).
