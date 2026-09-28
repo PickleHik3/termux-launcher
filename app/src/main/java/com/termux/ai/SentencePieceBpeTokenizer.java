@@ -14,6 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.PriorityQueue;
 
 final class SentencePieceBpeTokenizer {
     private static final int TOKEN_UNK = 3;
@@ -166,29 +167,65 @@ final class SentencePieceBpeTokenizer {
                 }
             }
         }
-        while (symbols.size() > 1) {
-            int bestIndex = -1;
-            float bestScore = 0f;
-            String bestMerged = null;
-            for (int i = 0; i + 1 < symbols.size(); i++) {
-                String merged = symbols.get(i) + symbols.get(i + 1);
-                Integer id = pieceToId.get(merged);
-                if (id == null) continue;
-                // Scores are negative log probabilities: the highest score is the earliest merge rank.
-                float score = scores[id];
-                if (bestIndex < 0 || score > bestScore) {
-                    bestIndex = i;
-                    bestScore = score;
-                    bestMerged = merged;
-                }
-            }
-            if (bestIndex < 0) break;
-            symbols.set(bestIndex, bestMerged);
-            symbols.remove(bestIndex + 1);
+        // Highest-scoring adjacent merge first, leftmost on a tie — the same order as rescanning every
+        // pair per merge, but through a heap over a linked list, so a long note stays O(n log n).
+        // English prose is one segment (a space joins the word after it), so the rescan was quadratic.
+        int count = symbols.size();
+        String[] merged = symbols.toArray(new String[0]);
+        int[] prev = new int[count];
+        int[] next = new int[count];
+        for (int i = 0; i < count; i++) {
+            prev[i] = i - 1;
+            next[i] = i + 1 < count ? i + 1 : -1;
         }
+        PriorityQueue<Merge> queue = new PriorityQueue<>();
+        for (int i = 0; i + 1 < count; i++) offerMerge(queue, merged, i, i + 1);
+        while (!queue.isEmpty()) {
+            Merge merge = queue.poll();
+            int left = merge.left;
+            int right = merge.right;
+            // Stale: either side has merged since this pair was queued.
+            if (merged[left] == null || merged[right] == null || next[left] != right
+                || !merge.piece.equals(merged[left] + merged[right])) continue;
+            merged[left] = merge.piece;
+            merged[right] = null;
+            next[left] = next[right];
+            if (next[left] >= 0) prev[next[left]] = left;
+            if (prev[left] >= 0) offerMerge(queue, merged, prev[left], left);
+            if (next[left] >= 0) offerMerge(queue, merged, left, next[left]);
+        }
+        symbols.clear();
+        for (int i = 0; i >= 0 && i < count; i = next[i]) symbols.add(merged[i]);
         for (String symbol : symbols) {
             Integer id = pieceToId.get(symbol);
             out.add(id == null ? TOKEN_UNK : id);
+        }
+    }
+
+    private void offerMerge(@NonNull PriorityQueue<Merge> queue, @NonNull String[] merged, int left, int right) {
+        String piece = merged[left] + merged[right];
+        Integer id = pieceToId.get(piece);
+        // Scores are negative log probabilities: the highest score is the earliest merge rank.
+        if (id != null) queue.offer(new Merge(left, right, piece, scores[id]));
+    }
+
+    private static final class Merge implements Comparable<Merge> {
+        final int left;
+        final int right;
+        @NonNull final String piece;
+        final float score;
+
+        Merge(int left, int right, @NonNull String piece, float score) {
+            this.left = left;
+            this.right = right;
+            this.piece = piece;
+            this.score = score;
+        }
+
+        @Override
+        public int compareTo(@NonNull Merge other) {
+            int byScore = Float.compare(other.score, score);
+            return byScore != 0 ? byScore : Integer.compare(left, other.left);
         }
     }
 
