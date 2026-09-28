@@ -5,6 +5,8 @@ import android.graphics.Canvas;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -56,12 +58,23 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     private final Path mBandClipPath = new Path();
     private boolean mBandClipPathDirty = true;
 
+    /**
+     * How far above its laid-out bottom this frame's visible bottom stands, while the wall's
+     * travel has the chrome's live edge over the room the pane still holds; 0 at rest. The shape
+     * is drawn that much shorter, corners and all, so the pane ends where the rising chrome
+     * begins ({@link #setTravelBottomInsetPx}).
+     */
+    private int mTravelBottomInsetPx;
+    /** The clip a square frame, which does not clip to its outline, takes the inset through. */
+    private final Rect mTravelClipRect = new Rect();
+
     /** Re-capped on every ask: a divider drag resizes the frame without re-dressing the pane. */
     private final ViewOutlineProvider mShapeOutline = new ViewOutlineProvider() {
         @Override
         public void getOutline(View view, Outline outline) {
-            outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
-                PaneShape.radiusForBounds(mRequestedRadiusPx, view.getWidth(), view.getHeight()));
+            int height = Math.max(0, view.getHeight() - mTravelBottomInsetPx);
+            outline.setRoundRect(0, 0, view.getWidth(), height,
+                PaneShape.radiusForBounds(mRequestedRadiusPx, view.getWidth(), height));
         }
     };
 
@@ -158,10 +171,63 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         invalidate();
     }
 
+    /**
+     * Ends this frame's visible shape {@code insetPx} above its laid-out bottom, for as long as the
+     * wall's travel keeps the chrome's edge over the room the pane holds; 0 puts the bottom back.
+     * A transform of the outline (or, on a frame that clips to no shape, of its clip bounds), so a
+     * slide costs no layout here; the settle's own pass lays the frame out at the size the inset
+     * stood in for.
+     */
+    public void setTravelBottomInsetPx(int insetPx) {
+        int inset = Math.max(0, insetPx);
+        if (mTravelBottomInsetPx == inset)
+            return;
+        mTravelBottomInsetPx = inset;
+        if (mClipToShape) {
+            invalidateOutline();
+        } else if (inset > 0) {
+            mTravelClipRect.set(0, 0, getWidth(), Math.max(0, getHeight() - inset));
+            setClipBounds(mTravelClipRect);
+        } else {
+            setClipBounds(null);
+        }
+        fitForegroundToTravelInset();
+        invalidate();
+    }
+
+    /**
+     * The rim is this frame's foreground, drawn on the frame's own bounds: while the travel
+     * shortens the shape it is drawn on the shortened bounds instead, so the pane's bottom
+     * corners close at the clip rather than under the chrome. Both rim drawables draw inside
+     * {@link Drawable#getBounds()}; the view re-applies its full bounds after a size change or a
+     * new foreground, which {@link #onDrawForeground} corrects on the next draw.
+     */
+    private void fitForegroundToTravelInset() {
+        Drawable foreground = getForeground();
+        if (foreground == null)
+            return;
+        int width = getWidth();
+        int height = Math.max(0, getHeight() - mTravelBottomInsetPx);
+        Rect bounds = foreground.getBounds();
+        if (bounds.left != 0 || bounds.top != 0 || bounds.right != width || bounds.bottom != height)
+            foreground.setBounds(0, 0, width, height);
+    }
+
+    @Override
+    public void onDrawForeground(Canvas canvas) {
+        if (mTravelBottomInsetPx > 0)
+            fitForegroundToTravelInset();
+        super.onDrawForeground(canvas);
+    }
+
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         mBandClipPathDirty = true;
+        if (mTravelBottomInsetPx > 0 && !mClipToShape) {
+            mTravelClipRect.set(0, 0, w, Math.max(0, h - mTravelBottomInsetPx));
+            setClipBounds(mTravelClipRect);
+        }
     }
 
     /**

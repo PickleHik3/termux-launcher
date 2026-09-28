@@ -213,17 +213,19 @@ public class KeyboardOverlayPolicyTest {
 
     @Test
     public void twoPlacesRestReservationsDifferByExactlyWhatDiffersBetweenThem() {
-        // The terminal with its keyboard up, flush against the navigation bar.
-        int terminalUp = KeyboardOverlayPolicy.restReservationPx(120, 0, true, false, 300, 0);
-        assertEquals(420, terminalUp);
-        // Home: the keyboard is down and the Floating dock keeps its gap under it.
+        // The terminal with its keyboard up: the Floating dock's gap is the stack's margin, the
+        // same as with the keyboard down, so the keyboard coming and going never moves the dock's
+        // landing (ChromePolicy.bottomEdgeGapPx).
+        int terminalUp = KeyboardOverlayPolicy.restReservationPx(120, 0, true, false, 300, 16);
+        assertEquals(436, terminalUp);
+        // Home: the keyboard is down and the dock keeps that one gap under it.
         int home = KeyboardOverlayPolicy.restReservationPx(120, 0, false, true, 300, 16);
         assertEquals(136, home);
-        // Leaving the terminal for Home gives the keyboard's room back, less the dock's gap.
-        assertEquals(300 - 16, terminalUp - home);
+        // Leaving the terminal for Home gives exactly the keyboard's room back.
+        assertEquals(300, terminalUp - home);
         // The display with the keyboard floating over it: the keyboard's room is handed back.
-        int displayOverlay = KeyboardOverlayPolicy.restReservationPx(120, 0, true, true, 300, 0);
-        assertEquals(120, displayOverlay);
+        int displayOverlay = KeyboardOverlayPolicy.restReservationPx(120, 0, true, true, 300, 16);
+        assertEquals(136, displayOverlay);
         // The terminal with the keyboard down pads the dock down to a whole row.
         int terminalDown = KeyboardOverlayPolicy.restReservationPx(120, 9, false, false, 300, 16);
         assertEquals(145, terminalDown);

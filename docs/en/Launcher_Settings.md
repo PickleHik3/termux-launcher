@@ -91,7 +91,9 @@ Use this section for visible surfaces and colors:
 - **Icon appearance:** monochrome icons, system or custom icon pack, and pinned-app icon behavior.
 - **Keyboard look:** **Theme**, **Keyboard colors**, and **Typeface** for the built-in keyboard,
   **Bottom padding** to lift its bottom key row away from the edge of the screen (the same value
-  Layout sets, for the orientation you are holding the phone in), and **Customize keyboard appearance** for live size,
+  Layout sets, for the orientation you are holding the phone in; it adds to the one gap the dock
+  style keeps at the bottom edge under the dock, the keyboard and the pane alike — Floating's card
+  gap, or none for Docked), and **Customize keyboard appearance** for live size,
   spacing, radius, and color tuning. These rows are only enabled while the built-in keyboard is the
   chosen input method on the **Keyboard** page.
 

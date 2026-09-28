@@ -70,14 +70,36 @@ public final class ChromePolicy {
     }
 
     /**
+     * The one gap between the screen's bottom edge and whatever surface stands on it: the dock's
+     * rows, the keyboard under them, a status bar along the bottom, or the pane itself when the
+     * stack is away. Floating keeps its card's gap ({@code capsuleBottomGapPx}); Docked is flush.
+     * A minimal place is maximised and keeps nothing.
+     *
+     * <p>One number for every bottom-most surface, whichever it is, so the slide between two
+     * places never lands on a different margin than it travelled toward: the keyboard used to
+     * carry the Floating gap under its own host while the stack's margin dropped to zero, and the
+     * stack's margin came back only once the keyboard was hidden at settle — the dock reached the
+     * bottom with the slide and then stepped up by the gap (pong, 2026-09-28).
+     */
+    public static int bottomEdgeGapPx(boolean minimal, boolean roundedDock,
+                                      int capsuleBottomGapPx) {
+        if (minimal || !roundedDock) return 0;
+        return Math.max(0, capsuleBottomGapPx);
+    }
+
+    /**
      * Where the keyboard's "space under the keys" allowance lands, as a bottom margin under the
      * surface. Floating, the glass is a capsule that has to wrap the keys, so the allowance is a
      * taller gap under it and the whole surface lifts; padding there would leave an empty band of
      * glass below the last key row. Docked, the surface owns no gap at all.
+     *
+     * @param ownGapPx the gap this host carries under itself before the allowance: a keyboard
+     *                 floating in a frame of its own keeps the card's gap here; one standing in
+     *                 the accessory stack carries none, since the stack's own margin is the shared
+     *                 bottom edge gap ({@link #bottomEdgeGapPx}) for the keyboard and the dock alike
      */
-    public static int keyboardChinBottomMarginPx(boolean capsule, int capsuleBottomGapPx,
-                                                 int chinPx) {
-        return capsule ? capsuleBottomGapPx + Math.max(0, chinPx) : 0;
+    public static int keyboardChinBottomMarginPx(boolean capsule, int ownGapPx, int chinPx) {
+        return capsule ? Math.max(0, ownGapPx) + Math.max(0, chinPx) : 0;
     }
 
     /**

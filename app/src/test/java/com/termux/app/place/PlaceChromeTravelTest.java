@@ -238,6 +238,30 @@ public class PlaceChromeTravelTest {
     }
 
     @Test
+    public void thePaneIsCoveredByExactlyWhatTheChromeHasRisenThroughItsRoom() {
+        // Home's room held while the keyboard is pre-rolled: the content reaches under the stack
+        // by the keyboard's height, and the stack starts slid all the way down past it.
+        int overlap = PlaceChromeTravel.heldOverlapPx(DOCK + KEYBOARD, 16, DOCK + 16);
+        assertEquals(KEYBOARD, overlap);
+        assertEquals(0, PlaceChromeTravel.coveredRoomPx(overlap, KEYBOARD));
+        // Half way up, half the room is under the keyboard; landed, all of it.
+        assertEquals(KEYBOARD / 2, PlaceChromeTravel.coveredRoomPx(overlap, KEYBOARD / 2f));
+        assertEquals(KEYBOARD, PlaceChromeTravel.coveredRoomPx(overlap, 0f));
+        // The same arithmetic on every frame of the slide: what the frame's translation leaves
+        // over the room is what the pane is clipped by, so the pane's edge rides the keyboard's.
+        PlaceChromeTravel.States s = states(true, false);
+        Frame quarter = at(PaneWallPage.WIDGETS, -WIDTH * 0.25f, s);
+        float translation = PlaceChromeTravel.stackTranslationPx(quarter, KEYBOARD, DOCK);
+        assertEquals(KEYBOARD - translation, PlaceChromeTravel.coveredRoomPx(overlap, translation),
+            1f);
+        // A stack slid further than the room reaches, or no room at all, covers nothing.
+        assertEquals(0, PlaceChromeTravel.coveredRoomPx(overlap, KEYBOARD + DOCK));
+        assertEquals(0, PlaceChromeTravel.coveredRoomPx(0, 0f));
+        assertEquals(0, PlaceChromeTravel.coveredRoomPx(-5, 0f));
+        assertEquals(overlap, PlaceChromeTravel.coveredRoomPx(overlap, Float.NaN));
+    }
+
+    @Test
     public void theArrivingPlaceIsWhicheverSideOfTheFrameIsNotBeingLeft() {
         PlaceChromeTravel.States s = states(true, false);
         // Leaving the terminal toward Home on the left: the frame reads Home -> Terminal.
