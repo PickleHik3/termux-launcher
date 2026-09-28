@@ -1096,4 +1096,36 @@ public class PlaceMiniatureViewTest {
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         assertNull(view.underKeyboardSlotFor(0));
     }
+
+    // ---- One radius system -----------------------------------------------------------------------
+
+    @Test
+    public void theDocksRadiusIsScaledOntoThePictureByTheShortSides() {
+        // The picture's short side is 240 units, a 411dp phone's is 411dp: 24dp is 14 units.
+        assertEquals(24f * 240f / 411f, PlaceMiniatureView.surfaceRadiusUnits(24f, 411f), 0.001f);
+        assertEquals("no screen to ask: the reference phone",
+            PlaceMiniatureView.surfaceRadiusUnits(24f, 411f),
+            PlaceMiniatureView.surfaceRadiusUnits(24f, 0f), 0.001f);
+        assertEquals(0f, PlaceMiniatureView.surfaceRadiusUnits(-1f, 411f), 0.001f);
+    }
+
+    @Test
+    public void everyCardSharesTheRadiusUpToAHalfCapsuleOfItsOwn() {
+        assertEquals("a tall card keeps the whole radius", 14f,
+            PlaceMiniatureView.cardRadiusPx(14f, 200f, 80f), 0.001f);
+        assertEquals("a thin band is a capsule", 6f,
+            PlaceMiniatureView.cardRadiusPx(14f, 200f, 12f), 0.001f);
+    }
+
+    @Test
+    public void theBandsAndTheKeyboardAreRoundedFromTheDocksOneRadius() {
+        PlaceMiniatureView view = sized();
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        float before = view.surfaceRadiusPx();
+        assertTrue(before > 0f);
+        view.setDockCornerRadiusDp(PlaceMiniatureView.DEFAULT_DOCK_RADIUS_DP * 2f);
+        assertEquals("the Corners control moves every card together", before * 2f,
+            view.surfaceRadiusPx(), 0.01f);
+    }
 }

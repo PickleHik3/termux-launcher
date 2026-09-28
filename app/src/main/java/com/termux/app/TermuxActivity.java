@@ -10005,6 +10005,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isSurfaceEditorActive() {
             return mSurfaceEditor.isActive();
         }
+
+        // The dock's own corner, resolved as the dock draws it — the configured Corners value or
+        // the follow-the-style radius — unclamped, for the miniature to scale onto its cards.
+        @Override public float dockCornerRadiusDp() {
+            float density = getResources().getDisplayMetrics().density;
+            return density <= 0f ? 0f
+                : getDockLayout().capsuleCornerRadiusPx(Integer.MAX_VALUE) / density;
+        }
     }
 
     /** The activity's half of the surface editor's seam: its views, its prefs, its render pipeline. */

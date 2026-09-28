@@ -112,6 +112,14 @@ public final class LayoutEditorController {
 
         /** Whether the surface editor holds the screen; the two are never up together. */
         boolean isSurfaceEditorActive();
+
+        /**
+         * The dock's corner radius in dp, as the dock draws it: what the miniature's cards are
+         * rounded from, scaled to the picture, so they read as the surfaces they stand for.
+         */
+        default float dockCornerRadiusDp() {
+            return PlaceMiniatureView.DEFAULT_DOCK_RADIUS_DP;
+        }
     }
 
     @NonNull private final Host mHost;
@@ -400,6 +408,7 @@ public final class LayoutEditorController {
         card.orientationNotice.setVisibility(
             plan.warnsOtherOrientation() ? View.VISIBLE : View.GONE);
         applyCanvasHeight(card, plan);
+        card.miniature.setDockCornerRadiusDp(mHost.dockCornerRadiusDp());
         card.miniature.setLayout(plan.shownLayout(), plan.shownOrientation(), plan.place());
         syncNotice(card, plan);
         syncRows(card, plan);

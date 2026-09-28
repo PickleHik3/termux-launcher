@@ -151,12 +151,18 @@ public final class PlaceMiniatureView extends View {
     /** Half the gap between two elements, taken off every block on every side. */
     private static final float CARD_PAD_U = 3f;
     /** The elements' corner radii. */
-    private static final float STATUS_RADIUS_U = 10f;
-    private static final float APPS_RADIUS_U = 16f;
-    private static final float ALPHABETS_RADIUS_U = 10f;
-    private static final float EXTRA_KEYS_RADIUS_U = 12f;
     private static final float PANE_RADIUS_U = 20f;
-    private static final float KEYBOARD_RADIUS_U = 16f;
+    /**
+     * The dock's corner until the editor says otherwise: the follow-the-style radius a Floating
+     * dock ships with. Every band and the keyboard are rounded from this one figure, scaled to the
+     * picture ({@link #surfaceRadiusUnits}); each card then stops at a true half-capsule of its own.
+     */
+    public static final float DEFAULT_DOCK_RADIUS_DP =
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+            .resolveAutoCornerRadiusDp(com.termux.shared.termux.settings.preferences
+                .TermuxAppSharedPreferences.SurfaceSlot.DOCK, true);
+    /** The short side a phone is taken to have when the view has no screen to ask: 411dp. */
+    private static final float REFERENCE_SHORT_SIDE_DP = 411f;
     /** The hairline every resting card wears, and the heavier one a lifted card does. */
     private static final float CARD_STROKE_U = 1f;
     private static final float LIFTED_STROKE_U = 1.5f;
@@ -242,6 +248,8 @@ public final class PlaceMiniatureView extends View {
     private final RectF mContentRect = new RectF();
     /** One design unit on this frame, in pixels. */
     private float mUnit = 1f;
+    /** The one corner radius every band and the keyboard share, in design units. */
+    private float mSurfaceRadiusU;
     private final Path mClipPath = new Path();
     /** Reused scratch rects for whatever a draw call is computing right now; never read across
      *  two different shapes, only within one draw-then-move-on sequence. */
@@ -317,6 +325,57 @@ public final class PlaceMiniatureView extends View {
         mIconHomeGrid = loadIcon(R.drawable.ic_symbol_grid_view);
         mIconDisplay = loadIcon(R.drawable.ic_symbol_desktop_windows);
         mIconTerminal = loadIcon(R.drawable.ic_symbol_terminal);
+        mSurfaceRadiusU = surfaceRadiusUnits(DEFAULT_DOCK_RADIUS_DP, screenShortSideDp());
+    }
+
+    /**
+     * The dock's corner radius, in dp, that the bands and the keyboard are rounded from. The
+     * picture is the phone at {@value #PHONE_SHORT_SIDE_UNITS} units across its short side, so the
+     * real radius is scaled by that against the real screen's short side: the cards corner as the
+     * surfaces do, one system, rather than each band a number of its own.
+     */
+    public void setDockCornerRadiusDp(float radiusDp) {
+        float units = surfaceRadiusUnits(radiusDp, screenShortSideDp());
+        if (units == mSurfaceRadiusU) return;
+        mSurfaceRadiusU = units;
+        invalidate();
+    }
+
+    /**
+     * A real radius, in dp, in the picture's units: the phone's short side is
+     * {@value #PHONE_SHORT_SIDE_UNITS} of them, the screen's is {@code screenShortSideDp}.
+     */
+    @VisibleForTesting
+    public static float surfaceRadiusUnits(float radiusDp, float screenShortSideDp) {
+        float side = screenShortSideDp > 0f ? screenShortSideDp : REFERENCE_SHORT_SIDE_DP;
+        return Math.max(0f, radiusDp) * PHONE_SHORT_SIDE_UNITS / side;
+    }
+
+    /**
+     * The radius a card of this size is drawn at: the shared radius, no more than a true
+     * half-capsule of its shorter side. A thin band is then a capsule and a tall one — the
+     * keyboard — keeps the whole radius, which is what the real surfaces do.
+     */
+    @VisibleForTesting
+    public static float cardRadiusPx(float surfaceRadiusPx, float cardWidthPx, float cardHeightPx) {
+        float half = Math.max(0f, Math.min(cardWidthPx, cardHeightPx)) / 2f;
+        return Math.max(0f, Math.min(surfaceRadiusPx, half));
+    }
+
+    /** The shared radius in view pixels, at this frame's unit. */
+    @VisibleForTesting
+    public float surfaceRadiusPx() {
+        return u(mSurfaceRadiusU);
+    }
+
+    private float cardRadius(@NonNull RectF card) {
+        return cardRadiusPx(surfaceRadiusPx(), card.width(), card.height());
+    }
+
+    private float screenShortSideDp() {
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        if (metrics.density <= 0f) return REFERENCE_SHORT_SIDE_DP;
+        return Math.min(metrics.widthPixels, metrics.heightPixels) / metrics.density;
     }
 
     public PlaceMiniatureView(@NonNull Context context) {
@@ -1330,18 +1389,6 @@ public final class PlaceMiniatureView extends View {
         return units * mUnit;
     }
 
-    /** A band's corner radius, in the design's units. */
-    private static float bandRadiusUnits(@NonNull Block block) {
-        switch (block) {
-            case STATUS_BAR: return STATUS_RADIUS_U;
-            case APPS_ROW: return APPS_RADIUS_U;
-            case ALPHABETS_ROW: return ALPHABETS_RADIUS_U;
-            case EXTRA_KEYS: return EXTRA_KEYS_RADIUS_U;
-            case CANVAS:
-            default: return PANE_RADIUS_U;
-        }
-    }
-
     /**
      * The card an element is drawn as, inside the block it claims: the block less half the gap
      * between neighbours on every side, so two adjacent bands read as two cards with air between
@@ -1361,7 +1408,7 @@ public final class PlaceMiniatureView extends View {
         if (rect == null || rect.isEmpty() || mLayout == null) return;
         if (mDraggedBar == block) {
             cardOf(rect, mScratchRectA);
-            float radius = u(bandRadiusUnits(block));
+            float radius = cardRadius(mScratchRectA);
             mDashPaint.setPathEffect(mSlotDash);
             mDashPaint.setStrokeWidth(dp(1f));
             mDashPaint.setColor(dim());
@@ -1384,7 +1431,7 @@ public final class PlaceMiniatureView extends View {
                               boolean vertical, boolean lifted) {
         RectF card = mScratchRectC;
         cardOf(rect, card);
-        float radius = u(bandRadiusUnits(block));
+        float radius = cardRadius(card);
         if (lifted) {
             // The raise: a solid underlay a little below, then the card with a wash of accent.
             mScratchRectB.set(card);
@@ -1785,13 +1832,14 @@ public final class PlaceMiniatureView extends View {
      * 216x128 viewport and scaled to fit whatever card it is given.
      */
     private void drawKeyboardCard(@NonNull Canvas canvas, @NonNull RectF card) {
-        float radius = u(KEYBOARD_RADIUS_U);
+        float radius = cardRadius(card);
         mFillPaint.setColor(surface());
         canvas.drawRoundRect(card, radius, radius, mFillPaint);
         mScratchRectB.set(card);
         mScratchRectB.inset(u(2f), u(2f));
         mFillPaint.setColor(ColorUtils.setAlphaComponent(container(), KEYBOARD_TINT_ALPHA));
-        canvas.drawRoundRect(mScratchRectB, radius - u(2f), radius - u(2f), mFillPaint);
+        float inner = Math.max(0f, radius - u(2f));
+        canvas.drawRoundRect(mScratchRectB, inner, inner, mFillPaint);
         mLinePaint.setColor(dim());
         mLinePaint.setStrokeWidth(u(CARD_STROKE_U));
         canvas.drawRoundRect(card, radius, radius, mLinePaint);
