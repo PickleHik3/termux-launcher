@@ -588,6 +588,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mStatusBarFoldDragStartHeight;
     private int mStatusBarFoldDragResizeGeneration;
     private int mStatusBarTerminalResizeGeneration;
+    /**
+     * Whether the pane's top border has a bar to fold (syncBorderStatusSwipe): the bar shown,
+     * along the top, where it can unfold. Kept as a field because the wall reads it on every
+     * frame it draws its grabbers.
+     */
+    private boolean mBorderStatusBarFoldable;
     private final com.termux.app.statusbar.StatusBarSurfaceOutlineProvider
         mStatusBarSurfaceOutline =
             new com.termux.app.statusbar.StatusBarSurfaceOutlineProvider();
@@ -17226,6 +17232,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void onKeyboardRevealEnd(boolean open) {
                     finishKeyboardSwipeTravel(open);
                 }
+                // The top border's swipe drives the bar's own fold: the drag the bar takes
+                // across itself, and the landing its release runs, from the other side of the line.
+                @Override public boolean isBorderStatusSwipeEnabled() {
+                    return isBorderStatusSwipeAvailable();
+                }
+                @Override public void onBorderStatusSwipe(boolean expand) {
+                    if (isBorderStatusSwipeAvailable()) setTopStatusBarCollapsed(!expand, true);
+                }
+                @Override public int onStatusFoldBegin(boolean expanding) {
+                    return beginBorderStatusFold(expanding);
+                }
+                @Override public void onStatusFoldProgress(float towardOpenPx) {
+                    if (mStatusBarFoldDragging) dragTopStatusBar(towardOpenPx);
+                }
+                @Override public void onStatusFoldEnd(boolean expanded,
+                                                      float towardOpenVelocityPxPerSec) {
+                    // Whoever took the fold over since has landed it; otherwise the landing is
+                    // this release's, and it returns the lease the drag took.
+                    if (!mStatusBarFoldDragging) return;
+                    boolean collapsed = isChromeMinimal() ? isStatusBarCompact() : !expanded;
+                    setTopStatusBarCollapsed(collapsed, true, towardOpenVelocityPxPerSec);
+                }
                 @Override public void onPageSinkChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page, float scale) {
                     // The terminal's frame line is laid over the wall, not carried by the page
@@ -19616,6 +19644,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyTopStatusBarInteractiveHeight(host, topWidgets, height, capsule);
     }
 
+    /**
+     * Whether a swipe off the pane's top border may fold the bar now: there is one to fold
+     * ({@link #mBorderStatusBarFoldable}), minimal mode is off, and no other surface has the
+     * bar's gesture (the same vetoes as the bar's own drag). Cheap: the wall asks it per frame.
+     */
+    private boolean isBorderStatusSwipeAvailable() {
+        return mBorderStatusBarFoldable && mPreferences != null && !isChromeMinimal()
+            && !isCommandPaletteOpen() && !isAppDrawerEngaged() && !mSurfaceEditor.isActive();
+    }
+
+    /**
+     * The bar was shown or put away, or moved to another edge: the top border's swipe, and the
+     * grabber that marks it, go with a bar along the top that can unfold.
+     */
+    private void syncBorderStatusSwipe(boolean barShown) {
+        boolean foldable = barShown && mStatusBarEdge == PlaceLayout.Edge.TOP
+            && com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge);
+        if (foldable == mBorderStatusBarFoldable) return;
+        mBorderStatusBarFoldable = foldable;
+        if (mPaneWallController != null) mPaneWallController.wall().invalidate();
+    }
+
+    /**
+     * A swipe off the top border was claimed, going down ({@code expanding}) or up: the bar's
+     * fold follows it from the form it rests in, through {@link #dragTopStatusBar} as the bar's
+     * own drag does, taking the same resize lease on this first frame. Answers the fold's whole
+     * way in px, or 0 where it cannot follow — nothing to fold, the bar already where the swipe
+     * points, or a landing still running — and the release then asks on its own.
+     */
+    private int beginBorderStatusFold(boolean expanding) {
+        if (!isBorderStatusSwipeAvailable() || isStatusBarFoldInteractive()) return 0;
+        if (isStatusBarCompact() != expanding) return 0;
+        boolean capsule = isRoundedDockStyle();
+        int travel = targetStatusBarHeightPx(capsule, false)
+            - targetStatusBarHeightPx(capsule, true);
+        if (travel <= 0) return 0;
+        dragTopStatusBar(0f);
+        return mStatusBarFoldDragging ? travel : 0;
+    }
+
     /** Refresh visibility, labels, selection and the shared dock/keyboard glass treatment. */
     public void refreshTerminalWindowBar() {
         if (mWindowBarRefreshBatchDepth > 0) {
@@ -19656,6 +19724,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean visible = isSplitPanesEnabled()
             && !currentPlaceLayout().slot(Element.STATUS).hidden;
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
+        syncBorderStatusSwipe(visible);
         if (!visible) {
             applyTerminalSurfaceAppearance();
             // Idempotence: the widgets live inside the GONE host here, so nothing is shown either

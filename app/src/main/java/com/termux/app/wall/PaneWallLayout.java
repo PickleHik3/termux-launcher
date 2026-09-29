@@ -3,6 +3,7 @@ package com.termux.app.wall;
 import android.content.Context;
 import android.graphics.LightingColorFilter;
 import android.graphics.Paint;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -14,6 +15,7 @@ import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -44,8 +46,9 @@ import java.util.Map;
  * ({@link BorderDrag}): a press held on the current page's border, then dragged sideways, which
  * is how a finger pages the wall on every place and in every mode — and, on the bottom border, a
  * vertical swipe without the hold, which carries the keyboard up or down under the finger
- * ({@link KeyboardReveal}) and is marked by a small grabber ({@link KeyboardGrabber}). The window
- * strip's overswipe drives the same drag from outside.
+ * ({@link KeyboardReveal}) and is marked by a small grabber ({@link BorderGrabber}); and on the
+ * top border its mirror, which folds and unfolds the status bar under the finger by the same rule
+ * and wears the same grabber. The window strip's overswipe drives the same drag from outside.
  *
  * <p>Every page is laid out at the host's size and moved with {@code translationX}, so a page
  * change and a whole drag cost no layout work. Only the pages on screen are laid out at all: a
@@ -118,7 +121,7 @@ public final class PaneWallLayout extends ViewGroup {
         /**
          * Whether a vertical swipe off the current page's bottom border is the keyboard's
          * ({@link BorderDrag#KEYBOARD_REACH_DP}); asked as each finger lands, and by the grabber
-         * that marks the border ({@link KeyboardGrabber}), which is drawn only while it is.
+         * that marks the border ({@link BorderGrabber}), which is drawn only while it is.
          */
         default boolean isBorderKeyboardSwipeEnabled() { return false; }
         /**
@@ -143,6 +146,39 @@ public final class PaneWallLayout extends ViewGroup {
          * for a swipe let go short or cancelled, the other state for one that went through.
          */
         default void onKeyboardRevealEnd(boolean open) { }
+        /**
+         * Whether a vertical swipe off the current page's top border drives the status bar's fold
+         * ({@link BorderDrag#STATUS_REACH_DP}): only where the bar stands along the top and can
+         * unfold. Asked as each finger lands, and by the top grabber on every frame the wall
+         * draws, so it has to be cheap.
+         */
+        default boolean isBorderStatusSwipeEnabled() { return false; }
+        /**
+         * A swipe off the top border asked for the status bar unfolded ({@code expand}, down) or
+         * folded (up): the release-only path, for a swipe the bar did not follow
+         * ({@link #onStatusFoldBegin} answered 0, or motion is reduced).
+         */
+        default void onBorderStatusSwipe(boolean expand) { }
+        /**
+         * A status bar swipe was just claimed, going down ({@code expanding}) or up: the bar's
+         * fold is to follow the finger from here. Answers the fold's whole way in px — the open
+         * bar's height less the folded one's — or 0 where it cannot follow (the bar already where
+         * the swipe points, or a fold still landing), and then the release asks through
+         * {@link #onBorderStatusSwipe}. Answering more than 0 takes the fold until
+         * {@link #onStatusFoldEnd}.
+         */
+        default int onStatusFoldBegin(boolean expanding) { return 0; }
+        /**
+         * One frame of the fold under the finger: {@code towardOpenPx} is how far the finger has
+         * taken the bar from the form it had, positive the way it opens, held to the fold's way.
+         */
+        default void onStatusFoldProgress(float towardOpenPx) { }
+        /**
+         * The finger let go of the fold, or lost it: land the bar unfolded ({@code expanded}) or
+         * folded, from where the finger left it, at {@code towardOpenVelocityPxPerSec} (positive
+         * the way it opens; 0 for a fold that was taken away rather than let go).
+         */
+        default void onStatusFoldEnd(boolean expanded, float towardOpenVelocityPxPerSec) { }
         /**
          * The page a held border sank ({@link PageSink}) is drawn at {@code scale} about its
          * centre, 1 once it is back at rest: for chrome drawn outside the page that frames it.
@@ -209,10 +245,25 @@ public final class PaneWallLayout extends ViewGroup {
     @Nullable private View mWeightPage;
     private float mWeightOffsetPx;
     /** The keyboard swipe's grabber on the current page's bottom border. */
-    @NonNull private final KeyboardGrabber mGrabber;
+    @NonNull private final BorderGrabber mGrabber;
     /** The wall offset and sink the grabber was last drawn for, so a still wall redraws nothing. */
     private float mGrabberDrawnOffsetPx = Float.NaN;
     private float mGrabberDrawnSink = Float.NaN;
+    /** The status bar swipe's grabber on the current page's top border. */
+    @NonNull private final BorderGrabber mStatusGrabber;
+    /**
+     * The status bar's fold the finger drives ({@link Listener#onStatusFoldBegin}): its whole way
+     * in px from the claim to the lift, 0 while no fold is engaged. The fold is carried on the
+     * keyboard's reveal arithmetic ({@link KeyboardReveal}) with the direction turned over, since
+     * the bar opens away from the top border as the keyboard opens away from the bottom one.
+     */
+    private int mFoldTravelPx;
+    /** Whether the bar was unfolded when the engaged fold began. */
+    private boolean mFoldFromOpen;
+    /** How far unfolded the finger has the bar: 0 folded, 1 open. */
+    private float mFold;
+    /** Reused for the wall's place in its window, so a press allocates nothing. */
+    private final int[] mWindowLocation = new int[2];
     /**
      * The keyboard's height the finger drives the reveal over ({@link KeyboardReveal}), from a
      * keyboard swipe the listener took ({@link Listener#onKeyboardRevealBegin}) until the settle
@@ -266,7 +317,8 @@ public final class PaneWallLayout extends ViewGroup {
         super(context, attrs);
         setClipChildren(false);
         setClipToPadding(false);
-        mGrabber = new KeyboardGrabber(this);
+        mGrabber = new BorderGrabber(this);
+        mStatusGrabber = new BorderGrabber(this, true);
     }
 
     public void setListener(@Nullable Listener listener) {
@@ -427,10 +479,14 @@ public final class PaneWallLayout extends ViewGroup {
         mGesturesEnabled = enabled;
         // The grabber marks a gesture that is on: it goes and comes back with it.
         if (changed) invalidate();
-        // A keyboard swipe under way asks for nothing once another surface owns the gesture, and
+        // A border swipe under way asks for nothing once another surface owns the gesture, and
         // a keyboard it was carrying lands at once where it was going.
-        if (!enabled && mBorderDrag.isKeyboardSwipe()) mBorderDrag.abandon();
+        if (!enabled && (mBorderDrag.isKeyboardSwipe() || mBorderDrag.isStatusSwipe())) {
+            mBorderDrag.abandon();
+        }
         if (!enabled) settleKeyboardRevealNow();
+        // And a status bar fold under way goes back to the form the bar had.
+        if (!enabled) settleStatusFoldNow();
         if (enabled || !mDragging) return;
         // The claimant is told to let go, and the wall goes back to rest on its own — nothing
         // else is going to release this drag now.
@@ -457,8 +513,10 @@ public final class PaneWallLayout extends ViewGroup {
     private boolean goTo(@NonNull PaneWallPage page, boolean animate, float velocityPxPerSec) {
         if (!mPages.contains(page)) return false;
         interruptDrag();
-        // The wall is about to move: a keyboard still settling from a swipe lands first.
+        // The wall is about to move: a keyboard still settling from a swipe lands first, and a
+        // status bar fold under a finger goes back.
         settleKeyboardRevealNow();
+        settleStatusFoldNow();
         if (page == mCurrent && mOffsetPx == 0f) return true;
         stopNudge();
         // Carry the current visual position across the page change: the new page's rest is one
@@ -501,6 +559,7 @@ public final class PaneWallLayout extends ViewGroup {
         try {
             // A keyboard still settling from a swipe lands before the wall moves.
             settleKeyboardRevealNow();
+            settleStatusFoldNow();
             mDragging = true;
             stopSlide();
             stopNudge();
@@ -591,7 +650,8 @@ public final class PaneWallLayout extends ViewGroup {
      * finger that sets off up or down from the bottom border before the hold is the keyboard's
      * ({@link BorderDrag#move}). Where the listener can move the keyboard with it, the keyboard
      * follows the finger and the lift settles it ({@link KeyboardReveal}); elsewhere the lift
-     * asks the listener to open or close it.
+     * asks the listener to open or close it. The status bar's swipe off the top border is claimed
+     * the same way and folds the bar under the finger ({@link #claimStatusSwipe}).
      */
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
@@ -618,9 +678,18 @@ public final class PaneWallLayout extends ViewGroup {
                     trackKeyboardReveal(event.getY());
                     return true;
                 }
+                if (mBorderDrag.isStatusSwipe()) {
+                    if (mBorderVelocity != null) mBorderVelocity.addMovement(event);
+                    trackStatusFold(event.getY());
+                    return true;
+                }
                 BorderDrag.Claim claim = mBorderDrag.move(event.getX(), event.getY());
                 if (claim == BorderDrag.Claim.KEYBOARD) {
                     claimKeyboardSwipe(event);
+                    return true;
+                }
+                if (claim == BorderDrag.Claim.STATUS) {
+                    claimStatusSwipe(event);
                     return true;
                 }
                 if (claim == BorderDrag.Claim.ABANDONED) {
@@ -628,17 +697,21 @@ public final class PaneWallLayout extends ViewGroup {
                 }
                 break;
             case MotionEvent.ACTION_POINTER_DOWN:
-                if (mBorderDrag.isPaging() || mBorderDrag.isKeyboardSwipe()) return true;
+                if (isBorderClaimed()) return true;
                 if (mBorderDrag.secondPointer() == BorderDrag.Claim.ABANDONED) {
                     mHoldHandler.removeCallbacks(mHoldElapsed);
                 }
                 break;
             case MotionEvent.ACTION_POINTER_UP:
-                if (mBorderDrag.isPaging() || mBorderDrag.isKeyboardSwipe()) return true;
+                if (isBorderClaimed()) return true;
                 break;
             case MotionEvent.ACTION_UP:
                 if (mBorderDrag.isKeyboardSwipe()) {
                     releaseKeyboardSwipe(event);
+                    return true;
+                }
+                if (mBorderDrag.isStatusSwipe()) {
+                    releaseStatusSwipe(event);
                     return true;
                 }
                 if (mBorderDrag.isPaging()) {
@@ -665,6 +738,12 @@ public final class PaneWallLayout extends ViewGroup {
                     if (mRevealTravelPx > 0) settleKeyboardReveal(mRevealFromOpen, 0f);
                     return true;
                 }
+                if (mBorderDrag.isStatusSwipe()) {
+                    // Cancelled from above: the bar goes back to the form it had.
+                    releaseBorderDrag();
+                    endStatusFold(mFoldFromOpen, 0f);
+                    return true;
+                }
                 break;
             default:
                 break;
@@ -675,6 +754,12 @@ public final class PaneWallLayout extends ViewGroup {
             releaseBorderDrag();
         }
         return handled;
+    }
+
+    /** Whether the wall owns the finger: the page drag, or one of the border swipes. */
+    private boolean isBorderClaimed() {
+        return mBorderDrag.isPaging() || mBorderDrag.isKeyboardSwipe()
+            || mBorderDrag.isStatusSwipe();
     }
 
     /**
@@ -692,7 +777,8 @@ public final class PaneWallLayout extends ViewGroup {
     /**
      * A finger landed. It arms the border drag when the wall has another place to go, and the
      * keyboard swipe when the listener wants it — on a wall of one place too, since the keyboard
-     * has to be reachable from every place in every mode.
+     * has to be reachable from every place in every mode — and the status bar's swipe on the same
+     * terms, below the phone's own strip at the top of the screen ({@link #topGestureLimit}).
      */
     private void armBorderDrag(@NonNull MotionEvent event) {
         releaseBorderDrag();
@@ -701,7 +787,9 @@ public final class PaneWallLayout extends ViewGroup {
         float density = getResources().getDisplayMetrics().density;
         float keyboardReach = mListener != null && mListener.isBorderKeyboardSwipeEnabled()
             ? BorderDrag.KEYBOARD_REACH_DP * density : 0f;
-        if (!canPage && keyboardReach <= 0f) return;
+        float statusReach = mListener != null && mListener.isBorderStatusSwipeEnabled()
+            ? BorderDrag.STATUS_REACH_DP * density : 0f;
+        if (!canPage && keyboardReach <= 0f && statusReach <= 0f) return;
         View page = mPageViews.get(mCurrent);
         if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
         float left = page.getLeft() + page.getTranslationX();
@@ -710,11 +798,32 @@ public final class PaneWallLayout extends ViewGroup {
             left, top, left + page.getWidth(), top + page.getHeight(),
             BorderDrag.BAND_DP * density,
             CornerZones.clampSize(CornerZones.paneSizePx(density), page.getWidth(), page.getHeight()),
-            ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardReach);
+            ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardReach,
+            statusReach, statusReach > 0f ? topGestureLimit() : Float.NEGATIVE_INFINITY);
         if (!armed) return;
         mBorderDownX = event.getX();
         mBorderDownY = event.getY();
         mHoldHandler.postDelayed(mHoldElapsed, HoldTiming.holdTimeoutMs());
+    }
+
+    /**
+     * The foot of the phone's own touch strip along the top of the screen, in the wall's
+     * coordinates: the notification shade's pull, and the status bar it is pulled from. The top
+     * border is normally well below it, under the launcher's own status bar, but with that bar
+     * hidden or thin it can reach up into the strip, and a press there is never the wall's.
+     * Unbounded where the window reports no insets.
+     */
+    private float topGestureLimit() {
+        WindowInsets insets = getRootWindowInsets();
+        if (insets == null) return Float.NEGATIVE_INFINITY;
+        @SuppressWarnings("deprecation")
+        int strip = insets.getStableInsetTop();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            strip = Math.max(strip, insets.getSystemGestureInsets().top);
+        }
+        if (strip <= 0) return Float.NEGATIVE_INFINITY;
+        getLocationInWindow(mWindowLocation);
+        return strip - mWindowLocation[1];
     }
 
     /**
@@ -736,6 +845,7 @@ public final class PaneWallLayout extends ViewGroup {
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         // The hold made the finger the wall's, not the keyboard's: the grabber goes back to rest.
         mGrabber.setPressed(false, 0f, mReducedMotion);
+        mStatusGrabber.setPressed(false, 0f, mReducedMotion);
         mBorderVelocity = VelocityTracker.obtain();
         beginDrag(true, mBorderDownX);
         engageSink(mBorderDrag.border());
@@ -808,6 +918,118 @@ public final class PaneWallLayout extends ViewGroup {
         if (swipe != BorderDrag.KeyboardSwipe.NONE && mListener != null) {
             mListener.onBorderKeyboardSwipe(swipe == BorderDrag.KeyboardSwipe.OPEN);
         }
+    }
+
+    // ---- The status bar's fold under the finger ----------------------------------------------
+
+    /**
+     * A finger set off up or down from the top border before the hold: the content is told its
+     * touch is over, as for the keyboard swipe, and the rest of the stream is read here. Where
+     * the listener lets the bar's fold follow the finger it does from this move on; where it
+     * cannot, or motion is reduced, nothing moves until the release asks.
+     */
+    private void claimStatusSwipe(@NonNull MotionEvent event) {
+        mHoldHandler.removeCallbacks(mHoldElapsed);
+        cancelChildGesture();
+        if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
+        mBorderVelocity = VelocityTracker.obtain();
+        mBorderVelocity.addMovement(event);
+        engageStatusFold(event.getY());
+    }
+
+    /**
+     * The status bar swipe was claimed with the finger at {@code y}: down unfolds the bar, up
+     * folds it. The listener says whether the fold can follow ({@link Listener#onStatusFoldBegin})
+     * and from here it is the finger's, measured from where the finger landed.
+     */
+    private void engageStatusFold(float y) {
+        if (mReducedMotion || mListener == null) return;
+        boolean expanding = y > mBorderDownY;
+        int travel = mListener.onStatusFoldBegin(expanding);
+        if (travel <= 0) return;
+        mFoldTravelPx = travel;
+        mFoldFromOpen = !expanding;
+        mFold = mFoldFromOpen ? 1f : 0f;
+        trackStatusFold(y);
+    }
+
+    /**
+     * One move of the status bar swipe's finger: the fold is where the finger says, one to one
+     * over its whole way, and crossing the point past which the release would go on (or back) is
+     * felt as the keyboard's one light tick.
+     */
+    private void trackStatusFold(float y) {
+        if (mFoldTravelPx <= 0) return;
+        float start = mFoldFromOpen ? 1f : 0f;
+        float before = mFold;
+        // Down unfolds: the keyboard's reveal with the finger's travel turned over.
+        float fold = KeyboardReveal.reveal(start, -(y - mBorderDownY), mFoldTravelPx);
+        if (KeyboardReveal.crossesCommit(mFoldFromOpen, before, fold)) {
+            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        }
+        mFold = fold;
+        if (mListener != null) mListener.onStatusFoldProgress((fold - start) * mFoldTravelPx);
+    }
+
+    /**
+     * The status bar swipe's finger lifted. A fold following the finger lands open or folded as
+     * {@link KeyboardReveal#settlesOpen} says, the keyboard's rule — a third of the way, or a
+     * flick — from where the finger left it and at its speed; otherwise down unfolds the bar, up
+     * folds it, and short is nothing.
+     */
+    private void releaseStatusSwipe(@NonNull MotionEvent event) {
+        float velocity = 0f;
+        if (mBorderVelocity != null) {
+            mBorderVelocity.addMovement(event);
+            mBorderVelocity.computeCurrentVelocity(1000);
+            velocity = mBorderVelocity.getYVelocity();
+        }
+        float density = getResources().getDisplayMetrics().density;
+        if (mFoldTravelPx > 0) {
+            trackStatusFold(event.getY());
+            boolean open = KeyboardReveal.settlesOpen(mFoldFromOpen, mFold,
+                KeyboardReveal.revealVelocity(-velocity, mFoldTravelPx),
+                KeyboardReveal.FLING_DP_PER_SEC * density / mFoldTravelPx);
+            releaseBorderDrag();
+            // Down is the way a top bar opens, so the finger's own speed is the fold's.
+            endStatusFold(open, velocity);
+            return;
+        }
+        BorderDrag.StatusSwipe swipe = mBorderDrag.statusRelease(event.getY(), velocity,
+            BorderDrag.KEYBOARD_COMMIT_DP * density,
+            BorderDrag.KEYBOARD_FLING_DP_PER_SEC * density);
+        releaseBorderDrag();
+        if (swipe != BorderDrag.StatusSwipe.NONE && mListener != null) {
+            mListener.onBorderStatusSwipe(swipe == BorderDrag.StatusSwipe.EXPAND);
+        }
+    }
+
+    /** The fold is the listener's again, landing {@code expanded} or folded. */
+    private void endStatusFold(boolean expanded, float towardOpenVelocityPxPerSec) {
+        if (mFoldTravelPx <= 0) return;
+        mFoldTravelPx = 0;
+        mFold = expanded ? 1f : 0f;
+        if (mListener != null) mListener.onStatusFoldEnd(expanded, towardOpenVelocityPxPerSec);
+    }
+
+    /**
+     * Put a status bar fold a finger is carrying back to the form the bar had, and swallow the
+     * rest of that finger: for whatever is about to move the chrome another way.
+     */
+    public void settleStatusFoldNow() {
+        if (mFoldTravelPx <= 0) return;
+        if (mBorderDrag.isStatusSwipe()) mBorderDrag.abandon();
+        endStatusFold(mFoldFromOpen, 0f);
+    }
+
+    /** True from a status bar swipe the listener let the fold follow until its lift. */
+    public boolean isStatusFoldEngaged() {
+        return mFoldTravelPx > 0;
+    }
+
+    /** How far unfolded the engaged fold has the bar, for tests. */
+    float statusFold() {
+        return mFold;
     }
 
     // ---- The keyboard under the finger -------------------------------------------------------
@@ -965,6 +1187,11 @@ public final class PaneWallLayout extends ViewGroup {
         return mGesturesEnabled && mListener != null && mListener.isBorderKeyboardSwipeEnabled();
     }
 
+    /** Whether the top border's grabber is drawn: while the status bar's swipe is on. */
+    boolean isStatusGrabberShown() {
+        return mGesturesEnabled && mListener != null && mListener.isBorderStatusSwipeEnabled();
+    }
+
     /**
      * A finger on the keyboard swipe's band — pending there or holding the swipe — lights the
      * grabber and draws it a little way along; anything else puts it back at rest.
@@ -974,30 +1201,45 @@ public final class PaneWallLayout extends ViewGroup {
             || (mBorderDrag.claim() == BorderDrag.Claim.PENDING && mBorderDrag.isKeyboardEligible());
         float dy = pressed && mBorderDrag.isKeyboardSwipe() ? event.getY() - mBorderDownY : 0f;
         mGrabber.setPressed(pressed && isGrabberShown(), dy, mReducedMotion);
+        boolean statusPressed = mBorderDrag.isStatusSwipe()
+            || (mBorderDrag.claim() == BorderDrag.Claim.PENDING && mBorderDrag.isStatusEligible());
+        float statusDy = statusPressed && mBorderDrag.isStatusSwipe()
+            ? event.getY() - mBorderDownY : 0f;
+        mStatusGrabber.setPressed(statusPressed && isStatusGrabberShown(), statusDy,
+            mReducedMotion);
     }
 
     /** Re-read the grabber's accent, after a theme or scheme change. */
     public void refreshGrabberColor() {
         mGrabber.refreshColor();
+        mStatusGrabber.refreshColor();
     }
 
     /** The grabber, for tests. */
     @NonNull
-    KeyboardGrabber grabber() {
+    BorderGrabber grabber() {
         return mGrabber;
     }
 
+    /** The top border's grabber, for tests. */
+    @NonNull
+    BorderGrabber statusGrabber() {
+        return mStatusGrabber;
+    }
+
     /**
-     * The pages first, then the grabber over the bottom border of each page on screen: faded with
-     * the page's own outline as it leaves its rest, so a slide shows one, and scaled with a sunk
-     * page about its centre, so it stays on the edge it marks.
+     * The pages first, then the grabbers over the bottom and top borders of each page on screen:
+     * faded with the page's own outline as it leaves its rest, so a slide shows one, and scaled
+     * with a sunk page about its centre, so each stays on the edge it marks.
      */
     @Override
     protected void dispatchDraw(android.graphics.Canvas canvas) {
         super.dispatchDraw(canvas);
         mGrabberDrawnOffsetPx = mOffsetPx;
         mGrabberDrawnSink = mSink;
-        if (!isGrabberShown()) return;
+        boolean bottom = isGrabberShown();
+        boolean top = isStatusGrabberShown();
+        if (!bottom && !top) return;
         int width = getWidth();
         for (PaneWallPage place : mPages) {
             View page = mPageViews.get(place);
@@ -1006,15 +1248,21 @@ public final class PaneWallLayout extends ViewGroup {
             if (!(visibility > 0f)) continue;
             float centreX = page.getLeft() + page.getTranslationX() + page.getPivotX()
                 + (page.getWidth() / 2f - page.getPivotX()) * page.getScaleX();
-            float bottomY = page.getTop() + page.getTranslationY() + page.getPivotY()
-                + (page.getHeight() - page.getPivotY()) * page.getScaleY();
-            mGrabber.draw(canvas, centreX, bottomY, page.getScaleY(), visibility);
+            float pivotY = page.getTop() + page.getTranslationY() + page.getPivotY();
+            if (bottom) {
+                float bottomY = pivotY + (page.getHeight() - page.getPivotY()) * page.getScaleY();
+                mGrabber.draw(canvas, centreX, bottomY, page.getScaleY(), visibility);
+            }
+            if (top) {
+                float topY = pivotY - page.getPivotY() * page.getScaleY();
+                mStatusGrabber.draw(canvas, centreX, topY, page.getScaleY(), visibility);
+            }
         }
     }
 
     /** The grabber follows its page: a frame that moved the wall or sank the page redraws it. */
     private void invalidateGrabberIfMoved() {
-        if (!isGrabberShown()) return;
+        if (!isGrabberShown() && !isStatusGrabberShown()) return;
         if (mOffsetPx == mGrabberDrawnOffsetPx && mSink == mGrabberDrawnSink) return;
         invalidate();
     }
@@ -1613,10 +1861,12 @@ public final class PaneWallLayout extends ViewGroup {
         stopNudge();
         // A keyboard the finger or its settle was carrying lands where it was going.
         settleKeyboardRevealNow();
+        settleStatusFoldNow();
         releaseBorderDrag();
         finishSink();
         releasePlank();
         releaseStills();
         mGrabber.reset();
+        mStatusGrabber.reset();
     }
 }

@@ -1420,6 +1420,235 @@ public class PaneWallLayoutTest {
             .idleFor(java.time.Duration.ofMillis(ms));
     }
 
+    // ---- The status bar's swipe off the top border -------------------------------------------
+
+    private static final int FOLD = 150;
+    private final List<Boolean> statusSwipes = new ArrayList<>();
+    private final List<Boolean> foldBegins = new ArrayList<>();
+    private final List<Float> folds = new ArrayList<>();
+    private final List<Boolean> foldEnds = new ArrayList<>();
+
+    /**
+     * A listener that wants both border swipes, as the wall's controller does with the bar along
+     * the top; its fold follows the finger over {@code travelPx}, or not at all for 0.
+     */
+    private void listenForStatusSwipes(final int travelPx) {
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isBorderKeyboardSwipeEnabled() { return true; }
+            @Override public void onBorderKeyboardSwipe(boolean open) { keyboardSwipes.add(open); }
+            @Override public boolean isBorderStatusSwipeEnabled() { return true; }
+            @Override public void onBorderStatusSwipe(boolean expand) { statusSwipes.add(expand); }
+            @Override public int onStatusFoldBegin(boolean expanding) {
+                foldBegins.add(expanding);
+                return travelPx;
+            }
+            @Override public void onStatusFoldProgress(float towardOpenPx) {
+                folds.add(towardOpenPx);
+            }
+            @Override public void onStatusFoldEnd(boolean expanded, float velocity) {
+                foldEnds.add(expanded);
+            }
+        });
+    }
+
+    private float lastFold() {
+        return folds.get(folds.size() - 1);
+    }
+
+    @Test
+    public void aDownSwipeOffTheTopBorderUnfoldsTheBarAndCancelsTheContent() {
+        buildWithContent();
+        listenForStatusSwipes(0);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 204f,
+            50L));
+        assertEquals(BorderDrag.Claim.STATUS, wall.borderDragClaim());
+        assertEquals("claimed at once: the content forgets the touch", Arrays.asList(
+            android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_CANCEL),
+            content.actions);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, 204f, 80L));
+        assertEquals(Collections.singletonList(true), statusSwipes);
+        assertTrue("never the keyboard's", keyboardSwipes.isEmpty());
+        assertEquals(2, content.actions.size());
+        letTheHoldElapse();
+        assertFalse("the hold's timer went with the claim", wall.isDragging());
+    }
+
+    @Test
+    public void anUpSwipeOffTheTopBorderFoldsIt() {
+        buildWithContent();
+        listenForStatusSwipes(0);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, -150f,
+            50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, -150f,
+            80L));
+        assertEquals(Collections.singletonList(false), statusSwipes);
+    }
+
+    @Test
+    public void withoutTheStatusSwipeTheTopBorderStaysTheContentsAndAHoldStillPages() {
+        buildWithContent();
+        listenForKeyboardSwipes();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 204f,
+            50L));
+        assertEquals(BorderDrag.Claim.ABANDONED, wall.borderDragClaim());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, 204f, 80L));
+
+        // With it on, a hold on the top border is still the wall's.
+        listenForStatusSwipes(FOLD);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f,
+            1000L));
+        letTheHoldElapse();
+        assertEquals(BorderDrag.Claim.PAGING, wall.borderDragClaim());
+        assertTrue(wall.isDragging());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 304f,
+            1500L));
+        assertTrue("a held drag down the page moves no fold", foldBegins.isEmpty());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, 304f,
+            1520L));
+        assertTrue(statusSwipes.isEmpty());
+    }
+
+    @Test
+    public void theTopCornersStayTheCornerTabs() {
+        buildWithContent();
+        listenForStatusSwipes(FOLD);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 4f, 204f, 50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 4f, 204f, 80L));
+        assertTrue(foldBegins.isEmpty());
+        assertTrue(statusSwipes.isEmpty());
+    }
+
+    @Test
+    public void theFoldFollowsTheFingerAndPastAThirdItUnfolds() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        listenForStatusSwipes(FOLD);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 4f + 30f,
+            1000L));
+        assertEquals("asked once, going down", Collections.singletonList(true), foldBegins);
+        assertTrue(wall.isStatusFoldEngaged());
+        assertEquals("from where the finger landed", 30f, lastFold(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 4f + 60f,
+            1100L));
+        assertEquals(60f / FOLD, wall.statusFold(), EPS);
+        // Past the bar's whole way the fold is held there.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 4f + 400f,
+            1200L));
+        assertEquals((float) FOLD, lastFold(), EPS);
+        // Back to 60 px of 150, held still, let go: past a third, it unfolds.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 4f + 60f,
+            2000L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 4f + 60f,
+            3000L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, 4f + 60f,
+            4000L));
+        assertEquals(Collections.singletonList(true), foldEnds);
+        assertTrue("the release-only path is not asked", statusSwipes.isEmpty());
+        assertFalse(wall.isStatusFoldEngaged());
+        assertEquals(BorderDrag.Claim.NONE, wall.borderDragClaim());
+    }
+
+    @Test
+    public void aShortSlowSwipeUpIsTakenBack() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        listenForStatusSwipes(FOLD);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 4f - 30f,
+            1000L));
+        assertEquals("asked once, going up", Collections.singletonList(false), foldBegins);
+        assertEquals(-30f, lastFold(), EPS);
+        assertEquals(1f - 30f / FOLD, wall.statusFold(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 4f - 30f,
+            2000L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, 4f - 30f,
+            3000L));
+        assertEquals("short of a third and not flung: it stays open",
+            Collections.singletonList(true), foldEnds);
+    }
+
+    @Test
+    public void aCancelledOrInterruptedFoldGoesBackToTheFormTheBarHad() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        listenForStatusSwipes(FOLD);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 4f + 120f,
+            50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_CANCEL, WIDTH / 2f,
+            4f + 120f, 60L));
+        assertEquals(Collections.singletonList(false), foldEnds);
+        assertFalse(wall.isStatusFoldEngaged());
+
+        // The wall moved by something else takes the fold back as well.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f,
+            1000L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 4f + 120f,
+            1050L));
+        assertTrue(wall.goTo(PaneWallPage.DISPLAY, false));
+        assertEquals(Arrays.asList(false, false), foldEnds);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, 4f + 120f,
+            1100L));
+        assertEquals("the rest of that finger is swallowed", 2, foldEnds.size());
+        assertTrue(statusSwipes.isEmpty());
+    }
+
+    @Test
+    public void underReducedMotionTheFoldAnswersTheReleaseAlone() {
+        buildWithContent();
+        listenForStatusSwipes(FOLD);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 204f,
+            50L));
+        assertTrue("nothing follows the finger", foldBegins.isEmpty());
+        assertFalse(wall.isStatusFoldEngaged());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, 204f, 80L));
+        assertEquals(Collections.singletonList(true), statusSwipes);
+        assertTrue(foldEnds.isEmpty());
+    }
+
+    @Test
+    public void theTopGrabberIsDrawnOnlyWhileTheStatusSwipeIsOnAndLightsForItsOwnBand() {
+        buildWithContent();
+        wall.setReducedMotion(false);
+        listenForKeyboardSwipes();
+        assertFalse(wall.isStatusGrabberShown());
+        listenForStatusSwipes(FOLD);
+        assertTrue(wall.isStatusGrabberShown());
+        assertTrue(wall.statusGrabber().isTop());
+        assertFalse(wall.grabber().isTop());
+        wall.setGesturesEnabled(false);
+        assertFalse(wall.isStatusGrabberShown());
+        wall.setGesturesEnabled(true);
+
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        idle(200L);
+        assertEquals(1f, wall.statusGrabber().emphasis(), EPS);
+        assertEquals("the bottom one stays at rest", 0f, wall.grabber().emphasis(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 104f,
+            250L));
+        assertTrue("drawn down after the finger", wall.statusGrabber().trackOffsetPx() > 0f);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, 104f,
+            280L));
+        idle(300L);
+        assertEquals(0f, wall.statusGrabber().emphasis(), EPS);
+        assertEquals(0f, wall.statusGrabber().trackOffsetPx(), EPS);
+
+        // A finger on the bottom band lights the keyboard's, not this one.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
+            HEIGHT - 4f, 1000L));
+        idle(100L);
+        assertEquals(0f, wall.statusGrabber().emphasis(), EPS);
+        assertEquals(1f, wall.grabber().emphasis(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f,
+            HEIGHT - 4f, 1100L));
+    }
+
     @Test
     public void aPageChangeWithoutAFingerNeverTips() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);

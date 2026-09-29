@@ -24,6 +24,12 @@ import androidx.annotation.NonNull;
  * rather than a still one, so the content keeps everything above that. A sideways start is still
  * the content's, and a hold is still the wall's.</p>
  *
+ * <p>The top border carries its mirror, the status bar's: the same clear vertical swipe from the
+ * top band, before the hold, is claimed as {@link Claim#STATUS}, and drives the bar's fold — down
+ * unfolds it, up folds it ({@link #statusRelease}). It reaches {@link #STATUS_REACH_DP} inside
+ * the top line, and never above {@code statusTopLimit}: the phone's own pull for its notification
+ * shade starts in the strip at the top of the screen, and a press there is never taken.</p>
+ *
  * <p>The hold is timed by whoever owns the finger; this class only says whether a hold that has
  * elapsed may claim ({@link #holdElapsed}). Pure, so the band, the hold and the drag can be
  * tested without a view; one instance is reused across gestures, so a swipe allocates nothing.</p>
@@ -39,6 +45,13 @@ public final class BorderDrag {
      * and the lower part of its last row — so a scroll that starts any higher is never taken.
      */
     public static final float KEYBOARD_REACH_DP = 16f;
+
+    /**
+     * How far inside the top line a press may start the status bar's swipe, in dp; outside the
+     * line it reaches the whole {@link #BAND_DP}. The keyboard's reach, mirrored: the pane's
+     * inner gap and the upper part of its first row.
+     */
+    public static final float STATUS_REACH_DP = KEYBOARD_REACH_DP;
 
     /** How far a keyboard swipe has to travel to open or close the keyboard, in dp. */
     public static final float KEYBOARD_COMMIT_DP = 32f;
@@ -61,12 +74,20 @@ public final class BorderDrag {
          * from here to the lift, where {@link #keyboardRelease} says which way it went.
          */
         KEYBOARD,
+        /**
+         * A vertical swipe that set off from the top border before the hold: the status bar's,
+         * from here to the lift, where {@link #statusRelease} says which way it went.
+         */
+        STATUS,
         /** Moved, joined by a second finger, or taken from under: the content keeps this gesture. */
         ABANDONED
     }
 
     /** What a keyboard swipe's release asks for. */
     public enum KeyboardSwipe { NONE, OPEN, CLOSE }
+
+    /** What a status bar swipe's release asks for: the bar unfolded, or folded. */
+    public enum StatusSwipe { NONE, EXPAND, COLLAPSE }
 
     @NonNull private Claim mClaim = Claim.NONE;
     @NonNull private Border mBorder = Border.NONE;
@@ -77,6 +98,8 @@ public final class BorderDrag {
     private boolean mCanPage;
     /** Whether this press may become the keyboard swipe: it landed in the bottom band. */
     private boolean mKeyboardEligible;
+    /** Whether this press may become the status bar's swipe: it landed in the top band. */
+    private boolean mStatusEligible;
 
     /**
      * Which border of the frame {@code left, top, right, bottom} the point {@code (x, y)} presses,
@@ -127,6 +150,22 @@ public final class BorderDrag {
     public boolean down(float x, float y, float left, float top, float right, float bottom,
                         float bandPx, float cornerPx, float slopPx, boolean canPage,
                         float keyboardReachPx) {
+        return down(x, y, left, top, right, bottom, bandPx, cornerPx, slopPx, canPage,
+            keyboardReachPx, 0f, Float.NEGATIVE_INFINITY);
+    }
+
+    /**
+     * The same, with the status bar's swipe on the top border as well.
+     *
+     * @param statusReachPx how far inside the top line a press may start the status bar's swipe
+     *                      (outside the line the band reaches {@code bandPx}); 0 for none
+     * @param statusTopLimit the highest point, in the same coordinates, a press may start it at:
+     *                       the foot of the phone's own gesture strip at the top of the screen
+     * @return whether the press is armed
+     */
+    public boolean down(float x, float y, float left, float top, float right, float bottom,
+                        float bandPx, float cornerPx, float slopPx, boolean canPage,
+                        float keyboardReachPx, float statusReachPx, float statusTopLimit) {
         mDownX = x;
         mDownY = y;
         mSlop = Math.max(0f, slopPx);
@@ -134,7 +173,9 @@ public final class BorderDrag {
         mBorder = borderAt(x, y, left, top, right, bottom, bandPx, cornerPx);
         mKeyboardEligible = mBorder == Border.BOTTOM && keyboardReachPx > 0f
             && y >= bottom - keyboardReachPx;
-        boolean armed = mBorder != Border.NONE && (canPage || mKeyboardEligible);
+        mStatusEligible = mBorder == Border.TOP && statusReachPx > 0f
+            && y <= top + statusReachPx && !(y < statusTopLimit);
+        boolean armed = mBorder != Border.NONE && (canPage || mKeyboardEligible || mStatusEligible);
         if (!armed) mBorder = Border.NONE;
         mClaim = armed ? Claim.PENDING : Claim.NONE;
         return armed;
@@ -142,9 +183,10 @@ public final class BorderDrag {
 
     /**
      * One move of the finger. Before the hold, travel past the slop gives the gesture away for
-     * good: a finger that sets off is not holding. Sideways, or from anywhere but the bottom band,
-     * it goes to the content; up or down from the bottom band it is the keyboard's. After a claim
-     * the move is the claimant's, and the claim never changes.
+     * good: a finger that sets off is not holding. Sideways, or from anywhere but the bottom and
+     * top bands, it goes to the content; up or down from the bottom band it is the keyboard's, and
+     * from the top band the status bar's. After a claim the move is the claimant's, and the claim
+     * never changes.
      */
     @NonNull
     public Claim move(float x, float y) {
@@ -152,8 +194,9 @@ public final class BorderDrag {
         float dx = x - mDownX;
         float dy = y - mDownY;
         if (dx * dx + dy * dy <= mSlop * mSlop) return mClaim;
-        mClaim = mKeyboardEligible && Math.abs(dy) > Math.abs(dx)
-            ? Claim.KEYBOARD : Claim.ABANDONED;
+        boolean vertical = Math.abs(dy) > Math.abs(dx);
+        mClaim = vertical && mKeyboardEligible ? Claim.KEYBOARD
+            : vertical && mStatusEligible ? Claim.STATUS : Claim.ABANDONED;
         return mClaim;
     }
 
@@ -161,7 +204,7 @@ public final class BorderDrag {
      * The hold time passed. A finger that travelled or was joined has already given the gesture
      * up through {@link #move} or {@link #secondPointer}, so a still pending press is a still one.
      * Where the hold may not page, a still finger is the content's — a long press, a selection —
-     * and a later vertical move can no longer turn into the keyboard swipe.
+     * and a later vertical move can no longer turn into the keyboard's or the status bar's swipe.
      *
      * @return true when the wall just claimed the finger, and the content is owed a cancel
      */
@@ -193,7 +236,8 @@ public final class BorderDrag {
      */
     @NonNull
     public Claim abandon() {
-        if (mClaim == Claim.PENDING || mClaim == Claim.PAGING || mClaim == Claim.KEYBOARD) {
+        if (mClaim == Claim.PENDING || mClaim == Claim.PAGING || mClaim == Claim.KEYBOARD
+            || mClaim == Claim.STATUS) {
             mClaim = Claim.ABANDONED;
         }
         return mClaim;
@@ -204,6 +248,7 @@ public final class BorderDrag {
         mClaim = Claim.NONE;
         mBorder = Border.NONE;
         mKeyboardEligible = false;
+        mStatusEligible = false;
     }
 
     @NonNull
@@ -230,6 +275,24 @@ public final class BorderDrag {
     /** True while the keyboard swipe owns the finger. */
     public boolean isKeyboardSwipe() {
         return mClaim == Claim.KEYBOARD;
+    }
+
+    /** True while the status bar's swipe owns the finger. */
+    public boolean isStatusSwipe() {
+        return mClaim == Claim.STATUS;
+    }
+
+    /**
+     * True from a DOWN in the status bar swipe's band — the top border, within
+     * {@link #STATUS_REACH_DP} inside the line and below the phone's own strip — until the lift.
+     */
+    public boolean isStatusEligible() {
+        return mStatusEligible;
+    }
+
+    /** The finger's vertical travel since the DOWN, positive downward. */
+    public float verticalTravel(float y) {
+        return y - mDownY;
     }
 
     /**
@@ -262,16 +325,40 @@ public final class BorderDrag {
     public KeyboardSwipe keyboardRelease(float y, float velocityYPxPerSec, float commitPx,
                                          float flingPxPerSec) {
         if (mClaim != Claim.KEYBOARD) return KeyboardSwipe.NONE;
+        int way = verticalRelease(y, velocityYPxPerSec, commitPx, flingPxPerSec);
+        return way < 0 ? KeyboardSwipe.OPEN : way > 0 ? KeyboardSwipe.CLOSE : KeyboardSwipe.NONE;
+    }
+
+    /**
+     * What a status bar swipe released at {@code y} asks for, by the keyboard's own rule
+     * ({@link #keyboardRelease}) mirrored: {@link StatusSwipe#EXPAND} for one that went down, away
+     * from the bar, and {@link StatusSwipe#COLLAPSE} for one that went up, into it.
+     */
+    @NonNull
+    public StatusSwipe statusRelease(float y, float velocityYPxPerSec, float commitPx,
+                                     float flingPxPerSec) {
+        if (mClaim != Claim.STATUS) return StatusSwipe.NONE;
+        int way = verticalRelease(y, velocityYPxPerSec, commitPx, flingPxPerSec);
+        return way > 0 ? StatusSwipe.EXPAND : way < 0 ? StatusSwipe.COLLAPSE : StatusSwipe.NONE;
+    }
+
+    /**
+     * The way a vertical swipe released at {@code y} went: -1 up, +1 down, each once it has
+     * travelled {@code commitPx} or is flicked on the same way at {@code flingPxPerSec}; 0 for a
+     * release short of both or flicked back against its own travel.
+     */
+    private int verticalRelease(float y, float velocityYPxPerSec, float commitPx,
+                                float flingPxPerSec) {
         float dy = y - mDownY;
-        if (dy == 0f) return KeyboardSwipe.NONE;
+        if (dy == 0f) return 0;
         boolean up = dy < 0f;
         // The release speed along the swipe's own travel; negative is a flick back.
         float along = up ? -velocityYPxPerSec : velocityYPxPerSec;
         float fling = Math.max(0f, flingPxPerSec);
-        if (along <= -fling && fling > 0f) return KeyboardSwipe.NONE;
+        if (along <= -fling && fling > 0f) return 0;
         boolean far = Math.abs(dy) >= commitPx;
         boolean flung = fling > 0f && along >= fling;
-        if (!far && !flung) return KeyboardSwipe.NONE;
-        return up ? KeyboardSwipe.OPEN : KeyboardSwipe.CLOSE;
+        if (!far && !flung) return 0;
+        return up ? -1 : 1;
     }
 }
