@@ -170,3 +170,9 @@ The variants:
 2. Packs live in a separate repository named `tlwalls`. They are not signed; see §5 for what replaces signing.
 3. Continuous video offers both 30 and 60 fps.
 4. The refraction controls do not touch the key-press lens or the dock refraction while Fancier Glass is off. Current behaviour stays.
+
+## 11. Window-switch card (2026-09-29)
+
+Switching, creating or closing a window pans a snapshot of the outgoing surface (`captureTerminalDeparture`) away while the wall slides the new page in. The snapshot was drawn on a software canvas, which cannot run the refraction program, so its ground was the shared blur frame painted across the whole terminal rectangle, on an opaque plate with a shadow. The result was a hard-edged block of the wrong backdrop around the panes' rounded frames, riding along with the pan (evidence: `evidence-2026-09-29/`).
+
+Rule: a copy of the glass is clipped to the slabs' own rounded outlines (`PaneGlass.slabOutline`, cut at the radius `PaneGlass.apply` uses), never to a window or page rectangle. The card's gaps and corners stay see-through, so the live wallpaper shows there, and the card carries no plate. The live panes are unaffected: their slabs already re-aim per frame of the page slide (`invalidatePaneGlassPositions`) and draw inside their own rounded frames. The card's slabs show the plain blur rather than the refracted frame while they move; drawing the snapshot from a hardware `RenderNode` (as the split reveal does) would restore it.

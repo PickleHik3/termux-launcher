@@ -1,6 +1,9 @@
 package com.termux.app.terminal;
 
+import android.graphics.Path;
 import android.view.View;
+
+import com.termux.R;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -53,6 +56,39 @@ public final class PaneGlass {
     /** The gap between tiled panes in dp, or {@code fallbackDp} while no style is attached. */
     public static int gapDp(@Nullable PaneSurfaceStyle style, int fallbackDp) {
         return style != null ? Math.max(0, style.paneGapDp()) : fallbackDp;
+    }
+
+    /**
+     * The shapes the glass is actually drawn in: one rounded rect per frame that wears a visible
+     * slab, cut at the radius {@link #apply} gives it, in {@code origin}'s coordinates. Whatever
+     * copies the glass somewhere else (the window-switch card) clips to this, never to the
+     * window's rectangle, so the gaps and corners around the slabs keep showing the live
+     * wallpaper.
+     *
+     * @return {@code out}, emptied first
+     */
+    @NonNull
+    public static Path slabOutline(@NonNull Iterable<? extends View> frames, @NonNull View origin,
+                                   float requestedRadiusPx, @NonNull Path out) {
+        out.rewind();
+        int[] at = new int[2];
+        int[] base = new int[2];
+        origin.getLocationOnScreen(base);
+        for (View frame : frames) {
+            View backdrop = frame.findViewById(R.id.terminal_pane_glass);
+            if (!(backdrop instanceof PaneGlassBackdropView)
+                    || backdrop.getVisibility() != View.VISIBLE
+                    || frame.getParent() == null || frame.getWidth() <= 0 || frame.getHeight() <= 0)
+                continue;
+            frame.getLocationOnScreen(at);
+            float radius = PaneShape.radiusForBounds(requestedRadiusPx,
+                frame.getWidth(), frame.getHeight());
+            float left = at[0] - base[0];
+            float top = at[1] - base[1];
+            out.addRoundRect(left, top, left + frame.getWidth(), top + frame.getHeight(),
+                radius, radius, Path.Direction.CW);
+        }
+        return out;
     }
 
     /**
