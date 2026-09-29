@@ -137,8 +137,8 @@ the per-place look override model.
 
 The keyboard joins the elements the editor can show or hide, so a minimal-mode arrangement such as
 "terminal + A–Z row + keyboard" can be built by hand and minimal mode reads as a preset of the same
-model (`MinimalMode.apply` hides every element but the status bar and leaves the keyboard's switch
-alone). The Keyboard section gains a first row, **Keyboard on/off** (On / Off), before Type. The
+model (superseded 2026-09-29: minimal mode has its own layout variant, edited in this editor while
+the mode is on; `MinimalMode.apply` only seeds it, see `../minimal-layout/SPEC.md`). The Keyboard section gains a first row, **Keyboard on/off** (On / Off), before Type. The
 switch is `keyboard_turned_off` itself — see `../keyboard-off/SPEC.md`, "The Layout editor's
 Keyboard element" — read and written through `PlaceLayoutStore.isKeyboardShown` /
 `setKeyboardShown`, resolved into `PlaceLayout.keyboardShown`, and carried by

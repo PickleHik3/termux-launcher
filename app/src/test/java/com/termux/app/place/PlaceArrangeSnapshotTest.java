@@ -229,4 +229,38 @@ public class PlaceArrangeSnapshotTest {
             assertEquals(place + " status", Edge.TOP, places.statusBarEdge(PORTRAIT));
         }
     }
+
+    /** The editor opened in minimal mode edits the minimal layout, and Discard puts that one back. */
+    @Test
+    public void aSnapshotOfTheMinimalLayoutRestoresOnlyTheMinimalLayout() {
+        places.setStatusBarEdge(PORTRAIT, Edge.BOTTOM);
+        PlaceLayoutStore minimal = places.forVariant(LayoutVariant.MINIMAL);
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places, LayoutVariant.MINIMAL);
+        assertEquals(LayoutVariant.MINIMAL, entry.variant());
+        String entrySignature = entry.signature();
+
+        minimal.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
+        minimal.setKeyboardForm(PORTRAIT, KeyboardForm.SPLIT);
+        places.setKeyboardForm(PORTRAIT, KeyboardForm.SPLIT);
+        assertNotEquals(entrySignature,
+            PlaceArrangeSnapshot.capture(places, LayoutVariant.MINIMAL).signature());
+
+        entry.restore(places);
+        assertEquals(entrySignature,
+            PlaceArrangeSnapshot.capture(places, LayoutVariant.MINIMAL).signature());
+        assertTrue(minimal.resolve(PORTRAIT).slot(Element.APPS).hidden);
+        assertEquals(KeyboardForm.DOCKED, minimal.resolve(PORTRAIT).keyboardForm);
+        // Nothing of the normal layout was in it: its own edit survives the restore.
+        assertEquals(KeyboardForm.SPLIT,
+            places.forVariant(LayoutVariant.NORMAL).resolve(PORTRAIT).keyboardForm);
+    }
+
+    /** Each variant is its own question to the unsaved-changes check. */
+    @Test
+    public void editsToOneVariantAreNotUnsavedChangesToTheOther() {
+        String normalEntry = PlaceArrangeSnapshot.capture(places, LayoutVariant.NORMAL).signature();
+        places.forVariant(LayoutVariant.MINIMAL).setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
+        assertEquals(normalEntry,
+            PlaceArrangeSnapshot.capture(places, LayoutVariant.NORMAL).signature());
+    }
 }

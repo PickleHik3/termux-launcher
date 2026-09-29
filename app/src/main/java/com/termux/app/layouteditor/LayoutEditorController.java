@@ -40,6 +40,7 @@ import com.termux.app.fragments.settings.PlaceMiniatureView;
 import com.termux.app.place.PlaceArrangeModel;
 import com.termux.app.place.PlaceArrangeModel.Element;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
@@ -399,8 +400,10 @@ public final class LayoutEditorController {
         LayoutEditorPlan plan = mPlan;
         if (card == null || plan == null)
             return;
-        // The header names the editor; the one layout is every place's, which needs no saying.
-        card.title.setText(R.string.termux_layout_editor_title);
+        // The header names the editor; the layout is every place's, which needs no saying, but
+        // which of the two it is does: the minimal one is edited while minimal mode is on.
+        card.title.setText(plan.variant() == LayoutVariant.MINIMAL
+            ? R.string.termux_layout_editor_title_minimal : R.string.termux_layout_editor_title);
         mRestatingToggle = true;
         card.orientation.check(plan.shownOrientation() == PlaceOrientation.LANDSCAPE
             ? R.id.layout_editor_orientation_landscape : R.id.layout_editor_orientation_portrait);

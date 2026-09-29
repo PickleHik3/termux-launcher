@@ -13,7 +13,7 @@ product model.
 One of the three full-screen pages the launcher swipes between: Home (widgets), Terminal, Display.
 The usage mode decides which places exist: Terminal alone, Terminal with Home, or all three with
 the Display; a place that is off is not built at all. Layout and appearance are shared by all
-places (one layout per orientation), and so is minimal mode. What differs per place is state only:
+places (one layout per orientation and layout variant), and so is minimal mode. What differs per place is state only:
 whether the keyboard is up.
 _Avoid_: screen, page, wall page, tab
 
@@ -29,17 +29,19 @@ The shared appearance values every surface inherits until a property is detached
 One terminal view inside a split. Panes have corner tabs but no appearance of their own.
 
 **Orientation**:
-Portrait or landscape. The shared layout has one version per orientation; appearance is never
-per orientation.
+Portrait or landscape. The shared layout has one version per orientation (and per layout variant,
+see Minimal mode); appearance is never per orientation.
 
 **Minimal mode**:
-The launcher shown with only each place's content: the status bar, the apps bar, the A–Z index,
-the extra keys and the keyboard go away, and the widgets, the pane or the display are maximised in
-either orientation. One mode for every place, not a state of one: turned on and off only from the
-corner tab's minimal button, which every place carries, and remembered until turned off; paging
-never leaves it. It is a preset of the layout's own element model — every element but the status
-bar put away — never a layout of its own. The keyboard can still be raised while it is on, by the
-keyboard swipe or a tap. Paging is the border drag, as everywhere.
+The launcher shown with only each place's content, unless the user chose otherwise: by default the
+status bar, the apps bar, the A–Z index, the extra keys and the keyboard go away, and the widgets,
+the pane or the display are maximised in either orientation. One mode for every place, not a state
+of one: turned on and off only from the corner tab's minimal button, which every place carries, and
+remembered until turned off; paging never leaves it. It has a layout of its own, the **minimal
+layout**, beside the normal one, in the same element model: the Layout editor opened while the mode
+is on edits it, and it says "Minimal layout", so users choose which elements minimal keeps. It
+starts as the normal layout with every element put away. The keyboard can still be raised while it
+is on, by the keyboard swipe or a tap. Paging is the border drag, as everywhere.
 _Avoid_: full screen, focus mode, zen mode, zen view
 
 **Border drag**:

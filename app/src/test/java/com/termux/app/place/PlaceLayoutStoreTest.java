@@ -895,4 +895,150 @@ public class PlaceLayoutStoreTest {
             default: throw new AssertionError("no row placement for " + slot);
         }
     }
+
+    // ------------------------------------------------------------------ the minimal layout
+
+    /** The normal layout's stored keys, which nothing about the minimal layout may move. */
+    private java.util.Map<String, Object> normalKeys() {
+        java.util.Map<String, Object> keys = new java.util.TreeMap<>();
+        for (java.util.Map.Entry<String, ?> entry : prefs.getAll().entrySet()) {
+            String key = entry.getKey();
+            if (key.startsWith("layout.portrait.") || key.startsWith("layout.landscape."))
+                keys.put(key, entry.getValue());
+        }
+        return keys;
+    }
+
+    @Test
+    public void theMinimalLayoutKeepsItsKeysBesideTheNormalOnes() {
+        assertEquals("layout.portrait.apps_row",
+            PlaceLayoutStore.layoutKey(LayoutVariant.NORMAL, PlaceOrientation.PORTRAIT, "apps_row"));
+        assertEquals("layout.portrait.apps_row",
+            PlaceLayoutStore.layoutKey(PlaceOrientation.PORTRAIT, "apps_row"));
+        assertEquals("layout.minimal.portrait.apps_row",
+            PlaceLayoutStore.layoutKey(LayoutVariant.MINIMAL, PlaceOrientation.PORTRAIT, "apps_row"));
+        assertEquals("layout.minimal.landscape.keyboard_form",
+            PlaceLayoutStore.layoutKey(LayoutVariant.MINIMAL, PlaceOrientation.LANDSCAPE,
+                "keyboard_form"));
+    }
+
+    @Test
+    public void theMinimalLayoutIsSeededFromTheNormalOneWithMinimalModeTakenOff() {
+        PlaceLayoutStore store = store();
+        store.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        store.setKeyboardForm(PlaceOrientation.PORTRAIT, KeyboardForm.SPLIT);
+        store.setWidgetColumns(PlaceOrientation.PORTRAIT, 6);
+        java.util.Map<String, Object> before = normalKeys();
+
+        PlaceLayout minimal = store.resolve(PlaceOrientation.PORTRAIT, LayoutVariant.MINIMAL);
+
+        for (Element element : Element.values())
+            assertTrue(element.name(), minimal.slot(element).hidden);
+        // What is not an element's is the normal layout's, as it stood.
+        assertEquals(KeyboardForm.SPLIT, minimal.keyboardForm);
+        assertEquals(6, minimal.widgetColumns);
+        assertEquals("the normal layout is not touched by reading the minimal one",
+            before, normalKeys());
+        assertFalse(store.resolve(PlaceOrientation.PORTRAIT, LayoutVariant.NORMAL)
+            .slot(Element.APPS).hidden);
+        assertTrue(prefs.contains("layout.minimal.portrait.apps_row"));
+    }
+
+    @Test
+    public void theMinimalLayoutIsSeededOnceAndTheUsersEditsAreItsOwn() {
+        PlaceLayoutStore store = store();
+        PlaceLayoutStore minimal = store.forVariant(LayoutVariant.MINIMAL);
+        // The user brings the apps back into minimal mode.
+        minimal.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        java.util.Map<String, Object> before = normalKeys();
+
+        // The normal layout moves on afterwards; the minimal one is not re-seeded from it, and
+        // its edit does not reach back.
+        store.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
+        store.setKeyboardForm(PlaceOrientation.PORTRAIT, KeyboardForm.SPLIT);
+        PlaceLayoutStore again = store();
+        assertFalse("still shown in minimal",
+            again.resolve(PlaceOrientation.PORTRAIT, LayoutVariant.MINIMAL)
+                .slot(Element.APPS).hidden);
+        assertEquals(KeyboardForm.DOCKED,
+            again.resolve(PlaceOrientation.PORTRAIT, LayoutVariant.MINIMAL).keyboardForm);
+        assertTrue(again.resolve(PlaceOrientation.PORTRAIT, LayoutVariant.NORMAL)
+            .slot(Element.APPS).hidden);
+        assertNotEquals(before, normalKeys());
+        assertEquals("the other orientation is seeded on its own", true,
+            again.resolve(PlaceOrientation.LANDSCAPE, LayoutVariant.MINIMAL)
+                .slot(Element.APPS).hidden);
+    }
+
+    @Test
+    public void aStoreFollowsMinimalModeUnlessItIsPinnedToAVariant() {
+        PlaceLayoutStore store = store();
+        store.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        assertEquals(LayoutVariant.NORMAL, store.activeVariant());
+        assertFalse(store.resolve(PlaceOrientation.PORTRAIT).slot(Element.APPS).hidden);
+
+        store.setMinimal(true);
+        assertEquals(LayoutVariant.MINIMAL, store.activeVariant());
+        assertTrue(store.resolve(PlaceOrientation.PORTRAIT).slot(Element.APPS).hidden);
+        // An edit while minimal lands on the minimal layout.
+        store.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        assertFalse(store.resolve(PlaceOrientation.PORTRAIT).slot(Element.APPS).hidden);
+        // A store pinned to the normal layout keeps reading and writing it whatever the mode is.
+        PlaceLayoutStore normal = store.forVariant(LayoutVariant.NORMAL);
+        normal.setKeyboardForm(PlaceOrientation.PORTRAIT, KeyboardForm.SPLIT);
+        assertEquals(KeyboardForm.SPLIT, normal.resolve(PlaceOrientation.PORTRAIT).keyboardForm);
+        assertEquals(KeyboardForm.DOCKED, store.resolve(PlaceOrientation.PORTRAIT).keyboardForm);
+
+        store.setMinimal(false);
+        assertEquals(KeyboardForm.SPLIT, store.resolve(PlaceOrientation.PORTRAIT).keyboardForm);
+    }
+
+    @Test
+    public void clearingTheMinimalLayoutSeedsItAgainAndLeavesTheNormalOneBe() {
+        PlaceLayoutStore store = store();
+        PlaceLayoutStore minimal = store.forVariant(LayoutVariant.MINIMAL);
+        minimal.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        store.setKeyboardForm(PlaceOrientation.PORTRAIT, KeyboardForm.SPLIT);
+        java.util.Map<String, Object> before = normalKeys();
+
+        minimal.clear(PlaceOrientation.PORTRAIT);
+
+        PlaceLayout reset = minimal.resolve(PlaceOrientation.PORTRAIT);
+        assertTrue(reset.slot(Element.APPS).hidden);
+        assertEquals("re-seeded from the normal layout as it is now", KeyboardForm.SPLIT,
+            reset.keyboardForm);
+        assertEquals(before, normalKeys());
+    }
+
+    @Test
+    public void everyArrangementKeyHasAMinimalTwinAfterSeeding() {
+        PlaceLayoutStore store = store();
+        store.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+        store.setDockHeightScale(PlaceOrientation.PORTRAIT, 1.3f);
+        store.resolve(PlaceOrientation.PORTRAIT, LayoutVariant.MINIMAL);
+        assertEquals(1.3f, prefs.getFloat("layout.minimal.portrait.dock_height", 0f), 0f);
+        assertEquals(1.3f, store.forVariant(LayoutVariant.MINIMAL)
+            .dockHeightScale(PlaceOrientation.PORTRAIT), 0f);
+    }
+
+    /** What the chrome reads while minimal: the apps a user added to the layout are shown. */
+    @Test
+    public void appsAddedToTheMinimalLayoutAreShownWhileMinimal() {
+        PlaceLayoutStore store = store();
+        store.setMinimal(true);
+        PlaceLayout seeded = store.resolve(PlaceOrientation.PORTRAIT);
+        assertFalse(PlaceChromePolicy.appsShown(seeded));
+        assertFalse(PlaceChromePolicy.dockShown(seeded));
+
+        store.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.BOTTOM);
+
+        PlaceLayout edited = store.resolve(PlaceOrientation.PORTRAIT);
+        assertTrue(PlaceChromePolicy.appsShown(edited));
+        assertTrue(PlaceChromePolicy.dockShown(edited));
+        // Out of minimal mode the normal layout answers, untouched by it.
+        store.setMinimal(false);
+        assertTrue(PlaceChromePolicy.appsShown(store.resolve(PlaceOrientation.PORTRAIT)));
+        store.setMinimal(true);
+        assertTrue(PlaceChromePolicy.appsShown(store.resolve(PlaceOrientation.PORTRAIT)));
+    }
 }

@@ -12,9 +12,9 @@ import com.termux.app.place.PlaceLayout.RowPlacement;
 import org.junit.Test;
 
 /**
- * Minimal mode (CONTEXT.md) as a state taken off the shared arrangement: what it puts away, what
- * it leaves, what the slide away from it lays out again, and what it does to the keyboard a place
- * remembers.
+ * Minimal mode (CONTEXT.md): the layout its variant starts from (what it puts away, what it
+ * leaves), what the slide away from it lays out again, and what it does to the keyboard a place
+ * remembers. What it shows afterwards is its own layout, tested with {@link PlaceLayoutStoreTest}.
  */
 public class MinimalModeTest {
 
@@ -31,15 +31,13 @@ public class MinimalModeTest {
     }
 
     @Test
-    public void minimalPutsEverythingButTheStatusBarAwayWhereItStood() {
+    public void theMinimalSeedPutsEveryElementAwayWhereItStood() {
         for (PlaceLayout layout : new PlaceLayout[] {portrait(), landscape()}) {
             PlaceLayout minimal = MinimalMode.apply(layout);
-            assertFalse(minimal.slot(Element.STATUS).hidden);
-            assertEquals(layout.slot(Element.STATUS), minimal.slot(Element.STATUS));
-            for (Element element : new Element[] {Element.APPS, Element.AZ, Element.EXTRA_KEYS}) {
+            for (Element element : Element.values()) {
                 assertTrue(element.name(), minimal.slot(element).hidden);
                 assertFalse(element.name(), EdgeStackPolicy.isShown(minimal, element));
-                // Put away, not moved: turning the mode off finds each on the edge it left.
+                // Put away, not moved: adding one back finds it on the edge it left.
                 assertEquals(element.name(), layout.slot(element).edge, minimal.slot(element).edge);
                 assertEquals(element.name(), layout.slot(element).order,
                     minimal.slot(element).order);
@@ -57,10 +55,7 @@ public class MinimalModeTest {
     }
 
     @Test
-    public void aStatusBarTheUserHidStaysHiddenThroughMinimalAndBack() {
-        // The mode leaves the status slot alone either way: the bar is drawn at no thickness
-        // while the mode is on, and what the user chose in the Layout editor is still there when
-        // it is turned off.
+    public void aStatusBarAlreadyPutAwayStaysSoInTheSeed() {
         PlaceLayout hidden = EdgeStackPolicy.withAway(portrait(), Element.STATUS);
         assertTrue(MinimalMode.apply(hidden).slot(Element.STATUS).hidden);
         assertTrue(MinimalMode.bottomOnly(hidden).slot(Element.STATUS).hidden);
@@ -88,16 +83,5 @@ public class MinimalModeTest {
         assertFalse(MinimalMode.keyboardOnEnter(true, true));
         assertFalse(MinimalMode.keyboardOnEnter(false, false));
         assertFalse(MinimalMode.keyboardOnEnter(false, true));
-    }
-
-    /**
-     * The status bar reserves nothing while the mode is on — there is no strip to swipe out of
-     * the mode from any more — and exactly what it rests at otherwise.
-     */
-    @Test
-    public void theStatusBarReservesNothingInMinimalMode() {
-        assertEquals(0, MinimalMode.statusBarThicknessPx(true, 96));
-        assertEquals(96, MinimalMode.statusBarThicknessPx(false, 96));
-        assertEquals(0, MinimalMode.statusBarThicknessPx(false, -5));
     }
 }
