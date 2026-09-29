@@ -236,6 +236,29 @@ exist for a process that has no terminal to write an escape into — a coding ag
 and need no pane id: they attribute to the current pane unless `--pane` says otherwise. See
 [LauncherCtl API](LauncherCtl_API.md#notifications-the-progress-ring-and-the-clipboard).
 
+## Extended clipboard (OSC 5522)
+
+`kitten clipboard` works. The terminal implements kitty's
+[clipboard protocol](https://sw.kovidgoyal.net/kitty/clipboard/) for text, on the same Android
+clipboard `OSC 52` uses and under the same rules: a write needs the launcher on screen, and a read
+needs it on screen and *Settings → Terminal → Let programs read the clipboard* on. A refused read
+is answered `status=EPERM`.
+
+- **Read** (`type=read`): `text/plain` and `text/plain;charset=utf-8` are answered `OK`, `DATA`
+  packets (3 KiB of text each, under the requested name) and `DONE`. The payload `.` lists the
+  types on offer (both text names, none for an empty clipboard).
+- **Write** (`type=write`, `wdata` chunks, a bare `wdata` to end, optional `walias`): the text is
+  assembled, put on the clipboard, and answered `type=write:status=DONE`. Chunks may split base64
+  groups; bad base64 is `EINVAL`, more than 64 MiB `EFBIG`.
+- **`id`** is echoed on every answer, stripped to the spec's characters.
+- **Not text**: reading a type other than text is `ENOSYS`; a write that carries only non-text
+  types is `ENOSYS`, and non-text data next to text is dropped. `loc=primary` is `ENOSYS` (Android
+  has no primary selection).
+- **Not implemented**: the `pw`/`name` permission cache (both ignored; the setting is the gate),
+  and the paste-events mode (`CSI ? 5522 h`).
+- A refused read and an unset clipboard both reach the terminal as "nothing", so both answer
+  `EPERM`; an empty but readable clipboard answers `OK`/`DONE` with no data.
+
 ## Current boundaries
 
 - File (`t=f`) and temporary-file (`t=t`) transmissions are accepted; a `t=t` file is deleted only when its path carries `tty-graphics-protocol` and sits in a temporary directory. Shared-memory (`t=s`) transmission is not implemented: Android has no `shm_open`.

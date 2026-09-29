@@ -420,6 +420,26 @@ public final class TerminalEmulator {
     /** Desktop notifications a program asked for with {@code OSC 99}. */
     private final KittyNotifications mKittyNotifications = new KittyNotifications();
 
+    /** The extended clipboard a program drives with {@code OSC 5522}; shares the OSC 52 callbacks. */
+    private final KittyClipboard mKittyClipboard = new KittyClipboard();
+
+    private final KittyClipboard.Handler mKittyClipboardHandler = new KittyClipboard.Handler() {
+        @Override
+        public String readText() {
+            return mSession.onReadTextFromClipboard();
+        }
+
+        @Override
+        public void writeText(String text) {
+            mSession.onCopyTextToClipboard(text);
+        }
+
+        @Override
+        public void write(String escapeSequence) {
+            mSession.write(escapeSequence);
+        }
+    };
+
     /**
      * The text of the last {@code OSC 66} block written, or null when the last thing written was
      * ordinary text. REP repeats a block just as it repeats a character.
@@ -3742,6 +3762,10 @@ public final class TerminalEmulator {
                     }
                 }
                 break;
+            case // Kitty extended clipboard: "5522;type=read|write|wdata|walias;payload".
+            5522:
+                mKittyClipboard.handle(textParameter, bellOrStringTerminator, mKittyClipboardHandler);
+                break;
             case // Shell integration marks: "133;A" prompt, "133;B" command, "133;C" output, "133;D[;code]" done.
             133:
                 doShellIntegration(textParameter);
@@ -4766,6 +4790,7 @@ public final class TerminalEmulator {
         mITermImage = null;
         mKittyGraphics.reset();
         mKittyNotifications.reset();
+        mKittyClipboard.reset();
         mPointerShapeStack.clear();
         setPointerShape(null);
         clearExtraCursors();
