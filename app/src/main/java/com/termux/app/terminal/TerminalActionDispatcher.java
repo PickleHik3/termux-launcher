@@ -840,6 +840,12 @@ public final class TerminalActionDispatcher {
                     if (client == null) return error(503, "unavailable", "Terminal session client is not ready");
                     TerminalSession target = signalTarget(host, arguments);
                     if (target == null) return signalTargetMissing(host, arguments, toolName);
+                    // "close" takes down the message of that id, as OSC 99's p=close does.
+                    String closeId = arguments.optString("close", "").trim();
+                    if (!closeId.isEmpty()) {
+                        client.signals().notifyClose(target, closeId);
+                        return ok().put("pane", target.mHandle).put("id", closeId).put("closed", true);
+                    }
                     String title = arguments.optString("title", "");
                     String body = arguments.optString("body", "");
                     if (title.trim().isEmpty() && body.trim().isEmpty()) {
