@@ -1832,6 +1832,7 @@
 
                 <!-- The Layout editor: the miniature of the place on screen, and the way out of it. -->
                 <string name="termux_layout_editor_title">Layout</string>
+                <string name="termux_layout_editor_title_minimal">Minimal layout</string>
                 <!-- The chooser above the miniature. The header already says what is edited, so
                      this row only has to say which of its two layouts is on the picture. -->
                 <string name="termux_layout_editor_orientation">Orientation</string>

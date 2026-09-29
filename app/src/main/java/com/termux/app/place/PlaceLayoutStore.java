@@ -18,6 +18,7 @@ import java.util.EnumMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Where the launcher keeps its arrangement. Anything that decides what is on screen and where is a
@@ -30,6 +31,12 @@ import java.util.Set;
  * is one mode for the whole launcher rather than a place's. A missing arrangement key falls back
  * to the shared value the launcher used to keep globally, and then to the shipped default, so
  * nothing has to be written before the chrome reads the way it always looked.
+ *
+ * <p>There are two arrangements, one per {@link LayoutVariant}: the normal one, and the one
+ * minimal mode stands in, under {@code layout.minimal.<portrait|landscape>.<key>}. A store made
+ * with the public constructor reads and writes the variant minimal mode selects; {@link
+ * #forVariant} pins it to one. The minimal layout is seeded from the normal one the first time it
+ * is used ({@link MinimalMode#apply}), and is the user's from then on.
  *
  * <p>The arrangement used to be kept per place as well as per orientation. Version 6 of the
  * migration folds that into the shared keys, seeding each orientation from the place the value
@@ -167,7 +174,17 @@ public final class PlaceLayoutStore {
     @NonNull private final TermuxAppSharedPreferences mPreferences;
     @Nullable private final SharedPreferences mStore;
 
-    private int mRevision;
+    /** Shared by every {@link #forVariant view} of one store, so any write retires every cache. */
+    @NonNull private final AtomicInteger mRevision;
+
+    /**
+     * The variant this store reads and writes, or null for the one the launcher is standing in
+     * ({@link #activeVariant}), which follows minimal mode.
+     */
+    @Nullable private final LayoutVariant mFixedVariant;
+
+    /** Per orientation, whether the minimal layout has been checked for its first seeding. */
+    @NonNull private final boolean[] mMinimalSeeded;
 
     /**
      * Any write to the launcher's preferences can change what the layout resolves to — the shared
@@ -175,13 +192,43 @@ public final class PlaceLayoutStore {
      * cached layout.
      */
     private final SharedPreferences.OnSharedPreferenceChangeListener mChangeListener =
-        (preferences, key) -> mRevision++;
+        (preferences, key) -> mRevision.incrementAndGet();
 
     public PlaceLayoutStore(@NonNull TermuxAppSharedPreferences preferences) {
         mPreferences = preferences;
         mStore = preferences.getSharedPreferences();
+        mRevision = new AtomicInteger();
+        mFixedVariant = null;
+        mMinimalSeeded = new boolean[PlaceOrientation.values().length];
         migrateIfNeeded();
         if (mStore != null) mStore.registerOnSharedPreferenceChangeListener(mChangeListener);
+    }
+
+    private PlaceLayoutStore(@NonNull PlaceLayoutStore root, @NonNull LayoutVariant variant) {
+        mPreferences = root.mPreferences;
+        mStore = root.mStore;
+        mRevision = root.mRevision;
+        mFixedVariant = variant;
+        mMinimalSeeded = root.mMinimalSeeded;
+    }
+
+    /**
+     * The variant the launcher is standing in: the minimal layout while minimal mode is on, the
+     * normal one otherwise. What a store made with the public constructor reads and writes.
+     */
+    @NonNull
+    public LayoutVariant activeVariant() {
+        return mFixedVariant != null ? mFixedVariant : LayoutVariant.of(isMinimal());
+    }
+
+    /**
+     * This store pinned to one variant, whatever minimal mode is doing: the Layout editor opens
+     * on the variant the launcher was in and keeps editing it. Shares the revision and the
+     * preferences with this store, so nothing is copied.
+     */
+    @NonNull
+    public PlaceLayoutStore forVariant(@NonNull LayoutVariant variant) {
+        return mFixedVariant == variant ? this : new PlaceLayoutStore(this, variant);
     }
 
     /**
@@ -189,7 +236,7 @@ public final class PlaceLayoutStore {
      * {@link PlaceLayout} can keep it while this has not moved.
      */
     public int revision() {
-        return mRevision;
+        return mRevision.get();
     }
 
     // ---------------------------------------------------------------- arrangement
@@ -199,6 +246,12 @@ public final class PlaceLayoutStore {
      * say where a row is arranged to go; this is where the switches that can still turn a row off
      * entirely are folded in, so a caller reads one effective layout and nothing else.
      */
+    @NonNull
+    public PlaceLayout resolve(@NonNull PlaceOrientation orientation, @NonNull LayoutVariant variant) {
+        return forVariant(variant).resolve(orientation);
+    }
+
+    /** As {@link #resolve(PlaceOrientation, LayoutVariant)}, for the variant this store is on. */
     @NonNull
     public PlaceLayout resolve(@NonNull PlaceOrientation orientation) {
         EnumMap<Element, Slot> slots = new EnumMap<>(Element.class);
@@ -238,7 +291,7 @@ public final class PlaceLayoutStore {
     public void setKeyboardShown(boolean shown) {
         if (mPreferences.isKeyboardTurnedOff() == !shown) return;
         mPreferences.setKeyboardTurnedOff(!shown);
-        mRevision++;
+        mRevision.incrementAndGet();
     }
 
     // ---------------------------------------------------------------- slots
@@ -306,13 +359,13 @@ public final class PlaceLayoutStore {
     public boolean slotUnderKeyboard(@NonNull PlaceOrientation orientation,
                                      @NonNull Element element) {
         return element.underKeyboardAllowed() && mStore != null
-            && mStore.getBoolean(layoutKey(orientation, underKeyboardKeyName(element)), false);
+            && mStore.getBoolean(variantKey(orientation, underKeyboardKeyName(element)), false);
     }
 
     public void setSlotUnderKeyboard(@NonNull PlaceOrientation orientation,
                                      @NonNull Element element, boolean under) {
         if (!element.underKeyboardAllowed()) return;
-        writeBoolean(layoutKey(orientation, underKeyboardKeyName(element)), under);
+        writeBoolean(variantKey(orientation, underKeyboardKeyName(element)), under);
     }
 
     /**
@@ -321,7 +374,7 @@ public final class PlaceLayoutStore {
      * the edge the element is actually on.
      */
     public int slotOrder(@NonNull PlaceOrientation orientation, @NonNull Element element) {
-        String key = layoutKey(orientation, orderKeyName(element));
+        String key = variantKey(orientation, orderKeyName(element));
         int fallback = element.defaultOrder(elementEdge(orientation, element));
         if (mStore == null || !mStore.contains(key)) return fallback;
         return Math.max(0, mStore.getInt(key, fallback));
@@ -329,7 +382,7 @@ public final class PlaceLayoutStore {
 
     public void setSlotOrder(@NonNull PlaceOrientation orientation, @NonNull Element element,
                              int order) {
-        writeInt(layoutKey(orientation, orderKeyName(element)), Math.max(0, order));
+        writeInt(variantKey(orientation, orderKeyName(element)), Math.max(0, order));
     }
 
     /**
@@ -413,13 +466,13 @@ public final class PlaceLayoutStore {
 
     /** The alphabets row is a switch, not a place: it rides on the apps row wherever that goes. */
     public boolean azRowShown(@NonNull PlaceOrientation orientation) {
-        String key = layoutKey(orientation, KEY_AZ_ROW);
+        String key = variantKey(orientation, KEY_AZ_ROW);
         if (mStore != null && mStore.contains(key)) return mStore.getBoolean(key, true);
         return mPreferences.isAppLauncherAzRowEnabled();
     }
 
     public void setAzRowShown(@NonNull PlaceOrientation orientation, boolean shown) {
-        writeBoolean(layoutKey(orientation, KEY_AZ_ROW), shown);
+        writeBoolean(variantKey(orientation, KEY_AZ_ROW), shown);
     }
 
     /**
@@ -429,11 +482,11 @@ public final class PlaceLayoutStore {
      */
     public boolean azMinimised(@NonNull PlaceOrientation orientation) {
         return mStore != null
-            && mStore.getBoolean(layoutKey(orientation, KEY_AZ_MINIMISED), false);
+            && mStore.getBoolean(variantKey(orientation, KEY_AZ_MINIMISED), false);
     }
 
     public void setAzMinimised(@NonNull PlaceOrientation orientation, boolean minimised) {
-        writeBoolean(layoutKey(orientation, KEY_AZ_MINIMISED), minimised);
+        writeBoolean(variantKey(orientation, KEY_AZ_MINIMISED), minimised);
     }
 
     /** The Layout editor's three-way choice for the index: a band, the pull tab, or put away. */
@@ -541,7 +594,7 @@ public final class PlaceLayoutStore {
     }
 
     public void setWidgetColumns(@NonNull PlaceOrientation orientation, int columns) {
-        writeInt(layoutKey(orientation, KEY_WIDGET_COLUMNS),
+        writeInt(variantKey(orientation, KEY_WIDGET_COLUMNS),
             clamp(columns, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
                 TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS));
     }
@@ -554,7 +607,7 @@ public final class PlaceLayoutStore {
     }
 
     public void setWidgetRows(@NonNull PlaceOrientation orientation, int rows) {
-        writeInt(layoutKey(orientation, KEY_WIDGET_ROWS),
+        writeInt(variantKey(orientation, KEY_WIDGET_ROWS),
             clamp(rows, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
                 TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS));
     }
@@ -572,7 +625,7 @@ public final class PlaceLayoutStore {
 
     /** How tall the pinned apps row stands, as a multiple of its unscaled height. */
     public float dockHeightScale(@NonNull PlaceOrientation orientation) {
-        String key = layoutKey(orientation, KEY_DOCK_HEIGHT);
+        String key = variantKey(orientation, KEY_DOCK_HEIGHT);
         float value = mStore != null && mStore.contains(key)
             ? mStore.getFloat(key, TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT)
             : mPreferences.getSharedAppLauncherBarHeightScale();
@@ -580,13 +633,13 @@ public final class PlaceLayoutStore {
     }
 
     public void setDockHeightScale(@NonNull PlaceOrientation orientation, float scale) {
-        writeFloat(layoutKey(orientation, KEY_DOCK_HEIGHT),
+        writeFloat(variantKey(orientation, KEY_DOCK_HEIGHT),
             TermuxAppSharedPreferences.clampAppLauncherBarHeightScale(scale));
     }
 
     /** How tall the in-app keyboard stands, as a multiple of its unscaled height. */
     public float keyboardHeightScale(@NonNull PlaceOrientation orientation) {
-        String key = layoutKey(orientation, KEY_KEYBOARD_HEIGHT);
+        String key = variantKey(orientation, KEY_KEYBOARD_HEIGHT);
         float value = mStore != null && mStore.contains(key)
             ? mStore.getFloat(key, mPreferences.getDefaultInAppKeyboardHeightScale())
             : mPreferences.getSharedInAppKeyboardHeightScale(
@@ -595,13 +648,13 @@ public final class PlaceLayoutStore {
     }
 
     public void setKeyboardHeightScale(@NonNull PlaceOrientation orientation, float scale) {
-        writeFloat(layoutKey(orientation, KEY_KEYBOARD_HEIGHT),
+        writeFloat(variantKey(orientation, KEY_KEYBOARD_HEIGHT),
             TermuxAppSharedPreferences.clampInAppKeyboardHeightScale(scale));
     }
 
     /** Extra air in dp under the last key row, inside the keyboard's own surface. */
     public int keyboardChinDp(@NonNull PlaceOrientation orientation) {
-        String key = layoutKey(orientation, KEY_KEYBOARD_CHIN);
+        String key = variantKey(orientation, KEY_KEYBOARD_CHIN);
         int value = mStore != null && mStore.contains(key)
             ? mStore.getInt(key, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING)
             : mPreferences.getSharedInAppKeyboardBottomPadding();
@@ -609,17 +662,23 @@ public final class PlaceLayoutStore {
     }
 
     public void setKeyboardChinDp(@NonNull PlaceOrientation orientation, int dp) {
-        writeInt(layoutKey(orientation, KEY_KEYBOARD_CHIN),
+        writeInt(variantKey(orientation, KEY_KEYBOARD_CHIN),
             TermuxAppSharedPreferences.clampInAppKeyboardBottomPadding(dp));
     }
 
-    /** Puts one orientation back to whatever the global values and defaults say. */
+    /**
+     * Puts one orientation of the variant this store is on back to whatever the global values and
+     * defaults say. For the minimal layout that is its seed again - the normal layout with minimal
+     * mode taken off it - which the next read writes afresh.
+     */
     public void clear(@NonNull PlaceOrientation orientation) {
         if (mStore == null) return;
+        LayoutVariant variant = activeVariant();
         SharedPreferences.Editor editor = mStore.edit();
-        for (String key : ARRANGEMENT_KEYS) editor.remove(layoutKey(orientation, key));
+        for (String key : ARRANGEMENT_KEYS) editor.remove(layoutKey(variant, orientation, key));
         editor.apply();
-        mRevision++;
+        mMinimalSeeded[orientation.ordinal()] = false;
+        mRevision.incrementAndGet();
     }
 
     // ---------------------------------------------------------------- memory
@@ -744,7 +803,7 @@ public final class PlaceLayoutStore {
         } else {
             mStore.edit().putFloat(key, value).apply();
         }
-        mRevision++;
+        mRevision.incrementAndGet();
     }
 
     // ---------------------------------------------------------------- keys
@@ -757,11 +816,62 @@ public final class PlaceLayoutStore {
         return place == PaneWallPage.WIDGETS ? "home" : place.name().toLowerCase(Locale.ROOT);
     }
 
-    /** Where the shared arrangement keeps one value for one orientation. */
+    /** Where the normal arrangement keeps one value for one orientation. */
     @VisibleForTesting
     @NonNull
     static String layoutKey(@NonNull PlaceOrientation orientation, @NonNull String key) {
-        return LAYOUT_PREFIX + orientation.storageValue() + "." + key;
+        return layoutKey(LayoutVariant.NORMAL, orientation, key);
+    }
+
+    /**
+     * Where one variant's arrangement keeps one value for one orientation:
+     * {@code layout.<o>.<key>} for the normal layout, exactly as it has always been written, and
+     * {@code layout.minimal.<o>.<key>} for the minimal one.
+     */
+    @VisibleForTesting
+    @NonNull
+    static String layoutKey(@NonNull LayoutVariant variant, @NonNull PlaceOrientation orientation,
+                            @NonNull String key) {
+        return LAYOUT_PREFIX + variant.keyScope() + orientation.storageValue() + "." + key;
+    }
+
+    /**
+     * Where this store keeps one arrangement value: the key of the variant it is on. The minimal
+     * layout is seeded before its first key is read, so no caller sees it empty.
+     */
+    @NonNull
+    private String variantKey(@NonNull PlaceOrientation orientation, @NonNull String key) {
+        LayoutVariant variant = activeVariant();
+        if (variant == LayoutVariant.MINIMAL) seedMinimalIfNeeded(orientation);
+        return layoutKey(variant, orientation, key);
+    }
+
+    /**
+     * Gives the minimal layout of an orientation its starting point, the first time it is used and
+     * has stored nothing: the normal layout as it stands, with {@link MinimalMode#apply} taken
+     * off it, which is what minimal mode looked like before it had a layout of its own. Only what
+     * the normal layout has actually stored is copied, so a default that still moves - the dock's
+     * height with its style - keeps moving. Written once; from then on the user's edits are the
+     * layout, and {@link #clear} puts it back to this.
+     */
+    private void seedMinimalIfNeeded(@NonNull PlaceOrientation orientation) {
+        if (mStore == null || mMinimalSeeded[orientation.ordinal()]) return;
+        mMinimalSeeded[orientation.ordinal()] = true;
+        for (String key : ARRANGEMENT_KEYS) {
+            if (mStore.contains(layoutKey(LayoutVariant.MINIMAL, orientation, key))) return;
+        }
+        Map<String, ?> all = mStore.getAll();
+        SharedPreferences.Editor editor = mStore.edit();
+        for (String key : ARRANGEMENT_KEYS) {
+            Object value = all.get(layoutKey(LayoutVariant.NORMAL, orientation, key));
+            if (value != null) put(editor, layoutKey(LayoutVariant.MINIMAL, orientation, key), value);
+        }
+        editor.apply();
+        PlaceLayoutStore minimal = forVariant(LayoutVariant.MINIMAL);
+        PlaceLayout seeded = MinimalMode.apply(minimal.resolve(orientation));
+        for (Element element : Element.values()) {
+            if (seeded.slot(element).hidden) minimal.setSlot(orientation, element, seeded.slot(element));
+        }
     }
 
     /** Where a place kept its own copy of an arrangement value, before version 6 shared them. */
@@ -813,7 +923,7 @@ public final class PlaceLayoutStore {
         if (fromVersion < 7) migrateToOneMinimalMode(editor);
         editor.putInt(KEY_MIGRATED, MIGRATION_VERSION);
         editor.apply();
-        mRevision++;
+        mRevision.incrementAndGet();
     }
 
     /**
@@ -1077,37 +1187,37 @@ public final class PlaceLayoutStore {
 
     @Nullable
     private String readString(@NonNull PlaceOrientation orientation, @NonNull String key) {
-        return mStore == null ? null : mStore.getString(layoutKey(orientation, key), null);
+        return mStore == null ? null : mStore.getString(variantKey(orientation, key), null);
     }
 
     private int readInt(@NonNull PlaceOrientation orientation, @NonNull String key, int fallback) {
-        String shared = layoutKey(orientation, key);
+        String shared = variantKey(orientation, key);
         return mStore != null && mStore.contains(shared) ? mStore.getInt(shared, fallback) : fallback;
     }
 
     private void writeString(@NonNull PlaceOrientation orientation, @NonNull String key,
                              @NonNull String value) {
         if (mStore == null) return;
-        mStore.edit().putString(layoutKey(orientation, key), value).apply();
-        mRevision++;
+        mStore.edit().putString(variantKey(orientation, key), value).apply();
+        mRevision.incrementAndGet();
     }
 
     private void writeBoolean(@NonNull String key, boolean value) {
         if (mStore == null) return;
         mStore.edit().putBoolean(key, value).apply();
-        mRevision++;
+        mRevision.incrementAndGet();
     }
 
     private void writeInt(@NonNull String key, int value) {
         if (mStore == null) return;
         mStore.edit().putInt(key, value).apply();
-        mRevision++;
+        mRevision.incrementAndGet();
     }
 
     private void writeFloat(@NonNull String key, float value) {
         if (mStore == null) return;
         mStore.edit().putFloat(key, value).apply();
-        mRevision++;
+        mRevision.incrementAndGet();
     }
 
     private static int clamp(int value, int min, int max) {

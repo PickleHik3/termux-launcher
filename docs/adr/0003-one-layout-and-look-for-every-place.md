@@ -62,3 +62,15 @@ its last layout and is laid out again in the frame that brings it back. Because 
 changes while Home is on screen, the widget grid is no longer re-cut by the terminal's keyboard;
 because the Display page is only ever laid out at the room it rests with, the X screen is no
 longer resized by a slide to or from it.
+
+## Amended 2026-09-29: minimal mode has a layout of its own
+
+"One layout per orientation" now reads "one layout per orientation and layout variant". There are
+two variants, normal and minimal, and every place still shares both: places differ only in state,
+as before. Minimal mode used to be an overlay (`MinimalMode.apply` hid every element on the fly);
+it is now the **minimal variant** of the layout, kept under `layout.minimal.<orientation>.<key>`
+beside the normal keys (which are unchanged) and edited in the Layout editor while the mode is on.
+The first time the minimal variant is used it is seeded from the normal layout with every element
+put away, so minimal looks as it always did until the user adds something back. The look stays
+one look: minimal mode has no appearance of its own. See `project-docs/minimal-layout/SPEC.md`.
+

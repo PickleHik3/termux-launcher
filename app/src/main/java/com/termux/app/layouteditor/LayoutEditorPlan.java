@@ -9,6 +9,7 @@ import com.termux.app.place.PlaceArrangeModel;
 import com.termux.app.place.PlaceArrangeModel.Element;
 import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
@@ -114,7 +115,9 @@ public final class LayoutEditorPlan {
         }
     }
 
+    /** The store pinned to the variant being edited, so nothing here can reach the other one. */
     @NonNull private final PlaceLayoutStore mPlaces;
+    @NonNull private final LayoutVariant mVariant;
     /** The place the miniature draws and the live place behind the card; never a write target. */
     @NonNull private PaneWallPage mPlace;
     /** The arrangement as the editor found it; what Discard and ↺ put back. */
@@ -123,24 +126,43 @@ public final class LayoutEditorPlan {
     @NonNull private PlaceOrientation mDeviceOrientation;
     @NonNull private PlaceOrientation mShownOrientation;
 
-    private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
-                             @NonNull PlaceOrientation deviceOrientation) {
-        mPlaces = places;
+    private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull LayoutVariant variant,
+                             @NonNull PaneWallPage place, @NonNull PlaceOrientation deviceOrientation) {
+        mVariant = variant;
+        mPlaces = places.forVariant(variant);
         mPlace = place;
         mDeviceOrientation = deviceOrientation;
         // The editor opens on what the user is looking at; the toggle is how the other one is asked
         // for.
         mShownOrientation = deviceOrientation;
-        mEntry = PlaceArrangeSnapshot.capture(places);
+        mEntry = PlaceArrangeSnapshot.capture(mPlaces, variant);
         mEntrySignature = mEntry.signature();
     }
 
-    /** Opens a session over one place, showing the orientation the phone is in. */
+    /**
+     * Opens a session over one place, showing the orientation the phone is in, on the layout the
+     * launcher is standing in: the minimal one while minimal mode is on.
+     */
     @NonNull
     public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
                                          @NonNull PaneWallPage place,
                                          @NonNull PlaceOrientation deviceOrientation) {
-        return new LayoutEditorPlan(places, place, deviceOrientation);
+        return enter(places, places.activeVariant(), place, deviceOrientation);
+    }
+
+    /** Opens a session over one variant of the layout. */
+    @NonNull
+    public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
+                                         @NonNull LayoutVariant variant,
+                                         @NonNull PaneWallPage place,
+                                         @NonNull PlaceOrientation deviceOrientation) {
+        return new LayoutEditorPlan(places, variant, place, deviceOrientation);
+    }
+
+    /** Which layout the session is editing, which the card says so it is never a surprise. */
+    @NonNull
+    public LayoutVariant variant() {
+        return mVariant;
     }
 
     @NonNull

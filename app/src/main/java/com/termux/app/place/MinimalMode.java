@@ -5,13 +5,12 @@ import androidx.annotation.NonNull;
 import com.termux.app.place.PlaceLayout.Edge;
 
 /**
- * Minimal mode (CONTEXT.md): the launcher shown with nothing but the place's own content. The
- * status bar, the apps bar, the alphabets index and the extra keys go away, the keyboard is put
- * down, and the content takes the whole screen, in either orientation. It is one mode for the
- * whole launcher rather than a state of a place: paging to another place never leaves it, and
- * only the corner tab's minimal button turns it on or off. It is never a layout of its own (ADR
- * 0003): the arrangement underneath stays the one every place shares, and minimal mode is what is
- * taken off it.
+ * Minimal mode (CONTEXT.md): the launcher shown with nothing but the place's own content, unless
+ * the user has chosen otherwise. It is one mode for the whole launcher rather than a state of a
+ * place: paging to another place never leaves it, and only the corner tab's minimal button turns
+ * it on or off. Since it has a layout of its own ({@link LayoutVariant#MINIMAL}, edited in the
+ * Layout editor while the mode is on), what it shows is that layout; this class holds the layout
+ * it starts from, the slide's pre-roll and the keyboard rules, which are not part of any layout.
  *
  * <p>Pure, so what the mode means can be read and tested without a window; the activity only
  * applies it, and {@link PlaceLayoutStore} only remembers whether it is on.
@@ -21,18 +20,15 @@ public final class MinimalMode {
     private MinimalMode() {}
 
     /**
-     * The arrangement a minimal place stands in: every element but the status bar put away, on
-     * whatever edge it was, so that turning the mode off puts each one back exactly where it stood.
-     * The status bar's slot is left exactly as the layout has it — shown, or hidden by the user in
-     * the Layout editor — and the mode draws the bar at no thickness instead
-     * ({@link #statusBarThicknessPx}), so leaving the mode never has to remember whether the bar
-     * was the user's to hide.
+     * The layout the minimal variant starts from: every element put away, on whatever edge it was,
+     * so that a user who adds one back in the Layout editor finds it where it stood. The status bar
+     * goes too, which is what the mode has always looked like (it used to be drawn at no
+     * thickness); the keyboard's own type, switch and the widget grid are left as they were.
      */
     @NonNull
     public static PlaceLayout apply(@NonNull PlaceLayout layout) {
         PlaceLayout result = layout;
         for (Element element : Element.values()) {
-            if (element == Element.STATUS) continue;
             Slot slot = result.slot(element);
             if (!slot.hidden) result = result.withSlot(element, slot.withHidden(true));
         }
@@ -69,15 +65,5 @@ public final class MinimalMode {
      */
     public static boolean keyboardOnEnter(boolean remembered, boolean minimal) {
         return remembered && !minimal;
-    }
-
-    /**
-     * The status bar's thickness while the launcher is minimal, in pixels: nothing. The bar used
-     * to stay as a thin strip to swipe out of the mode from; that swipe started under the phone's
-     * own status bar and opened the notification shade instead, so the strip is gone and the mode
-     * reserves nothing along the bar's edge. The corner tab is the way out.
-     */
-    public static int statusBarThicknessPx(boolean minimal, int restingThicknessPx) {
-        return minimal ? 0 : Math.max(0, restingThicknessPx);
     }
 }

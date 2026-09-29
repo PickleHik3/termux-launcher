@@ -1,5 +1,6 @@
 package com.termux.app.layouteditor;
 
+import com.termux.app.place.LayoutVariant;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertFalse;
@@ -759,5 +760,38 @@ public class LayoutEditorPlanTest {
                 }
             }
         }
+    }
+
+    @Test
+    public void anEditorOpenedInMinimalModeEditsTheMinimalLayout() {
+        places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
+        places.setMinimal(true);
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        assertEquals(LayoutVariant.MINIMAL, plan.variant());
+        // The miniature draws the minimal layout: the seed, with everything put away.
+        assertTrue(plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden);
+        assertFalse(plan.isDirty());
+
+        places.forVariant(LayoutVariant.MINIMAL).setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
+        assertTrue(plan.isDirty());
+        assertFalse(plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden);
+        // Toggling minimal mode under the open editor does not move what it edits.
+        places.setMinimal(false);
+        assertFalse(plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden);
+
+        plan.revert();
+        assertFalse(plan.isDirty());
+        assertTrue(plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden);
+        // The normal layout was never in it.
+        assertFalse(places.forVariant(LayoutVariant.NORMAL).resolve(PORTRAIT)
+            .slot(com.termux.app.place.Element.APPS).hidden);
+    }
+
+    @Test
+    public void anEditorOpenedOutsideMinimalModeEditsTheNormalLayoutAndLeavesMinimalBe() {
+        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        assertEquals(LayoutVariant.NORMAL, plan.variant());
+        places.forVariant(LayoutVariant.MINIMAL).setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
+        assertFalse("the minimal layout is not this session's to lose", plan.isDirty());
     }
 }

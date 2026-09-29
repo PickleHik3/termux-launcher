@@ -699,6 +699,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The last resolved layout, kept while nothing the store answers from has moved. */
     @Nullable private PlaceLayout mCachedPlaceLayout;
     @Nullable private PlaceOrientation mCachedPlaceLayoutOrientation;
+    @Nullable private com.termux.app.place.LayoutVariant mCachedPlaceLayoutVariant;
     private int mCachedPlaceLayoutRevision;
     /** The arrangement the chrome was last laid out for, so an unchanged one costs nothing. */
     @Nullable private PlaceLayout mAppliedPlaceLayout;
@@ -4679,11 +4680,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the width of a column down a side.
      */
     private int targetStatusBarHeightPx(boolean capsule, boolean collapsed) {
-        // Minimal mode draws no bar, open or folded: every writer of the bar's thickness asks
-        // here, so the mode is one answer rather than a special case at each of them.
-        return com.termux.app.place.MinimalMode.statusBarThicknessPx(isChromeMinimal(),
-            com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(mStatusBarEdge, capsule,
-                collapsed, getResources().getDisplayMetrics().density));
+        // Minimal mode needs no case of its own: the minimal layout puts the bar away, or keeps it,
+        // like any layout does (applyStatusBarEdge), and a bar it keeps is a bar with a band.
+        return com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(mStatusBarEdge, capsule,
+            collapsed, getResources().getDisplayMetrics().density);
     }
 
     /** The bar stands in a column rather than a row, so its content runs down the screen. */
@@ -10903,14 +10903,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private PlaceLayout currentPlaceLayout() {
+        // Minimal mode has a layout of its own, which placeLayout resolves while the chrome is
+        // minimal. It is one mode for every place, so a slide never crosses into or out of it; the
+        // pre-roll that lays the bottom rows out again below the screen (MinimalMode#bottomOnly)
+        // is kept for the frame that asks for it all the same, over the normal layout.
         PlaceLayout layout = placeLayout(currentPlaceOrientation());
-        // Minimal mode is a state taken off the shared arrangement, not an arrangement of its own,
-        // so it is folded in here where every piece of chrome reads it. It is one mode for every
-        // place, so a slide never crosses into or out of it; the pre-roll that lays the bottom
-        // rows out again below the screen (MinimalMode#bottomOnly) is kept for the frame that
-        // asks for it all the same.
-        if (mTravelDockPreRolled) return com.termux.app.place.MinimalMode.bottomOnly(layout);
-        return isChromeMinimal() ? com.termux.app.place.MinimalMode.apply(layout) : layout;
+        return mTravelDockPreRolled ? com.termux.app.place.MinimalMode.bottomOnly(layout) : layout;
     }
 
     /** Whether the chrome on screen is arranged for minimal mode, a pre-rolled slide aside. */
@@ -10946,15 +10944,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (store != null) store.setStatusCompact(currentPlaceOrientation(), compact);
     }
 
+    /** The layout the chrome on screen is arranged by: the minimal one while it is minimal. */
     @NonNull
     private PlaceLayout placeLayout(@NonNull PlaceOrientation orientation) {
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return NO_PREFERENCES_PLACE_LAYOUT;
+        com.termux.app.place.LayoutVariant variant =
+            com.termux.app.place.LayoutVariant.of(isChromeMinimal());
         if (mCachedPlaceLayout == null
             || mCachedPlaceLayoutOrientation != orientation
+            || mCachedPlaceLayoutVariant != variant
             || mCachedPlaceLayoutRevision != store.revision()) {
-            mCachedPlaceLayout = store.resolve(orientation);
+            mCachedPlaceLayout = store.resolve(orientation, variant);
             mCachedPlaceLayoutOrientation = orientation;
+            mCachedPlaceLayoutVariant = variant;
             mCachedPlaceLayoutRevision = store.revision();
         }
         return mCachedPlaceLayout;
@@ -16709,16 +16712,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The status bar as minimal mode has it: gone. Its thickness is read off
-     * {@link #targetStatusBarHeightPx} wherever the bar is sized, so this re-applies it, and
-     * hides the row, the lens and the column clock so nothing of a bar with no band can be
-     * tapped or drawn. The bar keeps its own expand swipe rule: there is no strip to swipe out
-     * of the mode from any more, and the corner tab is the way out.
+     * The status bar as the minimal layout has it. Whether it is there at all is the layout's
+     * ({@link #applyStatusBarEdge} puts it away or keeps it), so this only settles what a bar that
+     * stays looks like: rested folded, since the mode gives it no swipe to open (the corner tab
+     * is the way out), and drawn in full, not left faded from an earlier version of the mode.
      */
-    private static final long MINIMAL_BAR_FADE_MS = 150L;
-
     private void applyMinimalStatusChrome() {
-        boolean minimal = isChromeMinimal();
         View host = findViewById(R.id.terminal_window_bar_host);
         if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
             com.termux.app.statusbar.StatusBarSwipeLayout swipeHost =
@@ -16726,25 +16725,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             swipeHost.setExpansionAllowed(
                 com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
         }
-        // The bar's content fades as its band closes, so the mode lands as one motion rather
-        // than a bar that blinks out a frame before it stops taking room.
-        if (host != null) {
-            float alpha = minimal ? 0f : 1f;
-            if (host.getAlpha() != alpha) {
-                com.termux.app.chrome.GlassMotionPlayer.fade(host,
-                    com.termux.app.chrome.GlassMotion.of(mPreferences), !minimal,
-                    MINIMAL_BAR_FADE_MS);
-            }
-        }
-        int visibility = minimal ? View.INVISIBLE : View.VISIBLE;
+        if (host != null && host.getAlpha() != 1f) host.setAlpha(1f);
         View row = findViewById(R.id.terminal_status_row);
-        if (row != null && row.getVisibility() != visibility) row.setVisibility(visibility);
+        if (row != null && row.getVisibility() != View.VISIBLE) row.setVisibility(View.VISIBLE);
         View lens = findViewById(R.id.terminal_status_lens);
-        if (lens != null && lens.getVisibility() != visibility) lens.setVisibility(visibility);
-        if (minimal) {
-            View stackedClock = findViewById(R.id.terminal_status_column_clock);
-            if (stackedClock != null) stackedClock.setVisibility(View.GONE);
-        }
+        if (lens != null && lens.getVisibility() != View.VISIBLE) lens.setVisibility(View.VISIBLE);
         // The fold's own path sizes the bar, under the resize lease that gives the panes one
         // row-and-column update for the change instead of one per pass.
         setTopStatusBarCollapsed(isStatusBarCompact(), false);

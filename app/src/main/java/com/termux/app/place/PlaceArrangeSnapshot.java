@@ -7,7 +7,8 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The shared arrangement, in both orientations, as one immutable value: what the Layout editor took
+ * One variant's arrangement (the normal layout, or the one minimal mode stands in), in both
+ * orientations, as one immutable value: what the Layout editor took
  * a copy of on entry, what its revert puts back, and — folded to a string — how it knows a bar has
  * been moved since. The three sizes ride along, so a dragged dock, keyboard or chin is exactly as
  * unsaved as a moved bar, and so does the keyboard element's on/off switch.
@@ -16,6 +17,9 @@ import java.util.List;
  * a restore writes the value the layout was resolving to whether or not it had a key of its own.
  * That materialises a key the global value was answering for, at the value it was answering with:
  * the same arrangement, spelled out.
+ *
+ * <p>A snapshot remembers its variant and restores onto it, whatever the store is on by then, so a
+ * Discard puts back the layout that was being edited and never the other one.
  *
  * <p>Pure: a store in, a value out, no views, so revert and dirtiness are testable without a window.
  */
@@ -113,27 +117,45 @@ public final class PlaceArrangeSnapshot {
         }
     }
 
+    @NonNull private final LayoutVariant mVariant;
     @NonNull private final List<Entry> mEntries;
     /** The keyboard element, on or off: one switch for both orientations, captured once. */
     private final boolean mKeyboardShown;
 
-    private PlaceArrangeSnapshot(@NonNull List<Entry> entries, boolean keyboardShown) {
+    private PlaceArrangeSnapshot(@NonNull LayoutVariant variant, @NonNull List<Entry> entries,
+                                 boolean keyboardShown) {
+        mVariant = variant;
         mEntries = Collections.unmodifiableList(entries);
         mKeyboardShown = keyboardShown;
     }
 
-    /** Both orientations: a rotation mid-edit moves which one the editor writes. */
+    /** The layout the store is on, in both orientations. */
     @NonNull
     public static PlaceArrangeSnapshot capture(@NonNull PlaceLayoutStore places) {
+        return capture(places, places.activeVariant());
+    }
+
+    /** Both orientations of one variant: a rotation mid-edit moves which one the editor writes. */
+    @NonNull
+    public static PlaceArrangeSnapshot capture(@NonNull PlaceLayoutStore places,
+                                               @NonNull LayoutVariant variant) {
+        PlaceLayoutStore layout = places.forVariant(variant);
         List<Entry> entries = new ArrayList<>();
         for (PlaceOrientation orientation : PlaceOrientation.values())
-            entries.add(new Entry(places, orientation));
-        return new PlaceArrangeSnapshot(entries, places.isKeyboardShown());
+            entries.add(new Entry(layout, orientation));
+        return new PlaceArrangeSnapshot(variant, entries, places.isKeyboardShown());
+    }
+
+    /** The variant this snapshot was taken of, and restores onto. */
+    @NonNull
+    public LayoutVariant variant() {
+        return mVariant;
     }
 
     /** Puts the arrangement back the way {@link #capture} found it. */
     public void restore(@NonNull PlaceLayoutStore places) {
-        for (Entry entry : mEntries) entry.restore(places);
+        PlaceLayoutStore layout = places.forVariant(mVariant);
+        for (Entry entry : mEntries) entry.restore(layout);
         places.setKeyboardShown(mKeyboardShown);
     }
 
@@ -141,6 +163,7 @@ public final class PlaceArrangeSnapshot {
     @NonNull
     public String signature() {
         StringBuilder out = new StringBuilder(128);
+        out.append(mVariant).append('/');
         for (Entry entry : mEntries) entry.appendTo(out);
         out.append("keyboard:").append(mKeyboardShown);
         return out.toString();
