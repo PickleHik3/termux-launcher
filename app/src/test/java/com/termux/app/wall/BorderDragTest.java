@@ -406,4 +406,154 @@ public class BorderDragTest {
         assertTrue(drag.down(LEFT + 5f, 1000f, LEFT, TOP, RIGHT, BOTTOM, BAND, CORNER, SLOP));
         assertEquals(BorderDrag.Border.LEFT, drag.border());
     }
+
+    // ---- The status bar's swipe off the top border -------------------------------------------
+
+    private static final float STATUS_REACH = 48f;   // STATUS_REACH_DP at 3x
+    /** No gesture strip of the phone's own reaching down into the band. */
+    private static final float NO_LIMIT = Float.NEGATIVE_INFINITY;
+
+    private static BorderDrag bothArmed(float x, float y, boolean canPage, float topLimit) {
+        BorderDrag drag = new BorderDrag();
+        drag.down(x, y, LEFT, TOP, RIGHT, BOTTOM, BAND, CORNER, SLOP, canPage, REACH,
+            STATUS_REACH, topLimit);
+        return drag;
+    }
+
+    @Test
+    public void theShippedStatusReachIsWhatTheseTestsAssume() {
+        assertEquals(STATUS_REACH, BorderDrag.STATUS_REACH_DP * DENSITY, 0.01f);
+        assertTrue(BorderDrag.STATUS_REACH_DP <= BorderDrag.BAND_DP);
+    }
+
+    @Test
+    public void aDownSwipeFromTheTopBorderIsTheStatusBarsAndExpandsIt() {
+        BorderDrag drag = bothArmed(550f, TOP + 10f, true, NO_LIMIT);
+        assertTrue(drag.isStatusEligible());
+        assertFalse(drag.isKeyboardEligible());
+        assertEquals(BorderDrag.Claim.PENDING, drag.move(550f, TOP + 10f + SLOP));
+        assertEquals(BorderDrag.Claim.STATUS, drag.move(555f, TOP + 10f + SLOP + 1f));
+        assertTrue(drag.isStatusSwipe());
+        assertFalse(drag.isKeyboardSwipe());
+        assertFalse("claimed before the hold, the hold claims nothing", drag.holdElapsed());
+        assertEquals(COMMIT, drag.verticalTravel(TOP + 10f + COMMIT), 0.01f);
+        assertEquals(BorderDrag.StatusSwipe.EXPAND,
+            drag.statusRelease(TOP + 10f + COMMIT, 0f, COMMIT, FLING));
+        assertEquals("the keyboard's release asks nothing of it", BorderDrag.KeyboardSwipe.NONE,
+            drag.keyboardRelease(TOP + 10f - COMMIT, 0f, COMMIT, FLING));
+    }
+
+    @Test
+    public void anUpSwipeCollapsesItFromEitherSideOfTheLine() {
+        BorderDrag inside = bothArmed(550f, TOP + 10f, true, NO_LIMIT);
+        assertEquals(BorderDrag.Claim.STATUS, inside.move(550f, TOP - 40f));
+        assertEquals(BorderDrag.StatusSwipe.COLLAPSE,
+            inside.statusRelease(TOP + 10f - COMMIT, 0f, COMMIT, FLING));
+        BorderDrag outside = bothArmed(550f, TOP - BAND + 1f, true, NO_LIMIT);
+        assertEquals(BorderDrag.Border.TOP, outside.border());
+        assertEquals(BorderDrag.Claim.STATUS, outside.move(550f, TOP - BAND - 40f));
+    }
+
+    @Test
+    public void theStatusSwipeKeepsTheKeyboardsCommitRule() {
+        float downY = TOP + 10f;
+        float shortDown = downY + COMMIT / 2f;
+        BorderDrag drag = bothArmed(550f, downY, true, NO_LIMIT);
+        assertEquals(BorderDrag.Claim.STATUS, drag.move(550f, shortDown));
+        assertEquals("short and slow is nothing", BorderDrag.StatusSwipe.NONE,
+            drag.statusRelease(shortDown, FLING / 2f, COMMIT, FLING));
+        assertEquals("short and flicked on down expands", BorderDrag.StatusSwipe.EXPAND,
+            drag.statusRelease(shortDown, FLING + 1f, COMMIT, FLING));
+        assertEquals("far but flicked back up is a change of mind", BorderDrag.StatusSwipe.NONE,
+            drag.statusRelease(downY + COMMIT * 2f, -FLING - 1f, COMMIT, FLING));
+    }
+
+    @Test
+    public void theTopBandReachesOnlyARowInsideTheLine() {
+        float y = TOP + STATUS_REACH + 1f;
+        BorderDrag below = bothArmed(550f, y, true, NO_LIMIT);
+        assertEquals(BorderDrag.Border.TOP, below.border());
+        assertFalse(below.isStatusEligible());
+        assertEquals(BorderDrag.Claim.ABANDONED, below.move(550f, y + 200f));
+        BorderDrag edge = bothArmed(550f, TOP + STATUS_REACH, true, NO_LIMIT);
+        assertEquals(BorderDrag.Claim.STATUS, edge.move(550f, TOP + STATUS_REACH + 200f));
+    }
+
+    @Test
+    public void thePhonesOwnStripAtTheTopIsNeverTaken() {
+        // The shade's pull reaches down to TOP - 20 here: a press above that is the phone's.
+        float limit = TOP - 20f;
+        BorderDrag inStrip = bothArmed(550f, TOP - 30f, true, limit);
+        assertEquals(BorderDrag.Border.TOP, inStrip.border());
+        assertFalse(inStrip.isStatusEligible());
+        assertEquals(BorderDrag.Claim.ABANDONED, inStrip.move(550f, TOP + 200f));
+        BorderDrag belowStrip = bothArmed(550f, TOP - 10f, true, limit);
+        assertEquals(BorderDrag.Claim.STATUS, belowStrip.move(550f, TOP + 200f));
+        // And a wall that cannot page arms nothing in the strip at all.
+        assertFalse(bothArmed(550f, TOP - 30f, false, limit).isArmed());
+    }
+
+    @Test
+    public void aSidewaysStartOrAHoldOnTheTopBorderStayAsTheyWere() {
+        BorderDrag sideways = bothArmed(550f, TOP + 10f, true, NO_LIMIT);
+        assertEquals(BorderDrag.Claim.ABANDONED, sideways.move(550f + SLOP + 5f, TOP + 14f));
+        assertFalse(sideways.isStatusSwipe());
+
+        BorderDrag held = bothArmed(550f, TOP + 10f, true, NO_LIMIT);
+        assertTrue("the hold still pages", held.holdElapsed());
+        assertEquals(BorderDrag.Claim.PAGING, held.move(550f, TOP + 300f));
+        assertEquals(BorderDrag.StatusSwipe.NONE,
+            held.statusRelease(TOP + 300f, 0f, COMMIT, FLING));
+        assertEquals(-300f, held.travel(250f), 0.01f);
+
+        BorderDrag onePlace = bothArmed(550f, TOP + 10f, false, NO_LIMIT);
+        assertTrue("the status swipe arms a wall of one place", onePlace.isArmed());
+        assertFalse("where the hold cannot page it is the content's", onePlace.holdElapsed());
+    }
+
+    @Test
+    public void theTopAndBottomSwipesNeverCross() {
+        // Up off the top border is the status bar's fold, never the keyboard's open.
+        BorderDrag top = bothArmed(550f, TOP + 10f, true, NO_LIMIT);
+        assertEquals(BorderDrag.Claim.STATUS, top.move(550f, TOP - 200f));
+        assertEquals(BorderDrag.KeyboardSwipe.NONE,
+            top.keyboardRelease(TOP - 200f, 0f, COMMIT, FLING));
+        // Down off the bottom border is the keyboard's close, never the bar's unfold.
+        BorderDrag bottom = bothArmed(550f, BOTTOM - 10f, true, NO_LIMIT);
+        assertFalse(bottom.isStatusEligible());
+        assertEquals(BorderDrag.Claim.KEYBOARD, bottom.move(550f, BOTTOM + 200f));
+        assertEquals(BorderDrag.StatusSwipe.NONE,
+            bottom.statusRelease(BOTTOM + 200f, 0f, COMMIT, FLING));
+        // The side borders carry neither.
+        BorderDrag side = bothArmed(LEFT + 10f, 1000f, true, NO_LIMIT);
+        assertEquals(BorderDrag.Claim.ABANDONED, side.move(LEFT + 10f, 1200f));
+    }
+
+    @Test
+    public void theCornersStayTheCornerTabsForTheStatusSwipeToo() {
+        assertFalse(bothArmed(LEFT + 10f, TOP + 10f, true, NO_LIMIT).isArmed());
+        assertFalse(bothArmed(RIGHT - 10f, TOP - 10f, true, NO_LIMIT).isArmed());
+        assertFalse(bothArmed(LEFT + 10f, TOP + 10f, false, NO_LIMIT).isArmed());
+    }
+
+    @Test
+    public void withoutAStatusReachTheTopBorderOnlyPages() {
+        BorderDrag drag = keyboardArmed(550f, TOP + 10f, true);
+        assertFalse(drag.isStatusEligible());
+        assertEquals(BorderDrag.Claim.ABANDONED, drag.move(550f, TOP + 300f));
+    }
+
+    @Test
+    public void aSecondFingerOrAnAbandonEndsTheStatusSwipe() {
+        BorderDrag pinch = bothArmed(550f, TOP + 10f, true, NO_LIMIT);
+        assertEquals(BorderDrag.Claim.ABANDONED, pinch.secondPointer());
+        BorderDrag claimed = bothArmed(550f, TOP + 10f, true, NO_LIMIT);
+        assertEquals(BorderDrag.Claim.STATUS, claimed.move(550f, TOP + 300f));
+        assertEquals(BorderDrag.Claim.STATUS, claimed.secondPointer());
+        assertEquals(BorderDrag.Claim.ABANDONED, claimed.abandon());
+        assertEquals(BorderDrag.StatusSwipe.NONE,
+            claimed.statusRelease(TOP + 300f, 0f, COMMIT, FLING));
+        claimed.reset();
+        assertFalse(claimed.isStatusEligible());
+    }
 }
