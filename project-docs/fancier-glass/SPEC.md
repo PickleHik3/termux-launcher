@@ -53,6 +53,29 @@ Bug fixes (all versions, API 26+):
   4. The Fancier Glass motions (§6).
 - **What overrides it:** Lazy mode, battery saver and reduced motion stop every animation and video, and the glass shows the resting look. The toggle itself stays on.
 
+### 3.1 Every glass surface (coverage as of 2026-09-29)
+
+The look is `TermuxActivity.mFancierGlassLook` (null in the default mode); one program, `chrome/GlassRefraction.Program`, draws it. It reaches a surface by one of three routes: **(a)** a `chrome/SharedFrameDrawable` handed the look through `setRefraction`, **(b)** a `terminal/PaneGlassBackdropView` through its own `setRefraction`, **(c)** a `RenderEffect` over the view's own pixels (`buildGlassRefractionEffect`). A surface with Solid material, or with blur off, gets no frame and so no glass, as in the default mode. A software canvas (a `RealtimeBlurView` drawing the window into its bitmap) never gets the refracted frame: routes (a) and (b) and the corner tab skip it there.
+
+| Surface | Frost | Refraction | Rim |
+|---|---|---|---|
+| Dock | shared frame | (c) | the capsule, or square; overscanned bottom |
+| Under-pill nav strip | shared frame | (c) | square |
+| Keyboard host | shared frame | (a) | the capsule, or square with a bottom seam over the strip |
+| Under-keyboard card (`UnderKeyboardBand`) | shared frame | (a) | the card's own radius |
+| Status band and window bar | shared frame, `WallpaperFrostPainter.updateTopPane`; live blur when there is no frame | (a) | one sheet in the docked style (the band's bottom and the bar's top are seams); the capsule's own radius in the floating style; none for a bar on the dock's plank, which has no frost of its own |
+| Command palette, terminal sheet | shared frame; live blur when there is no frame | (a) | the plane's corner |
+| App drawer plane | shared frame, with the live blur kept on top of it so the terminal ghosts through; tint only in wallpaper mode with no frame | (a) | the plane's corner |
+| Terminal panes, Widgets page, Display page | shared frame | (b) | the slab's own radius; none under a corner mask |
+| Corner tabs, every place (since 2026-09-29) | shared frame, under the tab's fixed scrim; no tint or grain of the pane's | the tab's own program, as (a) | the tab's rect turning its one free corner; the edge it slid out of and the frame side are seams (`CornerTabGeometry.refractionSeams`) |
+| Off-dock plank, and the A–Z bar's capsule off the dock (since 2026-09-29) | shared frame, `WallpaperFrostPainter.applyOffDockSheet`, at the dock's radius; live blur only when there is no frame | (a) | the outline's own clamped radius on all four sides |
+
+Deliberately without refraction:
+- **The A–Z pull tab and the letters it slides out** (`AzPullTabLayer`): tint only. They stand over live content, not over the wallpaper.
+- **Popup menus** (`AnchoredMenu`): separate windows with no access to the shared frame.
+
+Known, left as they are: the live-blur fallbacks of the palette, the sheet, the drawer and the top bars still run a `RealtimeBlurView` (whole-window software capture) whenever they show. They never refract.
+
 ## 4. Refraction
 
 - **One shader for every glass surface.** It extends today's `GLASS_AGSL` (`TermuxActivity.java:3399-3495`) and samples the shared frame, or the live-recorded backdrop while a video plays. Per pixel it bends the frame near the rim and adds the rim light.
