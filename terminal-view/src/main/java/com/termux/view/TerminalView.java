@@ -145,12 +145,26 @@ public final class TerminalView extends View {
     private int mTravelAnchorHeightPx;
     /** How far down the grid is drawn from the anchor this frame; negative is up. */
     private float mTravelDisplacementPx;
+    /**
+     * How many rows the settle's resize will bring into view above the rows on screen: the
+     * transcript a growth reveals over a bottom-anchored grid, 0 for a shrink and on the
+     * alternate screen. The travel draws them already, in the room the view is gaining.
+     */
+    private int mTravelRevealRows;
+    /** What the centring slack above the grid changes by at the settle, and how far the travel is. */
+    private float mTravelHeadroomChangePx;
+    private float mTravelProgress;
     /** Whether the reflow that ends this travel is to be frosted; set by the settle. */
     private boolean mFrostOnTravelReflow;
-    /** The frost's thaw, while one runs (API 31+). */
+    /** Whether this travel is frosted throughout ({@link #holdTravelFrost}), to thaw as it ends. */
+    private boolean mTravelFrostHeld;
+    /** The frost's change, while one runs (API 31+), and how deep it stands, 0 to 1. */
     @Nullable private ValueAnimator mReflowFrost;
+    private float mReflowFrostLevel;
     /** How long the frost over a travel's reflow takes to thaw. */
     static final long REFLOW_FROST_MS = 180L;
+    /** How long a held frost takes to come in. */
+    static final long TRAVEL_FROST_IN_MS = 100L;
     /** Per-instance instrumentation seam; production leaves this null. */
     public interface SizeUpdateObserver { void onUpdateSize(TerminalView view); }
     private SizeUpdateObserver mSizeUpdateObserver;
@@ -2619,23 +2633,36 @@ public final class TerminalView extends View {
         mTravelAnchorOffsetPx = getVerticalContentOffset();
         mTravelAnchorHeightPx = getHeight();
         mTravelDisplacementPx = 0f;
+        mTravelRevealRows = 0;
+        mTravelHeadroomChangePx = 0f;
+        mTravelProgress = 0f;
         mFrostOnTravelReflow = false;
+        mTravelFrostHeld = false;
     }
 
     /**
      * One frame of the slide: the grid is drawn {@code progress} of the way to where a resize from
      * the height the travel began at to that plus {@code futureHeightDeltaPx} will put its rows,
      * centred as the settle's layout will draw it, with the buffer's bottom-anchored shift on top
-     * ({@link #predictResizeDisplacementPx}).
+     * ({@link #predictResizeDisplacementPx}). The transcript that resize will pull in above the
+     * rows is drawn above them already ({@link #mTravelRevealRows}), so a growing view fills with
+     * the lines it will show instead of opening empty until the settle.
      * The cursor trail snaps to the rows rather than smearing along a whole slide.
      */
     public void setTravelDisplacement(int futureHeightDeltaPx, float progress) {
         beginTravelDisplacement();
-        float target = predictResizeDisplacementPx(mTravelAnchorHeightPx,
-            mTravelAnchorHeightPx + futureHeightDeltaPx);
-        float displacement = target * Math.max(0f, Math.min(1f, progress));
-        if (displacement == mTravelDisplacementPx) return;
+        int toHeightPx = mTravelAnchorHeightPx + futureHeightDeltaPx;
+        float target = predictResizeDisplacementPx(mTravelAnchorHeightPx, toHeightPx);
+        float clamped = Math.max(0f, Math.min(1f, progress));
+        float displacement = target * clamped;
+        int revealRows = Math.max(0, predictResizeRowShift(toHeightPx));
+        float headroomChange = predictResizeHeadroomChangePx(mTravelAnchorHeightPx, toHeightPx);
+        mTravelProgress = clamped;
+        if (displacement == mTravelDisplacementPx && revealRows == mTravelRevealRows
+            && headroomChange == mTravelHeadroomChangePx) return;
         mTravelDisplacementPx = displacement;
+        mTravelRevealRows = revealRows;
+        mTravelHeadroomChangePx = headroomChange;
         notifyCursorTrailSnap();
         invalidate();
     }
@@ -2643,6 +2670,35 @@ public final class TerminalView extends View {
     /** How far down from its laid-out place the grid is drawn right now; 0 outside a travel. */
     public float getTravelDisplacementPx() {
         return mTravelActive ? mTravelDisplacementPx : 0f;
+    }
+
+    /**
+     * Whether the settle's resize can be drawn ahead of it: on the normal screen the rows land
+     * where {@link TerminalEmulator#predictRowsOnlyResizeShift} says. The alternate screen's
+     * full-screen program repaints itself after the resize, so nothing drawn early is what it
+     * will show; that travel is better frosted throughout ({@link #holdTravelFrost}).
+     */
+    public boolean canPlaceTravelRows() {
+        return mEmulator != null && !mEmulator.isAlternateBufferActive();
+    }
+
+    /**
+     * Frosts the grid for the rest of this travel: the blur comes in over
+     * {@link #TRAVEL_FROST_IN_MS} and stays until the travel ends, reflowed or sprung back, when
+     * it thaws as a reflow's frost does. For rows the travel cannot place
+     * ({@link #canPlaceTravelRows}); nothing outside a travel, and nothing below API 31. The
+     * caller gates it on motion the way it gates the settle's frost.
+     */
+    public void holdTravelFrost() {
+        if (!mTravelActive || mTravelFrostHeld) return;
+        mTravelFrostHeld = true;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            animateReflowFrost(1f, TRAVEL_FROST_IN_MS);
+    }
+
+    /** Whether this travel is frosted throughout; see {@link #holdTravelFrost}. */
+    boolean isTravelFrostHeld() {
+        return mTravelActive && mTravelFrostHeld;
     }
 
     /**
@@ -2665,9 +2721,19 @@ public final class TerminalView extends View {
         if (!mTravelActive) return;
         mTravelActive = false;
         mTravelDisplacementPx = 0f;
+        mTravelRevealRows = 0;
+        mTravelHeadroomChangePx = 0f;
+        mTravelProgress = 0f;
+        // A held frost thaws whichever way the travel ends; otherwise only a reflow the settle
+        // asked to frost is.
+        boolean held = mTravelFrostHeld;
         boolean frost = reflowed && mFrostOnTravelReflow;
+        mTravelFrostHeld = false;
         mFrostOnTravelReflow = false;
-        if (frost && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) frostReflow();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (held) animateReflowFrost(0f, REFLOW_FROST_MS);
+            else if (frost) frostReflow();
+        }
         notifyCursorTrailSnap();
         invalidate();
     }
@@ -2679,14 +2745,36 @@ public final class TerminalView extends View {
      * 0 before there is a grid to speak of.
      */
     float predictResizeDisplacementPx(int fromHeightPx, int toHeightPx) {
-        if (mEmulator == null || mRenderer == null || fromHeightPx <= 0 || toHeightPx <= 0
-            || mRenderer.mFontLineSpacing <= 0)
-            return 0f;
-        int toRows = Math.max(4, (toHeightPx - mRenderer.mFontLineSpacingAndAscent)
-            / mRenderer.mFontLineSpacing);
+        if (!canPredictResize(fromHeightPx, toHeightPx)) return 0f;
+        int toRows = rowsForHeight(toHeightPx);
         int rowShift = mEmulator.predictRowsOnlyResizeShift(toRows, true);
         return travelDisplacementPx(fromHeightPx, toHeightPx, mEmulator.mRows, toRows, rowShift,
             mRenderer.mFontLineSpacing, mRenderer.mFontLineSpacingAndAscent);
+    }
+
+    /** How many rows down the settle's resize to {@code toHeightPx} moves the rows on screen. */
+    private int predictResizeRowShift(int toHeightPx) {
+        if (!canPredictResize(mTravelAnchorHeightPx, toHeightPx)) return 0;
+        return mEmulator.predictRowsOnlyResizeShift(rowsForHeight(toHeightPx), true);
+    }
+
+    /** What the centring slack above the grid changes by across that resize. */
+    private float predictResizeHeadroomChangePx(int fromHeightPx, int toHeightPx) {
+        if (!canPredictResize(fromHeightPx, toHeightPx)) return 0f;
+        return travelHeadroomChangePx(fromHeightPx, toHeightPx, mEmulator.mRows,
+            rowsForHeight(toHeightPx), mRenderer.mFontLineSpacing,
+            mRenderer.mFontLineSpacingAndAscent);
+    }
+
+    private boolean canPredictResize(int fromHeightPx, int toHeightPx) {
+        return mEmulator != null && mRenderer != null && fromHeightPx > 0 && toHeightPx > 0
+            && mRenderer.mFontLineSpacing > 0;
+    }
+
+    /** The rows {@link #updateSize} gives a view this tall. */
+    private int rowsForHeight(int heightPx) {
+        return Math.max(4, (heightPx - mRenderer.mFontLineSpacingAndAscent)
+            / mRenderer.mFontLineSpacing);
     }
 
     /**
@@ -2698,9 +2786,46 @@ public final class TerminalView extends View {
      */
     static float travelDisplacementPx(int fromHeightPx, int toHeightPx, int fromRows, int toRows,
                                       int rowShift, int lineSpacingPx, int ascentPx) {
+        return travelHeadroomChangePx(fromHeightPx, toHeightPx, fromRows, toRows, lineSpacingPx,
+            ascentPx) + rowShift * (float) lineSpacingPx;
+    }
+
+    /** The slack part of that move: how far the centred grid's top edge moves with the resize. */
+    static float travelHeadroomChangePx(int fromHeightPx, int toHeightPx, int fromRows,
+                                        int toRows, int lineSpacingPx, int ascentPx) {
         int fromHeadroom = centredSlackPx(fromHeightPx, fromRows * lineSpacingPx + ascentPx);
         int toHeadroom = centredSlackPx(toHeightPx, toRows * lineSpacingPx + ascentPx);
-        return (toHeadroom - fromHeadroom) + rowShift * (float) lineSpacingPx;
+        return toHeadroom - fromHeadroom;
+    }
+
+    /**
+     * How many rows above {@code topRow} a travel draws: the rows the settle's resize reveals
+     * ({@code revealRows}), as far as the transcript reaches. Past the transcript's first line
+     * the resize shows blank rows, which is what drawing nothing there shows too.
+     */
+    static int travelFillRows(int revealRows, int topRow, int activeTranscriptRows) {
+        return Math.max(0, Math.min(revealRows, topRow + activeTranscriptRows));
+    }
+
+    /**
+     * Where, in this view's pixels, a travel that reveals rows cuts its drawing off at the top:
+     * the grid's top edge as the settle's layout will move it, {@code progress} of the way from
+     * where it stood when the travel began. The revealed rows come out from under this edge as
+     * the grid travels down, so at the travel's start none of them shows in the slack above the
+     * grid, and at its end the edge is exactly where the resized grid begins.
+     */
+    static float travelFillClipTopPx(float anchorOffsetPx, float headroomChangePx, float progress,
+                                     int ascentPx) {
+        return anchorOffsetPx + headroomChangePx * progress + ascentPx;
+    }
+
+    /** The rows above {@link #mTopRow} this frame draws; 0 outside a travel that reveals any. */
+    int currentTravelFillRows() {
+        if (!mTravelActive || mTravelRevealRows <= 0 || mEmulator == null
+            || mEmulator.isAlternateBufferActive())
+            return 0;
+        return travelFillRows(mTravelRevealRows, mTopRow,
+            mEmulator.getScreen().getActiveTranscriptRows());
     }
 
     /**
@@ -2710,22 +2835,64 @@ public final class TerminalView extends View {
      */
     @RequiresApi(Build.VERSION_CODES.S)
     private void frostReflow() {
-        if (mReflowFrost != null) mReflowFrost.cancel();
-        final float radius = Math.max(2f, mRenderer == null ? 8f
-            : mRenderer.mFontLineSpacing * 0.45f);
-        ValueAnimator frost = ValueAnimator.ofFloat(1f, 0f);
-        frost.setDuration(REFLOW_FROST_MS);
+        cancelReflowFrostAnimation();
+        mReflowFrostLevel = 1f;
+        applyReflowFrost(reflowFrostRadiusPx());
+        animateReflowFrost(0f, REFLOW_FROST_MS);
+    }
+
+    /**
+     * Carries the frost from the depth it stands at to {@code toLevel} (1 is the full blur, 0
+     * none) over {@code durationMs}, on the reflow frost's decelerating curve. A frost already
+     * changing is taken on from where it has got to.
+     */
+    @RequiresApi(Build.VERSION_CODES.S)
+    private void animateReflowFrost(float toLevel, long durationMs) {
+        cancelReflowFrostAnimation();
+        final float radius = reflowFrostRadiusPx();
+        if (mReflowFrostLevel == toLevel) {
+            applyReflowFrost(radius * toLevel);
+            return;
+        }
+        ValueAnimator frost = ValueAnimator.ofFloat(mReflowFrostLevel, toLevel);
+        frost.setDuration(durationMs);
         frost.setInterpolator(new DecelerateInterpolator());
-        frost.addUpdateListener(animation ->
-            applyReflowFrost(radius * (float) animation.getAnimatedValue()));
+        frost.addUpdateListener(animation -> {
+            if (mReflowFrost != animation) return;
+            mReflowFrostLevel = (float) animation.getAnimatedValue();
+            applyReflowFrost(radius * mReflowFrostLevel);
+        });
         frost.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
-                applyReflowFrost(0f);
-                if (mReflowFrost == animation) mReflowFrost = null;
+                if (mReflowFrost != animation) return;
+                mReflowFrost = null;
+                mReflowFrostLevel = toLevel;
+                applyReflowFrost(radius * toLevel);
             }
         });
         mReflowFrost = frost;
         frost.start();
+    }
+
+    /** Stops a frost mid-change, leaving it at the depth it had reached. */
+    private void cancelReflowFrostAnimation() {
+        ValueAnimator running = mReflowFrost;
+        mReflowFrost = null;
+        if (running != null) running.cancel();
+    }
+
+    /** Takes any frost off at once: a view leaving the window keeps none. */
+    private void clearReflowFrost() {
+        cancelReflowFrostAnimation();
+        mTravelFrostHeld = false;
+        if (mReflowFrostLevel == 0f) return;
+        mReflowFrostLevel = 0f;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) applyReflowFrost(0f);
+    }
+
+    /** About half a row deep. */
+    private float reflowFrostRadiusPx() {
+        return Math.max(2f, mRenderer == null ? 8f : mRenderer.mFontLineSpacing * 0.45f);
     }
 
     @RequiresApi(Build.VERSION_CODES.S)
@@ -2800,6 +2967,14 @@ public final class TerminalView extends View {
             final boolean paintingPaddingFill = mPaddingFillEnabled && mEdgeColorsColumns > 0;
             final boolean canvasTranslated = drawOffset != 0f || paintingPaddingFill
                 || mTravelActive;
+            // A travel toward a taller grid draws the transcript its resize will reveal above the
+            // rows, where the resize will put it: drawing starts that many rows up and is moved up
+            // by as many lines, so mTopRow, hit-testing and every row below stay where they were.
+            final int fillRows = currentTravelFillRows();
+            final float fillClipTop = fillRows > 0 ? travelFillClipTopPx(mTravelAnchorOffsetPx,
+                mTravelHeadroomChangePx, mTravelProgress, mRenderer.mFontLineSpacingAndAscent) : 0f;
+            final int drawTopRow = mTopRow - fillRows;
+            final int extraRows = fillRows + (scrollOffset != 0f ? 1 : 0);
             if (canvasTranslated) {
                 canvas.save();
                 // Rows displaced past this view's edges stay inside it: the pane frame around
@@ -2808,11 +2983,21 @@ public final class TerminalView extends View {
                 canvas.translate(0f, drawOffset);
             }
             if (paintingPaddingFill)
-                drawPaddingFill(canvas, getHorizontalContentOffset(), drawOffset);
-            mRenderer.render(mEmulator, canvas, mTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear, mTransparentFrameOverlayColor, getHorizontalContentOffset(), scrollOffset != 0f ? 1 : 0);
+                drawPaddingFill(canvas, getHorizontalContentOffset(), drawOffset,
+                    fillRows > 0 ? fillClipTop - drawOffset : Float.NaN);
+            if (fillRows > 0) {
+                // The revealed rows come out from under the grid's moving top edge, so none of
+                // them shows in the slack above the grid before the travel has made room for it.
+                // The frame's ground is laid first, since the render's own would stop at the cut.
+                mRenderer.clearFrame(mEmulator, canvas, mUseTransparentFrameClear,
+                    mTransparentFrameOverlayColor);
+                canvas.clipRect(0f, fillClipTop - drawOffset, getWidth(), getHeight() - drawOffset);
+                canvas.translate(0f, -fillRows * (float) mRenderer.mFontLineSpacing);
+            }
+            mRenderer.render(mEmulator, canvas, drawTopRow, sel[0], sel[1], sel[2], sel[3], mUseTransparentFrameClear, mTransparentFrameOverlayColor, getHorizontalContentOffset(), extraRows);
             if (mFindOverlay != null) {
-                mRenderer.renderFindOverlay(mEmulator, canvas, mTopRow, mFindOverlay,
-                    getHorizontalContentOffset(), scrollOffset != 0f ? 1 : 0);
+                mRenderer.renderFindOverlay(mEmulator, canvas, drawTopRow, mFindOverlay,
+                    getHorizontalContentOffset(), extraRows);
             }
             // The trail itself is drawn by whoever composes the panes (it spans all of them, not
             // just this view); this pane only reports that its cursor may have moved, or — while
@@ -3126,11 +3311,18 @@ public final class TerminalView extends View {
      * <p>The wider band outside this view — the pane's own rounded-corner clearance — is not this
      * view's to paint; {@code PaneContentFrame} reads these same colours through the accessors above
      * and extends them the rest of the way to the pane's border, using the same rounding.
+     *
+     * @param topBandBottom where the headroom band stops, in the translated canvas's coordinates:
+     *                      NaN for row 0's top edge, or the cut a travel's revealed rows come out
+     *                      from under, so the band never lies beneath them
      */
-    private void drawPaddingFill(Canvas canvas, float horizontalOffset, float drawOffset) {
+    private void drawPaddingFill(Canvas canvas, float horizontalOffset, float drawOffset,
+                                 float topBandBottom) {
         final float fontWidth = mRenderer.getFontWidth();
         final float fontLineSpacing = mRenderer.getFontLineSpacing();
         final float firstRowTop = Math.round(mRenderer.getFontLineSpacingAndAscent());
+        final float topBandEnd = Float.isNaN(topBandBottom) ? firstRowTop
+            : Math.min(firstRowTop, Math.round(topBandBottom));
         final float viewWidth = getWidth();
         final float viewTop = -drawOffset;
         final float viewBottom = getHeight() - drawOffset;
@@ -3145,7 +3337,7 @@ public final class TerminalView extends View {
                 final float right = runEnd == mEdgeColorsColumns
                     ? viewWidth : Math.round(horizontalOffset + runEnd * fontWidth);
                 mPaddingFillPaint.setColor(topColor);
-                canvas.drawRect(left, viewTop, right, firstRowTop, mPaddingFillPaint);
+                canvas.drawRect(left, viewTop, right, topBandEnd, mPaddingFillPaint);
             }
             c = runEnd;
         }
@@ -3875,7 +4067,7 @@ public final class TerminalView extends View {
         mHoldGesture.reset();
         releaseHoldDownEvent();
         updateKittyAnimationVisibility();
-        if (mReflowFrost != null) mReflowFrost.cancel();
+        clearReflowFrost();
         if (mTextSelectionCursorController != null) {
             // Might solve the following exception
             // android.view.WindowLeaked: Activity com.termux.app.TermuxActivity has leaked window android.widget.PopupWindow

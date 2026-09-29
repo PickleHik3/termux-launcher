@@ -892,6 +892,22 @@ public final class TerminalRenderer {
         }
     }
 
+    /**
+     * The ground a frame is drawn on, laid over whatever the canvas's clip lets through: the
+     * foreground under reverse video, the pane's overlay on a transparent frame, otherwise nothing.
+     * {@link #render} lays it itself; a view that narrows the clip before rendering lays it first
+     * over the whole of itself, so the ground does not stop at the clip.
+     */
+    final void clearFrame(TerminalEmulator emulator, Canvas canvas, boolean transparentBackground,
+                          int transparentOverlayColor) {
+        if (emulator.isReverseVideo()) {
+            canvas.drawColor(emulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_FOREGROUND],
+                PorterDuff.Mode.SRC);
+        } else if (transparentBackground) {
+            canvas.drawColor(transparentOverlayColor, PorterDuff.Mode.SRC);
+        }
+    }
+
     private boolean[] changedRowsBuffer(int visibleRows) {
         if (mChangedRows.length < visibleRows) mChangedRows = new boolean[visibleRows];
         return mChangedRows;
@@ -975,11 +991,7 @@ public final class TerminalRenderer {
         mEmulator.setCellSize((int) mFontWidth, (int) mFontLineSpacing);
         mUrlUnderlines.prepare(screen, topRow, endRow, columns, mEmulator.mRows, mUrlUnderlineColor != 0);
         mKittyLayer.collect(mEmulator, topRow, Math.max(0, endRow - topRow));
-        if (reverseVideo) {
-            canvas.drawColor(palette[TextStyle.COLOR_INDEX_FOREGROUND], PorterDuff.Mode.SRC);
-        } else if (transparentBackground) {
-            canvas.drawColor(transparentOverlayColor, PorterDuff.Mode.SRC);
-        }
+        clearFrame(mEmulator, canvas, transparentBackground, transparentOverlayColor);
         if (drawRowsThroughNodes(mEmulator, canvas, screen, palette, topRow, endRow, columns,
             cursorRow, cursorCol, cursorVisible, cursorShape, selectionY1, selectionY2,
             selectionX1, selectionX2, boldWithBright, reverseVideo, transparentBackground,
