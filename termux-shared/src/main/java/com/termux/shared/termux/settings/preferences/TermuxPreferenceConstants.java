@@ -1403,6 +1403,33 @@ public final class TermuxPreferenceConstants {
         public static final String DEFAULT_SURFACE_MATERIAL = SURFACE_MATERIAL_GLASS;
         public static final int DEFAULT_SURFACE_MATERIAL_INTENSITY = 50;
 
+        /*
+         * What a preset carries beyond the numbers: the glass's tint colour, its rim, and how glass
+         * surfaces move. Each is a small enum-like string so a preset stays a plain map and the
+         * selection ring's match test keeps working; an unknown value reads as the default, so a
+         * look written by a newer build degrades to the shipped one.
+         */
+        public static final String KEY_SURFACE_GLASS_TINT = "surface_glass_tint";
+        /** The tint follows the colour scheme's background: what every install has always drawn. */
+        public static final String GLASS_TINT_SCHEME = "scheme";
+        /** Obsidian-Music's ink-blue glass, a white wash over it; white in a light theme. */
+        public static final String GLASS_TINT_OBSIDIAN = "obsidian";
+        public static final String DEFAULT_SURFACE_GLASS_TINT = GLASS_TINT_SCHEME;
+
+        public static final String KEY_SURFACE_GLASS_RIM = "surface_glass_rim";
+        /** The 1dp containing stroke in the outline colour: what every install has always drawn. */
+        public static final String GLASS_RIM_HAIRLINE = "hairline";
+        /** The 1dp stroke as a diagonal white gradient, bright top-left and faint bottom-right. */
+        public static final String GLASS_RIM_GRADIENT = "gradient";
+        public static final String DEFAULT_SURFACE_GLASS_RIM = GLASS_RIM_HAIRLINE;
+
+        public static final String KEY_SURFACE_GLASS_MOTION = "surface_glass_motion";
+        /** Glass surfaces move exactly as they always have. */
+        public static final String GLASS_MOTION_CLASSIC = "classic";
+        /** Obsidian-Music's springs: scale and blur settle in, a slower fade, a deeper scrim. */
+        public static final String GLASS_MOTION_MIST = "mist";
+        public static final String DEFAULT_SURFACE_GLASS_MOTION = GLASS_MOTION_CLASSIC;
+
         /**
          * The look the user pinned as the editor's Custom preset, as the preset format's JSON.
          * Written only by the editor's save glyph — never by Done, which commits the live

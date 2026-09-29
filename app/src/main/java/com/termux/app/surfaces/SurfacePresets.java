@@ -27,16 +27,24 @@ import java.util.Map;
  * override. Unknown keys are ignored on read, so a preset written by a newer build degrades
  * instead of failing.
  *
- * <p>The Base blur/opacity/grain triple of every preset is computed from its material point via
- * {@link SurfaceMaterials}, never written by hand, so a freshly applied preset always shows its
- * material selected rather than "Custom".
+ * <p>The Base blur/opacity/grain triple of a preset is computed from its material point via
+ * {@link SurfaceMaterials}, so a freshly applied preset shows its material selected rather than
+ * "Custom". A preset whose look sits off every curve (Mist) names its triple in its extras, which
+ * win over the computed one.
+ *
+ * <p>Beyond the numbers a preset carries three enum-like strings: the glass tint colour, its rim
+ * and its motion profile. Every preset states them (the defaults unless it says otherwise), so
+ * applying one always resets the others' choice.
  */
 public final class SurfacePresets {
 
     private SurfacePresets() {}
 
-    /** Bumped when a key's meaning changes; unknown keys are already ignored without it. */
-    public static final int FORMAT_VERSION = 1;
+    /**
+     * Bumped when a key's meaning changes; unknown keys are already ignored without it. 2 added the
+     * glass tint, rim and motion keys; a stored look without them reads as the defaults.
+     */
+    public static final int FORMAT_VERSION = 2;
 
     /** The fifth card: whatever look the user last saved, rather than one this build ships. */
     public static final String CUSTOM_ID = "custom";
@@ -71,9 +79,21 @@ public final class SurfacePresets {
                     TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS);
                 look.put(TERMUX_APP.KEY_TERMINAL_PANE_GAP, TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
             }),
+        // Mist: Obsidian-Music's glass and motion (Apache-2.0; project-docs/mist-preset/). Blur 25
+        // and opacity 60 are Obsidian's own numbers. Grain 8 is not its 0.08 noise carried over:
+        // Haze lays a soft noise tile at 0.08 alpha, ours is full-contrast random alpha at up to
+        // 60/255 of the percentage, so a literal match (about 68) would read as sand. 8 is the
+        // same faint tooth. See SPEC.md.
         preset("frost", R.string.termux_surface_preset_frost,
             SegmentedPillPreference.VALUE_ROUNDED, TERMUX_APP.SURFACE_MATERIAL_FROST, 50, 28, 14,
-            look -> { }),
+            look -> {
+                look.put(TERMUX_APP.KEY_SURFACE_BASE_BLUR, 25);
+                look.put(TERMUX_APP.KEY_SURFACE_BASE_OPACITY, 60);
+                look.put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 8);
+                look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_OBSIDIAN);
+                look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.GLASS_RIM_GRADIENT);
+                look.put(TERMUX_APP.KEY_SURFACE_GLASS_MOTION, TERMUX_APP.GLASS_MOTION_MIST);
+            }),
         preset("solid", R.string.termux_surface_preset_solid,
             SegmentedPillPreference.VALUE_DEFAULT, TERMUX_APP.SURFACE_MATERIAL_SOLID, 78, 0, 12,
             look -> {
@@ -90,7 +110,10 @@ public final class SurfacePresets {
         void addTo(Map<String, Object> look);
     }
 
-    /** Shape, material point (the triple falls out of it), radius and margin; then the extras. */
+    /**
+     * Shape, material point (the triple falls out of it), radius and margin, the default glass
+     * tint, rim and motion; then the extras, whose puts replace any of those in place.
+     */
     private static Preset preset(String id, @StringRes int nameRes, String dockStyle,
                                  String material, int intensity, int cornerRadius, int sideGap,
                                  Extras extras) {
@@ -104,8 +127,15 @@ public final class SurfacePresets {
         look.put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, triple[SurfaceMaterials.GRAIN]);
         look.put(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS, cornerRadius);
         look.put(TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP, sideGap);
+        putGlassDefaults(look);
         extras.addTo(look);
         return new Preset(id, nameRes, look);
+    }
+
+    private static void putGlassDefaults(Map<String, Object> look) {
+        look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT);
+        look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.DEFAULT_SURFACE_GLASS_RIM);
+        look.put(TERMUX_APP.KEY_SURFACE_GLASS_MOTION, TERMUX_APP.DEFAULT_SURFACE_GLASS_MOTION);
     }
 
     @NonNull
@@ -153,6 +183,9 @@ public final class SurfacePresets {
         // point of any family's curve, and these three are the numbers that must win on apply.
         for (SurfaceProperty property : SurfaceProperty.values())
             look.put(property.baseKey, prefs.getSurfaceBaseValue(property));
+        look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, prefs.getSurfaceGlassTint());
+        look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, prefs.getSurfaceGlassRim());
+        look.put(TERMUX_APP.KEY_SURFACE_GLASS_MOTION, prefs.getSurfaceGlassMotion());
         look.put(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, prefs.isTerminalBorderEnabled());
         look.put(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS, prefs.getTerminalCornerRadius());
         look.put(TERMUX_APP.KEY_TERMINAL_PANE_GAP, prefs.getTerminalPaneGap());
@@ -201,7 +234,19 @@ public final class SurfacePresets {
         } catch (org.json.JSONException e) {
             return null;
         }
+        // A look saved before format 2 knows nothing of tint, rim or motion: it was the scheme
+        // tint, the hairline and the classic motion, and applying it must put those back.
+        if (!look.isEmpty()) {
+            for (Map.Entry<String, Object> glass : glassDefaults().entrySet())
+                if (!look.containsKey(glass.getKey())) look.put(glass.getKey(), glass.getValue());
+        }
         return look;
+    }
+
+    private static Map<String, Object> glassDefaults() {
+        LinkedHashMap<String, Object> defaults = new LinkedHashMap<>();
+        putGlassDefaults(defaults);
+        return defaults;
     }
 
     /**
@@ -227,6 +272,15 @@ public final class SurfacePresets {
                 return;
             case TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY:
                 prefs.setSurfaceMaterialIntensity(intOf(value));
+                return;
+            case TERMUX_APP.KEY_SURFACE_GLASS_TINT:
+                prefs.setSurfaceGlassTint((String) value);
+                return;
+            case TERMUX_APP.KEY_SURFACE_GLASS_RIM:
+                prefs.setSurfaceGlassRim((String) value);
+                return;
+            case TERMUX_APP.KEY_SURFACE_GLASS_MOTION:
+                prefs.setSurfaceGlassMotion((String) value);
                 return;
             case TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED:
                 prefs.setTerminalBorderEnabled((Boolean) value);
@@ -285,6 +339,12 @@ public final class SurfacePresets {
                 return prefs.getSurfaceMaterial();
             case TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY:
                 return prefs.getSurfaceMaterialIntensity();
+            case TERMUX_APP.KEY_SURFACE_GLASS_TINT:
+                return prefs.getSurfaceGlassTint();
+            case TERMUX_APP.KEY_SURFACE_GLASS_RIM:
+                return prefs.getSurfaceGlassRim();
+            case TERMUX_APP.KEY_SURFACE_GLASS_MOTION:
+                return prefs.getSurfaceGlassMotion();
             case TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED:
                 return prefs.isTerminalBorderEnabled();
             case TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS:

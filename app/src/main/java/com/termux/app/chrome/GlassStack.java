@@ -162,7 +162,7 @@ public final class GlassStack {
         }
         if (spec.tintColor != null) {
             layers.add(new android.graphics.drawable.ColorDrawable(spec.tintColor));
-            if (spec.rim) layers.add(glass.rim(spec.cornerRadiusPx));
+            if (spec.rim) layers.add(glass.rimDrawable(spec.cornerRadiusPx));
         } else {
             layers.add(glass.surface(spec.tintAlpha, 0f, spec.sliceEnd, spec.foot,
                 spec.grainPercent, spec.cornerRadiusPx, spec.rim));

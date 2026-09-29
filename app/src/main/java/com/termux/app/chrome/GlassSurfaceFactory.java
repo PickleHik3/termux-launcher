@@ -35,8 +35,29 @@ public final class GlassSurfaceFactory {
     }
 
     GlassSurfaceFactory(@NonNull ChromeRenderer.Surfaces surfaces, @Nullable ChromeInk ink) {
+        this(surfaces, ink, null);
+    }
+
+    private GlassSurfaceFactory(@NonNull ChromeRenderer.Surfaces surfaces, @Nullable ChromeInk ink,
+                                @Nullable GlassLook lookOverride) {
         mSurfaces = surfaces;
         mInk = ink;
+        mLookOverride = lookOverride;
+    }
+
+    /** A preset's tint and rim standing in for the live preferences'; null reads the preferences. */
+    @Nullable private final GlassLook mLookOverride;
+
+    /** This factory's material, drawn in {@code look} instead of the preferences' (the preset tiles). */
+    @NonNull
+    public GlassSurfaceFactory withLook(@NonNull GlassLook look) {
+        return new GlassSurfaceFactory(mSurfaces, mInk, look);
+    }
+
+    /** The tint colour and rim every surface built here wears: the preset's, or the live one. */
+    @NonNull
+    public GlassLook look() {
+        return mLookOverride != null ? mLookOverride : GlassLook.of(mSurfaces.preferences());
     }
 
     /**
@@ -197,7 +218,8 @@ public final class GlassSurfaceFactory {
                              int grain, float cornerRadiusPx, boolean withRim,
                              @Nullable GlassBackdropCache.Band glassBand,
                              @Nullable GlassBackdropCache.Band veilBand) {
-        int base = mSurfaces.glassBaseColor();
+        GlassLook look = look();
+        int base = look.tintBase(mSurfaces.glassBaseColor());
         int accent = mSurfaces.accentColor();
         float clamped = barAlpha < 0f ? 0f : (barAlpha > 1f ? 1f : barAlpha);
         // Opacity controls the colored material wash and its lighting. The wallpaper blur and
@@ -214,8 +236,11 @@ public final class GlassSurfaceFactory {
         baseLayer.setColor(SchemeTone.withAlpha(base, baseAlpha / 255f));
         baseLayer.setDither(true);
 
-        int[] sliceColors = DockGlassRendering.lightModelSlice(accent, topSheenAlpha, midSheenAlpha,
-            bottomFootAlpha, sliceStart, sliceEnd);
+        // Obsidian glass has no sheen and no foot: one white wash over the tint, flat.
+        int[] sliceColors = look.obsidianTint
+            ? new int[] {GlassLook.wash(), GlassLook.wash()}
+            : DockGlassRendering.lightModelSlice(accent, topSheenAlpha, midSheenAlpha,
+                bottomFootAlpha, sliceStart, sliceEnd);
         GradientDrawable lightLayer = new GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM, sliceColors);
         lightLayer.setDither(true);
@@ -242,7 +267,7 @@ public final class GlassSurfaceFactory {
         if (grain > 0) {
             layers.add(grainLayer(grain));
         }
-        if (withRim) layers.add(rim(cornerRadiusPx));
+        if (withRim) layers.add(rimDrawable(cornerRadiusPx));
         if (cornerRadiusPx > 0f) {
             baseLayer.setCornerRadius(cornerRadiusPx);
             lightLayer.setCornerRadius(cornerRadiusPx);
@@ -263,6 +288,17 @@ public final class GlassSurfaceFactory {
         rim.setStroke(Math.max(1, Math.round(mSurfaces.dpToPx(1))),
             SchemeTone.withAlpha(mSurfaces.outlineColor(), RIM_ALPHA / 255f));
         return rim;
+    }
+
+    /**
+     * The rim in this factory's look: the hairline above, or the diagonal white gradient. Every
+     * surface's rim goes through here, so the look's choice is made once.
+     */
+    @NonNull
+    public Drawable rimDrawable(float cornerRadiusPx) {
+        if (!look().gradientRim) return rim(cornerRadiusPx);
+        return new GradientRimDrawable(cornerRadiusPx, Math.max(1, Math.round(mSurfaces.dpToPx(1))),
+            GlassLook.RIM_START, GlassLook.RIM_END);
     }
 
     /** A tiled grain layer whose strength is controlled only by the grain preference. */

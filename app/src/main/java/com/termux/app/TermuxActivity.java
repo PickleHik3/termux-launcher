@@ -3129,7 +3129,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public int paneGlassTintColor() {
                 return shouldShowTerminalOverlaySurface()
-                    ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
+                    ? mChrome.glass().look().flatTint(resolveTerminalSurfaceColor())
+                    : Color.TRANSPARENT;
             }
 
             @Override @Nullable public Drawable paneGlassGrainLayer() {
@@ -4751,7 +4752,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         // Barely-there containing stroke; the AGSL shader draws the dark glass contour + bevel at the
         // edge, so a visible outline here would read as a drawn border ("inside rim") over the glass.
-        GradientDrawable outline = mChrome.glass().rim(resolveDockCapsuleCornerRadiusPx(surfaceHeightPx));
+        Drawable outline = mChrome.glass().rimDrawable(resolveDockCapsuleCornerRadiusPx(surfaceHeightPx));
         surface.setBackground(outline);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             surface.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
@@ -10123,9 +10124,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override @NonNull public Drawable presetGlassSurface(float barAlpha, int grainPercent,
                                                               float cornerRadiusPx,
-                                                              boolean withRim) {
-            return mChrome.glass().surface(barAlpha, 0f, 1f, true, grainPercent, cornerRadiusPx,
-                withRim);
+                                                              boolean withRim,
+                                                              @NonNull com.termux.app.chrome.GlassLook look) {
+            return mChrome.glass().withLook(look).surface(barAlpha, 0f, 1f, true, grainPercent,
+                cornerRadiusPx, withRim);
         }
 
         @Override @NonNull public com.termux.app.chrome.WallpaperPicture wallpaperPicture() {
@@ -13139,6 +13141,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The activity's half of the sheet plane's seam. */
     private final class TerminalSheetHost implements com.termux.app.terminal.TerminalSheetController.Host {
+        @NonNull @Override public com.termux.app.chrome.GlassMotion glassMotion() {
+            return com.termux.app.chrome.GlassMotion.forId(mPreferences != null
+                ? mPreferences.getSurfaceGlassMotion()
+                : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLASS_MOTION);
+        }
+
         @NonNull @Override public Context context() {
             return TermuxActivity.this;
         }
