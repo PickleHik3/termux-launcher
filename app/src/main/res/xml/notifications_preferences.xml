@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/settings_notifications_access_header">
+        <com.termux.app.fragments.settings.StatusActionPreference
+            app:key="app_launcher_notification_access"
+            app:icon="@drawable/ic_symbol_notifications"
+            app:title="@string/termux_app_launcher_notification_access_settings_title" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_notifications_home_header">
+        <SwitchPreferenceCompat
+            app:key="app_launcher_notification_dots"
+            app:title="@string/settings_notification_dots_title"
+            app:summary="@string/termux_app_launcher_notification_dots_summary"
+            app:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_notifications_pinned_header">
+        <Preference
+            app:key="essential_notification_rules_manage"
+            app:persistent="false"
+            app:title="@string/settings_essential_notifications_title"
+            app:summary="@string/settings_essential_notifications_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.EssentialNotificationRulesFragment" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_notifications_shell_header">
+        <Preference
+            app:key="notification_history_shell"
+            app:persistent="false"
+            app:title="@string/notif_history_title"
+            app:summary="@string/notif_history_link_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.NotificationHistoryFragment" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

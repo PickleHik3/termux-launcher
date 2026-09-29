@@ -36,6 +36,13 @@
             app:fragment="com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment" />
 
         <Preference
+            app:key="notifications"
+            app:icon="@drawable/ic_symbol_notification_settings"
+            app:title="@string/settings_destination_notifications"
+            app:summary="@string/settings_destination_notifications_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.NotificationsPreferencesFragment" />
+
+        <Preference
             app:key="keyboard_input"
             app:icon="@drawable/ic_symbol_keyboard"
             app:title="@string/settings_destination_keyboard_input"

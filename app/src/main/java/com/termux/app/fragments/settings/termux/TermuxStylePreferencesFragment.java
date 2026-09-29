@@ -29,7 +29,6 @@ import com.termux.app.chrome.WallpaperBackdropPolicy;
 import com.termux.app.chrome.WallpaperPictureReader;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
-import com.termux.launcherctl.LauncherCtlNotificationStore;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.theme.LauncherSchemeTheme;
@@ -590,14 +589,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherNotificationDotsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case "app_launcher_notification_history":
-                // History is per app now; this old switch can only turn it off. Turning it off
-                // means the captured message bodies go too, not just future ones.
-                if (!value) {
-                    mPreferences.setNotificationHistoryPackages(null);
-                    LauncherCtlNotificationStore.getInstance().clearAll();
-                }
-                break;
             case "app_launcher_most_used_page":
                 mPreferences.setAppLauncherMostUsedPageEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -660,8 +651,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherDisplayAppNamesEnabled();
             case "app_launcher_notification_dots":
                 return mPreferences.isAppLauncherNotificationDotsEnabled();
-            case "app_launcher_notification_history":
-                return !mPreferences.getNotificationHistoryPackages().isEmpty();
             case "app_launcher_most_used_page":
                 return mPreferences.isAppLauncherMostUsedPageEnabled();
             case "app_launcher_drawer_enabled":
