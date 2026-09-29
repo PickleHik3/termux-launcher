@@ -40,7 +40,7 @@ public final class TaiBenchSuite {
     /** Nothing but the reply: a system line the chat templates of both backends accept. */
     static final String SYSTEM_PROMPT = "You are a helpful assistant. Answer directly.";
     /** An everyday power-user question whose full answer runs to a few hundred tokens. */
-    static final String CHAT_PROMPT = "Explain what a shell alias is and give two useful examples.";
+    public static final String CHAT_PROMPT = "Explain what a shell alias is and give two useful examples.";
     /** The question after the pasted log. */
     static final String LONG_INPUT_QUESTION = "What went wrong, in two sentences?";
     /** The warm-up asks for a word and throws it away; it only exists to fill the caches. */

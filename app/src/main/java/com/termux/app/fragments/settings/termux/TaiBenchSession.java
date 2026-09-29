@@ -71,11 +71,14 @@ public final class TaiBenchSession {
     /** What the Check sheet's Start hands over. */
     public static final class Plan {
         @NonNull public final String presetId;
+        /** Run the CPU and the GPU where the model supports both, not only the processor an automatic load picks. */
+        public final boolean compare;
         @NonNull public final List<Model> models;
         public final boolean removeAfterwards;
 
-        public Plan(@NonNull String presetId, @NonNull List<Model> models, boolean removeAfterwards) {
+        public Plan(@NonNull String presetId, boolean compare, @NonNull List<Model> models, boolean removeAfterwards) {
             this.presetId = presetId;
+            this.compare = compare;
             this.models = Collections.unmodifiableList(new ArrayList<>(models));
             this.removeAfterwards = removeAfterwards;
         }
@@ -159,7 +162,7 @@ public final class TaiBenchSession {
 
     /**
      * Starts a run; ignored (returns {@code false}) while one is active. {@code bestTpsBeforeRun}
-     * is the leaderboard's top writing speed now, so an entry that beats it can say "New best".
+     * is the leaderboard's top decode speed now, so an entry that beats it can say "New best".
      */
     @MainThread
     public boolean start(@NonNull Context context, @NonNull Plan plan, double bestTpsBeforeRun) {
@@ -333,6 +336,7 @@ public final class TaiBenchSession {
             for (String id : modelIds) models.put(new JSONObject().put("model", id));
             body.put("models", models);
             body.put("preset", plan.presetId);
+            body.put("compare", plan.compare);
         } catch (JSONException e) {
             post(synthetic("error").put("code", "bad_request").put("message", e.getMessage() == null ? "bad request" : e.getMessage()));
             return;
@@ -355,7 +359,7 @@ public final class TaiBenchSession {
         }
     }
 
-    /** The leaderboard after an entry landed, reduced to what the state needs: key, rank, speed. */
+    /** The leaderboard after an entry landed, reduced to what the state needs: key, rank, decode speed. */
     private void postLeaderboard(@NonNull TaiManager manager) {
         try {
             JSONObject board = manager.benchmarks().optJSONObject("leaderboard");
@@ -366,7 +370,7 @@ public final class TaiBenchSession {
                 JSONObject row = ranked.optJSONObject(i);
                 if (row == null) continue;
                 slim.put(new JSONObject().put("key", row.optString("key", "")).put("rank", row.optInt("rank", i + 1))
-                    .put("writingTps", row.optDouble("writingTps", 0.0)));
+                    .put("decodeTps", row.optDouble("decodeTps", 0.0)));
             }
             post(synthetic("leaderboard").put("ranked", slim));
         } catch (JSONException | RuntimeException ignored) {

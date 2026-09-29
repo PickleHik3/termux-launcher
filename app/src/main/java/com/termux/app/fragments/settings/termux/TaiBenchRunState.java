@@ -11,14 +11,14 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * What the Run screen shows, reduced from the harness's event stream ({@code TaiBenchHarness}:
- * {@code entry_start}, {@code phase_start}, {@code token}, {@code check_start},
+ * {@code entry_start}, {@code phase_start}, {@code run_start}, {@code token}, {@code check_start},
  * {@code phase_done}, {@code paused}, {@code skipped}, {@code cache_rebuilt}, {@code error},
  * {@code entry_done}, {@code done}) plus the few synthetic events {@link TaiBenchSession} adds
  * around it: the downloads that come first ({@code download_start}, {@code download_progress},
@@ -38,8 +38,8 @@ public final class TaiBenchRunState {
 
     public enum StepStatus { PENDING, RUNNING, DONE, FAILED }
 
-    /** Samples the writing sparkline keeps; at 20 token events a second this is a minute. */
-    static final int SERIES_CAPACITY = 240;
+    /** The tests a run shows as "Test N of 3": Chat, Long input, Sanity. */
+    public static final int TEST_COUNT = 3;
 
     /** A model the run was asked for; a row of the stepper until its entries arrive. */
     public static final class Planned {
@@ -112,7 +112,10 @@ public final class TaiBenchRunState {
         @Nullable public JSONObject record;
         @Nullable public String reason;
         @Nullable public String verdict;
-        public double writingTps;
+        /** The chat's median decode speed, the chat's median first-token wait and the long page's median read time; {@code 0} when not measured. */
+        public double decodeTps;
+        public double ttftMs;
+        public double readMs;
         /** The entry's place on the leaderboard once it landed there; {@code 0} until then or when unranked. */
         public int rank;
         public boolean newBest;
@@ -145,6 +148,8 @@ public final class TaiBenchRunState {
         public int tokens;
         public double tps;
         public long ttftMs;
+        /** When the current generation was submitted ({@code run_start}'s clock); {@code 0} until one has. */
+        public long startedAtMs;
         public boolean active;
 
         void reset(@NonNull String phase, @NonNull String prompt, int run, int runs) {
@@ -156,6 +161,7 @@ public final class TaiBenchRunState {
             tokens = 0;
             tps = 0.0;
             ttftMs = 0L;
+            startedAtMs = 0L;
             active = true;
         }
     }
@@ -216,17 +222,11 @@ public final class TaiBenchRunState {
     @NonNull public final Live live = new Live();
     @Nullable public Wait wait;
     @NonNull public final Conditions conditions = new Conditions();
-    /** Running decode tok/s samples of the current entry's writing and sustained phases, oldest first. */
-    @NonNull public final List<Float> series = new ArrayList<>();
-    // The tiles: the current entry's figures as they firm up.
-    public long firstWordMs = -1L;
-    public double readingTps = -1.0;
-    public double writingTps = -1.0;
-    /** Whether the writing and first-word medians have landed: from then on those tiles hold them. */
-    private boolean writingFinal;
-    private boolean firstWordFinal;
-    public long loadMs = -1L;
-    public long memBytes = -1L;
+    // The dial: the current entry's figures as they firm up, and held once their medians land.
+    private double chatDecodeTps = -1.0;
+    private boolean chatFinal;
+    private long readMs = -1L;
+    private boolean readFinal;
     /** The entry that finished last, for the cool-down card. */
     @Nullable public Entry lastFinished;
     /** A run that could not start, or died: the {@code error} event's code and message. */
@@ -235,7 +235,7 @@ public final class TaiBenchRunState {
     @Nullable public JSONObject errorDetail;
     /** The {@code done} event's {@code stopped} reason, or the reason the session ended early. */
     @Nullable public String stopReason;
-    /** The fastest writing speed on the leaderboard before the run; a faster entry is a new best. */
+    /** The fastest decode speed on the leaderboard before the run; a faster entry is a new best. */
     public double bestTpsBeforeRun;
     /** Bumps on every {@link #apply}, so a view can tell a new state from the last it drew. */
     public long version;
@@ -253,8 +253,7 @@ public final class TaiBenchRunState {
         live.reset("", "", 0, 0);
         live.active = false;
         wait = null;
-        series.clear();
-        resetTiles();
+        resetFigures();
         lastFinished = null;
         errorCode = null;
         errorMessage = null;
@@ -323,6 +322,7 @@ public final class TaiBenchRunState {
             case "download_done": onDownloadDone(event); break;
             case "entry_start": onEntryStart(event); break;
             case "phase_start": onPhaseStart(event); break;
+            case "run_start": onRunStart(event, at); break;
             case "token": onToken(event); break;
             case "check_start": onCheckStart(event); break;
             case "phase_done": onPhaseDone(event); break;
@@ -386,8 +386,7 @@ public final class TaiBenchRunState {
         entries.add(entry);
         wait = null;
         live.active = false;
-        series.clear();
-        resetTiles();
+        resetFigures();
         if (phase != Phase.STOPPING) phase = Phase.RUNNING;
     }
 
@@ -409,13 +408,28 @@ public final class TaiBenchRunState {
         }
     }
 
+    /** One generation is about to be submitted: its reply starts over, and the reading counter starts from now. */
+    private void onRunStart(@NonNull JSONObject event, long at) {
+        String phaseName = event.optString("phase", live.phase);
+        String prompt = phaseName.equals(live.phase) ? live.prompt : "";
+        live.reset(phaseName, prompt, event.optInt("run", 1), event.optInt("runs", 1));
+        live.startedAtMs = at;
+        Entry entry = current();
+        if (entry != null) {
+            Step step = entry.steps.get(phaseName);
+            if (step != null) step.run = live.run;
+        }
+    }
+
     private void onToken(@NonNull JSONObject event) {
         String phaseName = event.optString("phase", live.phase);
         int run = event.optInt("run", live.run);
         if (!live.active || !phaseName.equals(live.phase) || run != live.run) {
             // A new run of the same phase: the reply starts over, the prompt stays.
             String prompt = live.prompt;
+            long startedAtMs = live.startedAtMs;
             live.reset(phaseName, prompt, run, event.optInt("runs", live.runs));
+            live.startedAtMs = startedAtMs;
         }
         live.reply.append(event.optString("text", ""));
         live.tokens = event.optInt("tokens", live.tokens);
@@ -426,25 +440,57 @@ public final class TaiBenchRunState {
             Step step = entry.steps.get(phaseName);
             if (step != null) step.run = run;
         }
-        // Every phase drives the decode and first-word dials, so they move from the warm-up on, until
-        // the phase that measures each one lands its median (phase_done): the tile then holds it, and
-        // the short check replies after it never overwrite it. Only the sparkline stays with the
-        // phases that measure decode speed.
-        if (live.tps > 0.0 && !writingFinal) writingTps = live.tps;
-        if (live.ttftMs > 0L && !firstWordFinal) firstWordMs = live.ttftMs;
-        if (live.tps > 0.0 && (TaiBenchSuite.PHASE_WRITING.equals(phaseName) || TaiBenchSuite.PHASE_SUSTAINED.equals(phaseName))) {
-            series.add((float) live.tps);
-            if (series.size() > SERIES_CAPACITY) series.remove(0);
+        // Every phase drives the dial's decode figure, so it moves from the warm-up on, until the
+        // Chat phase lands its median (phase_done): the dial then holds it, and the short replies
+        // after it never overwrite it.
+        if (live.tps > 0.0 && !chatFinal) chatDecodeTps = live.tps;
+    }
+
+    /** What the one dial shows. */
+    public enum DialKind {
+        /** Nothing measured yet. */
+        NONE,
+        /** Decode speed in tok/s: live while the chat writes, then the median. */
+        DECODE,
+        /** The long page is being read, no token yet: {@link Dial#value} is the seconds waited so far. */
+        READING,
+        /** The long page was read: {@link Dial#value} is the seconds it took. */
+        READ
+    }
+
+    public static final class Dial {
+        @NonNull public final DialKind kind;
+        public final double value;
+
+        Dial(@NonNull DialKind kind, double value) {
+            this.kind = kind;
+            this.value = value;
         }
     }
 
     /**
-     * Whether the Reading tile has nothing to show but "still going": a reading run is under way and
-     * its median has not landed. The events carry no prompt-token count, so a running prefill rate
-     * cannot be worked out; the tile shows a placeholder until {@code phase_done}.
+     * The dial for {@code nowMs}: the read time once the long page has been read (held from the
+     * first token of the answer, and as the median once it lands), a running "reading" counter
+     * while the phone works through it, else the chat's decode speed. The events carry no prompt
+     * progress, so the counter is elapsed time only, which is why the clock is a parameter.
      */
-    public boolean readingRunning() {
-        return live.active && TaiBenchSuite.PHASE_READING.equals(live.phase);
+    @NonNull
+    public Dial dial(long nowMs) {
+        if (readFinal && readMs > 0L) return new Dial(DialKind.READ, readMs / 1000.0);
+        if (live.active && TaiBenchSuite.PHASE_LONG_INPUT.equals(live.phase)) {
+            if (live.ttftMs > 0L) return new Dial(DialKind.READ, live.ttftMs / 1000.0);
+            return new Dial(DialKind.READING, live.startedAtMs > 0L ? Math.max(0L, nowMs - live.startedAtMs) / 1000.0 : 0.0);
+        }
+        if (chatDecodeTps > 0.0) return new Dial(DialKind.DECODE, chatDecodeTps);
+        return new Dial(DialKind.NONE, 0.0);
+    }
+
+    /** {@code 1} for Chat, {@code 2} for Long input, {@code 3} for Sanity; {@code 0} for the load and warm-up. */
+    public static int testNumber(@Nullable String phaseName) {
+        if (TaiBenchSuite.PHASE_CHAT.equals(phaseName)) return 1;
+        if (TaiBenchSuite.PHASE_LONG_INPUT.equals(phaseName)) return 2;
+        if (TaiBenchSuite.PHASE_CHECK.equals(phaseName)) return 3;
+        return 0;
     }
 
     /**
@@ -504,27 +550,16 @@ public final class TaiBenchRunState {
         live.active = false;
         if (metrics == null) return;
         switch (phaseName) {
-            case TaiBenchSuite.PHASE_LOAD:
-                loadMs = metrics.optLong("ms", loadMs);
-                memBytes = metrics.optLong("memBytes", memBytes);
-                break;
-            case TaiBenchSuite.PHASE_WARMUP:
-                long pss = metrics.optLong("pssBytes", -1L);
-                if (pss > 0L) memBytes = pss;
-                break;
-            case TaiBenchSuite.PHASE_READING:
-                if (metrics.has("med")) readingTps = metrics.optDouble("med", readingTps);
-                break;
-            case TaiBenchSuite.PHASE_FIRST_WORD:
-                if (metrics.has("med")) {
-                    firstWordMs = Math.round(metrics.optDouble("med", firstWordMs));
-                    firstWordFinal = true;
+            case TaiBenchSuite.PHASE_CHAT:
+                if (metrics.optJSONObject("decodeTps") != null) {
+                    chatDecodeTps = TaiBenchStore.median(metrics, "decodeTps", chatDecodeTps);
+                    chatFinal = true;
                 }
                 break;
-            case TaiBenchSuite.PHASE_WRITING:
-                if (metrics.has("med")) {
-                    writingTps = metrics.optDouble("med", writingTps);
-                    writingFinal = true;
+            case TaiBenchSuite.PHASE_LONG_INPUT:
+                if (metrics.optJSONObject("readMs") != null) {
+                    readMs = Math.round(TaiBenchStore.median(metrics, "readMs", readMs));
+                    readFinal = true;
                 }
                 break;
             default:
@@ -564,8 +599,7 @@ public final class TaiBenchRunState {
         entry.cacheRebuilt = true;
         entry.steps.clear();
         entry.currentPhase = null;
-        series.clear();
-        resetTiles();
+        resetFigures();
     }
 
     private void onError(@NonNull JSONObject event) {
@@ -610,8 +644,11 @@ public final class TaiBenchRunState {
             String verdict = record.optString("verdict", "");
             entry.verdict = verdict.isEmpty() || record.isNull("verdict") ? null : verdict;
             JSONObject phases = record.optJSONObject("phases");
-            JSONObject writing = phases == null ? null : phases.optJSONObject("writing");
-            entry.writingTps = writing == null ? 0.0 : writing.optDouble("med", 0.0);
+            JSONObject chat = phases == null ? null : phases.optJSONObject("chat");
+            JSONObject longInput = phases == null ? null : phases.optJSONObject("longInput");
+            entry.decodeTps = TaiBenchStore.median(chat, "decodeTps", 0.0);
+            entry.ttftMs = TaiBenchStore.median(chat, "ttftMs", 0.0);
+            entry.readMs = TaiBenchStore.median(longInput, "readMs", 0.0);
             if (entry.reason == null && record.has("skipReason")) entry.reason = record.optString("skipReason", null);
             if (record.optBoolean("cacheRebuilt", false)) entry.cacheRebuilt = true;
         }
@@ -647,7 +684,7 @@ public final class TaiBenchRunState {
         conditions.freeRamBytes = event.optLong("freeRamBytes", -1L);
     }
 
-    /** {@code {ranked:[{key, rank, writingTps}…]}}: places every finished entry, and flags a new best. */
+    /** {@code {ranked:[{key, rank, decodeTps}…]}}: places every finished entry, and flags a new best. */
     private void onLeaderboard(@NonNull JSONObject event) {
         JSONArray ranked = event.optJSONArray("ranked");
         if (ranked == null) return;
@@ -660,28 +697,21 @@ public final class TaiBenchRunState {
         for (Entry entry : entries) {
             Integer rank = ranks.get(entry.key);
             entry.rank = rank == null ? 0 : rank;
-            entry.newBest = entry.status == EntryStatus.DONE && entry.rank == 1 && entry.writingTps > bestTpsBeforeRun;
+            entry.newBest = entry.status == EntryStatus.DONE && entry.rank == 1 && entry.decodeTps > bestTpsBeforeRun;
         }
     }
 
-    private void resetTiles() {
-        firstWordMs = -1L;
-        readingTps = -1.0;
-        writingTps = -1.0;
-        writingFinal = false;
-        firstWordFinal = false;
-        loadMs = -1L;
-        memBytes = -1L;
+    private void resetFigures() {
+        chatDecodeTps = -1.0;
+        chatFinal = false;
+        readMs = -1L;
+        readFinal = false;
     }
 
-    /** The phases a preset runs, in order, for the stepper's sub-line. */
+    /** The phases of an entry, in order, for the stepper's sub-line; the Sanity check is left out, as it only shows when it fails. */
     @NonNull
-    public static List<String> phasesFor(@Nullable TaiBenchSuite.Preset preset) {
-        List<String> phases = new ArrayList<>();
-        Collections.addAll(phases, TaiBenchSuite.PHASE_LOAD, TaiBenchSuite.PHASE_WARMUP, TaiBenchSuite.PHASE_READING,
-            TaiBenchSuite.PHASE_FIRST_WORD, TaiBenchSuite.PHASE_WRITING);
-        if (preset != null && preset.sustained) phases.add(TaiBenchSuite.PHASE_SUSTAINED);
-        phases.add(TaiBenchSuite.PHASE_CHECK);
-        return phases;
+    public static List<String> phasesFor() {
+        return Arrays.asList(TaiBenchSuite.PHASE_LOAD, TaiBenchSuite.PHASE_WARMUP, TaiBenchSuite.PHASE_CHAT,
+            TaiBenchSuite.PHASE_LONG_INPUT);
     }
 }

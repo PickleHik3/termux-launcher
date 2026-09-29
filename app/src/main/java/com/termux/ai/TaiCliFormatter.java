@@ -207,12 +207,12 @@ public final class TaiCliFormatter {
                 out.append("done");
                 break;
             case "chat":
-                out.append("starts in ").append(seriesSeconds(metrics.optJSONObject("ttftMs")))
+                out.append("first token ").append(seriesSeconds(metrics.optJSONObject("ttftMs")))
                     .append(", writes ").append(tpsSeries(metrics.optJSONObject("decodeTps")));
                 if (metrics.has("tokens")) out.append(", ").append(metrics.optInt("tokens", 0)).append(" tokens");
                 break;
             case "longInput":
-                out.append("reads in ").append(seriesSeconds(metrics.optJSONObject("readMs")));
+                out.append("read time ").append(seriesSeconds(metrics.optJSONObject("readMs")));
                 if (metrics.optInt("promptTokens", 0) > 0) {
                     out.append(" (").append(metrics.optInt("promptTokens", 0)).append(" prompt tokens");
                     if (metrics.optJSONObject("promptTps") != null) out.append(", ").append(tpsSeries(metrics.optJSONObject("promptTps")));

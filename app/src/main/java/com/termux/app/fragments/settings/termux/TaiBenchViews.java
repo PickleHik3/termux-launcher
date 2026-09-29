@@ -266,6 +266,40 @@ final class TaiBenchViews {
         return context.getString(R.string.tai_bench_seconds, String.format(Locale.US, "%.1f", value / 1000.0));
     }
 
+    /** "0.6 s", "14 s": a wait in seconds, one decimal under ten; "—" with nothing measured. */
+    @NonNull
+    static String waitSeconds(@NonNull Context context, double ms) {
+        if (Double.isNaN(ms) || ms <= 0.0) return context.getString(R.string.tai_bench_none);
+        double seconds = ms / 1000.0;
+        return context.getString(R.string.tai_bench_seconds, seconds < 10.0 ? String.format(Locale.US, "%.1f", seconds)
+            : String.format(Locale.US, "%.0f", seconds));
+    }
+
+    /**
+     * The three plain numbers of a result: "Starts in 0.6 s · 14 tok/s · Reads long page in 4 s".
+     * A figure that was not measured is left out.
+     */
+    @NonNull
+    static String summaryLine(@NonNull Context context, double decodeTps, double ttftMs, double readMs) {
+        StringBuilder line = new StringBuilder();
+        if (!Double.isNaN(ttftMs) && ttftMs > 0.0) line.append(context.getString(R.string.tai_bench_summary_starts, waitSeconds(context, ttftMs)));
+        if (!Double.isNaN(decodeTps) && decodeTps > 0.0) {
+            if (line.length() > 0) line.append(" · ");
+            line.append(context.getString(R.string.tai_bench_tps, TaiBenchLeaderboard.formatTpsValue(decodeTps)));
+        }
+        if (!Double.isNaN(readMs) && readMs > 0.0) {
+            if (line.length() > 0) line.append(" · ");
+            line.append(context.getString(R.string.tai_bench_summary_reads, waitSeconds(context, readMs)));
+        }
+        return line.length() == 0 ? context.getString(R.string.tai_bench_none) : line.toString();
+    }
+
+    /** "Memory: 1.9 GB"; empty with nothing measured. */
+    @NonNull
+    static String memoryLine(@NonNull Context context, long bytes) {
+        return bytes <= 0L ? "" : context.getString(R.string.tai_bench_memory, TaiModelCentreRows.formatBytes(bytes));
+    }
+
     /** "1.2 GB"; "—" with nothing measured. */
     @NonNull
     static String bytes(@NonNull Context context, long value) {
@@ -325,13 +359,22 @@ final class TaiBenchViews {
         switch (phase) {
             case TaiBenchSuite.PHASE_LOAD: return context.getString(R.string.tai_bench_phase_load);
             case TaiBenchSuite.PHASE_WARMUP: return context.getString(R.string.tai_bench_phase_warmup);
-            case TaiBenchSuite.PHASE_READING: return context.getString(R.string.tai_bench_phase_reading);
-            case TaiBenchSuite.PHASE_FIRST_WORD: return context.getString(R.string.tai_bench_phase_first_word);
-            case TaiBenchSuite.PHASE_WRITING: return context.getString(R.string.tai_bench_phase_writing);
-            case TaiBenchSuite.PHASE_SUSTAINED: return context.getString(R.string.tai_bench_phase_sustained);
+            case TaiBenchSuite.PHASE_CHAT: return context.getString(R.string.tai_bench_phase_chat);
+            case TaiBenchSuite.PHASE_LONG_INPUT: return context.getString(R.string.tai_bench_phase_long_input);
             case TaiBenchSuite.PHASE_CHECK: return context.getString(R.string.tai_bench_phase_check);
             default: return phase;
         }
+    }
+
+    /** "Test 1 of 3: Chat" for the three tests; the load and warm-up have their own words. */
+    @NonNull
+    static String testLabel(@NonNull Context context, @Nullable String phase) {
+        int number = TaiBenchRunState.testNumber(phase);
+        if (number == 0) {
+            return context.getString(TaiBenchSuite.PHASE_WARMUP.equals(phase) ? R.string.tai_bench_test_warmup : R.string.tai_bench_test_loading);
+        }
+        int name = number == 1 ? R.string.tai_bench_test_chat : number == 2 ? R.string.tai_bench_test_long_input : R.string.tai_bench_test_sanity;
+        return context.getString(R.string.tai_bench_test_title, number, TaiBenchRunState.TEST_COUNT, context.getString(name));
     }
 
     @NonNull
@@ -339,7 +382,6 @@ final class TaiBenchViews {
         if (preset == null) return "";
         switch (preset) {
             case QUICK: return context.getString(R.string.tai_bench_preset_quick);
-            case THOROUGH: return context.getString(R.string.tai_bench_preset_thorough);
             default: return context.getString(R.string.tai_bench_preset_standard);
         }
     }

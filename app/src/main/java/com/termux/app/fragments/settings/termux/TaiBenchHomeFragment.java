@@ -9,7 +9,6 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -41,8 +40,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The benchmark's Home (spec Screen 1): a device card, the leaderboard under Speed | First word
- * | Memory tabs that re-sort the same entries, the broken entries apart, a "Run a benchmark"
+ * The benchmark's Home (spec Screen 1): a device card, the one leaderboard list (ranked by
+ * verdict, then decode speed, then the first reply), the broken entries apart, a "Run a benchmark"
  * button and when the last run was. {@link #open} is the one entry point the wiring slice calls:
  * it lands on the Run screen while a run is going, on Choose with one model preselected when
  * asked for a model, and here otherwise. Hosted by {@link SettingsActivity} like the Model centre.
@@ -51,13 +50,11 @@ import java.util.concurrent.Executors;
 public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapter.Factory, TaiBenchSession.Listener {
     private static final int TYPE_BANNER = 0;
     private static final int TYPE_DEVICE = 1;
-    private static final int TYPE_TABS = 2;
     private static final int TYPE_ROW = 3;
     private static final int TYPE_SECTION = 4;
     private static final int TYPE_NOTE = 5;
     private static final int TYPE_EMPTY = 6;
     private static final int TYPE_ACTION = 7;
-    private static final String STATE_TAB = "tai_bench_tab";
 
     /** The device card's facts, gathered off the main thread. */
     private static final class DeviceFacts {
@@ -78,7 +75,6 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         return thread;
     });
     private final TaiBenchListAdapter adapter = new TaiBenchListAdapter(this);
-    @NonNull private TaiBenchLeaderboard.Tab tab = TaiBenchLeaderboard.Tab.SPEED;
     @Nullable private TaiBenchLeaderboard.Board board;
     @Nullable private DeviceFacts facts;
     private int lastSeenEntries = -1;
@@ -122,16 +118,6 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         return new TaiBenchLeaderboard.Versions(BuildConfig.VERSION_NAME, BuildConfig.LITERT_LM_VERSION, MnnTaiRuntime.RUNTIME_VERSION);
     }
 
-    @Override
-    public void onCreate(@Nullable Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        if (savedInstanceState != null) {
-            int index = savedInstanceState.getInt(STATE_TAB, 0);
-            TaiBenchLeaderboard.Tab[] tabs = TaiBenchLeaderboard.Tab.values();
-            tab = tabs[Math.max(0, Math.min(tabs.length - 1, index))];
-        }
-    }
-
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
@@ -171,12 +157,6 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     public void onStop() {
         TaiBenchSession.get().removeListener(this);
         super.onStop();
-    }
-
-    @Override
-    public void onSaveInstanceState(@NonNull Bundle outState) {
-        super.onSaveInstanceState(outState);
-        outState.putInt(STATE_TAB, tab.ordinal());
     }
 
     @Override
@@ -265,8 +245,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         if (b == null || b.empty()) {
             items.add(new TaiBenchListAdapter.Item(TYPE_EMPTY, "empty", b == null ? "loading" : "empty", b == null));
         } else {
-            items.add(new TaiBenchListAdapter.Item(TYPE_TABS, "tabs", "tabs|" + tab, tab));
-            for (TaiBenchLeaderboard.Row row : TaiBenchLeaderboard.sorted(b.ranked, tab)) {
+            for (TaiBenchLeaderboard.Row row : b.ranked) {
                 items.add(new TaiBenchListAdapter.Item(TYPE_ROW, row.key, rowSignature(row), row));
             }
             if (!b.broken.isEmpty()) {
@@ -288,7 +267,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
 
     @NonNull
     private String rowSignature(@NonNull TaiBenchLeaderboard.Row row) {
-        return row.recordId + '|' + row.rank + '|' + tab + '|' + row.installed;
+        return row.recordId + '|' + row.rank + '|' + row.installed;
     }
 
     // ---- rows ----
@@ -300,7 +279,6 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         switch (type) {
             case TYPE_BANNER: return createBanner(context);
             case TYPE_DEVICE: return createDevice(context);
-            case TYPE_TABS: return createTabs(context);
             case TYPE_ROW: return createRow(context);
             case TYPE_SECTION: return TaiBenchViews.sectionHeader(context, "", "");
             case TYPE_NOTE: return createNote(context);
@@ -314,7 +292,6 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         switch (item.type) {
             case TYPE_BANNER: ((TextView) view.findViewById(R.id.tai_bench_text)).setText((String) item.data); break;
             case TYPE_DEVICE: bindDevice(view, (DeviceFacts) item.data); break;
-            case TYPE_TABS: bindTabs(view, (TaiBenchLeaderboard.Tab) item.data); break;
             case TYPE_ROW: bindRow(view, (TaiBenchLeaderboard.Row) item.data); break;
             case TYPE_SECTION: bindSection(view, (String) item.data); break;
             case TYPE_NOTE: ((TextView) view.findViewById(R.id.tai_bench_text)).setText((String) item.data); break;
@@ -387,29 +364,6 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     }
 
     @NonNull
-    private View createTabs(@NonNull Context context) {
-        FrameLayout frame = new FrameLayout(context);
-        frame.setPadding(TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 14), TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 6));
-        TaiSegmentedTabs tabs = new TaiSegmentedTabs(context);
-        tabs.setId(R.id.tai_bench_tabs);
-        tabs.setContentDescription(getString(R.string.tai_bench_tabs_desc));
-        tabs.setLabels(getString(R.string.tai_bench_tab_speed), getString(R.string.tai_bench_tab_first_word), getString(R.string.tai_bench_tab_memory));
-        tabs.setOnSegmentSelectedListener(index -> {
-            TaiBenchLeaderboard.Tab[] values = TaiBenchLeaderboard.Tab.values();
-            if (index < 0 || index >= values.length || values[index] == tab) return;
-            tab = values[index];
-            rebuild();
-        });
-        frame.addView(tabs, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TaiBenchViews.dp(context, 42)));
-        return frame;
-    }
-
-    private void bindTabs(@NonNull View view, @NonNull TaiBenchLeaderboard.Tab selected) {
-        TaiSegmentedTabs tabs = view.findViewById(R.id.tai_bench_tabs);
-        tabs.select(selected.ordinal(), tabs.selectedIndex() >= 0);
-    }
-
-    @NonNull
     private View createRow(@NonNull Context context) {
         TaiBenchViews.Card card = TaiBenchViews.card(context);
         LinearLayout line = new LinearLayout(context);
@@ -429,6 +383,9 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         TextView sub = TaiBenchViews.mono(context, "");
         sub.setId(R.id.tai_bench_subtitle);
         middle.addView(sub);
+        TextView numbers = TaiBenchViews.body(context, "");
+        numbers.setId(R.id.tai_bench_numbers);
+        middle.addView(numbers, TaiBenchViews.block(context, 3));
         LinearLayout marks = new LinearLayout(context);
         marks.setId(R.id.tai_bench_marks);
         marks.setOrientation(LinearLayout.HORIZONTAL);
@@ -440,14 +397,14 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         LinearLayout end = new LinearLayout(context);
         end.setOrientation(LinearLayout.VERTICAL);
         end.setGravity(Gravity.END);
-        TextView figure = TaiBenchViews.figure(context, "", 17f);
-        figure.setId(R.id.tai_bench_figure);
-        end.addView(figure);
         TextView verdict = TaiBenchViews.pill(context, "", TaiModelCentreRows.Tone.NEUTRAL);
         verdict.setId(R.id.tai_bench_verdict);
-        LinearLayout.LayoutParams verdictParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        verdictParams.topMargin = TaiBenchViews.dp(context, 4);
-        end.addView(verdict, verdictParams);
+        end.addView(verdict);
+        TextView memory = TaiBenchViews.mono(context, "");
+        memory.setId(R.id.tai_bench_figure);
+        LinearLayout.LayoutParams memoryParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        memoryParams.topMargin = TaiBenchViews.dp(context, 4);
+        end.addView(memory, memoryParams);
         LinearLayout.LayoutParams endParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         endParams.setMarginStart(TaiBenchViews.dp(context, 10));
         line.addView(end, endParams);
@@ -476,12 +433,11 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         if (row.olderVersion) addMark(marks, getString(R.string.tai_bench_mark_older_version), TaiModelCentreRows.Tone.NEUTRAL);
         if (!row.installed) addMark(marks, getString(R.string.tai_bench_mark_not_installed), TaiModelCentreRows.Tone.NEUTRAL);
         marks.setVisibility(marks.getChildCount() == 0 ? View.GONE : View.VISIBLE);
-        TextView figure = view.findViewById(R.id.tai_bench_figure);
-        switch (tab) {
-            case FIRST_WORD: figure.setText(TaiBenchViews.millis(context, row.firstWordMs)); break;
-            case MEMORY: figure.setText(TaiBenchViews.bytes(context, row.memBytes)); break;
-            default: figure.setText(TaiBenchViews.tps(context, row.writingTps)); break;
-        }
+        ((TextView) view.findViewById(R.id.tai_bench_numbers)).setText(TaiBenchViews.summaryLine(context, row.decodeTps, row.ttftMs, row.readMs));
+        TextView memory = view.findViewById(R.id.tai_bench_figure);
+        String memoryText = TaiBenchViews.memoryLine(context, row.memBytes);
+        memory.setText(memoryText);
+        memory.setVisibility(memoryText.isEmpty() ? View.GONE : View.VISIBLE);
         TextView verdict = view.findViewById(R.id.tai_bench_verdict);
         String label = TaiBenchViews.verdictLabel(context, row.verdict);
         verdict.setText(label);

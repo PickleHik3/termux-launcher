@@ -15,7 +15,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The Result screen's history chart: one entry's writing speed over its kept runs, oldest at
+ * The Result screen's history chart: one entry's decode speed over its kept runs, oldest at
  * the left, as a line with a dot per run; a dashed divider before every run where the app or
  * runtime version changed ({@link TaiBenchLeaderboard#dividers}), so a jump that came with an
  * update is not read as a change in the phone. A run whose check failed draws its dot hollow.
@@ -72,7 +72,7 @@ final class TaiBenchHistoryView extends View {
         int count = points.size();
         if (count == 0) return;
         double max = 0.0;
-        for (TaiBenchLeaderboard.Point point : points) max = Math.max(max, point.writingTps);
+        for (TaiBenchLeaderboard.Point point : points) max = Math.max(max, point.decodeTps);
         if (max <= 0.0) max = 1.0;
         float left = inset, right = width - inset;
         float top = inset, bottom = height - inset;
@@ -80,7 +80,7 @@ final class TaiBenchHistoryView extends View {
         path.reset();
         for (int i = 0; i < count; i++) {
             float x = count > 1 ? left + i * stepX : (left + right) / 2f;
-            float y = bottom - (float) (points.get(i).writingTps / max) * (bottom - top);
+            float y = bottom - (float) (points.get(i).decodeTps / max) * (bottom - top);
             if (i == 0) path.moveTo(x, y);
             else path.lineTo(x, y);
         }
@@ -94,7 +94,7 @@ final class TaiBenchHistoryView extends View {
         for (int i = 0; i < count; i++) {
             TaiBenchLeaderboard.Point point = points.get(i);
             float x = count > 1 ? left + i * stepX : (left + right) / 2f;
-            float y = bottom - (float) (point.writingTps / max) * (bottom - top);
+            float y = bottom - (float) (point.decodeTps / max) * (bottom - top);
             canvas.drawCircle(x, y, dotRadius, point.checkPassed ? dot : hollow);
         }
     }

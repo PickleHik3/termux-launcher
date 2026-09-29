@@ -33,10 +33,10 @@ import java.util.concurrent.Executors;
 
 /**
  * Result (spec Screen 6) for one leaderboard entry (a model on one processor, its key as
- * {@link SettingsActivity#EXTRA_INITIAL_PLACE}): the headline writing speed and the verdict, the
- * details (first word, reading, load, memory used, sustained drop, check), the history chart of
- * that entry's kept runs split where the app or runtime version changed, "Run this model
- * again" (Choose with only this model selected) and "Delete this model's results"
+ * {@link SettingsActivity#EXTRA_INITIAL_PLACE}): the verdict with the three plain numbers (starts
+ * replying, writes, reads a long page) and the memory, the details (each with its range, load, the
+ * sanity check when it failed), the Chat reply collapsed, the history chart of that entry's kept
+ * runs split where the app or runtime version changed, "Run this model again" (Choose with only this model selected) and "Delete this model's results"
  * ({@link TaiManager#clearBenchmarks} for the model, every processor).
  */
 @Keep
@@ -133,15 +133,15 @@ public class TaiBenchResultFragment extends Fragment {
         String accelerator = record.optString("accelerator", "");
         boolean speculative = record.optBoolean("speculative", false);
         JSONObject phases = record.optJSONObject("phases");
-        JSONObject writing = phases == null ? null : phases.optJSONObject("writing");
-        JSONObject firstWord = phases == null ? null : phases.optJSONObject("firstWord");
-        JSONObject reading = phases == null ? null : phases.optJSONObject("reading");
+        JSONObject chat = phases == null ? null : phases.optJSONObject("chat");
+        JSONObject longInput = phases == null ? null : phases.optJSONObject("longInput");
         JSONObject load = phases == null ? null : phases.optJSONObject("load");
-        JSONObject sustained = phases == null ? null : phases.optJSONObject("sustained");
         JSONObject check = record.optJSONObject("check");
         JSONObject conditions = record.optJSONObject("conditions");
-        double writingTps = writing == null ? Double.NaN : writing.optDouble("med", Double.NaN);
-        String verdict = record.isNull("verdict") ? null : record.optString("verdict", null);
+        double decodeTps = TaiBenchStore.median(chat, "decodeTps", Double.NaN);
+        double ttftMs = TaiBenchStore.median(chat, "ttftMs", Double.NaN);
+        double readMs = TaiBenchStore.median(longInput, "readMs", Double.NaN);
+        String verdict = row != null ? row.verdict : record.isNull("verdict") ? null : record.optString("verdict", null);
         boolean installed = record.optBoolean("installed", true);
 
         // The headline.
@@ -153,15 +153,11 @@ public class TaiBenchResultFragment extends Fragment {
         if (row != null && row.rank > 0) pills.addView(TaiBenchViews.pill(context, getString(R.string.tai_bench_rank, row.rank), TaiModelCentreRows.Tone.NEUTRAL), pillParams(context));
         if (!installed) pills.addView(TaiBenchViews.pill(context, getString(R.string.tai_bench_mark_not_installed), TaiModelCentreRows.Tone.NEUTRAL), pillParams(context));
         head.core.addView(pills, TaiBenchViews.block(context, 6));
-        LinearLayout figureRow = new LinearLayout(context);
-        figureRow.setOrientation(LinearLayout.HORIZONTAL);
-        figureRow.setGravity(Gravity.CENTER_VERTICAL);
-        TextView figure = TaiBenchViews.figure(context, TaiBenchViews.tps(context, writingTps), 30f);
-        figureRow.addView(figure, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         String verdictLabel = TaiBenchViews.verdictLabel(context, verdict);
-        if (!verdictLabel.isEmpty()) figureRow.addView(TaiBenchViews.pill(context, verdictLabel, TaiBenchViews.verdictTone(verdict)));
-        head.core.addView(figureRow, TaiBenchViews.block(context, 8));
-        head.core.addView(TaiBenchViews.body(context, getString(R.string.tai_bench_result_writing_caption)), TaiBenchViews.block(context, 2));
+        if (!verdictLabel.isEmpty()) pills.addView(TaiBenchViews.pill(context, verdictLabel, TaiBenchViews.verdictTone(verdict)), pillParams(context));
+        head.core.addView(TaiBenchViews.body(context, TaiBenchViews.summaryLine(context, decodeTps, ttftMs, readMs)), TaiBenchViews.block(context, 4));
+        long mem = TaiBenchStore.memoryBytes(phases);
+        if (mem > 0L) head.core.addView(TaiBenchViews.body(context, TaiBenchViews.memoryLine(context, mem)), TaiBenchViews.block(context, 2));
         StringBuilder when = new StringBuilder(TaiBenchViews.ago(record.optLong("timestamp", 0L)));
         when.append(" · ").append(TaiBenchViews.presetLabel(context, com.termux.ai.TaiBenchSuite.Preset.fromId(record.optString("preset", null))));
         if (row != null) {
@@ -179,30 +175,26 @@ public class TaiBenchResultFragment extends Fragment {
         // The details.
         column.addView(TaiBenchViews.sectionHeader(context, getString(R.string.tai_bench_result_details_header), ""));
         TaiBenchViews.Card details = TaiBenchViews.card(context);
-        addDetail(details.core, getString(R.string.tai_bench_tile_first_word), firstWord == null ? TaiBenchViews.millis(context, Double.NaN)
-            : TaiBenchViews.millis(context, firstWord.optDouble("med", Double.NaN)) + rangeMillis(context, firstWord)
-                + limitNote(TaiBenchRunState.tokenLimitHit(firstWord)));
-        addDetail(details.core, getString(R.string.tai_bench_tile_reading), reading == null ? TaiBenchViews.tps(context, Double.NaN)
-            : TaiBenchViews.tps(context, reading.optDouble("med", Double.NaN)) + promptTokens(reading)
-                + limitNote(TaiBenchRunState.tokenLimitHit(reading)));
-        addDetail(details.core, getString(R.string.tai_bench_tile_writing), writing == null ? TaiBenchViews.tps(context, Double.NaN)
-            : TaiBenchViews.tps(context, writingTps) + rangeTps(context, writing)
-                + limitNote(TaiBenchRunState.tokenLimitHit(writing)));
+        JSONObject ttftSeries = chat == null ? null : chat.optJSONObject("ttftMs");
+        JSONObject decodeSeries = chat == null ? null : chat.optJSONObject("decodeTps");
+        JSONObject readSeries = longInput == null ? null : longInput.optJSONObject("readMs");
+        addDetail(details.core, getString(R.string.tai_bench_result_starts), TaiBenchViews.waitSeconds(context, ttftMs) + rangeSeconds(context, ttftSeries));
+        addDetail(details.core, getString(R.string.tai_bench_result_writes), TaiBenchViews.tps(context, decodeTps) + rangeTps(context, decodeSeries)
+            + limitNote(TaiBenchRunState.tokenLimitHit(chat)));
+        addDetail(details.core, getString(R.string.tai_bench_result_reads), TaiBenchViews.waitSeconds(context, readMs) + rangeSeconds(context, readSeries)
+            + promptTokens(longInput) + (longInput != null && longInput.optBoolean("truncated", false)
+                ? " · " + getString(R.string.tai_bench_result_truncated) : ""));
         addDetail(details.core, getString(R.string.tai_bench_phase_load), load == null ? TaiBenchViews.millis(context, Double.NaN)
             : TaiBenchViews.millis(context, load.optLong("ms", 0L)));
-        long mem = load == null ? -1L : TaiBenchStore.memoryBytes(load);
         addDetail(details.core, getString(R.string.tai_bench_result_memory), TaiBenchViews.bytes(context, mem)
-            + (load != null && load.optLong("pssBytes", -1L) > 0L ? " · " + getString(R.string.tai_bench_result_memory_pss) : ""));
-        if (sustained != null && sustained.optDouble("startTps", 0.0) > 0.0) {
-            addDetail(details.core, getString(R.string.tai_bench_phase_sustained), getString(R.string.tai_bench_result_sustained,
-                TaiBenchViews.tps(context, sustained.optDouble("startTps", 0.0)), TaiBenchViews.tps(context, sustained.optDouble("endTps", 0.0)),
-                Math.round(sustained.optDouble("dropPct", 0.0))));
-        }
+            + (longInput != null && longInput.optLong("peakPssBytes", -1L) > 0L ? " · " + getString(R.string.tai_bench_result_memory_pss) : ""));
         int passed = check == null ? 0 : check.optInt("passed", 0);
         int total = check == null ? 0 : check.optInt("total", 0);
-        addDetail(details.core, getString(R.string.tai_bench_phase_check), total > 0 ? getString(R.string.tai_bench_result_check, passed, total)
-            + limitNote(TaiBenchRunState.checkTokenLimitHit(check))
-            : getString(R.string.tai_bench_none));
+        // The sanity check is silent unless a question failed; then the verdict is Broken and this says how many passed.
+        if (total > 0 && passed < total) {
+            addDetail(details.core, getString(R.string.tai_bench_test_sanity), getString(R.string.tai_bench_result_check, passed, total)
+                + limitNote(TaiBenchRunState.checkTokenLimitHit(check)));
+        }
         if (conditions != null) {
             String battery = conditions.isNull("batteryStart") ? getString(R.string.tai_bench_none)
                 : getString(R.string.tai_bench_result_battery_span, conditions.optInt("batteryStart", 0), conditions.optInt("batteryEnd", conditions.optInt("batteryStart", 0)));
@@ -215,6 +207,30 @@ public class TaiBenchResultFragment extends Fragment {
         addDetail(details.core, getString(R.string.tai_bench_result_versions), getString(R.string.tai_bench_result_versions_value,
             record.optString("appVersion", ""), TaiBenchViews.backendLabel(context, backend), record.optString("runtimeVersion", "")));
         column.addView(details.outer);
+
+        // What the model wrote for the Chat test, folded away until asked for.
+        String reply = chat == null ? "" : chat.optString("reply", "").trim();
+        if (!reply.isEmpty()) {
+            column.addView(TaiBenchViews.sectionHeader(context, getString(R.string.tai_bench_result_reply_header), ""));
+            TaiBenchViews.Card replyCard = TaiBenchViews.card(context);
+            TextView replyText = TaiBenchViews.mono(context, reply);
+            replyText.setTextIsSelectable(true);
+            replyText.setVisibility(View.GONE);
+            TextView toggle = TaiBenchViews.ghostButton(context, getString(R.string.tai_bench_live_show));
+            toggle.setOnClickListener(v -> {
+                boolean show = replyText.getVisibility() != View.VISIBLE;
+                replyText.setVisibility(show ? View.VISIBLE : View.GONE);
+                toggle.setText(show ? R.string.tai_bench_live_hide : R.string.tai_bench_live_show);
+            });
+            LinearLayout replyHead = new LinearLayout(context);
+            replyHead.setOrientation(LinearLayout.HORIZONTAL);
+            replyHead.setGravity(Gravity.CENTER_VERTICAL);
+            replyHead.addView(TaiBenchViews.body(context, com.termux.ai.TaiBenchSuite.CHAT_PROMPT), new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            replyHead.addView(toggle);
+            replyCard.core.addView(replyHead);
+            replyCard.core.addView(replyText, TaiBenchViews.block(context, 8));
+            column.addView(replyCard.outer);
+        }
 
         // The history.
         List<TaiBenchLeaderboard.Point> history = TaiBenchLeaderboard.history(benchmarks, key);
@@ -229,8 +245,8 @@ public class TaiBenchResultFragment extends Fragment {
             chart.core.addView(view, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TaiBenchViews.dp(context, 96)));
             TaiBenchLeaderboard.Point first = history.get(0);
             TaiBenchLeaderboard.Point last = history.get(history.size() - 1);
-            String span = getString(R.string.tai_bench_result_history_span, TaiBenchViews.tps(context, first.writingTps),
-                TaiBenchViews.tps(context, last.writingTps));
+            String span = getString(R.string.tai_bench_result_history_span, TaiBenchViews.tps(context, first.decodeTps),
+                TaiBenchViews.tps(context, last.decodeTps));
             if (!TaiBenchLeaderboard.dividers(history).isEmpty()) span += " · " + getString(R.string.tai_bench_result_history_dividers);
             chart.core.addView(TaiBenchViews.mono(context, span), TaiBenchViews.block(context, 6));
         }
@@ -271,20 +287,20 @@ public class TaiBenchResultFragment extends Fragment {
     }
 
     @NonNull
-    private String rangeMillis(@NonNull Context context, @NonNull JSONObject series) {
-        if (series.optInt("runs", 0) < 2) return "";
-        return " (" + TaiBenchViews.millis(context, series.optDouble("min", Double.NaN)) + "–" + TaiBenchViews.millis(context, series.optDouble("max", Double.NaN)) + ")";
+    private String rangeSeconds(@NonNull Context context, @Nullable JSONObject series) {
+        if (series == null || series.optInt("runs", 0) < 2) return "";
+        return " (" + TaiBenchViews.waitSeconds(context, series.optDouble("min", Double.NaN)) + "–" + TaiBenchViews.waitSeconds(context, series.optDouble("max", Double.NaN)) + ")";
     }
 
     @NonNull
-    private String rangeTps(@NonNull Context context, @NonNull JSONObject series) {
-        if (series.optInt("runs", 0) < 2) return "";
+    private String rangeTps(@NonNull Context context, @Nullable JSONObject series) {
+        if (series == null || series.optInt("runs", 0) < 2) return "";
         return " (" + TaiBenchViews.tps(context, series.optDouble("min", Double.NaN)) + "–" + TaiBenchViews.tps(context, series.optDouble("max", Double.NaN)) + ")";
     }
 
     @NonNull
-    private String promptTokens(@NonNull JSONObject reading) {
-        int tokens = reading.optInt("promptTokens", 0);
+    private String promptTokens(@Nullable JSONObject longInput) {
+        int tokens = longInput == null ? 0 : longInput.optInt("promptTokens", 0);
         return tokens > 0 ? " · " + getString(R.string.tai_bench_result_prompt_tokens, tokens) : "";
     }
 
