@@ -23,6 +23,7 @@ import com.termux.terminal.TerminalSession;
 
 import java.lang.ref.WeakReference;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -53,6 +54,13 @@ public final class ShellNotifications {
     /** The shade key of the message the user tapped, so it can be taken down. */
     public static final String EXTRA_NOTIFICATION_TAG =
         "com.termux.app.extra.SHELL_NOTIFICATION_TAG";
+
+    /** The 1-based number of the button the user pressed; absent for a tap on the body. */
+    public static final String EXTRA_NOTIFICATION_BUTTON =
+        "com.termux.app.extra.SHELL_NOTIFICATION_BUTTON";
+
+    /** Android shows at most three actions on a notification; further buttons are dropped. */
+    private static final int MAX_ACTIONS = 3;
 
     private static final String ACTION_DISMISSED =
         "com.termux.app.action.SHELL_NOTIFICATION_DISMISSED";
@@ -124,6 +132,18 @@ public final class ShellNotifications {
         if (!body.isEmpty()) {
             builder.setContentText(body);
             builder.setStyle(new NotificationCompat.BigTextStyle().bigText(body));
+        }
+        // A button press takes the same road as a tap (see tapIntent) with its number added, so it
+        // is reported to the pane exactly like an activation, and only when a=report was asked.
+        // Android allows MAX_ACTIONS actions; the rest are dropped. An empty label is not shown but
+        // keeps its number, since kitty reports buttons by position.
+        List<String> buttons = notification.getButtons();
+        int shown = 0;
+        for (int i = 0; i < buttons.size() && shown < MAX_ACTIONS; i++) {
+            String label = buttons.get(i).trim();
+            if (label.isEmpty()) continue;
+            builder.addAction(0, label, buttonIntent(app, session, notification, tag, i + 1));
+            shown++;
         }
         if (notification.getUrgency() == KittyNotification.URGENCY_LOW) builder.setSilent(true);
         int timeout = notification.getTimeoutMillis();
@@ -212,6 +232,22 @@ public final class ShellNotifications {
             .putExtra(EXTRA_NOTIFICATION_FOCUS, notification.isFocusOnActivate())
             .putExtra(EXTRA_NOTIFICATION_TAG, tag);
         return PendingIntent.getActivity(context, tag.hashCode(), intent,
+            PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag());
+    }
+
+    @NonNull
+    private static PendingIntent buttonIntent(@NonNull Context context, @NonNull TerminalSession session,
+                                              @NonNull KittyNotification notification, @NonNull String tag,
+                                              int number) {
+        // Same target as the tap, distinguished by its request code and the button's number.
+        // https://sw.kovidgoyal.net/kitty/desktop-notifications/ numbers buttons from 1.
+        Intent intent = TermuxActivity.newInstance(context)
+            .putExtra(EXTRA_SESSION_HANDLE, session.mHandle)
+            .putExtra(EXTRA_NOTIFICATION_NAME, notification.getId())
+            .putExtra(EXTRA_NOTIFICATION_FOCUS, notification.isFocusOnActivate())
+            .putExtra(EXTRA_NOTIFICATION_TAG, tag)
+            .putExtra(EXTRA_NOTIFICATION_BUTTON, number);
+        return PendingIntent.getActivity(context, tag.hashCode() ^ (0x100 + number), intent,
             PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag());
     }
 

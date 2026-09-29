@@ -455,6 +455,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean mPendingNotificationTapFocus;
 
+    /** The pressed button's 1-based number, or 0 for a tap on the message itself. */
+    private int mPendingNotificationTapButton;
+
     /**
      * The user tapped a message a program in the terminal sent them. Take the message out of the
      * shade, go back to the pane it came from, and let the program know it was read.
@@ -471,12 +474,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_NAME);
         mPendingNotificationTapFocus = intent.getBooleanExtra(
             com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_FOCUS, true);
+        mPendingNotificationTapButton = Math.max(0, intent.getIntExtra(
+            com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_BUTTON, 0));
         // The same intent is re-delivered after process death, and the message is long gone by
         // then, so the extras are cleared as soon as they are read.
         intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_SESSION_HANDLE);
         intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_NAME);
         intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_FOCUS);
         intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_TAG);
+        intent.removeExtra(com.termux.app.terminal.ShellNotifications.EXTRA_NOTIFICATION_BUTTON);
         deliverPendingShellNotificationTap();
     }
 
@@ -489,13 +495,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (handle == null || mTermuxService == null) return;
         final String name = mPendingNotificationTapName;
         final boolean focus = mPendingNotificationTapFocus;
+        final int button = mPendingNotificationTapButton;
+        mPendingNotificationTapButton = 0;
         mPendingNotificationTapSession = null;
         mPendingNotificationTapName = null;
         final TerminalSession session = mTermuxService.getTerminalSessionForHandle(handle);
         if (session == null) return;
         Runnable go = () -> {
             if (focus) activateSessionInPanes(session);
-            if (name != null && !name.isEmpty()) session.notificationActivated(name, 0);
+            if (name != null && !name.isEmpty()) session.notificationActivated(name, button);
         };
         View root = findViewById(android.R.id.content);
         if (root != null) root.post(go);

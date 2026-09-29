@@ -182,7 +182,11 @@ public final class KittyNotification {
         return mSound;
     }
 
-    /** Button labels the program offered. The terminal is free to ignore them. */
+    /**
+     * Button labels the program offered, in the order it sent them. The position (1-based) is the
+     * button's number when a press is reported, so a label may be empty: it is left unshown but
+     * keeps its number.
+     */
     @NonNull
     public List<String> getButtons() {
         return mButtons;
