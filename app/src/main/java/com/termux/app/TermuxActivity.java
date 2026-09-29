@@ -5496,7 +5496,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int getInAppKeyboardBackdropOpacityPercent() {
         return mPreferences != null
-            ? mPreferences.getInAppKeyboardBackdropOpacity()
+            ? com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences)
             : TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY;
     }
 
