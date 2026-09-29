@@ -236,6 +236,15 @@ public final class SurfaceStandIn {
         return !isStandInShown();
     }
 
+    /**
+     * The kept copy's bitmap is lent to the {@link Begin#COPY} just asked for, as its
+     * destination: nothing is kept until that copy lands, and one that fails leaves nothing.
+     * Unlike {@link #drop}, the copy on its way still counts.
+     */
+    public void lendCache() {
+        mCached = false;
+    }
+
     /** The page is leaving the wall or the window: nothing stands in and nothing is kept. */
     public void reset() {
         mEpoch++;
