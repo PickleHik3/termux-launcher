@@ -17012,6 +17012,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mKeyboardSwipeFromOpen;
     /** How much more room the content has with the keyboard where the swipe is taking it. */
     private int mKeyboardSwipeRoomChangePx;
+    /**
+     * The dock padding a swipe closing the keyboard lands with ({@link
+     * #keyboardDownFlushPaddingPx}): the settle's pass gives it to the dock and takes it from the
+     * terminal, so the rows are drawn toward the height left after it. 0 for a swipe opening it.
+     */
+    private int mKeyboardSwipeLandingPaddingPx;
 
     /**
      * A keyboard swipe was claimed, going up ({@code opening}) or down: take the keyboard for the
@@ -17038,6 +17044,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The room the content has now, read before anything moves; the other end is read once
         // the keyboard it depends on has been measured.
         int fromReservationPx = keyboardSwipeReservationPx(up);
+        mKeyboardSwipeLandingPaddingPx = 0;
         if (opening) {
             preRollTravelKeyboard(mLastWallPage);
             mKeyboardSwipeRoomChangePx = fromReservationPx - keyboardSwipeReservationPx(true);
@@ -17045,6 +17052,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Down: the content is given the room the keyboard gives back now, under a paused
             // grid, and the stack slides away from over it.
             mKeyboardSwipeRoomChangePx = fromReservationPx - keyboardSwipeReservationPx(false);
+            mKeyboardSwipeLandingPaddingPx = keyboardDownFlushPaddingPx();
             beginTravelHold();
             if (mKeyboardSwipeRoomChangePx > 0) preRollTravelContent(mKeyboardSwipeRoomChangePx);
         }
@@ -17079,6 +17087,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The terminal's flush dock padding once the keyboard is down, worked out while it is still
+     * up: the geometry pass stands the padding down while the keyboard shows, so the reservation
+     * a closing swipe reads has none, yet the settle's pass lays it (up to a line) under the dock
+     * and takes it from the terminal. The same conditions and arithmetic as that pass, for a
+     * stack of the dock's rows alone; the window positions it measures do not move with the
+     * keyboard.
+     */
+    private int keyboardDownFlushPaddingPx() {
+        boolean toolbarShown = buildChromeSpec().toolbarShown;
+        if (!toolbarShown || visiblePaneCount() > 1 || isImeVisible()
+            || mLastWallPage != com.termux.app.wall.PaneWallPage.TERMINAL
+            || (mPaneController != null && mPaneController.isActivePaneFloating()))
+            return 0;
+        return Math.max(0, resolveTerminalFlushDockPaddingPx(
+            computeAccessoryStackHeight(mAppliedDockContentHeightPx, 0, 0),
+            resolveAccessoryStackBottomMarginPx(toolbarShown, false, isChromeMinimal())));
+    }
+
+    /**
      * One frame of the keyboard swipe: {@code reveal} of the keyboard shows, 0 to 1. Transforms
      * only, as for the wall's travel: the stack's translation, the pane's clip under it and the
      * rows' displacement.
@@ -17095,7 +17122,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.view.TerminalView view = mPaneController == null ? null
             : mPaneController.soleTiledPaneView();
         if (view != null) {
-            view.setTravelDisplacement(mKeyboardSwipeRoomChangePx,
+            // Toward the height the terminal settles at: the room given back less the dock
+            // padding the settle lays, so the rows land where the resize puts them.
+            view.setTravelDisplacement(mKeyboardSwipeRoomChangePx - mKeyboardSwipeLandingPaddingPx,
                 mKeyboardSwipeFromOpen ? 1f - shown : shown);
         }
         syncTerminalTravelCover(translation);
@@ -17111,6 +17140,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void finishKeyboardSwipeTravel(boolean open) {
         if (!mKeyboardSwipeTravel) return;
         mKeyboardSwipeTravel = false;
+        mKeyboardSwipeLandingPaddingPx = 0;
         boolean keyboardPreRolled = mTravelKeyboardPreRolled;
         boolean contentPreRolled = mTravelContentPreRolled;
         boolean held = mTravelHoldsContent;
