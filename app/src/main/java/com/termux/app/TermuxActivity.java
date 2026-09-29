@@ -16667,11 +16667,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void settleTerminalTravelDisplacement() {
         if (mPaneController == null) return;
-        boolean frost = !isReducedMotionEnabled() && !isLazyModeEnabled()
-            && mPaneWallController != null && mPaneWallController.isTerminalShowing();
+        boolean frost = isTerminalTravelFrostAllowed();
         for (com.termux.view.TerminalView view : mPaneController.getVisiblePaneViews()) {
             view.settleTravelDisplacement(frost);
         }
+    }
+
+    /** Whether a travel's frost can be seen and is wanted: on the terminal, with motion allowed. */
+    private boolean isTerminalTravelFrostAllowed() {
+        return !isReducedMotionEnabled() && !isLazyModeEnabled()
+            && mPaneWallController != null && mPaneWallController.isTerminalShowing();
     }
 
     /** Lays a minimal place's bottom rows out again for the slide toward a place that has them. */
@@ -17050,7 +17055,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return 0;
         }
         setKeyboardSwipeTravel(up ? 1f : 0f);
+        holdKeyboardSwipeFrostIfUnplaceable();
         return travelPx;
+    }
+
+    /**
+     * A swipe over rows the travel cannot draw ahead — a full-screen program's, which it repaints
+     * itself once the resize lands — is frosted from its claim until it lands or springs back,
+     * instead of sliding a frame the program is about to replace. Rows the travel can place are
+     * drawn sharp and keep only the settle's brief frost. Gated as that frost is.
+     */
+    private void holdKeyboardSwipeFrostIfUnplaceable() {
+        if (!mTravelHoldsContent || mPaneController == null || !isTerminalTravelFrostAllowed())
+            return;
+        com.termux.view.TerminalView view = mPaneController.soleTiledPaneView();
+        if (view != null && !view.canPlaceTravelRows()) view.holdTravelFrost();
     }
 
     /** The room a place's chrome leaves the content with the keyboard up or down, at rest. */
