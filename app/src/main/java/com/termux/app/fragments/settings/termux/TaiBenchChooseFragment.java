@@ -49,8 +49,9 @@ import java.util.concurrent.Executors;
  * Choose (spec Screen 2): the Quick | Standard | Thorough selector, the installed chat models
  * first, then "Worth a download" (the catalogue's recommended entries that pass the filter), each
  * row with backend, size, processors and the estimated time; the hidden models counted with
- * "Show why"; a footer with the model count, the total time and the download size, and
- * Continue, which opens the Check sheet. Opened with a model id as
+ * "Show why"; a bar floating over the list's foot with the model count, the total time and the
+ * download size, Select all, and Continue, which opens the Check sheet. Installed models start
+ * selected unless the leaderboard already has a result for them. Opened with a model id as
  * {@link SettingsActivity#EXTRA_INITIAL_PLACE}, only that model starts selected.
  */
 @Keep
@@ -61,7 +62,6 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
     private static final int TYPE_HIDDEN = 3;
     private static final int TYPE_REASON = 4;
     private static final int TYPE_EMPTY = 5;
-    private static final int TYPE_FOOTER = 6;
     private static final String STATE_PRESET = "tai_bench_preset";
     private static final String STATE_SELECTED = "tai_bench_selected";
     private static final String STATE_SHOW_WHY = "tai_bench_show_why";
@@ -90,7 +90,10 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
     @NonNull private List<Offer> installed = Collections.emptyList();
     @NonNull private List<Offer> downloads = Collections.emptyList();
     @NonNull private List<Offer> hidden = Collections.emptyList();
+    /** Model ids the leaderboard already has a result for; they start unselected. */
+    @NonNull private Set<String> tested = Collections.emptySet();
     private final Set<String> selected = new LinkedHashSet<>();
+    @Nullable private View bar;
     /** The selection has been made (by the person, or by the preselect argument); the default no longer applies. */
     private boolean touched;
     private boolean showWhy;
@@ -116,6 +119,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
         Context context = requireContext();
+        FrameLayout root = new FrameLayout(context);
         RecyclerView list = new RecyclerView(context);
         list.setId(R.id.tai_bench_list);
         list.setLayoutManager(new LinearLayoutManager(context));
@@ -129,7 +133,22 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
             list.setItemAnimator(animator);
         }
         list.setAdapter(adapter);
-        return list;
+        root.addView(list, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        View floating = createBar(context);
+        root.addView(floating, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        // The last row scrolls clear of the bar.
+        floating.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            int pad = (bottom - top) + TaiBenchViews.dp(context, 8);
+            if (list.getPaddingBottom() != pad) list.setPadding(0, 0, 0, pad);
+        });
+        bar = floating;
+        return root;
+    }
+
+    @Override
+    public void onDestroyView() {
+        bar = null;
+        super.onDestroyView();
     }
 
     @Override
@@ -194,12 +213,20 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
                 TaiBenchChoice.Verdict verdict = TaiBenchChoice.judge(candidate, seen);
                 (verdict.fit == TaiBenchChoice.Fit.HIDDEN ? hiddenOnes : shownDownloads).add(new Offer(candidate, verdict));
             }
+            Set<String> benchmarked;
+            try {
+                benchmarked = TaiBenchLeaderboard.bestSpeedByModel(TaiManager.getInstance(app).benchmarks()).keySet();
+            } catch (JSONException | RuntimeException e) {
+                benchmarked = Collections.emptySet();
+            }
+            Set<String> finalTested = benchmarked;
             handler.post(() -> {
                 if (!isAdded()) return;
                 device = seen;
                 installed = shownInstalled;
                 downloads = shownDownloads;
                 hidden = hiddenOnes;
+                tested = finalTested;
                 applyDefaultSelection();
                 rebuild();
             });
@@ -230,7 +257,10 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         return new TaiBenchChoice.Device(memory, free, soc, mnn, gpu);
     }
 
-    /** Untouched: every installed model is in; a preselected model is the only one in. */
+    /**
+     * Untouched: every installed model without a result is in (running one twice is allowed,
+     * not encouraged); a preselected model is the only one in.
+     */
     private void applyDefaultSelection() {
         if (touched) return;
         selected.clear();
@@ -240,7 +270,9 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
             touched = !selected.isEmpty();
             if (touched) return;
         }
-        for (Offer offer : installed) selected.add(offer.candidate.modelId);
+        for (Offer offer : installed) {
+            if (!tested.contains(offer.candidate.modelId)) selected.add(offer.candidate.modelId);
+        }
     }
 
     // ---- the list ----
@@ -254,6 +286,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         if (seen == null) {
             items.add(new TaiBenchListAdapter.Item(TYPE_EMPTY, "loading", "loading", getString(R.string.tai_bench_loading)));
             adapter.submit(items);
+            bindBar(0, 0L, 0L);
             return;
         }
         String installedHeader = getString(R.string.tai_bench_section_installed);
@@ -284,15 +317,15 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
             totalMs += TaiBenchChoice.estimateMs(preset, seen);
             if (!offer.candidate.installed) bytes += Math.max(0L, offer.candidate.sizeBytes);
         }
-        String footer = count + "|" + totalMs + "|" + bytes;
-        items.add(new TaiBenchListAdapter.Item(TYPE_FOOTER, "footer", footer, new long[] {count, totalMs, bytes}));
         adapter.submit(items);
+        bindBar(count, totalMs, bytes);
     }
 
     @NonNull
     private TaiBenchListAdapter.Item modelItem(@NonNull Offer offer, @NonNull TaiBenchChoice.Device seen) {
         boolean on = selected.contains(offer.candidate.modelId);
-        String signature = offer.candidate.modelId + '|' + on + '|' + preset.id + '|' + offer.verdict.fit + '|' + seen.gpuSupported;
+        String signature = offer.candidate.modelId + '|' + on + '|' + preset.id + '|' + offer.verdict.fit + '|' + seen.gpuSupported
+            + '|' + tested.contains(offer.candidate.modelId);
         return new TaiBenchListAdapter.Item(TYPE_MODEL, offer.candidate.modelId, signature, offer);
     }
 
@@ -316,8 +349,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
             case TYPE_MODEL: return createModel(context);
             case TYPE_HIDDEN: return createHidden(context);
             case TYPE_REASON: return createReason(context);
-            case TYPE_EMPTY: return createEmpty(context);
-            default: return createFooter(context);
+            default: return createEmpty(context);
         }
     }
 
@@ -329,8 +361,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
             case TYPE_MODEL: bindModel(view, (Offer) item.data); break;
             case TYPE_HIDDEN: bindHidden(view, (Integer) item.data); break;
             case TYPE_REASON: bindReason(view, (Offer) item.data); break;
-            case TYPE_EMPTY: ((TextView) view).setText((String) item.data); break;
-            default: bindFooter(view, (long[]) item.data); break;
+            default: ((TextView) view).setText((String) item.data); break;
         }
     }
 
@@ -431,6 +462,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         sub.append(getString(processors == 2 ? R.string.tai_bench_processors_both : R.string.tai_bench_processors_cpu));
         sub.append(" · ").append(TaiBenchViews.duration(context, TaiBenchSuite.estimateMs(preset, processors)));
         if (!offer.candidate.installed) sub.append(" · ").append(getString(R.string.tai_bench_row_download));
+        if (tested.contains(offer.candidate.modelId)) sub.append(" · ").append(getString(R.string.tai_bench_row_tested));
         ((TextView) view.findViewById(R.id.tai_bench_subtitle)).setText(sub);
         TextView backend = view.findViewById(R.id.tai_bench_marks);
         String label = TaiBenchViews.backendLabel(context, offer.candidate.backend);
@@ -506,12 +538,30 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         return text;
     }
 
+    // ---- the floating bar ----
+
     @NonNull
-    private View createFooter(@NonNull Context context) {
+    private View createBar(@NonNull Context context) {
         TaiBenchViews.Card card = TaiBenchViews.card(context);
+        card.outer.setPadding(TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 6), TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 12));
+        card.shell.setElevation(TaiBenchViews.dp(context, 6));
         TextView summary = TaiBenchViews.mono(context, "");
         summary.setId(R.id.tai_bench_text);
         card.core.addView(summary);
+        TextView all = TaiBenchViews.ghostButton(context, getString(R.string.tai_bench_select_all));
+        all.setId(R.id.tai_bench_select_all);
+        all.setMinHeight(TaiBenchViews.dp(context, 44));
+        all.setOnClickListener(v -> {
+            TaiMotion.tick(v);
+            touched = true;
+            if (allSelected()) {
+                selected.clear();
+            } else {
+                for (Offer offer : installed) selected.add(offer.candidate.modelId);
+                for (Offer offer : downloads) selected.add(offer.candidate.modelId);
+            }
+            rebuild();
+        });
         TextView go = TaiBenchViews.goButton(context, getString(R.string.tai_bench_continue));
         go.setId(R.id.tai_bench_action);
         go.setMinHeight(TaiBenchViews.dp(context, 44));
@@ -519,18 +569,36 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
             TaiMotion.tick(v);
             openCheck();
         });
-        card.core.addView(go, TaiBenchViews.block(context, 10));
+        LinearLayout buttons = new LinearLayout(context);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        buttons.addView(all, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams goParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        goParams.setMarginStart(TaiBenchViews.dp(context, 8));
+        buttons.addView(go, goParams);
+        card.core.addView(buttons, TaiBenchViews.block(context, 10));
         return card.outer;
     }
 
-    private void bindFooter(@NonNull View view, @NonNull long[] figures) {
+    private void bindBar(int count, long totalMs, long bytes) {
+        View view = bar;
+        if (view == null) return;
         Context context = view.getContext();
-        int count = (int) figures[0];
         StringBuilder text = new StringBuilder(getResources().getQuantityString(R.plurals.tai_bench_footer_models, count, count));
-        if (count > 0) text.append(" · ").append(TaiBenchViews.duration(context, figures[1]));
-        if (figures[2] > 0L) text.append(" · ").append(getString(R.string.tai_bench_footer_download, TaiModelCentreRows.formatBytes(figures[2])));
+        if (count > 0) text.append(" · ").append(TaiBenchViews.duration(context, totalMs));
+        if (bytes > 0L) text.append(" · ").append(getString(R.string.tai_bench_footer_download, TaiModelCentreRows.formatBytes(bytes)));
         ((TextView) view.findViewById(R.id.tai_bench_text)).setText(text);
+        TextView all = view.findViewById(R.id.tai_bench_select_all);
+        all.setText(allSelected() ? R.string.tai_bench_select_none : R.string.tai_bench_select_all);
+        TaiBenchViews.setEnabled(all, device != null && !(installed.isEmpty() && downloads.isEmpty()));
         TaiBenchViews.setEnabled(view.findViewById(R.id.tai_bench_action), count > 0 && !TaiBenchSession.get().isActive());
+    }
+
+    /** Every listed model (installed and worth a download) is ticked, and there is at least one. */
+    private boolean allSelected() {
+        if (installed.isEmpty() && downloads.isEmpty()) return false;
+        for (Offer offer : installed) if (!selected.contains(offer.candidate.modelId)) return false;
+        for (Offer offer : downloads) if (!selected.contains(offer.candidate.modelId)) return false;
+        return true;
     }
 
     // ---- Check and Start ----

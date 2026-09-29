@@ -20,6 +20,7 @@
     <item name="tai_bench_figure" type="id" />
     <item name="tai_bench_verdict" type="id" />
     <item name="tai_bench_action" type="id" />
+    <item name="tai_bench_select_all" type="id" />
     <item name="tai_bench_check" type="id" />
     <item name="tai_bench_scroll" type="id" />
 </resources>

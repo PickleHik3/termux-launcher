@@ -1533,6 +1533,9 @@
         </plurals>
         <string name="tai_bench_footer_download">%1$s to download</string>
         <string name="tai_bench_continue">Continue</string>
+        <string name="tai_bench_select_all">Select all</string>
+        <string name="tai_bench_select_none">Clear all</string>
+        <string name="tai_bench_row_tested">tested</string>
         <string name="tai_bench_already_running">A benchmark is already running.</string>
         <!-- Check -->
         <string name="tai_bench_check_title">Before it starts</string>
