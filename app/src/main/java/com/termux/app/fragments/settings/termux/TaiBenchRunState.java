@@ -222,6 +222,9 @@ public final class TaiBenchRunState {
     public long firstWordMs = -1L;
     public double readingTps = -1.0;
     public double writingTps = -1.0;
+    /** Whether the writing and first-word medians have landed: from then on those tiles hold them. */
+    private boolean writingFinal;
+    private boolean firstWordFinal;
     public long loadMs = -1L;
     public long memBytes = -1L;
     /** The entry that finished last, for the cool-down card. */
@@ -423,11 +426,12 @@ public final class TaiBenchRunState {
             Step step = entry.steps.get(phaseName);
             if (step != null) step.run = run;
         }
-        // Every phase drives the decode and first-word dials, so they move from the warm-up on; a
-        // phase's own median (phase_done) replaces the figure when it lands, and the next phase's
-        // tokens move it again. Only the sparkline stays with the phases that measure decode speed.
-        if (live.tps > 0.0) writingTps = live.tps;
-        if (live.ttftMs > 0L) firstWordMs = live.ttftMs;
+        // Every phase drives the decode and first-word dials, so they move from the warm-up on, until
+        // the phase that measures each one lands its median (phase_done): the tile then holds it, and
+        // the short check replies after it never overwrite it. Only the sparkline stays with the
+        // phases that measure decode speed.
+        if (live.tps > 0.0 && !writingFinal) writingTps = live.tps;
+        if (live.ttftMs > 0L && !firstWordFinal) firstWordMs = live.ttftMs;
         if (live.tps > 0.0 && (TaiBenchSuite.PHASE_WRITING.equals(phaseName) || TaiBenchSuite.PHASE_SUSTAINED.equals(phaseName))) {
             series.add((float) live.tps);
             if (series.size() > SERIES_CAPACITY) series.remove(0);
@@ -512,10 +516,16 @@ public final class TaiBenchRunState {
                 if (metrics.has("med")) readingTps = metrics.optDouble("med", readingTps);
                 break;
             case TaiBenchSuite.PHASE_FIRST_WORD:
-                if (metrics.has("med")) firstWordMs = Math.round(metrics.optDouble("med", firstWordMs));
+                if (metrics.has("med")) {
+                    firstWordMs = Math.round(metrics.optDouble("med", firstWordMs));
+                    firstWordFinal = true;
+                }
                 break;
             case TaiBenchSuite.PHASE_WRITING:
-                if (metrics.has("med")) writingTps = metrics.optDouble("med", writingTps);
+                if (metrics.has("med")) {
+                    writingTps = metrics.optDouble("med", writingTps);
+                    writingFinal = true;
+                }
                 break;
             default:
                 break;
@@ -658,6 +668,8 @@ public final class TaiBenchRunState {
         firstWordMs = -1L;
         readingTps = -1.0;
         writingTps = -1.0;
+        writingFinal = false;
+        firstWordFinal = false;
         loadMs = -1L;
         memBytes = -1L;
     }

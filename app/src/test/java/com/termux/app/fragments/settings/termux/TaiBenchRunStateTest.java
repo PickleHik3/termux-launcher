@@ -225,6 +225,23 @@ public class TaiBenchRunStateTest {
     }
 
     @Test
+    public void theCheckRepliesNeverOverwriteTheWritingAndFirstWordMedians() throws JSONException {
+        entryStart(0, 1, QWEN, "cpu", 2_000L);
+        state.apply(event("phase_start", 2_001L).put("phase", "firstWord").put("runs", 1).put("prompt", "p"));
+        token(2_002L, "firstWord", 1, "a", 1, 0.0, 500L);
+        state.apply(event("phase_done", 2_003L).put("phase", "firstWord").put("status", "ok")
+            .put("metrics", new JSONObject().put("med", 480.0).put("runs", 1)));
+        state.apply(event("phase_start", 2_004L).put("phase", "writing").put("runs", 1).put("prompt", "p"));
+        token(2_005L, "writing", 1, "a", 9, 18.0, 450L);
+        state.apply(event("phase_done", 2_006L).put("phase", "writing").put("status", "ok")
+            .put("metrics", new JSONObject().put("med", 17.5).put("runs", 1)));
+        state.apply(event("phase_start", 2_007L).put("phase", "check").put("runs", 1).put("prompt", "p"));
+        token(2_008L, "check", 1, "42", 2, 40.0, 150L);
+        assertEquals(17.5, state.writingTps, 1e-9);
+        assertEquals(480L, state.firstWordMs);
+    }
+
+    @Test
     public void readingShowsAPlaceholderWhileItRunsAndItsMedianAfter() throws JSONException {
         entryStart(0, 1, QWEN, "cpu", 2_000L);
         assertFalse(state.readingRunning());
