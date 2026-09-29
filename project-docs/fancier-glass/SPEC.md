@@ -42,10 +42,10 @@ Bug fixes (all versions, API 26+):
 
 ## 3. The Fancier Glass toggle
 
-- **Where:** in-app Appearance settings, a section "Fancier Glass" directly under Lazy mode. Off by default.
-- **Hint:** "Needs a wallpaper set from inside termux-launcher."
+- **Where:** Settings > Look (the Appearance page, `TermuxStylePreferencesFragment`), a section "Fancier Glass" below the Battery section that holds Lazy mode (both moved there from the Terminal page 2026-09-29; keys unchanged). Off by default.
+- **Hint:** "Bends the wallpaper at glass edges. Set the wallpaper with the in-app wallpaper picker." While disabled the summary reads "Off: the wallpaper was not set with the in-app wallpaper picker."
 - **Shown only on API 33+.** Below that it is hidden.
-- **Needs an in-app wallpaper** (a managed picture or video). With any other wallpaper, the toggle is disabled with the hint, and everything behaves as the default mode.
+- **Needs an in-app wallpaper** (a managed picture or video). With any other wallpaper, the toggle is greyed out with the reason, and everything behaves as the default mode. A switch already on stays on (stored) but `FancierGlassPolicy.active` is false, so nothing refracts until an in-app wallpaper is back. The page re-checks on every resume (`WallpaperPictureReader.managedPictureOnScreen`: stored wallpaper id equals the system's and the exact copy is on disk).
 - **What it turns on:**
   1. AGSL refraction on every glass surface (§4).
   2. Video wallpapers, both modes (§5).

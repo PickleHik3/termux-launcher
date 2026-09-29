@@ -233,6 +233,22 @@ The tokens are `surface`, `surface_dim`, `surface_bright`, `surface_container_lo
 `error` families spelled the same way, plus `inverse_surface`, `inverse_on_surface` and
 `inverse_primary`.
 
+- **Battery → Lazy mode:** stop the launcher animating while you are only looking at it. The clock
+  swaps its digits instead of folding them, a working window's rim holds lit instead of breathing,
+  the status readings sample less often, and the weather icon rests on its last frame. Nothing on
+  screen repaints until something actually changes.
+
+**Please try Lazy mode.** Without it the launcher redraws every frame the panel offers, purely to
+animate the clock's seconds — that is a real battery cost for something nobody is watching most of
+the time. The intent is to make it the default once it has been through enough hands; what that
+needs is people running it on other devices and reporting anything that looks stuck, stale, or
+wrong — a clock that stops updating, a status reading that freezes, a rim that never lights.
+[Open an issue](https://github.com/PickleHik3/termux-launcher/issues) if you find one.
+
+- **Fancier Glass:** every glass surface bends the wallpaper at its edge. It needs Android 13 and a
+  wallpaper set with the in-app wallpaper picker (or `launcherctl wallpaper set`); with any other
+  wallpaper the switch is greyed out and says so.
+
 ## Terminal
 
 Use this section for terminal geometry, panes, and how the launcher behaves as an app:
@@ -255,17 +271,6 @@ Use this section for terminal geometry, panes, and how the launcher behaves as a
 - **Clipboard Cleanup:** drop trailing spaces from copied lines, and the trailing newline from a
   one-line paste, so a copied command runs again cleanly instead of leaving a blank line behind it
   or waiting on an extra newline. On by default.
-- **Battery → Lazy mode:** stop the launcher animating while you are only looking at it. The clock
-  swaps its digits instead of folding them, a working window's rim holds lit instead of breathing,
-  the status readings sample less often, and the weather icon rests on its last frame. Nothing on
-  screen repaints until something actually changes.
-
-**Please try Lazy mode.** Without it the launcher redraws every frame the panel offers, purely to
-animate the clock's seconds — that is a real battery cost for something nobody is watching most of
-the time. The intent is to make it the default once it has been through enough hands; what that
-needs is people running it on other devices and reporting anything that looks stuck, stale, or
-wrong — a clock that stops updating, a status reading that freezes, a rim that never lights.
-[Open an issue](https://github.com/PickleHik3/termux-launcher/issues) if you find one.
 
 ## Status bar
 

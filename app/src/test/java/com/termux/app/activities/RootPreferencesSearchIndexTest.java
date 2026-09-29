@@ -98,13 +98,13 @@ public class RootPreferencesSearchIndexTest {
     }
 
     @Test
-    public void searchingALazyModeTermFindsTheTerminalDestinationOnly() {
+    public void searchingALazyModeTermFindsTheAppearanceDestinationOnly() {
         SettingsActivity.RootPreferencesFragment root = launch();
         SettingsSearchPreference search = root.findPreference("settings_search");
         assertTrue(search.getOnQueryChangedListener() != null);
         search.getOnQueryChangedListener().onQueryChanged("lazy mode");
 
-        assertTrue("terminal page contains lazy mode", isVisible(root, "terminal"));
+        assertTrue("appearance page contains lazy mode", isVisible(root, "appearance"));
         assertFalse("status bar page has no lazy mode row", isVisible(root, "status_bar"));
     }
 

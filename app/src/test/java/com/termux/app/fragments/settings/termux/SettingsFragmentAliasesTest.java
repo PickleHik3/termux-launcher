@@ -60,7 +60,7 @@ public class SettingsFragmentAliasesTest {
         assertTrue(fragment instanceof TerminalPreferencesFragment);
         PreferenceScreen screen = ((TerminalPreferencesFragment) fragment).getPreferenceScreen();
         assertNotNull(screen.findPreference("split_pane_controls"));
-        assertNotNull(screen.findPreference("lazy_mode"));
+        assertNull("moved to the Appearance page", screen.findPreference("lazy_mode"));
     }
 
     @Test
@@ -73,6 +73,9 @@ public class SettingsFragmentAliasesTest {
             screen.findPreference("in_app_keyboard_theme"));
         assertNotNull(screen.findPreference("customize_keyboard_surface"));
         assertNotNull(screen.findPreference("in_app_keyboard_bottom_padding"));
+        assertNotNull("Lazy mode moved in from the Terminal page", screen.findPreference("lazy_mode"));
+        assertNotNull("Fancier Glass moved in from the Terminal page",
+            screen.findPreference("fancier_glass"));
     }
 
     @Test
