@@ -1589,6 +1589,7 @@
         <string name="tai_bench_step_skipped">skipped · %1$s</string>
         <string name="tai_bench_step_stopped">stopped</string>
         <string name="tai_bench_step_cache_rebuilt">cache rebuilt</string>
+        <string name="tai_bench_token_limit">stopped at the %1$d-token limit</string>
         <string name="tai_bench_live_header">Live</string>
         <string name="tai_bench_live_show">Show</string>
         <string name="tai_bench_live_hide">Hide</string>

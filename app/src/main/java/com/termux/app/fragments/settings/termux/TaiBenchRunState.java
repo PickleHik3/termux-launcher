@@ -77,6 +77,17 @@ public final class TaiBenchRunState {
         public int run;
         public int runs;
         @Nullable public JSONObject metrics;
+        /** How the phase's replies ended ({@code "length"} when one hit the bench's token cap); {@code null} until {@code phase_done}. */
+        @Nullable public String finishReason;
+        /** The token cap the phase's replies were held to; {@code 0} when the event did not say. */
+        public int tokenLimit;
+        /** Thinking tokens the phase's replies spent, most of any run. */
+        public int reasoningTokens;
+
+        /** Whether a reply of this phase was cut off by the bench's own token cap, not by the model finishing. */
+        public boolean hitTokenLimit() {
+            return tokenLimitHit(finishReason, tokenLimit) > 0;
+        }
 
         Step(@NonNull String phase, int runs) {
             this.phase = phase;
@@ -412,16 +423,50 @@ public final class TaiBenchRunState {
             Step step = entry.steps.get(phaseName);
             if (step != null) step.run = run;
         }
-        if (TaiBenchSuite.PHASE_WRITING.equals(phaseName) || TaiBenchSuite.PHASE_SUSTAINED.equals(phaseName)) {
-            if (live.tps > 0.0) {
-                series.add((float) live.tps);
-                if (series.size() > SERIES_CAPACITY) series.remove(0);
-            }
-            if (writingTps < 0.0 && live.tps > 0.0) writingTps = live.tps;
+        // Every phase drives the decode and first-word dials, so they move from the warm-up on; a
+        // phase's own median (phase_done) replaces the figure when it lands, and the next phase's
+        // tokens move it again. Only the sparkline stays with the phases that measure decode speed.
+        if (live.tps > 0.0) writingTps = live.tps;
+        if (live.ttftMs > 0L) firstWordMs = live.ttftMs;
+        if (live.tps > 0.0 && (TaiBenchSuite.PHASE_WRITING.equals(phaseName) || TaiBenchSuite.PHASE_SUSTAINED.equals(phaseName))) {
+            series.add((float) live.tps);
+            if (series.size() > SERIES_CAPACITY) series.remove(0);
         }
-        if (TaiBenchSuite.PHASE_FIRST_WORD.equals(phaseName) && live.ttftMs > 0L && firstWordMs < 0L) {
-            firstWordMs = live.ttftMs;
+    }
+
+    /**
+     * Whether the Reading tile has nothing to show but "still going": a reading run is under way and
+     * its median has not landed. The events carry no prompt-token count, so a running prefill rate
+     * cannot be worked out; the tile shows a placeholder until {@code phase_done}.
+     */
+    public boolean readingRunning() {
+        return live.active && TaiBenchSuite.PHASE_READING.equals(live.phase);
+    }
+
+    /**
+     * The token cap a reply ended at: {@code limit} when {@code finishReason} is {@code "length"} and
+     * the cap is known, else {@code 0}. The bench's caps are part of the bench version, so a reply cut
+     * there is intended; the UI says so instead of leaving the user to think the model stopped.
+     */
+    public static int tokenLimitHit(@Nullable String finishReason, int limit) {
+        return "length".equals(finishReason) && limit > 0 ? limit : 0;
+    }
+
+    /** {@link #tokenLimitHit(String, int)} for a record's phase object ({@code finishReason}, {@code tokenLimit}); {@code 0} when absent. */
+    public static int tokenLimitHit(@Nullable JSONObject phase) {
+        if (phase == null) return 0;
+        return tokenLimitHit(phase.optString("finishReason", ""), phase.optInt("tokenLimit", 0));
+    }
+
+    /** The cap the first check reply that hit one ended at, from a record's {@code check.details}; {@code 0} when none did. */
+    public static int checkTokenLimitHit(@Nullable JSONObject check) {
+        JSONArray details = check == null ? null : check.optJSONArray("details");
+        if (details == null) return 0;
+        for (int i = 0; i < details.length(); i++) {
+            int limit = tokenLimitHit(details.optJSONObject(i));
+            if (limit > 0) return limit;
         }
+        return 0;
     }
 
     private void onCheckStart(@NonNull JSONObject event) {
@@ -448,6 +493,9 @@ public final class TaiBenchRunState {
             step.status = "ok".equals(status) ? StepStatus.DONE : StepStatus.FAILED;
             step.run = step.runs;
             step.metrics = metrics;
+            step.finishReason = event.has("finishReason") ? event.optString("finishReason", null) : null;
+            step.tokenLimit = event.optInt("tokenLimit", 0);
+            step.reasoningTokens = event.optInt("reasoningTokens", 0);
         }
         live.active = false;
         if (metrics == null) return;

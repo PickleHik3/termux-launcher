@@ -180,11 +180,14 @@ public class TaiBenchResultFragment extends Fragment {
         column.addView(TaiBenchViews.sectionHeader(context, getString(R.string.tai_bench_result_details_header), ""));
         TaiBenchViews.Card details = TaiBenchViews.card(context);
         addDetail(details.core, getString(R.string.tai_bench_tile_first_word), firstWord == null ? TaiBenchViews.millis(context, Double.NaN)
-            : TaiBenchViews.millis(context, firstWord.optDouble("med", Double.NaN)) + rangeMillis(context, firstWord));
+            : TaiBenchViews.millis(context, firstWord.optDouble("med", Double.NaN)) + rangeMillis(context, firstWord)
+                + limitNote(TaiBenchRunState.tokenLimitHit(firstWord)));
         addDetail(details.core, getString(R.string.tai_bench_tile_reading), reading == null ? TaiBenchViews.tps(context, Double.NaN)
-            : TaiBenchViews.tps(context, reading.optDouble("med", Double.NaN)) + promptTokens(reading));
+            : TaiBenchViews.tps(context, reading.optDouble("med", Double.NaN)) + promptTokens(reading)
+                + limitNote(TaiBenchRunState.tokenLimitHit(reading)));
         addDetail(details.core, getString(R.string.tai_bench_tile_writing), writing == null ? TaiBenchViews.tps(context, Double.NaN)
-            : TaiBenchViews.tps(context, writingTps) + rangeTps(context, writing));
+            : TaiBenchViews.tps(context, writingTps) + rangeTps(context, writing)
+                + limitNote(TaiBenchRunState.tokenLimitHit(writing)));
         addDetail(details.core, getString(R.string.tai_bench_phase_load), load == null ? TaiBenchViews.millis(context, Double.NaN)
             : TaiBenchViews.millis(context, load.optLong("ms", 0L)));
         long mem = load == null ? -1L : TaiBenchStore.memoryBytes(load);
@@ -198,6 +201,7 @@ public class TaiBenchResultFragment extends Fragment {
         int passed = check == null ? 0 : check.optInt("passed", 0);
         int total = check == null ? 0 : check.optInt("total", 0);
         addDetail(details.core, getString(R.string.tai_bench_phase_check), total > 0 ? getString(R.string.tai_bench_result_check, passed, total)
+            + limitNote(TaiBenchRunState.checkTokenLimitHit(check))
             : getString(R.string.tai_bench_none));
         if (conditions != null) {
             String battery = conditions.isNull("batteryStart") ? getString(R.string.tai_bench_none)
@@ -282,6 +286,12 @@ public class TaiBenchResultFragment extends Fragment {
     private String promptTokens(@NonNull JSONObject reading) {
         int tokens = reading.optInt("promptTokens", 0);
         return tokens > 0 ? " · " + getString(R.string.tai_bench_result_prompt_tokens, tokens) : "";
+    }
+
+    /** " · stopped at the 128-token limit" for a phase whose reply ended at the bench's cap; empty for {@code 0}. */
+    @NonNull
+    private String limitNote(int limit) {
+        return limit > 0 ? " · " + getString(R.string.tai_bench_token_limit, limit) : "";
     }
 
     @NonNull
