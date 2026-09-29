@@ -180,7 +180,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
     @NonNull
     private Theme.Palette buildPreviewPalette(@NonNull android.content.Context context) {
         String theme = mPreferences.getInAppKeyboardTheme();
-        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(context, theme);
+        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(context, theme,
+            com.termux.app.chrome.GlassLook.of(mPreferences));
         if (mScheme.shouldApplyImportedPalette(theme))
             palette = mScheme.applyToPalette(palette);
         // Production paints this color into the activity's glass backdrop behind a transparent

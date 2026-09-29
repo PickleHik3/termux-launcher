@@ -151,4 +151,34 @@ public class GlassStackTest {
         assertTrue(stack.getDrawable(0) instanceof android.graphics.drawable.ColorDrawable);
         assertTrue(stack.getDrawable(1) instanceof GradientDrawable);
     }
+
+    @Test
+    public void whileTheKeyboardFollowsBaseAStaleBackdropOpacityDoesNotFadeIt() {
+        preferences.setInAppKeyboardBackdropOpacityRaw(35);
+
+        assertEquals(100, GlassStack.keyboardStackAlphaPercent(preferences));
+        assertEquals("inheriting, the keyboard is the dock's spec", dockSpec(FANCIER),
+            keyboardSpec(FANCIER));
+
+        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY, 60);
+        assertEquals("detached, its own Opacity row applies", 35,
+            GlassStack.keyboardStackAlphaPercent(preferences));
+    }
+
+    @Test
+    public void underMistTheKeyboardStackWearsTheDocksTintAndRim() {
+        GlassSurfaceFactory mist = glass.withLook(new GlassLook(true, true));
+        preferences.setInAppKeyboardBackdropOpacityRaw(35);
+
+        LayerDrawable dock = (LayerDrawable) GlassStack.build(mist, dockSpec(null), 2f, null);
+        LayerDrawable keyboard = (LayerDrawable) GlassStack.build(mist, keyboardSpec(null), 2f, null);
+
+        assertEquals(dock.getNumberOfLayers(), keyboard.getNumberOfLayers());
+        int last = dock.getNumberOfLayers() - 1;
+        assertTrue(dock.getDrawable(last) instanceof GradientRimDrawable);
+        assertTrue(keyboard.getDrawable(last) instanceof GradientRimDrawable);
+        assertEquals(((GradientDrawable) dock.getDrawable(0)).getColor().getDefaultColor(),
+            ((GradientDrawable) keyboard.getDrawable(0)).getColor().getDefaultColor());
+        assertEquals(255, keyboard.getAlpha());
+    }
 }
