@@ -367,6 +367,54 @@ public class TaiLoadBudgetTest {
         assertEquals(0L, TaiLoadBudget.ramClassBytes(0L));
     }
 
+    // --- LiteRT CPU: KV cache and buffers arrive at the first prefill, after the budget has looked ---
+
+    private static final List<String> CPU_ONLY = Collections.singletonList("cpu");
+
+    @Test
+    public void anImplicitWindowOnLiteRtCpuIsHeldToTheFloor() {
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 9_000_000_000L, CPU_ONLY,
+            32_768, false, PONG_THRESHOLD, TaiLoadBudget.NO_HISTORY, NOTHING));
+        assertTrue(plan.fits);
+        assertEquals("cpu", plan.accelerator);
+        assertEquals(TaiLoadBudget.FLOOR_CONTEXT, plan.contextWindow);
+    }
+
+    @Test
+    public void anExplicitWindowOnLiteRtCpuIsHonoured() {
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 9_000_000_000L, CPU_ONLY,
+            32_768, true, PONG_THRESHOLD, TaiLoadBudget.NO_HISTORY, NOTHING));
+        assertEquals(32_768, plan.contextWindow);
+    }
+
+    @Test
+    public void aModelLimitBelowTheFloorStillWinsOnLiteRtCpu() {
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(request(E2B, PONG_TOTAL, 9_000_000_000L, CPU_ONLY,
+            2048, false, PONG_THRESHOLD, TaiLoadBudget.NO_HISTORY, NOTHING));
+        assertEquals(2048, plan.contextWindow);
+    }
+
+    @Test
+    public void theCpuCapDoesNotApplyToMnn() {
+        TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_MNN_LLM, 500_000_000L, false,
+            PONG_TOTAL, 9_000_000_000L, CPU_ONLY, 16_384, null, 0, false, PONG_THRESHOLD, TaiLoadBudget.NO_HISTORY, NOTHING));
+        assertEquals(16_384, plan.contextWindow);
+    }
+
+    @Test
+    public void aLoadTimeSampleIsIgnoredForLiteRtCpuButNotForGpu() {
+        TaiLoadBudget.History optimistic = (accelerator, context) -> 400_000_000L;
+        TaiLoadBudget.Estimate cpu = TaiLoadBudget.estimate(TaiModelSpec.BACKEND_LITERT_LM, "cpu", E2B, false, 4096, optimistic);
+        assertEquals(TaiLoadBudget.SOURCE_RATIO, cpu.source);
+        assertEquals(TaiLoadBudget.estimateBytes(TaiModelSpec.BACKEND_LITERT_LM, "cpu", E2B, false, 4096), cpu.nonReclaimableBytes);
+        assertEquals(TaiLoadBudget.SOURCE_MEASURED,
+            TaiLoadBudget.estimate(TaiModelSpec.BACKEND_LITERT_LM, "gpu", E2B, false, 4096, optimistic).source);
+        assertEquals(TaiLoadBudget.SOURCE_MEASURED,
+            TaiLoadBudget.estimate(TaiModelSpec.BACKEND_MNN_LLM, "cpu", E2B, false, 4096, optimistic).source);
+        assertFalse(TaiLoadBudget.trustsLoadDrop(TaiModelSpec.BACKEND_LITERT_LM, "cpu"));
+        assertTrue(TaiLoadBudget.trustsLoadDrop(TaiModelSpec.BACKEND_LITERT_LM, "gpu"));
+    }
+
     private static TaiLoadBudget.Request request(long file, long total, long available, List<String> accelerators, int cap,
                                                  boolean explicitContext, long threshold, TaiLoadBudget.History history,
                                                  List<TaiResidency.Entry> evictable) {

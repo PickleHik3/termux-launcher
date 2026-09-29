@@ -228,6 +228,37 @@ public class TaiImportProfilesTest {
     }
 
     @Test
+    public void granite42IsToldNotToThinkWithARealBoolean() {
+        TaiModelProfile guessed = new TaiModelProfile(Collections.singletonList("cpu"), 1024, 64, 0.95d, 1.0d, null,
+            "import-dialog-selection");
+        assertEquals(TaiModelProfile.THINKING_NONE, guessed.thinkingMode);
+        TaiModelProfile profile = TaiImportProfiles.withGraniteThinkingSwitch(guessed,
+            "litert-community/granite-4.2-3b granite-4.2-3b_int4.litertlm");
+        assertEquals(TaiModelProfile.THINKING_TOGGLEABLE, profile.thinkingMode);
+        assertEquals(TaiModelProfile.THINKING_SWITCH_TEMPLATE_BOOLEAN, profile.thinkingSwitch);
+        // Everything else the importer guessed stays.
+        assertEquals(guessed.compatibleAccelerators, profile.compatibleAccelerators);
+        assertEquals(guessed.defaultMaxTokens, profile.defaultMaxTokens);
+        assertEquals(guessed.source, profile.source);
+        // Off unless asked: the key is sent as false when thinking is unset or off, true when on.
+        assertSame(Boolean.FALSE, LiteRtTaiRuntime.thinkingExtraContext(thinking(null), profile).get("enable_thinking"));
+        assertSame(Boolean.FALSE, LiteRtTaiRuntime.thinkingExtraContext(thinking(false), profile).get("enable_thinking"));
+        assertSame(Boolean.TRUE, LiteRtTaiRuntime.thinkingExtraContext(thinking(true), profile).get("enable_thinking"));
+    }
+
+    @Test
+    public void otherGraniteFilesAndProfilesWithAThinkingModeAreLeftAlone() {
+        TaiModelProfile guessed = new TaiModelProfile(Collections.singletonList("cpu"), 1024, 64, 0.95d, 1.0d, null, "x");
+        assertSame(guessed, TaiImportProfiles.withGraniteThinkingSwitch(guessed, "granite-4.0-h-1b_int8.litertlm"));
+        assertSame(guessed, TaiImportProfiles.withGraniteThinkingSwitch(guessed, null));
+        TaiModelProfile always = TaiModelProfile.qwen3Thinking2507Profile();
+        assertSame(always, TaiImportProfiles.withGraniteThinkingSwitch(always, "granite-4.2-3b-int4"));
+        assertTrue(TaiImportProfiles.granite42("granite-4.2-3b-int4"));
+        assertTrue(TaiImportProfiles.granite42("/models/x/Granite-4.2-3B_int4.litertlm"));
+        assertFalse(TaiImportProfiles.granite42("granite-4.0-h-1b"));
+    }
+
+    @Test
     public void smolLm3SwitchesThinkingOffInTheSystemPrompt() {
         TaiModelProfile profile = match("SmolLM3-3B", "SmolLM3-3B_q4_block32_ekv4096.litertlm").profile;
         assertTrue(LiteRtTaiRuntime.thinkingExtraContext(thinking(false), profile).isEmpty());

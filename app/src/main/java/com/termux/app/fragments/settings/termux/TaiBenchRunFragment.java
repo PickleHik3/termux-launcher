@@ -414,7 +414,10 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
             line.append(TaiBenchViews.phaseLabel(context, phase));
             TaiBenchRunState.Step step = entry.steps.get(phase);
             if (step == null) continue;
-            if (step.status == TaiBenchRunState.StepStatus.DONE) line.append(" ✓");
+            if (step.status == TaiBenchRunState.StepStatus.DONE) {
+                line.append(" ✓");
+                if (step.hitTokenLimit()) line.append(" (").append(getString(R.string.tai_bench_token_limit, step.tokenLimit)).append(')');
+            }
             else if (step.status == TaiBenchRunState.StepStatus.FAILED) line.append(" ✗");
             else if (step.runs > 1) line.append(' ').append(Math.max(1, step.run)).append('/').append(step.runs);
             else line.append(" …");
@@ -506,10 +509,8 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
 
     private void bindTiles(@NonNull Context context, @NonNull TaiBenchRunState state) {
         tileFirstWord.setText(TaiBenchViews.millis(context, state.firstWordMs));
-        tileReading.setText(TaiBenchViews.tps(context, state.readingTps));
-        double writing = state.live.active && (TaiBenchSuite.PHASE_WRITING.equals(state.live.phase) || TaiBenchSuite.PHASE_SUSTAINED.equals(state.live.phase))
-            && state.live.tps > 0.0 ? state.live.tps : state.writingTps;
-        tileWriting.setText(TaiBenchViews.tps(context, writing));
+        tileReading.setText(state.readingRunning() && state.readingTps <= 0.0 ? "…" : TaiBenchViews.tps(context, state.readingTps));
+        tileWriting.setText(TaiBenchViews.tps(context, state.writingTps));
         sparkline.setSeries(state.series);
         tileRam.setText(TaiBenchViews.bytes(context, state.conditions.freeRamBytes));
         tileHeat.setText(TaiBenchViews.heatLabel(context, state.conditions.thermalStatus));

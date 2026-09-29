@@ -859,11 +859,14 @@ final class TaiImportFlow {
             defaults = family.profile;
         }
         if (draft.customProfile != null) defaults = draft.customProfile;
-        return new TaiModelProfile(accelerators, defaults.defaultMaxTokens, defaults.defaultTopK,
+        TaiModelProfile stored = new TaiModelProfile(accelerators, defaults.defaultMaxTokens, defaults.defaultTopK,
             defaults.defaultTopP, defaults.defaultTemperature, defaults.minDeviceMemoryInGb,
             draft.customProfile == null ? "import-dialog-selection" : "user-artifact-profile",
             defaults.thinkingMode, defaults.thinkingChannelStart, defaults.thinkingChannelEnd, defaults.maxContextTokens,
             defaults.thinkingSwitch);
+        // A profile the user edited is theirs; a guessed one gets Granite 4.2's thinking switch.
+        return draft.customProfile != null ? stored
+            : TaiImportProfiles.withGraniteThinkingSwitch(stored, draft.identity() + " " + modelId());
     }
 
     @NonNull

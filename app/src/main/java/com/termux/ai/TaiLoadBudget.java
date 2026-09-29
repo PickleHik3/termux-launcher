@@ -56,7 +56,9 @@ import java.util.List;
  * larger CPU window was the one configuration the calibration could not survive (it took the
  * phone's network down). An automatic GPU load is capped at 4k as well: 8k cost ~0.8 GB more on
  * pong and slowed decode from 10.5 to 9.8 tok/s, and both LiteRT-LM and Gallery default GPU to
- * 4096; an explicit window above that is honoured, subject to the budget. A load whose process was
+ * 4096; an explicit window above that is honoured, subject to the budget. An automatic LiteRT CPU
+ * load is capped at the floor too, because its runtime buffers are allocated at the first prefill
+ * and no load-time measurement sees them (see {@link #trustsLoadDrop}). A load whose process was
  * killed last time is not repeated as it was: that accelerator is held to half the window it died
  * at.
  *
@@ -148,10 +150,21 @@ public final class TaiLoadBudget {
     @NonNull
     public static Estimate estimate(@NonNull String backend, @NonNull String accelerator, long fileBytes,
                                     boolean encoders, int contextTokens, @NonNull History history) {
-        long measured = history.measuredBytes(accelerator, contextTokens);
+        long measured = trustsLoadDrop(backend, accelerator) ? history.measuredBytes(accelerator, contextTokens) : 0L;
         if (measured > 0L) return Estimate.measured(measured);
         return Estimate.ratio(estimateBytes(backend, accelerator, fileBytes, encoders, contextTokens),
             reclaimableBytes(backend, accelerator, fileBytes));
+    }
+
+    /**
+     * Whether a MemAvailable drop sampled while the model loads says what the load costs. Not for a
+     * LiteRT CPU load: it maps the file and allocates its KV cache and runtime buffers at the first
+     * prefill, so the drop over a load of about a second (371-422 MB for gemma-4-e2b) came before the
+     * memory was taken, while the first generation went on to 6.9 GB. Such samples are neither
+     * recorded nor read back, which also discards the ones recorded before this rule.
+     */
+    public static boolean trustsLoadDrop(@NonNull String backend, @Nullable String accelerator) {
+        return !(TaiModelSpec.BACKEND_LITERT_LM.equals(backend) && "cpu".equals(accelerator));
     }
 
     /** The ratio estimate of a load's new, non-reclaimable memory pressure, in bytes. */
@@ -314,6 +327,11 @@ public final class TaiLoadBudget {
             String accelerator = r.accelerators.get(i);
             int limit = i == 0 ? cap : floor;
             if ("gpu".equals(accelerator) && !r.explicitContext) limit = Math.min(limit, GPU_AUTO_CONTEXT);
+            // The CPU allocates its KV cache at the first prefill, past anything the budget sees at
+            // load time: without a window someone chose, it gets the floor rather than the RAM tier.
+            if ("cpu".equals(accelerator) && !r.explicitContext && TaiModelSpec.BACKEND_LITERT_LM.equals(r.backend)) {
+                limit = Math.min(limit, FLOOR_CONTEXT);
+            }
             if (accelerator.equals(r.crashedAccelerator)) {
                 int crashedAt = r.crashedContext > 0 ? r.crashedContext : cap;
                 limit = Math.min(limit, crashedAt / 2);

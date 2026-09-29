@@ -90,6 +90,13 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private ScheduledFuture<?> idleUnloadFuture;
     private boolean generating;
     private boolean unloadAfterGeneration;
+    /**
+     * A cancel or unload arrived during the current generation. Cancelling only stops the native
+     * process; the conversation is closed by {@link #generate}'s finally, once nothing can be
+     * sending on it (closing it earlier could delete the native conversation under a send that had
+     * read it but not yet called {@code sendMessageAsync}).
+     */
+    private boolean cancelRequested;
     private String activeGenerationId;
     private long activeGenerationStartedAtMs;
     private long loadedAtMs;
@@ -184,6 +191,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     public synchronized JSONObject unload() throws JSONException {
         if (generating) {
             unloadAfterGeneration = true;
+            cancelRequested = true;
             runtimeState = "stopping";
             statusMessage = "Cancelling generation; LiteRT-LM will unload when generation stops.";
             try {
@@ -239,13 +247,14 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         }
         runtimeState = "stopping";
         statusMessage = "Cancelling active generation.";
+        // cancelProcess() does not roll back the conversation's KV state, so generate() closes the
+        // conversation (it sees cancelRequested) once the send is over; closing it here could race
+        // a send that has not started yet.
+        cancelRequested = true;
         try {
             conversation.cancelProcess();
         } catch (Exception e) {
             return error(500, "cancel_failed", "Failed to cancel active LiteRT-LM generation: " + e.getMessage());
-        } finally {
-            // cancelProcess() does not roll back the conversation's KV state. Never reuse it.
-            closeConversationLocked();
         }
         JSONObject data = stateEnvelopeLocked(true);
         data.put("cancelled", true);
@@ -360,6 +369,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             : loadedProfile.defaultMaxTokens;
         boolean unloadRequested;
         try {
+            // A cancel that landed before the send started has nothing to stop yet: do not send.
+            if (isCancelRequested()) throw new CancellationException("Generation cancelled before it was sent.");
             activeConversation.sendMessageAsync(sendMessage, new MessageCallback() {
                     @Override
                     public void onMessage(@NonNull Message message) {
@@ -431,6 +442,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                         done.countDown();
                     }
                 }, thinkingExtraContext(options, loadedProfile));
+            // A cancel between the check above and the send started cancelled nothing; repeat it.
+            if (isCancelRequested()) activeConversation.cancelProcess();
             done.await();
             try {
                 BenchmarkInfo benchmark = activeConversation.getBenchmarkInfo();
@@ -457,7 +470,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 // cancelProcess() leaves the KV cache dirty, so a length-limited conversation
                 // must never be reused even though its partial response is a normal completion.
                 // A failed generation leaves the KV state unknown, so it is not reused either.
-                if (lengthLimited.get() || callbackCancelled.get() || failure != null || !request.reusableConversation) {
+                if (lengthLimited.get() || callbackCancelled.get() || cancelRequested || failure != null
+                    || !request.reusableConversation) {
                     closeConversationLocked();
                 } else if (pendingTranscript != null && conversation == activeConversation) {
                     String reply;
@@ -729,7 +743,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 // reaches this block.
                 String loadedAccelerator = acceleratorFromBackendName(backendName, requestedAccelerator);
                 int loadedContext = effectiveOptions.contextWindow != null ? effectiveOptions.contextWindow : TaiLoadBudget.FLOOR_CONTEXT;
-                long measured = lastLoadDropBytes;
+                // A LiteRT CPU load's drop is taken before its buffers exist (see
+                // TaiLoadBudget#trustsLoadDrop), so it is treated as unmeasured.
+                long measured = TaiLoadBudget.trustsLoadDrop(TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator) ? lastLoadDropBytes : -1L;
                 if (measured >= 0L) {
                     TaiRuntimeHistory.recordMeasuredLoad(appContext, modelSpec, deviceCapabilities,
                         TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator, loadedContext, measured);
@@ -867,6 +883,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         long now = System.currentTimeMillis();
         generating = true;
         unloadAfterGeneration = false;
+        cancelRequested = false;
         activeGenerationStartedAtMs = now;
         activeGenerationId = "tai-gen-" + now;
         lastUsedAtMs = now;
@@ -1318,6 +1335,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         loading = false;
         loadCancellationRequested = false;
         loadingModelId = null;
+    }
+
+    private synchronized boolean isCancelRequested() {
+        return cancelRequested;
     }
 
     private synchronized boolean isLoadCancellationRequested() {

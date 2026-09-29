@@ -254,8 +254,10 @@ final class TaiBenchHarness {
             } catch (RuntimeException ignored) {
                 record.pssBytes = -1L;
             }
-            emit(event("phase_done").put("phase", TaiBenchSuite.PHASE_WARMUP).put("status", warmup.status())
-                .put("reply", warmup.reply()).put("metrics", new JSONObject().put("pssBytes", record.pssBytes)));
+            PhaseEnd warmupEnd = new PhaseEnd();
+            warmupEnd.add(warmup);
+            emit(warmupEnd.into(event("phase_done").put("phase", TaiBenchSuite.PHASE_WARMUP).put("status", warmup.status())
+                .put("reply", warmup.reply()).put("metrics", new JSONObject().put("pssBytes", record.pssBytes))));
 
             if (!runReading(entry, record)) return record.finish();
             if (!runFirstWord(entry, record)) return record.finish();
@@ -366,15 +368,16 @@ final class TaiBenchHarness {
                 prompt, TaiBenchSuite.READING_MAX_TOKENS, 0L);
             if (!generation.ok && !record.noteFailure(TaiBenchSuite.PHASE_READING, generation)) return false;
             record.lastReply = generation.reply();
+            record.readingEnd.add(generation);
             if (generation.promptTokens > 0 && generation.ttftMs() > 0L) {
                 record.reading.add(TaiBenchStats.prefillTps(generation.promptTokens, generation.ttftMs()));
             }
             record.readingTokens = Math.max(record.readingTokens, generation.promptTokens);
             if (generation.timedOut) break;
         }
-        emit(event("phase_done").put("phase", TaiBenchSuite.PHASE_READING).put("status", record.phaseStatus)
+        emit(record.readingEnd.into(event("phase_done").put("phase", TaiBenchSuite.PHASE_READING).put("status", record.phaseStatus)
             .put("metrics", metrics(record.reading).put("promptTokens", record.readingTokens))
-            .put("reply", record.lastReply));
+            .put("reply", record.lastReply)));
         return true;
     }
 
@@ -387,11 +390,12 @@ final class TaiBenchHarness {
                 TaiBenchSuite.FIRST_WORD_PROMPT, TaiBenchSuite.FIRST_WORD_MAX_TOKENS, 0L);
             if (!generation.ok && !record.noteFailure(TaiBenchSuite.PHASE_FIRST_WORD, generation)) return false;
             record.lastReply = generation.reply();
+            record.firstWordEnd.add(generation);
             if (generation.ttftMs() > 0L) record.firstWord.add(generation.ttftMs());
             if (generation.timedOut) break;
         }
-        emit(event("phase_done").put("phase", TaiBenchSuite.PHASE_FIRST_WORD).put("status", record.phaseStatus)
-            .put("metrics", metrics(record.firstWord)).put("reply", record.lastReply));
+        emit(record.firstWordEnd.into(event("phase_done").put("phase", TaiBenchSuite.PHASE_FIRST_WORD).put("status", record.phaseStatus)
+            .put("metrics", metrics(record.firstWord)).put("reply", record.lastReply)));
         return true;
     }
 
@@ -405,14 +409,15 @@ final class TaiBenchHarness {
                 TaiBenchSuite.WRITING_PROMPT, TaiBenchSuite.WRITING_MAX_TOKENS, 0L);
             if (!generation.ok && !record.noteFailure(TaiBenchSuite.PHASE_WRITING, generation)) return false;
             record.lastReply = generation.reply();
+            record.writingEnd.add(generation);
             double tps = generation.decodeTps();
             if (tps > 0.0) record.writing.add(tps);
             if (generation.generatedTokens() > 0) tokens.add(generation.generatedTokens());
             if (generation.timedOut) break;
         }
         record.writingTokens = (int) Math.round(tokens.median());
-        emit(event("phase_done").put("phase", TaiBenchSuite.PHASE_WRITING).put("status", record.phaseStatus)
-            .put("metrics", metrics(record.writing).put("tokens", record.writingTokens)).put("reply", record.lastReply));
+        emit(record.writingEnd.into(event("phase_done").put("phase", TaiBenchSuite.PHASE_WRITING).put("status", record.phaseStatus)
+            .put("metrics", metrics(record.writing).put("tokens", record.writingTokens)).put("reply", record.lastReply)));
         return true;
     }
 
@@ -464,6 +469,7 @@ final class TaiBenchHarness {
         if (!consultGuard(TaiBenchSuite.PHASE_CHECK, entry, record)) return false;
         emit(event("phase_start").put("phase", TaiBenchSuite.PHASE_CHECK).put("runs", TaiBenchSuite.CHECKS.size()));
         JSONArray details = new JSONArray();
+        PhaseEnd checkEnd = new PhaseEnd();
         int passed = 0;
         for (int i = 0; i < TaiBenchSuite.CHECKS.size(); i++) {
             TaiBenchSuite.Check check = TaiBenchSuite.CHECKS.get(i);
@@ -473,17 +479,46 @@ final class TaiBenchHarness {
             if (!generation.ok && !record.noteFailure(TaiBenchSuite.PHASE_CHECK, generation)) return false;
             boolean ok = generation.ok && check.grade(generation.reply());
             if (ok) passed++;
-            details.put(new JSONObject().put("name", check.name).put("passed", ok).put("reply", generation.reply()));
+            // The reply is kept whole, with how it ended, so a wrong answer can be told from a cut-off one.
+            PhaseEnd replyEnd = new PhaseEnd();
+            replyEnd.add(generation);
+            checkEnd.add(generation);
+            details.put(replyEnd.into(new JSONObject().put("name", check.name).put("passed", ok).put("reply", generation.reply())));
             if (generation.timedOut) break;
         }
         record.checkPassed = passed;
         record.checkDetails = details;
-        emit(event("phase_done").put("phase", TaiBenchSuite.PHASE_CHECK).put("status", record.phaseStatus)
-            .put("metrics", new JSONObject().put("passed", passed).put("total", TaiBenchSuite.CHECKS.size()).put("details", details)));
+        emit(checkEnd.into(event("phase_done").put("phase", TaiBenchSuite.PHASE_CHECK).put("status", record.phaseStatus)
+            .put("metrics", new JSONObject().put("passed", passed).put("total", TaiBenchSuite.CHECKS.size()).put("details", details))));
         return true;
     }
 
     // ---- one generation ----------------------------------------------------------------------
+
+    /**
+     * How the replies of one phase ended, for its {@code phase_done} event and its part of the
+     * record: {@code finishReason} ({@code "length"} if any run hit the cap, else the last run's),
+     * {@code reasoningTokens} (the most any run spent thinking) and {@code tokenLimit} (the cap).
+     * The caps are fixed by the bench version, so a reply that ends at one is intended, and the UI
+     * says so.
+     */
+    static final class PhaseEnd {
+        @NonNull String finishReason = "";
+        int reasoningTokens;
+        int tokenLimit;
+
+        void add(@NonNull Generation generation) {
+            if (!"length".equals(finishReason)) finishReason = generation.effectiveFinishReason();
+            reasoningTokens = Math.max(reasoningTokens, generation.reasoningTokens);
+            tokenLimit = generation.tokenLimit;
+        }
+
+        /** Adds the three fields to {@code json} and returns it. */
+        @NonNull
+        JSONObject into(@NonNull JSONObject json) throws JSONException {
+            return json.put("finishReason", finishReason).put("reasoningTokens", reasoningTokens).put("tokenLimit", tokenLimit);
+        }
+    }
 
     /** The stamps and counts of one reply, and what the runtime said about it. */
     static final class Generation {
@@ -495,6 +530,12 @@ final class TaiBenchHarness {
         int promptTokens;
         int usageCompletionTokens = -1;
         boolean usageEstimated;
+        /** Thinking callbacks seen (a floor of the thinking tokens; LiteRT may batch several per callback). */
+        int reasoningTokens;
+        /** The runtime's {@code finishReason} for the reply; empty when it gave none. */
+        @NonNull String finishReason = "";
+        /** The {@code max_tokens} this reply was held to. */
+        int tokenLimit;
         boolean ok;
         boolean timedOut;
         @NonNull String errorCode = "";
@@ -517,6 +558,18 @@ final class TaiBenchHarness {
 
         double decodeTps() {
             return TaiBenchStats.decodeTps(generatedTokens(), firstTokenMs, lastTokenMs);
+        }
+
+        /**
+         * How the reply ended: {@code "length"} when the runtime said so, or when a reply that
+         * finished normally used its whole token cap (MNN always reports {@code stop}); else the
+         * runtime's reason, {@code "stop"} when it gave none.
+         */
+        @NonNull
+        String effectiveFinishReason() {
+            if ("length".equals(finishReason)) return "length";
+            if (ok && tokenLimit > 0 && generatedTokens() >= tokenLimit) return "length";
+            return finishReason.isEmpty() ? "stop" : finishReason;
         }
 
         @NonNull
@@ -571,13 +624,22 @@ final class TaiBenchHarness {
             @Override
             public void onThinkingToken(@NonNull String text) {
                 // Thinking is switched off for the bench; a model that thinks anyway still has
-                // its first output stamped, so TTFT is the wait the user sees.
-                if (!text.isEmpty()) stamp();
+                // its first output stamped, so TTFT is the wait the user sees. Thinking tokens
+                // count toward the live decode rate and the token counter, and emit throttled
+                // token events like reply text, so a thinking model's dials and counter move.
+                if (text.isEmpty()) return;
+                stamp(true);
+                maybeEmitToken(false);
             }
 
             private void stamp() {
+                stamp(false);
+            }
+
+            private void stamp(boolean thinking) {
                 long now = System.currentTimeMillis();
                 synchronized (generation.stamps) {
+                    if (thinking) generation.reasoningTokens++;
                     if (generation.firstTokenMs == 0L) generation.firstTokenMs = now;
                     generation.lastTokenMs = now;
                     generation.callbackTokens++;
@@ -596,17 +658,18 @@ final class TaiBenchHarness {
                 if (!flush && now - lastEventMs.get() < TOKEN_EVENT_INTERVAL_MS) return;
                 String delta;
                 synchronized (pending) {
-                    if (pending.length() == 0) return;
                     delta = pending.toString();
                     pending.setLength(0);
                 }
-                lastEventMs.set(now);
                 int count;
                 double tps;
                 synchronized (generation.stamps) {
                     count = generation.callbackTokens;
                     tps = TaiBenchStats.decodeTps(count, generation.firstTokenMs, generation.lastTokenMs);
                 }
+                // A stretch of thinking leaves the reply text empty but still advances the count.
+                if (delta.isEmpty() && count == eventTokens.get()) return;
+                lastEventMs.set(now);
                 eventTokens.set(count);
                 try {
                     emit(event("token").put("phase", phase).put("run", run).put("runs", runs)
@@ -659,6 +722,8 @@ final class TaiBenchHarness {
             generation.usageCompletionTokens = usage.optInt("completion_tokens", -1);
         }
         generation.usageEstimated = result.optBoolean("usageEstimated", usage == null);
+        generation.finishReason = result.optString("finishReason", "");
+        generation.tokenLimit = maxTokens;
         return generation;
     }
 
@@ -695,6 +760,9 @@ final class TaiBenchHarness {
         final TaiBenchStats.Series firstWord = new TaiBenchStats.Series();
         final TaiBenchStats.Series writing = new TaiBenchStats.Series();
         int writingTokens;
+        final PhaseEnd readingEnd = new PhaseEnd();
+        final PhaseEnd firstWordEnd = new PhaseEnd();
+        final PhaseEnd writingEnd = new PhaseEnd();
         @Nullable JSONObject sustained;
         int checkPassed = -1;
         @Nullable JSONArray checkDetails;
@@ -735,9 +803,11 @@ final class TaiBenchHarness {
             JSONObject phases = new JSONObject();
             phases.put("load", loadMs < 0L ? JSONObject.NULL
                 : new JSONObject().put("ms", loadMs).put("memBytes", memBytes).put("pssBytes", pssBytes));
-            phases.put("reading", orNull(reading.toJson() == null ? null : reading.toJson().put("promptTokens", readingTokens)));
-            phases.put("firstWord", orNull(firstWord.toJson()));
-            phases.put("writing", orNull(writing.toJson() == null ? null : writing.toJson().put("tokens", writingTokens)));
+            phases.put("reading", orNull(reading.toJson() == null ? null
+                : readingEnd.into(reading.toJson().put("promptTokens", readingTokens))));
+            phases.put("firstWord", orNull(firstWord.toJson() == null ? null : firstWordEnd.into(firstWord.toJson())));
+            phases.put("writing", orNull(writing.toJson() == null ? null
+                : writingEnd.into(writing.toJson().put("tokens", writingTokens))));
             phases.put("sustained", orNull(sustained));
             JSONObject check = new JSONObject()
                 .put("passed", Math.max(0, checkPassed))
