@@ -34,7 +34,7 @@ import java.util.List;
  * it, parked wherever the user last left it.
  *
  * <p>The frame is deliberately thin. It carries no idea of what a keyboard is — the keyboard's own
- * container is moved into {@link #contentHost()} unchanged, keeps its glass, its suggestion strip
+ * container is moved into {@link #contentHost()} unchanged, keeps its suggestion strip
  * and its height controls, and is measured by the normal layout pass against the width this frame
  * was given. What the frame owns is the handle and the drag: it clamps the offset it is dragged to
  * against the travel it was handed and reports where it ended up, so the arithmetic stays in

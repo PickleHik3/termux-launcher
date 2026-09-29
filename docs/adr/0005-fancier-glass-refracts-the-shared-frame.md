@@ -20,7 +20,10 @@ runs.
 with one change: the content is sampled at `(sampleCoord - uFrameOffset) / uFrameScale`. Under a
 `RenderEffect` the content is the view's own pixels and the aim is identity, so the dock and the
 strip draw exactly what they did — their numbers (20 dp band, 9 dp pull, 0.16 of light) are
-pinned as `Look.DEFAULT` and the default mode never reads a knob. Everywhere else the program
+pinned as `Look.DEFAULT` and the default mode never reads a knob. The surfaces that are the
+dock's own material — the keyboard host and the card under it — take `Look.DEFAULT` in the
+default mode too (`GlassStack.lookFor`, the one rule the dock's `RenderEffect` reads as well), so
+a Floating keyboard capsule is not the one plain surface next to a refracting dock. Everywhere else the program
 is the surface's paint shader: the frame's `BitmapShader` is its child input, and the four
 numbers `SharedFrameDrawable.aim` and the pane slab already compute — scale and translate — are
 written as uniforms instead of into a matrix. The program then bends and lights the frame in the

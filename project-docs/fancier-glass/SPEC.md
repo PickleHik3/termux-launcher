@@ -55,20 +55,22 @@ Bug fixes (all versions, API 26+):
 
 ### 3.1 Every glass surface (coverage as of 2026-09-29)
 
-The look is `TermuxActivity.mFancierGlassLook` (null in the default mode); one program, `chrome/GlassRefraction.Program`, draws it. It reaches a surface by one of three routes: **(a)** a `chrome/SharedFrameDrawable` handed the look through `setRefraction`, **(b)** a `terminal/PaneGlassBackdropView` through its own `setRefraction`, **(c)** a `RenderEffect` over the view's own pixels (`buildGlassRefractionEffect`). A surface with Solid material, or with blur off, gets no frame and so no glass, as in the default mode. A software canvas (a `RealtimeBlurView` drawing the window into its bitmap) never gets the refracted frame: routes (a) and (b) and the corner tab skip it there.
+The look is `TermuxActivity.mFancierGlassLook` (null in the default mode). The dock, the keyboard host and the under-keyboard card follow the dock's material, so in the default mode they draw `Look.DEFAULT` rather than nothing: `GlassStack.lookFor` is the one rule, and the keyboard's capsule, the under-keyboard card and the dock's `RenderEffect` all read it. One program, `chrome/GlassRefraction.Program`, draws it. It reaches a surface by one of three routes: **(a)** a `chrome/SharedFrameDrawable` handed the look through `setRefraction`, **(b)** a `terminal/PaneGlassBackdropView` through its own `setRefraction`, **(c)** a `RenderEffect` over the view's own pixels (`buildGlassRefractionEffect`). A surface with Solid material, or with blur off, gets no frame and so no glass, as in the default mode. A software canvas (a `RealtimeBlurView` drawing the window into its bitmap) never gets the refracted frame: routes (a) and (b) and the corner tab skip it there.
 
 | Surface | Frost | Refraction | Rim |
 |---|---|---|---|
 | Dock | shared frame | (c) | the capsule, or square; overscanned bottom |
 | Under-pill nav strip | shared frame | (c) | square |
-| Keyboard host | shared frame | (a) | the capsule, or square with a bottom seam over the strip |
-| Under-keyboard card (`UnderKeyboardBand`) | shared frame | (a) | the card's own radius |
+| Keyboard host | shared frame | (a), built by `GlassStack.build`; `Look.DEFAULT` in the default mode | the capsule, or square with a bottom seam over the strip |
+| Under-keyboard card (`UnderKeyboardBand`) | shared frame | (a), built by `GlassStack.build`; `Look.DEFAULT` in the default mode | the card's own radius |
 | Status band and window bar | shared frame, `WallpaperFrostPainter.updateTopPane`; live blur when there is no frame | (a) | one sheet in the docked style (the band's bottom and the bar's top are seams); the capsule's own radius in the floating style; none for a bar on the dock's plank, which has no frost of its own |
 | Command palette, terminal sheet | shared frame; live blur when there is no frame | (a) | the plane's corner |
 | App drawer plane | shared frame, with the live blur kept on top of it so the terminal ghosts through; tint only in wallpaper mode with no frame | (a) | the plane's corner |
 | Terminal panes, Widgets page, Display page | shared frame | (b) | the slab's own radius; none under a corner mask |
 | Corner tabs, every place (since 2026-09-29) | shared frame, under the tab's fixed scrim; no tint or grain of the pane's | the tab's own program, as (a) | the tab's rect turning its one free corner; the edge it slid out of and the frame side are seams (`CornerTabGeometry.refractionSeams`) |
 | Off-dock plank, and the A–Z bar's capsule off the dock (since 2026-09-29) | shared frame, `WallpaperFrostPainter.applyOffDockSheet`, at the dock's radius; live blur only when there is no frame | (a) | the outline's own clamped radius on all four sides |
+
+The dock's frame, tint, grain, rim and refraction, the keyboard capsule's and the under-keyboard card's are one stack, `chrome/GlassStack` (a plain `Spec` in, the layered drawable out), so a value that differs between them is a value in the spec and nowhere else. The rim is `GlassSurfaceFactory.rim`, written once.
 
 Deliberately without refraction:
 - **The A–Z pull tab and the letters it slides out** (`AzPullTabLayer`): tint only. They stand over live content, not over the wallpaper.

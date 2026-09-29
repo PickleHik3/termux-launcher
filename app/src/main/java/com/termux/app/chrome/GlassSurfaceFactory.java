@@ -242,21 +242,27 @@ public final class GlassSurfaceFactory {
         if (grain > 0) {
             layers.add(grainLayer(grain));
         }
-        if (withRim) {
-            // Same barely-there containing stroke the dock's capsule pass draws. Anything heavier
-            // reads as a drawn border over the glass rather than the edge of the material.
-            GradientDrawable rim = new GradientDrawable();
-            rim.setColor(Color.TRANSPARENT);
-            rim.setCornerRadius(cornerRadiusPx);
-            rim.setStroke(Math.max(1, Math.round(mSurfaces.dpToPx(1))),
-                SchemeTone.withAlpha(mSurfaces.outlineColor(), RIM_ALPHA / 255f));
-            layers.add(rim);
-        }
+        if (withRim) layers.add(rim(cornerRadiusPx));
         if (cornerRadiusPx > 0f) {
             baseLayer.setCornerRadius(cornerRadiusPx);
             lightLayer.setCornerRadius(cornerRadiusPx);
         }
         return new LayerDrawable(layers.toArray(new Drawable[0]));
+    }
+
+    /**
+     * The one containing stroke every glass surface draws: barely there, or it reads as a drawn
+     * border over the glass rather than the edge of the material. Also the dock capsule's
+     * background, whose outline it supplies.
+     */
+    @NonNull
+    public GradientDrawable rim(float cornerRadiusPx) {
+        GradientDrawable rim = new GradientDrawable();
+        rim.setColor(Color.TRANSPARENT);
+        rim.setCornerRadius(cornerRadiusPx);
+        rim.setStroke(Math.max(1, Math.round(mSurfaces.dpToPx(1))),
+            SchemeTone.withAlpha(mSurfaces.outlineColor(), RIM_ALPHA / 255f));
+        return rim;
     }
 
     /** A tiled grain layer whose strength is controlled only by the grain preference. */

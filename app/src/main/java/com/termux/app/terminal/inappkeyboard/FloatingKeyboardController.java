@@ -17,7 +17,7 @@ import com.termux.app.place.PlaceOrientation;
  *
  * <p>The same keyboard is used either way. Docked, its container is a bottom-aligned child of the
  * accessory stack, and its height is what the stack reserves. Floating, the very same container is
- * moved — children, glass, suggestion strip and height controls intact — into a
+ * moved — children, suggestion strip and height controls intact, on a solid panel instead of glass — into a
  * {@link FloatingKeyboardFrame} in the full-content {@code floating_keyboard_host}, where it is
  * measured against the frame's width and drawn over the place instead of beside it. Nothing is
  * rebuilt on the way through, so switching type with the keyboard open re-hosts it without closing

@@ -3683,8 +3683,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             program.setRect(capLeft, capTop, capRight, capBottom, radiusPx);
             // The user's knobs while Fancier Glass is on; the numbers this dock always ran with
             // otherwise, so the default mode's dock and strip are pixel for pixel what they were.
-            program.setLook(mFancierGlassLook != null
-                ? mFancierGlassLook : com.termux.app.chrome.GlassRefraction.Look.DEFAULT);
+            program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook));
             // Per-key lens state (0 intensity == no lens, dock refraction unchanged).
             if (mKeyLensActive && mKeyLensIntensity > 0f) {
                 program.setLens(mKeyLensCx, mKeyLensCy, mKeyLensHx, mKeyLensHy, mKeyLensRadius,
@@ -4220,33 +4219,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         DockLayout dock = getDockLayout();
         float radiusPx = com.termux.app.dock.UnderKeyboardBand.cornerRadiusPx(dock,
             under.getHeight() > 0 ? under.getHeight() : Integer.MAX_VALUE);
-        List<Drawable> layers = new ArrayList<>(3);
+        com.termux.app.chrome.SharedFrameDrawable backdrop = null;
         mUnderKeyboardBackdropBitmap = null;
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
         if (state.blurEnabled && wallpaperFrame != null) {
             Bitmap frame = mChrome.blurCache().obtain(state.blurRadiusDp, wallpaperFrame);
             if (frame != null) {
                 mUnderKeyboardBackdropBitmap = frame;
-                com.termux.app.chrome.SharedFrameDrawable backdrop =
-                    new com.termux.app.chrome.SharedFrameDrawable(frame,
-                        new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
-                        com.termux.app.chrome.GlassAnchor.layout(under,
-                            () -> mAccessoryStackLift.px() + under.getTranslationY()));
-                backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
-                backdrop.setRefraction(mFancierGlassLook,
-                    getResources().getDisplayMetrics().density, radiusPx, 0);
-                layers.add(backdrop);
+                backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
+                    new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+                    com.termux.app.chrome.GlassAnchor.layout(under,
+                        () -> mAccessoryStackLift.px() + under.getTranslationY()));
             }
         }
-        layers.add(mChrome.glass().dockSurface(state.barAlpha));
-        GradientDrawable rim = new GradientDrawable();
-        rim.setColor(Color.TRANSPARENT);
-        rim.setCornerRadius(radiusPx);
-        rim.setStroke(Math.max(1, Math.round(dpToPx(1))),
-            withAlphaComponent(resolveAccessoryOutlineColor(), 18));
-        layers.add(rim);
+        com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
+                state.blurRadiusDp, state.barAlpha, mPreferences != null
+                    ? mPreferences.getDockGlassGrain()
+                    : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN,
+                radiusPx, mFancierGlassLook)
+            .withRim(true).withSlice(1f, true);
         under.setBackground(new com.termux.app.chrome.RoundedSheetDrawable(
-            new LayerDrawable(layers.toArray(new Drawable[0])),
+            com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
+                getResources().getDisplayMetrics().density, backdrop),
             com.termux.app.dock.UnderKeyboardBand.sideInsetPx(dock), radiusPx));
     }
 
@@ -4755,12 +4749,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        GradientDrawable outline = new GradientDrawable();
-        outline.setColor(Color.TRANSPARENT);
-        outline.setCornerRadius(resolveDockCapsuleCornerRadiusPx(surfaceHeightPx));
         // Barely-there containing stroke; the AGSL shader draws the dark glass contour + bevel at the
         // edge, so a visible outline here would read as a drawn border ("inside rim") over the glass.
-        outline.setStroke(Math.max(1, Math.round(dpToPx(1))), withAlphaComponent(resolveAccessoryOutlineColor(), 18));
+        GradientDrawable outline = mChrome.glass().rim(resolveDockCapsuleCornerRadiusPx(surfaceHeightPx));
         surface.setBackground(outline);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             surface.setOutlineProvider(ViewOutlineProvider.BACKGROUND);
@@ -4924,9 +4915,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The keyboard's own blur radius as its own glass draws it — {@code getInAppKeyboardBlurRadius}
-     * already falls back to the dock's radius while the keyboard's is still the {@code -1} "follow"
-     * sentinel, so an untouched keyboard resolves to the same number
+     * The keyboard's own blur radius as its own glass draws it — the KEYBOARD slot's blur, which
+     * follows Base until detached, so an untouched keyboard resolves to the same number
      * {@link #getEffectiveExtraKeysBlurRadius()} does. See that method for the wallpaper-does-not-
      * blur gate this mirrors.
      */
@@ -5479,9 +5469,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The keyboard's own film-grain strength — {@code getInAppKeyboardGrain} already falls back to
-     * the dock's grain while the keyboard's is still {@code -1}, so an untouched keyboard grains
-     * exactly as it always has, off the same dock number it used to read directly.
+     * The keyboard's own film-grain strength — the KEYBOARD slot's grain, which follows Base until
+     * detached, so an untouched keyboard grains like the dock.
      */
     private int getInAppKeyboardGrainPercent() {
         return mPreferences != null
@@ -5573,7 +5562,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * inner padding) when the Rounded surface style is active, and the dock's blurred-wallpaper +
      * tinted-glass stack behind the keys. The glass stack is
      * rendered as the host's background drawable (a pre-blurred wallpaper crop under the same
-     * tint used by {@link #buildDockGlassSurface}) so the wrap-content keyboard measurement is
+     * tint, built by {@link com.termux.app.chrome.GlassStack}) so the wrap-content keyboard measurement is
      * never affected by extra sibling views.
      */
     private void applyInAppKeyboardSurfaceState(@NonNull ChromeSpec state) {
@@ -5589,7 +5578,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         boolean capsule = isInAppKeyboardCapsule();
         boolean floating = isKeyboardFloating();
-        boolean glassTheme = isInAppKeyboardGlassSurface();
         int horizontalMargin = resolveInAppKeyboardHorizontalInsetPx();
         // A floating keyboard already sits under its card's grab handle, so the capsule's top gap
         // would only push the keys further from it: the host runs straight up to the handle row
@@ -5653,8 +5641,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // ends of that blend are exactly the materials painted below, so the settle repaints
         // nothing the eye can see. See syncKeyboardMaterialTravel.
         if (mKeyboardTravelSolidness != KeyboardMaterialPolicy.NO_TRAVEL) {
-            applyInAppKeyboardMaterialTravel(state, surfaceHost, capsule, glassTheme,
-                cornerRadiusPx);
+            applyInAppKeyboardMaterialTravel(state, surfaceHost, capsule, cornerRadiusPx);
             return;
         }
         mKeyboardTravelSolidFill = null;
@@ -5685,12 +5672,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 clearInAppKeyboardBackdrop();
             } else {
                 surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
-                    state, surfaceHost, false, glassTheme, 0f));
+                    state, surfaceHost, false, 0f));
             }
             return;
         }
         surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
-            state, surfaceHost, capsule, glassTheme, cornerRadiusPx));
+            state, surfaceHost, capsule, cornerRadiusPx));
     }
 
     /**
@@ -5702,13 +5689,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void applyInAppKeyboardMaterialTravel(@NonNull ChromeSpec state,
                                                   @NonNull View surfaceHost, boolean capsule,
-                                                  boolean glassTheme, float cornerRadiusPx) {
+                                                  float cornerRadiusPx) {
         GradientDrawable fill = buildInAppKeyboardSolidSurface(capsule ? cornerRadiusPx : 0f);
         fill.setAlpha(Math.round(255f * mKeyboardTravelSolidness));
         mKeyboardTravelSolidFill = fill;
         Drawable glass = isUnifiedAccessoryBackdropReady(state) ? null
-            : buildInAppKeyboardSurfaceBackground(state, surfaceHost, capsule, glassTheme,
-                cornerRadiusPx);
+            : buildInAppKeyboardSurfaceBackground(state, surfaceHost, capsule, cornerRadiusPx);
         Drawable material = glass == null ? fill
             : new LayerDrawable(new Drawable[] {glass, fill});
         surfaceHost.setBackground(new LayoutNeutralDrawable(material));
@@ -5779,12 +5765,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return fill;
     }
 
-    @Nullable
+    /**
+     * The keyboard's glass, on the same {@link com.termux.app.chrome.GlassStack} the dock's cards
+     * are built on: its own blur, tint and grain from its slot, the dock's refraction and rim.
+     */
+    @NonNull
     private Drawable buildInAppKeyboardSurfaceBackground(@NonNull ChromeSpec state,
                                                          @NonNull View surfaceHost,
-                                                         boolean capsule, boolean glassTheme,
-                                                         float cornerRadiusPx) {
-        java.util.List<Drawable> layers = new java.util.ArrayList<>();
+                                                         boolean capsule, float cornerRadiusPx) {
         // While the keyboard's opacity still follows Base it renders the shared material, so its
         // own background colour and opacity are ignored here exactly as in the unified path. An
         // overlaying keyboard ignores them for the other reason (D3): it is opaque, and both say
@@ -5792,79 +5780,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean normalized = isInAppKeyboardOpacityLinked()
             || !KeyboardMaterialPolicy.opacityApplies(inAppKeyboardForm(), inAppKeyboardOverlays());
         Integer schemeBackground = normalized ? null : resolveInAppKeyboardSchemeBackgroundColor();
-        int backgroundAlpha = normalized ? 255 : Math.round(
-            255f * getInAppKeyboardBackgroundOpacityPercent() / 100f);
-        // The keyboard's own blur, not the dock's state it used to borrow outright — falls back to
-        // it while the keyboard's radius is still the -1 "follow" sentinel.
-        boolean keyboardBlurEnabled = ChromePolicy.dockBlurEnabled(getEffectiveInAppKeyboardBlurRadius());
-        if (glassTheme) {
-            if (keyboardBlurEnabled) {
-                Bitmap frame = obtainInAppKeyboardBackdropFrame(state, surfaceHost);
-                if (frame != null) {
-                    // The shared frame, sampled at the host's own position on every draw — through
-                    // the stack's travel, so a rising keyboard shows the wallpaper it is over.
-                    com.termux.app.chrome.SharedFrameDrawable backdrop =
-                        new com.termux.app.chrome.SharedFrameDrawable(frame,
-                            mInAppKeyboardBackdropFrameRect, mWallpaperParallax,
-                            com.termux.app.chrome.GlassAnchor.layout(surfaceHost, mAccessoryStackLift));
-                    // Same content-aware light scatter the dock backdrop uses — one material.
-                    backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
-                    // Fancier Glass: the rim follows the capsule, or runs square; a docked keyboard
-                    // over the under-pill strip continues into it, so its bottom edge takes none.
-                    backdrop.setRefraction(mFancierGlassLook,
-                        getResources().getDisplayMetrics().density, capsule ? cornerRadiusPx : 0f,
-                        !capsule && shouldShowDecorNavBarSurface(state)
-                            ? com.termux.app.chrome.GlassRefraction.SEAM_BOTTOM : 0);
-                    layers.add(backdrop);
-                }
+        int blurRadiusDp = getEffectiveInAppKeyboardBlurRadius();
+        // Render only the keyboard's slice of the shared light model — the under-pill nav strip
+        // renders the remainder so the single foot lands under the pill (see the slice overload).
+        // A docked keyboard over that strip continues into it, so its bottom edge takes no rim.
+        com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.keyboard(
+                mPreferences, state.barAlpha, capsule ? cornerRadiusPx : 0f, mFancierGlassLook)
+            .withBlur(blurRadiusDp)
+            .withRim(capsule && !isKeyboardFloating())
+            .withSlice(defaultDockGlassFootFraction(), false)
+            .withSeams(!capsule && shouldShowDecorNavBarSurface(state)
+                ? com.termux.app.chrome.GlassRefraction.SEAM_BOTTOM : 0)
+            .withTintColor(schemeBackground == null ? null : withAlphaComponent(schemeBackground,
+                Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)));
+        com.termux.app.chrome.SharedFrameDrawable backdrop = null;
+        if (ChromePolicy.dockBlurEnabled(blurRadiusDp)) {
+            Bitmap frame = obtainInAppKeyboardBackdropFrame(state, surfaceHost);
+            if (frame != null) {
+                // The shared frame, sampled at the host's own position on every draw — through
+                // the stack's travel, so a rising keyboard shows the wallpaper it is over.
+                backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
+                    mInAppKeyboardBackdropFrameRect, mWallpaperParallax,
+                    com.termux.app.chrome.GlassAnchor.layout(surfaceHost, mAccessoryStackLift));
             }
-            if (schemeBackground != null) {
-                // The scheme's background color replaces the glass tint over the blurred
-                // wallpaper; the opacity slider decides how much of the blur shows through.
-                layers.add(new ColorDrawable(
-                    withAlphaComponent(schemeBackground, backgroundAlpha)));
-            } else {
-                // Render only the keyboard's slice of the shared light model, built at the
-                // keyboard's own opacity and its own grain — the under-pill nav strip renders the
-                // remainder so the single foot lands under the pill (see the slice overload).
-                layers.add(mChrome.glass().surface(inAppKeyboardGlassAlpha(state), 0f,
-                    defaultDockGlassFootFraction(), false, getInAppKeyboardGrainPercent()));
-            }
-        } else if (capsule) {
-            // Opaque themes fill the capsule with the keyboard's own background color so the
-            // inner padding ring stays seamless with the keys.
-            GradientDrawable fill = new GradientDrawable();
-            fill.setColor(withAlphaComponent(schemeBackground != null
-                ? schemeBackground : resolveInAppKeyboardBackgroundColor(), backgroundAlpha));
-            fill.setCornerRadius(cornerRadiusPx);
-            layers.add(fill);
         }
-        // The docked Floating-style capsule keeps its rim; a floating card is one solid panel and
-        // a rim inside it would read as a second edge just inside the card's own.
-        if (capsule && !isKeyboardFloating()) {
-            GradientDrawable ring = new GradientDrawable();
-            ring.setColor(Color.TRANSPARENT);
-            ring.setCornerRadius(cornerRadiusPx);
-            ring.setStroke(Math.max(1, Math.round(dpToPx(1))),
-                withAlphaComponent(resolveAccessoryOutlineColor(), 18));
-            layers.add(ring);
-        }
-        if (layers.isEmpty()) {
-            return null;
-        }
-        Drawable material = layers.size() == 1
-            ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));
-        // The keyboard's own Opacity (background) row: one alpha over the whole finished stack —
-        // backdrop bitmap, tint and ring together — so a lower setting fades all of it back to the
-        // plain wallpaper rather than cross-fading any single layer. 100 (the effective default)
-        // leaves this a no-op, so an untouched keyboard renders exactly as it always has.
-        int stackOpacityPercent = getInAppKeyboardBackdropOpacityPercent();
-        if (stackOpacityPercent < 100)
-            material.setAlpha(Math.round(255f * stackOpacityPercent / 100f));
         // The drawable reports no intrinsic size. This background is installed on a wrap-content
         // host, and an intrinsic size would feed itself back into layout as a blank band below a
         // subsequently shorter keyboard. Decoration must follow content geometry, never define it.
-        return new LayoutNeutralDrawable(material);
+        return new LayoutNeutralDrawable(com.termux.app.chrome.GlassStack.build(mChrome.glass(),
+            spec, getResources().getDisplayMetrics().density, backdrop));
     }
 
     /**

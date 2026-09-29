@@ -59,6 +59,19 @@ public class GlassSurfaceFactoryTest {
     }
 
     @Test
+    public void everyRimIsTheOneTheFactoryDraws() {
+        // The dock capsule's background, the keyboard and the under-keyboard card all take it from
+        // rim(), so the stroke is written once.
+        GradientDrawable rim = glass.rim(24f);
+        LayerDrawable surface = (LayerDrawable) glass.surface(0.5f, 0f, 1f, true, 0, 24f, true);
+        GradientDrawable inSurface = (GradientDrawable) surface.getDrawable(2);
+
+        assertEquals(24f, rim.getCornerRadius(), 0f);
+        assertEquals(inSurface.getCornerRadius(), rim.getCornerRadius(), 0f);
+        assertEquals(Color.TRANSPARENT, rim.getColor().getDefaultColor());
+    }
+
+    @Test
     public void theRadiusRoundsTheBaseAndTheLightTogether() {
         LayerDrawable surface = (LayerDrawable) glass.surface(0.5f, 0f, 1f, true, 0, 18f, false);
 

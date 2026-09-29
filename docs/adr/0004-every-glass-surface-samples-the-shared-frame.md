@@ -32,6 +32,12 @@ with it, as it always has, rather than re-aiming on whichever draw lands mid-pre
 the planes and the under-pill strip, which nothing tilts and whose owners re-apply them when they
 move, use the framework's transform-inclusive position.
 
+What a surface stacks over its frame — the frost, the refraction, the tint and grain, the rim, one
+alpha over the whole — is built in one place, `chrome/GlassStack.build`, from a plain `Spec`. The
+keyboard capsule and the under-keyboard card are calls to it with their own values, so they cannot
+drift from the dock by a hand-written layer; the keyboard's blur and grain are cells of the
+inheritance model like the dock's, following Base until detached.
+
 The alternative was to keep the crops and cut them off the main thread. That leaves the mid-travel
 displacement, the swap at settle and the rect bookkeeping in place, and still costs a bitmap per
 surface per geometry change.
