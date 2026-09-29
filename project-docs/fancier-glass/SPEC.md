@@ -97,7 +97,7 @@ Bug fixes (all versions, API 26+):
 |---|---|---|---|
 | M1 | Keyboard open/close | The slab rises with a refracting top lip. Terminal text frosts during the reflow and lands sharp | Frost-on-reflow (bug fix 6) |
 | M2 | Keyboard position change | The leading edge's refraction grows with velocity and eases back to the resting look | Plain glide |
-| M3 | Status bar expand/retract | The sheet unrolls; its lower lip bends the pane below; tiles fade in only after 60% of the travel | The same, without the lip |
+| M3 | Status bar expand/retract (driven by the drag across the bar and, since 2026-09-29, the status swipe off the page's top border: `BorderDrag.Claim.STATUS` → `PaneWallLayout` → `TermuxActivity.dragTopStatusBar` / `setTopStatusBarCollapsed`, released by `KeyboardReveal`'s rule) | The sheet unrolls; its lower lip bends the pane below; tiles fade in only after 60% of the travel | The same, without the lip |
 | M4 | Portrait ↔ landscape | The chrome frosts and dims during rotation, and the new layout thaws in. The wallpaper stays sharp | Crossfade |
 | M5 | App launch from the dock | The icon's lens swells, the dock gives, and the launch uses `ActivityOptions.makeClipRevealAnimation` from the icon's bounds. Return plays in reverse | Lens (current) |
 | M6 | Page slide | The glass is registered to the wallpaper at its true position. Side-edge refraction grows with slide speed | Registration fix only |

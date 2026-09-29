@@ -106,6 +106,14 @@ minimal mode included, and it turns the keyboard back on if you switched it off,
 always a way back to it. A floating keyboard, or Android's own, opens and closes when you let go
 instead of following your finger.
 
+The top border does the same for the status bar. Swipe down from it and the bar opens with your
+finger; swipe up and it folds back to its slim form. The same third-of-the-way or quick-flick rule
+decides where it lands, with the same light tick, and a small pill marks the middle of the line. It
+works on every place wherever the status bar stands along the top; with the bar on the bottom, down
+a side or put away in the Layout editor, and in minimal mode, the top border only pages. A swipe
+that starts in Android's own strip at the very top of the screen still pulls down the notification
+shade.
+
 The dock's rows normally stand over the keyboard. In the Layout editor you can drop the apps row,
 the A–Z index or the extra keys into the slot under the keyboard instead, so they stay at the
 bottom of the screen with the keyboard opening above them; with the keyboard down they sit at the
@@ -126,7 +134,8 @@ nothing reflows in your shells when you move. Your session keeps running while y
 
 A swipe that starts on the window pills scrolls those, and only those. When the pills fit the row,
 or the strip already rests at the end you pull past, the swipe moves the wall instead. Swiping
-the rest of the bar sideways does nothing; it folds and unfolds with a drag across it.
+the rest of the bar sideways does nothing; it folds and unfolds with a drag across it, or with a
+swipe off the top border of the page below it.
 
 The widget grid holds Android home-screen widgets. Long-press an empty spot to add one, long-press
 a widget to move or resize it, and swipe inside the grid to reach its other pages. Drop a widget on

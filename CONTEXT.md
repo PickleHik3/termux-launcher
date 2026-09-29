@@ -47,7 +47,8 @@ The one finger gesture that pages the wall, on every place and in every mode: a 
 current page's border — the frame line on any of its four sides, less the corner squares — for the
 same hold a corner takes, then dragged sideways. A tap, a sideways swipe without the hold, a drag
 that sets off before it and a second finger all stay the content's; a vertical swipe off the
-bottom border is the keyboard swipe. The border is always drawn while the
+bottom border is the keyboard swipe, and one off the top border is the status swipe. The border
+is always drawn while the
 border preference is on (the slab's rim on glass, the plain stroke otherwise), on the terminal,
 the Widgets page and the Display page alike, so the gesture has a line to find. The hold sinks
 the page away from the user until the finger lets go, in every mode unless motion is reduced;
@@ -68,6 +69,16 @@ flick, and takes it back otherwise; a floating keyboard, Android's, and one swit
 the release alone. A small **grabber** pill on the bottom border marks it.
 The keyboard itself carries no swipe of its own.
 _Avoid_: pull-up, keyboard gesture, hide swipe (the retired swipe on the keyboard's top edge)
+
+**Status swipe**:
+The keyboard swipe's mirror on the current page's top border: a swipe that sets off down or up
+from it before the border drag's hold. Down unfolds the status bar, up folds it: the bar's own
+two forms, compact and open, driven by the same fold its drag across itself drives, following the
+finger and landing by the keyboard swipe's rule. A grabber pill marks it. It is there only while
+the status bar stands along the top and can unfold; a bar on another edge or put away, and minimal
+mode, leave the top border to paging. A press in the phone's own strip at the top of the screen is
+never taken, so the notification shade still pulls down.
+_Avoid_: status bar swipe (the retired page swipe on the bar), pull-down
 
 **Managed wallpaper**:
 A wallpaper set through the launcher's own picker, of which the launcher keeps its own copy.
