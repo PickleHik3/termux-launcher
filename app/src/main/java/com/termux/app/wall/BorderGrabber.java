@@ -177,7 +177,7 @@ final class BorderGrabber {
 
     // ---- Geometry ----------------------------------------------------------------------------
 
-    /** The bottom border's pill: {@link #bounds(RectF, float, float, float, float, float, float, boolean)}. */
+    /** The bottom border's pill, as the keyboard swipe has always drawn it. */
     static void bounds(@NonNull RectF out, float centreX, float bottomY, float emphasis,
                        float trackPx, float scale, float density) {
         bounds(out, centreX, bottomY, emphasis, trackPx, scale, density, false);

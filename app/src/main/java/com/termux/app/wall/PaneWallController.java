@@ -70,6 +70,27 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         /** The keyboard a swipe carried came to rest, up ({@code open}) or down. */
         default void onKeyboardRevealEnd(boolean open) { }
         /**
+         * Whether a vertical swipe off the page's top border drives the status bar's fold: where
+         * the bar stands along the top, can unfold, and is not put away. Asked on every frame the
+         * wall draws its grabbers; see {@link PaneWallLayout.Listener#isBorderStatusSwipeEnabled}.
+         */
+        default boolean isBorderStatusSwipeEnabled() { return false; }
+        /**
+         * A swipe off the top border asked for the bar unfolded ({@code expand}) or folded, for a
+         * swipe the fold did not follow ({@link #onStatusFoldBegin} answered 0, or reduced motion).
+         */
+        default void onBorderStatusSwipe(boolean expand) { }
+        /**
+         * The status bar swipe was claimed, going down ({@code expanding}) or up: the fold's whole
+         * way in px for the finger to drive, or 0 where it cannot follow. See
+         * {@link PaneWallLayout.Listener#onStatusFoldBegin}.
+         */
+        default int onStatusFoldBegin(boolean expanding) { return 0; }
+        /** The finger has the bar {@code towardOpenPx} from the form it had, positive opening. */
+        default void onStatusFoldProgress(float towardOpenPx) { }
+        /** The fold's finger let go or lost it: land the bar unfolded ({@code expanded}) or folded. */
+        default void onStatusFoldEnd(boolean expanded, float towardOpenVelocityPxPerSec) { }
+        /**
          * A page sunk under a held border ({@link PageSink}) is drawn at {@code scale} about its
          * centre; 1 once it is back up. The terminal's frame line is drawn outside its page and
          * has to follow by hand.
@@ -390,6 +411,31 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onKeyboardRevealEnd(boolean open) {
         mHost.onKeyboardRevealEnd(open);
+    }
+
+    @Override
+    public boolean isBorderStatusSwipeEnabled() {
+        return mHost.isBorderStatusSwipeEnabled();
+    }
+
+    @Override
+    public void onBorderStatusSwipe(boolean expand) {
+        mHost.onBorderStatusSwipe(expand);
+    }
+
+    @Override
+    public int onStatusFoldBegin(boolean expanding) {
+        return mHost.onStatusFoldBegin(expanding);
+    }
+
+    @Override
+    public void onStatusFoldProgress(float towardOpenPx) {
+        mHost.onStatusFoldProgress(towardOpenPx);
+    }
+
+    @Override
+    public void onStatusFoldEnd(boolean expanded, float towardOpenVelocityPxPerSec) {
+        mHost.onStatusFoldEnd(expanded, towardOpenVelocityPxPerSec);
     }
 
     @Override
