@@ -3320,6 +3320,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 findViewById(R.id.command_palette_wallpaper_backdrop),
                 findViewById(R.id.terminal_sheet_wallpaper_backdrop),
                 findViewById(R.id.app_drawer_wallpaper_backdrop),
+                findViewById(R.id.place_off_dock_plank_frost),
+                findViewById(R.id.place_az_bar_host_frost),
             };
         }
         for (View frost : mParallaxFrostViews) {
@@ -6519,7 +6521,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // keyboard host's background.
         int[] frostIds = {R.id.command_palette_wallpaper_backdrop, R.id.terminal_sheet_wallpaper_backdrop,
             R.id.app_drawer_wallpaper_backdrop, R.id.terminal_window_bar_wallpaper_backdrop,
-            R.id.terminal_status_bar_wallpaper_backdrop, R.id.accessory_blur_backdrop};
+            R.id.terminal_status_bar_wallpaper_backdrop, R.id.accessory_blur_backdrop,
+            R.id.place_off_dock_plank_frost, R.id.place_az_bar_host_frost};
         for (int frostId : frostIds) {
             ImageView frost = findViewById(frostId);
             if (frost != null && drawableShowsFrame(frost.getDrawable(), frame)) return true;
@@ -8448,13 +8451,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View plank = findViewById(R.id.place_off_dock_plank_host);
         if (plank != null && plank.getVisibility() == View.VISIBLE) {
             applyOffDockPlankGlass(R.id.place_off_dock_plank_glass,
-                R.id.place_off_dock_plank_blur, R.id.place_off_dock_plank_surface,
+                R.id.place_off_dock_plank_blur, R.id.place_off_dock_plank_frost,
+                R.id.place_off_dock_plank_surface,
+                com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK,
                 mOffDockPlankOutline, mOffDockPlankEdge, offDockPlankGlassHeightPx());
         }
         View host = findViewById(R.id.place_az_bar_host);
         if (host == null || host.getVisibility() != View.VISIBLE || mAzBarOnPlank) return;
         applyOffDockPlankGlass(R.id.place_az_bar_host_glass, R.id.place_az_bar_host_blur,
-            R.id.place_az_bar_host_surface, mAzBarHostOutline, mAzBarEdge, azBarThicknessPx());
+            R.id.place_az_bar_host_frost, R.id.place_az_bar_host_surface,
+            com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST,
+            mAzBarHostOutline, mAzBarEdge, azBarThicknessPx());
     }
 
     /** The bar's own view inside a host, filling whatever box the host's padding leaves it. */
@@ -8541,17 +8548,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * a capsule, both bars' for the shared plank — because the radius is clamped to a true
      * half-capsule of whatever is being glazed. Handing it one bar's thickness while two stood on
      * it is what kept a top plank looking square.
+     *
+     * <p>The blur is the shared wallpaper frame at the sheet's own place on screen, as every other
+     * sheet's is, through Fancier Glass's refraction when that is on, rimmed along the sheet's own
+     * outline. The live blur the sheet used to wear is only the fallback now — no frame yet, or a
+     * wallpaper the launcher cannot see — as the palette's is: while the frost shows it is GONE,
+     * so its whole-window software capture no longer runs behind these bars at all.
      */
     private void applyOffDockPlankGlass(
         int glassId,
         int blurId,
+        int frostId,
         int surfaceId,
+        @NonNull com.termux.app.chrome.SurfaceDirtyLedger.FrostRect frostKey,
         @NonNull com.termux.app.statusbar.StatusBarSurfaceOutlineProvider outline,
         @NonNull PlaceLayout.Edge edge,
         int heightPx
     ) {
         float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity() / 100f;
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        // The Appearance editor's dock radius, resolved through the same follow-the-style sentinel
+        // the dock reads, and clamped to a half-capsule of the sheet being glazed.
+        float cornerRadiusPx = getDockLayout().capsuleCornerRadiusPx(heightPx);
+        View frostView = findViewById(frostId);
+        boolean frosted = frostView instanceof ImageView && mChrome.frost().applyOffDockSheet(
+            (ImageView) frostView, frostKey, cornerRadiusPx);
         View blur = findViewById(blurId);
         applyRealtimeBlurRadius(blur, blurRadiusDp);
         applyRealtimeBlurDownsampleFactor(blur, ChromePolicy.ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
@@ -8559,10 +8580,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // exactly as the dock's own extra-keys background does.
         applyRealtimeBlurOverlayColor(blur, Color.TRANSPARENT);
         if (blur != null) {
-            blur.setVisibility(ChromePolicy.dockBlurEnabled(blurRadiusDp)
-                ? View.VISIBLE : View.GONE);
+            boolean live = !frosted && ChromePolicy.dockBlurEnabled(blurRadiusDp);
+            blur.setVisibility(live ? View.VISIBLE : View.GONE);
             // Only the wallpaper is behind a bar off the dock, so one capture is the whole picture.
-            restLiveBlur(blur, true);
+            if (live) restLiveBlur(blur, true);
         }
         View surface = findViewById(surfaceId);
         if (surface != null) {
@@ -8577,9 +8598,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (glass == null) return;
         outline.setEdge(edge);
         outline.setInnerEdgeOnly(false);
-        // The Appearance editor's dock radius, resolved through the same follow-the-style sentinel
-        // the dock reads, and clamped to a half-capsule of the sheet being glazed.
-        outline.setFrame(getDockLayout().capsuleCornerRadiusPx(heightPx));
+        outline.setFrame(cornerRadiusPx);
         if (glass.getOutlineProvider() != outline) glass.setOutlineProvider(outline);
         glass.setClipToOutline(outline.clipsCorners());
         glass.invalidateOutline();
