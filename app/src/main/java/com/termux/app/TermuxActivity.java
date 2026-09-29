@@ -16667,11 +16667,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void settleTerminalTravelDisplacement() {
         if (mPaneController == null) return;
-        boolean frost = !isReducedMotionEnabled() && !isLazyModeEnabled()
-            && mPaneWallController != null && mPaneWallController.isTerminalShowing();
+        boolean frost = isTerminalTravelFrostAllowed();
         for (com.termux.view.TerminalView view : mPaneController.getVisiblePaneViews()) {
             view.settleTravelDisplacement(frost);
         }
+    }
+
+    /** Whether a travel's frost can be seen and is wanted: on the terminal, with motion allowed. */
+    private boolean isTerminalTravelFrostAllowed() {
+        return !isReducedMotionEnabled() && !isLazyModeEnabled()
+            && mPaneWallController != null && mPaneWallController.isTerminalShowing();
     }
 
     /** Lays a minimal place's bottom rows out again for the slide toward a place that has them. */
@@ -17007,6 +17012,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mKeyboardSwipeFromOpen;
     /** How much more room the content has with the keyboard where the swipe is taking it. */
     private int mKeyboardSwipeRoomChangePx;
+    /**
+     * The dock padding a swipe closing the keyboard lands with ({@link
+     * #keyboardDownFlushPaddingPx}): the settle's pass gives it to the dock and takes it from the
+     * terminal, so the rows are drawn toward the height left after it. 0 for a swipe opening it.
+     */
+    private int mKeyboardSwipeLandingPaddingPx;
 
     /**
      * A keyboard swipe was claimed, going up ({@code opening}) or down: take the keyboard for the
@@ -17033,6 +17044,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The room the content has now, read before anything moves; the other end is read once
         // the keyboard it depends on has been measured.
         int fromReservationPx = keyboardSwipeReservationPx(up);
+        mKeyboardSwipeLandingPaddingPx = 0;
         if (opening) {
             preRollTravelKeyboard(mLastWallPage);
             mKeyboardSwipeRoomChangePx = fromReservationPx - keyboardSwipeReservationPx(true);
@@ -17040,6 +17052,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Down: the content is given the room the keyboard gives back now, under a paused
             // grid, and the stack slides away from over it.
             mKeyboardSwipeRoomChangePx = fromReservationPx - keyboardSwipeReservationPx(false);
+            mKeyboardSwipeLandingPaddingPx = keyboardDownFlushPaddingPx();
             beginTravelHold();
             if (mKeyboardSwipeRoomChangePx > 0) preRollTravelContent(mKeyboardSwipeRoomChangePx);
         }
@@ -17050,13 +17063,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return 0;
         }
         setKeyboardSwipeTravel(up ? 1f : 0f);
+        holdKeyboardSwipeFrostIfUnplaceable();
         return travelPx;
+    }
+
+    /**
+     * A swipe over rows the travel cannot draw ahead — a full-screen program's, which it repaints
+     * itself once the resize lands — is frosted from its claim until it lands or springs back,
+     * instead of sliding a frame the program is about to replace. Rows the travel can place are
+     * drawn sharp and keep only the settle's brief frost. Gated as that frost is.
+     */
+    private void holdKeyboardSwipeFrostIfUnplaceable() {
+        if (!mTravelHoldsContent || mPaneController == null || !isTerminalTravelFrostAllowed())
+            return;
+        com.termux.view.TerminalView view = mPaneController.soleTiledPaneView();
+        if (view != null && !view.canPlaceTravelRows()) view.holdTravelFrost();
     }
 
     /** The room a place's chrome leaves the content with the keyboard up or down, at rest. */
     private int keyboardSwipeReservationPx(boolean keyboardUp) {
         return travelRestReservationPx(mLastWallPage, buildChromeSpec().toolbarShown, keyboardUp,
             isMinimalMode());
+    }
+
+    /**
+     * The terminal's flush dock padding once the keyboard is down, worked out while it is still
+     * up: the geometry pass stands the padding down while the keyboard shows, so the reservation
+     * a closing swipe reads has none, yet the settle's pass lays it (up to a line) under the dock
+     * and takes it from the terminal. The same conditions and arithmetic as that pass, for a
+     * stack of the dock's rows alone; the window positions it measures do not move with the
+     * keyboard.
+     */
+    private int keyboardDownFlushPaddingPx() {
+        boolean toolbarShown = buildChromeSpec().toolbarShown;
+        if (!toolbarShown || visiblePaneCount() > 1 || isImeVisible()
+            || mLastWallPage != com.termux.app.wall.PaneWallPage.TERMINAL
+            || (mPaneController != null && mPaneController.isActivePaneFloating()))
+            return 0;
+        return Math.max(0, resolveTerminalFlushDockPaddingPx(
+            computeAccessoryStackHeight(mAppliedDockContentHeightPx, 0, 0),
+            resolveAccessoryStackBottomMarginPx(toolbarShown, false, isChromeMinimal())));
     }
 
     /**
@@ -17076,7 +17122,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.view.TerminalView view = mPaneController == null ? null
             : mPaneController.soleTiledPaneView();
         if (view != null) {
-            view.setTravelDisplacement(mKeyboardSwipeRoomChangePx,
+            // Toward the height the terminal settles at: the room given back less the dock
+            // padding the settle lays, so the rows land where the resize puts them.
+            view.setTravelDisplacement(mKeyboardSwipeRoomChangePx - mKeyboardSwipeLandingPaddingPx,
                 mKeyboardSwipeFromOpen ? 1f - shown : shown);
         }
         syncTerminalTravelCover(translation);
@@ -17092,6 +17140,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void finishKeyboardSwipeTravel(boolean open) {
         if (!mKeyboardSwipeTravel) return;
         mKeyboardSwipeTravel = false;
+        mKeyboardSwipeLandingPaddingPx = 0;
         boolean keyboardPreRolled = mTravelKeyboardPreRolled;
         boolean contentPreRolled = mTravelContentPreRolled;
         boolean held = mTravelHoldsContent;

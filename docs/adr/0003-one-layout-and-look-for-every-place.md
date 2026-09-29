@@ -51,7 +51,11 @@ room, the content is held at the roomier place as it always was and shrinks at s
 While the wall travels, the terminal's rows are drawn where that resize is going to put them
 (`TerminalView#setTravelDisplacement`, from `TerminalEmulator#predictRowsOnlyResizeShift`), so
 the resize lands on rows that are already there, and the reflow is drawn under a brief frost that
-thaws to the sharp rows — M1's frost-on-reflow, in the default mode.
+thaws to the sharp rows — M1's frost-on-reflow, in the default mode. A travel toward a taller grid
+also draws the transcript that resize will reveal, above the rows and where it will land, so the
+room the terminal gains fills as it opens instead of on landing. The alternate screen's rows cannot
+be placed ahead — the full-screen program repaints after the resize — so a keyboard swipe over one
+is frosted from its claim until it lands (`TerminalView#holdTravelFrost`).
 
 The wall lays out only the pages on screen (`PaneWallLayout`): a page parked off screen keeps
 its last layout and is laid out again in the frame that brings it back. Because Home's room never

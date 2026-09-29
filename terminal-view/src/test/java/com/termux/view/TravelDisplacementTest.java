@@ -88,6 +88,57 @@ public class TravelDisplacementTest {
     }
 
     @Test
+    public void theRowsARevealDrawsAreTheOnesTheTranscriptHas() {
+        // Five rows revealed over deep history: all five are drawn.
+        assertEquals(5, TerminalView.travelFillRows(5, 0, 40));
+        // Three lines of history: the other two are the blank rows the resize adds too.
+        assertEquals(3, TerminalView.travelFillRows(5, 0, 3));
+        // Scrolled back to two lines from the top, only those two are left above.
+        assertEquals(2, TerminalView.travelFillRows(5, -38, 40));
+        assertEquals(0, TerminalView.travelFillRows(5, -40, 40));
+        assertEquals(0, TerminalView.travelFillRows(5, 0, 0));
+        // A shrink, or a screen that does not move, reveals nothing.
+        assertEquals(0, TerminalView.travelFillRows(0, 0, 40));
+        assertEquals(0, TerminalView.travelFillRows(-4, 0, 40));
+    }
+
+    @Test
+    public void theRevealedRowsComeOutFromUnderTheGridsMovingTopEdge() {
+        int from = 1050, to = 1900;
+        float anchor = headroomFor(from);
+        float headroomChange = TerminalView.travelHeadroomChangePx(from, to, rowsFor(from),
+            rowsFor(to), LINE, ASCENT);
+        assertEquals(headroomFor(to) - headroomFor(from), headroomChange, EPSILON);
+        // At the start the cut is the grid's top edge as it stands: nothing above row 0 shows.
+        assertEquals(anchor + ASCENT, TerminalView.travelFillClipTopPx(anchor, headroomChange,
+            0f, ASCENT), EPSILON);
+        // On landing it is exactly where the resized grid's first row begins.
+        assertEquals(headroomFor(to) + ASCENT, TerminalView.travelFillClipTopPx(anchor,
+            headroomChange, 1f, ASCENT), EPSILON);
+    }
+
+    @Test
+    public void aRevealedRowLandsWhereTheResizePutsIt() {
+        int from = 1050, to = 1900;
+        int fromRows = rowsFor(from), toRows = rowsFor(to);
+        int shift = toRows - fromRows;
+        float target = TerminalView.travelDisplacementPx(from, to, fromRows, toRows, shift, LINE,
+            ASCENT);
+        for (int row = -shift; row < fromRows; row++) {
+            // Drawn at the end of the travel, from the anchor, displaced the whole way ...
+            float drawn = headroomFor(from) + target + ASCENT + row * LINE;
+            // ... and laid by the resize as row + shift of the taller grid.
+            float laid = headroomFor(to) + ASCENT + (row + shift) * LINE;
+            assertEquals("row " + row, laid, drawn, EPSILON);
+        }
+        // And the first revealed row sits right on the cut, so it is whole when the resize lands.
+        assertEquals(TerminalView.travelFillClipTopPx(headroomFor(from),
+                TerminalView.travelHeadroomChangePx(from, to, fromRows, toRows, LINE, ASCENT), 1f,
+                ASCENT),
+            headroomFor(from) + target + ASCENT - shift * LINE, EPSILON);
+    }
+
+    @Test
     public void aGridThatOverflowsItsViewStartsAtTheEdge() {
         assertEquals(0, TerminalView.centredSlackPx(100, 160));
         assertEquals(0, TerminalView.centredSlackPx(0, 0));
