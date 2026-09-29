@@ -174,10 +174,12 @@ public final class SurfaceEditorController {
         float keyboardSurfaceCornerRadiusPx();
         /**
          * The live glass recipe at caller-supplied opacity/grain — what makes a preset card show
-         * the material the preset would actually render, not a sketch of it.
+         * the material the preset would actually render, not a sketch of it. {@code look} is the
+         * preset's own tint and rim, not the live preferences'.
          */
         @NonNull Drawable presetGlassSurface(
-            float barAlpha, int grainPercent, float cornerRadiusPx, boolean withRim);
+            float barAlpha, int grainPercent, float cornerRadiusPx, boolean withRim,
+            @NonNull com.termux.app.chrome.GlassLook look);
         /**
          * What the glass can currently read as the wallpaper, and how sure it is that matches the
          * screen. Uncached: read it once per card build, not per tick of a slider.
@@ -2969,7 +2971,11 @@ public final class SurfaceEditorController {
 
         float[] radii = SurfaceEditorPresetPreview.surfaceCornerRadiiPx(density, radiusDp,
             floating);
-        Drawable surface = mHost.presetGlassSurface(opacity / 100f, grain, radii[0], floating);
+        com.termux.app.chrome.GlassLook look = com.termux.app.chrome.GlassLook.of(
+            presetString(preset, TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_GLASS_TINT),
+            presetString(preset, TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_GLASS_RIM));
+        Drawable surface = mHost.presetGlassSurface(opacity / 100f, grain, radii[0], floating,
+            look);
         if (surface instanceof GradientDrawable) {
             // Docked and Floating round different corners, so the fill takes all four rather than
             // the one number presetGlassSurface was given.
@@ -3006,6 +3012,12 @@ public final class SurfaceEditorController {
         BitmapDrawable blurred = new BitmapDrawable(getResources(), small);
         blurred.setFilterBitmap(true);
         return blurred;
+    }
+
+    @Nullable
+    private static String presetString(@NonNull SurfacePresets.Preset preset, @NonNull String key) {
+        Object value = preset.values.get(key);
+        return value instanceof String ? (String) value : null;
     }
 
     private static int presetInt(@NonNull SurfacePresets.Preset preset, @NonNull String key,

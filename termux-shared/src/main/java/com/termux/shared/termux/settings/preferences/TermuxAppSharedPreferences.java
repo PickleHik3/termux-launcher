@@ -2838,6 +2838,52 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             Math.max(0, Math.min(100, intensity)), false);
     }
 
+    /** The glass tint colour a preset chose; {@code scheme} unless it named another that we know. */
+    @NonNull
+    public String getSurfaceGlassTint() {
+        return knownOrDefault(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT,
+            TERMUX_APP.GLASS_TINT_SCHEME, TERMUX_APP.GLASS_TINT_OBSIDIAN);
+    }
+
+    public void setSurfaceGlassTint(@Nullable String tint) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_SURFACE_GLASS_TINT,
+            tint == null ? TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT : tint, false);
+    }
+
+    /** The glass rim a preset chose; {@code hairline} unless it named another that we know. */
+    @NonNull
+    public String getSurfaceGlassRim() {
+        return knownOrDefault(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.DEFAULT_SURFACE_GLASS_RIM,
+            TERMUX_APP.GLASS_RIM_HAIRLINE, TERMUX_APP.GLASS_RIM_GRADIENT);
+    }
+
+    public void setSurfaceGlassRim(@Nullable String rim) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_SURFACE_GLASS_RIM,
+            rim == null ? TERMUX_APP.DEFAULT_SURFACE_GLASS_RIM : rim, false);
+    }
+
+    /** The glass motion profile a preset chose; {@code classic} unless it named another we know. */
+    @NonNull
+    public String getSurfaceGlassMotion() {
+        return knownOrDefault(TERMUX_APP.KEY_SURFACE_GLASS_MOTION,
+            TERMUX_APP.DEFAULT_SURFACE_GLASS_MOTION,
+            TERMUX_APP.GLASS_MOTION_CLASSIC, TERMUX_APP.GLASS_MOTION_MIST);
+    }
+
+    public void setSurfaceGlassMotion(@Nullable String motion) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_SURFACE_GLASS_MOTION,
+            motion == null ? TERMUX_APP.DEFAULT_SURFACE_GLASS_MOTION : motion, false);
+    }
+
+    /** A stored enum-like string if it is one of {@code known}, else the default. */
+    @NonNull
+    private String knownOrDefault(String key, String fallback, String... known) {
+        String stored = SharedPreferenceUtils.getString(mSharedPreferences, key, fallback, true);
+        for (String candidate : known)
+            if (candidate.equals(stored)) return stored;
+        return fallback;
+    }
+
     /** The pinned Custom look, as stored JSON; empty until the user saves one. */
     @NonNull
     public String getSurfaceCustomPreset() {
