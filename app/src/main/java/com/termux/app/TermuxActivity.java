@@ -12455,8 +12455,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
-    private boolean applyDockRowHorizontalInsets() {
-        DockLayout layout = getDockLayout();
+    /**
+     * @param layout the dock being applied — not one computed afresh off the stored arrangement,
+     *               which the row's air now depends on through its place in the stack
+     */
+    private boolean applyDockRowHorizontalInsets(@NonNull DockLayout layout) {
         int surfaceInset = layout.horizontalInsetPx;
         int contentInset = layout.capsule ? layout.capsuleContentInsetPx : surfaceInset;
         int extraKeysInset = layout.capsule ? layout.capsuleExtraKeysInsetPx : surfaceInset;
@@ -12536,6 +12539,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A row with nothing beside it in its container keeps a sliver of air instead of the
             // dock's own row paddings, which are the space between three rows on one sheet.
             .appsRowAlone(isAppsRowAlone(layout))
+            // Next to the canvas its ticks take that side, and a band sharing its container stands
+            // beyond the other, which keeps only the letters' crown.
+            .appsRowNextToCanvas(isAppsRowNextToCanvas(layout))
             // A row that lies down carries the ticks in its own air; a rail's stand in a column
             // beside it, so its cross-axis keeps the plain air of a lone row.
             .appsRowPageStripShown(!PlaceChromePolicy.appsRailShown(layout))
@@ -12618,7 +12624,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAzScrubRowView.setCrownPaddingPx(layout.azRowCrownPaddingPx);
         }
         moved |= updateViewBottomMargin(R.id.apps_bar_viewpager, 0);
-        moved |= applyDockRowHorizontalInsets();
+        moved |= applyDockRowHorizontalInsets(layout);
         if (mSuggestionBarView != null) {
             moved |= layout.appsRowBandHintPx != mAppliedDockRowHeightHintPx;
             mAppliedDockRowHeightHintPx = layout.appsRowBandHintPx;

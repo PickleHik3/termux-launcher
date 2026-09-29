@@ -103,6 +103,12 @@ public final class DockLayoutPolicy {
          */
         public final boolean appsRowAlone;
         /**
+         * The row is the band next to the canvas, so its ticks take that side. Sharing its
+         * container, the other side then has a band standing beyond it, and keeps the letters'
+         * crown there ({@link #rowAirPx}) instead of the ticks' band.
+         */
+        public final boolean appsRowNextToCanvas;
+        /**
          * Whether the row carries the page ticks. The strip is not a band beside the row: it
          * stands in the air the row already keeps on its centre-facing side, so its presence is
          * what that air is worth ({@link PageTickStrip#BAND_DP}) rather than something added to
@@ -144,6 +150,7 @@ public final class DockLayoutPolicy {
             this.appsRowOnEdge = b.appsRowOnEdge;
             this.appsOnRail = b.appsOnRail;
             this.appsRowAlone = b.appsRowAlone;
+            this.appsRowNextToCanvas = b.appsRowNextToCanvas;
             this.appsRowPageStripShown = b.appsRowPageStripShown;
             this.density = b.density;
             this.barHeightScale = b.barHeightScale;
@@ -170,6 +177,7 @@ public final class DockLayoutPolicy {
             private boolean appsRowOnEdge;
             private boolean appsOnRail;
             private boolean appsRowAlone;
+            private boolean appsRowNextToCanvas;
             // Every row that lies down carries the ticks' band, whether or not it has a second
             // page to show — the band is its air, so a row that gained a page cannot grow by it.
             private boolean appsRowPageStripShown = true;
@@ -197,6 +205,7 @@ public final class DockLayoutPolicy {
             public Builder appsRowOnEdge(boolean v) { this.appsRowOnEdge = v; return this; }
             public Builder appsOnRail(boolean v) { this.appsOnRail = v; return this; }
             public Builder appsRowAlone(boolean v) { this.appsRowAlone = v; return this; }
+            public Builder appsRowNextToCanvas(boolean v) { this.appsRowNextToCanvas = v; return this; }
             public Builder appsRowPageStripShown(boolean v) { this.appsRowPageStripShown = v; return this; }
             public Builder density(float v) { this.density = v; return this; }
             public Builder barHeightScale(float v) { this.barHeightScale = v; return this; }
@@ -279,7 +288,8 @@ public final class DockLayoutPolicy {
         // matches their band on the other side too, since a sliver there set the icons hard on
         // the rim across from the ticks and the row read bottom-heavy. The one place the row's
         // air is decided, whichever edge and form it is in.
-        int airPx = rowAirPx(in.appsRowAlone, in.appsRowPageStripShown, density);
+        int airPx = rowAirPx(in.appsRowAlone, in.appsRowPageStripShown,
+            in.appsRowNextToCanvas, density);
         int tickSideAirPx = rowTickSideAirPx(in.appsRowAlone, in.appsRowPageStripShown, density);
         out.appsRowStripBandPx = stripBandPx;
         out.appsTopPaddingPx = airPx;
@@ -408,6 +418,19 @@ public final class DockLayoutPolicy {
      * alone set the icons against the rim across from the strip, and the row read bottom-heavy.
      */
     public static int rowAirPx(boolean alone, boolean pageStripShown, float density) {
+        return rowAirPx(alone, pageStripShown, false, density);
+    }
+
+    /**
+     * As {@link #rowAirPx(boolean, boolean, float)}, for a row that may be the band next to the
+     * canvas. Sharing its container there, its ticks stand on the canvas side and a band stands
+     * beyond the other, so that side keeps the letters' crown: the ticks' band there opened a hole
+     * between the icons and the band under them. The side facing a band over the row is not
+     * touched, which is what keeps the icon centred when the ticks stand under it.
+     */
+    public static int rowAirPx(boolean alone, boolean pageStripShown, boolean nextToCanvas,
+                               float density) {
+        if (!alone && nextToCanvas) return sharedRowAirPx(density);
         if (alone) return Math.max(loneRowAirPx(density),
             pageStripShown ? PageTickStrip.bandPx(density) : 0);
         return Math.max(sharedRowAirPx(density),
