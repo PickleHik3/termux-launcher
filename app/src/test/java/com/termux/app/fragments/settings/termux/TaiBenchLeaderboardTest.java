@@ -6,7 +6,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.ai.TaiBenchStats;
 import com.termux.ai.TaiBenchStore;
 import com.termux.ai.TaiBenchSuite;
 import com.termux.ai.TaiModelSpec;
@@ -20,22 +19,29 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The Home screen's reading of the benchmarks JSON: the marks on a row, the three tabs' orders
- * over the same rows, the broken list, and one entry's history with its version dividers.
+ * The Home screen's reading of the benchmarks JSON: the marks on a row, the one ranked list, the
+ * broken list, and one entry's history with its version dividers.
  */
 public class TaiBenchLeaderboardTest {
     private static final TaiBenchLeaderboard.Versions NOW = new TaiBenchLeaderboard.Versions("0.2.40", "0.9.0", "3.6.1");
     private static int nextId = 1;
 
-    private static JSONObject record(String modelId, String backend, String accelerator, long timestamp, double writingTps,
-                                     double firstWordMs, long memBytes, boolean checkPassed, String appVersion, String runtimeVersion,
+    private static JSONObject series(double median) throws JSONException {
+        return new JSONObject().put("med", median).put("min", median).put("max", median).put("runs", 1);
+    }
+
+    /** A complete v2 record; a {@code ttftMs} or {@code peakBytes} at or below zero is a figure that was not measured. */
+    private static JSONObject record(String modelId, String backend, String accelerator, long timestamp, double decodeTps,
+                                     double ttftMs, long peakBytes, boolean checkPassed, String appVersion, String runtimeVersion,
                                      JSONObject conditions) throws JSONException {
+        JSONObject chat = new JSONObject().put("decodeTps", series(decodeTps)).put("tokens", 231);
+        if (ttftMs > 0) chat.put("ttftMs", series(ttftMs));
+        JSONObject longInput = new JSONObject().put("readMs", series(4_000.0)).put("promptTokens", 2600).put("truncated", false)
+            .put("peakPssBytes", peakBytes > 0 ? peakBytes : -1L);
         JSONObject phases = new JSONObject()
-            .put("load", new JSONObject().put("ms", 3200L).put("memBytes", memBytes))
-            .put("reading", new JSONObject().put("med", 400.0).put("min", 390.0).put("max", 410.0).put("runs", 3))
-            .put("firstWord", firstWordMs > 0 ? new JSONObject().put("med", firstWordMs).put("min", firstWordMs).put("max", firstWordMs).put("runs", 3) : JSONObject.NULL)
-            .put("writing", new JSONObject().put("med", writingTps).put("min", writingTps - 1).put("max", writingTps + 1).put("runs", 3).put("tokens", 128))
-            .put("sustained", JSONObject.NULL);
+            .put("load", new JSONObject().put("ms", 3200L).put("memBytes", 1_600_000_000L))
+            .put("chat", chat)
+            .put("longInput", longInput);
         return new JSONObject()
             .put("id", "r" + (nextId++))
             .put("benchVersion", TaiBenchSuite.BENCH_VERSION)
@@ -52,7 +58,6 @@ public class TaiBenchLeaderboardTest {
             .put("phases", phases)
             .put("check", new JSONObject().put("passed", checkPassed ? 3 : 2).put("total", 3))
             .put("status", TaiBenchStore.STATUS_COMPLETE)
-            .put("verdict", TaiBenchStats.verdict(writingTps, checkPassed))
             .put("installed", true);
     }
 
@@ -111,19 +116,31 @@ public class TaiBenchLeaderboardTest {
     }
 
     @Test
-    public void tabsReorderTheSameRows() throws JSONException {
+    public void theListIsOneRankByVerdictThenSpeed() throws JSONException {
         JSONObject fast = record("fast", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1000L, 25.0, 500.0, 2_000L, true, "0.2.40", "3.6.1", null);
         JSONObject quickWord = record("quick-word", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1001L, 12.0, 150.0, 3_000L, true, "0.2.40", "3.6.1", null);
-        JSONObject lean = record("lean", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1002L, 8.0, 300.0, 1_000L, true, "0.2.40", "3.6.1", null);
+        JSONObject usable = record("usable", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1002L, 8.0, 300.0, 1_000L, true, "0.2.40", "3.6.1", null);
+        // Quick to write but no first token was measured: it clears no line, so it is Slow and last.
         JSONObject noWord = record("no-word", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1003L, 20.0, 0.0, -1L, true, "0.2.40", "3.6.1", null);
-        TaiBenchLeaderboard.Board board = TaiBenchLeaderboard.read(benchmarks(fast, quickWord, lean, noWord), NOW);
-        assertEquals(Arrays.asList("fast", "no-word", "quick-word", "lean"), ids(TaiBenchLeaderboard.sorted(board.ranked, TaiBenchLeaderboard.Tab.SPEED)));
-        // Missing figures sort last on every tab; ties fall back to the speed rank.
-        assertEquals(Arrays.asList("quick-word", "lean", "fast", "no-word"), ids(TaiBenchLeaderboard.sorted(board.ranked, TaiBenchLeaderboard.Tab.FIRST_WORD)));
-        assertEquals(Arrays.asList("lean", "fast", "quick-word", "no-word"), ids(TaiBenchLeaderboard.sorted(board.ranked, TaiBenchLeaderboard.Tab.MEMORY)));
-        // The rows themselves are the same objects, whatever the order.
-        assertEquals(4, board.ranked.size());
-        assertTrue(Double.isNaN(TaiBenchLeaderboard.find(board, "no-word|mnn-llm|cpu|off").firstWordMs));
+        TaiBenchLeaderboard.Board board = TaiBenchLeaderboard.read(benchmarks(fast, quickWord, usable, noWord), NOW);
+        assertEquals(Arrays.asList("fast", "quick-word", "usable", "no-word"), ids(board.ranked));
+        assertEquals(Arrays.asList(1, 2, 3, 4), Arrays.asList(board.ranked.get(0).rank, board.ranked.get(1).rank,
+            board.ranked.get(2).rank, board.ranked.get(3).rank));
+        assertEquals("smooth", board.ranked.get(1).verdict);
+        assertEquals("usable", board.ranked.get(2).verdict);
+        assertEquals("slow", board.ranked.get(3).verdict);
+        assertTrue(Double.isNaN(TaiBenchLeaderboard.find(board, "no-word|mnn-llm|cpu|off").ttftMs));
+    }
+
+    @Test
+    public void aRowCarriesTheThreeNumbersAndTheMemory() throws JSONException {
+        JSONObject run = record("qwen", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1000L, 14.0, 600.0, 2_100_000_000L, true, "0.2.40", "3.6.1", null);
+        TaiBenchLeaderboard.Row row = TaiBenchLeaderboard.read(benchmarks(run), NOW).ranked.get(0);
+        assertEquals(14.0, row.decodeTps, 1e-9);
+        assertEquals(600.0, row.ttftMs, 1e-9);
+        assertEquals(4_000.0, row.readMs, 1e-9);
+        assertEquals(2_100_000_000L, row.memBytes);
+        assertFalse(row.truncated);
     }
 
     @Test
@@ -163,7 +180,7 @@ public class TaiBenchLeaderboardTest {
         List<TaiBenchLeaderboard.Point> history = TaiBenchLeaderboard.history(benchmarks, key);
         assertEquals(4, history.size());
         assertEquals(1000L, history.get(0).timestamp);
-        assertEquals(18.0, history.get(0).writingTps, 1e-9);
+        assertEquals(18.0, history.get(0).decodeTps, 1e-9);
         assertTrue(history.get(0).checkPassed);
         assertFalse(history.get(1).checkPassed);
         assertEquals(4000L, history.get(3).timestamp);

@@ -95,14 +95,14 @@ final class TaiBenchChoice {
         return new Verdict(fit.verdict == TaiImportFit.Verdict.SLOW ? Fit.TIGHT : Fit.SHOWN, null);
     }
 
-    /** How many processors the preset runs a model on here: both where the phone has a GPU, else the CPU. */
-    static int processors(@NonNull TaiBenchSuite.Preset preset, @NonNull Device device) {
-        return preset.bothProcessors && device.gpuSupported ? 2 : 1;
+    /** How many processors a model runs on here: both when comparing and the phone has a GPU, else one. */
+    static int processors(boolean compare, @NonNull Device device) {
+        return compare && device.gpuSupported ? 2 : 1;
     }
 
     /** The estimated time for one model under {@code preset} on this phone. */
-    static long estimateMs(@NonNull TaiBenchSuite.Preset preset, @NonNull Device device) {
-        return TaiBenchSuite.estimateMs(preset, processors(preset, device));
+    static long estimateMs(@NonNull TaiBenchSuite.Preset preset, boolean compare, @NonNull Device device) {
+        return TaiBenchSuite.estimateMs(preset, processors(compare, device));
     }
 
     /** "Worth a download": a recommended catalogue entry that is not installed and passes the filter. */

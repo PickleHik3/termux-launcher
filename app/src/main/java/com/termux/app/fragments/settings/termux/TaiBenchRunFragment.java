@@ -27,24 +27,27 @@ import com.termux.app.activities.SettingsActivity;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
- * Run (spec Screens 4 and 5): a stepper per model and phase (the downloads first, when the run
- * has any), the live view (prompt in grey, the streaming reply in monospace, a token counter)
- * that folds away, the tiles (first word, reading, writing with its sparkline, free RAM, heat,
- * battery), and Stop, which keeps the phases that finished. The cool-down is a state of this
+ * Run (spec Screens 4 and 5): a "Test 1 of 3: Chat" card with the model and processor, ONE live
+ * dial for the current test (decode tok/s while the chat writes, a "reading" seconds counter while
+ * the long page is read) and the phone's conditions (free RAM, heat, battery), the live view
+ * (prompt in grey, the streaming reply in monospace, a token counter) that folds away, a stepper
+ * per model and phase (the downloads first, when the run has any), and Stop, which keeps the
+ * phases that finished. The cool-down is a state of this
  * screen: how long the run has waited against its cap, the heat and headroom the guard read, the
  * model that just finished with its rank and a "New best" pill, and "Skip the wait".
  *
  * <p>The screen only draws {@link TaiBenchSession}'s state; it attaches in onStart and detaches
  * in onStop, and the run goes on without it. The screen stays on while it is visible
  * ({@code FLAG_KEEP_SCREEN_ON}). A fixed view tree updated in place rather than a list: the
- * tiles and the live view change up to twenty times a second.
+ * dial and the live view change up to twenty times a second.
  */
 @Keep
 public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Listener {
     private static final long TICK_MS = 1_000L;
+    /** The "reading" counter redraws this often; the events carry no progress during the wait. */
+    private static final long DIAL_TICK_MS = 500L;
     private static final String STATE_FOLDED = "tai_bench_live_folded";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -57,6 +60,14 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
                 bindWait(state);
                 handler.postDelayed(this, TICK_MS);
             }
+        }
+    };
+
+    private final Runnable dialTick = new Runnable() {
+        @Override
+        public void run() {
+            if (!isAdded() || getView() == null) return;
+            bindNow(requireContext(), TaiBenchSession.get().state());
         }
     };
 
@@ -75,13 +86,12 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
     private View liveCard;
     private TextView liveToggle;
     private TaiBenchLiveView live;
-    private TextView tileFirstWord;
-    private TextView tileReading;
-    private TextView tileWriting;
-    private TaiBenchSparklineView sparkline;
-    private TextView tileRam;
-    private TextView tileHeat;
-    private TextView tileBattery;
+    private View nowCard;
+    private TextView nowTitle;
+    private TextView nowSub;
+    private TextView dialFigure;
+    private TextView dialCaption;
+    private TextView conditionsLine;
     private TextView errorText;
     private boolean folded;
     private long drawnVersion = -1L;
@@ -160,11 +170,21 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         waitCard.setVisibility(View.GONE);
         column.addView(waitCard);
 
-        // The stepper.
-        column.addView(TaiBenchViews.sectionHeader(context, getString(R.string.tai_bench_stepper_header), ""));
-        TaiBenchViews.Card steps = TaiBenchViews.card(context);
-        stepper = steps.core;
-        column.addView(steps.outer);
+        // The one dial for the current test, with the phone's conditions under it.
+        TaiBenchViews.Card now = TaiBenchViews.card(context);
+        nowCard = now.outer;
+        nowTitle = TaiBenchViews.title(context, "");
+        now.core.addView(nowTitle);
+        nowSub = TaiBenchViews.mono(context, "");
+        now.core.addView(nowSub, TaiBenchViews.block(context, 2));
+        dialFigure = TaiBenchViews.figure(context, "", 34f);
+        now.core.addView(dialFigure, TaiBenchViews.block(context, 10));
+        dialCaption = TaiBenchViews.body(context, "");
+        now.core.addView(dialCaption, TaiBenchViews.block(context, 2));
+        conditionsLine = TaiBenchViews.mono(context, "");
+        now.core.addView(conditionsLine, TaiBenchViews.block(context, 10));
+        nowCard.setVisibility(View.GONE);
+        column.addView(nowCard);
 
         // The live view, foldable.
         TaiBenchViews.Card liveShell = TaiBenchViews.card(context);
@@ -186,52 +206,13 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         liveShell.core.addView(live, TaiBenchViews.block(context, 8));
         column.addView(liveCard);
 
-        // The tiles, two to a row.
-        column.addView(TaiBenchViews.sectionHeader(context, getString(R.string.tai_bench_tiles_header), ""));
-        LinearLayout tiles = new LinearLayout(context);
-        tiles.setOrientation(LinearLayout.VERTICAL);
-        tiles.setPadding(TaiBenchViews.dp(context, 12), 0, TaiBenchViews.dp(context, 12), 0);
-        tileFirstWord = TaiBenchViews.figure(context, "", 20f);
-        tileReading = TaiBenchViews.figure(context, "", 20f);
-        tileWriting = TaiBenchViews.figure(context, "", 20f);
-        sparkline = new TaiBenchSparklineView(context);
-        tileRam = TaiBenchViews.figure(context, "", 20f);
-        tileHeat = TaiBenchViews.figure(context, "", 20f);
-        tileBattery = TaiBenchViews.figure(context, "", 20f);
-        tiles.addView(tileRow(context,
-            tile(context, getString(R.string.tai_bench_tile_first_word), tileFirstWord, null),
-            tile(context, getString(R.string.tai_bench_tile_reading), tileReading, null)));
-        tiles.addView(tileRow(context,
-            tile(context, getString(R.string.tai_bench_tile_writing), tileWriting, sparkline),
-            tile(context, getString(R.string.tai_bench_tile_free_ram), tileRam, null)));
-        tiles.addView(tileRow(context,
-            tile(context, getString(R.string.tai_bench_tile_heat), tileHeat, null),
-            tile(context, getString(R.string.tai_bench_tile_battery), tileBattery, null)));
-        column.addView(tiles);
+        // The stepper.
+        column.addView(TaiBenchViews.sectionHeader(context, getString(R.string.tai_bench_stepper_header), ""));
+        TaiBenchViews.Card steps = TaiBenchViews.card(context);
+        stepper = steps.core;
+        column.addView(steps.outer);
         bindFold();
         return scroll;
-    }
-
-    @NonNull
-    private LinearLayout tileRow(@NonNull Context context, @NonNull View a, @NonNull View b) {
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f);
-        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f);
-        row.addView(a, left);
-        row.addView(b, right);
-        return row;
-    }
-
-    @NonNull
-    private View tile(@NonNull Context context, @NonNull String label, @NonNull TextView figure, @Nullable View extra) {
-        TaiBenchViews.Card card = TaiBenchViews.card(context);
-        card.outer.setPadding(TaiBenchViews.dp(context, 4), TaiBenchViews.dp(context, 3), TaiBenchViews.dp(context, 4), TaiBenchViews.dp(context, 3));
-        TextView caption = TaiBenchViews.mono(context, label);
-        card.core.addView(caption);
-        card.core.addView(figure, TaiBenchViews.block(context, 4));
-        if (extra != null) card.core.addView(extra, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, TaiBenchViews.dp(context, 22)));
-        return card.outer;
     }
 
     @Override
@@ -262,6 +243,7 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         }
         TaiBenchSession.get().removeListener(this);
         handler.removeCallbacks(tick);
+        handler.removeCallbacks(dialTick);
         keepScreenOn(false);
         super.onStop();
     }
@@ -292,7 +274,7 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         bindWait(state);
         live.bind(state.live);
         liveCard.setVisibility(state.entries.isEmpty() && !state.live.active ? View.GONE : View.VISIBLE);
-        bindTiles(context, state);
+        bindNow(context, state);
     }
 
     private void bindHeadline(@NonNull Context context, @NonNull TaiBenchRunState state) {
@@ -367,7 +349,6 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
             rows.add(stepRow(context, glyph, getString(R.string.tai_bench_step_download, download.displayName), detail,
                 download.status == TaiBenchRunState.StepStatus.RUNNING, null));
         }
-        TaiBenchSuite.Preset preset = TaiBenchSuite.Preset.fromId(state.presetId);
         for (TaiBenchRunState.Entry entry : state.entries) {
             String glyph;
             switch (entry.status) {
@@ -384,11 +365,12 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
             } else if (entry.status == TaiBenchRunState.EntryStatus.STOPPED) {
                 detail = entry.reason == null ? getString(R.string.tai_bench_step_stopped) : entry.reason;
             } else if (entry.status == TaiBenchRunState.EntryStatus.DONE) {
-                detail = TaiBenchViews.tps(context, entry.writingTps)
-                    + (entry.verdict == null ? "" : " · " + TaiBenchViews.verdictLabel(context, entry.verdict))
+                // Sanity is silent unless it failed: then the verdict is Broken and says so.
+                detail = (entry.verdict == null ? "" : TaiBenchViews.verdictLabel(context, entry.verdict) + " · ")
+                    + TaiBenchViews.summaryLine(context, entry.decodeTps, entry.ttftMs, entry.readMs)
                     + (entry.rank > 0 ? " · " + getString(R.string.tai_bench_rank, entry.rank) : "");
             } else {
-                detail = phasesLine(context, entry, preset);
+                detail = phasesLine(context, entry);
             }
             String key = entry.finished() && entry.status != TaiBenchRunState.EntryStatus.SKIPPED ? entry.key : null;
             rows.add(stepRow(context, glyph, title, detail, entry.status == TaiBenchRunState.EntryStatus.RUNNING, key));
@@ -405,11 +387,11 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         if (rows.isEmpty()) stepper.addView(TaiBenchViews.body(context, getString(R.string.tai_bench_loading)));
     }
 
-    /** "load ✓ · warm-up ✓ · reading 2/3 · first word · writing · check", the phases in the preset's order. */
+    /** "load ✓ · warm-up ✓ · chat 1/2 · long input", the phases in order; the sanity check stays silent. */
     @NonNull
-    private String phasesLine(@NonNull Context context, @NonNull TaiBenchRunState.Entry entry, @Nullable TaiBenchSuite.Preset preset) {
+    private String phasesLine(@NonNull Context context, @NonNull TaiBenchRunState.Entry entry) {
         StringBuilder line = new StringBuilder();
-        for (String phase : TaiBenchRunState.phasesFor(preset)) {
+        for (String phase : TaiBenchRunState.phasesFor()) {
             if (line.length() > 0) line.append(" · ");
             line.append(TaiBenchViews.phaseLabel(context, phase));
             TaiBenchRunState.Step step = entry.steps.get(phase);
@@ -421,11 +403,6 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
             else if (step.status == TaiBenchRunState.StepStatus.FAILED) line.append(" ✗");
             else if (step.runs > 1) line.append(' ').append(Math.max(1, step.run)).append('/').append(step.runs);
             else line.append(" …");
-        }
-        for (Map.Entry<String, TaiBenchRunState.Step> extra : entry.steps.entrySet()) {
-            if (!TaiBenchRunState.phasesFor(preset).contains(extra.getKey())) {
-                line.append(" · ").append(TaiBenchViews.phaseLabel(context, extra.getKey()));
-            }
         }
         if (entry.cacheRebuilt) line.append(" · ").append(getString(R.string.tai_bench_step_cache_rebuilt));
         return line.toString();
@@ -485,7 +462,7 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         TaiBenchRunState.Entry last = state.lastFinished;
         if (last != null && last.status == TaiBenchRunState.EntryStatus.DONE) {
             TextView text = TaiBenchViews.body(context, getString(R.string.tai_bench_wait_finished, last.displayName,
-                TaiBenchViews.processorLabel(last.accelerator), TaiBenchViews.tps(context, last.writingTps))
+                TaiBenchViews.processorLabel(last.accelerator), TaiBenchViews.tps(context, last.decodeTps))
                 + (last.rank > 0 ? " · " + getString(R.string.tai_bench_rank, last.rank) : ""));
             waitFinished.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             if (last.newBest) {
@@ -507,14 +484,39 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         liveToggle.setText(folded ? R.string.tai_bench_live_show : R.string.tai_bench_live_hide);
     }
 
-    private void bindTiles(@NonNull Context context, @NonNull TaiBenchRunState state) {
-        tileFirstWord.setText(TaiBenchViews.millis(context, state.firstWordMs));
-        tileReading.setText(state.readingRunning() && state.readingTps <= 0.0 ? "…" : TaiBenchViews.tps(context, state.readingTps));
-        tileWriting.setText(TaiBenchViews.tps(context, state.writingTps));
-        sparkline.setSeries(state.series);
-        tileRam.setText(TaiBenchViews.bytes(context, state.conditions.freeRamBytes));
-        tileHeat.setText(TaiBenchViews.heatLabel(context, state.conditions.thermalStatus));
-        tileBattery.setText(TaiBenchViews.batteryLabel(context, state.conditions.batteryPercent, state.conditions.charging));
+    /** The "Test N of 3" card: which test, on which model and processor, its one dial, and the phone's conditions. */
+    private void bindNow(@NonNull Context context, @NonNull TaiBenchRunState state) {
+        handler.removeCallbacks(dialTick);
+        TaiBenchRunState.Entry entry = state.current();
+        nowCard.setVisibility(entry == null ? View.GONE : View.VISIBLE);
+        if (entry == null) return;
+        nowTitle.setText(TaiBenchViews.testLabel(context, entry.currentPhase));
+        nowSub.setText(entry.displayName + " · " + TaiBenchViews.processorLabel(entry.accelerator)
+            + (entry.speculative ? " · " + getString(R.string.tai_bench_mark_draft) : ""));
+        TaiBenchRunState.Dial dial = state.dial(System.currentTimeMillis());
+        switch (dial.kind) {
+            case DECODE:
+                dialFigure.setText(TaiBenchViews.tps(context, dial.value));
+                dialCaption.setText(R.string.tai_bench_dial_writing);
+                break;
+            case READING:
+                dialFigure.setText(getString(R.string.tai_bench_dial_reading, Math.round(dial.value)));
+                dialCaption.setText(R.string.tai_bench_dial_reading_caption);
+                handler.postDelayed(dialTick, DIAL_TICK_MS);
+                break;
+            case READ:
+                dialFigure.setText(TaiBenchViews.waitSeconds(context, dial.value * 1000.0));
+                dialCaption.setText(R.string.tai_bench_dial_read);
+                break;
+            default:
+                dialFigure.setText(R.string.tai_bench_none);
+                dialCaption.setText("");
+                break;
+        }
+        dialCaption.setVisibility(dialCaption.length() == 0 ? View.GONE : View.VISIBLE);
+        conditionsLine.setText(getString(R.string.tai_bench_conditions, TaiBenchViews.bytes(context, state.conditions.freeRamBytes),
+            TaiBenchViews.heatLabel(context, state.conditions.thermalStatus),
+            TaiBenchViews.batteryLabel(context, state.conditions.batteryPercent, state.conditions.charging)));
     }
 
     // ---- actions ----

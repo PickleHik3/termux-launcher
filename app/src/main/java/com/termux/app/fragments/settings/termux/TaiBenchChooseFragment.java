@@ -22,6 +22,7 @@ import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
 import com.termux.ai.TaiBenchSuite;
 import com.termux.ai.TaiDeviceCapabilities;
@@ -63,6 +64,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
     private static final int TYPE_REASON = 4;
     private static final int TYPE_EMPTY = 5;
     private static final String STATE_PRESET = "tai_bench_preset";
+    private static final String STATE_COMPARE = "tai_bench_compare";
     private static final String STATE_SELECTED = "tai_bench_selected";
     private static final String STATE_SHOW_WHY = "tai_bench_show_why";
     private static final String STATE_TOUCHED = "tai_bench_touched";
@@ -86,6 +88,8 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
     });
     private final TaiBenchListAdapter adapter = new TaiBenchListAdapter(this);
     @NonNull private TaiBenchSuite.Preset preset = TaiBenchSuite.Preset.STANDARD;
+    /** The "Compare CPU and GPU" switch. */
+    private boolean compare;
     @Nullable private TaiBenchChoice.Device device;
     @NonNull private List<Offer> installed = Collections.emptyList();
     @NonNull private List<Offer> downloads = Collections.emptyList();
@@ -108,6 +112,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         if (savedInstanceState != null) {
             TaiBenchSuite.Preset saved = TaiBenchSuite.Preset.fromId(savedInstanceState.getString(STATE_PRESET));
             if (saved != null) preset = saved;
+            compare = savedInstanceState.getBoolean(STATE_COMPARE, false);
             List<String> ids = savedInstanceState.getStringArrayList(STATE_SELECTED);
             if (ids != null) selected.addAll(ids);
             showWhy = savedInstanceState.getBoolean(STATE_SHOW_WHY, false);
@@ -168,6 +173,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
     public void onSaveInstanceState(@NonNull Bundle outState) {
         super.onSaveInstanceState(outState);
         outState.putString(STATE_PRESET, preset.id);
+        outState.putBoolean(STATE_COMPARE, compare);
         outState.putStringArrayList(STATE_SELECTED, new ArrayList<>(selected));
         outState.putBoolean(STATE_SHOW_WHY, showWhy);
         outState.putBoolean(STATE_TOUCHED, touched);
@@ -281,8 +287,9 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         Context context = getContext();
         if (context == null) return;
         List<TaiBenchListAdapter.Item> items = new ArrayList<>();
-        items.add(new TaiBenchListAdapter.Item(TYPE_PRESET, "preset", "preset|" + preset.id, preset));
         TaiBenchChoice.Device seen = device;
+        boolean canCompare = seen != null && seen.gpuSupported;
+        items.add(new TaiBenchListAdapter.Item(TYPE_PRESET, "preset", "preset|" + preset.id + '|' + (canCompare && compare) + '|' + canCompare, preset));
         if (seen == null) {
             items.add(new TaiBenchListAdapter.Item(TYPE_EMPTY, "loading", "loading", getString(R.string.tai_bench_loading)));
             adapter.submit(items);
@@ -314,7 +321,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         long bytes = 0L;
         for (Offer offer : selectedOffers()) {
             count++;
-            totalMs += TaiBenchChoice.estimateMs(preset, seen);
+            totalMs += TaiBenchChoice.estimateMs(preset, compare, seen);
             if (!offer.candidate.installed) bytes += Math.max(0L, offer.candidate.sizeBytes);
         }
         adapter.submit(items);
@@ -324,7 +331,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
     @NonNull
     private TaiBenchListAdapter.Item modelItem(@NonNull Offer offer, @NonNull TaiBenchChoice.Device seen) {
         boolean on = selected.contains(offer.candidate.modelId);
-        String signature = offer.candidate.modelId + '|' + on + '|' + preset.id + '|' + offer.verdict.fit + '|' + seen.gpuSupported
+        String signature = offer.candidate.modelId + '|' + on + '|' + preset.id + '|' + compare + '|' + offer.verdict.fit + '|' + seen.gpuSupported
             + '|' + tested.contains(offer.candidate.modelId);
         return new TaiBenchListAdapter.Item(TYPE_MODEL, offer.candidate.modelId, signature, offer);
     }
@@ -373,7 +380,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         TaiSegmentedTabs tabs = new TaiSegmentedTabs(context);
         tabs.setId(R.id.tai_bench_tabs);
         tabs.setContentDescription(getString(R.string.tai_bench_preset_desc));
-        tabs.setLabels(getString(R.string.tai_bench_preset_quick), getString(R.string.tai_bench_preset_standard), getString(R.string.tai_bench_preset_thorough));
+        tabs.setLabels(getString(R.string.tai_bench_preset_quick), getString(R.string.tai_bench_preset_standard));
         tabs.setOnSegmentSelectedListener(index -> {
             TaiBenchSuite.Preset[] values = TaiBenchSuite.Preset.values();
             if (index < 0 || index >= values.length || values[index] == preset) return;
@@ -385,6 +392,26 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         hint.setId(R.id.tai_bench_text);
         hint.setPadding(TaiBenchViews.dp(context, 6), 0, TaiBenchViews.dp(context, 6), 0);
         column.addView(hint, TaiBenchViews.block(context, 8));
+        LinearLayout compareRow = new LinearLayout(context);
+        compareRow.setId(R.id.tai_bench_compare_row);
+        compareRow.setOrientation(LinearLayout.HORIZONTAL);
+        compareRow.setGravity(Gravity.CENTER_VERTICAL);
+        compareRow.setPadding(TaiBenchViews.dp(context, 6), 0, TaiBenchViews.dp(context, 6), 0);
+        LinearLayout compareText = new LinearLayout(context);
+        compareText.setOrientation(LinearLayout.VERTICAL);
+        compareText.addView(TaiBenchViews.title(context, getString(R.string.tai_bench_compare_title)));
+        compareText.addView(TaiBenchViews.body(context, getString(R.string.tai_bench_compare_hint)), TaiBenchViews.block(context, 2));
+        compareRow.addView(compareText, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        MaterialSwitch compareSwitch = new MaterialSwitch(context);
+        compareSwitch.setId(R.id.tai_bench_compare);
+        compareSwitch.setContentDescription(getString(R.string.tai_bench_compare_title));
+        compareSwitch.setOnCheckedChangeListener((button, checked) -> {
+            if (!button.isPressed() || checked == compare) return;
+            compare = checked;
+            rebuild();
+        });
+        compareRow.addView(compareSwitch);
+        column.addView(compareRow, TaiBenchViews.block(context, 12));
         return column;
     }
 
@@ -392,11 +419,13 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         TaiSegmentedTabs tabs = view.findViewById(R.id.tai_bench_tabs);
         tabs.select(chosen.ordinal(), tabs.selectedIndex() >= 0);
         TextView hint = view.findViewById(R.id.tai_bench_text);
-        switch (chosen) {
-            case QUICK: hint.setText(R.string.tai_bench_preset_quick_hint); break;
-            case THOROUGH: hint.setText(R.string.tai_bench_preset_thorough_hint); break;
-            default: hint.setText(R.string.tai_bench_preset_standard_hint); break;
-        }
+        hint.setText(chosen == TaiBenchSuite.Preset.QUICK ? R.string.tai_bench_preset_quick_hint : R.string.tai_bench_preset_standard_hint);
+        // Only where the phone has a GPU is there anything to compare.
+        boolean canCompare = device != null && device.gpuSupported;
+        View compareRow = view.findViewById(R.id.tai_bench_compare_row);
+        compareRow.setVisibility(canCompare ? View.VISIBLE : View.GONE);
+        MaterialSwitch compareSwitch = view.findViewById(R.id.tai_bench_compare);
+        if (compareSwitch.isChecked() != (canCompare && compare)) compareSwitch.setChecked(canCompare && compare);
     }
 
     @NonNull
@@ -456,7 +485,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
             : TaiBenchViews.color(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant)));
         check.setVisibility(on ? View.VISIBLE : View.INVISIBLE);
         ((TextView) view.findViewById(R.id.tai_bench_title)).setText(offer.candidate.displayName);
-        int processors = seen == null ? 1 : TaiBenchChoice.processors(preset, seen);
+        int processors = seen == null ? 1 : TaiBenchChoice.processors(compare, seen);
         StringBuilder sub = new StringBuilder();
         if (offer.candidate.sizeBytes > 0L) sub.append(TaiModelCentreRows.formatBytes(offer.candidate.sizeBytes)).append(" · ");
         sub.append(getString(processors == 2 ? R.string.tai_bench_processors_both : R.string.tai_bench_processors_cpu));
@@ -616,7 +645,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
                 offer.candidate.sizeBytes));
         }
         if (models.isEmpty()) return;
-        TaiBenchCheckSheet.show(context, preset, models, this::start);
+        TaiBenchCheckSheet.show(context, preset, compare && device != null && device.gpuSupported, models, this::start);
     }
 
     private void start(@NonNull TaiBenchSession.Plan plan) {

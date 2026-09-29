@@ -98,14 +98,15 @@ public class TaiBenchChoiceTest {
     }
 
     @Test
-    public void processorsFollowThePresetAndTheGpu() {
+    public void processorsFollowTheCompareSwitchAndTheGpu() {
         TaiBenchChoice.Device noGpu = new TaiBenchChoice.Device(8L * GB, 20L * GB, "SM8650", true, false);
-        assertEquals(1, TaiBenchChoice.processors(TaiBenchSuite.Preset.QUICK, PHONE));
-        assertEquals(2, TaiBenchChoice.processors(TaiBenchSuite.Preset.STANDARD, PHONE));
-        assertEquals(2, TaiBenchChoice.processors(TaiBenchSuite.Preset.THOROUGH, PHONE));
-        assertEquals(1, TaiBenchChoice.processors(TaiBenchSuite.Preset.STANDARD, noGpu));
-        assertEquals(4 * 60_000L, TaiBenchChoice.estimateMs(TaiBenchSuite.Preset.STANDARD, PHONE));
-        assertEquals(2 * 60_000L, TaiBenchChoice.estimateMs(TaiBenchSuite.Preset.STANDARD, noGpu));
-        assertEquals(60_000L, TaiBenchChoice.estimateMs(TaiBenchSuite.Preset.QUICK, PHONE));
+        assertEquals(1, TaiBenchChoice.processors(false, PHONE));
+        assertEquals(2, TaiBenchChoice.processors(true, PHONE));
+        // Nothing to compare on a phone without a usable GPU.
+        assertEquals(1, TaiBenchChoice.processors(true, noGpu));
+        assertEquals(6 * 60_000L, TaiBenchChoice.estimateMs(TaiBenchSuite.Preset.STANDARD, true, PHONE));
+        assertEquals(3 * 60_000L, TaiBenchChoice.estimateMs(TaiBenchSuite.Preset.STANDARD, true, noGpu));
+        assertEquals(3 * 60_000L, TaiBenchChoice.estimateMs(TaiBenchSuite.Preset.STANDARD, false, PHONE));
+        assertEquals(90_000L, TaiBenchChoice.estimateMs(TaiBenchSuite.Preset.QUICK, false, PHONE));
     }
 }

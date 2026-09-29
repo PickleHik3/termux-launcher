@@ -14,7 +14,6 @@ import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
-import com.termux.ai.TaiBenchStats;
 import com.termux.ai.TaiBenchSuite;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiSettings;
@@ -39,7 +38,7 @@ import java.nio.file.Files;
 
 /**
  * The benchmark's Home opens in SettingsActivity and lays out its list: the device card, then
- * either the empty state or the tabs and one row per leaderboard entry, then Run a benchmark.
+ * either the empty state or one row per leaderboard entry, then Run a benchmark.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -82,16 +81,22 @@ public class TaiBenchHomeFragmentTest {
         return home;
     }
 
-    private static JSONObject record(String modelId, String accelerator, double writingTps) throws Exception {
+    private static JSONObject series(double median) throws Exception {
+        return new JSONObject().put("med", median).put("min", median).put("max", median).put("runs", 2);
+    }
+
+    private static JSONObject record(String modelId, String accelerator, double decodeTps) throws Exception {
+        return record(modelId, accelerator, decodeTps, TaiBenchSuite.BENCH_VERSION);
+    }
+
+    private static JSONObject record(String modelId, String accelerator, double decodeTps, String benchVersion) throws Exception {
         JSONObject phases = new JSONObject()
-            .put("load", new JSONObject().put("ms", 3200L).put("memBytes", 1_600_000_000L).put("pssBytes", 900_000_000L))
-            .put("reading", new JSONObject().put("med", 400.0).put("min", 390.0).put("max", 410.0).put("runs", 3))
-            .put("firstWord", new JSONObject().put("med", 200.0).put("min", 190.0).put("max", 210.0).put("runs", 3))
-            .put("writing", new JSONObject().put("med", writingTps).put("min", writingTps - 1).put("max", writingTps + 1).put("runs", 3).put("tokens", 128))
-            .put("sustained", JSONObject.NULL);
+            .put("load", new JSONObject().put("ms", 3200L).put("memBytes", 1_600_000_000L))
+            .put("chat", new JSONObject().put("ttftMs", series(600.0)).put("decodeTps", series(decodeTps)).put("tokens", 231))
+            .put("longInput", new JSONObject().put("readMs", series(4_000.0)).put("promptTokens", 2600).put("peakPssBytes", 900_000_000L));
         return new JSONObject()
             .put("id", modelId + "-" + accelerator)
-            .put("benchVersion", TaiBenchSuite.BENCH_VERSION)
+            .put("benchVersion", benchVersion)
             .put("preset", "standard")
             .put("timestamp", 1_700_000_000_000L)
             .put("modelId", modelId)
@@ -105,8 +110,7 @@ public class TaiBenchHomeFragmentTest {
                 .put("thermalStart", "none").put("thermalEnd", "light").put("warmStart", false))
             .put("phases", phases)
             .put("check", new JSONObject().put("passed", 3).put("total", 3))
-            .put("status", "complete")
-            .put("verdict", TaiBenchStats.verdict(writingTps, true));
+            .put("status", "complete");
     }
 
     private void seed(JSONObject... records) throws Exception {
@@ -131,7 +135,7 @@ public class TaiBenchHomeFragmentTest {
     }
 
     @Test
-    public void withTwoRecordsHomeShowsTheTabsAndARowPerEntry() throws Exception {
+    public void withTwoRecordsHomeShowsOneRowPerEntry() throws Exception {
         seed(record("qwen3-vl-2b", "cpu", 21.0), record("gemma-4-e2b", "gpu", 12.0));
         TaiBenchHomeFragment home = launch();
         assertTrue(home.hasRowsForTest());
@@ -139,7 +143,20 @@ public class TaiBenchHomeFragmentTest {
         assertNotNull(list);
         RecyclerView.Adapter<?> adapter = list.getAdapter();
         assertNotNull(adapter);
-        // Device card, tabs, two rows, the action block.
-        assertEquals(5, adapter.getItemCount());
+        // Device card, two rows, the action block: one list, no sort tabs.
+        assertEquals(4, adapter.getItemCount());
+    }
+
+    @Test
+    public void aBenchV1RecordLeavesTheModelUntestedSoHomeShowsTheEmptyState() throws Exception {
+        seed(record("qwen3-vl-2b", "cpu", 21.0, "bench_v1"));
+        TaiBenchHomeFragment home = launch();
+        assertFalse(home.hasRowsForTest());
+        RecyclerView list = (RecyclerView) home.getView();
+        assertNotNull(list);
+        RecyclerView.Adapter<?> adapter = list.getAdapter();
+        assertNotNull(adapter);
+        // Device card, the empty state, the action block.
+        assertEquals(3, adapter.getItemCount());
     }
 }

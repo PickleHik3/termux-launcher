@@ -2014,7 +2014,7 @@ public class LauncherCtlApiServer {
             "  tai unload\n" +
             "  tai keep-warm [model] [--minutes N] [--auto|--cpu|--gpu]\n" +
             "  tai cancel\n" +
-            "  tai benchmark [model...] [--preset quick|standard|thorough] [--cpu|--gpu] [--eagle] [--force]\n" +
+            "  tai benchmark [model...] [--preset quick|standard] [--cpu|--gpu] [--compare] [--eagle] [--force]\n" +
             "  tai benchmark --results | --clear [model] | --skip-wait\n" +
             "  tai benchmark --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\n" +
             "  tai transcribe <file.wav> [--model id] [--language xx] [--prompt \"words\"]\n" +
@@ -2032,12 +2032,16 @@ public class LauncherCtlApiServer {
             "--fresh on tai load throws away the model's MNN mmap weight cache before loading, so it is\n" +
             "rebuilt from scratch instead of reused; use it if a loaded MNN model starts giving degenerate\n" +
             "replies (repeated characters, whatever the sampling settings).\n" +
-            "tai benchmark runs bench v1 on each model, timed the same way for LiteRT-LM and MNN: a cold\n" +
-            "load, then reading (prompt tok/s over a fixed passage), first word (time to first token),\n" +
-            "writing (decode tok/s over 128 tokens) and three check questions with known answers. Standard\n" +
-            "runs each test three times on the CPU and on the GPU where the model supports it; quick runs\n" +
-            "once on the processor an automatic load would pick; thorough adds a 90 s sustained run. Each\n" +
-            "load goes through the usual preflight and memory budget, and a refusal skips that entry with\n" +
+            "tai benchmark runs bench v2 on each model, timed the same way for LiteRT-LM and MNN: a cold\n" +
+            "load, then three tests that stand for real use. Chat asks an everyday question and times the\n" +
+            "first token (starts replying in X s) and the writing speed (N tok/s over up to 320 tokens).\n" +
+            "Long input pastes a build log of about 2000 tokens and asks for a two-sentence answer; the wait\n" +
+            "for the first token is how long the phone takes to read a long page, and the process's peak\n" +
+            "memory is sampled meanwhile. Sanity asks three questions with known answers and only shows\n" +
+            "when one fails (Broken). Each model gets a one-word verdict: Smooth, Usable or Slow, from those\n" +
+            "three figures. Quick runs each test once, standard twice (the median is kept), on the processor\n" +
+            "an automatic load would pick; --compare runs the CPU and the GPU where the model supports\n" +
+            "both. Each load goes through the usual preflight and memory budget, and a refusal skips that entry with\n" +
             "the reason. Results are kept in files/tai/benchmarks.json: --results prints the leaderboard,\n" +
             "--clear removes them (for one model when named). Chat requests are refused while a benchmark\n" +
             "runs; tai cancel stops it, keeping the phases that finished. A run refuses to start below 30%\n" +
@@ -2260,9 +2264,9 @@ public class LauncherCtlApiServer {
             "    post_json /v1/ai/runtime/cancel '{}'\n" +
             "    ;;\n" +
             "  benchmark)\n" +
-            "    usage_benchmark() { echo \"usage: tai benchmark [model...] [--preset quick|standard|thorough] [--cpu|--gpu] [--eagle] [--force] | --results | --clear [model] | --skip-wait | --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }\n" +
+            "    usage_benchmark() { echo \"usage: tai benchmark [model...] [--preset quick|standard] [--cpu|--gpu] [--compare] [--eagle] [--force] | --results | --clear [model] | --skip-wait | --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\" >&2; exit 2; }\n" +
             "    if [ \"${1:-}\" = \"--native\" ]; then\n" +
-            "      # The old path: LiteRT-LM's own benchmark(), kept so its numbers can be set against bench v1's.\n" +
+            "      # The old path: LiteRT-LM's own benchmark(), kept so its numbers can be set against bench v2's.\n" +
             "      shift\n" +
             "      model=\"\"\n" +
             "      accelerator=\"\"\n" +
@@ -2299,6 +2303,7 @@ public class LauncherCtlApiServer {
             "    first_model=\"\"\n" +
             "    preset=\"\"\n" +
             "    processors=\"\"\n" +
+            "    compare=\"\"\n" +
             "    eagle=\"\"\n" +
             "    force=\"\"\n" +
             "    results=\"\"\n" +
@@ -2307,9 +2312,10 @@ public class LauncherCtlApiServer {
             "    while [ \"$#\" -gt 0 ]; do\n" +
             "      case \"$1\" in\n" +
             "        --preset) shift; [ \"$#\" -gt 0 ] || usage_benchmark; preset=\"$1\" ;;\n" +
-            "        --quick|--standard|--thorough) preset=\"${1#--}\" ;;\n" +
+            "        --quick|--standard) preset=\"${1#--}\" ;;\n" +
             "        --cpu) processors=\"$processors,\\\"cpu\\\"\" ;;\n" +
             "        --gpu) processors=\"$processors,\\\"gpu\\\"\" ;;\n" +
+            "        --compare) compare=true ;;\n" +
             "        --eagle) eagle=true ;;\n" +
             "        --force) force=true ;;\n" +
             "        --results) results=true ;;\n" +
@@ -2320,7 +2326,7 @@ public class LauncherCtlApiServer {
             "      esac\n" +
             "      shift\n" +
             "    done\n" +
-            "    case \"$preset\" in ''|quick|standard|thorough) ;; *) usage_benchmark ;; esac\n" +
+            "    case \"$preset\" in ''|quick|standard) ;; *) usage_benchmark ;; esac\n" +
             "    if [ -n \"$results\" ]; then\n" +
             "      get_json /v1/ai/benchmarks\n" +
             "      exit $?\n" +
@@ -2338,9 +2344,10 @@ public class LauncherCtlApiServer {
             "    body=\"{\\\"preset\\\":\\\"${preset:-standard}\\\"\"\n" +
             "    [ -z \"$models\" ] || body=\"$body,\\\"models\\\":[${models#,}]\"\n" +
             "    [ -z \"$processors\" ] || body=\"$body,\\\"processors\\\":[${processors#,}]\"\n" +
+            "    [ -z \"$compare\" ] || body=\"$body,\\\"compare\\\":true\"\n" +
             "    [ -z \"$eagle\" ] || body=\"$body,\\\"eagle\\\":true\"\n" +
             "    [ -z \"$force\" ] || body=\"$body,\\\"force\\\":true\"\n" +
-            "    # A thorough run over several models takes a good part of an hour; the stream keeps the\n" +
+            "    # A standard run over several models can take a good while; the stream keeps the\n" +
             "    # connection alive with a line per phase. Ctrl-C stops the runtime too, not just this command.\n" +
             "    CURL_BENCH=\"--fail-with-body -sS --connect-timeout 2 --max-time 14400\"\n" +
             "    trap 'post_json /v1/ai/runtime/cancel \"{}\" >/dev/null 2>&1; exit 130' INT TERM\n" +

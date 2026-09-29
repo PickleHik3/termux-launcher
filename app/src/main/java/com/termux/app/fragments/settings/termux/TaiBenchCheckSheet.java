@@ -43,7 +43,7 @@ final class TaiBenchCheckSheet {
     private TaiBenchCheckSheet() {
     }
 
-    static void show(@NonNull Context context, @NonNull TaiBenchSuite.Preset preset,
+    static void show(@NonNull Context context, @NonNull TaiBenchSuite.Preset preset, boolean compare,
                      @NonNull List<TaiBenchSession.Model> models, @NonNull OnStart onStart) {
         BottomSheetDialog sheet = new BottomSheetDialog(context);
         LinearLayout content = new LinearLayout(context);
@@ -135,7 +135,7 @@ final class TaiBenchCheckSheet {
             if (blocked[0]) return;
             TaiMotion.tick(v);
             sheet.dismiss();
-            onStart.start(new TaiBenchSession.Plan(preset.id, models, remove[0]));
+            onStart.start(new TaiBenchSession.Plan(preset.id, compare, models, remove[0]));
         });
         sheet.setOnDismissListener(dialog -> {
             handler.removeCallbacksAndMessages(null);

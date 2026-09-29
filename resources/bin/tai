@@ -22,7 +22,7 @@ Usage:
   tai unload
   tai keep-warm [model] [--minutes N] [--auto|--cpu|--gpu]
   tai cancel
-  tai benchmark [model...] [--preset quick|standard|thorough] [--cpu|--gpu] [--eagle] [--force]
+  tai benchmark [model...] [--preset quick|standard] [--cpu|--gpu] [--compare] [--eagle] [--force]
   tai benchmark --results | --clear [model] | --skip-wait
   tai benchmark --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]
   tai transcribe <file.wav> [--model id] [--language xx] [--prompt "words"]
@@ -40,12 +40,16 @@ cannot fit is refused rather than started.
 --fresh on tai load throws away the model's MNN mmap weight cache before loading, so it is
 rebuilt from scratch instead of reused; use it if a loaded MNN model starts giving degenerate
 replies (repeated characters, whatever the sampling settings).
-tai benchmark runs bench v1 on each model, timed the same way for LiteRT-LM and MNN: a cold
-load, then reading (prompt tok/s over a fixed passage), first word (time to first token),
-writing (decode tok/s over 128 tokens) and three check questions with known answers. Standard
-runs each test three times on the CPU and on the GPU where the model supports it; quick runs
-once on the processor an automatic load would pick; thorough adds a 90 s sustained run. Each
-load goes through the usual preflight and memory budget, and a refusal skips that entry with
+tai benchmark runs bench v2 on each model, timed the same way for LiteRT-LM and MNN: a cold
+load, then three tests that stand for real use. Chat asks an everyday question and times the
+first token (starts replying in X s) and the writing speed (N tok/s over up to 320 tokens).
+Long input pastes a build log of about 2000 tokens and asks for a two-sentence answer; the wait
+for the first token is how long the phone takes to read a long page, and the process's peak
+memory is sampled meanwhile. Sanity asks three questions with known answers and only shows
+when one fails (Broken). Each model gets a one-word verdict: Smooth, Usable or Slow, from those
+three figures. Quick runs each test once, standard twice (the median is kept), on the processor
+an automatic load would pick; --compare runs the CPU and the GPU where the model supports
+both. Each load goes through the usual preflight and memory budget, and a refusal skips that entry with
 the reason. Results are kept in files/tai/benchmarks.json: --results prints the leaderboard,
 --clear removes them (for one model when named). Chat requests are refused while a benchmark
 runs; tai cancel stops it, keeping the phases that finished. A run refuses to start below 30%
@@ -266,9 +270,9 @@ case "$cmd" in
     post_json /v1/ai/runtime/cancel '{}'
     ;;
   benchmark)
-    usage_benchmark() { echo "usage: tai benchmark [model...] [--preset quick|standard|thorough] [--cpu|--gpu] [--eagle] [--force] | --results | --clear [model] | --skip-wait | --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]" >&2; exit 2; }
+    usage_benchmark() { echo "usage: tai benchmark [model...] [--preset quick|standard] [--cpu|--gpu] [--compare] [--eagle] [--force] | --results | --clear [model] | --skip-wait | --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]" >&2; exit 2; }
     if [ "${1:-}" = "--native" ]; then
-      # The old path: LiteRT-LM's own benchmark(), kept so its numbers can be set against bench v1's.
+      # The old path: LiteRT-LM's own benchmark(), kept so its numbers can be set against bench v2's.
       shift
       model=""
       accelerator=""
@@ -305,6 +309,7 @@ case "$cmd" in
     first_model=""
     preset=""
     processors=""
+    compare=""
     eagle=""
     force=""
     results=""
@@ -313,9 +318,10 @@ case "$cmd" in
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --preset) shift; [ "$#" -gt 0 ] || usage_benchmark; preset="$1" ;;
-        --quick|--standard|--thorough) preset="${1#--}" ;;
+        --quick|--standard) preset="${1#--}" ;;
         --cpu) processors="$processors,\"cpu\"" ;;
         --gpu) processors="$processors,\"gpu\"" ;;
+        --compare) compare=true ;;
         --eagle) eagle=true ;;
         --force) force=true ;;
         --results) results=true ;;
@@ -326,7 +332,7 @@ case "$cmd" in
       esac
       shift
     done
-    case "$preset" in ''|quick|standard|thorough) ;; *) usage_benchmark ;; esac
+    case "$preset" in ''|quick|standard) ;; *) usage_benchmark ;; esac
     if [ -n "$results" ]; then
       get_json /v1/ai/benchmarks
       exit $?
@@ -344,9 +350,10 @@ case "$cmd" in
     body="{\"preset\":\"${preset:-standard}\""
     [ -z "$models" ] || body="$body,\"models\":[${models#,}]"
     [ -z "$processors" ] || body="$body,\"processors\":[${processors#,}]"
+    [ -z "$compare" ] || body="$body,\"compare\":true"
     [ -z "$eagle" ] || body="$body,\"eagle\":true"
     [ -z "$force" ] || body="$body,\"force\":true"
-    # A thorough run over several models takes a good part of an hour; the stream keeps the
+    # A standard run over several models can take a good while; the stream keeps the
     # connection alive with a line per phase. Ctrl-C stops the runtime too, not just this command.
     CURL_BENCH="--fail-with-body -sS --connect-timeout 2 --max-time 14400"
     trap 'post_json /v1/ai/runtime/cancel "{}" >/dev/null 2>&1; exit 130' INT TERM

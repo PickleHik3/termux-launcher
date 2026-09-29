@@ -716,7 +716,7 @@ public final class TaiManager {
         return result;
     }
 
-    // ---- Benchmark (bench v1) ------------------------------------------------------------------
+    // ---- Benchmark (bench v2) ------------------------------------------------------------------
 
     /** The results file, {@code files/tai/benchmarks.json}, written by this (the app) process only. */
     @NonNull
@@ -805,9 +805,9 @@ public final class TaiManager {
     }
 
     /**
-     * Runs bench v1 over {@code models} and streams {@link TaiBenchHarness} events into
-     * {@code sink}. Request: {@code {models: [id…] | model, preset: quick|standard|thorough,
-     * processors: [cpu|gpu…]?, eagle: bool?}}. In the app process the request is resolved
+     * Runs bench v2 over {@code models} and streams {@link TaiBenchHarness} events into
+     * {@code sink}. Request: {@code {models: [id…] | model, preset: quick|standard,
+     * compare: bool? (both processors where supported), processors: [cpu|gpu…]?, eagle: bool?}}. In the app process the request is resolved
      * (model specs and the settings' runtime options travel with it, as every runtime request's
      * do), forwarded to {@code :tai_runtime} as {@link TaiRuntimeIpc#OP_BENCH_RUN}, and each
      * {@code entry_done} record is appended to the store as it arrives. In the runtime process
@@ -900,7 +900,7 @@ public final class TaiManager {
             ids.add(single.isEmpty() ? settings.getDefaultAssistantModel() : single);
         }
         TaiBenchSuite.Preset preset = TaiBenchSuite.Preset.fromId(request.optString("preset", null));
-        if (preset == null) return error(400, "bad_preset", "preset must be quick, standard or thorough.");
+        if (preset == null) return error(400, "bad_preset", "preset must be quick or standard.");
         JSONArray prepared = new JSONArray();
         for (String id : ids) {
             TaiModelSpec spec = resolveModel(id);
@@ -929,6 +929,7 @@ public final class TaiManager {
         body.put("models", prepared);
         body.put("preset", preset.id);
         body.put("processors", processors == null ? JSONObject.NULL : processors);
+        body.put("compare", request.optBoolean("compare", false));
         body.put("eagle", request.optBoolean("eagle", false));
         body.put("force", request.optBoolean("force", false));
         return body;
@@ -951,7 +952,7 @@ public final class TaiManager {
         }
         TaiBenchSuite.Preset preset = TaiBenchSuite.Preset.fromId(request.optString("preset", null));
         if (preset == null) {
-            emitBenchError(sink, error(400, "bad_preset", "preset must be quick, standard or thorough."));
+            emitBenchError(sink, error(400, "bad_preset", "preset must be quick or standard."));
             return;
         }
         JSONArray models = request.optJSONArray("models");
@@ -973,14 +974,14 @@ public final class TaiManager {
                 return;
             }
             TaiRuntimeOptions options = runtimeOptionsFromRequest(model, spec);
-            // The processor an automatic load would take is Quick's pick; the GPU is offered by the
-            // presets only where the phone and this model's preflight allow it. An explicit
-            // --gpu is planned regardless and refused, with the reason, by the load.
+            // The processor an automatic load would take is the default pick; the GPU is compared
+            // only where the phone and this model's preflight allow it. An explicit --gpu is
+            // planned regardless and refused, with the reason, by the load.
             boolean gpuSupported = device.supportsAccelerator("gpu")
                 && !TaiLoadPreflight.evaluate(appContext, spec, options.withAccelerator("gpu"), false).blocked;
             String best = TaiLoadPreflight.evaluate(appContext, spec, options.withAccelerator("auto"), false).effectiveAccelerator;
             best = "gpu".equalsIgnoreCase(best) ? TaiBenchSuite.ACCELERATOR_GPU : TaiBenchSuite.ACCELERATOR_CPU;
-            // A GPU-only file (the Gemma 4 -gpu/-web bundles) has no CPU graph; the presets skip it.
+            // A GPU-only file (the Gemma 4 -gpu/-web bundles) has no CPU graph; the comparison skips it.
             boolean cpuSupported = TaiModelProfile.forModel(spec).supports("cpu");
             boolean speculativeCapable = spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING);
             specs.put(spec.id, spec);
@@ -993,7 +994,7 @@ public final class TaiManager {
             processors = new ArrayList<>();
             for (int i = 0; i < requestedProcessors.length(); i++) processors.add(requestedProcessors.optString(i, ""));
         }
-        List<TaiBenchSuite.EntryPlan> entries = TaiBenchSuite.expand(inputs, preset, processors, request.optBoolean("eagle", false));
+        List<TaiBenchSuite.EntryPlan> entries = TaiBenchSuite.expand(inputs, request.optBoolean("compare", false), processors, request.optBoolean("eagle", false));
         if (entries.isEmpty()) {
             emitBenchError(sink, error(400, "no_entries", "Nothing to run: no model and processor pair to benchmark."));
             return;
@@ -1046,11 +1047,11 @@ public final class TaiManager {
         }
     }
 
-    /** The harness's window on this process: the router, the meter, the passage, the stamps. */
+    /** The harness's window on this process: the router, the meter, the log, the stamps. */
     private final class BenchHost implements TaiBenchHarness.Host {
         @NonNull private final Map<String, TaiModelSpec> specs;
         @NonNull private final Map<String, TaiRuntimeOptions> baseOptions;
-        @Nullable private String passage;
+        @Nullable private String log;
 
         BenchHost(@NonNull Map<String, TaiModelSpec> specs, @NonNull Map<String, TaiRuntimeOptions> baseOptions) {
             this.specs = specs;
@@ -1131,16 +1132,16 @@ public final class TaiManager {
 
         @NonNull
         @Override
-        public String readingPassage() throws IOException {
-            if (passage != null) return passage;
-            try (InputStream input = appContext.getAssets().open(TaiBenchSuite.READING_ASSET);
+        public String longInputLog() throws IOException {
+            if (log != null) return log;
+            try (InputStream input = appContext.getAssets().open(TaiBenchSuite.LONG_INPUT_ASSET);
                  ByteArrayOutputStream output = new ByteArrayOutputStream()) {
                 byte[] buffer = new byte[8192];
                 int read;
                 while ((read = input.read(buffer)) != -1) output.write(buffer, 0, read);
-                passage = new String(output.toByteArray(), StandardCharsets.UTF_8);
+                log = new String(output.toByteArray(), StandardCharsets.UTF_8);
             }
-            return passage;
+            return log;
         }
 
         @Override

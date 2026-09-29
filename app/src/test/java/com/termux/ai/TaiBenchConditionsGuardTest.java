@@ -40,7 +40,7 @@ public class TaiBenchConditionsGuardTest {
         current = new TaiBenchGuardRules.Snapshot(80, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.10f);
         assertEquals(TaiBenchGuard.CONTINUE, guard.beforePhase(TaiBenchSuite.PHASE_LOAD, first).action);
         guard.entryStarted(first);
-        assertEquals(TaiBenchGuard.CONTINUE, guard.beforePhase(TaiBenchSuite.PHASE_WRITING, first).action);
+        assertEquals(TaiBenchGuard.CONTINUE, guard.beforePhase(TaiBenchSuite.PHASE_CHAT, first).action);
         guard.entryFinished(first);
 
         JSONObject conditions1 = guard.entryConditions(first);
@@ -68,7 +68,7 @@ public class TaiBenchConditionsGuardTest {
         current = new TaiBenchGuardRules.Snapshot(77, true, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.12f);
         assertEquals(TaiBenchGuard.CONTINUE, guard.beforePhase(TaiBenchSuite.PHASE_LOAD, second).action);
         guard.entryStarted(second);
-        assertEquals(TaiBenchGuard.CONTINUE, guard.beforePhase(TaiBenchSuite.PHASE_WRITING, second).action);
+        assertEquals(TaiBenchGuard.CONTINUE, guard.beforePhase(TaiBenchSuite.PHASE_CHAT, second).action);
         current = new TaiBenchGuardRules.Snapshot(76, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, 0.11f);
         guard.entryFinished(second);
 

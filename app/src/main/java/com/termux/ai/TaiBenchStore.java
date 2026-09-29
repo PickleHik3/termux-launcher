@@ -35,14 +35,18 @@ import java.util.Set;
  * empty and overwritten by the next append; results are measurements, not user data, and a run
  * makes new ones.
  *
- * <p>Record layout (bench v1): {@code id, benchVersion, preset, timestamp, modelId, displayName,
- * sizeBytes, sha256, backend, accelerator, speculative, runtimeVersion, appVersion, device{soc,
- * ramClassGb}, conditions{batteryStart, batteryEnd, charging, thermalStart, thermalEnd,
- * headroomStart, headroomEnd, warmStart},
- * phases{load{ms, memBytes, pssBytes}, reading{med,min,max,runs}, firstWord{…}, writing{…, tokens},
- * sustained{startTps, endTps, dropPct}|null}, check{passed, total, details}, status, verdict}.
- * The entry key is {@code modelId|backend|accelerator|speculative}. The leaderboard's
- * {@code memBytes} is {@link #memoryBytes}: the PSS when the record has one, else the older figure.
+ * <p>Record layout (bench v2): {@code id, benchVersion, preset, timestamp, durationMs, modelId,
+ * displayName, sizeBytes, sha256, backend, accelerator, speculative, runtimeVersion, appVersion,
+ * device{soc, ramClassGb}, conditions{batteryStart, batteryEnd, charging, thermalStart,
+ * thermalEnd, headroomStart, headroomEnd, warmStart},
+ * phases{load{ms, memBytes}, chat{ttftMs{med,min,max,runs}, decodeTps{…}, tokens, reply,
+ * finishReason, reasoningTokens, tokenLimit}, longInput{readMs{…}, promptTps{…}, promptTokens,
+ * contextWindow, truncated, keptChars, totalChars, peakPssBytes, finishReason, …}},
+ * check{passed, total, details}, status, verdict}. The entry key is
+ * {@code modelId|backend|accelerator|speculative}. Older records stay in the file, whatever their
+ * layout, and are only ever read for their key and version. {@link #memoryBytes} is the memory
+ * figure of a record's phases: the peak PSS sampled during the long input, else the older
+ * MemAvailable difference of the load.
  */
 public final class TaiBenchStore {
     static final String FILE_NAME = "benchmarks.json";
@@ -130,11 +134,13 @@ public final class TaiBenchStore {
     }
 
     /**
-     * The leaderboard for one bench version: the latest complete record per entry, ranked by the
-     * median writing speed, ties to the faster first word. Entries whose check failed are
-     * {@code broken}: returned, not ranked. Records of other bench versions are not looked at, so
-     * two versions never share a ranking; stopped, skipped and timed-out records never rank
-     * either, though an older complete record of the same entry does.
+     * The leaderboard for one bench version: the latest complete record per entry, ranked by
+     * verdict (Smooth, Usable, Slow), then decode speed, then the chat's first token. Entries whose
+     * sanity check failed are {@code broken}: returned, not ranked. Records of other bench versions
+     * are not looked at, so two versions never share a ranking; stopped, skipped and timed-out
+     * records never rank either, though an older complete record of the same entry does. The
+     * verdict is worked out from the record's figures, so a change to the thresholds re-grades the
+     * records already on file.
      */
     @NonNull
     public static JSONObject leaderboard(@NonNull JSONArray records, @NonNull String benchVersion) throws JSONException {
@@ -155,9 +161,12 @@ public final class TaiBenchStore {
         Collections.sort(ranked, new Comparator<JSONObject>() {
             @Override
             public int compare(JSONObject a, JSONObject b) {
-                int bySpeed = Double.compare(b.optDouble("writingTps", 0.0), a.optDouble("writingTps", 0.0));
+                int byVerdict = Integer.compare(TaiBenchStats.verdictOrder(b.optString("verdict", "")),
+                    TaiBenchStats.verdictOrder(a.optString("verdict", "")));
+                if (byVerdict != 0) return byVerdict;
+                int bySpeed = Double.compare(b.optDouble("decodeTps", 0.0), a.optDouble("decodeTps", 0.0));
                 if (bySpeed != 0) return bySpeed;
-                return Double.compare(firstWordForSort(a), firstWordForSort(b));
+                return Double.compare(ttftForSort(a), ttftForSort(b));
             }
         });
         JSONArray rankedJson = new JSONArray();
@@ -175,21 +184,30 @@ public final class TaiBenchStore {
     }
 
     /**
-     * The memory figure a load phase stands for: the runtime process's own PSS after load and
-     * warm-up ({@code pssBytes}, bench v1 records from 2026-09-28 on) when it was measured, else
-     * the MemAvailable difference ({@code memBytes}) older records carry. The PSS is preferred
-     * because MemAvailable says nothing useful about an mmap'd MNN package (the same model has
-     * read 4 MB and 660 MB); {@code -1} when neither was measured.
+     * The memory figure of a record's {@code phases}: the runtime process's peak PSS sampled
+     * while the long input was read ({@code longInput.peakPssBytes}) when it was measured, else
+     * the MemAvailable difference of the load ({@code load.memBytes}), which says little about an
+     * mmap'd MNN package (the same model has read 4 MB and 660 MB) and is only the fallback;
+     * {@code -1} when neither was measured.
      */
-    public static long memoryBytes(@NonNull JSONObject load) {
-        long pss = load.optLong("pssBytes", -1L);
-        return pss > 0L ? pss : load.optLong("memBytes", -1L);
+    public static long memoryBytes(@Nullable JSONObject phases) {
+        JSONObject longInput = phases == null ? null : phases.optJSONObject("longInput");
+        long peak = longInput == null ? -1L : longInput.optLong("peakPssBytes", -1L);
+        if (peak > 0L) return peak;
+        JSONObject load = phases == null ? null : phases.optJSONObject("load");
+        return load == null ? -1L : load.optLong("memBytes", -1L);
     }
 
-    /** A missing first-word figure sorts after every measured one. */
-    private static double firstWordForSort(@NonNull JSONObject row) {
-        double value = row.optDouble("firstWordMs", Double.NaN);
-        return Double.isNaN(value) ? Double.MAX_VALUE : value;
+    /** {@code parent.key.med}, or {@code fallback} when the figure is missing. */
+    public static double median(@Nullable JSONObject parent, @NonNull String key, double fallback) {
+        JSONObject figure = parent == null ? null : parent.optJSONObject(key);
+        return figure == null ? fallback : figure.optDouble("med", fallback);
+    }
+
+    /** A missing first-token figure sorts after every measured one. */
+    private static double ttftForSort(@NonNull JSONObject row) {
+        double value = row.optDouble("ttftMs", Double.NaN);
+        return Double.isNaN(value) || value <= 0.0 ? Double.MAX_VALUE : value;
     }
 
     /** The leaderboard's view of one record: the headline figures, not the runs. */
@@ -197,13 +215,14 @@ public final class TaiBenchStore {
     private static JSONObject row(@NonNull String key, @NonNull JSONObject record) throws JSONException {
         JSONObject phases = record.optJSONObject("phases");
         JSONObject check = record.optJSONObject("check");
-        JSONObject writing = phases == null ? null : phases.optJSONObject("writing");
-        JSONObject firstWord = phases == null ? null : phases.optJSONObject("firstWord");
-        JSONObject reading = phases == null ? null : phases.optJSONObject("reading");
+        JSONObject chat = phases == null ? null : phases.optJSONObject("chat");
+        JSONObject longInput = phases == null ? null : phases.optJSONObject("longInput");
         JSONObject load = phases == null ? null : phases.optJSONObject("load");
         boolean checkPassed = check != null && check.optInt("total", 0) > 0
             && check.optInt("passed", 0) >= check.optInt("total", 0);
-        double writingTps = writing == null ? 0.0 : writing.optDouble("med", 0.0);
+        double decodeTps = median(chat, "decodeTps", 0.0);
+        double ttftMs = median(chat, "ttftMs", 0.0);
+        double readMs = median(longInput, "readMs", 0.0);
         JSONObject row = new JSONObject();
         row.put("key", key);
         row.put("recordId", record.optString("id", ""));
@@ -214,13 +233,14 @@ public final class TaiBenchStore {
         row.put("speculative", record.optBoolean("speculative", false));
         row.put("timestamp", record.optLong("timestamp", 0L));
         row.put("preset", record.optString("preset", ""));
-        row.put("writingTps", writingTps);
-        row.put("firstWordMs", firstWord == null ? JSONObject.NULL : firstWord.optDouble("med", 0.0));
-        row.put("readingTps", reading == null ? JSONObject.NULL : reading.optDouble("med", 0.0));
+        row.put("decodeTps", decodeTps);
+        row.put("ttftMs", chat == null || chat.optJSONObject("ttftMs") == null ? JSONObject.NULL : ttftMs);
+        row.put("readMs", longInput == null || longInput.optJSONObject("readMs") == null ? JSONObject.NULL : readMs);
+        row.put("truncated", longInput != null && longInput.optBoolean("truncated", false));
         row.put("loadMs", load == null ? JSONObject.NULL : load.optLong("ms", 0L));
-        row.put("memBytes", load == null ? JSONObject.NULL : memoryBytes(load));
+        row.put("memBytes", memoryBytes(phases));
         row.put("checkPassed", checkPassed);
-        row.put("verdict", record.optString("verdict", TaiBenchStats.verdict(writingTps, checkPassed)));
+        row.put("verdict", TaiBenchStats.verdict(decodeTps, Math.round(ttftMs), Math.round(readMs), checkPassed));
         row.put("conditions", record.opt("conditions") == null ? JSONObject.NULL : record.opt("conditions"));
         row.put("runtimeVersion", record.optString("runtimeVersion", ""));
         row.put("appVersion", record.optString("appVersion", ""));

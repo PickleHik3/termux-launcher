@@ -21,7 +21,7 @@ import java.util.Collections;
 
 /**
  * The Run screen's reducer, driven by the event sequences the harness and the session produce:
- * the stepper's rows and phases, the live text, the tiles, a cool-down, a skipped entry, a stop,
+ * the stepper's rows and phases, the live text, the dial, a cool-down, a skipped entry, a stop,
  * an error, a {@code conditions_not_met} refusal, and the leaderboard's ranks.
  */
 public class TaiBenchRunStateTest {
@@ -52,10 +52,15 @@ public class TaiBenchRunStateTest {
         state.apply(event("entry_start", at).put("index", index).put("total", total).put("entry", plan(modelId, accelerator)));
     }
 
-    private static JSONObject record(String modelId, String accelerator, String status, double writingTps, boolean checkPassed) throws JSONException {
+    private static JSONObject series(double median) throws JSONException {
+        return new JSONObject().put("med", median).put("min", median).put("max", median).put("runs", 2);
+    }
+
+    private static JSONObject record(String modelId, String accelerator, String status, double decodeTps, boolean checkPassed) throws JSONException {
         JSONObject phases = new JSONObject()
-            .put("load", new JSONObject().put("ms", 3000L).put("memBytes", 100L).put("pssBytes", 900L))
-            .put("writing", new JSONObject().put("med", writingTps).put("min", writingTps).put("max", writingTps).put("runs", 3));
+            .put("load", new JSONObject().put("ms", 3000L).put("memBytes", 100L))
+            .put("chat", new JSONObject().put("decodeTps", series(decodeTps)).put("ttftMs", series(600.0)).put("tokens", 231))
+            .put("longInput", new JSONObject().put("readMs", series(4_000.0)).put("promptTokens", 2600).put("peakPssBytes", 900L));
         return new JSONObject()
             .put("id", "r-" + modelId + "-" + accelerator)
             .put("modelId", modelId)
@@ -73,10 +78,11 @@ public class TaiBenchRunStateTest {
         state.apply(event("phase_start", at + 1).put("phase", "load").put("runs", 1));
         state.apply(event("phase_done", at + 2).put("phase", "load").put("status", "ok")
             .put("metrics", new JSONObject().put("ms", 3000L).put("memBytes", 100L)));
-        state.apply(event("phase_start", at + 3).put("phase", "writing").put("runs", 3).put("prompt", "Write about rain."));
-        state.apply(event("token", at + 4).put("phase", "writing").put("run", 1).put("runs", 3).put("text", "Rain ").put("tokens", 2).put("tps", tps).put("ttftMs", 300L));
-        state.apply(event("phase_done", at + 5).put("phase", "writing").put("status", "ok")
-            .put("metrics", new JSONObject().put("med", tps).put("min", tps).put("max", tps).put("runs", 3)));
+        state.apply(event("phase_start", at + 3).put("phase", "chat").put("runs", 2).put("prompt", "Explain an alias."));
+        state.apply(event("run_start", at + 3).put("phase", "chat").put("run", 1).put("runs", 2));
+        state.apply(event("token", at + 4).put("phase", "chat").put("run", 1).put("runs", 2).put("text", "An ").put("tokens", 2).put("tps", tps).put("ttftMs", 300L));
+        state.apply(event("phase_done", at + 5).put("phase", "chat").put("status", "ok")
+            .put("metrics", new JSONObject().put("decodeTps", series(tps)).put("ttftMs", series(600.0)).put("tokens", 231)));
         state.apply(event("entry_done", at + 6).put("index", index).put("total", 2).put("record", record(modelId, accelerator, "complete", tps, true)).put("stored", true));
     }
 
@@ -119,79 +125,104 @@ public class TaiBenchRunStateTest {
         state.apply(event("phase_done", 2_002L).put("phase", "load").put("status", "ok")
             .put("metrics", new JSONObject().put("ms", 4200L).put("memBytes", 50L)));
         assertEquals(TaiBenchRunState.StepStatus.DONE, entry.steps.get("load").status);
-        assertEquals(4200L, state.loadMs);
-        assertEquals(50L, state.memBytes);
-        // The warm-up's PSS is the memory figure once it is known.
         state.apply(event("phase_start", 2_003L).put("phase", "warmup").put("runs", 1).put("prompt", "Say hello."));
-        state.apply(event("phase_done", 2_004L).put("phase", "warmup").put("status", "ok").put("metrics", new JSONObject().put("pssBytes", 900_000L)));
-        assertEquals(900_000L, state.memBytes);
-        state.apply(event("phase_start", 2_005L).put("phase", "reading").put("runs", 3).put("prompt", "passage"));
-        state.apply(event("token", 2_006L).put("phase", "reading").put("run", 2).put("runs", 3).put("text", "x").put("tokens", 1).put("tps", 0.0).put("ttftMs", 900L));
-        assertEquals(2, entry.steps.get("reading").run);
-        assertEquals(3, entry.steps.get("reading").runs);
-        state.apply(event("phase_done", 2_007L).put("phase", "reading").put("status", "ok")
-            .put("metrics", new JSONObject().put("med", 410.0).put("min", 400.0).put("max", 420.0).put("runs", 3).put("promptTokens", 512)));
-        assertEquals(410.0, state.readingTps, 1e-9);
-        assertEquals(TaiBenchRunState.StepStatus.DONE, entry.steps.get("reading").status);
+        state.apply(event("phase_done", 2_004L).put("phase", "warmup").put("status", "ok"));
+        state.apply(event("phase_start", 2_005L).put("phase", "longInput").put("runs", 2).put("prompt", "What went wrong?"));
+        state.apply(event("run_start", 2_005L).put("phase", "longInput").put("run", 2).put("runs", 2));
+        assertEquals(2, entry.steps.get("longInput").run);
+        assertEquals(2, entry.steps.get("longInput").runs);
+        state.apply(event("phase_done", 2_007L).put("phase", "longInput").put("status", "ok")
+            .put("metrics", new JSONObject().put("readMs", series(4_000.0)).put("promptTokens", 2600)));
+        assertEquals(TaiBenchRunState.StepStatus.DONE, entry.steps.get("longInput").status);
     }
 
     @Test
     public void aTimedOutPhaseIsMarkedFailedButTheEntryGoesOn() throws JSONException {
         entryStart(0, 1, QWEN, "cpu", 2_000L);
-        state.apply(event("phase_start", 2_001L).put("phase", "writing").put("runs", 3).put("prompt", "p"));
-        state.apply(event("error", 2_002L).put("entry", plan(QWEN, "cpu")).put("phase", "writing").put("code", "timeout").put("message", "Stopped after 135 s."));
-        state.apply(event("phase_done", 2_003L).put("phase", "writing").put("status", "timeout").put("metrics", new JSONObject().put("runs", 0)));
+        state.apply(event("phase_start", 2_001L).put("phase", "chat").put("runs", 2).put("prompt", "p"));
+        state.apply(event("error", 2_002L).put("entry", plan(QWEN, "cpu")).put("phase", "chat").put("code", "timeout").put("message", "Stopped after 300 s."));
+        state.apply(event("phase_done", 2_003L).put("phase", "chat").put("status", "timeout").put("metrics", new JSONObject().put("runs", 0)));
         TaiBenchRunState.Entry entry = state.current();
         assertNotNull(entry);
         assertEquals(TaiBenchRunState.EntryStatus.RUNNING, entry.status);
-        assertEquals(TaiBenchRunState.StepStatus.FAILED, entry.steps.get("writing").status);
-        assertEquals("Stopped after 135 s.", entry.reason);
+        assertEquals(TaiBenchRunState.StepStatus.FAILED, entry.steps.get("chat").status);
+        assertEquals("Stopped after 300 s.", entry.reason);
         assertEquals(TaiBenchRunState.Phase.RUNNING, state.phase);
     }
 
-    // ---- live text and tiles ----
+    // ---- live text and the dial ----
 
     @Test
-    public void tokensStreamIntoTheLiveViewAndTheWritingSparkline() throws JSONException {
+    public void tokensStreamIntoTheLiveViewAndTheDial() throws JSONException {
         entryStart(0, 1, QWEN, "cpu", 2_000L);
-        state.apply(event("phase_start", 2_001L).put("phase", "writing").put("runs", 3).put("prompt", "Write about rain."));
+        state.apply(event("phase_start", 2_001L).put("phase", "chat").put("runs", 2).put("prompt", "Explain an alias."));
         assertTrue(state.live.active);
-        assertEquals("Write about rain.", state.live.prompt);
-        assertEquals("writing", state.live.phase);
-        state.apply(event("token", 2_002L).put("phase", "writing").put("run", 1).put("runs", 3).put("text", "Rain ").put("tokens", 2).put("tps", 20.0).put("ttftMs", 300L));
-        state.apply(event("token", 2_003L).put("phase", "writing").put("run", 1).put("runs", 3).put("text", "forms").put("tokens", 3).put("tps", 21.0).put("ttftMs", 300L));
-        assertEquals("Rain forms", state.live.reply.toString());
+        assertEquals("Explain an alias.", state.live.prompt);
+        assertEquals("chat", state.live.phase);
+        assertEquals(TaiBenchRunState.DialKind.NONE, state.dial(2_500L).kind);
+        state.apply(event("token", 2_002L).put("phase", "chat").put("run", 1).put("runs", 2).put("text", "An ").put("tokens", 2).put("tps", 20.0).put("ttftMs", 300L));
+        state.apply(event("token", 2_003L).put("phase", "chat").put("run", 1).put("runs", 2).put("text", "alias").put("tokens", 3).put("tps", 21.0).put("ttftMs", 300L));
+        assertEquals("An alias", state.live.reply.toString());
         assertEquals(3, state.live.tokens);
         assertEquals(21.0, state.live.tps, 1e-9);
-        assertEquals(Arrays.asList(20.0f, 21.0f), state.series);
-        // The tile follows the running figure until the phase's median lands.
-        assertEquals(21.0, state.writingTps, 1e-9);
+        // The dial follows the running figure until the phase's median lands.
+        assertEquals(TaiBenchRunState.DialKind.DECODE, state.dial(2_500L).kind);
+        assertEquals(21.0, state.dial(2_500L).value, 1e-9);
         // The second run starts the reply over but keeps the prompt.
-        state.apply(event("token", 2_004L).put("phase", "writing").put("run", 2).put("runs", 3).put("text", "Water").put("tokens", 1).put("tps", 0.0).put("ttftMs", 280L));
+        state.apply(event("token", 2_004L).put("phase", "chat").put("run", 2).put("runs", 2).put("text", "Water").put("tokens", 1).put("tps", 0.0).put("ttftMs", 280L));
         assertEquals("Water", state.live.reply.toString());
         assertEquals(2, state.live.run);
-        assertEquals("Write about rain.", state.live.prompt);
-        state.apply(event("phase_done", 2_005L).put("phase", "writing").put("status", "ok")
-            .put("metrics", new JSONObject().put("med", 20.5).put("min", 20.0).put("max", 21.0).put("runs", 3).put("tokens", 128)));
-        assertEquals(20.5, state.writingTps, 1e-9);
+        assertEquals("Explain an alias.", state.live.prompt);
+        state.apply(event("phase_done", 2_005L).put("phase", "chat").put("status", "ok")
+            .put("metrics", new JSONObject().put("decodeTps", series(20.5)).put("ttftMs", series(290.0)).put("tokens", 231)));
+        assertEquals(20.5, state.dial(2_600L).value, 1e-9);
         assertFalse(state.live.active);
     }
 
     @Test
-    public void theFirstWordTileFollowsEachRunThenTakesThePhaseMedian() throws JSONException {
+    public void aRunStartResetsTheReplyAndStartsTheReadingClock() throws JSONException {
         entryStart(0, 1, QWEN, "cpu", 2_000L);
-        state.apply(event("phase_start", 2_001L).put("phase", "firstWord").put("runs", 3).put("prompt", "morning?"));
-        state.apply(event("token", 2_002L).put("phase", "firstWord").put("run", 1).put("runs", 3).put("text", "A").put("tokens", 1).put("tps", 0.0).put("ttftMs", 350L));
-        assertEquals(350L, state.firstWordMs);
-        state.apply(event("token", 2_003L).put("phase", "firstWord").put("run", 2).put("runs", 3).put("text", "A").put("tokens", 1).put("tps", 0.0).put("ttftMs", 900L));
-        assertEquals(900L, state.firstWordMs);
-        state.apply(event("phase_done", 2_004L).put("phase", "firstWord").put("status", "ok")
-            .put("metrics", new JSONObject().put("med", 340.0).put("min", 300.0).put("max", 900.0).put("runs", 3)));
-        assertEquals(340L, state.firstWordMs);
-        // The tiles and the sparkline belong to one entry: the next one starts them over.
-        entryStart(1, 2, QWEN, "gpu", 3_000L);
-        assertEquals(-1L, state.firstWordMs);
-        assertTrue(state.series.isEmpty());
+        state.apply(event("phase_start", 2_001L).put("phase", "longInput").put("runs", 2).put("prompt", "What went wrong?"));
+        state.apply(event("run_start", 2_010L).put("phase", "longInput").put("run", 1).put("runs", 2));
+        assertTrue(state.live.active);
+        assertEquals(2_010L, state.live.startedAtMs);
+        assertEquals("What went wrong?", state.live.prompt);
+        token(2_050L, "longInput", 1, "It", 1, 0.0, 40L);
+        state.apply(event("run_start", 6_000L).put("phase", "longInput").put("run", 2).put("runs", 2));
+        assertEquals("", state.live.reply.toString());
+        assertEquals(2, state.live.run);
+        assertEquals(6_000L, state.live.startedAtMs);
+        assertEquals("What went wrong?", state.live.prompt);
+    }
+
+    @Test
+    public void theDialCountsSecondsWhileALongPageIsReadThenHoldsHowLongItTook() throws JSONException {
+        entryStart(0, 1, QWEN, "cpu", 2_000L);
+        state.apply(event("phase_start", 2_001L).put("phase", "longInput").put("runs", 2).put("prompt", "q"));
+        state.apply(event("run_start", 10_000L).put("phase", "longInput").put("run", 1).put("runs", 2));
+        TaiBenchRunState.Dial reading = state.dial(13_000L);
+        assertEquals(TaiBenchRunState.DialKind.READING, reading.kind);
+        assertEquals(3.0, reading.value, 1e-9);
+        // The clock is the caller's: later reads count on, and never below zero.
+        assertEquals(7.0, state.dial(17_000L).value, 1e-9);
+        assertEquals(0.0, state.dial(9_000L).value, 1e-9);
+        // The first token of the answer ends the wait: the dial holds the read time.
+        token(15_200L, "longInput", 1, "It", 1, 0.0, 5_200L);
+        TaiBenchRunState.Dial read = state.dial(20_000L);
+        assertEquals(TaiBenchRunState.DialKind.READ, read.kind);
+        assertEquals(5.2, read.value, 1e-9);
+        // The median of both runs lands with phase_done and is held from then on.
+        state.apply(event("phase_done", 30_000L).put("phase", "longInput").put("status", "ok")
+            .put("metrics", new JSONObject().put("readMs", series(4_800.0)).put("promptTokens", 2600)));
+        assertEquals(TaiBenchRunState.DialKind.READ, state.dial(31_000L).kind);
+        assertEquals(4.8, state.dial(31_000L).value, 1e-9);
+        // The short sanity replies after it never move it.
+        state.apply(event("phase_start", 31_000L).put("phase", "check").put("runs", 3).put("prompt", "p"));
+        token(31_100L, "check", 1, "42", 2, 40.0, 150L);
+        assertEquals(4.8, state.dial(31_200L).value, 1e-9);
+        // The next entry starts the dial over.
+        entryStart(1, 2, QWEN, "gpu", 32_000L);
+        assertEquals(TaiBenchRunState.DialKind.NONE, state.dial(32_100L).kind);
     }
 
     private void token(long at, String phase, int run, String text, int tokens, double tps, long ttftMs) throws JSONException {
@@ -200,84 +231,74 @@ public class TaiBenchRunStateTest {
     }
 
     @Test
-    public void everyPhaseMovesTheDecodeAndFirstWordDials() throws JSONException {
-        for (String phase : new String[]{"warmup", "reading", "firstWord", "writing", "sustained", "check"}) {
+    public void everyPhaseMovesTheDecodeDialUntilTheChatMedianLands() throws JSONException {
+        for (String phase : new String[]{"warmup", "chat", "check"}) {
             entryStart(0, 1, QWEN, "cpu", 2_000L);
             state.apply(event("phase_start", 2_001L).put("phase", phase).put("runs", 1).put("prompt", "p"));
             token(2_002L, phase, 1, "a", 5, 12.5, 420L);
-            assertEquals(phase, 12.5, state.writingTps, 1e-9);
-            assertEquals(phase, 420L, state.firstWordMs);
+            assertEquals(phase, TaiBenchRunState.DialKind.DECODE, state.dial(3_000L).kind);
+            assertEquals(phase, 12.5, state.dial(3_000L).value, 1e-9);
             token(2_003L, phase, 1, "b", 9, 14.0, 420L);
-            assertEquals(phase, 14.0, state.writingTps, 1e-9);
+            assertEquals(phase, 14.0, state.dial(3_000L).value, 1e-9);
         }
     }
 
     @Test
-    public void aPhaseKeepsItsFinalValueAfterPhaseDone() throws JSONException {
+    public void theChatMedianIsHeldAndTheSanityRepliesNeverOverwriteIt() throws JSONException {
+        entryStart(0, 1, QWEN, "cpu", 2_000L);
+        state.apply(event("phase_start", 2_004L).put("phase", "chat").put("runs", 2).put("prompt", "p"));
+        token(2_005L, "chat", 1, "a", 9, 18.0, 450L);
+        state.apply(event("phase_done", 2_006L).put("phase", "chat").put("status", "ok")
+            .put("metrics", new JSONObject().put("decodeTps", series(17.5)).put("ttftMs", series(450.0)).put("tokens", 200)));
+        state.apply(event("phase_start", 2_007L).put("phase", "check").put("runs", 1).put("prompt", "p"));
+        token(2_008L, "check", 1, "42", 2, 40.0, 150L);
+        assertEquals(TaiBenchRunState.DialKind.DECODE, state.dial(3_000L).kind);
+        assertEquals(17.5, state.dial(3_000L).value, 1e-9);
+    }
+
+    @Test
+    public void aWarmupWithoutAMedianLeavesTheLastLiveFigureOnTheDial() throws JSONException {
         entryStart(0, 1, QWEN, "cpu", 2_000L);
         state.apply(event("phase_start", 2_001L).put("phase", "warmup").put("runs", 1));
         token(2_002L, "warmup", 1, "a", 5, 9.0, 800L);
-        state.apply(event("phase_done", 2_003L).put("phase", "warmup").put("status", "ok").put("metrics", new JSONObject().put("pssBytes", 10L)));
-        // The warm-up has no median: the last live figures stay.
-        assertEquals(9.0, state.writingTps, 1e-9);
-        assertEquals(800L, state.firstWordMs);
+        state.apply(event("phase_done", 2_003L).put("phase", "warmup").put("status", "ok"));
+        assertEquals(9.0, state.dial(3_000L).value, 1e-9);
         assertFalse(state.live.active);
     }
 
     @Test
-    public void theCheckRepliesNeverOverwriteTheWritingAndFirstWordMedians() throws JSONException {
-        entryStart(0, 1, QWEN, "cpu", 2_000L);
-        state.apply(event("phase_start", 2_001L).put("phase", "firstWord").put("runs", 1).put("prompt", "p"));
-        token(2_002L, "firstWord", 1, "a", 1, 0.0, 500L);
-        state.apply(event("phase_done", 2_003L).put("phase", "firstWord").put("status", "ok")
-            .put("metrics", new JSONObject().put("med", 480.0).put("runs", 1)));
-        state.apply(event("phase_start", 2_004L).put("phase", "writing").put("runs", 1).put("prompt", "p"));
-        token(2_005L, "writing", 1, "a", 9, 18.0, 450L);
-        state.apply(event("phase_done", 2_006L).put("phase", "writing").put("status", "ok")
-            .put("metrics", new JSONObject().put("med", 17.5).put("runs", 1)));
-        state.apply(event("phase_start", 2_007L).put("phase", "check").put("runs", 1).put("prompt", "p"));
-        token(2_008L, "check", 1, "42", 2, 40.0, 150L);
-        assertEquals(17.5, state.writingTps, 1e-9);
-        assertEquals(480L, state.firstWordMs);
-    }
-
-    @Test
-    public void readingShowsAPlaceholderWhileItRunsAndItsMedianAfter() throws JSONException {
-        entryStart(0, 1, QWEN, "cpu", 2_000L);
-        assertFalse(state.readingRunning());
-        state.apply(event("phase_start", 2_001L).put("phase", "reading").put("runs", 3).put("prompt", "passage"));
-        assertTrue(state.readingRunning());
-        token(2_002L, "reading", 1, "x", 1, 0.0, 900L);
-        assertTrue(state.readingRunning());
-        assertTrue(state.readingTps < 0.0);
-        state.apply(event("phase_done", 2_003L).put("phase", "reading").put("status", "ok")
-            .put("metrics", new JSONObject().put("med", 410.0).put("runs", 3)));
-        assertFalse(state.readingRunning());
-        assertEquals(410.0, state.readingTps, 1e-9);
+    public void testNumbersNameTheThreeTests() {
+        assertEquals(1, TaiBenchRunState.testNumber("chat"));
+        assertEquals(2, TaiBenchRunState.testNumber("longInput"));
+        assertEquals(3, TaiBenchRunState.testNumber("check"));
+        assertEquals(0, TaiBenchRunState.testNumber("load"));
+        assertEquals(0, TaiBenchRunState.testNumber("warmup"));
+        assertEquals(0, TaiBenchRunState.testNumber(null));
+        assertEquals(3, TaiBenchRunState.TEST_COUNT);
     }
 
     @Test
     public void aThinkingOnlyTokenEventStillMovesTheDials() throws JSONException {
         // The harness emits these with empty text; the reducer must count them.
         entryStart(0, 1, QWEN, "cpu", 2_000L);
-        state.apply(event("phase_start", 2_001L).put("phase", "writing").put("runs", 3).put("prompt", "p"));
-        token(2_002L, "writing", 1, "", 40, 31.0, 250L);
+        state.apply(event("phase_start", 2_001L).put("phase", "chat").put("runs", 2).put("prompt", "p"));
+        token(2_002L, "chat", 1, "", 40, 31.0, 250L);
         assertEquals(40, state.live.tokens);
-        assertEquals(31.0, state.writingTps, 1e-9);
+        assertEquals(31.0, state.dial(3_000L).value, 1e-9);
         assertEquals("", state.live.reply.toString());
     }
 
     @Test
     public void phaseDoneKeepsFinishReasonReasoningTokensAndTheLimit() throws JSONException {
         entryStart(0, 1, QWEN, "cpu", 2_000L);
-        state.apply(event("phase_start", 2_001L).put("phase", "writing").put("runs", 3).put("prompt", "p"));
-        state.apply(event("phase_done", 2_002L).put("phase", "writing").put("status", "ok")
-            .put("finishReason", "length").put("reasoningTokens", 12).put("tokenLimit", 128)
-            .put("metrics", new JSONObject().put("med", 20.0).put("runs", 3)));
-        TaiBenchRunState.Step step = state.current().steps.get("writing");
+        state.apply(event("phase_start", 2_001L).put("phase", "chat").put("runs", 2).put("prompt", "p"));
+        state.apply(event("phase_done", 2_002L).put("phase", "chat").put("status", "ok")
+            .put("finishReason", "length").put("reasoningTokens", 12).put("tokenLimit", 320)
+            .put("metrics", new JSONObject().put("decodeTps", series(20.0)).put("tokens", 320)));
+        TaiBenchRunState.Step step = state.current().steps.get("chat");
         assertEquals("length", step.finishReason);
         assertEquals(12, step.reasoningTokens);
-        assertEquals(128, step.tokenLimit);
+        assertEquals(320, step.tokenLimit);
         assertTrue(step.hitTokenLimit());
         state.apply(event("phase_start", 2_003L).put("phase", "check").put("runs", 3));
         state.apply(event("phase_done", 2_004L).put("phase", "check").put("status", "ok")
@@ -287,7 +308,7 @@ public class TaiBenchRunStateTest {
 
     @Test
     public void tokenLimitHitReadsARecordsPhaseAndCheckDetails() throws JSONException {
-        assertEquals(128, TaiBenchRunState.tokenLimitHit(new JSONObject().put("finishReason", "length").put("tokenLimit", 128)));
+        assertEquals(320, TaiBenchRunState.tokenLimitHit(new JSONObject().put("finishReason", "length").put("tokenLimit", 320)));
         assertEquals(0, TaiBenchRunState.tokenLimitHit(new JSONObject().put("finishReason", "stop").put("tokenLimit", 128)));
         assertEquals(0, TaiBenchRunState.tokenLimitHit(new JSONObject().put("finishReason", "length")));
         assertEquals(0, TaiBenchRunState.tokenLimitHit((JSONObject) null));
@@ -349,7 +370,7 @@ public class TaiBenchRunStateTest {
         // The model that just finished is what the cool-down card shows.
         assertNotNull(state.lastFinished);
         assertEquals("cpu", state.lastFinished.accelerator);
-        assertEquals(21.0, state.lastFinished.writingTps, 1e-9);
+        assertEquals(21.0, state.lastFinished.decodeTps, 1e-9);
         // The guard let it through: the load starts and the wait is over.
         state.apply(event("phase_start", 14_000L).put("phase", "load").put("runs", 1));
         assertNull(state.wait);
@@ -359,26 +380,26 @@ public class TaiBenchRunStateTest {
     @Test
     public void aThermalPauseInsideAnEntryHasTheLongerCapAndNoSkip() throws JSONException {
         entryStart(0, 1, QWEN, "cpu", 2_000L);
-        state.apply(event("paused", 5_000L).put("phase", "writing").put("ms", 5_000L).put("reason", "thermal"));
+        state.apply(event("paused", 5_000L).put("phase", "chat").put("ms", 5_000L).put("reason", "thermal"));
         assertNotNull(state.wait);
         assertFalse(state.wait.cooldown());
         assertEquals(TaiBenchGuardRules.THERMAL_TIMEOUT_MS, state.wait.capMs());
-        assertEquals("writing", state.wait.phase);
+        assertEquals("chat", state.wait.phase);
     }
 
     @Test
     public void aHeldPauseIsVisibleAsLeftTheScreenAndTheNextPhaseClearsIt() throws JSONException {
         entryStart(0, 1, QWEN, "cpu", 2_000L);
-        state.apply(event("paused", 5_000L).put("phase", "writing").put("ms", 1_000L).put("reason", "left"));
+        state.apply(event("paused", 5_000L).put("phase", "chat").put("ms", 1_000L).put("reason", "left"));
         assertEquals(TaiBenchRunState.Phase.WAITING, state.phase);
         TaiBenchRunState.Wait wait = state.wait;
         assertNotNull(wait);
         assertTrue(wait.left());
         assertFalse(wait.cooldown());
         assertEquals(TaiBenchGuardRules.HELD_TIMEOUT_MS, wait.capMs());
-        assertEquals("writing", wait.phase);
+        assertEquals("chat", wait.phase);
         // Back on screen: the next phase_start clears the wait.
-        state.apply(event("phase_start", 6_000L).put("phase", "writing").put("runs", 1).put("prompt", "Write."));
+        state.apply(event("phase_start", 6_000L).put("phase", "chat").put("runs", 1).put("prompt", "Write."));
         assertNull(state.wait);
         assertEquals(TaiBenchRunState.Phase.RUNNING, state.phase);
     }
@@ -394,16 +415,16 @@ public class TaiBenchRunStateTest {
         assertNotNull(entry.record);
         assertEquals(0, entry.rank);
         state.apply(event("leaderboard", 2_010L).put("ranked", new JSONArray()
-            .put(new JSONObject().put("key", entry.key).put("rank", 1).put("writingTps", 21.0))
-            .put(new JSONObject().put("key", "other|mnn-llm|cpu|off").put("rank", 2).put("writingTps", 18.0))));
+            .put(new JSONObject().put("key", entry.key).put("rank", 1).put("decodeTps", 21.0))
+            .put(new JSONObject().put("key", "other|mnn-llm|cpu|off").put("rank", 2).put("decodeTps", 18.0))));
         assertEquals(1, entry.rank);
         // 21 beats the 18 the board had before the run.
         assertTrue(entry.newBest);
         runWholeEntry(1, QWEN, "gpu", 15.0, 3_000L);
         TaiBenchRunState.Entry gpu = state.entries.get(1);
         state.apply(event("leaderboard", 3_010L).put("ranked", new JSONArray()
-            .put(new JSONObject().put("key", entry.key).put("rank", 1).put("writingTps", 21.0))
-            .put(new JSONObject().put("key", gpu.key).put("rank", 2).put("writingTps", 15.0))));
+            .put(new JSONObject().put("key", entry.key).put("rank", 1).put("decodeTps", 21.0))
+            .put(new JSONObject().put("key", gpu.key).put("rank", 2).put("decodeTps", 15.0))));
         assertEquals(2, gpu.rank);
         assertFalse(gpu.newBest);
         assertTrue(entry.newBest);
@@ -414,7 +435,7 @@ public class TaiBenchRunStateTest {
         runWholeEntry(0, QWEN, "cpu", 18.0, 2_000L);
         TaiBenchRunState.Entry entry = state.entries.get(0);
         state.apply(event("leaderboard", 2_010L).put("ranked", new JSONArray()
-            .put(new JSONObject().put("key", entry.key).put("rank", 1).put("writingTps", 18.0))));
+            .put(new JSONObject().put("key", entry.key).put("rank", 1).put("decodeTps", 18.0))));
         assertEquals(1, entry.rank);
         assertFalse(entry.newBest);
     }
@@ -440,10 +461,10 @@ public class TaiBenchRunStateTest {
     public void aStopKeepsWhatFinishedAndEndsAsStopped() throws JSONException {
         runWholeEntry(0, QWEN, "cpu", 21.0, 2_000L);
         entryStart(1, 2, QWEN, "gpu", 3_000L);
-        state.apply(event("phase_start", 3_001L).put("phase", "writing").put("runs", 3).put("prompt", "p"));
+        state.apply(event("phase_start", 3_001L).put("phase", "chat").put("runs", 2).put("prompt", "p"));
         state.apply(event("stop_requested", 3_002L));
         assertEquals(TaiBenchRunState.Phase.STOPPING, state.phase);
-        state.apply(event("error", 3_003L).put("entry", plan(QWEN, "gpu")).put("phase", "writing").put("code", "generation_cancelled").put("message", "Cancelled."));
+        state.apply(event("error", 3_003L).put("entry", plan(QWEN, "gpu")).put("phase", "chat").put("code", "generation_cancelled").put("message", "Cancelled."));
         state.apply(event("entry_done", 3_004L).put("index", 1).put("total", 2).put("record", record(QWEN, "gpu", "stopped:cancelled", 0.0, false)));
         state.apply(event("done", 3_005L).put("ok", true).put("stopped", "cancelled").put("records", new JSONArray()).put("skipped", new JSONArray()));
         assertEquals(TaiBenchRunState.Phase.STOPPED, state.phase);
@@ -533,7 +554,7 @@ public class TaiBenchRunStateTest {
         assertNotNull(entry);
         assertTrue(entry.cacheRebuilt);
         assertTrue(entry.steps.isEmpty());
-        assertEquals(-1L, state.loadMs);
+        assertEquals(TaiBenchRunState.DialKind.NONE, state.dial(3_000L).kind);
     }
 
     @Test
@@ -548,10 +569,7 @@ public class TaiBenchRunStateTest {
     }
 
     @Test
-    public void phasesForAPresetIncludeSustainedOnlyForThorough() {
-        assertFalse(TaiBenchRunState.phasesFor(TaiBenchSuite.Preset.STANDARD).contains("sustained"));
-        assertTrue(TaiBenchRunState.phasesFor(TaiBenchSuite.Preset.THOROUGH).contains("sustained"));
-        assertEquals("load", TaiBenchRunState.phasesFor(TaiBenchSuite.Preset.QUICK).get(0));
-        assertEquals("check", TaiBenchRunState.phasesFor(null).get(TaiBenchRunState.phasesFor(null).size() - 1));
+    public void theStepperListsLoadWarmupChatAndLongInputButNotTheSilentSanityCheck() {
+        assertEquals(Arrays.asList("load", "warmup", "chat", "longInput"), TaiBenchRunState.phasesFor());
     }
 }
