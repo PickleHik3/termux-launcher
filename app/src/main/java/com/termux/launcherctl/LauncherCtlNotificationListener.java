@@ -15,10 +15,11 @@ import android.os.Handler;
 import android.os.Looper;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
-import android.util.Base64;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.Person;
 
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.statusbar.EssentialNotificationRule;
@@ -30,14 +31,8 @@ import com.termux.app.statusbar.TopPaneSlotMode;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
-import java.io.ByteArrayOutputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -46,9 +41,11 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Captures live notification and media-session state for LauncherCtl local API endpoints, and feeds
- * the top-pane widget slot through {@link TopPaneFeed}. Both the media widget and the pinned
- * notifications depend on listener access, so they surface only while this service is connected.
+ * Feeds the top-pane widget slot through {@link TopPaneFeed}, keeps the app-icon dots current, and
+ * hands the notifications of the apps the user enabled to {@link LauncherCtlNotificationStore}
+ * (and to the {@code /v1/notifications/active} route through {@link #captureActive}). The media
+ * widget and the pinned notifications depend on listener access, so they surface only while this
+ * service is connected.
  */
 public class LauncherCtlNotificationListener extends NotificationListenerService
         implements TopPaneFeed.Controls {
@@ -56,17 +53,14 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     private static final String NOTIFICATION_LISTENER_SETTINGS_ACTION =
         "android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS";
     private static final String NOTIFICATION_LISTENER_HINT =
-        "Enable notification access for Termux Launcher to populate notifications and media endpoints.";
-    private static final ConcurrentHashMap<String, JSONObject> NOTIFICATIONS = new ConcurrentHashMap<>();
-    private static final int MAX_ART_BYTES = 512 * 1024;
+        "Enable notification access for Termux Launcher so notification history can be recorded.";
 
     private static volatile boolean listenerConnected;
     private static volatile LauncherCtlNotificationListener activeInstance;
-    private static volatile JSONObject nowPlaying;
-    private static volatile JSONObject nowPlayingArt;
 
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
-    private final Map<String, String> mAppLabels = new HashMap<>();
+    /** Read from the listener, main and API threads, so concurrent. */
+    private final Map<String, String> mAppLabels = new ConcurrentHashMap<>();
     /** Insertion-ordered so a fourth match evicts the oldest pin. */
     private final LinkedHashMap<String, PinnedNotification> mPinned = new LinkedHashMap<>();
     /** Keys unpinned by hand, so an unpinned but still-posted notification does not come back. */
@@ -99,8 +93,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         Logger.logInfo(LOG_TAG, "Notification listener connected");
         TopPaneFeed.setControls(this);
         TopPaneFeed.setListenerConnected(true);
-        rebuildNotificationsSnapshot();
-        refreshNowPlaying();
+        rebuildBadges();
         registerSessionsListener();
         syncTopPaneMedia();
         rebuildPinnedNotifications();
@@ -123,9 +116,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         LauncherNotificationBadgeStore.onNotificationPosted(sbn, null);
-        updateNotification(sbn);
         persistPosted(sbn);
-        refreshNowPlaying();
         rebuildPinnedNotifications();
         publishTopPaneMedia();
     }
@@ -133,9 +124,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     @Override
     public void onNotificationPosted(StatusBarNotification sbn, NotificationListenerService.RankingMap rankingMap) {
         LauncherNotificationBadgeStore.onNotificationPosted(sbn, rankingMap);
-        updateNotification(sbn);
         persistPosted(sbn);
-        refreshNowPlaying();
         rebuildPinnedNotifications();
         publishTopPaneMedia();
     }
@@ -144,11 +133,9 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     public void onNotificationRemoved(StatusBarNotification sbn) {
         LauncherNotificationBadgeStore.onNotificationRemoved(sbn);
         if (sbn != null) {
-            NOTIFICATIONS.remove(sbn.getKey());
             mUnpinned.remove(sbn.getKey());
         }
         persistRemoved(sbn);
-        refreshNowPlaying();
         rebuildPinnedNotifications();
         publishTopPaneMedia();
     }
@@ -182,148 +169,190 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         return NOTIFICATION_LISTENER_HINT;
     }
 
-    public static JSONObject getNotificationsSnapshot() {
-        JSONObject data = new JSONObject();
-        try {
-            JSONArray notifications = new JSONArray();
-            List<JSONObject> entries = new ArrayList<>(NOTIFICATIONS.values());
-            entries.sort((a, b) -> Long.compare(b.optLong("postTime", 0), a.optLong("postTime", 0)));
-            for (JSONObject notification : entries) {
-                notifications.put(new JSONObject(notification.toString()));
-            }
-            data.put("listenerConnected", listenerConnected);
-            data.put("settingsAction", getListenerSettingsAction());
-            data.put("count", notifications.length());
-            data.put("notifications", notifications);
-            if (!listenerConnected) {
-                data.put("hint", getListenerHint());
-            }
-        } catch (JSONException ignored) {
-        }
-        return data;
-    }
-
-    public static JSONObject getNowPlayingSnapshot() {
-        JSONObject data = new JSONObject();
-        try {
-            data.put("listenerConnected", listenerConnected);
-            data.put("settingsAction", getListenerSettingsAction());
-            if (nowPlaying != null) {
-                data.put("nowPlaying", new JSONObject(nowPlaying.toString()));
-            } else {
-                data.put("nowPlaying", JSONObject.NULL);
-            }
-            if (!listenerConnected) {
-                data.put("hint", getListenerHint());
-            }
-        } catch (JSONException ignored) {
-        }
-        return data;
-    }
-
-    public static JSONObject getNowPlayingArtSnapshot() {
-        JSONObject data = new JSONObject();
-        try {
-            data.put("listenerConnected", listenerConnected);
-            data.put("settingsAction", getListenerSettingsAction());
-            if (nowPlayingArt != null) {
-                data.put("art", new JSONObject(nowPlayingArt.toString()));
-            } else {
-                data.put("art", JSONObject.NULL);
-            }
-            if (!listenerConnected) {
-                data.put("hint", getListenerHint());
-            }
-        } catch (JSONException ignored) {
-        }
-        return data;
-    }
-
-    private void rebuildNotificationsSnapshot() {
+    private void rebuildBadges() {
         try {
             StatusBarNotification[] active = getActiveNotifications();
-            NOTIFICATIONS.clear();
-            if (active == null) {
-                LauncherNotificationBadgeStore.syncFromActiveNotifications(null, null);
-                return;
-            }
-            for (StatusBarNotification sbn : active) {
-                updateNotification(sbn);
-            }
             LauncherNotificationBadgeStore.syncFromActiveNotifications(active, null);
         } catch (Exception e) {
-            Logger.logErrorExtended(LOG_TAG, "Failed to rebuild notification snapshot: " + e.getMessage());
-        }
-    }
-
-    private void updateNotification(StatusBarNotification sbn) {
-        if (sbn == null || sbn.getNotification() == null) {
-            return;
-        }
-        try {
-            NOTIFICATIONS.put(sbn.getKey(), toNotificationJson(sbn));
-        } catch (Exception e) {
-            Logger.logErrorExtended(LOG_TAG, "Failed to parse notification: " + e.getMessage());
+            Logger.logErrorExtended(LOG_TAG, "Failed to rebuild notification badges: " + e.getMessage());
         }
     }
 
     /**
-     * Whether the user asked for notification contents to be written to disk.
+     * What the history keeps, read from preferences on every call so a change in Settings takes
+     * effect on the next notification.
      *
-     * <p>Notification access alone does not authorise this: it is granted for dots, the status bar
-     * and the top pane, which read notifications in memory and forget them. History persists them
-     * under the Termux home, where anything running as the app UID -- any package installed in the
-     * shell, any script a user pastes -- can read message bodies and one-time codes long after the
-     * notification itself is gone.
+     * <p>Notification access alone does not authorise writing anything: it is granted for dots,
+     * the status bar and the top pane, which read notifications in memory and forget them. History
+     * persists them under the Termux home, where anything running as the app UID -- any package
+     * installed in the shell, any script a user pastes -- can read message bodies long after the
+     * notification itself is gone. So it records only the packages the user put in the set.
      */
-    private boolean isHistoryEnabled() {
+    private static final class HistoryConfig {
+        final Set<String> packages;
+        final boolean maskCodes;
+        final int retentionDays;
+
+        HistoryConfig(Set<String> packages, boolean maskCodes, int retentionDays) {
+            this.packages = packages;
+            this.maskCodes = maskCodes;
+            this.retentionDays = retentionDays;
+        }
+    }
+
+    @Nullable
+    private HistoryConfig historyConfig() {
         try {
             TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(this);
-            return preferences != null && preferences.isAppLauncherNotificationHistoryEnabled();
+            if (preferences == null) return null;
+            return new HistoryConfig(preferences.getNotificationHistoryPackages(),
+                preferences.isNotificationHistoryMaskCodesEnabled(),
+                preferences.getNotificationHistoryRetentionDays());
         } catch (Exception e) {
-            Logger.logErrorExtended(LOG_TAG, "Failed to read notification history preference: " + e.getMessage());
-            return false;
+            Logger.logErrorExtended(LOG_TAG, "Failed to read notification history preferences: " + e.getMessage());
+            return null;
         }
     }
 
     private void persistPosted(StatusBarNotification sbn) {
-        if (sbn == null || sbn.getNotification() == null || !isHistoryEnabled()) {
-            return;
-        }
+        if (sbn == null || sbn.getNotification() == null) return;
+        HistoryConfig config = historyConfig();
+        if (config == null || !config.packages.contains(sbn.getPackageName())) return;
         try {
-            LauncherCtlNotificationStore.getInstance().persistPosted(toNotificationJson(sbn));
+            List<LauncherCtlNotificationEvent> rows = capture(sbn);
+            LauncherCtlNotificationStore.getInstance()
+                .persistPosted(rows, config.maskCodes, config.retentionDays);
         } catch (Exception e) {
             Logger.logErrorExtended(LOG_TAG, "Failed to persist posted notification: " + e.getMessage());
         }
     }
 
     private void persistRemoved(StatusBarNotification sbn) {
-        if (sbn == null || sbn.getNotification() == null || !isHistoryEnabled()) {
-            return;
-        }
-        try {
-            LauncherCtlNotificationStore.getInstance().persistRemoved(toNotificationJson(sbn));
-        } catch (Exception e) {
-            Logger.logErrorExtended(LOG_TAG, "Failed to persist removed notification: " + e.getMessage());
-        }
+        if (sbn == null) return;
+        HistoryConfig config = historyConfig();
+        if (config == null || !config.packages.contains(sbn.getPackageName())) return;
+        LauncherCtlNotificationStore.getInstance().persistRemoved(sbn.getKey());
     }
 
-    private JSONObject toNotificationJson(StatusBarNotification sbn) throws JSONException {
-        JSONObject data = new JSONObject();
-        Bundle extras = sbn.getNotification().extras;
-        data.put("key", sbn.getKey());
-        data.put("packageName", sbn.getPackageName());
-        data.put("id", sbn.getId());
-        data.put("tag", sbn.getTag() == null ? JSONObject.NULL : sbn.getTag());
-        data.put("postTime", sbn.getPostTime());
-        data.put("isOngoing", sbn.isOngoing());
-        data.put("isClearable", sbn.isClearable());
-        data.put("category", sbn.getNotification().category == null ? JSONObject.NULL : sbn.getNotification().category);
-        data.put("title", toStringOrNull(extras, "android.title"));
-        data.put("text", toStringOrNull(extras, "android.text"));
-        data.put("subText", toStringOrNull(extras, "android.subText"));
-        data.put("bigText", toStringOrNull(extras, "android.bigText"));
-        return data;
+    /**
+     * What is in the shade now for the given apps, newest first, or null when the listener is not
+     * connected. Cut from the same capture the history uses, so noise (ongoing, progress, media,
+     * a group summary its children already cover) is left out here too.
+     */
+    @Nullable
+    public static List<LauncherCtlNotificationEvent> captureActive(@NonNull Set<String> packages,
+                                                                   boolean maskCodes) {
+        LauncherCtlNotificationListener listener = activeInstance;
+        if (listener == null) return null;
+        List<LauncherCtlNotificationEvent> rows = new ArrayList<>();
+        try {
+            StatusBarNotification[] active = listener.getActiveNotifications();
+            if (active == null) return rows;
+            for (StatusBarNotification sbn : active) {
+                if (sbn == null || sbn.getNotification() == null) continue;
+                if (!packages.contains(sbn.getPackageName())) continue;
+                for (LauncherCtlNotificationEvent row : listener.capture(sbn)) {
+                    rows.add(maskCodes ? row.mapText(LauncherCtlNotificationMasker::mask) : row);
+                }
+            }
+        } catch (Exception e) {
+            Logger.logErrorExtended(LOG_TAG, "Failed to read active notifications: " + e.getMessage());
+        }
+        rows.sort((a, b) -> Long.compare(b.messageTime, a.messageTime));
+        return rows;
+    }
+
+    /**
+     * One row per distinct message in a notification, or none when it is noise.
+     *
+     * <p>Noise is what says nothing a person would look up later: ongoing notifications (a running
+     * service, a call), progress bars, media controls, and a group summary. A summary is skipped
+     * when its children are in the shade, since they carry the individual messages, and when it has
+     * no lines of its own (it is only a counter, "3 new messages"). One that does carry InboxStyle
+     * lines or messages and has no children is the only place the content lives, so it is kept.
+     */
+    @NonNull
+    private List<LauncherCtlNotificationEvent> capture(@NonNull StatusBarNotification sbn) {
+        Notification notification = sbn.getNotification();
+        Bundle extras = notification.extras != null ? notification.extras : new Bundle();
+        if (isHistoryNoise(sbn, notification, extras)) return new ArrayList<>();
+
+        List<String> lines = null;
+        CharSequence[] rawLines = extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
+        if (rawLines != null && rawLines.length > 0) {
+            lines = new ArrayList<>();
+            for (CharSequence line : rawLines) if (line != null) lines.add(line.toString());
+        }
+
+        String conversation = toStringOrNull(extras, Notification.EXTRA_CONVERSATION_TITLE);
+        List<LauncherCtlNotificationEvent.Message> messages = null;
+        try {
+            NotificationCompat.MessagingStyle style =
+                NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(notification);
+            if (style != null) {
+                CharSequence styleTitle = style.getConversationTitle();
+                if (styleTitle != null && styleTitle.length() > 0) conversation = styleTitle.toString();
+                messages = new ArrayList<>();
+                for (NotificationCompat.MessagingStyle.Message message : style.getMessages()) {
+                    CharSequence text = message.getText();
+                    Person person = message.getPerson();
+                    CharSequence name = person == null ? null : person.getName();
+                    messages.add(new LauncherCtlNotificationEvent.Message(
+                        name == null ? null : name.toString(),
+                        text == null ? null : text.toString(), message.getTimestamp()));
+                }
+            }
+        } catch (Exception e) {
+            Logger.logWarn(LOG_TAG, "Could not read messaging style: " + e.getMessage());
+        }
+
+        boolean carriesLines = (lines != null && !lines.isEmpty())
+            || (messages != null && !messages.isEmpty());
+        if (isGroupSummary(sbn) && (!carriesLines || groupHasChildren(sbn))) {
+            return new ArrayList<>();
+        }
+
+        String packageName = sbn.getPackageName();
+        return LauncherCtlNotificationEvent.explode(sbn.getKey(), packageName, appLabel(packageName),
+            notification.category, notification.getChannelId(), conversation,
+            toStringOrNull(extras, Notification.EXTRA_TITLE),
+            toStringOrNull(extras, Notification.EXTRA_TEXT),
+            toStringOrNull(extras, Notification.EXTRA_BIG_TEXT),
+            toStringOrNull(extras, Notification.EXTRA_SUB_TEXT), sbn.getPostTime(), lines, messages);
+    }
+
+    private static boolean isHistoryNoise(@NonNull StatusBarNotification sbn,
+                                          @NonNull Notification notification, @NonNull Bundle extras) {
+        if (sbn.isOngoing() || (notification.flags
+            & (Notification.FLAG_ONGOING_EVENT | Notification.FLAG_FOREGROUND_SERVICE)) != 0) {
+            return true;
+        }
+        if (extras.getInt(Notification.EXTRA_PROGRESS_MAX, 0) > 0
+            || extras.getBoolean(Notification.EXTRA_PROGRESS_INDETERMINATE, false)
+            || Notification.CATEGORY_PROGRESS.equals(notification.category)) {
+            return true;
+        }
+        String template = extras.getString(Notification.EXTRA_TEMPLATE);
+        return Notification.CATEGORY_TRANSPORT.equals(notification.category)
+            || extras.containsKey(Notification.EXTRA_MEDIA_SESSION)
+            || (template != null && template.endsWith("MediaStyle"));
+    }
+
+    private boolean groupHasChildren(@NonNull StatusBarNotification summary) {
+        String groupKey = summary.getGroupKey();
+        if (groupKey == null) return false;
+        try {
+            StatusBarNotification[] active = getActiveNotifications();
+            if (active == null) return false;
+            for (StatusBarNotification other : active) {
+                if (other == null || other.getNotification() == null) continue;
+                if (other.getKey().equals(summary.getKey()) || isGroupSummary(other)) continue;
+                if (groupKey.equals(other.getGroupKey())) return true;
+            }
+        } catch (Exception e) {
+            Logger.logWarn(LOG_TAG, "Failed to look for group children: " + e.getMessage());
+        }
+        return false;
     }
 
     private String toStringOrNull(Bundle extras, String key) {
@@ -332,127 +361,12 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         return value == null ? null : value.toString();
     }
 
-    /**
-     * Reads the session this listener already holds rather than enumerating sessions again.
-     *
-     * <p>Every {@link MediaSessionManager#getActiveSessions} call mints a fresh
-     * {@link MediaController} per active session, and each one registers a binder death recipient
-     * that only unwinds when the object is finalized. This ran on every notification posted and
-     * removed — twice, with {@link #syncTopPaneMedia()} — so a chatty notification (a download, a
-     * player's progress) walked the process's death-recipient count up by dozens a minute forever.
-     * The active-sessions listener and {@link #mMediaCallback} already tell us when the session or
-     * its metadata changes, so nothing here has to ask the system again.
-     */
-    private void refreshNowPlaying() {
-        JSONObject current = null;
-        JSONObject currentArt = null;
-        MediaController controller = mTopPaneController;
-        if (controller != null) {
-            try {
-                current = toNowPlayingJson(controller);
-                currentArt = toNowPlayingArtJson(controller);
-            } catch (Exception e) {
-                Logger.logErrorExtended(LOG_TAG, "Failed to read media session: " + e.getMessage());
-            }
-        }
-        nowPlaying = current;
-        nowPlayingArt = currentArt;
-    }
-
-    private MediaController selectController(List<MediaController> sessions) {
-        if (sessions == null || sessions.isEmpty()) {
-            return null;
-        }
-        for (MediaController controller : sessions) {
-            PlaybackState state = controller.getPlaybackState();
-            if (state != null && state.getState() == PlaybackState.STATE_PLAYING) {
-                return controller;
-            }
-        }
-        return sessions.get(0);
-    }
-
-    private JSONObject toNowPlayingJson(MediaController controller) throws JSONException {
-        JSONObject data = new JSONObject();
-        PlaybackState state = controller.getPlaybackState();
-        MediaMetadata metadata = controller.getMetadata();
-
-        data.put("packageName", controller.getPackageName());
-        data.put("sessionTag", controller.getSessionToken() != null ? controller.getSessionToken().toString() : JSONObject.NULL);
-        data.put("playbackState", state != null ? state.getState() : PlaybackState.STATE_NONE);
-        data.put("playbackStateName", playbackStateName(state != null ? state.getState() : PlaybackState.STATE_NONE));
-        data.put("position", state != null ? state.getPosition() : -1);
-        data.put("actions", state != null ? state.getActions() : 0);
-
-        if (metadata != null) {
-            data.put("title", safeMeta(metadata, MediaMetadata.METADATA_KEY_TITLE));
-            data.put("artist", safeMeta(metadata, MediaMetadata.METADATA_KEY_ARTIST));
-            data.put("album", safeMeta(metadata, MediaMetadata.METADATA_KEY_ALBUM));
-            data.put("duration", metadata.getLong(MediaMetadata.METADATA_KEY_DURATION));
-        } else {
-            data.put("title", JSONObject.NULL);
-            data.put("artist", JSONObject.NULL);
-            data.put("album", JSONObject.NULL);
-            data.put("duration", -1);
-        }
-        return data;
-    }
-
-    private Object safeMeta(MediaMetadata metadata, String key) {
-        CharSequence value = metadata.getText(key);
-        return value == null ? JSONObject.NULL : value.toString();
-    }
-
-    private JSONObject toNowPlayingArtJson(MediaController controller) throws JSONException {
-        MediaMetadata metadata = controller.getMetadata();
-        if (metadata == null) {
-            return null;
-        }
-        Bitmap bitmap = extractAlbumArt(metadata);
-        if (bitmap == null) {
-            return null;
-        }
-
-        byte[] jpeg = compressArt(bitmap);
-        if (jpeg == null || jpeg.length == 0) {
-            return null;
-        }
-
-        JSONObject data = new JSONObject();
-        data.put("packageName", controller.getPackageName());
-        data.put("mimeType", "image/jpeg");
-        data.put("width", bitmap.getWidth());
-        data.put("height", bitmap.getHeight());
-        data.put("sizeBytes", jpeg.length);
-        data.put("base64", Base64.encodeToString(jpeg, Base64.NO_WRAP));
-        data.put("title", safeMeta(metadata, MediaMetadata.METADATA_KEY_TITLE));
-        data.put("artist", safeMeta(metadata, MediaMetadata.METADATA_KEY_ARTIST));
-        data.put("album", safeMeta(metadata, MediaMetadata.METADATA_KEY_ALBUM));
-        return data;
-    }
-
     private Bitmap extractAlbumArt(MediaMetadata metadata) {
         Bitmap art = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART);
         if (art != null) return art;
         art = metadata.getBitmap(MediaMetadata.METADATA_KEY_ART);
         if (art != null) return art;
         return metadata.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON);
-    }
-
-    private byte[] compressArt(Bitmap bitmap) {
-        int quality = 90;
-        while (quality >= 50) {
-            ByteArrayOutputStream output = new ByteArrayOutputStream();
-            if (!bitmap.compress(Bitmap.CompressFormat.JPEG, quality, output)) {
-                return null;
-            }
-            byte[] bytes = output.toByteArray();
-            if (bytes.length <= MAX_ART_BYTES || quality == 50) {
-                return bytes;
-            }
-            quality -= 10;
-        }
-        return null;
     }
 
     // ---- Top pane widget slot --------------------------------------------
@@ -628,9 +542,6 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     }
 
     private void publishTopPaneMedia() {
-        // Single funnel: the API's now-playing JSON is cut from the same controller this publishes,
-        // so a metadata change with no notification behind it cannot leave the JSON stale.
-        refreshNowPlaying();
         MediaController controller = mTopPaneController;
         if (controller == null) {
             TopPaneFeed.setMedia(null);
@@ -754,23 +665,5 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
                 + throwable.getMessage());
         }
         return null;
-    }
-
-    private String playbackStateName(int state) {
-        switch (state) {
-            case PlaybackState.STATE_NONE: return "NONE";
-            case PlaybackState.STATE_STOPPED: return "STOPPED";
-            case PlaybackState.STATE_PAUSED: return "PAUSED";
-            case PlaybackState.STATE_PLAYING: return "PLAYING";
-            case PlaybackState.STATE_FAST_FORWARDING: return "FAST_FORWARDING";
-            case PlaybackState.STATE_REWINDING: return "REWINDING";
-            case PlaybackState.STATE_BUFFERING: return "BUFFERING";
-            case PlaybackState.STATE_ERROR: return "ERROR";
-            case PlaybackState.STATE_CONNECTING: return "CONNECTING";
-            case PlaybackState.STATE_SKIPPING_TO_PREVIOUS: return "SKIPPING_TO_PREVIOUS";
-            case PlaybackState.STATE_SKIPPING_TO_NEXT: return "SKIPPING_TO_NEXT";
-            case PlaybackState.STATE_SKIPPING_TO_QUEUE_ITEM: return "SKIPPING_TO_QUEUE_ITEM";
-            default: return "UNKNOWN(" + state + ")";
-        }
     }
 }

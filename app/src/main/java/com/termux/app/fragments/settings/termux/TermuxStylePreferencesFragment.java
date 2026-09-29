@@ -591,9 +591,12 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 scheduleTermuxActivityStylingSync(false);
                 break;
             case "app_launcher_notification_history":
-                mPreferences.setAppLauncherNotificationHistoryEnabled(value);
-                // Turning it off means the captured message bodies go too, not just future ones.
-                if (!value) LauncherCtlNotificationStore.getInstance().clearAll();
+                // History is per app now; this old switch can only turn it off. Turning it off
+                // means the captured message bodies go too, not just future ones.
+                if (!value) {
+                    mPreferences.setNotificationHistoryPackages(null);
+                    LauncherCtlNotificationStore.getInstance().clearAll();
+                }
                 break;
             case "app_launcher_most_used_page":
                 mPreferences.setAppLauncherMostUsedPageEnabled(value);
@@ -658,7 +661,7 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
             case "app_launcher_notification_dots":
                 return mPreferences.isAppLauncherNotificationDotsEnabled();
             case "app_launcher_notification_history":
-                return mPreferences.isAppLauncherNotificationHistoryEnabled();
+                return !mPreferences.getNotificationHistoryPackages().isEmpty();
             case "app_launcher_most_used_page":
                 return mPreferences.isAppLauncherMostUsedPageEnabled();
             case "app_launcher_drawer_enabled":

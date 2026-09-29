@@ -4,33 +4,46 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.util.Log;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import org.json.JSONArray;
-import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Persists notification posted/removed events to SQLite and to a JSONL stream.
+ * The per-app notification history that agents in the shell query through {@code launcherctl
+ * notifications}.
  *
- * <p>SQLite is authoritative; {@code notifications.jsonl} is a compatibility and
- * debug append-only stream as described in the launcherctl agent platform plan.
+ * <p>One row per distinct message (see {@link LauncherCtlNotificationEvent#explode}), kept in
+ * SQLite under {@code ~/.launcherctl}. Removal is a timestamp on the existing row. Rows age out
+ * by the retention setting rather than by count; the prune runs on the write path but at most
+ * once an hour, so a chatty app does not pay for it on every post.
+ *
+ * <p>The store does not decide what is recorded: the listener only hands over notifications from
+ * apps the user enabled. Masking of one-time codes happens here, at write time, so an unmasked
+ * code never reaches the disk.
  */
 public final class LauncherCtlNotificationStore {
     private static final String LOG_TAG = "LauncherCtlNotifStore";
-    private static final String TABLE_NAME = "notification_events";
-    private static final int MAX_ROWS = 10_000;
-    static final long MAX_JSONL_BYTES = 4L * 1024 * 1024;
+    private static final String TABLE_NAME = "notification_history";
+    /** The table this store replaced; dropped by the migration. */
+    private static final String LEGACY_TABLE_NAME = "notification_events";
+    private static final int DB_VERSION = 2;
+    /** Safety ceiling behind the age limit, so one app posting in a loop cannot fill the disk. */
+    static final int MAX_ROWS = 50_000;
+    static final long PRUNE_INTERVAL_MS = TimeUnit.HOURS.toMillis(1);
+    /** The same content from another notification key inside this window is one message seen twice. */
+    static final long CROSS_KEY_DEDUPE_MS = TimeUnit.MINUTES.toMillis(2);
+    public static final int DEFAULT_LIMIT = 100;
+    public static final int MAX_LIMIT = 1000;
     private static final int DEFAULT_WRITE_TIMEOUT_MS = 5_000;
 
     private static LauncherCtlNotificationStore sInstance;
@@ -42,6 +55,17 @@ public final class LauncherCtlNotificationStore {
     });
 
     private SQLiteDatabase db;
+    private long lastPruneMs;
+
+    /** What a read asks for. Null or zero fields are not filtered on. */
+    public static final class Filter {
+        /** A package name, or a label matched case-insensitively as a substring. */
+        @Nullable public String app;
+        public long sinceMs;
+        public long untilMs;
+        @Nullable public String query;
+        public int limit = DEFAULT_LIMIT;
+    }
 
     private LauncherCtlNotificationStore() {
     }
@@ -64,219 +88,268 @@ public final class LauncherCtlNotificationStore {
     }
 
     /**
-     * Persists a notification-posted event asynchronously. Safe to call from the
+     * Records the rows of a posted notification asynchronously. Safe to call from the
      * notification listener callback thread.
      */
-    public void persistPosted(JSONObject notificationJson) {
-        persistEventAsync("posted", notificationJson);
-    }
-
-    /**
-     * Persists a notification-removed event asynchronously. Safe to call from the
-     * notification listener callback thread.
-     */
-    public void persistRemoved(JSONObject notificationJson) {
-        persistEventAsync("removed", notificationJson);
-    }
-
-    private void persistEventAsync(String eventType, JSONObject notificationJson) {
-        if (notificationJson == null) {
-            return;
-        }
+    public void persistPosted(@NonNull List<LauncherCtlNotificationEvent> events,
+                              boolean maskCodes, int retentionDays) {
+        if (events.isEmpty()) return;
         executor.submit(() -> {
             try {
-                insertEvent(new LauncherCtlNotificationEvent(eventType, System.currentTimeMillis(), notificationJson));
+                insertPosted(events, maskCodes, retentionDays, System.currentTimeMillis());
             } catch (Exception e) {
-                Log.w(LOG_TAG, "Failed to persist " + eventType + " event: " + e.getMessage());
+                Log.w(LOG_TAG, "Failed to persist notification: " + e.getMessage());
             }
         });
     }
 
     /**
-     * Synchronously inserts an event. Exposed for unit tests and for callers that
-     * need to wait for persistence before querying.
+     * Stamps a notification's rows as gone from the shade, asynchronously. Safe to call from the
+     * notification listener callback thread.
      */
-    public synchronized void insertEvent(LauncherCtlNotificationEvent event) {
-        if (event == null) {
-            return;
-        }
-        SQLiteDatabase database = getDb();
-        if (database == null) {
-            return;
-        }
+    public void persistRemoved(@Nullable String key) {
+        if (key == null) return;
+        executor.submit(() -> {
+            try {
+                markRemoved(key, System.currentTimeMillis());
+            } catch (Exception e) {
+                Log.w(LOG_TAG, "Failed to record notification removal: " + e.getMessage());
+            }
+        });
+    }
 
+    /**
+     * Synchronously records rows, skipping any already there, and returns how many were new.
+     * Exposed for unit tests and for callers that need the write done before they query.
+     *
+     * <p>A row is a repeat when the same notification key already holds the same content and that
+     * copy is still in the shade, or its time is the app's own (a chat line re-posted after the
+     * user swiped the notification away is still the same chat line). The same content from another
+     * key within {@link #CROSS_KEY_DEDUPE_MS} is a repeat too: a group summary and its child, or
+     * one message pushed through two channels.
+     */
+    public synchronized int insertPosted(@NonNull List<LauncherCtlNotificationEvent> events,
+                                         boolean maskCodes, int retentionDays, long nowMs) {
+        SQLiteDatabase database = getDb();
+        if (database == null) return 0;
+        int inserted = 0;
         try {
-            database.execSQL(
-                "INSERT INTO " + TABLE_NAME + " (" +
-                    "event_type, notification_key, package_name, title, text, sub_text, big_text, " +
-                    "category, post_time, is_ongoing, is_clearable, event_time, payload) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                new Object[]{
-                    event.eventType,
-                    event.key,
-                    event.packageName,
-                    event.title,
-                    event.text,
-                    event.subText,
-                    event.bigText,
-                    event.category,
-                    event.postTime,
-                    event.isOngoing ? 1 : 0,
-                    event.isClearable ? 1 : 0,
-                    event.eventTime,
-                    event.notification.toString()
-                }
-            );
-            appendJsonlEvent(event);
-            pruneOldRows();
+            for (LauncherCtlNotificationEvent raw : events) {
+                LauncherCtlNotificationEvent event = maskCodes
+                    ? raw.mapText(LauncherCtlNotificationMasker::mask) : raw;
+                String hash = event.contentHash();
+                if (isRepeat(database, event, hash, nowMs)) continue;
+                database.execSQL(
+                    "INSERT INTO " + TABLE_NAME + " (" +
+                        "notif_key, package_name, app_label, conversation, title, sender, text, " +
+                        "sub_text, category, channel_id, message_time, post_time, recorded_time, " +
+                        "removed_time, content_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)",
+                    new Object[]{event.key, event.packageName, event.appLabel, event.conversation,
+                        event.title, event.sender, event.text, event.subText, event.category,
+                        event.channelId, event.messageTime, event.postTime, nowMs, hash});
+                inserted++;
+            }
+            maybePrune(database, retentionDays, nowMs);
         } catch (Exception e) {
-            Log.w(LOG_TAG, "Failed to insert notification event: " + e.getMessage());
+            Log.w(LOG_TAG, "Failed to insert notification rows: " + e.getMessage());
+        }
+        return inserted;
+    }
+
+    private boolean isRepeat(SQLiteDatabase database, LauncherCtlNotificationEvent event,
+                             String hash, long nowMs) {
+        String sameKey = "notif_key = ? AND content_hash = ?"
+            + (event.explicitTime ? "" : " AND removed_time IS NULL");
+        if (exists(database, sameKey, new String[]{event.key, hash})) return true;
+        return exists(database,
+            "package_name = ? AND content_hash = ? AND recorded_time >= ?",
+            new String[]{event.packageName, hash, String.valueOf(nowMs - CROSS_KEY_DEDUPE_MS)});
+    }
+
+    private static boolean exists(SQLiteDatabase database, String where, String[] args) {
+        try (Cursor cursor = database.rawQuery(
+                "SELECT 1 FROM " + TABLE_NAME + " WHERE " + where + " LIMIT 1", args)) {
+            return cursor.moveToFirst();
+        }
+    }
+
+    /** Sets the removal time on the rows of a notification still in the shade. */
+    public synchronized void markRemoved(@NonNull String key, long nowMs) {
+        SQLiteDatabase database = getDb();
+        if (database == null) return;
+        try {
+            database.execSQL("UPDATE " + TABLE_NAME + " SET removed_time = ? " +
+                "WHERE notif_key = ? AND removed_time IS NULL", new Object[]{nowMs, key});
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "Failed to stamp notification removal: " + e.getMessage());
+        }
+    }
+
+    private void maybePrune(SQLiteDatabase database, int retentionDays, long nowMs) {
+        if (lastPruneMs != 0 && nowMs - lastPruneMs < PRUNE_INTERVAL_MS) return;
+        lastPruneMs = nowMs;
+        pruneNow(database, retentionDays, nowMs);
+    }
+
+    /** Deletes rows recorded before the retention window, then anything past the row ceiling. */
+    synchronized void pruneNow(int retentionDays, long nowMs) {
+        SQLiteDatabase database = getDb();
+        if (database != null) pruneNow(database, retentionDays, nowMs);
+    }
+
+    private void pruneNow(SQLiteDatabase database, int retentionDays, long nowMs) {
+        try {
+            long cutoff = nowMs - TimeUnit.DAYS.toMillis(Math.max(1, retentionDays));
+            database.execSQL("DELETE FROM " + TABLE_NAME + " WHERE recorded_time < ?", new Object[]{cutoff});
+            database.execSQL("DELETE FROM " + TABLE_NAME + " WHERE id <= (SELECT id FROM " + TABLE_NAME +
+                " ORDER BY id DESC LIMIT 1 OFFSET ?)", new Object[]{MAX_ROWS});
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "Failed to prune notification history: " + e.getMessage());
         }
     }
 
     /**
-     * Deletes everything this store has written: rows, the live JSONL stream and its rotation.
+     * Deletes every recorded row.
      *
      * <p>Called when the user turns notification history off. Leaving the previously captured
      * message bodies on disk would make the switch a promise about future notifications only,
      * which is not what turning it off means.
      */
     public synchronized void clearAll() {
-        try {
-            SQLiteDatabase database = getDb();
-            if (database != null) database.execSQL("DELETE FROM " + TABLE_NAME);
-        } catch (Exception e) {
-            Log.w(LOG_TAG, "Failed to clear notification history rows: " + e.getMessage());
-        }
-        File jsonlFile = LauncherCtlStorage.getNotificationsJsonlFile();
-        deleteQuietly(jsonlFile);
-        deleteQuietly(new File(jsonlFile.getParentFile(), jsonlFile.getName() + ".1"));
+        clear(null);
     }
 
-    private static void deleteQuietly(File file) {
+    /**
+     * Deletes the rows of one app (a package name, or a label as in {@link Filter#app}), or of all
+     * apps when {@code app} is null or empty. Returns how many rows went.
+     */
+    public synchronized int clear(@Nullable String app) {
+        SQLiteDatabase database = getDb();
+        if (database == null) return 0;
         try {
-            if (file.exists() && !file.delete()) {
-                Log.w(LOG_TAG, "Failed to delete " + file.getName());
+            if (app == null || app.trim().isEmpty()) {
+                int before = (int) count(database, "");
+                database.execSQL("DELETE FROM " + TABLE_NAME);
+                return before;
             }
+            List<String> args = new ArrayList<>();
+            String where = appClause(app, args);
+            int before = (int) count(database, " WHERE " + where, args.toArray(new String[0]));
+            database.execSQL("DELETE FROM " + TABLE_NAME + " WHERE " + where, args.toArray());
+            return before;
         } catch (Exception e) {
-            Log.w(LOG_TAG, "Failed to delete " + file.getName() + ": " + e.getMessage());
+            Log.w(LOG_TAG, "Failed to clear notification history: " + e.getMessage());
+            return 0;
         }
     }
 
-    public List<LauncherCtlNotificationEvent> queryRecent(int limit) {
-        return query("SELECT * FROM " + TABLE_NAME + " ORDER BY event_time DESC LIMIT ?",
-            new String[]{String.valueOf(limit)});
-    }
-
-    public List<LauncherCtlNotificationEvent> querySince(long sinceMs, int limit) {
-        return query("SELECT * FROM " + TABLE_NAME + " WHERE event_time >= ? ORDER BY event_time DESC LIMIT ?",
-            new String[]{String.valueOf(sinceMs), String.valueOf(limit)});
-    }
-
-    public List<LauncherCtlNotificationEvent> querySearch(String query, int limit) {
-        if (query == null || query.isEmpty()) {
-            return new ArrayList<>();
+    /** Rows newest first. The limit is clamped to {@code 1..MAX_LIMIT}. */
+    @NonNull
+    public synchronized List<LauncherCtlNotificationEvent> query(@NonNull Filter filter) {
+        List<LauncherCtlNotificationEvent> rows = new ArrayList<>();
+        SQLiteDatabase database = getDb();
+        if (database == null) return rows;
+        List<String> args = new ArrayList<>();
+        StringBuilder where = new StringBuilder("1=1");
+        if (filter.app != null && !filter.app.trim().isEmpty()) {
+            where.append(" AND ").append(appClause(filter.app, args));
         }
-        String pattern = "%" + query + "%";
-        return query("SELECT * FROM " + TABLE_NAME + " WHERE " +
-                "title LIKE ? OR text LIKE ? OR sub_text LIKE ? OR big_text LIKE ? OR " +
-                "package_name LIKE ? OR notification_key LIKE ? " +
-                "ORDER BY event_time DESC LIMIT ?",
-            new String[]{pattern, pattern, pattern, pattern, pattern, pattern, String.valueOf(limit)});
+        if (filter.sinceMs > 0) {
+            where.append(" AND message_time >= ?");
+            args.add(String.valueOf(filter.sinceMs));
+        }
+        if (filter.untilMs > 0) {
+            where.append(" AND message_time <= ?");
+            args.add(String.valueOf(filter.untilMs));
+        }
+        if (filter.query != null && !filter.query.trim().isEmpty()) {
+            String pattern = likePattern(filter.query.trim());
+            where.append(" AND (title LIKE ? ESCAPE '\\' OR text LIKE ? ESCAPE '\\' OR sub_text LIKE ? ESCAPE '\\'" +
+                " OR conversation LIKE ? ESCAPE '\\' OR sender LIKE ? ESCAPE '\\' OR app_label LIKE ? ESCAPE '\\')");
+            for (int i = 0; i < 6; i++) args.add(pattern);
+        }
+        int limit = Math.max(1, Math.min(MAX_LIMIT, filter.limit));
+        args.add(String.valueOf(limit));
+        try (Cursor cursor = database.rawQuery("SELECT * FROM " + TABLE_NAME + " WHERE " + where +
+                " ORDER BY message_time DESC, id DESC LIMIT ?", args.toArray(new String[0]))) {
+            while (cursor.moveToNext()) rows.add(fromCursor(cursor));
+        } catch (Exception e) {
+            Log.w(LOG_TAG, "Failed to query notification history: " + e.getMessage());
+        }
+        return rows;
     }
 
-    public JSONObject queryStats(Long sinceMs) throws JSONException {
-        String where = sinceMs != null ? " WHERE event_time >= ?" : "";
-        String[] args = sinceMs != null ? new String[]{String.valueOf(sinceMs)} : new String[]{};
-
-        JSONObject stats = new JSONObject();
-        stats.put("total", count(where, args));
-        stats.put("posted", count(where.isEmpty() ? " WHERE event_type = ?" : where + " AND event_type = ?",
-            appendArg(args, "posted")));
-        stats.put("removed", count(where.isEmpty() ? " WHERE event_type = ?" : where + " AND event_type = ?",
-            appendArg(args, "removed")));
-
-        JSONArray packages = new JSONArray();
-        Cursor cursor = null;
-        try {
-            cursor = getDb().rawQuery(
-                "SELECT package_name, COUNT(*) AS cnt FROM " + TABLE_NAME + where +
-                    " GROUP BY package_name ORDER BY cnt DESC LIMIT 20", args);
-            while (cursor != null && cursor.moveToNext()) {
+    /** Recorded apps as {@code [{package, app, count, lastSeen}]}, most recently seen first. */
+    @NonNull
+    public synchronized JSONArray queryApps() {
+        JSONArray apps = new JSONArray();
+        SQLiteDatabase database = getDb();
+        if (database == null) return apps;
+        try (Cursor cursor = database.rawQuery(
+                "SELECT package_name, MAX(app_label), COUNT(*), MAX(message_time) FROM " + TABLE_NAME +
+                    " GROUP BY package_name ORDER BY MAX(message_time) DESC", null)) {
+            while (cursor.moveToNext()) {
                 JSONObject item = new JSONObject();
-                String pkg = cursor.getString(cursor.getColumnIndexOrThrow("package_name"));
-                item.put("packageName", pkg == null ? JSONObject.NULL : pkg);
-                item.put("count", cursor.getLong(cursor.getColumnIndexOrThrow("cnt")));
-                packages.put(item);
+                String pkg = cursor.getString(0);
+                String label = cursor.getString(1);
+                item.put("package", pkg);
+                item.put("app", label == null ? pkg : label);
+                item.put("count", cursor.getLong(2));
+                item.put("lastSeen", cursor.getLong(3));
+                item.put("lastSeenIso", java.time.Instant.ofEpochMilli(cursor.getLong(3)).toString());
+                apps.put(item);
             }
         } catch (Exception e) {
-            Log.w(LOG_TAG, "Failed to query package stats: " + e.getMessage());
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
+            Log.w(LOG_TAG, "Failed to list recorded apps: " + e.getMessage());
         }
-        stats.put("packages", packages);
-        if (sinceMs != null) {
-            stats.put("since", sinceMs.longValue());
-        }
-        return stats;
+        return apps;
     }
 
-    private long count(String where, String[] args) {
-        Cursor cursor = null;
-        try {
-            cursor = getDb().rawQuery("SELECT COUNT(*) FROM " + TABLE_NAME + where, args);
-            if (cursor != null && cursor.moveToFirst()) {
-                return cursor.getLong(0);
-            }
+    public synchronized long countAll() {
+        SQLiteDatabase database = getDb();
+        return database == null ? 0 : count(database, "");
+    }
+
+    private static long count(SQLiteDatabase database, String whereClause, String... args) {
+        try (Cursor cursor = database.rawQuery("SELECT COUNT(*) FROM " + TABLE_NAME + whereClause, args)) {
+            return cursor.moveToFirst() ? cursor.getLong(0) : 0;
         } catch (Exception e) {
-            Log.w(LOG_TAG, "Failed to count notification events: " + e.getMessage());
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
+            Log.w(LOG_TAG, "Failed to count notification rows: " + e.getMessage());
+            return 0;
         }
-        return 0;
     }
 
-    private static String[] appendArg(String[] args, String extra) {
-        String[] result = new String[args.length + 1];
-        System.arraycopy(args, 0, result, 0, args.length);
-        result[args.length] = extra;
-        return result;
+    /** The package, or a label fragment, as one SQL condition; its arguments are appended to {@code args}. */
+    private static String appClause(String app, List<String> args) {
+        String trimmed = app.trim();
+        args.add(trimmed);
+        args.add(likePattern(trimmed.toLowerCase(Locale.ROOT)));
+        return "(package_name = ? OR LOWER(app_label) LIKE ? ESCAPE '\\')";
     }
 
-    private List<LauncherCtlNotificationEvent> query(String sql, String[] args) {
-        List<LauncherCtlNotificationEvent> events = new ArrayList<>();
-        Cursor cursor = null;
-        try {
-            cursor = getDb().rawQuery(sql, args);
-            while (cursor != null && cursor.moveToNext()) {
-                events.add(cursorToEvent(cursor));
-            }
-        } catch (Exception e) {
-            Log.w(LOG_TAG, "Failed to query notification events: " + e.getMessage());
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
-        }
-        return events;
+    private static String likePattern(String text) {
+        return "%" + text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%";
     }
 
-    private LauncherCtlNotificationEvent cursorToEvent(Cursor cursor) {
-        long id = cursor.getLong(cursor.getColumnIndexOrThrow("id"));
-        String eventType = cursor.getString(cursor.getColumnIndexOrThrow("event_type"));
-        long eventTime = cursor.getLong(cursor.getColumnIndexOrThrow("event_time"));
-        String payload = cursor.getString(cursor.getColumnIndexOrThrow("payload"));
-        JSONObject notification;
-        try {
-            notification = new JSONObject(payload);
-        } catch (JSONException e) {
-            notification = new JSONObject();
-        }
-        return new LauncherCtlNotificationEvent(id, eventType, eventTime, notification);
+    private static LauncherCtlNotificationEvent fromCursor(Cursor cursor) {
+        return new LauncherCtlNotificationEvent(
+            cursor.getLong(cursor.getColumnIndexOrThrow("id")),
+            cursor.getString(cursor.getColumnIndexOrThrow("notif_key")),
+            cursor.getString(cursor.getColumnIndexOrThrow("package_name")),
+            cursor.getString(cursor.getColumnIndexOrThrow("app_label")),
+            cursor.getString(cursor.getColumnIndexOrThrow("conversation")),
+            cursor.getString(cursor.getColumnIndexOrThrow("title")),
+            cursor.getString(cursor.getColumnIndexOrThrow("sender")),
+            cursor.getString(cursor.getColumnIndexOrThrow("text")),
+            cursor.getString(cursor.getColumnIndexOrThrow("sub_text")),
+            cursor.getString(cursor.getColumnIndexOrThrow("category")),
+            cursor.getString(cursor.getColumnIndexOrThrow("channel_id")),
+            cursor.getLong(cursor.getColumnIndexOrThrow("message_time")),
+            cursor.getLong(cursor.getColumnIndexOrThrow("post_time")),
+            cursor.getLong(cursor.getColumnIndexOrThrow("recorded_time")),
+            cursor.isNull(cursor.getColumnIndexOrThrow("removed_time")) ? 0
+                : cursor.getLong(cursor.getColumnIndexOrThrow("removed_time")),
+            false);
     }
 
     private synchronized SQLiteDatabase getDb() {
@@ -288,7 +361,8 @@ public final class LauncherCtlNotificationStore {
         if (db == null || !db.isOpen()) {
             try {
                 db = SQLiteDatabase.openOrCreateDatabase(dbFile.getAbsolutePath(), null);
-                createTables(db);
+                migrate(db);
+                deleteLegacyJsonl();
             } catch (Exception e) {
                 Log.e(LOG_TAG, "Failed to open notification database: " + e.getMessage());
             }
@@ -296,91 +370,58 @@ public final class LauncherCtlNotificationStore {
         return db;
     }
 
-    private void createTables(SQLiteDatabase database) {
+    /**
+     * Brings the file up to {@link #DB_VERSION}. Version 1 (unstamped, 0) was the write-only event
+     * table; its rows held every app's messages because the feature was on for all or none, so they
+     * are dropped rather than carried into a per-app history that never asked for them.
+     */
+    private void migrate(SQLiteDatabase database) {
+        if (database.getVersion() < DB_VERSION) {
+            database.execSQL("DROP TABLE IF EXISTS " + LEGACY_TABLE_NAME);
+            database.setVersion(DB_VERSION);
+        }
         database.execSQL(
             "CREATE TABLE IF NOT EXISTS " + TABLE_NAME + " (" +
                 "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                "event_type TEXT NOT NULL, " +
-                "notification_key TEXT, " +
-                "package_name TEXT, " +
+                "notif_key TEXT NOT NULL, " +
+                "package_name TEXT NOT NULL, " +
+                "app_label TEXT, " +
+                "conversation TEXT, " +
                 "title TEXT, " +
+                "sender TEXT, " +
                 "text TEXT, " +
                 "sub_text TEXT, " +
-                "big_text TEXT, " +
                 "category TEXT, " +
+                "channel_id TEXT, " +
+                "message_time INTEGER NOT NULL, " +
                 "post_time INTEGER, " +
-                "is_ongoing INTEGER, " +
-                "is_clearable INTEGER, " +
-                "event_time INTEGER NOT NULL, " +
-                "payload TEXT)"
+                "recorded_time INTEGER NOT NULL, " +
+                "removed_time INTEGER, " +
+                "content_hash TEXT NOT NULL)"
         );
-        database.execSQL(
-            "CREATE INDEX IF NOT EXISTS idx_notification_events_time ON " + TABLE_NAME + "(event_time DESC)"
-        );
-        database.execSQL(
-            "CREATE INDEX IF NOT EXISTS idx_notification_events_pkg ON " + TABLE_NAME + "(package_name)"
-        );
-    }
-
-    private void appendJsonlEvent(LauncherCtlNotificationEvent event) {
-        File jsonlFile = LauncherCtlStorage.getNotificationsJsonlFile();
-        rotateJsonlIfLarge(jsonlFile);
-        try (FileOutputStream fos = new FileOutputStream(jsonlFile, true);
-             BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(fos, StandardCharsets.UTF_8))) {
-            writer.write(event.toJson().toString());
-            writer.newLine();
-        } catch (IOException | JSONException e) {
-            Log.w(LOG_TAG, "Failed to append notification JSONL event: " + e.getMessage());
-        }
+        database.execSQL("CREATE INDEX IF NOT EXISTS idx_notification_history_time ON " + TABLE_NAME + "(message_time DESC)");
+        database.execSQL("CREATE INDEX IF NOT EXISTS idx_notification_history_pkg ON " + TABLE_NAME + "(package_name, message_time DESC)");
+        database.execSQL("CREATE INDEX IF NOT EXISTS idx_notification_history_key ON " + TABLE_NAME + "(notif_key, content_hash)");
+        database.execSQL("CREATE INDEX IF NOT EXISTS idx_notification_history_recorded ON " + TABLE_NAME + "(recorded_time)");
     }
 
     /**
-     * Keeps the append-only stream bounded at one live file plus one rotated file.
-     *
-     * <p>SQLite is capped by {@link #pruneOldRows()}, but the JSONL mirror had no ceiling at all: a
-     * chatty app could grow it until internal storage filled, and every line in it is notification
-     * content that outlives the SQLite retention window. Rotation happens by rename so a reader
-     * that already opened the stream keeps reading a consistent file, and the previous rotation is
-     * dropped rather than kept forever.
+     * The old design mirrored every event into {@code notifications.jsonl}, whose lines outlived
+     * the retention window. Nothing writes it now; remove what earlier builds left behind.
      */
-    private void rotateJsonlIfLarge(File jsonlFile) {
-        try {
-            if (!jsonlFile.isFile() || jsonlFile.length() < MAX_JSONL_BYTES) return;
-            File rotated = new File(jsonlFile.getParentFile(), jsonlFile.getName() + ".1");
-            if (rotated.exists() && !rotated.delete()) {
-                Log.w(LOG_TAG, "Failed to remove previous notification JSONL rotation");
-            }
-            if (!jsonlFile.renameTo(rotated) && !jsonlFile.delete()) {
-                Log.w(LOG_TAG, "Failed to rotate notification JSONL stream");
-            }
-        } catch (Exception e) {
-            Log.w(LOG_TAG, "Failed to rotate notification JSONL stream: " + e.getMessage());
-        }
+    private void deleteLegacyJsonl() {
+        File jsonl = LauncherCtlStorage.getLegacyNotificationsJsonlFile();
+        deleteQuietly(jsonl);
+        deleteQuietly(new File(jsonl.getParentFile(), jsonl.getName() + ".1"));
     }
 
-    private void pruneOldRows() {
+    private static void deleteQuietly(File file) {
         try {
-            long count;
-            Cursor cursor = getDb().rawQuery("SELECT COUNT(*) FROM " + TABLE_NAME, null);
-            if (cursor == null) {
-                return;
+            if (file.exists() && !file.delete()) {
+                Log.w(LOG_TAG, "Failed to delete " + file.getName());
             }
-            try {
-                cursor.moveToFirst();
-                count = cursor.getLong(0);
-            } finally {
-                cursor.close();
-            }
-            if (count <= MAX_ROWS) {
-                return;
-            }
-            getDb().execSQL(
-                "DELETE FROM " + TABLE_NAME + " WHERE id <= (" +
-                    "SELECT id FROM " + TABLE_NAME + " ORDER BY event_time DESC LIMIT 1 OFFSET ?)",
-                new Object[]{MAX_ROWS}
-            );
         } catch (Exception e) {
-            Log.w(LOG_TAG, "Failed to prune old notification rows: " + e.getMessage());
+            Log.w(LOG_TAG, "Failed to delete " + file.getName() + ": " + e.getMessage());
         }
     }
 

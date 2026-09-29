@@ -1,8 +1,9 @@
 package com.termux.launcherctl;
 
+import android.database.sqlite.SQLiteDatabase;
+
 import androidx.test.core.app.ApplicationProvider;
 
-import org.json.JSONObject;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -10,17 +11,23 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
 import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 @RunWith(RobolectricTestRunner.class)
 public class LauncherCtlNotificationStoreTest {
+    private static final long DAY = TimeUnit.DAYS.toMillis(1);
+    private static final long NOW = 1_800_000_000_000L;
 
     private File tempDir;
+    private LauncherCtlNotificationStore store;
 
     @Before
     public void setUp() {
@@ -28,6 +35,7 @@ public class LauncherCtlNotificationStoreTest {
             "notif-store-test-" + System.nanoTime());
         LauncherCtlStorage.setBaseDirForTesting(tempDir);
         LauncherCtlNotificationStore.resetForTesting();
+        store = LauncherCtlNotificationStore.getInstance();
     }
 
     @After
@@ -38,167 +46,264 @@ public class LauncherCtlNotificationStoreTest {
     }
 
     @Test
-    public void insertEvent_persistsToJsonl() throws Exception {
-        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
-        JSONObject notification = notificationJson("pkg1", "Hello", "World");
-        store.insertEvent(new LauncherCtlNotificationEvent("posted", 1000L, notification));
+    public void insert_storesTheRichFields() {
+        List<LauncherCtlNotificationEvent> rows = LauncherCtlNotificationEvent.explode(
+            "k1", "com.mail", "Mail", "email", "inbox", "Team", "Alice", "Lunch?", "Lunch at noon?",
+            "me@work", NOW, null, null);
 
-        List<String> lines = Files.readAllLines(LauncherCtlStorage.getNotificationsJsonlFile().toPath(), StandardCharsets.UTF_8);
-        assertEquals(1, lines.size());
-        JSONObject line = new JSONObject(lines.get(0));
-        assertEquals("posted", line.getString("eventType"));
-        assertEquals(1000L, line.getLong("eventTime"));
-        assertEquals("Hello", line.getJSONObject("notification").getString("title"));
+        assertEquals(1, store.insertPosted(rows, false, 30, NOW));
+
+        LauncherCtlNotificationEvent row = store.query(new LauncherCtlNotificationStore.Filter()).get(0);
+        assertEquals("com.mail", row.packageName);
+        assertEquals("Mail", row.appLabel);
+        assertEquals("Team", row.conversation);
+        assertEquals("Alice", row.title);
+        assertEquals("Lunch at noon?", row.text);
+        assertEquals("me@work", row.subText);
+        assertEquals("email", row.category);
+        assertEquals("inbox", row.channelId);
+        assertEquals(0L, row.removedTime);
     }
 
     @Test
-    public void jsonl_rotatesOnceItPassesTheByteCeiling() throws Exception {
-        File jsonl = LauncherCtlStorage.getNotificationsJsonlFile();
-        jsonl.getParentFile().mkdirs();
-        long overCeiling = LauncherCtlNotificationStore.MAX_JSONL_BYTES + 1;
-        fillTo(jsonl, overCeiling);
+    public void insert_dedupesAnIdenticalRepostOfTheSameKey() {
+        assertEquals(1, store.insertPosted(plain("k1", "com.mail", "Hi", "Body", NOW), false, 30, NOW));
+        assertEquals(0, store.insertPosted(plain("k1", "com.mail", "Hi", "Body", NOW + 5_000), false, 30, NOW + 5_000));
+        assertEquals(1, store.countAll());
+    }
 
-        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
-        store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
+    @Test
+    public void insert_changedContentUnderTheSameKeyIsANewRow() {
+        store.insertPosted(plain("k1", "com.mail", "Hi", "Body", NOW), false, 30, NOW);
+        store.insertPosted(plain("k1", "com.mail", "Hi", "Body, edited", NOW + 5_000), false, 30, NOW + 5_000);
+        assertEquals(2, store.countAll());
+    }
 
+    @Test
+    public void insert_samePlainContentAfterItLeftTheShadeIsRecordedAgain() {
+        store.insertPosted(plain("k1", "com.app", "Backup", "Done", NOW), false, 30, NOW);
+        store.markRemoved("k1", NOW + 1_000);
+
+        int later = store.insertPosted(plain("k1", "com.app", "Backup", "Done", NOW + DAY),
+            false, 30, NOW + DAY);
+
+        assertEquals(1, later);
+        assertEquals(2, store.countAll());
+    }
+
+    @Test
+    public void insert_aChatLineWithItsOwnTimeIsNotRecordedAgainAfterRemoval() {
+        List<LauncherCtlNotificationEvent.Message> messages = Collections.singletonList(
+            new LauncherCtlNotificationEvent.Message("Bob", "on my way", NOW - 60_000));
+        store.insertPosted(chat("k1", messages, NOW), false, 30, NOW);
+        store.markRemoved("k1", NOW + 1_000);
+
+        assertEquals(0, store.insertPosted(chat("k1", messages, NOW + DAY), false, 30, NOW + DAY));
+        assertEquals(1, store.countAll());
+    }
+
+    @Test
+    public void insert_sameContentFromAnotherKeyInsideTheWindowIsOneMessage() {
+        store.insertPosted(plain("summary", "com.mail", "Hi", "Body", NOW), false, 30, NOW);
+        assertEquals(0, store.insertPosted(plain("child", "com.mail", "Hi", "Body", NOW + 1_000),
+            false, 30, NOW + 1_000));
+        long farLater = NOW + LauncherCtlNotificationStore.CROSS_KEY_DEDUPE_MS + 1_000;
+        assertEquals(1, store.insertPosted(plain("child2", "com.mail", "Hi", "Body", farLater),
+            false, 30, farLater));
+    }
+
+    @Test
+    public void explode_inboxLinesBecomeOneRowEachWithASharedKey() {
+        List<LauncherCtlNotificationEvent> rows = LauncherCtlNotificationEvent.explode(
+            "gmail:1", "com.google.android.gm", "Gmail", "email", "mail", null, "3 new messages",
+            "3 new messages", null, "me@work.com", NOW,
+            Arrays.asList("Ann  Invoice due", "Ben  Standup notes", " "), null);
+
+        assertEquals(2, rows.size());
+        assertEquals("gmail:1", rows.get(0).key);
+        assertEquals("gmail:1", rows.get(1).key);
+        assertEquals("Ann  Invoice due", rows.get(0).text);
+        assertEquals("Ben  Standup notes", rows.get(1).text);
+
+        store.insertPosted(rows, false, 30, NOW);
+        assertEquals(2, store.countAll());
+    }
+
+    @Test
+    public void explode_messagingStyleMessagesCarrySenderAndTheirOwnTime() {
+        List<LauncherCtlNotificationEvent> rows = LauncherCtlNotificationEvent.explode(
+            "wa:1", "com.whatsapp", "WhatsApp", "msg", "chats", "Project chat", "Project chat",
+            "ignored", null, null, NOW, null,
+            Arrays.asList(
+                new LauncherCtlNotificationEvent.Message("Ann", "hello", NOW - 120_000),
+                new LauncherCtlNotificationEvent.Message("Ben", "hi all", NOW - 60_000)));
+
+        assertEquals(2, rows.size());
+        assertEquals("Ann", rows.get(0).sender);
+        assertEquals("hello", rows.get(0).text);
+        assertEquals(NOW - 120_000, rows.get(0).messageTime);
+        assertEquals("Project chat", rows.get(1).conversation);
+        assertTrue(rows.get(1).toLine().contains("Ben: hi all"));
+    }
+
+    @Test
+    public void explode_plainNotificationPrefersTheExpandedText() {
+        List<LauncherCtlNotificationEvent> rows = LauncherCtlNotificationEvent.explode(
+            "k", "p", "P", null, null, null, "Title", "short", "the long expanded text", null,
+            NOW, null, null);
+        assertEquals(1, rows.size());
+        assertEquals("the long expanded text", rows.get(0).text);
+    }
+
+    @Test
+    public void remove_isATimestampOnTheExistingRowNotANewRow() {
+        store.insertPosted(plain("k1", "com.mail", "Hi", "Body", NOW), false, 30, NOW);
+
+        store.markRemoved("k1", NOW + 9_000);
+
+        assertEquals(1, store.countAll());
+        assertEquals(NOW + 9_000,
+            store.query(new LauncherCtlNotificationStore.Filter()).get(0).removedTime);
+        // A second removal must not move the first one.
+        store.markRemoved("k1", NOW + 20_000);
+        assertEquals(NOW + 9_000,
+            store.query(new LauncherCtlNotificationStore.Filter()).get(0).removedTime);
+    }
+
+    @Test
+    public void retention_dropsRowsOlderThanTheWindowOnWrite() {
+        store.insertPosted(plain("old", "com.app", "Old", "x", NOW - 40 * DAY), false, 30, NOW - 40 * DAY);
+        store.insertPosted(plain("mid", "com.app", "Mid", "y", NOW - 10 * DAY), false, 30, NOW - 10 * DAY);
+
+        store.insertPosted(plain("new", "com.app", "New", "z", NOW), false, 30, NOW);
+
+        List<LauncherCtlNotificationEvent> rows = store.query(new LauncherCtlNotificationStore.Filter());
+        assertEquals(2, rows.size());
+        assertEquals("New", rows.get(0).title);
+        assertEquals("Mid", rows.get(1).title);
+    }
+
+    @Test
+    public void retention_pruneRunsAtMostOncePerHour() {
+        long start = NOW - 40 * DAY;
+        store.insertPosted(plain("old", "com.app", "Old", "x", start), false, 30, start);
+        // The first write pruned (nothing to drop). Ten minutes on, the row is past a 1 day window
+        // but the hourly gate has not opened yet, so it stays.
+        long soon = start + TimeUnit.MINUTES.toMillis(10);
+        store.insertPosted(plain("b", "com.app", "B", "y", soon), false, 0, soon);
+        assertEquals(2, store.countAll());
+        // Past the hour it is pruned; a retention of 1 day is the floor.
+        long later = start + DAY + TimeUnit.HOURS.toMillis(2);
+        store.insertPosted(plain("c", "com.app", "C", "z", later), false, 1, later);
+        assertEquals(1, store.countAll());
+    }
+
+    @Test
+    public void mask_hidesCodesAtWriteTimeOnlyWhenAsked() {
+        store.insertPosted(plain("k1", "com.bank", "Bank", "Your code is 482913", NOW), true, 30, NOW);
+        store.insertPosted(plain("k2", "com.bank", "Bank", "Your code is 555111", NOW + 1_000), false, 30, NOW + 1_000);
+
+        List<LauncherCtlNotificationEvent> rows = store.query(new LauncherCtlNotificationStore.Filter());
+        assertEquals("Your code is 555111", rows.get(0).text);
+        assertEquals("Your code is " + LauncherCtlNotificationMasker.MASK, rows.get(1).text);
+    }
+
+    @Test
+    public void query_filtersByAppLabelTimeAndTextNewestFirst() {
+        store.insertPosted(plain("a", "com.mail", "Mail", "Invoice 7", "Alpha", NOW - 3 * DAY), false, 30, NOW);
+        store.insertPosted(plain("b", "com.mail", "Mail", "Standup", "Beta", NOW - 1 * DAY), false, 30, NOW);
+        store.insertPosted(plain("c", "com.chat", "Chat", "Hey", "Gamma", NOW - 2 * DAY), false, 30, NOW);
+
+        LauncherCtlNotificationStore.Filter filter = new LauncherCtlNotificationStore.Filter();
+        filter.app = "mail";
+        List<LauncherCtlNotificationEvent> byLabel = store.query(filter);
+        assertEquals(2, byLabel.size());
+        assertEquals("Beta", byLabel.get(0).text);
+
+        filter.app = "com.chat";
+        assertEquals(1, store.query(filter).size());
+
+        filter = new LauncherCtlNotificationStore.Filter();
+        filter.sinceMs = NOW - 2 * DAY - 1;
+        filter.untilMs = NOW - DAY + 1;
+        assertEquals(2, store.query(filter).size());
+
+        filter = new LauncherCtlNotificationStore.Filter();
+        filter.query = "100%";
+        assertEquals(0, store.query(filter).size());
+        filter.query = "invoice";
+        assertEquals(1, store.query(filter).size());
+    }
+
+    @Test
+    public void queryApps_countsPerAppWithLastSeen() throws Exception {
+        store.insertPosted(plain("a", "com.mail", "Mail", "One", NOW - 2_000), false, 30, NOW);
+        store.insertPosted(plain("b", "com.mail", "Mail", "Two", NOW - 1_000), false, 30, NOW);
+        store.insertPosted(plain("c", "com.chat", "Chat", "Hey", NOW - 5_000), false, 30, NOW);
+
+        org.json.JSONArray apps = store.queryApps();
+
+        assertEquals(2, apps.length());
+        assertEquals("com.mail", apps.getJSONObject(0).getString("package"));
+        assertEquals("Mail", apps.getJSONObject(0).getString("app"));
+        assertEquals(2, apps.getJSONObject(0).getLong("count"));
+        assertEquals(NOW - 1_000, apps.getJSONObject(0).getLong("lastSeen"));
+    }
+
+    @Test
+    public void clear_removesOneAppOrEverything() {
+        store.insertPosted(plain("a", "com.mail", "Mail", "One", NOW), false, 30, NOW);
+        store.insertPosted(plain("c", "com.chat", "Chat", "Hey", NOW), false, 30, NOW);
+
+        assertEquals(1, store.clear("Mail"));
+        assertEquals(1, store.countAll());
+        assertEquals(1, store.clear(null));
+        assertEquals(0, store.countAll());
+    }
+
+    @Test
+    public void migration_dropsTheOldTableAndLeftoverJsonl() throws Exception {
+        File dbFile = LauncherCtlStorage.getDatabaseFile();
+        SQLiteDatabase old = SQLiteDatabase.openOrCreateDatabase(dbFile.getAbsolutePath(), null);
+        old.execSQL("CREATE TABLE notification_events (id INTEGER PRIMARY KEY, event_type TEXT, payload TEXT)");
+        old.execSQL("INSERT INTO notification_events (event_type, payload) VALUES ('posted', '{}')");
+        old.close();
+        File jsonl = LauncherCtlStorage.getLegacyNotificationsJsonlFile();
+        assertTrue(jsonl.createNewFile());
         File rotated = new File(jsonl.getParentFile(), jsonl.getName() + ".1");
-        assertTrue(rotated.isFile());
-        assertEquals(overCeiling, rotated.length());
-        // The live stream restarts from the event that triggered the rotation.
-        assertEquals(1, Files.readAllLines(jsonl.toPath(), StandardCharsets.UTF_8).size());
+        assertTrue(rotated.createNewFile());
+
+        assertEquals(0, store.countAll());
+        store.insertPosted(plain("k", "com.mail", "Hi", "Body", NOW), false, 30, NOW);
+        assertEquals(1, store.countAll());
+
+        assertFalse(jsonl.exists());
+        assertFalse(rotated.exists());
+        store.close();
+        SQLiteDatabase after = SQLiteDatabase.openOrCreateDatabase(dbFile.getAbsolutePath(), null);
+        try (android.database.Cursor cursor = after.rawQuery(
+                "SELECT name FROM sqlite_master WHERE name = 'notification_events'", null)) {
+            assertFalse(cursor.moveToFirst());
+        } finally {
+            after.close();
+        }
     }
 
-    @Test
-    public void jsonl_keepsAtMostOneRotation() throws Exception {
-        File jsonl = LauncherCtlStorage.getNotificationsJsonlFile();
-        jsonl.getParentFile().mkdirs();
-        long overCeiling = LauncherCtlNotificationStore.MAX_JSONL_BYTES + 1;
-        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
-
-        fillTo(jsonl, overCeiling);
-        store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
-        fillTo(jsonl, overCeiling);
-        store.insertEvent(event("posted", 2000L, "pkg2", "B", ""));
-
-        File[] streams = jsonl.getParentFile().listFiles((dir, name) -> name.startsWith(jsonl.getName()));
-        assertEquals(2, streams == null ? 0 : streams.length);
+    private static List<LauncherCtlNotificationEvent> plain(String key, String pkg, String title,
+                                                            String text, long postTime) {
+        return plain(key, pkg, pkg.substring(pkg.lastIndexOf('.') + 1), title, text, postTime);
     }
 
-    @Test
-    public void clearAll_removesRowsAndEveryStream() throws Exception {
-        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
-        store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
-        File jsonl = LauncherCtlStorage.getNotificationsJsonlFile();
-        assertTrue(jsonl.isFile());
-
-        store.clearAll();
-
-        assertTrue(store.queryRecent(10).isEmpty());
-        assertTrue(!jsonl.exists());
-        assertTrue(!new File(jsonl.getParentFile(), jsonl.getName() + ".1").exists());
+    private static List<LauncherCtlNotificationEvent> plain(String key, String pkg, String label,
+                                                            String title, String text, long postTime) {
+        return LauncherCtlNotificationEvent.explode(key, pkg, label, null, null, null, title, text,
+            null, null, postTime, null, null);
     }
 
-    @Test
-    public void queryRecent_returnsEventsInReverseChronologicalOrder() throws Exception {
-        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
-        store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
-        store.insertEvent(event("posted", 3000L, "pkg2", "B", ""));
-        store.insertEvent(event("posted", 2000L, "pkg3", "C", ""));
-
-        List<LauncherCtlNotificationEvent> events = store.queryRecent(2);
-
-        assertEquals(2, events.size());
-        assertEquals("B", events.get(0).title);
-        assertEquals("C", events.get(1).title);
-    }
-
-    @Test
-    public void querySince_filtersByEventTime() throws Exception {
-        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
-        store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
-        store.insertEvent(event("posted", 3000L, "pkg2", "B", ""));
-        store.insertEvent(event("posted", 2000L, "pkg3", "C", ""));
-
-        List<LauncherCtlNotificationEvent> events = store.querySince(1500L, 50);
-
-        assertEquals(2, events.size());
-        assertEquals("B", events.get(0).title);
-        assertEquals("C", events.get(1).title);
-    }
-
-    @Test
-    public void querySearch_matchesTitleAndText() throws Exception {
-        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
-        store.insertEvent(event("posted", 1000L, "pkg1", "Hello world", "summary"));
-        store.insertEvent(event("posted", 2000L, "pkg2", "Other", "hello again"));
-        store.insertEvent(event("posted", 3000L, "pkg3", "No match", "nope"));
-
-        List<LauncherCtlNotificationEvent> events = store.querySearch("hello", 50);
-
-        assertEquals(2, events.size());
-        assertEquals("Other", events.get(0).title);
-        assertEquals("Hello world", events.get(1).title);
-    }
-
-    @Test
-    public void querySearch_returnsEmptyForBlankQuery() throws Exception {
-        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
-        store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
-
-        assertTrue(store.querySearch("", 50).isEmpty());
-        assertTrue(store.querySearch(null, 50).isEmpty());
-    }
-
-    @Test
-    public void queryStats_returnsCountsAndPackageSummary() throws Exception {
-        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
-        store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
-        store.insertEvent(event("posted", 2000L, "pkg1", "B", ""));
-        store.insertEvent(event("removed", 3000L, "pkg2", "C", ""));
-
-        JSONObject stats = store.queryStats(null);
-
-        assertEquals(3, stats.getLong("total"));
-        assertEquals(2, stats.getLong("posted"));
-        assertEquals(1, stats.getLong("removed"));
-        assertEquals(2, stats.getJSONArray("packages").length());
-        assertEquals("pkg1", stats.getJSONArray("packages").getJSONObject(0).getString("packageName"));
-        assertEquals(2, stats.getJSONArray("packages").getJSONObject(0).getLong("count"));
-    }
-
-    @Test
-    public void queryStats_sinceFiltersResults() throws Exception {
-        LauncherCtlNotificationStore store = LauncherCtlNotificationStore.getInstance();
-        store.insertEvent(event("posted", 1000L, "pkg1", "A", ""));
-        store.insertEvent(event("posted", 3000L, "pkg1", "B", ""));
-
-        JSONObject stats = store.queryStats(2000L);
-
-        assertEquals(1, stats.getLong("total"));
-        assertEquals(1, stats.getLong("posted"));
-        assertEquals(0, stats.getLong("removed"));
-        assertEquals(2000L, stats.getLong("since"));
-    }
-
-    private static LauncherCtlNotificationEvent event(String eventType, long eventTime, String packageName, String title, String text) throws Exception {
-        return new LauncherCtlNotificationEvent(eventType, eventTime, notificationJson(packageName, title, text));
-    }
-
-    private static JSONObject notificationJson(String packageName, String title, String text) throws Exception {
-        JSONObject n = new JSONObject();
-        n.put("key", packageName + ":" + System.nanoTime());
-        n.put("packageName", packageName);
-        n.put("id", 1);
-        n.put("tag", JSONObject.NULL);
-        n.put("postTime", 0);
-        n.put("isOngoing", false);
-        n.put("isClearable", true);
-        n.put("category", JSONObject.NULL);
-        n.put("title", title);
-        n.put("text", text);
-        n.put("subText", JSONObject.NULL);
-        n.put("bigText", JSONObject.NULL);
-        return n;
+    private static List<LauncherCtlNotificationEvent> chat(String key,
+            List<LauncherCtlNotificationEvent.Message> messages, long postTime) {
+        return LauncherCtlNotificationEvent.explode(key, "com.chat", "Chat", "msg", null, "Group",
+            "Group", null, null, null, postTime, null, new ArrayList<>(messages));
     }
 
     private static void deleteRecursively(File file) {
@@ -213,15 +318,4 @@ public class LauncherCtlNotificationStoreTest {
         }
         file.delete();
     }
-    /**
-     * Makes the stream exactly {@code bytes} long without holding those bytes in memory. The
-     * rotation looks only at the file's length, and building a 4 MB array (twice, with the write's
-     * own copy) ran the shared test JVM out of heap in the full suite.
-     */
-    private static void fillTo(File file, long bytes) throws java.io.IOException {
-        try (java.io.RandomAccessFile raf = new java.io.RandomAccessFile(file, "rw")) {
-            raf.setLength(bytes);
-        }
-    }
-
 }
