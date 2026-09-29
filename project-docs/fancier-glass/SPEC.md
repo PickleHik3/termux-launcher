@@ -176,3 +176,20 @@ The variants:
 Switching, creating or closing a window pans a snapshot of the outgoing surface (`captureTerminalDeparture`) away while the wall slides the new page in. The snapshot was drawn on a software canvas, which cannot run the refraction program, so its ground was the shared blur frame painted across the whole terminal rectangle, on an opaque plate with a shadow. The result was a hard-edged block of the wrong backdrop around the panes' rounded frames, riding along with the pan (evidence: `evidence-2026-09-29/`).
 
 Rule: a copy of the glass is clipped to the slabs' own rounded outlines (`PaneGlass.slabOutline`, cut at the radius `PaneGlass.apply` uses), never to a window or page rectangle. The card's gaps and corners stay see-through, so the live wallpaper shows there, and the card carries no plate. The live panes are unaffected: their slabs already re-aim per frame of the page slide (`invalidatePaneGlassPositions`) and draw inside their own rounded frames. The card's slabs show the plain blur rather than the refracted frame while they move; drawing the snapshot from a hardware `RenderNode` (as the split reveal does) would restore it.
+
+### 11.1 Pane changes: the final rule and every path (2026-09-29)
+
+Rule: nothing that moves or freezes during a pane change carries a rectangle. A copy of a pane is the slab and only the slab: cut at the slab's own radius (`PaneShape.radiusForBounds`), with no ground, plate or shadow. Where the panes can simply move, they move as live frames, whose glass re-aims every frame through `GlassAnchor` (`PaneGlassMotion`), and no copy is made. A copy that translates carries no glass of its own (the departure card's gaps show the live wallpaper); a copy that is only clipped in place (the split reveal) keeps the aim it was recorded at. There is no second aim mechanism.
+
+A frozen pane goes through `terminal/PaneSnapshot`: on API 29+ with a hardware window a recorded `RenderNode` (draw ops, no pixels, the refraction program survives) with its outline set to the slab's rounded rect and clip-to-outline on, since a recording, unlike the live frame, is not cut to its own outline by the renderer; otherwise a bitmap, drawn under a clip to the same rounded rect. `PaneSnapshot.route(sdk, hardware)` makes the choice.
+
+| Path | Pane change | Copy? | Rule |
+|---|---|---|---|
+| FLIP move (`animateMoveFromOrigins`) | swap, move, rearrange, maximise, restore, close (siblings growing) | none, live frames | live glass re-aimed per frame |
+| Entry pop (`animatePaneEntry`) | new pane with no reveal | none, live frame | live glass re-aimed per frame |
+| Split reveal (`captureSplitRevealSnapshot`, `SplitRevealDrawable`) | split | the old pane | `PaneSnapshot`, cut to the rounded slab (was square-cornered on both routes) |
+| Close ghost (`ghostRemovedPane`, `PaneMotionOverlayView.Ghost`) | close | no bitmap: a tinted rounded outline | radius now capped as the slab's is |
+| Departure card (`captureTerminalDeparture`) | window switch, new window, close window | bitmap, half resolution | stays a bitmap: the pane tree is torn down right after the capture, and a recording only references the live child display lists. Clipped to `PaneGlass.slabOutline`, no plate (§11) |
+| Display stand-in (`wall/SurfaceStandIn`) | page motion only, not a pane change | the display's picture | the picture itself is rectangular; not glass |
+
+Default mode had the same square corners on the split reveal (its slabs are glass too); with the pane glass off there is no rectangle to cut.
