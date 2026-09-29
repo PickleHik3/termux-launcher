@@ -37,6 +37,27 @@ public class TaiModelProfileGalleryDefaultsTest {
     }
 
     @Test
+    public void installedGranite42GetsItsThinkingSwitchWithoutAReimport() {
+        String path = "/models/granite-4.2-3b-int4/granite-4.2-3b_int4.litertlm";
+        // Saved by an older import: no thinking mode, so the template's default (thinking on) would apply.
+        TaiModelSpec saved = new TaiModelSpec("granite-4.2-3b-int4", "Granite 4.2 3B", "chat", "imported", path,
+            "user-provided", 1L, new LinkedHashSet<>(Collections.singletonList(TaiModelSpec.CAPABILITY_TEXT_CHAT)), false,
+            new TaiModelProfile(Collections.singletonList("cpu"), 1024, 64, 0.95d, 1.0d, null, "import-dialog-selection"));
+        TaiModelProfile healed = TaiModelProfile.forModel(saved);
+        assertEquals(TaiModelProfile.THINKING_TOGGLEABLE, healed.thinkingMode);
+        assertEquals(TaiModelProfile.THINKING_SWITCH_TEMPLATE_BOOLEAN, healed.thinkingSwitch);
+        assertEquals(Collections.singletonList("cpu"), healed.compatibleAccelerators);
+        assertEquals("import-dialog-selection", healed.source);
+        assertEquals(Boolean.FALSE, LiteRtTaiRuntime.thinkingExtraContext(
+            new TaiRuntimeOptions(null, null, null, null, null, Boolean.FALSE, null, null), healed).get("enable_thinking"));
+        // Imported with no profile at all takes the same fix; another Granite does not.
+        assertEquals(TaiModelProfile.THINKING_TOGGLEABLE,
+            TaiModelProfile.forModel(importedSpec("granite-4.2-3b-int4", path)).thinkingMode);
+        assertEquals(TaiModelProfile.THINKING_NONE, TaiModelProfile.forModel(
+            importedSpec("granite-4.0-h-1b", "/models/granite-4.0-h-1b/granite-4.0-h-1b_int8.litertlm")).thinkingMode);
+    }
+
+    @Test
     public void gemma3nE2B_matchesGalleryCpuFirstDefaults() {
         TaiModelProfile profile = TaiModelProfile.forModel(
             importedSpec("gemma-3n-E2B-it", "/models/gemma-3n-E2B-it/gemma-3n-E2B-it-int4.litertlm"));

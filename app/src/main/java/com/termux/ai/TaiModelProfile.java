@@ -122,14 +122,16 @@ public final class TaiModelProfile {
     @NonNull
     public static TaiModelProfile forModel(@NonNull TaiModelSpec modelSpec) {
         TaiModelProfile profile = resolve(modelSpec);
+        if (!TaiModelSpec.BACKEND_LITERT_LM.equals(modelSpec.backend)) return profile;
         // The Gemma 4 -gpu/-web bundles hold only a GPU_ARTISAN decoder: a CPU load fails with
         // "TF_LITE_PREFILL_DECODE not found in the model". Older imports saved them as GPU + CPU;
         // correcting it here heals those installs without a re-import.
-        if (TaiModelSpec.BACKEND_LITERT_LM.equals(modelSpec.backend)
-            && TaiImportProfiles.artisanBundle(modelSpec.localPath) && profile.supports("cpu")) {
-            return profile.withAccelerators(Collections.singletonList("gpu"));
+        if (TaiImportProfiles.artisanBundle(modelSpec.localPath) && profile.supports("cpu")) {
+            profile = profile.withAccelerators(Collections.singletonList("gpu"));
         }
-        return profile;
+        // Granite 4.2's template thinks unless told not to, and older imports saved it without a
+        // thinking switch: healed here for the same reason, without a re-import.
+        return TaiImportProfiles.withGraniteThinkingSwitch(profile, modelSpec.id + " " + modelSpec.localPath);
     }
 
     @NonNull
@@ -300,6 +302,13 @@ public final class TaiModelProfile {
         return new TaiModelProfile(accelerators, defaultMaxTokens, defaultTopK, defaultTopP, defaultTemperature,
             minDeviceMemoryInGb, source, thinkingMode, thinkingChannelStart, thinkingChannelEnd, maxContextTokens,
             thinkingSwitch);
+    }
+
+    /** This profile with another thinking mode and switch; everything else unchanged. */
+    @NonNull
+    public TaiModelProfile withThinking(@NonNull String mode, @NonNull String switchKind) {
+        return new TaiModelProfile(compatibleAccelerators, defaultMaxTokens, defaultTopK, defaultTopP, defaultTemperature,
+            minDeviceMemoryInGb, source, mode, thinkingChannelStart, thinkingChannelEnd, maxContextTokens, switchKind);
     }
 
     public boolean supports(@NonNull String accelerator) {

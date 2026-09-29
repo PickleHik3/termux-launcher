@@ -385,6 +385,26 @@ public final class TaiImportProfiles {
         return name.matches("gemma-4-e[24]b-it-(gpu|web)\\.litertlm");
     }
 
+    /** litert-community's Granite 4.2 files, from any of a model id, a repository or a file name. */
+    public static boolean granite42(@Nullable String identity) {
+        return identity != null && identity.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "").contains("granite42");
+    }
+
+    /**
+     * Granite 4.2's chat template reads {@code {%- if enable_thinking | default(true) -%}}: with
+     * no key it thinks, every token lands in the thought channel and the reply is empty. So its
+     * profile switches thinking (off unless asked) with a real boolean, which sends
+     * {@code enable_thinking=false} (see {@link TaiModelProfile#THINKING_SWITCH_TEMPLATE_BOOLEAN}).
+     * Returns {@code profile} untouched for any other model, or when it already has a thinking mode.
+     * Used for the profile an import stores and for the ones already installed (see
+     * {@link TaiModelProfile#forModel}).
+     */
+    @NonNull
+    public static TaiModelProfile withGraniteThinkingSwitch(@NonNull TaiModelProfile profile, @Nullable String identity) {
+        if (!granite42(identity) || !TaiModelProfile.THINKING_NONE.equals(profile.thinkingMode)) return profile;
+        return profile.withThinking(TaiModelProfile.THINKING_TOGGLEABLE, TaiModelProfile.THINKING_SWITCH_TEMPLATE_BOOLEAN);
+    }
+
     private static final Pattern GPU_TOKEN = Pattern.compile("(^|[._-])gpu(?=[._-]|$)");
     private static final Pattern WEB_TOKEN = Pattern.compile("(^|[-_.])web(?=[-_.]|$)");
     private static final Pattern SEQ_TOKEN = Pattern.compile("(?:^|[._-])seq(\\d+)(?=[._-]|$)");
