@@ -17712,9 +17712,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public boolean isMinimalMode() {
                 return TermuxActivity.this.isMinimalMode();
             }
-            @Override public boolean isTerminalPlaceOnScreen() {
-                return mPaneWallController == null || mPaneWallController.isTerminalOnScreen();
-            }
             @Override public void toggleMinimalMode() {
                 setMinimalMode(!TermuxActivity.this.isMinimalMode());
             }
