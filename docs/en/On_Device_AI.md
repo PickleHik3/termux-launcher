@@ -355,59 +355,72 @@ and a Result screen per entry. An installed chat model also has **Benchmark** in
 menu, which preselects it. Once you have run one, installed chat rows show a speed pill with their
 best ranked tok/s. The same thing runs from the shell as `tai benchmark`.
 
-`tai benchmark` measures how well a model runs on this phone. LiteRT-LM and MNN models are timed
-the same way: every token goes through the runtime's generation callback and is stamped as it
-arrives, so the numbers are comparable across backends.
+`tai benchmark` measures how well a model runs on this phone, with three tests that stand for
+real use. LiteRT-LM and MNN models are timed the same way: every token goes through the runtime's
+generation callback and is stamped as it arrives, so the numbers are comparable across backends.
 
 ### What it measures
 
-For each model and processor (its own leaderboard entry):
+The model is unloaded and loaded cold through the normal preflight and memory budget, answers one
+short warm-up (thrown away), and then runs:
 
-| Phase | What happens | Figure |
+| Test | What happens | You read it as |
 | --- | --- | --- |
-| Load | Whatever is loaded is unloaded first; the model loads cold through the normal preflight and memory budget | Load time; memory used (MemAvailable before minus its lowest point) |
-| Warm-up | One short reply, discarded | — |
-| Reading | A fixed passage of about 512 tokens, then "summarise in one line" | Prompt tokens per second (prompt tokens over the wait for the first token) |
-| First word | A short chat message | Time to first token |
-| Writing | A fixed long-output prompt, 128 tokens, greedy sampling | Decode tokens per second (from the first token to the last) |
-| Sustained | 90 s of writing (thorough only) | Speed at the end against the start |
-| Check | Three questions with known answers (`17 + 25`, a fixed JSON object, repeat a word) | Pass/fail; a model that fails is **broken**, whatever its speed |
+| Chat | "Explain what a shell alias is and give two useful examples", up to 320 tokens, greedy sampling | **Starts replying in X s** (time to first token) and **writes N tok/s** (from the first token to the last) |
+| Long input | A build log of about 2000 tokens is pasted, then "What went wrong, in two sentences?", up to 96 tokens | **Reads a long page in X s** (the wait for the first token) |
+| Sanity | Three questions with known answers (`17 + 25`, a fixed JSON object, repeat a word) | Only shown when a question fails: the model is **Broken**, whatever its speed |
 
-Reading, first word and writing keep the median, minimum and maximum over their runs. A phase that
-takes three times longer than expected is stopped and the record is marked `timeout`.
+If the loaded context window cannot hold the log plus the reply, the log is cut from the top to
+fit, and the result says so. While the long input is read, the phone's memory use is sampled about
+four times a second and the peak of the `:tai_runtime` process is kept: that is the **Memory** figure.
+Each prompt starts a fresh conversation. A test that takes three times longer than expected is
+stopped and the record is marked `timeout`.
+
+### Verdict
+
+One word per model and processor:
+
+- **Broken** when a sanity question fails.
+- **Smooth** when it writes at 12 tok/s or more, the first token comes within 1.5 s and the long page
+  is read within 8 s.
+- **Usable** when it writes at 6 tok/s or more, the first token comes within 3 s and the long page is
+  read within 20 s.
+- **Slow** otherwise.
+
+The screens and `--results` list Smooth, then Usable, then Slow, each ordered by writing speed and
+then by the first token; Broken entries follow, unranked. Results from an older bench version are
+kept but never ranked against the current one, so those models show as untested until run again.
 
 ### Presets
 
-| Preset | Reading | First word | Writing | Sustained | Processors | Time per model |
-| --- | --- | --- | --- | --- | --- | --- |
-| `quick` | 1 | 1 | 1 | – | The one an automatic load would pick | about 1 min |
-| `standard` (default) | 3 | 3 | 3 | – | CPU, and GPU where the model supports it | about 2 min per processor |
-| `thorough` | 3 | 3 | 5 | 90 s | CPU, and GPU where supported | about 4 min per processor |
+| Preset | Runs of each test | Processors | Time per model |
+| --- | --- | --- | --- |
+| `quick` | 1 | The one an automatic load would pick | about 1.5 min |
+| `standard` (default) | 2, and the median is the mean of the two | The same | about 3 min |
 
-`--cpu` or `--gpu` benches exactly that processor; if the model cannot load on it, the entry is
-skipped with the reason. `--eagle` switches the draft model on for MNN builds that ship one (a
-separate entry).
+`--compare` (the "Compare CPU and GPU" switch on the Choose screen) runs both processors where the
+model and phone support them, each as its own entry, so it takes twice as long. `--cpu` or `--gpu`
+benches exactly that processor; if the model cannot load on it, the entry is skipped with the
+reason. `--eagle` switches the draft model on for MNN builds that ship one (a separate entry).
 
 ```sh
 tai benchmark                                   # the default assistant model, standard preset
 tai benchmark gemma-4-e2b qwen3-vl-2b-instruct-mnn --preset quick
-tai benchmark qwen3-vl-2b-instruct-mnn --thorough --cpu
+tai benchmark qwen3-vl-2b-instruct-mnn --compare
+tai benchmark qwen3-vl-2b-instruct-mnn --cpu
 tai benchmark --results                         # the leaderboard
 tai benchmark --clear gemma-4-e2b               # forget one model's results (no model: all)
 tai benchmark --native gemma-4-e2b --gpu        # LiteRT-LM's own benchmark(), for comparison with Google AI Edge Gallery
 ```
 
-The terminal shows one line per phase as it finishes. Verdicts: **smooth** at 15 tok/s or more,
-**usable** between 7 and 15, **slow** below 7, **broken** when the check fails. While a benchmark
-runs, chat and load requests are refused with `benchmark_running`; `tai cancel` stops it and keeps
-the phases that finished. Speech input and output are not blocked, but using them mid-run will
-disturb the numbers.
+The terminal shows one line per phase as it finishes. While a benchmark runs, chat and load
+requests are refused with `benchmark_running`; `tai cancel` stops it and keeps the phases that
+finished. Speech input and output are not blocked, but using them mid-run will disturb the numbers.
 
 Every entry's record is appended to `files/tai/benchmarks.json` in the app's private storage (the
-last 20 per model, backend, processor and draft-model combination). The leaderboard ranks the
-latest complete record of each entry by median writing speed, ties to the faster first word.
-Broken entries are listed but not ranked, and results from a different bench version are kept but
-never ranked against the current one. The HTTP routes and their payloads are documented in
+last 20 per model, backend, processor and draft-model combination). The leaderboard takes the
+latest complete record of each entry.
+The HTTP routes and their payloads are documented in
 [LauncherCtl API](LauncherCtl_API.md).
 
 ## Status Bar Indicator
