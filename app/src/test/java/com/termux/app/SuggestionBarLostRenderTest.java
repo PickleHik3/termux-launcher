@@ -1,16 +1,16 @@
 package com.termux.app;
 
+import android.app.Activity;
 import android.app.Application;
 import android.os.Build;
 import android.os.Looper;
-import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.RuntimeEnvironment;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.ConscryptMode;
 import org.robolectric.annotation.Config;
@@ -28,15 +28,20 @@ import static org.junit.Assert.assertTrue;
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class SuggestionBarLostRenderTest {
 
+    /** Gives the host a height through the window's own layout pass, as the chrome does. */
     private static void layoutHost(FrameLayout host, int heightPx) {
-        host.measure(View.MeasureSpec.makeMeasureSpec(1058, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(heightPx, View.MeasureSpec.EXACTLY));
-        host.layout(0, 0, 1058, heightPx);
+        ViewGroup.LayoutParams params = host.getLayoutParams();
+        params.height = heightPx;
+        host.setLayoutParams(params);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
     }
 
     @Test
     public void aRenderDroppedAtZeroSizeIsReissuedOnceTheRowIsStable() {
-        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        // Attached to a window, as the dock always is: a detached row never renders.
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout host = new FrameLayout(activity);
+        activity.setContentView(host, new ViewGroup.LayoutParams(1058, 0));
         SuggestionBarView bar = new SuggestionBarView(host.getContext(), null);
         host.addView(bar, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));

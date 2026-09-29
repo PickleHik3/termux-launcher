@@ -192,7 +192,11 @@ public final class PlaceLayoutStore {
      * cached layout.
      */
     private final SharedPreferences.OnSharedPreferenceChangeListener mChangeListener =
-        (preferences, key) -> mRevision.incrementAndGet();
+        this::onPreferenceChanged;
+
+    private void onPreferenceChanged(@NonNull SharedPreferences preferences, @Nullable String key) {
+        mRevision.incrementAndGet();
+    }
 
     public PlaceLayoutStore(@NonNull TermuxAppSharedPreferences preferences) {
         mPreferences = preferences;
