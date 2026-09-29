@@ -253,11 +253,11 @@ public class TermuxActivityPageIndicatorTest {
         float density = activity.getResources().getDisplayMetrics().density;
         int airPx = DockLayoutPolicy.rowAirPx(true, true, density);
         int stripPx = PageTickStrip.bandPx(density);
-        assertEquals("the sliver a lone row keeps on the side without ticks",
-            DockLayoutPolicy.loneRowAirPx(density), airPx);
+        assertEquals("a lone row with ticks matches their band on the other side",
+            stripPx, airPx);
         assertTrue("the row has to have a band for this to mean anything",
             dock.appsRowBandHintPx > 0);
-        assertEquals("the band is the icons' box, the sliver and the ticks' own band",
+        assertEquals("the band is the icons' box, the air and the ticks' own band",
             dock.appsRowBandHintPx + airPx + stripPx, dock.appsRowBandPx);
 
         // The row is the band next to the canvas up here, so the ticks take the canvas side, which
