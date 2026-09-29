@@ -899,10 +899,7 @@ public final class TerminalActionDispatcher {
                         return error(400, "bad_request", "Missing 'text'");
                     }
                     String text = arguments.optString("text", "");
-                    if (!client.signals().clipboardWrite(text)) {
-                        return error(409, ShellSignals.REFUSAL_NOT_VISIBLE,
-                            "The launcher is not on screen, so the clipboard was left alone");
-                    }
+                    client.signals().clipboardWriteFromApi(text);
                     return ok().put("length", text.length());
                 }
                 case TOOL_CLIPBOARD_READ: {

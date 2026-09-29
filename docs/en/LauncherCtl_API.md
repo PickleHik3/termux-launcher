@@ -322,7 +322,7 @@ session) is HTTP 409 `no_session`.
 **Background.** Like the pane routes, these only need the launcher to be *running*, not on screen:
 `activity_not_running` (409) means the process is gone. A notification sent while the user is in
 another app is precisely the case the shade is for; a progress report is state the chip picks up
-when the terminal is next seen. The clipboard is the exception, see below.
+when the terminal is next seen. A clipboard read is the exception, see below.
 
 `POST /v1/notify` takes:
 
@@ -363,9 +363,11 @@ The clipboard is the one place a signal can *take* something from the user or re
 just copied, so both directions follow the rules an `OSC 52` write and query already follow, and
 answer with their own codes rather than a generic one:
 
-- The launcher has to be on screen. Off screen, both answer 409 `launcher_not_visible` and touch
-  nothing — a program in a shell nobody is looking at does not get to replace what the user copied
-  in another app.
+- Writing works whether or not the launcher is on screen, as Termux:API's `termux-clipboard-set`
+  always has: a script started from another app's foreground is asking on purpose. An `OSC 52`
+  write from a pane keeps the on-screen rule, since any program printing to a pane can emit one.
+- Reading needs the launcher on screen. Off screen, `GET /v1/clipboard` answers 409
+  `launcher_not_visible` — Android only lets the focused app read the clipboard anyway.
 - Reading also needs **Settings → Terminal → Let programs read the clipboard** (on by default), the
   same switch that gates `OSC 52` queries. Off, `GET /v1/clipboard` is 403 `clipboard_read_disabled`.
 
@@ -739,8 +741,8 @@ Inspect `/v1/models` first to confirm both `_backend == "mnn-llm"` and the endpo
   opened through the API, and nothing here can bring the launcher to the Android foreground on its
   own — but the same token now reaches a pane for longer.
 - The signal routes give the token what any program in a shell already has through escape
-  sequences, no more: the clipboard routes keep the on-screen requirement and the read setting
-  that gate `OSC 52`, and a notification or a progress ring is something the user sees, not
+  sequences, no more: the clipboard read keeps the on-screen requirement and the read setting
+  that gate `OSC 52` (a write works off screen, as Termux:API's always has), and a notification or a progress ring is something the user sees, not
   something the caller learns.
 
 ## Troubleshooting

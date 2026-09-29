@@ -179,17 +179,17 @@ public class TerminalActionDispatcherSignalsTest {
     // --- clipboard ---
 
     @Test
-    public void clipboardWriteReachesTheAndroidClipboardOnlyWhileOnScreen() throws JSONException {
+    public void clipboardWriteReachesTheAndroidClipboardOnOrOffScreen() throws JSONException {
         JSONObject result = dispatcher.execute("clipboard.write", new JSONObject().put("text", "hello"));
         assertTrue(result.toString(), result.getBoolean("ok"));
         assertEquals(5, result.getInt("length"));
         assertEquals("hello", clipboardText());
 
+        // The API writes off screen too, as Termux:API's termux-clipboard-set always has.
         host.visible = false;
-        JSONObject refused = dispatcher.execute("clipboard.write", new JSONObject().put("text", "later"));
-        assertEquals(409, refused.getInt("_statusCode"));
-        assertEquals("launcher_not_visible", refused.getString("error"));
-        assertEquals("hello", clipboardText());
+        JSONObject later = dispatcher.execute("clipboard.write", new JSONObject().put("text", "later"));
+        assertTrue(later.toString(), later.getBoolean("ok"));
+        assertEquals("later", clipboardText());
 
         assertEquals(400, dispatcher.execute("clipboard.write", new JSONObject()).getInt("_statusCode"));
     }

@@ -115,7 +115,7 @@ These are the escape sequences OSC 99 (shade notification), OSC 9;4 (progress ri
 (clipboard) as HTTP routes, running the same code inside the app — for a process that has no
 terminal to write an escape into. They need **no pane id**: with `$TERMUX_LAUNCHER_PANE` set
 they go to your pane, `--pane` picks another, and with neither (opencode's tool service) they go
-to the current pane. They only need the launcher *running*, not on screen — except the clipboard.
+to the current pane. They only need the launcher *running*, not on screen — except a clipboard read.
 
 - `notify`: `--id` names the message so a later one with the same name replaces it; `--urgency
   low` is silent, `critical` uses the urgent channel. Answers `{"ok":true,"pane":…,"id":…,
@@ -124,9 +124,10 @@ to the current pane. They only need the launcher *running*, not on screen — ex
   one follows. Answers the state and the ring's percent. 600/min. `pane_not_ready` (409) means
   that pane's terminal hasn't started.
 - `clipboard copy`/`paste`: the Android clipboard, shared with the in-app keyboard's paste key and
-  every app. Both refuse with 409 `launcher_not_visible` when the launcher isn't on screen (a
-  background process doesn't get to replace what the user just copied elsewhere), and `paste`
-  is 403 `clipboard_read_disabled` when **Settings → Terminal → Let programs read the clipboard**
+  every app. `copy` works whether or not the launcher is on screen, as Termux:API's
+  `termux-clipboard-set` always has. `paste` refuses with 409 `launcher_not_visible` when the
+  launcher isn't on screen (Android only lets the app in front read the clipboard), and is 403
+  `clipboard_read_disabled` when **Settings → Terminal → Let programs read the clipboard**
   is off — the same two rules OSC 52 follows. 60/min each. A `copy` that lands also appears in
   the in-app keyboard's clipboard history (the clipboard corner of the Ctrl key), so the user can
   paste it again later; `paste` reads the Android clipboard, never that history.
@@ -208,7 +209,7 @@ eval "$(launcherctl x11 gpu --env)"
   compatibility mode on.
 - `pane_not_found` (404): stale id — the user closed your pane; `pane list` to resync.
 - `not_owned` (403): that pane/window isn't one you opened.
-- `launcher_not_visible` (409): the clipboard routes only work with the launcher on screen;
+- `launcher_not_visible` (409): `clipboard paste` only works with the launcher on screen;
   `clipboard_read_disabled` (403): the user turned clipboard reads off. Say so, don't retry.
 - `launcherctl: missing ~/.launcherctl/...`: the app hasn't started its local API yet.
 - `429` with `Retry-After`: back off; limits are per-route.

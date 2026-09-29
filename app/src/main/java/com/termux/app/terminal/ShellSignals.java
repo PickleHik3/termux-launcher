@@ -158,6 +158,17 @@ public final class ShellSignals {
     }
 
     /**
+     * {@link #clipboardWrite} for the local API ({@code launcherctl clipboard copy}, and the
+     * {@code termux-clipboard-set} shim over it), which writes whether or not the launcher is on
+     * screen. Termux:API always has, and a script run from another app's foreground is asking on
+     * purpose. The escape keeps the on-screen rule: any program printing to a pane can emit it.
+     */
+    public void clipboardWriteFromApi(@NonNull String text) {
+        ShareUtils.copyTextToClipboard(mContext, text);
+        mHistory.record(text);
+    }
+
+    /**
      * Why a read of the clipboard would be refused right now, or null when it is allowed: the
      * launcher has to be on screen, and the Terminal setting "Let programs read the clipboard"
      * has to be on. The same two rules an {@code OSC 52} query is answered under.
