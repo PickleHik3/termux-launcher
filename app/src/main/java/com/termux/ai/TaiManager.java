@@ -980,10 +980,12 @@ public final class TaiManager {
                 && !TaiLoadPreflight.evaluate(appContext, spec, options.withAccelerator("gpu"), false).blocked;
             String best = TaiLoadPreflight.evaluate(appContext, spec, options.withAccelerator("auto"), false).effectiveAccelerator;
             best = "gpu".equalsIgnoreCase(best) ? TaiBenchSuite.ACCELERATOR_GPU : TaiBenchSuite.ACCELERATOR_CPU;
+            // A GPU-only file (the Gemma 4 -gpu/-web bundles) has no CPU graph; the presets skip it.
+            boolean cpuSupported = TaiModelProfile.forModel(spec).supports("cpu");
             boolean speculativeCapable = spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING);
             specs.put(spec.id, spec);
             baseOptions.put(spec.id, options);
-            inputs.add(new TaiBenchSuite.ModelInput(spec.id, spec.backend, best, gpuSupported, speculativeCapable));
+            inputs.add(new TaiBenchSuite.ModelInput(spec.id, spec.backend, best, cpuSupported, gpuSupported, speculativeCapable));
         }
         List<String> processors = null;
         JSONArray requestedProcessors = request.optJSONArray("processors");
@@ -1106,8 +1108,10 @@ public final class TaiManager {
         public JSONObject chat(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull String userPrompt, int maxTokens,
                                @NonNull TaiGenerationCallback callback) throws JSONException {
             // Greedy (top_k 1, temperature 0) for every phase: the numbers should not move with
-            // the dice, and the check questions have one right answer.
-            return localRuntime().chat(spec(entry).id, TaiBenchSuite.SYSTEM_PROMPT, userPrompt,
+            // the dice, and the check questions have one right answer. One-shot: every prompt gets
+            // a fresh conversation, or LiteRT-LM would answer each one with the earlier phases'
+            // passages and replies still in context (a check answered as the previous question).
+            return localRuntime().chat(spec(entry).id, TaiChatRequest.oneShot(TaiBenchSuite.SYSTEM_PROMPT, userPrompt),
                 options(entry, maxTokens, true), callback);
         }
 

@@ -24,6 +24,19 @@ public class TaiModelProfileGalleryDefaultsTest {
     }
 
     @Test
+    public void gemma4ArtisanBundleIsGpuOnlyEvenWhenSavedWithCpu() {
+        TaiModelSpec spec = importedSpec("gemma-4-e2b-it-gpu", "/models/gemma-4-e2b-it-gpu/gemma-4-E2B-it-gpu.litertlm");
+        assertEquals(Collections.singletonList("gpu"), TaiModelProfile.forModel(spec).compatibleAccelerators);
+        TaiModelSpec saved = new TaiModelSpec(spec.id, spec.id, "chat", "imported", spec.localPath, "user-provided", 1L,
+            new LinkedHashSet<>(Collections.singletonList(TaiModelSpec.CAPABILITY_TEXT_CHAT)), false,
+            new TaiModelProfile(Arrays.asList("gpu", "cpu"), 4000, 64, 0.95d, 1.0d, null, "older-import"));
+        TaiModelProfile healed = TaiModelProfile.forModel(saved);
+        assertEquals(Collections.singletonList("gpu"), healed.compatibleAccelerators);
+        assertEquals(4000, healed.defaultMaxTokens);
+        assertEquals("older-import", healed.source);
+    }
+
+    @Test
     public void gemma3nE2B_matchesGalleryCpuFirstDefaults() {
         TaiModelProfile profile = TaiModelProfile.forModel(
             importedSpec("gemma-3n-E2B-it", "/models/gemma-3n-E2B-it/gemma-3n-E2B-it-int4.litertlm"));

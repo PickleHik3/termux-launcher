@@ -381,6 +381,7 @@ public final class TaiImportProfiles {
      */
     public static boolean artisanBundle(@Nullable String fileName) {
         String name = fileName == null ? "" : fileName.toLowerCase(Locale.ROOT);
+        name = name.substring(name.lastIndexOf('/') + 1);
         return name.matches("gemma-4-e[24]b-it-(gpu|web)\\.litertlm");
     }
 
