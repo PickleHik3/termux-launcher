@@ -19,6 +19,7 @@ import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
+import com.termux.app.terminal.PaneBorderStyle;
 import com.termux.app.terminal.PaneRim;
 import com.termux.app.terminal.PaneSurfaceStyle;
 import com.termux.app.tour.TourEdition;
@@ -1225,7 +1226,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
                 mCornerMask.setCornerMaskFallbackColor(style.wallBehindColor());
             }
         }
-        if (border) mRim.apply(this, glass, radiusPx, true);
+        if (border) mRim.apply(this, glass, radiusPx, PaneBorderStyle.lone(), style);
         else mRim.clear(this);
     }
 

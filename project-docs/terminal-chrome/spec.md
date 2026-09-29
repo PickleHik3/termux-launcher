@@ -51,3 +51,21 @@ today. No events while aiming.
 
 P1, P3, P4 in parallel; P2 after P1. Agents commit, never push, never touch devices. Merge only
 green. pong only when the user pings.
+
+## Pane borders and attention
+
+One module, `terminal/PaneBorderStyle`, decides every pane's border; the views only render it.
+
+- **Rim**: the shared glass rim (`GlassSurfaceFactory.rimDrawable`, hairline or gradient per the
+  preset), the same border the status bar, dock and keyboard wear. A lone pane on any place
+  (Home, Terminal, Display) and every unfocused pane of a split.
+- **Focus**: the Material active colour, on the focused pane of a split only.
+- **Attention**: a pane asking for the user gets the theme's error role (the window bar's bell and
+  blocked chip colour) as a coloured line with a soft glow, pulsing at about 1.2 s. It outranks
+  focus. The pulse is static under reduced motion, a zero animator scale and Lazy mode.
+
+`PaneAttention.set(paneId, cause, on)` is the one door. Causes: the bell (which OSC 9, OSC 777,
+OSC 99 and `launcherctl notify` all ring, through `noteShellAttention`), an agent reporting
+`blocked`, and a progress report in the error state. Focusing the pane on screen clears it.
+Working to idle completion is not attention: it keeps its done tick on the window chip.
+The gradient rim is drawn once, on the frame (`PaneRim`); the glass slab draws none of its own.

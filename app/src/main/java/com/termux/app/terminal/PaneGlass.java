@@ -115,7 +115,9 @@ public final class PaneGlass {
             style.paneGlassTintColor(), style.paneGlassGrainLayer(),
             style.paneGlassGrainStrength(), radiusPx, style.paneGlassFrostFilter(),
             style.paneGlassCrossfade());
-        backdrop.setRim(rimRadiusPx(style.paneGlassRimWanted(), radiusPx), style);
+        // The border is one drawable on the frame (PaneRim), so the slab draws none of its own: a
+        // gradient rim here as well would put two borders on a lone pane.
+        backdrop.setRim(NO_RIM, style);
         backdrop.setParallax(style.wallpaperParallax());
         backdrop.setRefraction(style.paneGlassRefraction());
         backdrop.setVisibility(View.VISIBLE);

@@ -25,6 +25,7 @@ import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
+import com.termux.app.terminal.PaneBorderStyle;
 import com.termux.app.terminal.PaneRim;
 import com.termux.app.terminal.PaneSurfaceStyle;
 import com.termux.view.HoldTiming;
@@ -587,9 +588,9 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         // it under any line, as the lone terminal pane's host does under the plain border: a
         // widget's square corner poking past the arc reads as the frame being broken.
         setPaneShape(radiusPx, border);
-        // The page is the only thing on screen while it shows, so it always wears the focused
-        // treatment.
-        if (border) mRim.apply(this, glass, radiusPx, true);
+        // The page is alone on screen while it shows, so it wears the shared rim, the same
+        // border as the status bar, dock and keyboard, never the focus colour.
+        if (border) mRim.apply(this, glass, radiusPx, PaneBorderStyle.lone(), style);
         else mRim.clear(this);
     }
 

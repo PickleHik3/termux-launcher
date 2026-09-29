@@ -198,6 +198,8 @@ public class TerminalPaneController {
         default void onAutoTilingChanged(boolean enabled) {}
         /** Whether the terminal place is in minimal mode, which the corner tab's glyph shows. */
         default boolean isMinimalMode() { return false; }
+        /** Whether the terminal place's pixels can be on screen (false while Widgets or Display rests in front). */
+        default boolean isTerminalPlaceOnScreen() { return true; }
         /** The corner tab asked to turn the terminal place's minimal mode on or off. */
         default void toggleMinimalMode() {}
         /** Default working directory when a cwd can't be derived. */
@@ -313,6 +315,9 @@ public class TerminalPaneController {
     /** Live border drawable + focus state per pane, so a focus flip can crossfade and a
      *  redundant re-render can leave a mid-flight crossfade untouched instead of snapping it. */
     private final Map<TerminalSession, PaneRim> mBorderStates = new HashMap<>();
+    /** Which panes are asking for the user; the border reads it (updateActiveBorders). */
+    private final PaneAttention mPaneAttention = new PaneAttention();
+    private boolean mUpdatingBorders;
     /** How much of every rim the wall's slide leaves showing; 1 at rest (setRimTravelAlpha). */
     private float mRimTravelAlpha = 1f;
     private final Map<Split, LinearLayout> mSplitLayouts = new HashMap<>();
@@ -373,6 +378,7 @@ public class TerminalPaneController {
         mHostView = hostView;
         mInflater = inflater;
         mInteractionOverlay = new PaneInteractionOverlay();
+        mPaneAttention.setListener(id -> repaintAttentionBorders());
         mMotionOverlay = new PaneMotionOverlayView(hostView.getContext());
         mMotionOverlay.setCursorTargetProvider(this::provideCursorTarget);
         // Fractional float bounds only become pixels against the live host size, so a rotation or
@@ -3324,8 +3330,9 @@ public class TerminalPaneController {
 
     private void detachPaneView(TerminalSession session) {
         PaneRim rim = mBorderStates.remove(session);
-        if (rim != null) rim.cancel();
         FrameLayout frame = mPaneFrames.remove(session);
+        if (rim != null && frame != null) rim.clear(frame);
+        else if (rim != null) rim.cancel();
         releasePanePlank(frame);
         mPaneViews.remove(session);
         if (frame != null && frame.getParent() instanceof ViewGroup)
@@ -3333,16 +3340,29 @@ public class TerminalPaneController {
     }
 
     private void updateActiveBorders() {
+        mUpdatingBorders = true;
+        try {
+            updateActiveBordersLocked();
+        } finally {
+            mUpdatingBorders = false;
+        }
+    }
+
+    private void updateActiveBordersLocked() {
         List<TerminalView> views = getVisiblePaneViews();
-        // Tiled panes, not every pane: a float always carries its own focus-keyed border, and a lone
-        // tiled pane keeps the terminal border as its frame. So showing the scratchpad no longer
-        // paints and unpaints a border on the pane behind it.
         boolean split = tiledPaneCount() > 1;
         TerminalSession activeSession = getActiveSession();
+        // Focusing a pane on screen acknowledges whatever it was asking for.
+        if (activeSession != null && mHost.isTerminalPlaceOnScreen())
+            mPaneAttention.clear(activeSession.getPid());
         java.util.Set<TerminalSession> floatingSessions = new java.util.HashSet<>();
         if (mActiveWindow != null) {
             for (Leaf leaf : mActiveWindow.floating) floatingSessions.add(leaf.session);
         }
+        // A float always carries its own focus-keyed border, so a window with one counts as split
+        // for the border's decision (PaneBorderStyle).
+        int paneCount = tiledPaneCount() + floatingSessions.size();
+        PaneBorderStyle.Palette palette = PaneRim.palette(mHostView.getContext());
         float density = mHostView.getResources().getDisplayMetrics().density;
         for (TerminalView v : views) {
             TerminalSession paneSession = v.getCurrentSession();
@@ -3350,19 +3370,22 @@ public class TerminalPaneController {
             if (frame == null) continue;
             boolean floating = floatingSessions.contains(paneSession);
             boolean glassShape = paneGlassActive();
-            // A lone plain pane wears no rim and no clip of its own: the terminal host draws the
-            // frame line and rounds the corners around this one frame, and pads the arc's
-            // clearance itself (TermuxActivity.applyPaneHostCornerPadding). So the frame is told
-            // it is square — handing it the radius as well made the terminal pay that clearance
-            // twice, the host's padding and then the frame's margin, for an arc the frame never
-            // draws.
-            boolean bare = !split && mMaximizedLeaf == null && !floating && !glassShape;
+            PaneBorderStyle.Decision border = PaneBorderStyle.decide(paneCount,
+                paneSession == activeSession, mPaneAttention.isSet(paneSession.getPid()), palette);
+            // A lone plain pane wearing the shared rim carries no border and no clip of its own:
+            // the terminal host draws the same rim around this one frame and rounds the corners,
+            // and pads the arc's clearance itself (TermuxActivity.applyPaneHostCornerPadding). So
+            // the frame is told it is square — handing it the radius as well made the terminal pay
+            // that clearance twice, for an arc the frame never draws. A pane that asks for
+            // attention takes the frame's own border instead, so the glow can show.
+            boolean bare = !split && mMaximizedLeaf == null && !floating && !glassShape
+                && border.kind == PaneBorderStyle.Kind.RIM;
             // Otherwise the pane's shape, and with it the clearance the terminal is laid out
             // inside. One radius for every pane, whatever is edging it — the glass slab, the
-            // float's card, the focus stroke's own arc — since all of them round the same corners
-            // over the same cells. Only glass clips here: a float clips on its own wrapper and a
-            // stroke does not clip at all. The frame also learns how wide the rim it is about to
-            // wear is, so the band it fills behind the grid stops at the rim's inner edge.
+            // float's card, the border's own arc — since all of them round the same corners over
+            // the same cells. Only glass clips here: a float clips on its own wrapper and a
+            // stroke does not clip at all. The frame also learns how wide the border it is about
+            // to wear is, so the band it fills behind the grid stops at the border's inner edge.
             frame.setPaneShape(bare ? 0f : paneRadiusPx(), glassShape);
             frame.setRimStrokePx(bare ? 0f : paneBorderStrokePx(glassShape, true, density));
             if (bare) {
@@ -3371,13 +3394,12 @@ public class TerminalPaneController {
                 else frame.setForeground(null);
                 continue;
             }
-            // Same Material primary hue for every pane, but the focused pane's border is at full
-            // strength while the rest are dimmed — an unambiguous, theme-proof focus cue. On glass
-            // the stroke gives way to the shared lit rim, which is the slab's own edge; a drawn
-            // outline over frost reads as a box sitting on the material.
+            // The decision is PaneBorderStyle's; this only renders it. A lone pane and every
+            // unfocused pane wear the shared rim, the focused pane of a split the Material active
+            // colour, and a pane asking for the user the attention glow.
             PaneRim rim = mBorderStates.get(paneSession);
             if (rim == null) rim = new PaneRim();
-            if (rim.apply(frame, glassShape, paneRadiusPx(), paneSession == activeSession)) {
+            if (rim.apply(frame, glassShape, paneRadiusPx(), border, mSurfaceStyle)) {
                 // A rim built mid-slide (a split made while the wall moves) fades like the rest.
                 rim.setTravelAlpha(mRimTravelAlpha);
                 mBorderStates.put(paneSession, rim);
@@ -3388,6 +3410,33 @@ public class TerminalPaneController {
         applyCursorOwnership();
         // The float handle pill dims with focus like the pane borders do.
         for (FloatingPaneContainer container : mFloatContainers.values()) container.invalidate();
+    }
+
+    /**
+     * The one door for "this pane asks for the user": the bell (and the OSC 9, 777, 99 and
+     * {@code launcherctl notify} messages that ring it), an agent that is blocked, a progress
+     * report in error. A pane already focused on screen is not asking, so raising it is ignored.
+     */
+    public void setPaneAttention(@NonNull TerminalSession pane, @NonNull PaneAttention.Cause cause,
+                                 boolean on) {
+        int id = pane.getPid();
+        if (id < 1) return;
+        if (on && pane == getActiveSession() && mHost.isTerminalPlaceOnScreen()) return;
+        mPaneAttention.set(id, cause, on);
+    }
+
+    /** Forget attention for panes that no longer exist. */
+    public void retainPaneAttention(@NonNull java.util.Set<Integer> livePaneIds) {
+        mPaneAttention.retain(livePaneIds);
+    }
+
+    /** The terminal place came back into view: a pane that asked while it was away is now focused. */
+    public void onTerminalPlaceShown() {
+        updateActiveBorders();
+    }
+
+    private void repaintAttentionBorders() {
+        if (!mUpdatingBorders && mActiveWindow != null) updateActiveBorders();
     }
 
     /**
