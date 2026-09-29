@@ -118,7 +118,7 @@ public final class TaiCliFormatter {
                 .append(describeEntry(record)).append('\n');
             JSONObject phases = record.optJSONObject("phases");
             if (phases != null) {
-                for (String phase : new String[] {"load", "reading", "firstWord", "writing", "sustained"}) {
+                for (String phase : new String[] {"load", "chat", "longInput"}) {
                     JSONObject metrics = phases.optJSONObject(phase);
                     if (metrics != null) out.append(formatPhaseDone(phase, metrics, "ok"));
                 }
@@ -169,25 +169,25 @@ public final class TaiCliFormatter {
         if (ranked == null || ranked.length() == 0) {
             out.append("  No complete results yet. Run: tai benchmark [model] --preset quick\n");
         } else {
-            out.append(String.format(Locale.US, "  %2s  %-34s %-5s %9s %11s %10s %7s  %s\n",
-                "#", "model", "proc", "writing", "first word", "reading", "load", "verdict"));
+            out.append(String.format(Locale.US, "  %2s  %-34s %-5s %-7s %10s %8s %8s %8s\n",
+                "#", "model", "proc", "verdict", "writes", "starts", "reads", "memory"));
             for (int i = 0; i < ranked.length(); i++) {
                 JSONObject row = ranked.optJSONObject(i);
                 if (row == null) continue;
-                out.append(String.format(Locale.US, "  %2d  %-34s %-5s %9s %11s %10s %7s  %s\n",
+                out.append(String.format(Locale.US, "  %2d  %-34s %-5s %-7s %10s %8s %8s %8s\n",
                     row.optInt("rank", i + 1), shorten(row.optString("modelId", ""), 34), processorLabel(row),
-                    tps(row.optDouble("writingTps", 0.0)), millis(row, "firstWordMs"), tps(row.optDouble("readingTps", 0.0)),
-                    row.isNull("loadMs") ? "" : seconds(row.optLong("loadMs", 0L)), clean(row.optString("verdict", ""))));
+                    clean(row.optString("verdict", "")), tps(row.optDouble("decodeTps", 0.0)), secondsOf(row, "ttftMs"),
+                    secondsOf(row, "readMs"), row.optLong("memBytes", -1L) > 0L ? formatBytes(row.optLong("memBytes", -1L)) : ""));
             }
         }
         JSONArray broken = leaderboard.optJSONArray("broken");
         if (broken != null && broken.length() > 0) {
-            out.append("Broken (check failed, not ranked):\n");
+            out.append("Broken (sanity check failed, not ranked):\n");
             for (int i = 0; i < broken.length(); i++) {
                 JSONObject row = broken.optJSONObject(i);
                 if (row == null) continue;
                 out.append("  ").append(clean(row.optString("modelId", ""))).append(' ').append(processorLabel(row))
-                    .append(' ').append(tps(row.optDouble("writingTps", 0.0))).append('\n');
+                    .append('\n');
             }
         }
         return out.toString();
@@ -206,19 +206,20 @@ public final class TaiCliFormatter {
             case "warmup":
                 out.append("done");
                 break;
-            case "reading":
-                out.append(series(metrics, "tok/s"));
-                break;
-            case "firstWord":
-                out.append(series(metrics, "ms"));
-                break;
-            case "writing":
-                out.append(series(metrics, "tok/s"));
+            case "chat":
+                out.append("starts in ").append(seriesSeconds(metrics.optJSONObject("ttftMs")))
+                    .append(", writes ").append(tpsSeries(metrics.optJSONObject("decodeTps")));
                 if (metrics.has("tokens")) out.append(", ").append(metrics.optInt("tokens", 0)).append(" tokens");
                 break;
-            case "sustained":
-                out.append(tps(metrics.optDouble("startTps", 0.0))).append(" -> ").append(tps(metrics.optDouble("endTps", 0.0)))
-                    .append(String.format(Locale.US, " (%.0f%% drop over %.0f s)", metrics.optDouble("dropPct", 0.0), metrics.optDouble("seconds", 0.0)));
+            case "longInput":
+                out.append("reads in ").append(seriesSeconds(metrics.optJSONObject("readMs")));
+                if (metrics.optInt("promptTokens", 0) > 0) {
+                    out.append(" (").append(metrics.optInt("promptTokens", 0)).append(" prompt tokens");
+                    if (metrics.optJSONObject("promptTps") != null) out.append(", ").append(tpsSeries(metrics.optJSONObject("promptTps")));
+                    out.append(')');
+                }
+                if (metrics.optBoolean("truncated", false)) out.append(", log cut to fit the window");
+                if (metrics.optLong("peakPssBytes", -1L) > 0L) out.append(", ").append(formatBytes(metrics.optLong("peakPssBytes", -1L))).append(" peak");
                 break;
             case "check":
                 out.append(metrics.optInt("passed", 0)).append('/').append(metrics.optInt("total", 0));
@@ -249,12 +250,13 @@ public final class TaiCliFormatter {
         String status = record.optString("status", "");
         if (status.startsWith("skipped:")) return "";
         JSONObject phases = record.optJSONObject("phases");
-        JSONObject writing = phases == null ? null : phases.optJSONObject("writing");
+        JSONObject chat = phases == null ? null : phases.optJSONObject("chat");
+        JSONObject decode = chat == null ? null : chat.optJSONObject("decodeTps");
         String verdict = nullable(record, "verdict", "");
         StringBuilder out = new StringBuilder("  -> ");
         if (!verdict.isEmpty()) {
             out.append(verdict);
-            if (writing != null) out.append(" (").append(tps(writing.optDouble("med", 0.0))).append(')');
+            if (decode != null) out.append(" (").append(tps(decode.optDouble("med", 0.0))).append(')');
         } else {
             out.append(status);
         }
@@ -283,25 +285,29 @@ public final class TaiCliFormatter {
         switch (phase) {
             case "load": return "load        ";
             case "warmup": return "warm-up     ";
-            case "reading": return "reading     ";
-            case "firstWord": return "first word  ";
-            case "writing": return "writing     ";
-            case "sustained": return "sustained   ";
+            case "chat": return "chat        ";
+            case "longInput": return "long input  ";
             case "check": return "check       ";
             default: return String.format(Locale.US, "%-12s", phase);
         }
     }
 
-    /** "21.3 tok/s (min 19.8, max 22.0)" over a {@code {med, min, max, runs}} object. */
+    /** "21.3 tok/s (min 19.8, max 22.0)" over a {@code {med, min, max, runs}} object; "not measured" without one. */
     @NonNull
-    private static String series(@NonNull JSONObject metrics, @NonNull String unit) {
-        if (!metrics.has("med")) return "not measured";
-        String med = "ms".equals(unit) ? Math.round(metrics.optDouble("med", 0.0)) + " ms" : tps(metrics.optDouble("med", 0.0));
+    private static String tpsSeries(@Nullable JSONObject metrics) {
+        if (metrics == null || !metrics.has("med")) return "not measured";
+        String med = tps(metrics.optDouble("med", 0.0));
         if (metrics.optInt("runs", 1) <= 1) return med;
-        if ("ms".equals(unit)) {
-            return med + String.format(Locale.US, " (min %d, max %d)", Math.round(metrics.optDouble("min", 0.0)), Math.round(metrics.optDouble("max", 0.0)));
-        }
         return med + String.format(Locale.US, " (min %.1f, max %.1f)", metrics.optDouble("min", 0.0), metrics.optDouble("max", 0.0));
+    }
+
+    /** "0.6 s (min 0.5, max 0.7)" over a {@code {med, min, max, runs}} object in milliseconds; "not measured" without one. */
+    @NonNull
+    private static String seriesSeconds(@Nullable JSONObject metrics) {
+        if (metrics == null || !metrics.has("med")) return "not measured";
+        String med = String.format(Locale.US, "%.1f s", metrics.optDouble("med", 0.0) / 1000.0);
+        if (metrics.optInt("runs", 1) <= 1) return med;
+        return med + String.format(Locale.US, " (min %.1f, max %.1f)", metrics.optDouble("min", 0.0) / 1000.0, metrics.optDouble("max", 0.0) / 1000.0);
     }
 
     @NonNull
@@ -309,10 +315,11 @@ public final class TaiCliFormatter {
         return String.format(Locale.US, value >= 100.0 ? "%.0f tok/s" : "%.1f tok/s", value);
     }
 
+    /** A row's milliseconds figure as "0.6 s"; empty when it was not measured. */
     @NonNull
-    private static String millis(@NonNull JSONObject row, @NonNull String key) {
+    private static String secondsOf(@NonNull JSONObject row, @NonNull String key) {
         if (row.isNull(key) || !row.has(key)) return "";
-        return Math.round(row.optDouble(key, 0.0)) + " ms";
+        return String.format(Locale.US, "%.1f s", row.optDouble(key, 0.0) / 1000.0);
     }
 
     @NonNull

@@ -21,37 +21,39 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Runs bench v1 ({@link TaiBenchSuite}) over a list of entries in the {@code :tai_runtime}
+ * Runs bench v2 ({@link TaiBenchSuite}) over a list of entries in the {@code :tai_runtime}
  * process and streams what happens as JSON events. LiteRT-LM and MNN are measured by the same
  * code: every generation goes through {@link TaiGenerationCallback}, the first and last token are
  * stamped as they arrive, and the prompt and generated token counts come from the runtime's own
  * usage figures. Nothing here calls a backend's own benchmark routine.
  *
  * <p>Per entry: unload whatever is resident, load cold (timed, memory through
- * {@link TaiLoadMeter}), one warm-up reply that is discarded, the preset's reading / first word /
- * writing runs (and the sustained window on Thorough), the three check questions, unload. The
- * {@link Host} does the loading and generating so this class knows nothing about the router; the
- * {@link TaiBenchGuard} is asked before every phase; {@link #requestStop} ends the run from
- * outside (the runtime's cancel and unload operations), keeping the phases that finished.
+ * {@link TaiLoadMeter}), one warm-up reply that is discarded, the preset's Chat and Long input
+ * runs (the process's peak memory is sampled while the long input is read), the three sanity
+ * questions, unload. The {@link Host} does the loading and generating so this class knows nothing
+ * about the router; the {@link TaiBenchGuard} is asked before every phase; {@link #requestStop}
+ * ends the run from outside (the runtime's cancel and unload operations), keeping the phases that
+ * finished.
  *
- * <p>Timing: TTFT is the first token minus the submit; prefill tok/s is prompt tokens over that;
- * decode tok/s is (generated − 1) over the first-to-last-token interval
- * ({@link TaiBenchStats}). Each run has a time limit of three times its expected length
- * ({@link TaiBenchSuite#timeLimitMs}): a watchdog cancels the runtime and the phase is marked
- * {@code timeout}.
+ * <p>Timing: TTFT is the first token minus the submit, which for the long input is the time to
+ * read the page; prefill tok/s is prompt tokens over that; decode tok/s is (generated - 1) over
+ * the first-to-last-token interval ({@link TaiBenchStats}). Each run has a time limit of three
+ * times its expected length ({@link TaiBenchSuite#timeLimitMs}): a watchdog cancels the runtime
+ * and the phase is marked {@code timeout}.
  *
  * <p>Events ({@code event} field): {@code entry_start}, {@code phase_start} (with the prompt),
- * {@code token} (at most one per {@link #TOKEN_EVENT_INTERVAL_MS}, with the text since the last
- * one and the running tok/s), {@code phase_done} (the metrics and the whole reply),
- * {@code entry_done} (the record the store keeps), {@code skipped}, {@code error}, {@code done};
- * also {@code check_start} (one per check question) and {@code paused} (the guard asked for a
- * wait). Every event carries {@code at}, the wall-clock millisecond it was made.
+ * {@code run_start} (one per generation), {@code token} (at most one per
+ * {@link #TOKEN_EVENT_INTERVAL_MS}, with the text since the last one and the running tok/s),
+ * {@code phase_done} (the metrics and the whole reply), {@code entry_done} (the record the store
+ * keeps), {@code skipped}, {@code error}, {@code done}; also {@code check_start} (one per sanity
+ * question) and {@code paused} (the guard asked for a wait). Every event carries {@code at}, the
+ * wall-clock millisecond it was made.
  */
 final class TaiBenchHarness {
     /** Token events are coalesced to about 20 a second; a live view needs no more. */
     static final long TOKEN_EVENT_INTERVAL_MS = 50L;
-    /** The sustained phase compares the tokens of its first and last window of this length. */
-    static final long SUSTAINED_WINDOW_MS = 10_000L;
+    /** While the long input is read the runtime's memory is sampled this often; the peak is kept. */
+    static final long MEMORY_SAMPLE_INTERVAL_MS = 250L;
 
     /** What the harness needs from the runtime process; {@link TaiManager} implements it. */
     interface Host {
@@ -64,7 +66,8 @@ final class TaiBenchHarness {
         /** Cancels the load or generation in progress; the watchdog's lever. */
         void cancel();
         @NonNull TaiLoadMeter startMeter();
-        @NonNull String readingPassage() throws IOException;
+        /** The build log the long-input test pastes, whole; {@link TaiBenchSuite#longInput} fits it to the window. */
+        @NonNull String longInputLog() throws IOException;
         /** The model, runtime and device stamps for an entry's record: displayName, sizeBytes, sha256, runtimeVersion. */
         @NonNull JSONObject describe(@NonNull TaiBenchSuite.EntryPlan entry) throws JSONException;
         /**
@@ -75,9 +78,10 @@ final class TaiBenchHarness {
         void clearMmapCache(@NonNull TaiBenchSuite.EntryPlan entry);
         /**
          * The runtime process's own proportional set size right now, in bytes, or {@code -1}
-         * when it cannot be read. Taken after the load and the warm-up, it is what the model
-         * really costs the phone: {@link TaiLoadMeter}'s MemAvailable difference is meaningless
-         * for an mmap'd MNN package, whose pages are counted only as they are touched.
+         * when it cannot be read. Sampled while the long input is read, when the weights and the
+         * KV cache are all in use, its peak is what the model really costs the phone:
+         * {@link TaiLoadMeter}'s MemAvailable difference is meaningless for an mmap'd MNN package,
+         * whose pages are counted only as they are touched.
          */
         long processPssBytes();
     }
@@ -245,24 +249,15 @@ final class TaiBenchHarness {
 
             if (!consultGuard(TaiBenchSuite.PHASE_WARMUP, entry, record)) return record.finish();
             Generation warmup = generate(entry, TaiBenchSuite.PHASE_WARMUP, 1, 1,
-                TaiBenchSuite.WARMUP_PROMPT, TaiBenchSuite.WARMUP_MAX_TOKENS, 0L);
+                TaiBenchSuite.WARMUP_PROMPT, TaiBenchSuite.WARMUP_MAX_TOKENS);
             if (!warmup.ok && !record.noteFailure(TaiBenchSuite.PHASE_WARMUP, warmup)) return record.finish();
-            // The weights are all touched once the warm-up has run: the process's PSS now is the
-            // model's real footprint, for both backends alike.
-            try {
-                record.pssBytes = host.processPssBytes();
-            } catch (RuntimeException ignored) {
-                record.pssBytes = -1L;
-            }
             PhaseEnd warmupEnd = new PhaseEnd();
             warmupEnd.add(warmup);
             emit(warmupEnd.into(event("phase_done").put("phase", TaiBenchSuite.PHASE_WARMUP).put("status", warmup.status())
-                .put("reply", warmup.reply()).put("metrics", new JSONObject().put("pssBytes", record.pssBytes))));
+                .put("reply", warmup.reply())));
 
-            if (!runReading(entry, record)) return record.finish();
-            if (!runFirstWord(entry, record)) return record.finish();
-            if (!runWriting(entry, record)) return record.finish();
-            if (preset.sustained && !runSustained(entry, record)) return record.finish();
+            if (!runChat(entry, record)) return record.finish();
+            if (!runLongInput(entry, record)) return record.finish();
             if (!runCheck(entry, record)) return record.finish();
             record.status = TaiBenchStore.STATUS_COMPLETE;
             return record.finish();
@@ -359,110 +354,81 @@ final class TaiBenchHarness {
         return true;
     }
 
-    private boolean runReading(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull Record record) throws IOException, JSONException {
-        if (!consultGuard(TaiBenchSuite.PHASE_READING, entry, record)) return false;
-        String prompt = TaiBenchSuite.readingPrompt(host.readingPassage());
-        emit(event("phase_start").put("phase", TaiBenchSuite.PHASE_READING).put("runs", preset.readingRuns).put("prompt", prompt));
-        for (int run = 1; run <= preset.readingRuns; run++) {
-            Generation generation = generate(entry, TaiBenchSuite.PHASE_READING, run, preset.readingRuns,
-                prompt, TaiBenchSuite.READING_MAX_TOKENS, 0L);
-            if (!generation.ok && !record.noteFailure(TaiBenchSuite.PHASE_READING, generation)) return false;
-            record.lastReply = generation.reply();
-            record.readingEnd.add(generation);
-            if (generation.promptTokens > 0 && generation.ttftMs() > 0L) {
-                record.reading.add(TaiBenchStats.prefillTps(generation.promptTokens, generation.ttftMs()));
-            }
-            record.readingTokens = Math.max(record.readingTokens, generation.promptTokens);
-            if (generation.timedOut) break;
-        }
-        emit(record.readingEnd.into(event("phase_done").put("phase", TaiBenchSuite.PHASE_READING).put("status", record.phaseStatus)
-            .put("metrics", metrics(record.reading).put("promptTokens", record.readingTokens))
-            .put("reply", record.lastReply)));
-        return true;
-    }
-
-    private boolean runFirstWord(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull Record record) throws IOException, JSONException {
-        if (!consultGuard(TaiBenchSuite.PHASE_FIRST_WORD, entry, record)) return false;
-        emit(event("phase_start").put("phase", TaiBenchSuite.PHASE_FIRST_WORD).put("runs", preset.firstWordRuns)
-            .put("prompt", TaiBenchSuite.FIRST_WORD_PROMPT));
-        for (int run = 1; run <= preset.firstWordRuns; run++) {
-            Generation generation = generate(entry, TaiBenchSuite.PHASE_FIRST_WORD, run, preset.firstWordRuns,
-                TaiBenchSuite.FIRST_WORD_PROMPT, TaiBenchSuite.FIRST_WORD_MAX_TOKENS, 0L);
-            if (!generation.ok && !record.noteFailure(TaiBenchSuite.PHASE_FIRST_WORD, generation)) return false;
-            record.lastReply = generation.reply();
-            record.firstWordEnd.add(generation);
-            if (generation.ttftMs() > 0L) record.firstWord.add(generation.ttftMs());
-            if (generation.timedOut) break;
-        }
-        emit(record.firstWordEnd.into(event("phase_done").put("phase", TaiBenchSuite.PHASE_FIRST_WORD).put("status", record.phaseStatus)
-            .put("metrics", metrics(record.firstWord)).put("reply", record.lastReply)));
-        return true;
-    }
-
-    private boolean runWriting(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull Record record) throws IOException, JSONException {
-        if (!consultGuard(TaiBenchSuite.PHASE_WRITING, entry, record)) return false;
-        emit(event("phase_start").put("phase", TaiBenchSuite.PHASE_WRITING).put("runs", preset.writingRuns)
-            .put("prompt", TaiBenchSuite.WRITING_PROMPT));
+    private boolean runChat(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull Record record) throws IOException, JSONException {
+        if (!consultGuard(TaiBenchSuite.PHASE_CHAT, entry, record)) return false;
+        emit(event("phase_start").put("phase", TaiBenchSuite.PHASE_CHAT).put("runs", preset.runs)
+            .put("prompt", TaiBenchSuite.CHAT_PROMPT));
         TaiBenchStats.Series tokens = new TaiBenchStats.Series();
-        for (int run = 1; run <= preset.writingRuns; run++) {
-            Generation generation = generate(entry, TaiBenchSuite.PHASE_WRITING, run, preset.writingRuns,
-                TaiBenchSuite.WRITING_PROMPT, TaiBenchSuite.WRITING_MAX_TOKENS, 0L);
-            if (!generation.ok && !record.noteFailure(TaiBenchSuite.PHASE_WRITING, generation)) return false;
+        for (int run = 1; run <= preset.runs; run++) {
+            Generation generation = generate(entry, TaiBenchSuite.PHASE_CHAT, run, preset.runs,
+                TaiBenchSuite.CHAT_PROMPT, TaiBenchSuite.CHAT_MAX_TOKENS);
+            if (!generation.ok && !record.noteFailure(TaiBenchSuite.PHASE_CHAT, generation)) return false;
             record.lastReply = generation.reply();
-            record.writingEnd.add(generation);
+            record.chatReply = generation.reply();
+            record.chatEnd.add(generation);
+            if (generation.ttftMs() > 0L) record.chatTtft.add(generation.ttftMs());
             double tps = generation.decodeTps();
-            if (tps > 0.0) record.writing.add(tps);
+            if (tps > 0.0) record.chatDecode.add(tps);
             if (generation.generatedTokens() > 0) tokens.add(generation.generatedTokens());
             if (generation.timedOut) break;
         }
-        record.writingTokens = (int) Math.round(tokens.median());
-        emit(record.writingEnd.into(event("phase_done").put("phase", TaiBenchSuite.PHASE_WRITING).put("status", record.phaseStatus)
-            .put("metrics", metrics(record.writing).put("tokens", record.writingTokens)).put("reply", record.lastReply)));
+        record.chatTokens = (int) Math.round(tokens.median());
+        emit(record.chatEnd.into(event("phase_done").put("phase", TaiBenchSuite.PHASE_CHAT).put("status", record.phaseStatus)
+            .put("metrics", record.chatMetrics()).put("reply", record.chatReply)));
         return true;
     }
 
     /**
-     * Thorough only: one reply held for {@link TaiBenchSuite#SUSTAINED_SECONDS}, then stopped
-     * through the callback. The token rate of the first {@link #SUSTAINED_WINDOW_MS} against the
-     * last shows how far the phone throttled while it wrote.
+     * The build log, fitted to the loaded window, with a short question after it. The wait for the
+     * first token is the time to read the page. The runtime's memory is sampled every
+     * {@link #MEMORY_SAMPLE_INTERVAL_MS} for as long as the phase runs, and the peak is the
+     * entry's memory figure.
      */
-    private boolean runSustained(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull Record record) throws IOException, JSONException {
-        if (!consultGuard(TaiBenchSuite.PHASE_SUSTAINED, entry, record)) return false;
-        String prompt = TaiBenchSuite.WRITING_PROMPT + " Then keep going: describe every kind of cloud you know, one paragraph each.";
-        emit(event("phase_start").put("phase", TaiBenchSuite.PHASE_SUSTAINED).put("runs", 1).put("prompt", prompt)
-            .put("seconds", TaiBenchSuite.SUSTAINED_SECONDS));
-        Generation generation = generate(entry, TaiBenchSuite.PHASE_SUSTAINED, 1, 1, prompt,
-            TaiBenchSuite.SUSTAINED_MAX_TOKENS, TaiBenchSuite.SUSTAINED_SECONDS * 1000L);
-        // A cancelled reply is the expected end of this phase, not a failure, as long as it wrote.
-        if (!generation.ok && generation.stamps.size() < 2 && !record.noteFailure(TaiBenchSuite.PHASE_SUSTAINED, generation)) return false;
-        JSONObject sustained = sustainedMetrics(generation.stamps);
-        record.sustained = sustained;
-        emit(event("phase_done").put("phase", TaiBenchSuite.PHASE_SUSTAINED).put("status", generation.timedOut ? "timeout" : "ok")
-            .put("metrics", sustained).put("reply", generation.reply()));
+    private boolean runLongInput(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull Record record) throws IOException, JSONException {
+        if (!consultGuard(TaiBenchSuite.PHASE_LONG_INPUT, entry, record)) return false;
+        record.contextWindow = loadedContextWindow(record.loadResult);
+        TaiBenchSuite.LongInput input = TaiBenchSuite.longInput(host.longInputLog(), record.contextWindow);
+        record.longInput = input;
+        emit(event("phase_start").put("phase", TaiBenchSuite.PHASE_LONG_INPUT).put("runs", preset.runs)
+            .put("prompt", TaiBenchSuite.LONG_INPUT_QUESTION).put("truncated", input.truncated)
+            .put("keptChars", input.keptChars).put("totalChars", input.totalChars));
+        ScheduledFuture<?> sampler = watchdog.scheduleAtFixedRate(() -> sampleMemory(record.peakPss), 0L,
+            MEMORY_SAMPLE_INTERVAL_MS, TimeUnit.MILLISECONDS);
+        try {
+            for (int run = 1; run <= preset.runs; run++) {
+                Generation generation = generate(entry, TaiBenchSuite.PHASE_LONG_INPUT, run, preset.runs,
+                    input.prompt, TaiBenchSuite.LONG_INPUT_MAX_TOKENS);
+                if (!generation.ok && !record.noteFailure(TaiBenchSuite.PHASE_LONG_INPUT, generation)) return false;
+                record.lastReply = generation.reply();
+                record.longEnd.add(generation);
+                if (generation.ttftMs() > 0L) record.longRead.add(generation.ttftMs());
+                if (generation.promptTokens > 0 && generation.ttftMs() > 0L) {
+                    record.longPromptTps.add(TaiBenchStats.prefillTps(generation.promptTokens, generation.ttftMs()));
+                }
+                record.promptTokens = Math.max(record.promptTokens, generation.promptTokens);
+                if (generation.timedOut) break;
+            }
+        } finally {
+            sampler.cancel(false);
+            sampleMemory(record.peakPss);
+        }
+        emit(record.longEnd.into(event("phase_done").put("phase", TaiBenchSuite.PHASE_LONG_INPUT).put("status", record.phaseStatus)
+            .put("metrics", record.longInputMetrics()).put("reply", record.lastReply)));
         return true;
     }
 
-    /** {@code {startTps, endTps, dropPct, tokens, seconds}} from the token stamps of one reply. */
-    @NonNull
-    static JSONObject sustainedMetrics(@NonNull List<Long> stamps) throws JSONException {
-        JSONObject metrics = new JSONObject();
-        if (stamps.size() < 2) {
-            return metrics.put("startTps", 0.0).put("endTps", 0.0).put("dropPct", 0.0).put("tokens", stamps.size()).put("seconds", 0.0);
+    /** One memory sample into {@code peak}; a runtime that cannot say adds nothing. */
+    private void sampleMemory(@NonNull TaiBenchStats.Peak peak) {
+        try {
+            peak.add(host.processPssBytes());
+        } catch (RuntimeException ignored) {
         }
-        long first = stamps.get(0);
-        long last = stamps.get(stamps.size() - 1);
-        long window = Math.min(SUSTAINED_WINDOW_MS, Math.max(1L, last - first));
-        int startCount = 0;
-        int endCount = 0;
-        for (long stamp : stamps) {
-            if (stamp - first < window) startCount++;
-            if (last - stamp < window) endCount++;
-        }
-        double startTps = startCount * 1000.0 / window;
-        double endTps = endCount * 1000.0 / window;
-        double dropPct = startTps <= 0.0 ? 0.0 : Math.max(0.0, (startTps - endTps) / startTps * 100.0);
-        return metrics.put("startTps", startTps).put("endTps", endTps).put("dropPct", dropPct)
-            .put("tokens", stamps.size()).put("seconds", (last - first) / 1000.0);
+    }
+
+    /** The window the loaded model was sized with, from the load's budget; {@code 0} when it did not say. */
+    static int loadedContextWindow(@Nullable JSONObject load) {
+        JSONObject budget = load == null ? null : load.optJSONObject("memoryBudget");
+        return budget == null ? 0 : budget.optInt("contextWindow", 0);
     }
 
     private boolean runCheck(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull Record record) throws IOException, JSONException {
@@ -475,7 +441,7 @@ final class TaiBenchHarness {
             TaiBenchSuite.Check check = TaiBenchSuite.CHECKS.get(i);
             emit(event("check_start").put("phase", TaiBenchSuite.PHASE_CHECK).put("run", i + 1).put("name", check.name).put("prompt", check.prompt));
             Generation generation = generate(entry, TaiBenchSuite.PHASE_CHECK, i + 1, TaiBenchSuite.CHECKS.size(),
-                check.prompt, TaiBenchSuite.CHECK_MAX_TOKENS, 0L);
+                check.prompt, TaiBenchSuite.CHECK_MAX_TOKENS);
             if (!generation.ok && !record.noteFailure(TaiBenchSuite.PHASE_CHECK, generation)) return false;
             boolean ok = generation.ok && check.grade(generation.reply());
             if (ok) passed++;
@@ -592,13 +558,10 @@ final class TaiBenchHarness {
         }
     }
 
-    /**
-     * One reply with every token stamped. {@code holdMs > 0} is the sustained window: the callback
-     * stops the reply after that long. The watchdog cancels the runtime at the phase's limit.
-     */
+    /** One reply with every token stamped. The watchdog cancels the runtime at the phase's limit. */
     @NonNull
     private Generation generate(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull String phase, int run, int runs,
-                                @NonNull String prompt, int maxTokens, long holdMs) throws IOException, JSONException {
+                                @NonNull String prompt, int maxTokens) throws IOException, JSONException {
         Generation generation = new Generation();
         long limitMs = TaiBenchSuite.timeLimitMs(phase);
         AtomicBoolean pastLimit = new AtomicBoolean();
@@ -606,8 +569,8 @@ final class TaiBenchHarness {
         AtomicLong lastEventMs = new AtomicLong();
         AtomicInteger eventTokens = new AtomicInteger();
         ScheduledFuture<?> limit = armWatchdog(limitMs, () -> pastLimit.set(true));
+        emit(event("run_start").put("phase", phase).put("run", run).put("runs", runs));
         generation.submitMs = System.currentTimeMillis();
-        long submitNanos = System.nanoTime();
         List<IOException> sinkFailure = new ArrayList<>(1);
         TaiGenerationCallback callback = new TaiGenerationCallback() {
             @Override
@@ -649,8 +612,7 @@ final class TaiBenchHarness {
 
             @Override
             public boolean shouldCancelGeneration() {
-                if (pastLimit.get() || stopRequested()) return true;
-                return holdMs > 0L && (System.nanoTime() - submitNanos) / 1_000_000L >= holdMs;
+                return pastLimit.get() || stopRequested();
             }
 
             private void maybeEmitToken(boolean flush) {
@@ -706,12 +668,6 @@ final class TaiBenchHarness {
         }
         generation.timedOut = pastLimit.get();
         generation.ok = result.optBoolean("ok", false);
-        // A reply the callback cut short (the sustained window, an outside stop) comes back as
-        // cancelled from MNN; it still measured what it measured.
-        if (!generation.ok && "generation_cancelled".equals(result.optString("error", ""))
-                && (holdMs > 0L || stopRequested()) && generation.callbackTokens > 0) {
-            generation.ok = holdMs > 0L;
-        }
         if (!generation.ok) {
             generation.errorCode = generation.timedOut ? "timeout" : result.optString("error", "generation_failed");
             generation.errorMessage = result.optString("message", generation.errorCode);
@@ -752,18 +708,20 @@ final class TaiBenchHarness {
         final long startedMs = System.currentTimeMillis();
         long loadMs = -1L;
         long memBytes = -1L;
-        /** The runtime process's PSS after load and warm-up; {@code -1} until measured or when unreadable. */
-        long pssBytes = -1L;
         @Nullable JSONObject loadResult;
-        final TaiBenchStats.Series reading = new TaiBenchStats.Series();
-        int readingTokens;
-        final TaiBenchStats.Series firstWord = new TaiBenchStats.Series();
-        final TaiBenchStats.Series writing = new TaiBenchStats.Series();
-        int writingTokens;
-        final PhaseEnd readingEnd = new PhaseEnd();
-        final PhaseEnd firstWordEnd = new PhaseEnd();
-        final PhaseEnd writingEnd = new PhaseEnd();
-        @Nullable JSONObject sustained;
+        final TaiBenchStats.Series chatTtft = new TaiBenchStats.Series();
+        final TaiBenchStats.Series chatDecode = new TaiBenchStats.Series();
+        int chatTokens;
+        @NonNull String chatReply = "";
+        final PhaseEnd chatEnd = new PhaseEnd();
+        final TaiBenchStats.Series longRead = new TaiBenchStats.Series();
+        final TaiBenchStats.Series longPromptTps = new TaiBenchStats.Series();
+        int promptTokens;
+        int contextWindow;
+        @Nullable TaiBenchSuite.LongInput longInput;
+        final PhaseEnd longEnd = new PhaseEnd();
+        /** The runtime process's peak PSS while the long input was read; {@code -1} until sampled or when unreadable. */
+        final TaiBenchStats.Peak peakPss = new TaiBenchStats.Peak();
         int checkPassed = -1;
         @Nullable JSONArray checkDetails;
         @NonNull String status = "stopped:incomplete";
@@ -797,18 +755,36 @@ final class TaiBenchHarness {
             return false;
         }
 
+        /** The Chat phase's figures: {@code {ttftMs, decodeTps, tokens}}, each figure a {@code {med, min, max, runs}}. */
+        @NonNull
+        JSONObject chatMetrics() throws JSONException {
+            JSONObject json = new JSONObject();
+            putSeries(json, "ttftMs", chatTtft);
+            putSeries(json, "decodeTps", chatDecode);
+            return json.put("tokens", chatTokens);
+        }
+
+        /** The Long input phase's figures: the read time and prompt rate as series, the prompt size, the fit and the peak memory. */
+        @NonNull
+        JSONObject longInputMetrics() throws JSONException {
+            JSONObject json = new JSONObject();
+            putSeries(json, "readMs", longRead);
+            putSeries(json, "promptTps", longPromptTps);
+            json.put("promptTokens", promptTokens).put("contextWindow", contextWindow);
+            if (longInput != null) {
+                json.put("truncated", longInput.truncated).put("keptChars", longInput.keptChars).put("totalChars", longInput.totalChars);
+            }
+            return json.put("peakPssBytes", peakPss.value());
+        }
+
         @NonNull
         JSONObject finish() throws JSONException {
             JSONObject describe = host.describe(entry);
             JSONObject phases = new JSONObject();
-            phases.put("load", loadMs < 0L ? JSONObject.NULL
-                : new JSONObject().put("ms", loadMs).put("memBytes", memBytes).put("pssBytes", pssBytes));
-            phases.put("reading", orNull(reading.toJson() == null ? null
-                : readingEnd.into(reading.toJson().put("promptTokens", readingTokens))));
-            phases.put("firstWord", orNull(firstWord.toJson() == null ? null : firstWordEnd.into(firstWord.toJson())));
-            phases.put("writing", orNull(writing.toJson() == null ? null
-                : writingEnd.into(writing.toJson().put("tokens", writingTokens))));
-            phases.put("sustained", orNull(sustained));
+            phases.put("load", loadMs < 0L ? JSONObject.NULL : new JSONObject().put("ms", loadMs).put("memBytes", memBytes));
+            phases.put("chat", chatTtft.isEmpty() && chatDecode.isEmpty() ? JSONObject.NULL
+                : chatEnd.into(chatMetrics().put("reply", chatReply)));
+            phases.put("longInput", longRead.isEmpty() ? JSONObject.NULL : longEnd.into(longInputMetrics()));
             JSONObject check = new JSONObject()
                 .put("passed", Math.max(0, checkPassed))
                 .put("total", TaiBenchSuite.CHECKS.size())
@@ -838,22 +814,18 @@ final class TaiBenchHarness {
             record.put("check", check);
             record.put("status", status);
             record.put("verdict", TaiBenchStore.STATUS_COMPLETE.equals(status) || "timeout".equals(status)
-                ? TaiBenchStats.verdict(writing.median(), checkOk) : JSONObject.NULL);
+                ? TaiBenchStats.verdict(chatDecode.median(), Math.round(chatTtft.median()), Math.round(longRead.median()), checkOk)
+                : JSONObject.NULL);
             if (skipReason != null) record.put("skipReason", skipReason);
             if (loadResult != null && loadResult.has("memoryBudget")) record.put("memoryBudget", loadResult.opt("memoryBudget"));
             return record;
         }
     }
 
-    @NonNull
-    private static Object orNull(@Nullable JSONObject json) {
-        return json == null ? JSONObject.NULL : json;
-    }
-
-    @NonNull
-    private static JSONObject metrics(@NonNull TaiBenchStats.Series series) throws JSONException {
-        JSONObject json = series.toJson();
-        return json == null ? new JSONObject().put("runs", 0) : json;
+    /** {@code series} under {@code key} as {@code {med, min, max, runs}}; nothing when no run measured it. */
+    private static void putSeries(@NonNull JSONObject json, @NonNull String key, @NonNull TaiBenchStats.Series series) throws JSONException {
+        JSONObject figure = series.toJson();
+        if (figure != null) json.put(key, figure);
     }
 
     @NonNull
