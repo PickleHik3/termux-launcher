@@ -176,10 +176,10 @@ public class SettingsSectionChipsTest {
         SettingsSectionChips.FilteringAdapter adapter =
             (SettingsSectionChips.FilteringAdapter) fragment.getListView().getAdapter();
 
-        // "Lazy mode" carries a single row; hiding it (as a page's own gating logic would) empties
-        // its whole section, so this also exercises "the selected section disappeared -> back to
-        // All" in the same test.
-        Preference lazyMode = fragment.findPreference("lazy_mode");
+        // Hiding every row of the clipboard section (as a page's own gating logic would) empties
+        // it, so this also exercises "the selected section disappeared -> back to All" in the
+        // same test. the first of those rows is `lazyMode` here, a name kept from when it was the lone row.
+        Preference lazyMode = fragment.findPreference("terminal_osc52_clipboard_read_enabled");
         assertNotNull(lazyMode);
         PreferenceCategory lazySection = SettingsSectionChips.topCategoryOf(lazyMode, screen);
         assertNotNull(lazySection);
@@ -189,6 +189,8 @@ public class SettingsSectionChipsTest {
         assertEquals(lazySection, SettingsSectionChips.topCategoryOf(adapter.getItem(0), screen));
 
         lazyMode.setVisible(false);
+        fragment.findPreference("terminal_trim_wrapped_trailing_spaces").setVisible(false);
+        fragment.findPreference("terminal_clipboard_cleanup").setVisible(false);
         idle(); // let PreferenceGroupAdapter's deferred sync run and notify our wrapper.
 
         // The section had only this row, so it no longer qualifies: the filter must have fallen

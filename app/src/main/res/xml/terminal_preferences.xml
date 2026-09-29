@@ -74,25 +74,4 @@
             android:defaultValue="true" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/settings_lazy_mode_header">
-        <SwitchPreferenceCompat
-            app:key="lazy_mode"
-            app:icon="@drawable/ic_symbol_battery_saver"
-            app:title="@string/settings_lazy_mode_title"
-            app:summary="@string/settings_lazy_mode_summary"
-            app:defaultValue="false" />
-    </PreferenceCategory>
-
-    <!-- Hidden below Android 13 and disabled without a wallpaper set from inside the launcher;
-         TerminalPreferencesFragment decides both. -->
-    <PreferenceCategory
-        app:key="fancier_glass_header"
-        app:title="@string/settings_fancier_glass_header">
-        <SwitchPreferenceCompat
-            app:key="fancier_glass"
-            app:title="@string/settings_fancier_glass_title"
-            app:summary="@string/settings_fancier_glass_summary"
-            app:defaultValue="false" />
-    </PreferenceCategory>
-
 </PreferenceScreen>
