@@ -399,9 +399,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
 
     @Override
     public boolean isPlankTiltEnabled(@NonNull PaneWallPage page) {
-        // The Display page's picture is a SurfaceView, composited outside the view hierarchy: a
-        // rotation on its frame tips the rim and the glass and leaves the picture flat, stretched
-        // into the tilted frame's bounding box. That place pages plain.
-        return page != PaneWallPage.DISPLAY && mHost.isPlankTiltEnabled();
+        // Every place, the Display too: its picture is a SurfaceView a rotation leaves flat, so the
+        // wall tips it only while a still copy stands in for the surface (SurfacePage), and slides
+        // it flat until then.
+        return mHost.isPlankTiltEnabled();
     }
 }

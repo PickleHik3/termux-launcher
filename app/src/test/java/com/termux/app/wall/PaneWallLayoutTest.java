@@ -526,6 +526,7 @@ public class PaneWallLayoutTest {
             terminal.getRotationY(), EPS);
         assertTrue("pressed on its centre line and dragged left, it dips toward the page arriving "
             + "on its right", terminal.getRotationY() > 0f);
+        // A plain Display page here, parked the whole drag: it has no stand-in to tip.
         assertEquals("the Display page never tips", 0f, display.getRotationY(), EPS);
         // A jump lands the wall at rest: flat, and the layer gone.
         assertTrue(wall.goTo(PaneWallPage.DISPLAY, false));
@@ -589,6 +590,12 @@ public class PaneWallLayoutTest {
         assertEquals(View.LAYER_TYPE_NONE, widgets.getLayerType());
     }
 
+    /**
+     * Changed with the Display's stand-in (2026-09-29): the listener no longer refuses the Display
+     * a tip, the wall decides. A Display page that cannot stand a copy in for its surface — a
+     * plain view here, as a page that is not a {@link SurfacePage} — keeps what a SurfaceView
+     * allows: no tilt, no layer. The stand-in's own tests are further down.
+     */
     @Test
     public void theDisplayPageNeverTipsNorTakesALayerEvenWithLeave() {
         buildWithContent();
@@ -933,6 +940,12 @@ public class PaneWallLayoutTest {
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
     }
 
+    /**
+     * A Display page with no stand-in (a plain view, not a {@link SurfacePage}) sinks by scale
+     * alone, as it did before there was one: its picture would be a SurfaceView a layer strands.
+     * With a stand-in up it takes the layer and the dim (see
+     * {@link #theDisplaysStandInSinksOnALayerAndTheRestGivesTheSurfaceBack}).
+     */
     @Test
     public void theDisplayPageSinksWithoutALayer() {
         buildWithContent();
@@ -1419,5 +1432,242 @@ public class PaneWallLayoutTest {
         assertTrue(wall.tiltPages().isEmpty());
         assertEquals(0f, terminal.getRotationY(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
+    }
+
+    // ---- The Display's stand-in (SurfacePage) ----------------------------------------------------
+
+    /**
+     * A Display page as the wall sees it: a page that can stand a still copy in for its surface.
+     * The copy lands at once, or when the test says ({@link #land}); PixelCopy itself cannot run
+     * on the JVM, and its lifecycle is {@link SurfaceStandInTest}'s.
+     */
+    private static final class FakeSurfacePage extends FrameLayout implements SurfacePage {
+        boolean landsAtOnce = true;
+        boolean still;
+        @androidx.annotation.Nullable Runnable pending;
+        int holds;
+        int releases;
+        int drops;
+
+        FakeSurfacePage(android.content.Context context) {
+            super(context);
+        }
+
+        @Override public void holdStill(Runnable onReady) {
+            holds++;
+            if (still || landsAtOnce) {
+                still = true;
+                onReady.run();
+            } else {
+                pending = onReady;
+            }
+        }
+
+        /** The copy lands mid-motion. */
+        void land() {
+            still = true;
+            Runnable ready = pending;
+            pending = null;
+            if (ready != null) ready.run();
+        }
+
+        @Override public boolean isStill() { return still; }
+
+        @Override public void releaseStill() {
+            releases++;
+            still = false;
+            pending = null;
+        }
+
+        @Override public void dropStill() {
+            drops++;
+            still = false;
+            pending = null;
+        }
+    }
+
+    /** {@link #buildWithContent}, with a Display page that can stand a copy in. */
+    private FakeSurfacePage buildWithSurfaceDisplay() {
+        buildWithContent();
+        FakeSurfacePage page = new FakeSurfacePage(wall.getContext());
+        wall.removeView(display);
+        wall.addView(page);
+        wall.setPageView(PaneWallPage.DISPLAY, page);
+        display = page;
+        wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, WIDTH, HEIGHT);
+        return page;
+    }
+
+    @Test
+    public void theDisplaysStandInSinksOnALayerAndTheRestGivesTheSurfaceBack() {
+        FakeSurfacePage page = buildWithSurfaceDisplay();
+        showAndLayOut(PaneWallPage.DISPLAY);
+        wall.setReducedMotion(false);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        letTheHoldElapse();
+        letTheMotionSettle();
+        assertTrue("the hold asked for the stand-in", page.holds > 0);
+        assertEquals(display, wall.sinkPage());
+        assertEquals(PageSink.SCALE, display.getScaleX(), EPS);
+        assertEquals("the stand-in is a plain view: dimmed on a layer like any page",
+            View.LAYER_TYPE_HARDWARE, display.getLayerType());
+        assertEquals(0, page.releases);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_CANCEL, WIDTH / 2f, 4f,
+            3000L));
+        letTheMotionSettle();
+        assertNull(wall.sinkPage());
+        assertEquals(1f, display.getScaleX(), EPS);
+        assertEquals("the layer goes before the surface comes back", View.LAYER_TYPE_NONE,
+            display.getLayerType());
+        assertEquals("at rest, once", 1, page.releases);
+        assertTrue(wall.stillPlaces().isEmpty());
+    }
+
+    @Test
+    public void aCopyLandingMidSinkTakesTheLayerAndTheDimFromThere() {
+        FakeSurfacePage page = buildWithSurfaceDisplay();
+        page.landsAtOnce = false;
+        showAndLayOut(PaneWallPage.DISPLAY);
+        wall.setReducedMotion(false);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        letTheHoldElapse();
+        letTheMotionSettle();
+        // The copy is on its way: today's sink, a scale on the live surface and no layer.
+        assertEquals(PageSink.SCALE, display.getScaleX(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
+        page.land();
+        assertEquals("snapped in where the sink stands", View.LAYER_TYPE_HARDWARE,
+            display.getLayerType());
+        assertEquals(PageSink.SCALE, display.getScaleX(), EPS);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_CANCEL, WIDTH / 2f, 4f,
+            3000L));
+        letTheMotionSettle();
+        assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
+        assertEquals(1, page.releases);
+    }
+
+    @Test
+    public void aCopyThatNeverLandsLeavesTheDisplaysMotionAsItWas() {
+        FakeSurfacePage page = buildWithSurfaceDisplay();
+        page.landsAtOnce = false;
+        showAndLayOut(PaneWallPage.DISPLAY);
+        wall.setReducedMotion(false);
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isPlankTiltEnabled(PaneWallPage place) { return true; }
+        });
+        // The left border, pulled right: the held Display page would tip if it could.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, HEIGHT / 2f, 0L));
+        letTheHoldElapse();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 304f, HEIGHT / 2f,
+            400L));
+        assertFalse(wall.tiltPages().contains(display));
+        assertEquals(0f, display.getRotationY(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
+        assertTrue("the page arriving tips as ever", wall.tiltPages().contains(terminal));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 4f, HEIGHT / 2f,
+            500L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 4f, HEIGHT / 2f,
+            900L));
+        letTheMotionSettle();
+        assertEquals("rest still tells it, so a copy landing late is only kept", 1,
+            page.releases);
+    }
+
+    @Test
+    public void theDisplayArrivingOnItsKeptCopyTipsWithThePageLeaving() {
+        FakeSurfacePage page = buildWithSurfaceDisplay();
+        layOutEveryPage();
+        wall.setReducedMotion(false);
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isPlankTiltEnabled(PaneWallPage place) { return true; }
+        });
+        // Held by the right border and pulled left: the Display page comes in from the right.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH - 4f,
+            HEIGHT / 2f, 0L));
+        letTheHoldElapse();
+        assertTrue("the drag asked the page beside it too", page.holds > 0);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH - 304f,
+            HEIGHT / 2f, 400L));
+        assertTrue(wall.tiltPages().contains(display));
+        assertEquals(View.LAYER_TYPE_HARDWARE, display.getLayerType());
+        assertTrue("it dips its left edge, at the finger", display.getRotationY() < -1f);
+        assertEquals("one motion: the two tip alike", Math.abs(terminal.getRotationY()),
+            Math.abs(display.getRotationY()), EPS);
+        // Let go short: both lie flat, and the Display is told the wall is at rest.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH - 4f,
+            HEIGHT / 2f, 500L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH - 4f,
+            HEIGHT / 2f, 900L));
+        letTheMotionSettle();
+        assertTrue(wall.tiltPages().isEmpty());
+        assertEquals(0f, display.getRotationY(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
+        assertEquals(1, page.releases);
+    }
+
+    @Test
+    public void theDisplayArrivingWithNoCopyToHandSlidesInFlat() {
+        FakeSurfacePage page = buildWithSurfaceDisplay();
+        page.landsAtOnce = false;
+        layOutEveryPage();
+        wall.setReducedMotion(false);
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean isPlankTiltEnabled(PaneWallPage place) { return true; }
+        });
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH - 4f,
+            HEIGHT / 2f, 0L));
+        letTheHoldElapse();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH - 304f,
+            HEIGHT / 2f, 400L));
+        assertTrue(terminal.getRotationY() > 0f);
+        assertFalse(wall.tiltPages().contains(display));
+        assertEquals(0f, display.getRotationY(), EPS);
+        assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
+    }
+
+    @Test
+    public void aSlideAsksOnlyForTheDisplayItCarries() {
+        FakeSurfacePage page = buildWithSurfaceDisplay();
+        wall.setReducedMotion(false);
+        // Terminal to Widgets: the Display stays parked the whole way.
+        assertTrue(wall.goTo(PaneWallPage.WIDGETS, true));
+        assertEquals(0, page.holds);
+        letTheMotionSettle();
+        assertEquals(0, page.releases);
+        // Widgets to Display: it lands on the Display, which is asked, and told at rest.
+        assertTrue(wall.goTo(PaneWallPage.DISPLAY, true));
+        assertEquals(1, page.holds);
+        letTheMotionSettle();
+        assertEquals(1, page.releases);
+        // And off it again: the Display leaving is on screen as the slide starts.
+        assertTrue(wall.goTo(PaneWallPage.TERMINAL, true));
+        assertEquals(2, page.holds);
+        letTheMotionSettle();
+        assertEquals(2, page.releases);
+    }
+
+    @Test
+    public void reducedMotionAsksForNoStandIn() {
+        FakeSurfacePage page = buildWithSurfaceDisplay();
+        showAndLayOut(PaneWallPage.DISPLAY);
+        // buildWithContent leaves motion reduced.
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 4f, 0L));
+        letTheHoldElapse();
+        assertTrue(wall.isDragging());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_CANCEL, WIDTH / 2f, 4f,
+            3000L));
+        assertTrue(wall.goTo(PaneWallPage.TERMINAL, true));
+        assertEquals(0, page.holds);
+        assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
+    }
+
+    @Test
+    public void theDisplayLeavingTheWallDropsItsStandIn() {
+        FakeSurfacePage page = buildWithSurfaceDisplay();
+        wall.setPageView(PaneWallPage.DISPLAY, null);
+        assertEquals(1, page.drops);
+        assertTrue(wall.stillPlaces().isEmpty());
     }
 }

@@ -240,8 +240,9 @@ public final class PaneWallLayout extends ViewGroup {
     /** The held side border for the plank's press: -1 left, +1 right, 0 top or bottom. */
     private int mSinkSide;
     /**
-     * Whether the sunk page is dimmed, on a hardware layer. Not the Display page: its picture is
-     * a SurfaceView, which follows a scale on its frame but would be stranded by a layer.
+     * Whether the sunk page is dimmed, on a hardware layer. Not a Display page showing its live
+     * surface: a SurfaceView follows a scale on its frame but would be stranded by a layer. Its
+     * stand-in ({@link SurfacePage}) takes the layer, from the moment it is up.
      */
     private boolean mSinkLayered;
     @Nullable private ValueAnimator mSinkSpring;
@@ -250,6 +251,12 @@ public final class PaneWallLayout extends ViewGroup {
     private static final int SINK_DIM_STEPS = 16;
     @Nullable private LightingColorFilter[] mSinkDimFilters;
     private int mSinkDimLevel = -1;
+    /**
+     * The places whose surface pages ({@link SurfacePage}) were asked to hold still for the motion
+     * under way, from its start until the wall rests with every sink risen.
+     */
+    private final java.util.EnumSet<PaneWallPage> mStillPlaces =
+        java.util.EnumSet.noneOf(PaneWallPage.class);
 
     public PaneWallLayout(@NonNull Context context) {
         this(context, null);
@@ -282,6 +289,11 @@ public final class PaneWallLayout extends ViewGroup {
             releasePlankPage(previous);
         }
         if (previous != null && previous != view && previous == mWeightPage) mWeightPage = null;
+        // A surface page leaving the wall lets go of its stand-in and the copy it kept.
+        if (previous instanceof SurfacePage && previous != view) {
+            mStillPlaces.remove(page);
+            ((SurfacePage) previous).dropStill();
+        }
         if (view == null) mPageViews.remove(page);
         else mPageViews.put(page, view);
         applyPagePositions();
@@ -492,6 +504,9 @@ public final class PaneWallLayout extends ViewGroup {
             mDragging = true;
             stopSlide();
             stopNudge();
+            // Before the plank and the sink look: a surface page with a copy to hand is still at
+            // once, and takes them from the first frame.
+            holdStillAround();
             if (plank) engagePlank(fingerX);
         } finally {
             Trace.endSection();
@@ -1024,8 +1039,9 @@ public final class PaneWallLayout extends ViewGroup {
     /**
      * A border drag claimed the finger at {@code fingerX}: the page the wall rests on and the
      * pages beside it become planks, each one the listener lets tip, until the settle lays them
-     * flat — the page arriving tips with the page leaving, toward the same finger. The Display
-     * page never does (see {@code PaneWallController#isPlankTiltEnabled}). Each tipping page is on
+     * flat — the page arriving tips with the page leaving, toward the same finger. A surface page
+     * (the Display place) tips only while its stand-in is up ({@link SurfacePage}), from whichever
+     * frame that is; a Display page without one never does. Each tipping page is on
      * a hardware layer for the length of the motion, so a screen of glyphs and glass is drawn flat
      * once per change and the tilt is a textured quad per frame rather than every glyph
      * re-rendered under a perspective matrix.
@@ -1039,9 +1055,6 @@ public final class PaneWallLayout extends ViewGroup {
         for (int steps = -1; steps <= 1; steps++) {
             PaneWallPage place = PaneWallPolicy.neighbour(mPages, mCurrent, steps);
             if (steps != 0 && place == mCurrent) continue;
-            // Never the Display page, whatever the listener says: its picture is a SurfaceView,
-            // which a rotation leaves flat and a layer would strand (as for the sink's dim).
-            if (place == PaneWallPage.DISPLAY) continue;
             if (mListener.isPlankTiltEnabled(place)) mPlankPlaces.add(place);
         }
         if (mPlankPlaces.isEmpty()) return;
@@ -1066,6 +1079,9 @@ public final class PaneWallLayout extends ViewGroup {
             if (page == null || !mPages.contains(place)) continue;
             if (!mTiltPages.contains(page)) {
                 if (page.getWidth() <= 0 || page.getHeight() <= 0) continue;
+                // A live surface a rotation leaves flat and a layer strands: it joins once its
+                // stand-in is up, at whatever angle the motion has reached by then.
+                if (!canTransform(place, page)) continue;
                 mTiltPages.add(page);
                 page.setPivotX(page.getWidth() / 2f);
                 page.setPivotY(page.getHeight() / 2f);
@@ -1134,7 +1150,7 @@ public final class PaneWallLayout extends ViewGroup {
         if (mSinkPage == null) {
             mSinkPage = page;
             mSinkPlace = mCurrent;
-            mSinkLayered = mCurrent != PaneWallPage.DISPLAY;
+            mSinkLayered = canTransform(mCurrent, page);
             mSinkDimLevel = -1;
             page.setPivotX(page.getWidth() / 2f);
             page.setPivotY(page.getHeight() / 2f);
@@ -1251,7 +1267,10 @@ public final class PaneWallLayout extends ViewGroup {
         if (layered || tipping) syncPageLayer(page);
         invalidateGrabberIfMoved();
         if (mListener != null && place != null) mListener.onPageSinkChanged(place, 1f);
-        if (!isMoving()) releasePlank();
+        if (!isMoving()) {
+            releasePlank();
+            releaseStills();
+        }
     }
 
     /** The page sunk under a hold, for tests; null while none is. */
@@ -1263,6 +1282,88 @@ public final class PaneWallLayout extends ViewGroup {
     /** How far the sunk page is down, for tests. */
     float sink() {
         return mSink;
+    }
+
+    // ---- Surface pages ---------------------------------------------------------------------
+
+    /**
+     * Whether {@code page} can take a hardware layer and a rotation now. Every page can but one
+     * whose picture is a live surface: a surface page while its stand-in is not up, and a Display
+     * page that has no stand-in at all, which keeps to what a surface allows — a scale.
+     */
+    private static boolean canTransform(@NonNull PaneWallPage place, @NonNull View page) {
+        if (page instanceof SurfacePage) return ((SurfacePage) page).isStill();
+        return place != PaneWallPage.DISPLAY;
+    }
+
+    /** A drag begins: the page it holds and the pages that can arrive beside it hold still. */
+    private void holdStillAround() {
+        if (mReducedMotion) return;
+        for (int steps = -1; steps <= 1; steps++) {
+            holdStill(PaneWallPolicy.neighbour(mPages, mCurrent, steps));
+        }
+    }
+
+    /**
+     * A slide begins: a surface page it carries on or off screen holds still — the page it lands
+     * on, and any it moves that is on screen now. A page parked through the whole slide is not
+     * asked.
+     */
+    private void holdStillForSlide() {
+        if (mReducedMotion) return;
+        int width = getWidth();
+        for (Map.Entry<PaneWallPage, View> entry : mPageViews.entrySet()) {
+            View page = entry.getValue();
+            if (!(page instanceof SurfacePage)) continue;
+            boolean onScreen = page.getVisibility() == VISIBLE
+                && Math.abs(page.getTranslationX()) < width;
+            if (entry.getKey() == mCurrent || onScreen) holdStill(entry.getKey());
+        }
+    }
+
+    private void holdStill(@NonNull PaneWallPage place) {
+        View page = mPageViews.get(place);
+        if (!(page instanceof SurfacePage) || !mPages.contains(place)) return;
+        mStillPlaces.add(place);
+        ((SurfacePage) page).holdStill(() -> onStillReady(place));
+    }
+
+    /**
+     * A surface page's stand-in is up, now or mid-motion: from this frame it takes what the
+     * motion gives the other pages at the point it has reached — the sink's dim on its layer, the
+     * plank's angle — so it snaps in where it would have been.
+     */
+    private void onStillReady(@NonNull PaneWallPage place) {
+        if (!mStillPlaces.contains(place)) return;
+        View page = mPageViews.get(place);
+        if (page == null || !canTransform(place, page)) return;
+        if (page == mSinkPage && !mSinkLayered) {
+            mSinkLayered = true;
+            mSinkDimLevel = -1;
+            syncPageLayer(page);
+            applySinkDim(page, mSink);
+        }
+        applyPlanks();
+    }
+
+    /**
+     * The wall is at rest with every sink risen, and the planks and the layers are already gone:
+     * each surface page it asked brings its live surface back.
+     */
+    private void releaseStills() {
+        if (mStillPlaces.isEmpty()) return;
+        List<PaneWallPage> places = new ArrayList<>(mStillPlaces);
+        mStillPlaces.clear();
+        for (PaneWallPage place : places) {
+            View page = mPageViews.get(place);
+            if (page instanceof SurfacePage) ((SurfacePage) page).releaseStill();
+        }
+    }
+
+    /** The places asked to hold still for the motion under way, for tests. */
+    @NonNull
+    java.util.Set<PaneWallPage> stillPlaces() {
+        return Collections.unmodifiableSet(java.util.EnumSet.copyOf(mStillPlaces));
     }
 
     // ---- Motion ----------------------------------------------------------------------------
@@ -1278,6 +1379,7 @@ public final class PaneWallLayout extends ViewGroup {
             return;
         }
         stopSlide();
+        holdStillForSlide();
         float velocity = Math.max(-SLIDE_MAX_VELOCITY_PX_PER_SEC,
             Math.min(SLIDE_MAX_VELOCITY_PX_PER_SEC, velocityPxPerSec));
         final SettleSpring spring = SettleSpring.of(mOffsetPx, velocity, SLIDE_OMEGA,
@@ -1338,7 +1440,10 @@ public final class PaneWallLayout extends ViewGroup {
             applyPagePositions();
             // A page still springing up keeps its plank until it lands (finishSink), so its
             // press lies down with the spring rather than snapping flat here.
-            if (mSinkPage == null) releasePlank();
+            if (mSinkPage == null) {
+                releasePlank();
+                releaseStills();
+            }
             if (mListener != null) mListener.onWallPageSettled(mCurrent);
         } finally {
             Trace.endSection();
@@ -1511,6 +1616,7 @@ public final class PaneWallLayout extends ViewGroup {
         releaseBorderDrag();
         finishSink();
         releasePlank();
+        releaseStills();
         mGrabber.reset();
     }
 }
