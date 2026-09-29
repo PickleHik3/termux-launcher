@@ -60,6 +60,9 @@ public final class PaneGlassBackdropView extends View {
     @Nullable private BitmapShader mPreviousFrameShader;
     private final Paint mPreviousFramePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     @NonNull private final FrameCrossfade mCrossfade = new FrameCrossfade();
+    /** The preset's rim over the slab, or null (the hairline look draws none on a pane). */
+    @Nullable private Drawable mRim;
+    private float mRimRadiusPx = PaneGlass.NO_RIM;
     @Nullable private Drawable mGrain;
     /** The grain strength {@link #mGrain} was built from: a fresh drawable is not comparable. */
     private int mGrainStrength;
@@ -185,6 +188,18 @@ public final class PaneGlassBackdropView extends View {
         mLastLeft = Integer.MIN_VALUE;   // force the matrix to be rebuilt against the new frame
         invalidate();
         return true;
+    }
+
+    /**
+     * The preset's rim on this slab, cut at {@code radiusPx} ({@link PaneGlass#NO_RIM} for none),
+     * built by {@code style} only when the radius or the presence changes. Idempotent, so every
+     * dress may restate it.
+     */
+    public void setRim(float radiusPx, @NonNull PaneSurfaceStyle style) {
+        if (radiusPx == mRimRadiusPx && (radiusPx < 0f || mRim != null)) return;
+        mRimRadiusPx = radiusPx;
+        mRim = radiusPx < 0f ? null : style.paneGlassRim(radiusPx);
+        invalidate();
     }
 
     /** Recompute the frame matrix on the next draw; call after this pane has moved. */
@@ -411,6 +426,10 @@ public final class PaneGlassBackdropView extends View {
             if (mGrain != null) {
                 mGrain.setBounds(0, 0, width, height);
                 mGrain.draw(canvas);
+            }
+            if (mRim != null) {
+                mRim.setBounds(0, 0, width, height);
+                mRim.draw(canvas);
             }
         }
         canvas.restoreToCount(save);

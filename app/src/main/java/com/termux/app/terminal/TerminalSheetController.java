@@ -865,7 +865,14 @@ public final class TerminalSheetController
         // list of actions, and a word above it ("Terminal") only spends a row saying where you
         // already are. Prompts and confirmations still title themselves.
         if (title.length() > 0) addHeading(card, context, title);
-        return finishCard(card, content, fillHeight);
+        // Only the centred card is glass a finger presses into: its rows and buttons take the
+        // motion's press feedback (none under classic). The placements are read before finishCard
+        // resets them.
+        boolean centred = !mPendingPlacement.leading && !mPendingPlacement.foot
+            && !mPendingPlacement.strip && mPendingPlacement.anchor == null;
+        View built = finishCard(card, content, fillHeight);
+        if (centred) com.termux.app.chrome.GlassPress.attachClickables(card, mHost::glassMotion);
+        return built;
     }
 
     /** The strip's flat material: an opaque borderless pill, no glass and no blur. */

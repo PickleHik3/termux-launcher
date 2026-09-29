@@ -37,6 +37,14 @@ public interface PaneSurfaceStyle {
      * against what it is being handed can only tell the two apart by this.
      */
     int paneGlassGrainStrength();
+    /**
+     * The preset's rim for a slab at {@code radiusPx}, or null for none. Panes wear no rim of
+     * their own under the hairline look (their edge is the focus rim {@link PaneRim} draws), so
+     * only a gradient rim answers; it comes from the same factory as every other glass surface.
+     */
+    @Nullable default android.graphics.drawable.Drawable paneGlassRim(float radiusPx) { return null; }
+    /** True while {@link #paneGlassRim} would answer, so a re-dress asks for a drawable only then. */
+    default boolean paneGlassRimWanted() { return false; }
     /** Corner radius of a pane slab, in px. */
     float paneGlassCornerRadiusPx();
     /**

@@ -3,6 +3,7 @@ package com.termux.app.chrome;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 /**
@@ -128,6 +129,28 @@ public final class GlassMotion {
     @NonNull
     public static GlassMotion forId(@Nullable String id) {
         return TERMUX_APP.GLASS_MOTION_MIST.equals(id) ? MIST : CLASSIC;
+    }
+
+    /** The profile the preferences name; classic while there are none yet. */
+    @NonNull
+    public static GlassMotion of(@Nullable TermuxAppSharedPreferences preferences) {
+        return forId(preferences != null ? preferences.getSurfaceGlassMotion() : null);
+    }
+
+    /** True when a press scales the tile at all; classic has no press feedback. */
+    public boolean pressable() {
+        return pressScale != 1f;
+    }
+
+    /** Where a tile scales to: the press scale while held, 1 once released. */
+    public float pressTarget(boolean down) {
+        return down ? pressScale : 1f;
+    }
+
+    /** The spring that gets it there: the press spring going down, the release spring coming back. */
+    @NonNull
+    public Spring pressSpringFor(boolean down) {
+        return down ? pressSpring : releaseSpring;
     }
 
     /** True when arrivals settle on springs instead of the fixed-duration tween. */

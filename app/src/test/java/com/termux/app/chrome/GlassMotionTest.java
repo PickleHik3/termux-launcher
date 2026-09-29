@@ -72,4 +72,27 @@ public class GlassMotionTest {
         for (float t = 0f; t < 1f; t += 0.005f)
             assertTrue(spring.valueAt(t) <= 1.0001f);
     }
+
+    @Test
+    public void classicHasNoPressFeedbackSoAPressLeavesTheTileAlone() {
+        GlassMotion classic = GlassMotion.CLASSIC;
+        assertFalse(classic.pressable());
+        assertEquals(1f, classic.pressTarget(true), 0f);
+        assertEquals(1f, classic.pressTarget(false), 0f);
+    }
+
+    @Test
+    public void mistPressesTo092OnThePressSpringAndReleasesOnTheReleaseSpring() {
+        GlassMotion mist = GlassMotion.MIST;
+        assertTrue(mist.pressable());
+        assertEquals(0.92f, mist.pressTarget(true), 0f);
+        assertEquals(1f, mist.pressTarget(false), 0f);
+        assertEquals(new GlassMotion.Spring(0.75f, 400f), mist.pressSpringFor(true));
+        assertEquals(new GlassMotion.Spring(0.55f, 300f), mist.pressSpringFor(false));
+    }
+
+    @Test
+    public void noPreferencesIsClassic() {
+        assertSame(GlassMotion.CLASSIC, GlassMotion.of(null));
+    }
 }
