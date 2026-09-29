@@ -217,6 +217,15 @@ Columns: **Termux:API impl** (upstream) · **Launcher impl(s)** (repo) · **Kitt
      9eaab899 ("feat(api): strip agent and MCP endpoints").
    - It captures message bodies and nothing shows them. **Recommend: remove the store and the
      preference, or re-expose it on purpose (Q3).**
+   - **Redesigned (2026-09-29): re-exposed on purpose.** The store is now opt-in per app
+     (`app_notification_history_packages`, empty by default; the boolean preference is retired),
+     keeps one row per distinct message (InboxStyle lines and MessagingStyle messages exploded, with
+     app label, conversation title, category and channel), skips ongoing, progress, media and
+     group-summary noise, dedupes re-posts, stamps removal on the existing row, prunes by age
+     (30 days default) at most hourly, masks 4-8 digit codes at write time, and dropped the jsonl
+     copy. It is read through `GET /v1/notifications[/apps|/active]` and `POST
+     /v1/notifications/clear`, or `launcherctl notifications`. The findings and the recommendation
+     above describe the store as it was.
 2. **Three shade and notice paths with different rules.**
    - (a) `ShellNotifications` for OSC 99 and `launcherctl notify`: shade, even when the launcher
      is hidden.
@@ -230,6 +239,7 @@ Columns: **Termux:API impl** (upstream) · **Launcher impl(s)** (repo) · **Kitt
 3. **Dead JSON snapshot helpers.** `LauncherCtlNotificationListener.getNotificationsSnapshot`,
    `getNowPlayingSnapshot` and `getNowPlayingArtSnapshot` (`:185-240`) have no callers since
    9eaab899. **Recommend:** remove them, or reuse them for §3.3.
+   - **Done (2026-09-29):** removed with the history redesign; the now-playing state they served had no other reader.
 4. **Haptics are spread out.** About 18 source files call `performHapticFeedback` or `Vibrator`
    directly. The largest are `VoiceFeedback.java` (12 hits), `DisplayTouchpadView`,
    `ClipboardPanelView` and `PaneWallLayout`. The in-app keyboard has its own `VibratorCompat`, and

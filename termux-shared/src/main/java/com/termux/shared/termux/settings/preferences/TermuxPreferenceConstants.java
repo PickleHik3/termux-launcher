@@ -324,19 +324,40 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_APP_LAUNCHER_NOTIFICATION_DOTS = false;
 
         /**
-         * Defines the key for persisting notification history to {@code ~/.launcherctl}.
+         * Defines the key for the packages whose notifications are written to the history under
+         * {@code ~/.launcherctl}. A string set, empty by default.
          *
-         * <p>Separate from notification access itself, and off by default. Notification access is
-         * granted for dots, the status bar and the top pane, all of which only need notifications
-         * in memory. Writing their contents -- titles, texts, expanded texts, so SMS bodies, email
-         * previews and 2FA codes -- into the Termux home puts them inside the shell's trust domain,
-         * where every package and script running under the app UID can read them. That is a second,
-         * larger decision, so it is asked separately rather than inherited from the grant.
+         * <p>History is opt-in per app and separate from notification access itself. Notification
+         * access is granted for dots, the status bar and the top pane, all of which only need
+         * notifications in memory. Writing their contents -- titles, texts, expanded texts, so SMS
+         * bodies, email previews and 2FA codes -- into the Termux home puts them inside the shell's
+         * trust domain, where every package and script running under the app UID can read them.
+         * That is a second, larger decision, so it is asked separately and only for the apps the
+         * user names; an empty set records nothing.
          */
-        public static final String KEY_APP_LAUNCHER_NOTIFICATION_HISTORY =
-            "app_launcher_notification_history";
+        public static final String KEY_APP_NOTIFICATION_HISTORY_PACKAGES =
+            "app_notification_history_packages";
 
-        public static final boolean DEFAULT_APP_LAUNCHER_NOTIFICATION_HISTORY = false;
+        /**
+         * Defines the key for how many days a recorded notification is kept before it is pruned.
+         * Allowed values are {@link #MIN_APP_NOTIFICATION_HISTORY_RETENTION_DAYS} to
+         * {@link #MAX_APP_NOTIFICATION_HISTORY_RETENTION_DAYS}.
+         */
+        public static final String KEY_APP_NOTIFICATION_HISTORY_RETENTION_DAYS =
+            "app_notification_history_retention_days";
+
+        public static final int DEFAULT_APP_NOTIFICATION_HISTORY_RETENTION_DAYS = 30;
+        public static final int MIN_APP_NOTIFICATION_HISTORY_RETENTION_DAYS = 1;
+        public static final int MAX_APP_NOTIFICATION_HISTORY_RETENTION_DAYS = 365;
+
+        /**
+         * Defines the key for masking one-time codes (4-8 digits next to words like code, OTP or
+         * PIN) before a notification is written to the history. On by default.
+         */
+        public static final String KEY_APP_NOTIFICATION_HISTORY_MASK_CODES =
+            "app_notification_history_mask_codes";
+
+        public static final boolean DEFAULT_APP_NOTIFICATION_HISTORY_MASK_CODES = true;
 
         /**
          * Defines the key for the optional dynamic "most used apps" dock page.

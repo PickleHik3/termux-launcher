@@ -135,6 +135,29 @@ Both `notify` and `progress` answer 409 `no_session` when there is no shell at a
 `pane_not_found` for a stale `--pane`. `launcherctl notify --close ID` takes down the message
 that `--id ID` named.
 
+## Notification history for agents
+
+The user can let the launcher keep a log of notifications from chosen apps (off by default, per
+app). When it is on you can read it — this is how to answer "make a task list from my work email
+notifications over the last week":
+
+```sh
+launcherctl notifications apps                            # which apps are recorded, with counts
+launcherctl notifications --app "Outlook" --since 7d      # newest first, one line per message
+launcherctl notifications --app com.google.android.gm --since 2026-09-21 --query invoice
+launcherctl notifications --json --since 7d --limit 500   # structured, for a script
+launcherctl notifications active                          # what is in the shade right now
+```
+
+Each text line is `time · app · title — text`. Read the lines, drop duplicates and chatter, and
+turn what asks for action (a deadline, a request, a meeting) into tasks with the date and the
+sender. The answer starts with a `# ...` hint line when notification access is not granted or no
+app is enabled: in that case say so and tell the user to pick apps in the launcher's settings; do
+not guess at notifications you cannot see. Codes in the log are masked (`••••••`) by design — do not
+try to recover them. `launcherctl notifications clear [--app X]` deletes what is recorded, so use it
+only when the user asks. `--since`/`--until` take `90m`, `12h`, `7d`, `2w` or an ISO date; `--app`
+takes a package or part of the app's name; default limit is 100.
+
 ## Device: vibrate, torch, battery, volume, toast
 
 ```sh

@@ -1,13 +1,13 @@
 # LauncherCtl API (Local AI Endpoint)
 
 ## Overview
-LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compatible inference endpoint, model management for the On-device AI runtime (`tai` internal code prefix), one app-launch route, the pane routes that let a process in a shell open and drive a terminal pane of its own, and the signal routes (a notification, the progress ring, the clipboard) for a process that has no terminal to write the matching escape sequence into. It is not a general device-control or agent bridge.
+LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compatible inference endpoint, model management for the On-device AI runtime (`tai` internal code prefix), one app-launch route, the pane routes that let a process in a shell open and drive a terminal pane of its own, the signal routes (a notification, the progress ring, the clipboard) for a process that has no terminal to write the matching escape sequence into, and the opt-in notification history routes. It is not a general device-control or agent bridge.
 
 - Server: in app process, isolated from native model work which runs in `:tai_runtime`.
 - Bind mode: `localhost` (default, `127.0.0.1`) or opt-in `lan` (`0.0.0.0`).
 - Auth: bearer token from `~/.launcherctl/token`, or `X-Api-Key: <token>` header. The token can be made optional for localhost (see [Auth](#auth)).
 - Endpoint URL: `~/.launcherctl/endpoint`.
-- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`, `launcherctl pane …`, `launcherctl notify`, `launcherctl progress`, `launcherctl clipboard`, and the device commands `vibrate`, `torch`, `battery`, `volume` and `toast`. The launcher app installs both when `TermuxActivity` starts.
+- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`, `launcherctl pane …`, `launcherctl notify`, `launcherctl progress`, `launcherctl clipboard`, `launcherctl notifications`, and the device commands `vibrate`, `torch`, `battery`, `volume` and `toast`. The launcher app installs both when `TermuxActivity` starts.
 - Removed helpers: `launcherctl-mcp` and `launcher-restart` are no longer installed and are deleted on upgrade.
 
 `tai` uses this authenticated server for the local On-device AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
@@ -76,7 +76,7 @@ remote page points its own hostname at `127.0.0.1` so the browser treats the API
 
 ## Endpoint Reference
 
-The complete route surface is below. Besides the On-device AI routes there are app launch, the pane and window routes, the on-screen keyboard, and the three signal routes (notification, progress, clipboard). There are no media, resource, event, MCP, restart, or general device-control routes.
+The complete route surface is below. Besides the On-device AI routes there are app launch, the pane and window routes, the on-screen keyboard, the three signal routes (notification, progress, clipboard), and the notification history routes. There are no media, resource, event, MCP, restart, or general device-control routes.
 
 ### Health and discovery
 
@@ -134,7 +134,7 @@ launcherctl launch maps
 launcherctl launch com.example.maps
 ```
 
-`launcherctl`'s other commands are `pane`, `window`, `agent`, `notify`, `progress`, `clipboard`, `keyboard` and `x11`, below. Use `tai` for model and inference commands.
+`launcherctl`'s other commands are `pane`, `window`, `agent`, `notify`, `progress`, `clipboard`, `notifications`, `keyboard` and `x11`, below. Use `tai` for model and inference commands.
 
 ### Panes
 
@@ -392,6 +392,77 @@ launcherctl clipboard paste        # {"ok":true,"text":"…"}
 with that id, as `OSC 99`'s `p=close` does, and answers `{"ok": true, "pane": "…", "id": "build",
 "closed": true}` (the same answer whether or not the message was still up). Shell:
 `launcherctl notify --close ID [--pane ID]`.
+
+### Notification history
+
+A per-app log of notifications that a process in the shell can query: an agent asked to "make a
+task list from my work email notifications over the last week" runs one command. It is **opt-in
+per app** and off until the user picks apps in the launcher's settings (the string set
+`app_notification_history_packages`); notification access alone records nothing. Only apps in that
+set are written, and a notification from any other app is never stored.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/v1/notifications` | Recorded messages, newest first |
+| GET | `/v1/notifications/apps` | Recorded apps with counts and last-seen time |
+| GET | `/v1/notifications/active` | What is in the shade now, for enabled apps only |
+| POST | `/v1/notifications/clear` | Delete recorded rows, all or one app's |
+
+`GET /v1/notifications` takes these query parameters, all optional:
+
+| Parameter | Meaning |
+| --- | --- |
+| `app` | A package name, or part of the app's name (case-insensitive) |
+| `since`, `until` | `90m`, `12h`, `7d`, `2w` (counted back from now), an ISO date or date-time, or epoch milliseconds. A bare `until` date includes that whole day |
+| `query` | Text to look for in title, text, sender, conversation and app name |
+| `limit` | 1 to 1000, default 100 |
+| `format` | `text` for one line per message instead of JSON |
+
+The JSON answer is `{"ok": true, "count": N, "notifications": [...]}`; each row has `time` (ms),
+`timeIso`, `package`, `app`, `conversation`, `title`, `sender`, `text`, `subText`, `category`,
+`channel`, `key`, `postTime` and `removedTime` (null while it is in the shade). `/apps` answers
+`{"apps": [{"package", "app", "count", "lastSeen", "lastSeenIso"}]}`. `/clear` takes an optional
+`{"app": "..."}` (or `?app=`) and answers `{"ok": true, "removed": N}`. A bad `since`, `until` or
+`limit` is a `400 bad_request` that says what it could not read.
+
+Every read answers with a `hint` when there is nothing to read for a reason the caller can fix:
+notification access is not granted, or no app is enabled. With `format=text` the hint is a first
+line starting `# `.
+
+```sh
+launcherctl notifications --app "Work Mail" --since 7d
+launcherctl notifications --since 2026-09-21 --until 2026-09-28 --query invoice --limit 50
+launcherctl notifications --json --app com.google.android.gm
+launcherctl notifications apps
+launcherctl notifications active
+launcherctl notifications clear --app com.google.android.gm
+```
+
+The text form is one line per message, `time · app · title — text`:
+
+```
+2026-09-28 14:03 · Work Mail · Ann — Invoice due Friday
+2026-09-28 13:00 · Chat · Project · Ben: on my way
+```
+
+What is recorded, and what is not:
+
+- One row per distinct message. An InboxStyle bundle (Gmail, Outlook) becomes a row per line and a
+  MessagingStyle chat a row per message with its sender and time, all sharing the notification's
+  key. The app label, conversation title, category and channel id are kept.
+- Skipped as noise: ongoing and foreground-service notifications, progress bars, media controls, and
+  group summaries (a summary is dropped when its children are in the shade or when it only counts).
+- An identical re-post of the same notification is one row. Removal from the shade sets
+  `removedTime` on the existing rows; it never adds a row.
+- Rows are pruned by age (`app_notification_history_retention_days`, 1 to 365, default 30), when
+  something is written and at most once an hour.
+- Codes are masked at write time while `app_notification_history_mask_codes` is on (the default): a
+  4-8 digit run next to a word like code, OTP, verification, passcode, one-time or PIN is stored as
+  `••••••`.
+
+The history lives in `~/.launcherctl/launcher.db`, readable by anything running as the app's user;
+that is why it is opt-in per app. The older `notifications.jsonl` mirror is gone and is deleted
+the first time the new store opens.
 
 ### Device routes: vibrate, torch, battery, volume, toast
 

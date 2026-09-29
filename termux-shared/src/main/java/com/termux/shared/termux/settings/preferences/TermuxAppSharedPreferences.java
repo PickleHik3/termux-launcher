@@ -1037,18 +1037,51 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_NOTIFICATION_DOTS, value, false);
     }
 
-    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_APP_LAUNCHER_NOTIFICATION_HISTORY}. */
-    public boolean isAppLauncherNotificationHistoryEnabled() {
-        return SharedPreferenceUtils.getBoolean(
-            mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_NOTIFICATION_HISTORY,
-            TERMUX_APP.DEFAULT_APP_LAUNCHER_NOTIFICATION_HISTORY
-        );
+    /**
+     * The packages whose notifications go into the history; empty means nothing is recorded.
+     * Always a fresh set, never the instance {@link SharedPreferences} owns.
+     */
+    @NonNull
+    public java.util.Set<String> getNotificationHistoryPackages() {
+        java.util.Set<String> stored = SharedPreferenceUtils.getStringSet(mSharedPreferences,
+            TERMUX_APP.KEY_APP_NOTIFICATION_HISTORY_PACKAGES, null);
+        return stored == null ? new java.util.HashSet<>() : new java.util.HashSet<>(stored);
     }
 
-    public void setAppLauncherNotificationHistoryEnabled(boolean value) {
+    public void setNotificationHistoryPackages(@Nullable java.util.Set<String> packages) {
+        SharedPreferenceUtils.setStringSet(mSharedPreferences,
+            TERMUX_APP.KEY_APP_NOTIFICATION_HISTORY_PACKAGES,
+            packages == null ? new java.util.HashSet<>() : new java.util.HashSet<>(packages), false);
+    }
+
+    public boolean isNotificationHistoryPackageEnabled(@Nullable String pkg) {
+        return pkg != null && getNotificationHistoryPackages().contains(pkg);
+    }
+
+    public int getNotificationHistoryRetentionDays() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_APP_NOTIFICATION_HISTORY_RETENTION_DAYS,
+                TERMUX_APP.DEFAULT_APP_NOTIFICATION_HISTORY_RETENTION_DAYS),
+            TERMUX_APP.MIN_APP_NOTIFICATION_HISTORY_RETENTION_DAYS,
+            TERMUX_APP.MAX_APP_NOTIFICATION_HISTORY_RETENTION_DAYS);
+    }
+
+    public void setNotificationHistoryRetentionDays(int days) {
+        SharedPreferenceUtils.setInt(mSharedPreferences,
+            TERMUX_APP.KEY_APP_NOTIFICATION_HISTORY_RETENTION_DAYS,
+            DataUtils.clamp(days, TERMUX_APP.MIN_APP_NOTIFICATION_HISTORY_RETENTION_DAYS,
+                TERMUX_APP.MAX_APP_NOTIFICATION_HISTORY_RETENTION_DAYS), false);
+    }
+
+    public boolean isNotificationHistoryMaskCodesEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_NOTIFICATION_HISTORY_MASK_CODES,
+            TERMUX_APP.DEFAULT_APP_NOTIFICATION_HISTORY_MASK_CODES);
+    }
+
+    public void setNotificationHistoryMaskCodesEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_APP_LAUNCHER_NOTIFICATION_HISTORY, value, false);
+            TERMUX_APP.KEY_APP_NOTIFICATION_HISTORY_MASK_CODES, value, false);
     }
 
     public boolean isAppLauncherMostUsedPageEnabled() {

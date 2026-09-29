@@ -564,6 +564,14 @@ public class LauncherCtlApiServer {
                 return jsonResponse(runWindowOpenRequest(request));
             } else if (request.path.startsWith("/v1/keyboard/")) {
                 return jsonResponse(runKeyboardRequest(request));
+            } else if (LauncherCtlNotificationRoutes.handles(request.method, request.path)) {
+                LauncherCtlNotificationRoutes.Result result = LauncherCtlNotificationRoutes.handle(
+                    context, request.method, request.path, queryParameters(request.query), request.body);
+                if (result.text != null) {
+                    return new HttpResponse(200, "text/plain; charset=utf-8",
+                        result.text.getBytes(StandardCharsets.UTF_8), null);
+                }
+                return jsonResponse(result.json);
             } else if (signalToolFor(request.method, request.path) != null) {
                 return jsonResponse(runSignalRequest(request));
             } else if (DeviceControlRoutes.handles(request.method, request.path)) {
@@ -1773,6 +1781,12 @@ public class LauncherCtlApiServer {
         // the agent hooks; a notification a second is already more than a shade can show, and
         // the clipboard is a thing a person copies, not a channel.
         rateLimiters.put("POST:/v1/notify", new SimpleRateLimiter(60, 60_000));
+        // Notification history reads: an agent may query a few times while it works; clearing is
+        // a deliberate act.
+        rateLimiters.put("GET:/v1/notifications", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("GET:/v1/notifications/apps", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("GET:/v1/notifications/active", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("POST:/v1/notifications/clear", new SimpleRateLimiter(10, 60_000));
         rateLimiters.put("POST:/v1/progress", new SimpleRateLimiter(600, 60_000));
         rateLimiters.put("POST:/v1/clipboard", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("GET:/v1/clipboard", new SimpleRateLimiter(60, 60_000));
@@ -2455,6 +2469,9 @@ public class LauncherCtlApiServer {
             "  launcherctl progress <0-100|clear|error [PCT]|indeterminate|paused [PCT]> [--pane ID]\n" +
             "  launcherctl clipboard copy [<text>] | launcherctl clipboard copy < file\n" +
             "  launcherctl clipboard paste\n" +
+            "  launcherctl notifications [--app PKG|LABEL] [--since 7d|ISO] [--until 1d|ISO] [--query TEXT] [--limit N] [--json]\n" +
+            "  launcherctl notifications apps|active [--json]\n" +
+            "  launcherctl notifications clear [--app PKG|LABEL]\n" +
             "  launcherctl keyboard show|hide [--source manual|focus] [--hold]\n" +
             "  launcherctl vibrate [-d MS] [--force]\n" +
             "  launcherctl torch on|off\n" +
@@ -2492,6 +2509,11 @@ public class LauncherCtlApiServer {
             "They go to $TERMUX_LAUNCHER_PANE when it is set, to --pane when given, and to the\n" +
             "current pane otherwise. clipboard paste is only answered while the launcher is on\n" +
             "screen and Settings > Terminal > Let programs read the clipboard is on.\n" +
+            "notifications reads the history of the apps the user enabled in the launcher's settings\n" +
+            "(none by default): newest first, one line per message as `time · app · title — text`,\n" +
+            "or JSON with --json. --since and --until take 90m, 12h, 7d, 2w or an ISO date; --app\n" +
+            "takes a package or part of the app's name. `active` lists what is in the shade now.\n" +
+            "One-time codes are masked at write time unless that is switched off in settings.\n" +
             "For local AI, use: tai --help\n" +
             "EOF\n" +
             "}\n" +
@@ -2728,6 +2750,40 @@ public class LauncherCtlApiServer {
             "    *) echo \"$usage\" >&2; exit 2 ;;\n" +
             "  esac\n" +
             "}\n" +
+            "# Percent-encodes every byte, so any app name or search text is safe in a query string.\n" +
+            "urlenc() {\n" +
+            "  printf '%s' \"$1\" | od -An -tx1 | tr -d '\\n' | sed 's/ /%/g'\n" +
+            "}\n" +
+            "notifications_cmd() {\n" +
+            "  usage='usage: launcherctl notifications [--app PKG|LABEL] [--since 7d|ISO] [--until 1d|ISO] [--query TEXT] [--limit N] [--json] | apps | active | clear [--app PKG|LABEL]'\n" +
+            "  what=list\n" +
+            "  case \"${1:-}\" in apps|active|clear) what=\"$1\"; shift ;; esac\n" +
+            "  app= since= upto= query= limit= json=false\n" +
+            "  while [ \"$#\" -gt 0 ]; do\n" +
+            "    case \"$1\" in\n" +
+            "      --app) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; app=\"$2\"; shift 2 ;;\n" +
+            "      --since) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; since=\"$2\"; shift 2 ;;\n" +
+            "      --until) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; upto=\"$2\"; shift 2 ;;\n" +
+            "      --query) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; query=\"$2\"; shift 2 ;;\n" +
+            "      --limit) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; limit=\"$2\"; shift 2 ;;\n" +
+            "      --json) json=true; shift ;;\n" +
+            "      *) echo \"launcherctl notifications: unknown option $1\" >&2; echo \"$usage\" >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "  done\n" +
+            "  if [ \"$what\" = clear ]; then\n" +
+            "    if [ -n \"$app\" ]; then api POST /v1/notifications/clear \"{\\\"app\\\":$(printf '%s' \"$app\" | json_str)}\"; else api POST /v1/notifications/clear '{}'; fi\n" +
+            "    return\n" +
+            "  fi\n" +
+            "  case \"$what\" in list) path=/v1/notifications ;; *) path=\"/v1/notifications/$what\" ;; esac\n" +
+            "  qs=\n" +
+            "  [ \"$json\" = true ] || qs=\"format=text\"\n" +
+            "  [ -z \"$app\" ] || qs=\"$qs${qs:+&}app=$(urlenc \"$app\")\"\n" +
+            "  [ -z \"$since\" ] || qs=\"$qs${qs:+&}since=$(urlenc \"$since\")\"\n" +
+            "  [ -z \"$upto\" ] || qs=\"$qs${qs:+&}until=$(urlenc \"$upto\")\"\n" +
+            "  [ -z \"$query\" ] || qs=\"$qs${qs:+&}query=$(urlenc \"$query\")\"\n" +
+            "  [ -z \"$limit\" ] || qs=\"$qs${qs:+&}limit=$(urlenc \"$limit\")\"\n" +
+            "  api GET \"$path${qs:+?$qs}\"\n" +
+            "}\n" +
             "vibrate_cmd() {\n" +
             "  usage='usage: launcherctl vibrate [-d MS] [--force]'\n" +
             "  ms=1000 force=false\n" +
@@ -2807,6 +2863,10 @@ public class LauncherCtlApiServer {
             "    shift || true\n" +
             "    clipboard_cmd \"$@\"\n" +
             "    ;;\n" +
+            "  notifications)\n" +
+            "    shift || true\n" +
+            "    notifications_cmd \"$@\"\n" +
+            "    ;;\n" +
             "  vibrate)\n" +
             "    shift || true\n" +
             "    vibrate_cmd \"$@\"\n" +
@@ -2859,7 +2919,7 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, keyboard, vibrate, torch, battery, volume, toast, x11. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, volume, toast, x11. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";
