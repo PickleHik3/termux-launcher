@@ -7,7 +7,9 @@ import android.app.Activity;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.os.Build;
+import android.os.Looper;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import com.termux.R;
@@ -16,7 +18,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -28,6 +32,7 @@ import java.util.Collections;
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {Build.VERSION_CODES.P})
+@GraphicsMode(GraphicsMode.Mode.NATIVE) // Region.setPath needs real path geometry.
 public class PaneGlassSlabOutlineTest {
 
     private static FrameLayout pane(Activity activity, FrameLayout host, int l, int t, int r, int b,
@@ -37,8 +42,11 @@ public class PaneGlassSlabOutlineTest {
         backdrop.setId(R.id.terminal_pane_glass);
         backdrop.setVisibility(backdropVisibility);
         frame.addView(backdrop);
-        host.addView(frame);
-        frame.layout(l, t, r, b);
+        // Placed through layout params, so the window's own layout pass keeps them where they are.
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(r - l, b - t);
+        params.leftMargin = l;
+        params.topMargin = t;
+        host.addView(frame, params);
         return frame;
     }
 
@@ -46,11 +54,11 @@ public class PaneGlassSlabOutlineTest {
     public void theOutlineIsTheSlabsRoundedRectsNotTheHostRectangle() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         FrameLayout host = new FrameLayout(activity);
-        activity.setContentView(host);
-        host.layout(0, 0, 1000, 1000);
+        activity.setContentView(host, new ViewGroup.LayoutParams(1000, 1000));
         FrameLayout a = pane(activity, host, 20, 20, 480, 980, View.VISIBLE);
         FrameLayout b = pane(activity, host, 520, 20, 980, 980, View.VISIBLE);
 
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
         Path outline = PaneGlass.slabOutline(Arrays.asList(a, b), host, 60f, new Path());
         RectF bounds = new RectF();
         outline.computeBounds(bounds, true);
@@ -68,10 +76,10 @@ public class PaneGlassSlabOutlineTest {
     public void aPaneWithoutASlabAddsNothing() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         FrameLayout host = new FrameLayout(activity);
-        activity.setContentView(host);
-        host.layout(0, 0, 1000, 1000);
+        activity.setContentView(host, new ViewGroup.LayoutParams(1000, 1000));
         FrameLayout bare = pane(activity, host, 20, 20, 480, 980, View.GONE);
 
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
         Path outline = PaneGlass.slabOutline(Collections.singletonList(bare), host, 60f, new Path());
 
         assertTrue(outline.isEmpty());
