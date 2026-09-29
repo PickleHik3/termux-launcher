@@ -20727,12 +20727,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 android.graphics.Bitmap.Config.ARGB_8888);
             android.graphics.Canvas canvas = new android.graphics.Canvas(snapshot);
             canvas.scale(0.5f, 0.5f);
-            // The ground behind the panes: the pane-gap margins and rounded rim corners are
-            // transparent in the surface's own draw, and whatever is baked there rides along for
-            // the whole pan. A flat base colour painted a dark border around every rim (the live
-            // layout shows blurred wallpaper through those gaps), so the same shared blur frame
-            // the pane glass draws is composited first, and the flat colour is only the fallback
-            // for when glass is off (where the terminal ground really is that colour).
+            // The glass under the panes: a slab is translucent and its refracted frame cannot be
+            // drawn on this software canvas, so the shared blur frame is painted under each
+            // slab's own rounded outline. Nowhere else: the gaps and corners around the panes are
+            // the live wallpaper, which both sheets share, so they stay see-through and no
+            // window-sized rectangle rides along with the pan. The flat colour is only the
+            // fallback for glass off, where the terminal ground really is that colour.
             boolean paintedGround = paintWallpaperGlassGround(canvas, terminal);
             // The flat base colour is only right where the live ground really is opaque. In
             // wallpaper passthrough mode with glass off the ground is the wallpaper seen through
@@ -20746,7 +20746,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 canvas.drawColor(resolveTerminalSurfaceBaseColor());
             terminal.draw(canvas);
             mTerminalDepartureSnapshot = snapshot;
-            mTerminalDepartureTranslucent = translucentGround;
+            // A ground painted under the slabs only leaves the gaps see-through, like the
+            // passthrough case: the ghost carries no plate or shadow rectangle either.
+            mTerminalDepartureTranslucent = translucentGround || paintedGround;
         } catch (Throwable t) {
             // OOM or a view that cannot software-draw: the switch just loses its outgoing half.
             mTerminalDepartureSnapshot = null;
@@ -20754,7 +20756,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Paints the shared pre-blurred wallpaper frame across {@code canvas}, mapped exactly as
+     * Paints the shared pre-blurred wallpaper frame under the panes' slabs on {@code canvas}
+     * (never the whole surface), mapped exactly as
      * {@link com.termux.app.terminal.PaneGlassBackdropView} maps it (frame rect in screen
      * coordinates, clamped shader), so a departure snapshot's ground matches what the live layout
      * showed around the panes. False when the glass frame is unavailable (glass off, no blur).
@@ -20764,7 +20767,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.graphics.Bitmap frame = obtainTerminalPaneGlassFrame();
         if (frame == null || frame.isRecycled()) return false;
         android.graphics.Rect frameRect = mChrome.blurCache().frameRectRef();
-        if (frameRect.isEmpty()) return false;
+        if (frameRect.isEmpty() || mPaneController == null) return false;
+        // Only where the panes' slabs are: the gaps and rounded corners around them show the live
+        // wallpaper, and a rectangle of the blurred frame over them is the hard-edged block that
+        // rode along with every window switch.
+        android.graphics.Path slabs = mPaneController.paneGlassOutline(terminal);
+        if (slabs.isEmpty()) return false;
         int[] location = new int[2];
         terminal.getLocationOnScreen(location);
         android.graphics.Matrix matrix = new android.graphics.Matrix();
@@ -20780,7 +20788,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         paint.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
         // View coordinates, not bitmap coordinates: the caller's canvas may be scaled down for a
         // reduced-resolution snapshot, and the shader matrix above is built in view space.
-        canvas.drawRect(0f, 0f, terminal.getWidth(), terminal.getHeight(), paint);
+        paint.setAntiAlias(true);
+        canvas.drawPath(slabs, paint);
         return true;
     }
 

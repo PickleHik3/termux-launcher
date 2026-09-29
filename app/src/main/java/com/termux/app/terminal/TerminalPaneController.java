@@ -3125,6 +3125,16 @@ public class TerminalPaneController {
     }
 
     /**
+     * Where the pane glass is drawn, in {@code origin}'s coordinates: see
+     * {@link PaneGlass#slabOutline}. Empty while no pane wears a slab.
+     */
+    @NonNull
+    public android.graphics.Path paneGlassOutline(@NonNull View origin) {
+        return PaneGlass.slabOutline(mPaneFrames.values(), origin, paneRadiusPx(),
+            new android.graphics.Path());
+    }
+
+    /**
      * Dress (or undress) every live pane frame as a glass slab. Idempotent and cheap: the backdrop
      * view is created once per pane and only re-fed here, so this can run on every editor slider
      * tick and on every frost refresh.
