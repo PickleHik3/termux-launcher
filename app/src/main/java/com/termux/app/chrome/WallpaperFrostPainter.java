@@ -16,8 +16,9 @@ import com.termux.app.ReducedMotion;
  * {@code RealtimeBlurView} is blind.
  *
  * <p>In wallpaper passthrough mode a live-blur view can only sample the window's own (transparent)
- * content, so the top pane, the command palette and the app drawer plane all read as flat tint —
- * or grey mud over the window dim — while the dock shows frosted wallpaper. Each of those surfaces
+ * content, so the top pane, the command palette, the app drawer plane and the sheets bars lie on
+ * off the dock all read as flat tint — or grey mud over the window dim — while the dock shows
+ * frosted wallpaper. Each of those surfaces
  * instead draws the same frame the dock samples, through a {@link SharedFrameDrawable} aimed at
  * the surface's own screen position on every draw, and its useless live-blur view rests.</p>
  *
@@ -109,6 +110,8 @@ public final class WallpaperFrostPainter {
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.COMMAND_PALETTE);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.TERMINAL_SHEET);
         mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.APP_DRAWER);
+        mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK);
+        mLedger.clearFrostRect(SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST);
         mLedger.setFrostRadiusDp(SurfaceDirtyLedger.FrostRadius.TOP_PANE, -1);
     }
 
@@ -153,6 +156,51 @@ public final class WallpaperFrostPainter {
         return applyFrost(frost, glassOf(frost, null), mSurfaces.effectiveDockBlurRadiusDp(),
             SurfaceDirtyLedger.FrostRect.APP_DRAWER,
             SurfaceDirtyLedger.FrostRadius.APP_DRAWER, mSurfaces.planeGlassCornerRadiusPx(), 0);
+    }
+
+    /**
+     * Wallpaper frost for a sheet a bar lies on off the dock: the shared plank a lying-down row
+     * stands on ({@link SurfaceDirtyLedger.FrostRect#OFF_DOCK_PLANK}), or the alphabets bar's own
+     * capsule on another edge ({@link SurfaceDirtyLedger.FrostRect#AZ_BAR_HOST}). Both are the
+     * dock's glass carried to another edge, so both follow the dock's own blur radius, as the
+     * drawer plane does, and share one radius entry. The frost fills the sheet and the sheet's
+     * outline clips it; the rim follows that outline's radius on all four sides, since a sheet
+     * off the dock stands clear of every edge and meets no other glass.
+     *
+     * <p>Returns true when the frost was installed and the sheet's live blur should rest; false
+     * leaves the caller its live blur, which is what these sheets always wore.</p>
+     */
+    public boolean applyOffDockSheet(@NonNull ImageView frost,
+                                     @NonNull SurfaceDirtyLedger.FrostRect rectKey,
+                                     float cornerRadiusPx) {
+        followMoves(frost);
+        return applyFrost(frost, glassOf(frost, null), mSurfaces.effectiveDockBlurRadiusDp(),
+            rectKey, SurfaceDirtyLedger.FrostRadius.OFF_DOCK, cornerRadiusPx, 0);
+    }
+
+    /** The frosts {@link #followMoves} already watches. */
+    @NonNull private final java.util.Set<View> mFollowed =
+        java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
+
+    /**
+     * Redraws {@code frost} after any layout that moved it on screen. A sheet off the dock is
+     * carried by the edge stacks around it — the status bar folding above a top plank, a column
+     * growing under the keyboard — and a view whose ancestor moved is not redrawn on its own, so
+     * the frame would stay aimed at where it was. One location read per layout pass, none per
+     * frame at rest.
+     */
+    private void followMoves(@NonNull ImageView frost) {
+        if (!mFollowed.add(frost)) return;
+        final int[] last = new int[2];
+        final int[] now = new int[2];
+        frost.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            if (frost.getVisibility() != View.VISIBLE || frost.getDrawable() == null) return;
+            frost.getLocationOnScreen(now);
+            if (now[0] == last[0] && now[1] == last[1]) return;
+            last[0] = now[0];
+            last[1] = now[1];
+            frost.invalidate();
+        });
     }
 
     /** The plane a full-pane frost fills: the view named, or the frost's own parent. */

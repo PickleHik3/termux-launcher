@@ -77,9 +77,10 @@ public final class PaneGlass {
     /**
      * Hand a frame's corner tab the app's wallpaper blur, so the tab is glass wherever it comes
      * out. The tab's material is its own fixed recipe — the blur under a panel scrim — and
-     * follows none of the frame's tint, grain or radius; this passes only the shared frame and
-     * its filter, or nothing while the app has no frame. Runs wherever {@link #apply} runs, so a
-     * frost refresh reaches the tab in the same pass as the slab.
+     * follows none of the frame's tint, grain or radius; this passes only the shared frame, its
+     * filter and Fancier Glass's look — the slab's own refraction, which the tab rims along its
+     * own shape — or nothing while the app has no frame. Runs wherever {@link #apply} runs, so a
+     * frost refresh or a new look reaches the tab in the same pass as the slab.
      */
     public static void dressTab(@Nullable PaneSurfaceStyle style,
                                 @Nullable com.termux.app.wall.PaneControlsView tab) {
@@ -89,7 +90,7 @@ public final class PaneGlass {
             return;
         }
         tab.setPaneGlass(style.paneGlassBlurFrame(), style.paneGlassBlurFrameRect(),
-            style.paneGlassFrostFilter(), style.wallpaperParallax());
+            style.paneGlassFrostFilter(), style.wallpaperParallax(), style.paneGlassRefraction());
     }
 
     private static final android.graphics.Rect EMPTY_RECT = new android.graphics.Rect();

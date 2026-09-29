@@ -26,12 +26,14 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.chrome.GlassRefraction;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * The tab a wall page drops from the corner that was tapped: the same fill, stroke and motion a
@@ -63,7 +65,9 @@ public final class PaneControlsView extends View {
      * over the app's shared wallpaper blur when it has one. Two strengths, both fixed — the tab
      * does not follow the page's own tint, blur or grain. Following them put a pane's film grain
      * on a 40dp tab, where it read as static (pong, 2026-09-20), and a pane's faint tint left the
-     * buttons on bare terminal text.
+     * buttons on bare terminal text. Fancier Glass is the one thing it does follow: the blur is
+     * then drawn through the same refraction as the slab it grows out of, rimmed along the tab's
+     * own free edge, with the scrim over it unchanged.
      */
     /** The scrim's alpha, out of 255, over the wallpaper blur: enough to read on any picture. */
     public static final int SCRIM_ON_FROST_ALPHA = 184;
@@ -202,6 +206,13 @@ public final class PaneControlsView extends View {
     @Nullable private com.termux.app.chrome.WallpaperParallax mParallax;
     private final int[] mRootLocation = new int[2];
     @Nullable private ColorFilter mFrostFilter;
+    /** Fancier Glass on the tab's blur, or null for the plain frost. */
+    @Nullable private GlassRefraction.Look mLook;
+    /** The program the blur draws through while {@link #mLook} is set and the phone runs one. */
+    @Nullable private GlassRefraction.Program mProgram;
+    /** Scratch for the frost's aim and the rim's rect; never allocated per frame. */
+    private final float[] mAim = new float[4];
+    private final float[] mRim = new float[4];
     /** Scratch for the tab's path points; never allocated per frame. */
     private final float[] mPathPoints = new float[CornerTabGeometry.PATH_POINTS * 2];
     /** The corner it comes out of; {@link CornerZones#NONE} until a page or the default says. */
@@ -269,27 +280,77 @@ public final class PaneControlsView extends View {
     public void setPaneGlass(@Nullable Bitmap frame, @NonNull Rect frameRect,
                              @Nullable ColorFilter frostFilter,
                              @Nullable com.termux.app.chrome.WallpaperParallax parallax) {
+        setPaneGlass(frame, frameRect, frostFilter, parallax, null);
+    }
+
+    /**
+     * {@link #setPaneGlass(Bitmap, Rect, ColorFilter, com.termux.app.chrome.WallpaperParallax)}
+     * under Fancier Glass: the blur is bent at the tab's rim and lit along it, through
+     * {@link GlassRefraction}, while the scrim over it stays the tab's own. Null is the plain
+     * frost — the default mode, and what every phone below API 33 draws whatever it is handed.
+     */
+    public void setPaneGlass(@Nullable Bitmap frame, @NonNull Rect frameRect,
+                             @Nullable ColorFilter frostFilter,
+                             @Nullable com.termux.app.chrome.WallpaperParallax parallax,
+                             @Nullable GlassRefraction.Look look) {
         Bitmap live = frame != null && !frame.isRecycled() ? frame : null;
         if (live == mFrostFrame && mFrostFilter == frostFilter && mFrostRect.equals(frameRect)
-            && mParallax == parallax) {
+            && mParallax == parallax && Objects.equals(look, mLook)) {
             return;
         }
         mParallax = parallax;
+        mLook = look;
+        if (live != mFrostFrame || mFrostShader == null) {
+            // CLAMP and a shader, as every other glass surface here draws the same frame: it does
+            // not always reach the screen's full width, and a plain drawBitmap left a sharp strip.
+            mFrostShader = live == null
+                ? null : new BitmapShader(live, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+        }
         mFrostFrame = live;
-        // CLAMP and a shader, as every other glass surface here draws the same frame: it does not
-        // always reach the screen's full width, and a plain drawBitmap left a sharp strip.
-        mFrostShader = live == null
-            ? null : new BitmapShader(live, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        mFrostPaint.setShader(mFrostShader);
         mFrostPaint.setColorFilter(frostFilter);
         mFrostFilter = frostFilter;
         mFrostRect.set(frameRect);
+        syncRefraction();
         invalidate();
+    }
+
+    /**
+     * Points the frost paint at the program or at the frame's own shader, whichever the look
+     * asks for and the phone can run; on a dress, never per draw, since the program captures its
+     * input when it is set.
+     */
+    private void syncRefraction() {
+        BitmapShader shader = mFrostShader;
+        GlassRefraction.Look look = mLook;
+        if (look == null || shader == null || !GlassRefraction.available()) {
+            mProgram = null;
+            mFrostPaint.setShader(shader);
+            return;
+        }
+        float density = getResources().getDisplayMetrics().density;
+        GlassRefraction.Program program = mProgram;
+        if (program == null || program.density() != density) {
+            program = GlassRefraction.Program.create(density);
+        }
+        mProgram = program;
+        if (program == null) {
+            // The driver refused the program: the plain frost is the look this phone gets.
+            mFrostPaint.setShader(shader);
+            return;
+        }
+        program.setLook(look);
+        program.setInput(shader);
+        program.applyTo(mFrostPaint);
     }
 
     /** True while the tab shows the wallpaper blur under its scrim. */
     public boolean hasPaneGlass() {
         return mFrostShader != null;
+    }
+
+    /** True while the tab's blur is drawn through the refraction program rather than plain. */
+    public boolean refracts() {
+        return mProgram != null;
     }
 
     /**
@@ -554,7 +615,7 @@ public final class PaneControlsView extends View {
         // The fill runs a hair past the edge and is trimmed there by the clip, so no anti-aliased
         // seam opens up between the tab and the border it comes out from behind.
         CornerTabGeometry.buildTabFill(corner(), mClip, mTab, radius, dp(1), mPathPoints, mPath);
-        drawMaterial(canvas, surface);
+        drawMaterial(canvas, surface, radius);
 
         // One line around frame and tab together: the frame's own stroke is the tab's outer edge,
         // so all the tab draws is the boundary it shares with the page's interior. Drawing its
@@ -595,13 +656,35 @@ public final class PaneControlsView extends View {
      * on screen under the panel scrim, or the scrim alone, stronger, when there is no blur. One
      * recipe for every screen — a terminal pane, the Display page, the Widgets page — so the
      * buttons read the same wherever the corner is.
+     *
+     * @param radiusPx the tab's one free corner, which the refraction's rim turns
      */
-    private void drawMaterial(@NonNull Canvas canvas, int surface) {
+    private void drawMaterial(@NonNull Canvas canvas, int surface, float radiusPx) {
         int save = canvas.save();
         canvas.clipPath(mPath);
-        boolean frosted = mFrostFrame != null && !mFrostFrame.isRecycled() && mFrostShader != null;
+        GlassRefraction.Program program = mProgram;
+        // A software canvas refuses a RuntimeShader outright: a RealtimeBlurView drawing the
+        // window into its bitmap is one. That pass only feeds another view's blur, so the tab
+        // gives it the scrim alone rather than a draw that throws.
+        boolean frosted = mFrostFrame != null && !mFrostFrame.isRecycled() && mFrostShader != null
+            && (program == null || canvas.isHardwareAccelerated());
         if (frosted) {
             aimFrost();
+            if (program != null) {
+                // The same aim, as uniforms; the rim runs along the tab's own free edge and its
+                // one corner, and past the two edges that are the frame's.
+                program.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
+                GlassRefraction.Look look = mLook;
+                float reach = look == null ? 0f
+                    : GlassRefraction.seamReachPx(look, program.density(), radiusPx);
+                GlassRefraction.rimRect(mRim, mTab.left, mTab.top, mTab.right, mTab.bottom, reach,
+                    CornerTabGeometry.refractionSeams(corner()));
+                program.setRect(mRim[0], mRim[1], mRim[2], mRim[3], radiusPx);
+            } else {
+                mFrostMatrix.setScale(mAim[0], mAim[1]);
+                mFrostMatrix.postTranslate(mAim[2], mAim[3]);
+                mFrostShader.setLocalMatrix(mFrostMatrix);
+            }
             mFrostPaint.setAlpha(Math.round(255f * mProgress));
             canvas.drawRect(mTab.left - dp(1), mTab.top - dp(1), mTab.right + dp(1),
                 mTab.bottom + dp(1), mFrostPaint);
@@ -619,9 +702,10 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * Point the frost shader at the wallpaper under this view. Recomputed on every draw: the tab
-     * is out only briefly and the overlay it lives in moves under the keyboard, so caching by
-     * position buys nothing here and risks a stale aim.
+     * Aim the frost at the wallpaper under this view, into {@link #mAim}: scale then translate,
+     * as {@code SharedFrameDrawable}'s aim states it. Recomputed on every draw: the tab is out
+     * only briefly and the overlay it lives in moves under the keyboard, so caching by position
+     * buys nothing here and risks a stale aim.
      */
     private void aimFrost() {
         if (mFrostFrame == null || mFrostShader == null) return;
@@ -629,13 +713,10 @@ public final class PaneControlsView extends View {
         // Past the page's slide and the wallpaper's parallax, exactly as the slab aims: the tab
         // is cut from the same glass and has to show the same wallpaper mid-slide.
         float shiftX = slideX + (mParallax == null ? 0f : mParallax.offsetPx());
-        float scaleX = mFrostRect.width() / (float) Math.max(1, mFrostFrame.getWidth());
-        float scaleY = mFrostRect.height() / (float) Math.max(1, mFrostFrame.getHeight());
-        mFrostMatrix.reset();
-        mFrostMatrix.setScale(scaleX, scaleY);
-        mFrostMatrix.postTranslate(mFrostRect.left - mLocation[0] - shiftX,
-            mFrostRect.top - mLocation[1]);
-        mFrostShader.setLocalMatrix(mFrostMatrix);
+        mAim[0] = mFrostRect.width() / (float) Math.max(1, mFrostFrame.getWidth());
+        mAim[1] = mFrostRect.height() / (float) Math.max(1, mFrostFrame.getHeight());
+        mAim[2] = mFrostRect.left - mLocation[0] - shiftX;
+        mAim[3] = mFrostRect.top - mLocation[1];
     }
 
     /**

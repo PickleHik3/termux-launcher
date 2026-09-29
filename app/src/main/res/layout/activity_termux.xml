@@ -395,6 +395,18 @@
                         app:realtimeBlurRadius="10dp"
                         app:realtimeOverlayColor="@android:color/transparent" />
 
+                    <!-- Wallpaper-mode frost: the shared pre-blurred frame at this capsule's
+                         own place on screen, which the blur above cannot see. While it shows,
+                         the live blur is GONE; WallpaperFrostPainter.applyOffDockSheet()
+                         installs it. -->
+                    <ImageView
+                        android:id="@+id/place_az_bar_host_frost"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:importantForAccessibility="no"
+                        android:visibility="gone" />
+
                     <View
                         android:id="@+id/place_az_bar_host_surface"
                         android:layout_width="match_parent"
@@ -436,6 +448,18 @@
                         android:layout_height="match_parent"
                         app:realtimeBlurRadius="10dp"
                         app:realtimeOverlayColor="@android:color/transparent" />
+
+                    <!-- Wallpaper-mode frost: the shared pre-blurred frame at this plank's
+                         own place on screen, which the blur above cannot see. While it shows,
+                         the live blur is GONE; WallpaperFrostPainter.applyOffDockSheet()
+                         installs it. -->
+                    <ImageView
+                        android:id="@+id/place_off_dock_plank_frost"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:scaleType="fitXY"
+                        android:importantForAccessibility="no"
+                        android:visibility="gone" />
 
                     <View
                         android:id="@+id/place_off_dock_plank_surface"

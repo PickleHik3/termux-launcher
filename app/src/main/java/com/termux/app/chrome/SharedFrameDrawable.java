@@ -14,6 +14,7 @@ import android.graphics.drawable.LayerDrawable;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import java.util.Objects;
 
@@ -141,6 +142,23 @@ public final class SharedFrameDrawable extends Drawable {
     /** True while the frame is drawn through the refraction program rather than plain. */
     public boolean refracts() {
         return mProgram != null;
+    }
+
+    /** The look, rim radius and seams last handed to {@link #setRefraction}, read back by tests. */
+    @VisibleForTesting
+    @Nullable
+    GlassRefraction.Look refractionLook() {
+        return mLook;
+    }
+
+    @VisibleForTesting
+    float refractionRadiusPx() {
+        return mRimRadiusPx;
+    }
+
+    @VisibleForTesting
+    int refractionSeams() {
+        return mSeams;
     }
 
     /**

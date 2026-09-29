@@ -256,6 +256,8 @@ public class TermuxActivityEdgeStackLayoutTest {
         // One sheet of glass, under both bars.
         assertNotNull(activity.findViewById(R.id.place_off_dock_plank_glass));
         assertNotNull(activity.findViewById(R.id.place_off_dock_plank_blur));
+        assertNotNull("frosted from the shared frame, the live blur only its fallback",
+            activity.findViewById(R.id.place_off_dock_plank_frost));
         assertNotNull(activity.findViewById(R.id.place_off_dock_plank_surface));
     }
 

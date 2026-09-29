@@ -139,10 +139,16 @@ public final class GlassRefraction {
      * @param out {@code {left, top, right, bottom}}
      */
     public static void rimRect(@NonNull float[] out, @NonNull Rect bounds, float reachPx, int seams) {
-        out[0] = bounds.left - ((seams & SEAM_LEFT) != 0 ? reachPx : 0f);
-        out[1] = bounds.top - ((seams & SEAM_TOP) != 0 ? reachPx : 0f);
-        out[2] = bounds.right + ((seams & SEAM_RIGHT) != 0 ? reachPx : 0f);
-        out[3] = bounds.bottom + ((seams & SEAM_BOTTOM) != 0 ? reachPx : 0f);
+        rimRect(out, bounds.left, bounds.top, bounds.right, bounds.bottom, reachPx, seams);
+    }
+
+    /** {@link #rimRect(float[], Rect, float, int)} for a surface drawn at fractional bounds: a corner tab mid-slide. */
+    public static void rimRect(@NonNull float[] out, float left, float top, float right, float bottom,
+                               float reachPx, int seams) {
+        out[0] = left - ((seams & SEAM_LEFT) != 0 ? reachPx : 0f);
+        out[1] = top - ((seams & SEAM_TOP) != 0 ? reachPx : 0f);
+        out[2] = right + ((seams & SEAM_RIGHT) != 0 ? reachPx : 0f);
+        out[3] = bottom + ((seams & SEAM_BOTTOM) != 0 ? reachPx : 0f);
     }
 
     /** How far a seam edge is pushed out: past the band, the pull and the corner arc, with a little to spare. */
