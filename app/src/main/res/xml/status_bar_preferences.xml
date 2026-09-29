@@ -30,15 +30,11 @@
             app:defaultValue="false"
             app:dependency="status_widget_weather" />
         <Preference
-            app:key="top_pane_notification_access"
+            app:key="status_bar_notifications_link"
             app:persistent="false"
-            app:title="@string/termux_top_pane_notification_access_title"
-            app:summary="@string/termux_top_pane_notification_access_summary" />
-        <Preference
-            app:key="essential_notification_rules_manage"
-            app:persistent="false"
-            app:title="@string/settings_essential_notifications_title"
-            app:summary="@string/settings_essential_notifications_summary" />
+            app:title="@string/settings_destination_notifications"
+            app:summary="@string/settings_status_bar_notifications_link_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.NotificationsPreferencesFragment" />
     </PreferenceCategory>
 
 </PreferenceScreen>

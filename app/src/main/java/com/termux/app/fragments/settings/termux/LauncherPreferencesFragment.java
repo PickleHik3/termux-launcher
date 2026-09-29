@@ -12,7 +12,6 @@ import androidx.annotation.NonNull;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
-import androidx.preference.SwitchPreferenceCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.app.notice.AppNotice;
@@ -52,18 +51,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         configureHelp(context);
         updatePermissionSummaries(context);
         updateDrawerLayoutSummary();
-
-        SwitchPreferenceCompat notificationDotsPreference = findPreference("app_launcher_notification_dots");
-        if (notificationDotsPreference != null) {
-            notificationDotsPreference.setOnPreferenceChangeListener((preference, newValue) -> {
-                boolean enabled = Boolean.TRUE.equals(newValue);
-                if (enabled && !LauncherNotificationAccess.isEnabled(context)) {
-                    showNotificationAccessPrompt(context);
-                }
-                return true;
-            });
-            updateNotificationDotsSummary(context, notificationDotsPreference);
-        }
 
         Preference lockMethodPreference = findPreference("app_launcher_az_lock_method");
         if (lockMethodPreference != null) {
@@ -135,10 +122,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         }
         updatePermissionSummaries(context);
         updateDrawerLayoutSummary();
-        SwitchPreferenceCompat notificationDotsPreference = findPreference("app_launcher_notification_dots");
-        if (notificationDotsPreference != null) {
-            updateNotificationDotsSummary(context, notificationDotsPreference);
-        }
     }
 
     private void configurePermissionActions(@NonNull Context context) {
@@ -209,22 +192,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
                 ? R.string.termux_app_launcher_access_status_on
                 : R.string.termux_app_launcher_access_status_off);
         }
-    }
-
-    private void updateNotificationDotsSummary(Context context, SwitchPreferenceCompat preference) {
-        boolean accessEnabled = LauncherNotificationAccess.isEnabled(context);
-        preference.setSummary(accessEnabled
-            ? R.string.termux_app_launcher_notification_dots_summary
-            : R.string.termux_app_launcher_notification_dots_summary_needs_access);
-    }
-
-    private void showNotificationAccessPrompt(Context context) {
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_app_launcher_notification_access_title)
-            .setMessage(R.string.termux_app_launcher_notification_access_message)
-            .setPositiveButton(R.string.termux_app_launcher_notification_access_enable, (dialog, which) -> openNotificationAccessSettings(context))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
     }
 
     private void openNotificationAccessSettings(Context context) {

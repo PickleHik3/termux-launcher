@@ -80,7 +80,11 @@
     <string name="settings_destination_terminal">Terminal</string>
     <string name="settings_destination_terminal_summary">Split panes, lazy mode, full screen, and Recents</string>
     <string name="settings_destination_status_bar">Status bar</string>
-    <string name="settings_destination_status_bar_summary">Clock, CPU, memory, weather, and notifications</string>
+    <string name="settings_destination_status_bar_summary">Clock, CPU, memory, and weather</string>
+    <string name="settings_destination_notifications">Notifications</string>
+    <string name="settings_destination_notifications_summary">Access, dots, pinned rules, and history for the shell</string>
+    <string name="settings_notifications_link_summary">Notification dots, pinned rules, and history</string>
+    <string name="settings_status_bar_notifications_link_summary">Media and pinned notifications are set under Notifications</string>
     <string name="settings_destination_keyboard_input">Keyboard</string>
     <string name="settings_destination_keyboard_input_summary">Input method, layouts, typing, feedback, and extra keys</string>
     <string name="settings_destination_display">Display</string>
@@ -796,6 +800,45 @@
 
     <!-- Termux App Preferences -->
     <string name="settings_root_launcher_header">Launcher</string>
+
+    <!-- Notifications page -->
+    <string name="settings_notifications_access_header">Access</string>
+    <string name="settings_notifications_access_summary">Needed for notification dots, media and pinned notifications, and history for the shell.</string>
+    <string name="settings_notifications_home_header">On the home screen</string>
+    <string name="settings_notifications_pinned_header">Pinned to the status bar</string>
+    <string name="settings_notifications_shell_header">For the shell</string>
+    <string name="notif_history_title">Notification history for the shell</string>
+    <string name="notif_history_link_summary">Choose which apps are recorded for Termux</string>
+    <plurals name="notif_history_apps_recorded">
+        <item quantity="one">%1$d app recorded</item>
+        <item quantity="other">%1$d apps recorded</item>
+    </plurals>
+    <string name="notif_history_body">Titles and text of notifications from the apps you check are saved on this device, where commands and agents in Termux can read them. Nothing is recorded until you check an app.</string>
+    <string name="notif_history_command">launcherctl notifications --app … --since 7d</string>
+    <string name="notif_history_access_title">Notification access is off</string>
+    <string name="notif_history_access_body">Without it nothing can be recorded.</string>
+    <string name="notif_history_access_grant">Grant access</string>
+    <string name="notif_history_keep_title">Keep for</string>
+    <string name="notif_history_keep_7">7 days</string>
+    <string name="notif_history_keep_30">30 days</string>
+    <string name="notif_history_keep_90">90 days</string>
+    <string name="notif_history_keep_365">1 year</string>
+    <string name="notif_history_mask_title">Mask one-time codes</string>
+    <string name="notif_history_mask_summary">Codes are hidden before a notification is saved.</string>
+    <string name="notif_history_clear">Clear history</string>
+    <string name="notif_history_clear_confirm_title">Clear notification history?</string>
+    <string name="notif_history_clear_confirm_message">Every saved notification is deleted. Recorded apps stay checked.</string>
+    <string name="notif_history_cleared">Notification history cleared</string>
+    <string name="notif_history_apps_section">Apps</string>
+    <string name="notif_history_search_hint">Search apps</string>
+    <string name="notif_history_loading">Loading apps…</string>
+    <string name="notif_history_no_match">No app matches</string>
+    <string name="notif_history_row_on_desc">%1$s, recorded</string>
+    <string name="notif_history_row_off_desc">%1$s, not recorded</string>
+    <string name="essential_rules_section_rules">Rules</string>
+    <string name="essential_rules_section_add">Add a rule</string>
+    <string name="essential_rules_remove">Remove</string>
+    <string name="essential_rules_clears_pill">Clears</string>
     <string name="settings_root_system_info_header">System &amp; Info</string>
 
 
