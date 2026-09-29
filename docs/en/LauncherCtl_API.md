@@ -7,7 +7,7 @@ LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compat
 - Bind mode: `localhost` (default, `127.0.0.1`) or opt-in `lan` (`0.0.0.0`).
 - Auth: bearer token from `~/.launcherctl/token`, or `X-Api-Key: <token>` header. The token can be made optional for localhost (see [Auth](#auth)).
 - Endpoint URL: `~/.launcherctl/endpoint`.
-- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`, `launcherctl pane …`, `launcherctl notify`, `launcherctl progress`, `launcherctl clipboard`, `launcherctl notifications`, and the device commands `vibrate`, `torch`, `battery`, `volume` and `toast`. The launcher app installs both when `TermuxActivity` starts.
+- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`, `launcherctl pane …`, `launcherctl notify`, `launcherctl progress`, `launcherctl clipboard`, `launcherctl notifications`, and the device commands `vibrate`, `torch`, `battery`, `volume`, `toast` and `wallpaper`. The launcher app installs both when `TermuxActivity` starts.
 - Removed helpers: `launcherctl-mcp` and `launcher-restart` are no longer installed and are deleted on upgrade.
 
 `tai` uses this authenticated server for the local On-device AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
@@ -466,7 +466,7 @@ The history lives in `~/.launcherctl/launcher.db`, readable by anything running 
 that is why it is opt-in per app. The older `notifications.jsonl` mirror is gone and is deleted
 the first time the new store opens.
 
-### Device routes: vibrate, torch, battery, volume, toast
+### Device routes: vibrate, torch, battery, volume, toast, wallpaper
 
 | Method | Path | Body | Answer |
 | --- | --- | --- | --- |
@@ -476,11 +476,13 @@ the first time the new store opens.
 | GET | `/v1/volume` | none | `{"ok": true, "streams": [{"stream": "music", "volume": 7, "max_volume": 15}, …]}` |
 | POST | `/v1/volume` | `{"stream": "music", "volume": 7}` | `{"ok": true, "stream": "music", "volume": 7, "max_volume": 15}` |
 | POST | `/v1/toast` | `{"text": "hi", "short": false}` | `{"ok": true, "length": 2}` |
+| POST | `/v1/wallpaper` | `{"path": "/sdcard/a.jpg", "target": "both"}` (`target`: `home`, `lock`, `both`; default `both`) | `{"ok": true, "target": "both", "width": 2400, "height": 1080, "launcher_refresh": "live"}` |
+| GET | `/v1/wallpaper` | none | `{"ok": true, "home_id": 12, "lock_id": 13, "live": false, "managed": true, "desired_width": 1080, "desired_height": 2400}` |
 
 These are the answers `termux-vibrate`, `termux-torch`, `termux-battery-status`, `termux-volume`
 and `termux-toast` give, so a compatibility script can pass them through. They need no pane and
 no visible launcher; the same bearer token and a per-route rate limit apply (30 a minute for
-vibrate and torch, 60 for toast and volume writes, 120 for battery and volume reads).
+vibrate and torch, 60 for toast and volume writes, 120 for battery and volume reads, 6 for wallpaper sets and 30 for the wallpaper read).
 
 - `vibrate` calls `Haptics.vibrate(context, ms, force)`, so the user's haptics setting and
   silent mode apply unless `force` is true. Duration is capped at 10 s. 400 `bad_request` for a
@@ -498,6 +500,20 @@ vibrate and torch, 60 for toast and volume writes, 120 for battery and volume re
   `volume_refused` when Android refuses (ring and notification under Do Not Disturb).
 - `toast` raises an in-app notice through `AppNotice` while the launcher is on screen and a
   stock system toast otherwise; long by default, `"short": true` for the brief one.
+- `wallpaper` sets the system wallpaper through the same code the in-app picker uses
+  (`ManagedWallpaper.apply`), so the launcher's stored wallpaper id and exact-picture copy follow
+  and the glass treats it as its own picture; a wide picture is cut to the screen-sized centre
+  exactly as after a pick. `path` must be absolute, readable, a decodable image of at most 48 MB,
+  and under the Termux home or shared storage (`/sdcard`, `/storage/emulated`; symlinks are
+  resolved first, so `~/storage/shared/...` works). Errors: 400 `bad_request`, 403
+  `path_not_allowed` or `unreadable`, 404 `not_found`, 413 `too_large`, 415 `not_an_image`, 500
+  `wallpaper_failed`. The call blocks until Android has taken the picture (seconds for a large
+  one). It never needs the Activity: the wallpaper is always set. For `home` and `both` the
+  launcher is also told to re-dress (wallpaper mode on, styling reload): `launcher_refresh` is
+  `live` when the launcher is running, and `on_next_open` when it is not, in which case the
+  reload happens the next time it opens. `lock` alone changes nothing in the launcher. `GET`
+  reports the current ids, whether a live wallpaper is on, and whether the home wallpaper is the
+  one the launcher set (`managed`).
 
 ```sh
 launcherctl vibrate -d 200 --force
@@ -506,6 +522,8 @@ launcherctl battery
 launcherctl volume                 # list every stream
 launcherctl volume music 7
 launcherctl toast --short 'build done'
+launcherctl wallpaper set ~/pics/a.jpg --lock   # --home | --lock | --both (default)
+launcherctl wallpaper get
 ```
 
 ### OpenAI-compatible

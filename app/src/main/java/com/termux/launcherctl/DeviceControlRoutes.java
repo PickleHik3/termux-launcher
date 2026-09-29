@@ -7,20 +7,34 @@ import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
 import android.media.AudioManager;
+import android.app.WallpaperManager;
+import android.graphics.Rect;
+import android.net.Uri;
 import android.os.BatteryManager;
+import android.os.Environment;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.TermuxActivity;
+import com.termux.app.chrome.ManagedWallpaper;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.notice.AppNotice;
+import com.termux.app.terminal.TerminalActionDispatcher;
+import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
 /**
- * The device routes {@code launcherctl vibrate|torch|battery|volume|toast} sit on: small,
+ * The device routes {@code launcherctl vibrate|torch|battery|volume|toast|wallpaper} sit on: small,
  * self-contained answers about, or requests to, the phone itself, in the shapes the matching
  * {@code termux-*} commands print so a compatibility script can pass the JSON straight through.
  * None of them needs a terminal or the Activity, so unlike the signal routes they never go
@@ -49,6 +63,7 @@ final class DeviceControlRoutes {
             case "/v1/battery":
                 return "GET".equals(method);
             case "/v1/volume":
+            case "/v1/wallpaper":
                 return "GET".equals(method) || "POST".equals(method);
             default:
                 return false;
@@ -79,6 +94,8 @@ final class DeviceControlRoutes {
                 return "GET".equals(method) ? volumeList(context) : volumeSet(context, arguments);
             case "/v1/toast":
                 return toast(context, arguments);
+            case "/v1/wallpaper":
+                return "GET".equals(method) ? wallpaperGet(context) : wallpaperSet(context, arguments);
             default:
                 return error(404, "not_found", "Unknown endpoint");
         }
@@ -278,6 +295,122 @@ final class DeviceControlRoutes {
         boolean shortToast = arguments.optBoolean("short", false);
         AppNotice.show(context, text, !shortToast);
         return ok().put("length", text.length());
+    }
+
+    // ---------------------------------------------------------------------------------- wallpaper
+
+    /** A picture bigger than this is not a wallpaper, and the system re-encodes it in memory. */
+    static final long MAX_WALLPAPER_BYTES = 48L * 1024 * 1024;
+
+    /**
+     * Whether {@code canonical} is {@code root} or lies under it. Both must already be canonical,
+     * so a symlink out of an allowed folder does not pass; the trailing separator keeps
+     * {@code /sdcard2} from matching {@code /sdcard}.
+     */
+    static boolean isUnderAnyRoot(@NonNull String canonical, @NonNull List<String> roots) {
+        for (String root : roots) {
+            if (canonical.equals(root) || canonical.startsWith(root.endsWith("/") ? root : root + "/")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Where a wallpaper picture may be read from: the Termux home and shared storage. */
+    @NonNull
+    private static List<String> wallpaperRoots() {
+        List<String> roots = new ArrayList<>();
+        String[] candidates = {TermuxConstants.TERMUX_HOME_DIR_PATH,
+            Environment.getExternalStorageDirectory().getPath(), "/sdcard", "/storage/emulated"};
+        for (String candidate : candidates) {
+            try {
+                roots.add(new File(candidate).getCanonicalPath());
+            } catch (IOException ignored) {
+            }
+        }
+        return roots;
+    }
+
+    /**
+     * {@code {"path":"/sdcard/a.jpg","target":"home|lock|both"}} in, {@code target} defaulting to
+     * {@code both}. It runs the same file-and-system half the in-app picker does
+     * ({@link ManagedWallpaper#apply}), so the launcher's stored wallpaper id and exact-picture
+     * copy follow; that half needs no Activity, so the wallpaper is always set. The launcher-side
+     * re-dress goes through {@code setWallpaperModeEnabled}, a broadcast plus a next-resume flag:
+     * {@code launcher_refresh} is {@code live} when the launcher is running and
+     * {@code on_next_open} when it is not (the wallpaper itself is set either way). Blocks for as
+     * long as {@code setStream} does, on the server's worker thread.
+     */
+    @NonNull
+    private static JSONObject wallpaperSet(@NonNull Context context, @NonNull JSONObject arguments)
+            throws JSONException {
+        String path = arguments.optString("path", "").trim();
+        if (path.isEmpty()) return error(400, "bad_request", "Missing 'path'");
+        int flags = ManagedWallpaper.flagsForTarget(arguments.optString("target", "both"));
+        if (flags == 0) return error(400, "bad_request", "'target' must be home, lock or both");
+        File file = new File(path);
+        if (!file.isAbsolute()) return error(400, "bad_request", "'path' must be absolute");
+        String canonical;
+        try {
+            canonical = file.getCanonicalPath();
+        } catch (IOException e) {
+            return error(400, "bad_request", "'path' could not be resolved");
+        }
+        if (!isUnderAnyRoot(canonical, wallpaperRoots())) {
+            return error(403, "path_not_allowed",
+                "The picture must be under the Termux home or shared storage");
+        }
+        File resolved = new File(canonical);
+        if (!resolved.isFile()) return error(404, "not_found", "No such file: " + path);
+        if (!resolved.canRead()) return error(403, "unreadable", "The file cannot be read: " + path);
+        if (resolved.length() > MAX_WALLPAPER_BYTES) {
+            return error(413, "too_large", "The picture is larger than "
+                + (MAX_WALLPAPER_BYTES / (1024 * 1024)) + " MB");
+        }
+        Rect bounds = ManagedWallpaper.fullImageBounds(context, Uri.fromFile(resolved));
+        if (bounds == null) return error(415, "not_an_image", "The file is not an image Android can decode");
+
+        Context app = context.getApplicationContext();
+        // The picker's cropper writes the pending file that apply() promotes to the exact copy;
+        // staging the picture there makes this path end in the same state.
+        Uri staged = ManagedWallpaper.stageSource(app, resolved);
+        if (staged == null) return error(500, "stage_failed", "The picture could not be copied for applying");
+        int[] portrait = ManagedWallpaper.portraitSize(app);
+        boolean applied = ManagedWallpaper.apply(app, WallpaperManager.getInstance(app), staged, flags,
+            portrait[0], portrait[1], TermuxAppSharedPreferences.build(app, false));
+        if (!applied) return error(500, "wallpaper_failed", "Android refused the wallpaper");
+
+        boolean live = TerminalActionDispatcher.getInstance().isAttached();
+        if ((flags & WallpaperManager.FLAG_SYSTEM) != 0) {
+            // What the picker does once its apply finishes: the picture is ours again, so turn
+            // wallpaper mode on and have the launcher re-dress (now if running, else on resume).
+            TermuxActivity.setWallpaperModeEnabled(app, true);
+        }
+        return ok().put("target", ManagedWallpaper.targetName(flags))
+            .put("width", bounds.width()).put("height", bounds.height())
+            .put("launcher_refresh", live ? "live" : "on_next_open");
+    }
+
+    /** {@code {"ok":true,"home_id","lock_id","live","managed",...}}: what is on screen now. */
+    @NonNull
+    private static JSONObject wallpaperGet(@NonNull Context context) throws JSONException {
+        Context app = context.getApplicationContext();
+        WallpaperManager manager = WallpaperManager.getInstance(app);
+        int homeId = -1;
+        int lockId = -1;
+        boolean live = false;
+        try {
+            homeId = manager.getWallpaperId(WallpaperManager.FLAG_SYSTEM);
+            lockId = manager.getWallpaperId(WallpaperManager.FLAG_LOCK);
+            live = manager.getWallpaperInfo() != null;
+        } catch (RuntimeException ignored) {
+        }
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, false);
+        int storedId = preferences == null ? -1 : preferences.getManagedWallpaperSystemId();
+        return ok().put("home_id", homeId).put("lock_id", lockId).put("live", live)
+            .put("managed", storedId > 0 && storedId == homeId)
+            .put("desired_width", manager.getDesiredMinimumWidth())
+            .put("desired_height", manager.getDesiredMinimumHeight());
     }
 
     // ------------------------------------------------------------------------------------ helpers

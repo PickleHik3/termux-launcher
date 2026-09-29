@@ -1798,6 +1798,10 @@ public class LauncherCtlApiServer {
         rateLimiters.put("GET:/v1/volume", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/volume", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/toast", new SimpleRateLimiter(60, 60_000));
+        // A wallpaper set makes system_server re-encode the picture, which takes seconds and
+        // memory; a script changes it now and then, so the limit is tight.
+        rateLimiters.put("POST:/v1/wallpaper", new SimpleRateLimiter(6, 60_000));
+        rateLimiters.put("GET:/v1/wallpaper", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/ai/status", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/runtime", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/models", new SimpleRateLimiter(120, 60_000));
@@ -2478,6 +2482,8 @@ public class LauncherCtlApiServer {
             "  launcherctl battery\n" +
             "  launcherctl volume [STREAM VALUE]\n" +
             "  launcherctl toast [--short] <text>\n" +
+            "  launcherctl wallpaper set FILE [--home|--lock|--both]\n" +
+            "  launcherctl wallpaper get\n" +
             "  launcherctl x11 gpu [--env]\n" +
             "\n" +
             "Examples:\n" +
@@ -2810,6 +2816,30 @@ public class LauncherCtlApiServer {
             "  case \"$2\" in ''|*[!0-9]*) echo \"launcherctl volume: value must be a whole number, got: $2\" >&2; exit 2 ;; esac\n" +
             "  api POST /v1/volume \"{\\\"stream\\\":$(printf '%s' \"$1\" | json_str),\\\"volume\\\":$2}\"\n" +
             "}\n" +
+            "wallpaper_cmd() {\n" +
+            "  usage='usage: launcherctl wallpaper set FILE [--home|--lock|--both] | launcherctl wallpaper get'\n" +
+            "  case \"${1:-}\" in\n" +
+            "    get) api GET /v1/wallpaper; return ;;\n" +
+            "    set) shift ;;\n" +
+            "    *) echo \"$usage\" >&2; exit 2 ;;\n" +
+            "  esac\n" +
+            "  target=both file=''\n" +
+            "  while [ \"$#\" -gt 0 ]; do\n" +
+            "    case \"$1\" in\n" +
+            "      --home) target=home; shift ;;\n" +
+            "      --lock) target=lock; shift ;;\n" +
+            "      --both) target=both; shift ;;\n" +
+            "      --) shift; file=\"${1:-}\"; break ;;\n" +
+            "      -*) echo \"launcherctl wallpaper: unknown option $1\" >&2; exit 2 ;;\n" +
+            "      *) [ -z \"$file\" ] || { echo \"$usage\" >&2; exit 2; }; file=\"$1\"; shift ;;\n" +
+            "    esac\n" +
+            "  done\n" +
+            "  [ -n \"$file\" ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "  case \"$file\" in /*) ;; *) file=\"$PWD/$file\" ;; esac\n" +
+            "  [ -f \"$file\" ] || { echo \"launcherctl wallpaper: no such file: $file\" >&2; exit 2; }\n" +
+            "  path=$(printf '%s' \"$file\" | json_str)\n" +
+            "  api POST /v1/wallpaper \"{\\\"path\\\":$path,\\\"target\\\":\\\"$target\\\"}\"\n" +
+            "}\n" +
             "toast_cmd() {\n" +
             "  usage='usage: launcherctl toast [--short] <text>'\n" +
             "  short=false\n" +
@@ -2886,6 +2916,10 @@ public class LauncherCtlApiServer {
             "    shift || true\n" +
             "    toast_cmd \"$@\"\n" +
             "    ;;\n" +
+            "  wallpaper)\n" +
+            "    shift || true\n" +
+            "    wallpaper_cmd \"$@\"\n" +
+            "    ;;\n" +
             "  keyboard)\n" +
             "    shift || true\n" +
             "    sub=\"${1:-}\"\n" +
@@ -2919,7 +2953,7 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, volume, toast, x11. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, volume, toast, wallpaper, x11. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";
