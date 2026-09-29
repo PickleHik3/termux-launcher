@@ -208,6 +208,11 @@ public final class AzPullTabLayer extends FrameLayout {
      * ({@link AzTabPolicy#tabFill}) — nothing while the glass is the material, the glass's base
      * made solid where there is no glass. {@code glassBase} is that base either way, which the
      * tab's "A" is made legible against.
+     *
+     * <p>The glass here is the tint alone, with no wallpaper frost and no Fancier Glass
+     * refraction, and that is deliberate: the tab and the letters stand over live content — the
+     * terminal, a widget — not over the wallpaper, so a frame of the wallpaper bent under them
+     * would show a picture that is not behind them.</p>
      */
     public void setGlass(@Nullable Drawable tabGlass, @Nullable Drawable sheetGlass, int tabFill,
                          int glassBase) {
