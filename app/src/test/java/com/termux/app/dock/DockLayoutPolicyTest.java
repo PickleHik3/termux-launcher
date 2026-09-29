@@ -357,6 +357,35 @@ public class DockLayoutPolicyTest {
         assertEquals(shared.appsRowIconPx + 50, shared.appsRowBandPx);
     }
 
+    /**
+     * The row next to the canvas with a band beyond it — the shipped dock, the letters under the
+     * row: the ticks stand over the icons, and the side under them keeps the letters' crown rather
+     * than the ticks' band, which opened a hole between the icons and the letters. A row with a
+     * band over it keeps the ticks' band on both sides, so its icon stays in the middle.
+     */
+    @Test
+    public void aSharedRowNextToTheCanvasKeepsOnlyTheCrownOnItsFarSide() {
+        DockLayout between = DockLayoutPolicy.compute(inputs(2.18f, true, false).build());
+        DockLayout next = DockLayoutPolicy.compute(inputs(2.18f, true, false)
+            .appsRowNextToCanvas(true).build());
+        int crownPx = DockLayoutPolicy.sharedRowAirPx(DENSITY);
+        int stripPx = PageTickStrip.bandPx(DENSITY);
+        assertEquals("6dp at density 2.75", 17, crownPx);
+        assertEquals(crownPx, next.appsTopPaddingPx);
+        assertEquals(crownPx, next.appsBottomPaddingPx);
+        assertEquals("the ticks keep their own band", stripPx, next.appsRowTickSideAirPx);
+        assertEquals(next.appsRowIconPx + crownPx + stripPx, next.appsRowBandPx);
+        assertEquals("the icon is the same size either way",
+            between.appsRowIconPx, next.appsRowIconPx);
+        assertEquals("and the row is shorter by the difference",
+            between.appsRowBandPx - (stripPx - crownPx), next.appsRowBandPx);
+        assertEquals(stripPx, between.appsTopPaddingPx);
+        // Alone the row has no band beyond it, so next to the canvas changes nothing.
+        DockLayout alone = DockLayoutPolicy.compute(inputs(2.18f, true, false)
+            .appsRowAlone(true).appsRowNextToCanvas(true).build());
+        assertEquals(stripPx, alone.appsTopPaddingPx);
+    }
+
     @Test
     public void aCollapsedRowStaysCollapsedWhenItStandsAlone() {
         DockLayout l = DockLayoutPolicy.compute(inputs(2.18f, true, false)

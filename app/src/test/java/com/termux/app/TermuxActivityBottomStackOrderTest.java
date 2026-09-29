@@ -654,8 +654,12 @@ public class TermuxActivityBottomStackOrderTest {
             pager.getPaddingTop());
 
         // The gap under the row holds no ticks at all, so its hairline splits it plainly.
-        int airPx = DockLayoutPolicy.rowAirPx(false, true,
+        // Updated for Q10 with a reason: with the letters under it the row keeps only their crown
+        // on that side; the ticks' band there opened a hole between the icons and the letters.
+        int airPx = DockLayoutPolicy.rowAirPx(false, true, true,
             activity.getResources().getDisplayMetrics().density);
+        assertEquals(DockLayoutPolicy.sharedRowAirPx(
+            activity.getResources().getDisplayMetrics().density), airPx);
         int hostBottom = topIn(rows, host) + host.getHeight();
         int iconBottom = topIn(rows, pager) + pager.getHeight() - pager.getPaddingBottom();
         View letters = activity.findViewById(R.id.apps_bar_az_row);
