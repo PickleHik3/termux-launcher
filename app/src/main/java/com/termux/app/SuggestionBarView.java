@@ -87,6 +87,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.termux.app.haptics.Haptics;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.launcher.LauncherAppLauncher;
@@ -2223,7 +2224,7 @@ public final class SuggestionBarView extends GridLayout
         azFocusedEntryKey = key;
         azFocusedView = target;
         if (rowHapticsEnabled && movedBetweenApps) {
-            performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+            Haptics.tick(this, android.view.HapticFeedbackConstants.CLOCK_TICK);
         }
         if ((now - lastAzFocusBounceUptimeMs) >= AZ_FOCUS_BOUNCE_COOLDOWN_MS) {
             lastAzFocusBounceUptimeMs = now;
@@ -3157,7 +3158,7 @@ public final class SuggestionBarView extends GridLayout
         terminalSearchFocusIndex = Math.floorMod(terminalSearchFocusIndex + delta, count);
         if (rowHapticsEnabled && RowHapticTickHelper.isBoundaryCrossing(
             previousFocusIndex, terminalSearchFocusIndex)) {
-            performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+            Haptics.tick(this, android.view.HapticFeedbackConstants.CLOCK_TICK);
         }
         applyTerminalSearchFocusOutline();
         return true;
@@ -6805,7 +6806,7 @@ public final class SuggestionBarView extends GridLayout
     private void performPinnedPageTransitionHaptic(int targetPage) {
         if (!rowHapticsEnabled)
             return;
-        performHapticFeedback(pinnedPageTransitionHaptic(
+        Haptics.tick(this, pinnedPageTransitionHaptic(
             isMostUsedDynamicPage(targetPage), Build.VERSION.SDK_INT));
     }
 

@@ -623,6 +623,9 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 if (com.termux.app.x11.X11DisplaySwitch.write(mContext, mPreferences, value))
                     scheduleTermuxActivityStylingSync(false);
                 break;
+            case "app_haptics_enabled":
+                mPreferences.setAppHapticsEnabled(value);
+                break;
             case "app_launcher_row_haptics":
                 mPreferences.setAppLauncherRowHapticsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -668,6 +671,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isAppLauncherWidgetPaneEnabled();
             case "x11_display_enabled":
                 return mPreferences.isX11DisplayEnabled();
+            case "app_haptics_enabled":
+                return mPreferences.isAppHapticsEnabled();
             case "app_launcher_row_haptics":
                 return mPreferences.isAppLauncherRowHapticsEnabled();
             case "app_launcher_az_double_tap_lock":

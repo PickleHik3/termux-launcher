@@ -1261,7 +1261,8 @@ public final class TermuxInAppKeyboard {
         mKeyEventHandler.setKeyValueInterceptor(mKeyValueInterceptor);
         Config.Builder configBuilder = new Config.Builder(
             requireContainer().getResources(), mKeyEventHandler);
-        configBuilder.hapticEnabled = mPreferences.isInAppKeyboardHapticsEnabled();
+        configBuilder.hapticEnabled = mPreferences.isInAppKeyboardHapticsEnabled()
+            && mPreferences.isAppHapticsEnabled();
         configBuilder.keySoundEnabled = mPreferences.isInAppKeyboardKeySoundEnabled();
         configBuilder.labelFont = loadCustomLabelFont();
         mAppliedConfigSignature = configPreferenceSignature();
@@ -1334,6 +1335,7 @@ public final class TermuxInAppKeyboard {
     /** Immutable-Config inputs; a change forces a renderer rebuild on preference reload. */
     private String configPreferenceSignature() {
         return mPreferences.isInAppKeyboardHapticsEnabled() + "|"
+            + mPreferences.isAppHapticsEnabled() + "|"
             + mPreferences.isInAppKeyboardKeySoundEnabled() + "|"
             + mPreferences.getInAppKeyboardFontPath();
     }

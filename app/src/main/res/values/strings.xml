@@ -486,6 +486,7 @@
     <string name="settings_edit_pinned_apps_title">Edit pinned apps</string>
     <string name="settings_edit_pinned_apps_summary">Choose apps and drag them to reorder directly.</string>
     <string name="settings_app_browsing_header">App browsing</string>
+    <string name="settings_app_haptics_summary">Master switch for every tick and buzz the launcher makes. The launcher and keyboard haptics below still apply on top of it.</string>
     <string name="settings_app_index_haptics_title">Launcher haptics</string>
     <string name="settings_app_index_haptics_summary">Subtle feedback across the app index and dock page changes.</string>
     <string name="settings_notification_dots_title">Notification dots</string>

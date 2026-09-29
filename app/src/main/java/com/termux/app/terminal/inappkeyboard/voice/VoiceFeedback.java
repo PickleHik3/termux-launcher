@@ -10,6 +10,7 @@ import android.os.Vibrator;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.haptics.Haptics;
 import com.termux.shared.logger.Logger;
 
 import java.util.concurrent.ExecutorService;
@@ -79,7 +80,7 @@ public final class VoiceFeedback {
         if (!sounds && !haptics) return;
         try {
             executor.execute(() -> {
-                if (haptics) vibrate(haptic);
+                if (haptics && Haptics.isEnabled(appContext)) vibrate(haptic);
                 if (sounds) play(tone);
             });
         } catch (RuntimeException ignored) {

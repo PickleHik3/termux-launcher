@@ -13632,7 +13632,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Row-level haptic ticks, shared by the dock rows and the palette's focus movement. */
     public boolean isRowHapticsEnabled() {
-        return mPreferences != null && mPreferences.isAppLauncherRowHapticsEnabled();
+        return mPreferences != null && mPreferences.isAppHapticsEnabled()
+            && mPreferences.isAppLauncherRowHapticsEnabled();
     }
 
     /**

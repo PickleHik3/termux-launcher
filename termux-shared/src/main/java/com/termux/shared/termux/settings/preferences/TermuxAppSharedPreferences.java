@@ -1083,6 +1083,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_AZ_ROW_ENABLED, value, false);
     }
 
+    public boolean isAppHapticsEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_HAPTICS_ENABLED,
+            TERMUX_APP.DEFAULT_APP_HAPTICS_ENABLED);
+    }
+
+    public void setAppHapticsEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_HAPTICS_ENABLED, value, false);
+    }
+
     public boolean isAppLauncherRowHapticsEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_ROW_HAPTICS,

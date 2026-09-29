@@ -20,6 +20,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.app.haptics.Haptics;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.Spring;
@@ -1303,7 +1304,7 @@ public final class TerminalCommandPaletteController
     /** Light tick on focus change and on run, under the same preference as the dock's rows. */
     private void playTick() {
         if (mView == null || !mActivity.isRowHapticsEnabled()) return;
-        mView.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        Haptics.tick(mView, HapticFeedbackConstants.CLOCK_TICK);
     }
 
     @NonNull
