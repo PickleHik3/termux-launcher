@@ -39,10 +39,18 @@ public interface PaneSurfaceStyle {
     int paneGlassGrainStrength();
     /**
      * The preset's rim for a slab at {@code radiusPx}, or null for none. Panes wear no rim of
-     * their own under the hairline look (their edge is the focus rim {@link PaneRim} draws), so
+     * their own under the hairline look (their edge is the shared rim {@link PaneRim} draws), so
      * only a gradient rim answers; it comes from the same factory as every other glass surface.
      */
     @Nullable default android.graphics.drawable.Drawable paneGlassRim(float radiusPx) { return null; }
+    /**
+     * The shared rim every chrome surface wears (status bar, dock, keyboard), cut at {@code
+     * radiusPx}: the preset's hairline or gradient. What a lone pane, and the unfocused panes of a
+     * split, draw as their border. Null lets {@link PaneRim} fall back to its own hairline.
+     */
+    @Nullable default android.graphics.drawable.Drawable paneRimDrawable(float radiusPx) { return null; }
+    /** Whether an attention border may pulse: false under Lazy mode and reduced motion (a static glow). */
+    default boolean paneAttentionPulses() { return true; }
     /** True while {@link #paneGlassRim} would answer, so a re-dress asks for a drawable only then. */
     default boolean paneGlassRimWanted() { return false; }
     /** Corner radius of a pane slab, in px. */

@@ -2966,15 +2966,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
 
-        // Harmonize with the split-pane focus border (pane_active_border.xml uses colorPrimary to
-        // mark the active pane): the ambient outer border must read as a quiet structural outline
-        // rather than a second focus indicator, so it uses termuxColorOutlineVariant (the same role
-        // already used for the dock/keyboard capsule's containing stroke) at a moderate alpha.
-        GradientDrawable border = new GradientDrawable();
-        border.setColor(Color.TRANSPARENT);
-        border.setCornerRadius(cornerRadiusPx);
-        border.setStroke(strokePx, withAlphaComponent(resolveAccessoryOutlineColor(), 150));
-        borderView.setBackground(border);
+        // The lone pane's frame is the shared rim, the same border the status bar, dock and
+        // keyboard wear (hairline or gradient, per preset). The Material active colour belongs to
+        // the focused pane of a split only (PaneBorderStyle).
+        borderView.setBackground(mChrome.glass().rimDrawable(cornerRadiusPx));
         if (borderView instanceof TerminalGlassFrameView) {
             ((TerminalGlassFrameView) borderView).setRim(false, 0f);
         }
@@ -3140,6 +3135,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override @Nullable public Drawable paneGlassRim(float radiusPx) {
                 return paneGlassRimWanted() ? mChrome.glass().rimDrawable(radiusPx) : null;
+            }
+
+            @Override @Nullable public Drawable paneRimDrawable(float radiusPx) {
+                return mChrome.glass().rimDrawable(radiusPx);
+            }
+
+            @Override public boolean paneAttentionPulses() {
+                return !isLazyModeEnabled() && !ReducedMotion.isEnabled(TermuxActivity.this);
             }
 
             @Override @Nullable public Drawable paneGlassGrainLayer() {
@@ -16792,6 +16795,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * that draws each of them once, and it is free when nothing was held back.
      */
     private void noteTerminalPlaceMayBeVisible() {
+        if (mPaneController != null) mPaneController.onTerminalPlaceShown();
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onTerminalPlaceMayBeVisible();
     }
@@ -17707,6 +17711,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public boolean isMinimalMode() {
                 return TermuxActivity.this.isMinimalMode();
+            }
+            @Override public boolean isTerminalPlaceOnScreen() {
+                return mPaneWallController == null || mPaneWallController.isTerminalOnScreen();
             }
             @Override public void toggleMinimalMode() {
                 setMinimalMode(!TermuxActivity.this.isMinimalMode());
@@ -19671,6 +19678,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // Agents first: observeWindowPhases reads back what this refresh's agent pass wrote,
                 // so a title that has just turned the ring on must not be a refresh behind.
                 com.termux.app.terminal.AgentStatus.State agentState = observeWindowAgents(window, now);
+                for (TerminalSession shell : mPaneController.shellsOf(window)) syncPaneAttention(shell);
                 int phases = observeWindowPhases(window, i == selected, now);
                 items.add(buildWindowItem(session, i, foregroundPids,
                     mPaneController.windowName(window))
@@ -19703,6 +19711,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         java.util.HashSet<Integer> live = new java.util.HashSet<>(pids);
         mShellPhases.retain(live);
         mAgentStatuses.retain(live);
+        if (mPaneController != null) mPaneController.retainPaneAttention(live);
         return pids;
     }
 
@@ -19755,6 +19764,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Feeds the pane's data-driven attention causes from what is already tracked: an agent that is
+     * blocked, and a progress report in the error state. The bell rides noteShellAttention.
+     */
+    private void syncPaneAttention(@NonNull TerminalSession shell) {
+        if (mPaneController == null) return;
+        com.termux.app.terminal.AgentStatus status = mAgentStatuses.get(shell.getPid());
+        mPaneController.setPaneAttention(shell, com.termux.app.terminal.PaneAttention.Cause.BLOCKED,
+            status != null && status.state == com.termux.app.terminal.AgentStatus.State.BLOCKED);
+        com.termux.terminal.TerminalEmulator emulator = shell.getEmulator();
+        mPaneController.setPaneAttention(shell,
+            com.termux.app.terminal.PaneAttention.Cause.PROGRESS_ERROR, emulator != null
+                && emulator.getProgressState()
+                == com.termux.terminal.TerminalEmulator.PROGRESS_STATE_ERROR);
+    }
+
+    /**
      * An agent's own report about its pane, from {@code launcherctl agent}. Authoritative, so the
      * chips and the browser are repainted straight away rather than at the next poll.
      */
@@ -19763,6 +19788,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int pid = pane.getPid();
         if (pid <= 0) return;
         if (!mAgentStatuses.report(pid, agent, state, android.os.SystemClock.uptimeMillis())) return;
+        syncPaneAttention(pane);
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar != null) syncWindowBarItems(bar);
         if (mSessionBrowserRefreshCallback != null) mSessionBrowserRefreshCallback.run();
@@ -19932,6 +19958,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void noteShellAttention(@NonNull TerminalSession session) {
         int pid = session.getPid();
         if (pid < 1 || mPaneController == null) return;
+        // The pane's own border glows until the user focuses it; every bell, OSC 9/777/99 message
+        // and launcherctl notify lands here.
+        mPaneController.setPaneAttention(session,
+            com.termux.app.terminal.PaneAttention.Cause.BELL, true);
         if (mCurrentWSession != null
             && mPaneController.shellsOf(mCurrentWSession.currentWindow()).contains(session)) {
             if (mTimedAttentionShellPids.add(pid)) refreshTerminalWindowBar();

@@ -27,6 +27,8 @@ The shared appearance values every surface inherits until a property is detached
 
 **Pane**:
 One terminal view inside a split. Panes have corner tabs but no appearance of their own.
+Their border is the shared rim; only the focused pane of a split wears the active colour, and a pane
+asking for the user (bell, blocked agent, progress error) glows in the attention colour until focused.
 
 **Orientation**:
 Portrait or landscape. The shared layout has one version per orientation (and per layout variant,
