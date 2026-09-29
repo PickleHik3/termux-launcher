@@ -3,8 +3,6 @@ package com.termux.app.terminal;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
-import android.os.Build;
-import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.PixelFormat;
@@ -1330,7 +1328,7 @@ public class TerminalPaneController {
         if (focus) mActiveWindow.active = newLeaf;
         // Captured before the re-render detaches it: the divider reveal needs the pane's surface
         // as it looked while it still owned the whole region the split is about to share.
-        RevealSnapshot revealSnapshot;
+        PaneSnapshot revealSnapshot;
         Trace.beginSection("Panes.snapshot");
         try {
             revealSnapshot = captureSplitRevealSnapshot(oldLeaf.session);
@@ -2630,10 +2628,10 @@ public class TerminalPaneController {
      * pure overlay — exactly the window-switch snapshot discipline, applied to a split.
      */
     private static final class SplitRevealDrawable extends Drawable {
-        final RevealSnapshot snapshot;
+        final PaneSnapshot snapshot;
         final Rect clip = new Rect();
 
-        SplitRevealDrawable(@NonNull RevealSnapshot snapshot) {
+        SplitRevealDrawable(@NonNull PaneSnapshot snapshot) {
             this.snapshot = snapshot;
         }
 
@@ -2652,71 +2650,16 @@ public class TerminalPaneController {
     }
 
     /**
-     * A frozen copy of a pane's surface: on a hardware window a recorded display list, which costs
-     * the draw ops and no pixels; otherwise a bitmap. The bitmap path was 32 ms of a split's 73 ms
-     * key handler on Pong (2026-09-09): a full-pane ARGB allocation plus a software render of the
-     * terminal, spent on the animation before the new pane could appear.
+     * The old pane's surface as drawn right now, or null when the reveal cannot run. A hardware
+     * window records a display list (refraction survives), anything else takes a bitmap; both are
+     * cut to the pane's rounded outline ({@link PaneSnapshot}).
      */
-    private static final class RevealSnapshot {
-        @Nullable final Bitmap bitmap;
-        @Nullable final Object node;
-
-        RevealSnapshot(@Nullable Bitmap bitmap, @Nullable Object node) {
-            this.bitmap = bitmap;
-            this.node = node;
-        }
-
-        /** Draws at the canvas origin; the caller has translated to the pane's bounds. */
-        void draw(@NonNull Canvas canvas) {
-            if (node != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-                && canvas.isHardwareAccelerated()) {
-                canvas.drawRenderNode((android.graphics.RenderNode) node);
-            } else if (bitmap != null && !bitmap.isRecycled()) {
-                canvas.drawBitmap(bitmap, 0f, 0f, null);
-            }
-        }
-
-        void release() {
-            if (bitmap != null) bitmap.recycle();
-            if (node != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
-                ((android.graphics.RenderNode) node).discardDisplayList();
-        }
-    }
-
-    /** The old pane's surface as drawn right now, or null when the reveal cannot run. */
     @Nullable
-    private RevealSnapshot captureSplitRevealSnapshot(@NonNull TerminalSession session) {
+    private PaneSnapshot captureSplitRevealSnapshot(@NonNull TerminalSession session) {
         if (!arePaneAnimationsEnabled()) return null;
         FrameLayout frame = mPaneFrames.get(session);
-        if (frame == null || !frame.isLaidOut()
-            || frame.getWidth() <= 0 || frame.getHeight() <= 0) return null;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && frame.isHardwareAccelerated()) {
-            android.graphics.RenderNode node = new android.graphics.RenderNode("SplitReveal");
-            node.setPosition(0, 0, frame.getWidth(), frame.getHeight());
-            // The terminal must record its glyphs, not its row nodes: those are re-recorded the
-            // moment the pane reflows, and the reveal has to keep showing what was there before.
-            TerminalView view = mPaneViews.get(session);
-            if (view != null) view.setRowCacheBypassed(true);
-            try {
-                Canvas recording = node.beginRecording(frame.getWidth(), frame.getHeight());
-                try {
-                    frame.draw(recording);
-                } finally {
-                    node.endRecording();
-                }
-            } finally {
-                if (view != null) view.setRowCacheBypassed(false);
-            }
-            return new RevealSnapshot(null, node);
-        }
-        try {
-            Bitmap snapshot = Bitmap.createBitmap(frame.getWidth(), frame.getHeight(),
-                Bitmap.Config.ARGB_8888);
-            frame.draw(new Canvas(snapshot));
-            return new RevealSnapshot(snapshot, null);
-        } catch (OutOfMemoryError e) {
-            return null;
-        }
+        if (frame == null) return null;
+        return PaneSnapshot.capture(frame, paneRadiusPx(), mPaneViews.get(session));
     }
 
     /** A view's bounds in the pane host's coordinates, translations included. */
@@ -2738,7 +2681,7 @@ public class TerminalPaneController {
      * the new pane from the shared edge outward. Falls back to the plain entry pop whenever the
      * layout policy re-tiled the old pane somewhere the sweep cannot explain.
      */
-    private void animateSplitReveal(@Nullable RevealSnapshot snapshot, @Nullable Rect origin,
+    private void animateSplitReveal(@Nullable PaneSnapshot snapshot, @Nullable Rect origin,
                                     @NonNull TerminalSession oldSession,
                                     @Nullable TerminalSession newSession) {
         if (snapshot == null || origin == null) {
@@ -2862,7 +2805,11 @@ public class TerminalPaneController {
         int rim = MaterialColors.getColor(mHostView.getContext(),
             com.google.android.material.R.attr.colorOutlineVariant,
             ContextCompat.getColor(mHostView.getContext(), R.color.termux_outline_variant));
-        mMotionOverlay.ghostPane(bounds, paneRadiusPx(), fill, rim);
+        // The radius the slab itself wears at this size, not the window's: a short pane's slab is
+        // capped, and a ghost with the larger arc read as a different shape leaving.
+        mMotionOverlay.ghostPane(bounds,
+            PaneShape.radiusForBounds(paneRadiusPx(), frame.getWidth(), frame.getHeight()),
+            fill, rim);
     }
 
     /**
