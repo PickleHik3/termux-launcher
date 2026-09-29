@@ -22,6 +22,7 @@ import com.termux.app.RowHapticTickHelper;
 import com.termux.app.chrome.GlassInk;
 import com.termux.app.chrome.OnGlass;
 import com.termux.app.SuggestionBarView;
+import com.termux.app.haptics.Haptics;
 
 /**
  * The drawer's A-Z rope: a strip of letters down the plane's right edge that hangs off the
@@ -479,7 +480,7 @@ public final class AppDrawerRopeColumnView extends View {
             && RowHapticTickHelper.isBoundaryCrossing(mHapticIndex, index)) {
             // Per boundary, never per frame: every letter change also auto-scrolls the grid, and a
             // tick on each MOVE would buzz continuously for the length of a scrub.
-            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+            Haptics.tick(this, HapticFeedbackConstants.CLOCK_TICK);
         }
         mHapticIndex = index;
         invalidate();

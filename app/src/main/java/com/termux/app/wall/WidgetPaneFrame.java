@@ -21,6 +21,7 @@ import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerHoldArbiter;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
@@ -437,7 +438,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private void onHoldElapsed() {
         if (!mHold.holdElapsed()) return;
         cancelGridGesture();
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
     }
 
@@ -540,7 +541,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             case MotionEvent.ACTION_UP:
                 if (mControls != null && !mTouchMoved
                     && mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
-                    performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                    Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
                     // The wheels hang off the tab, so that one leaves it out; help reads the ? off
                     // it, so it runs while the tab is still out and puts the tab away itself.
                     if (mPressedAction != ACTION_GRID_SIZE && mPressedAction != ACTION_HELP)

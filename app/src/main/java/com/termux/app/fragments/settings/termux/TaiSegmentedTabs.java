@@ -15,6 +15,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.Motion;
 
 /**
@@ -77,7 +78,7 @@ public final class TaiSegmentedTabs extends FrameLayout {
             label.setFocusable(true);
             label.setOnClickListener(view -> {
                 if (index == selected) return;
-                view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                Haptics.tick(view, HapticFeedbackConstants.CLOCK_TICK);
                 select(index, true);
                 if (listener != null) listener.onSegmentSelected(index);
             });

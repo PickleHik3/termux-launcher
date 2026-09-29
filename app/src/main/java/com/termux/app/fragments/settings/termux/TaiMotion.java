@@ -9,6 +9,7 @@ import android.view.animation.CycleInterpolator;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.Motion;
 
 /**
@@ -77,12 +78,12 @@ final class TaiMotion {
     }
 
     /**
-     * A light tick for Install and Pause. {@link View#performHapticFeedback} follows the system's
-     * touch-feedback setting, which is the only app-wide haptics switch there is (the keyboard's
-     * key-haptics setting is about typing, not about settings screens).
+     * A light tick for Install and Pause. It follows the app's master haptic-feedback setting and
+     * the system's touch-feedback setting (the keyboard's key-haptics setting is about typing, not
+     * about settings screens).
      */
     static void tick(@NonNull View view) {
-        view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+        Haptics.tick(view, HapticFeedbackConstants.CLOCK_TICK);
     }
 
     private static float dp(@NonNull View view, int value) {

@@ -15,6 +15,7 @@ import com.termux.app.chrome.CornerHoldArbiter;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.fragments.settings.termux.GuiAppsSetupPreferencesFragment;
+import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
@@ -384,7 +385,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private void onHoldElapsed() {
         if (!mHold.holdElapsed()) return;
         cancelDisplayGesture();
-        performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
+        Haptics.tick(this, android.view.HapticFeedbackConstants.LONG_PRESS);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
     }
 
@@ -454,7 +455,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             case android.view.MotionEvent.ACTION_UP:
                 if (mControls != null && !mTouchMoved
                     && mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
-                    performHapticFeedback(android.view.HapticFeedbackConstants.CONTEXT_CLICK);
+                    Haptics.tick(this, android.view.HapticFeedbackConstants.CONTEXT_CLICK);
                     // Help runs while the tab is still out — it reads the ? to hang its own
                     // buttons beside it — and puts the tab away itself.
                     if (mPressedAction != ACTION_HELP) dismissControls();
@@ -479,7 +480,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         switch (event.getActionMasked()) {
             case android.view.MotionEvent.ACTION_MOVE:
                 if (mRail.dragTo(event.getY())) {
-                    performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK);
+                    Haptics.tick(this, android.view.HapticFeedbackConstants.CLOCK_TICK);
                 }
                 return true;
             case android.view.MotionEvent.ACTION_UP:

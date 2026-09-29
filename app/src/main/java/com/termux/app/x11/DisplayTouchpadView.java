@@ -14,6 +14,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
+import com.termux.app.haptics.Haptics;
 import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.x11.LorieView;
 import com.termux.x11.input.InputStub;
@@ -180,7 +181,7 @@ public final class DisplayTouchpadView extends View {
         LorieView display = mSink.display();
         if (display == null) return;
         mDragging = true;
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
         display.sendMouseEvent(0f, 0f, InputStub.BUTTON_LEFT, true, true);
         invalidate();
     }
@@ -415,7 +416,7 @@ public final class DisplayTouchpadView extends View {
                 if (mOnBack) {
                     mOnBack = false;
                     if (mBack.contains(event.getX(), event.getY())) {
-                        performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                        Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
                         if (mListener != null) mListener.onExitRequested();
                     }
                     return true;
@@ -522,11 +523,11 @@ public final class DisplayTouchpadView extends View {
             case LEFT:
             case RIGHT:
                 if (display == null) return;
-                performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
                 sendChord(display, swipe == TouchpadGesturePolicy.Swipe.RIGHT);
                 break;
             case DOWN:
-                performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
                 if (mListener != null) mListener.onExitRequested();
                 break;
             default:
@@ -622,7 +623,7 @@ public final class DisplayTouchpadView extends View {
         float unit = -Math.signum((float) notches) * SCROLL_NOTCH_UNITS;
         for (int i = 0, n = Math.abs(notches); i < n; i++) {
             if (display != null) display.sendMouseWheelEvent(0f, unit);
-            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+            Haptics.tick(this, HapticFeedbackConstants.CLOCK_TICK);
         }
     }
 

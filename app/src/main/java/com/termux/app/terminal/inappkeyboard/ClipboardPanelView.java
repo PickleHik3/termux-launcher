@@ -23,6 +23,7 @@ import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
 import com.termux.R;
+import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.ClipboardHistory;
 import com.termux.shared.termux.font.NerdFontSpans;
 
@@ -138,7 +139,7 @@ public final class ClipboardPanelView extends FrameLayout implements ClipboardHi
         pill.setBackground(pillBackground(ColorUtils.setAlphaComponent(palette.accent, 46)));
         pill.setContentDescription(context.getString(R.string.clipboard_panel_back_to_keys));
         pill.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+            Haptics.tick(v, HapticFeedbackConstants.CONTEXT_CLICK);
             mListener.onCloseRequested();
         });
         header.addView(pill, new LinearLayout.LayoutParams(dp(PILL_WIDTH_DP), dp(PILL_HEIGHT_DP)));
@@ -318,7 +319,7 @@ public final class ClipboardPanelView extends FrameLayout implements ClipboardHi
         String preview = preview(item.text);
         row.setContentDescription(context.getString(R.string.clipboard_panel_paste_item, preview));
         row.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+            Haptics.tick(v, HapticFeedbackConstants.CONTEXT_CLICK);
             mListener.onPasteRequested(item.text);
         });
         LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
@@ -371,7 +372,7 @@ public final class ClipboardPanelView extends FrameLayout implements ClipboardHi
         button.setFocusable(true);
         button.setBackground(pillBackground(0));
         button.setOnClickListener(v -> {
-            v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+            Haptics.tick(v, HapticFeedbackConstants.CONTEXT_CLICK);
             action.run();
         });
         return sized(button, dp(40), dp(40));
@@ -399,7 +400,7 @@ public final class ClipboardPanelView extends FrameLayout implements ClipboardHi
             return;
         }
         setClearArmed(false);
-        performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+        Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
         history.clearRecent();
     }
 

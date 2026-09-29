@@ -22,6 +22,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.view.ViewCompat;
+import com.termux.app.haptics.Haptics;
 
 /** Hard visual and hit boundary around one provider-owned host view. */
 public final class WidgetCellView extends FrameLayout {
@@ -357,7 +358,7 @@ public final class WidgetCellView extends FrameLayout {
             longPressDownX, longPressDownY, 0);
         super.dispatchTouchEvent(cancel);
         cancel.recycle();
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
         longPressListener.onWidgetLongPress(lastRawX, lastRawY);
     }
 

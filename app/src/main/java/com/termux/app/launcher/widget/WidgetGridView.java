@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import com.termux.app.haptics.Haptics;
 
 /** Non-scrolling exact-cell host. Provider collections retain their own nested scrolling. */
 public final class WidgetGridView extends ViewGroup {
@@ -203,7 +204,7 @@ public final class WidgetGridView extends ViewGroup {
     private void fireEmptyLongPress() {
         if (!emptyLongPressPending) return;
         emptyLongPressPending = false;
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
         if (listener != null) listener.onEmptySpaceLongPressed(emptyDownRawX, emptyDownRawY);
     }
 

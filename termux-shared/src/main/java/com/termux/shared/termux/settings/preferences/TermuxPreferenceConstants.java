@@ -638,6 +638,11 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_LAUNCHER_AZ_ROW_ENABLED = true;
 
+        /** Master switch for every haptic the app raises; the per-feature haptics are ANDed with it. */
+        public static final String KEY_APP_HAPTICS_ENABLED = "app_haptics_enabled";
+
+        public static final boolean DEFAULT_APP_HAPTICS_ENABLED = true;
+
         /** Defines whether A-Z and app-row focus changes emit subtle haptic ticks. */
         public static final String KEY_APP_LAUNCHER_ROW_HAPTICS = "app_launcher_row_haptics";
 

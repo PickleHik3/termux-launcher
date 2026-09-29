@@ -22,6 +22,7 @@ import androidx.core.graphics.ColorUtils;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.chrome.OnGlass;
+import com.termux.app.haptics.Haptics;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.font.NerdFontSpans;
@@ -428,7 +429,7 @@ public final class StatusBarLensView extends View {
                 PaneWallPage pressed = mPressed;
                 mPressed = null;
                 if (pressed == null) return false;
-                performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
                 if (mListener != null) mListener.onPlaceIconTapped(pressed);
                 return true;
             }

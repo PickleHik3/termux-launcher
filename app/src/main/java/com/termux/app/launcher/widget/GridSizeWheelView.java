@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
+import com.termux.app.haptics.Haptics;
 
 /**
  * One column of numbers, dragged up or down. The number in the middle is the value; its
@@ -110,8 +111,10 @@ final class GridSizeWheelView extends View {
         mLeftoverPx = leftover;
         invalidate();
         if (!moved) return;
-        performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK,
-            HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+        if (Haptics.isEnabled(getContext())) {
+            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK,
+                HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING);
+        }
         announce();
         if (mListener != null) mListener.onValueChanged(mValue);
     }

@@ -25,6 +25,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.haptics.Haptics;
 import com.termux.view.HoldTiming;
 
 import java.util.ArrayList;
@@ -841,7 +842,7 @@ public final class PaneWallLayout extends ViewGroup {
             return;
         }
         cancelChildGesture();
-        performHapticFeedback(HapticFeedbackConstants.GESTURE_START);
+        Haptics.tick(this, HapticFeedbackConstants.GESTURE_START);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
         // The hold made the finger the wall's, not the keyboard's: the grabber goes back to rest.
         mGrabber.setPressed(false, 0f, mReducedMotion);
@@ -965,7 +966,7 @@ public final class PaneWallLayout extends ViewGroup {
         // Down unfolds: the keyboard's reveal with the finger's travel turned over.
         float fold = KeyboardReveal.reveal(start, -(y - mBorderDownY), mFoldTravelPx);
         if (KeyboardReveal.crossesCommit(mFoldFromOpen, before, fold)) {
-            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+            Haptics.tick(this, HapticFeedbackConstants.CLOCK_TICK);
         }
         mFold = fold;
         if (mListener != null) mListener.onStatusFoldProgress((fold - start) * mFoldTravelPx);
@@ -1071,7 +1072,7 @@ public final class PaneWallLayout extends ViewGroup {
         float before = mReveal;
         float reveal = KeyboardReveal.reveal(mRevealStart, y - mRevealAnchorY, mRevealTravelPx);
         if (KeyboardReveal.crossesCommit(mRevealFromOpen, before, reveal)) {
-            performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+            Haptics.tick(this, HapticFeedbackConstants.CLOCK_TICK);
         }
         setReveal(reveal);
     }

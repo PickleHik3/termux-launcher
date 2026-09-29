@@ -45,6 +45,7 @@ import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.haptics.Haptics;
 import com.termux.app.wall.PaneControlsView;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TerminalEmulator;
@@ -3818,7 +3819,7 @@ public class TerminalPaneController {
                             || moved == CornerHold.Move.DRAGGING;
                         // The tick belongs to the drag starting, not to every pixel of it.
                         if (moved == CornerHold.Move.COMMITTED && mDraggingDivider)
-                            performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                            Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
                         if (mDraggingDivider) {
                             applySplitDrag(mXSplit, x - mDownX, mXWeightA, mXWeightB);
                             applySplitDrag(mYSplit, y - mDownY, mYWeightA, mYWeightB);
@@ -3857,7 +3858,7 @@ public class TerminalPaneController {
                         resetTouchState();
                         if (activate) {
                             // The same tick the Widgets and Display tabs give their buttons.
-                            performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                            Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
                             mControls.activate(action);
                         }
                         return true;
@@ -3986,7 +3987,7 @@ public class TerminalPaneController {
         private void onHoldElapsed() {
             if (!mHold.holdElapsed()) return;
             cancelTerminalGesture();
-            performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+            Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
             focusLeaf(mCornerTapLeaf);
             if (mXSplit != null || mYSplit != null) {
                 // Settle the focus growth first: left running, it would keep rewriting the very
