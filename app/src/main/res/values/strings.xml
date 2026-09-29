@@ -78,7 +78,7 @@
     <string name="settings_destination_appearance">Look</string>
     <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons, keyboard look, and sessions opacity</string>
     <string name="settings_destination_terminal">Terminal</string>
-    <string name="settings_destination_terminal_summary">Split panes, lazy mode, full screen, and Recents</string>
+    <string name="settings_destination_terminal_summary">Split panes, full screen, and Recents</string>
     <string name="settings_destination_status_bar">Status bar</string>
     <string name="settings_destination_status_bar_summary">Clock, CPU, memory, and weather</string>
     <string name="settings_destination_notifications">Notifications</string>
