@@ -7,7 +7,7 @@ LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compat
 - Bind mode: `localhost` (default, `127.0.0.1`) or opt-in `lan` (`0.0.0.0`).
 - Auth: bearer token from `~/.launcherctl/token`, or `X-Api-Key: <token>` header. The token can be made optional for localhost (see [Auth](#auth)).
 - Endpoint URL: `~/.launcherctl/endpoint`.
-- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`, `launcherctl pane …`, `launcherctl notify`, `launcherctl progress` and `launcherctl clipboard`. The launcher app installs both when `TermuxActivity` starts.
+- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`, `launcherctl pane …`, `launcherctl notify`, `launcherctl progress`, `launcherctl clipboard`, and the device commands `vibrate`, `torch`, `battery`, `volume` and `toast`. The launcher app installs both when `TermuxActivity` starts.
 - Removed helpers: `launcherctl-mcp` and `launcher-restart` are no longer installed and are deleted on upgrade.
 
 `tai` uses this authenticated server for the local On-device AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
@@ -386,6 +386,53 @@ launcherctl progress 70 --pane "$id"
 launcherctl clipboard copy 'some text'
 git diff | launcherctl clipboard copy
 launcherctl clipboard paste        # {"ok":true,"text":"…"}
+```
+
+`POST /v1/notify` also takes `{"close": "build"}` in place of a body: it takes down the message
+with that id, as `OSC 99`'s `p=close` does, and answers `{"ok": true, "pane": "…", "id": "build",
+"closed": true}` (the same answer whether or not the message was still up). Shell:
+`launcherctl notify --close ID [--pane ID]`.
+
+### Device routes: vibrate, torch, battery, volume, toast
+
+| Method | Path | Body | Answer |
+| --- | --- | --- | --- |
+| POST | `/v1/vibrate` | `{"duration_ms": 1000, "force": false}` (both optional) | `{"ok": true, "duration_ms": 1000, "force": false}` |
+| POST | `/v1/torch` | `{"on": true}` | `{"ok": true, "on": true, "camera": "0"}` |
+| GET | `/v1/battery` | none | `{"health": "GOOD", "percentage": 87, "plugged": "UNPLUGGED", "status": "DISCHARGING", "temperature": 29.5, "current": -312000}` |
+| GET | `/v1/volume` | none | `{"ok": true, "streams": [{"stream": "music", "volume": 7, "max_volume": 15}, …]}` |
+| POST | `/v1/volume` | `{"stream": "music", "volume": 7}` | `{"ok": true, "stream": "music", "volume": 7, "max_volume": 15}` |
+| POST | `/v1/toast` | `{"text": "hi", "short": false}` | `{"ok": true, "length": 2}` |
+
+These are the answers `termux-vibrate`, `termux-torch`, `termux-battery-status`, `termux-volume`
+and `termux-toast` give, so a compatibility script can pass them through. They need no pane and
+no visible launcher; the same bearer token and a per-route rate limit apply (30 a minute for
+vibrate and torch, 60 for toast and volume writes, 120 for battery and volume reads).
+
+- `vibrate` calls `Haptics.vibrate(context, ms, force)`, so the user's haptics setting and
+  silent mode apply unless `force` is true. Duration is capped at 10 s. 400 `bad_request` for a
+  non-positive duration.
+- `torch` uses the first camera that reports a flash, and needs no permission. 404 `no_torch`
+  when no camera has one, 409 `torch_unavailable` when another app holds the camera.
+- `battery` values are the `termux-battery-status` names: `health` is `GOOD`, `COLD`, `DEAD`,
+  `OVERHEAT`, `OVER_VOLTAGE`, `UNSPECIFIED_FAILURE` or `UNKNOWN`; `plugged` is `PLUGGED_AC`,
+  `PLUGGED_USB`, `PLUGGED_WIRELESS` or `UNPLUGGED`; `status` is `CHARGING`, `DISCHARGING`,
+  `FULL`, `NOT_CHARGING` or `UNKNOWN`; `temperature` is degrees Celsius; `current` is
+  microamperes (`CURRENT_NOW`, 0 when the device does not report it; the sign convention is the
+  device's own).
+- `volume` streams are `alarm`, `music`, `notification`, `ring`, `system` and `call`. The array
+  `termux-volume` prints is wrapped under `streams`. A value above the maximum is clamped. 403
+  `volume_refused` when Android refuses (ring and notification under Do Not Disturb).
+- `toast` raises an in-app notice through `AppNotice` while the launcher is on screen and a
+  stock system toast otherwise; long by default, `"short": true` for the brief one.
+
+```sh
+launcherctl vibrate -d 200 --force
+launcherctl torch on; launcherctl torch off
+launcherctl battery
+launcherctl volume                 # list every stream
+launcherctl volume music 7
+launcherctl toast --short 'build done'
 ```
 
 ### OpenAI-compatible

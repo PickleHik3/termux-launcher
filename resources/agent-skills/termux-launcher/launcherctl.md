@@ -132,7 +132,23 @@ to the current pane. They only need the launcher *running*, not on screen — ex
   paste it again later; `paste` reads the Android clipboard, never that history.
 
 Both `notify` and `progress` answer 409 `no_session` when there is no shell at all, and 404
-`pane_not_found` for a stale `--pane`.
+`pane_not_found` for a stale `--pane`. `launcherctl notify --close ID` takes down the message
+that `--id ID` named.
+
+## Device: vibrate, torch, battery, volume, toast
+
+```sh
+launcherctl vibrate [-d MS] [--force]     # default 1000 ms, capped at 10 s
+launcherctl torch on|off                  # first camera with a flash; 404 no_torch if none
+launcherctl battery                       # health, percentage, plugged, status, temperature, current
+launcherctl volume                        # every stream: alarm music notification ring system call
+launcherctl volume music 7                # set one stream (clamped to its max)
+launcherctl toast [--short] <text>        # in-app notice, or a system toast off screen
+```
+
+Output is JSON in the shapes the `termux-*` equivalents print (`volume` wraps its array under
+`streams`). None needs a pane or a visible launcher. `vibrate` obeys the user's haptics setting
+unless `--force`.
 
 ## Keyboard
 

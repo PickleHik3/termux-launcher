@@ -566,6 +566,8 @@ public class LauncherCtlApiServer {
                 return jsonResponse(runKeyboardRequest(request));
             } else if (signalToolFor(request.method, request.path) != null) {
                 return jsonResponse(runSignalRequest(request));
+            } else if (DeviceControlRoutes.handles(request.method, request.path)) {
+                return jsonResponse(DeviceControlRoutes.handle(context, request.method, request.path, request.body));
             } else if ("GET".equals(request.method) && "/v1/x11/gpu".equals(request.path)) {
                 // Off the request thread's main-thread worries already: this is the server's own
                 // worker, and the probe builds a throwaway GL context the first time.
@@ -1774,6 +1776,14 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/progress", new SimpleRateLimiter(600, 60_000));
         rateLimiters.put("POST:/v1/clipboard", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("GET:/v1/clipboard", new SimpleRateLimiter(60, 60_000));
+        // Device routes: a motor, an LED and a mixer are things a script pokes now and then, not
+        // a channel; battery is a cheap sticky read a status loop may poll.
+        rateLimiters.put("POST:/v1/vibrate", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/torch", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("GET:/v1/battery", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("GET:/v1/volume", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("POST:/v1/volume", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/v1/toast", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("GET:/v1/ai/status", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/runtime", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/models", new SimpleRateLimiter(120, 60_000));
@@ -2441,10 +2451,16 @@ public class LauncherCtlApiServer {
             "  launcherctl agent working|blocked|idle|clear [--agent NAME] [--pane ID]\n" +
             "  launcherctl agent install-hooks\n" +
             "  launcherctl notify [--title T] [--id ID] [--urgency low|normal|critical] [--pane ID] <body> | ... < file\n" +
+            "  launcherctl notify --close ID [--pane ID]\n" +
             "  launcherctl progress <0-100|clear|error [PCT]|indeterminate|paused [PCT]> [--pane ID]\n" +
             "  launcherctl clipboard copy [<text>] | launcherctl clipboard copy < file\n" +
             "  launcherctl clipboard paste\n" +
             "  launcherctl keyboard show|hide [--source manual|focus] [--hold]\n" +
+            "  launcherctl vibrate [-d MS] [--force]\n" +
+            "  launcherctl torch on|off\n" +
+            "  launcherctl battery\n" +
+            "  launcherctl volume [STREAM VALUE]\n" +
+            "  launcherctl toast [--short] <text>\n" +
             "  launcherctl x11 gpu [--env]\n" +
             "\n" +
             "Examples:\n" +
@@ -2633,9 +2649,10 @@ public class LauncherCtlApiServer {
             "}\n" +
             "notify_cmd() {\n" +
             "  usage='usage: launcherctl notify [--title T] [--id ID] [--urgency low|normal|critical] [--pane ID] <body>'\n" +
-            "  title= id= urgency= pane=\"${TERMUX_LAUNCHER_PANE:-}\"\n" +
+            "  title= id= urgency= close= pane=\"${TERMUX_LAUNCHER_PANE:-}\"\n" +
             "  while [ \"$#\" -gt 0 ]; do\n" +
             "    case \"$1\" in\n" +
+            "      --close) close=\"${2:-}\"; [ -n \"$close\" ] || { echo \"$usage\" >&2; exit 2; }; shift 2 ;;\n" +
             "      --title) title=\"${2:-}\"; shift 2 ;;\n" +
             "      --id) id=\"${2:-}\"; shift 2 ;;\n" +
             "      --urgency) urgency=\"${2:-}\"; shift 2 ;;\n" +
@@ -2649,6 +2666,12 @@ public class LauncherCtlApiServer {
             "    ''|low|normal|critical) ;;\n" +
             "    *) echo \"launcherctl notify: --urgency must be low, normal or critical\" >&2; exit 2 ;;\n" +
             "  esac\n" +
+            "  if [ -n \"$close\" ]; then\n" +
+            "    req=\"{\\\"close\\\":$(printf '%s' \"$close\" | json_str)\"\n" +
+            "    [ -n \"$pane\" ] && req=\"$req,\\\"pane\\\":$(printf '%s' \"$pane\" | json_str)\"\n" +
+            "    api POST /v1/notify \"$req}\"\n" +
+            "    return\n" +
+            "  fi\n" +
             "  # The body is the arguments, or stdin when there are none (a file, a pipe).\n" +
             "  if [ \"$#\" -gt 0 ]; then body=$(printf '%s' \"$*\" | json_str); else body=$(json_str); fi\n" +
             "  if [ \"$body\" = '\"\"' ] && [ -z \"$title\" ]; then echo \"$usage\" >&2; exit 2; fi\n" +
@@ -2705,6 +2728,47 @@ public class LauncherCtlApiServer {
             "    *) echo \"$usage\" >&2; exit 2 ;;\n" +
             "  esac\n" +
             "}\n" +
+            "vibrate_cmd() {\n" +
+            "  usage='usage: launcherctl vibrate [-d MS] [--force]'\n" +
+            "  ms=1000 force=false\n" +
+            "  while [ \"$#\" -gt 0 ]; do\n" +
+            "    case \"$1\" in\n" +
+            "      -d|--duration_ms) ms=\"${2:-}\"; shift 2 || true ;;\n" +
+            "      -f|--force) force=true; shift ;;\n" +
+            "      *) echo \"$usage\" >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "  done\n" +
+            "  case \"$ms\" in ''|*[!0-9]*) echo \"launcherctl vibrate: duration must be milliseconds, got: $ms\" >&2; exit 2 ;; esac\n" +
+            "  api POST /v1/vibrate \"{\\\"duration_ms\\\":$ms,\\\"force\\\":$force}\"\n" +
+            "}\n" +
+            "torch_cmd() {\n" +
+            "  case \"${1:-}\" in\n" +
+            "    on) api POST /v1/torch '{\"on\":true}' ;;\n" +
+            "    off) api POST /v1/torch '{\"on\":false}' ;;\n" +
+            "    *) echo 'usage: launcherctl torch on|off' >&2; exit 2 ;;\n" +
+            "  esac\n" +
+            "}\n" +
+            "volume_cmd() {\n" +
+            "  if [ \"$#\" -eq 0 ]; then api GET /v1/volume; return; fi\n" +
+            "  [ \"$#\" -eq 2 ] || { echo 'usage: launcherctl volume [STREAM VALUE]' >&2; exit 2; }\n" +
+            "  case \"$2\" in ''|*[!0-9]*) echo \"launcherctl volume: value must be a whole number, got: $2\" >&2; exit 2 ;; esac\n" +
+            "  api POST /v1/volume \"{\\\"stream\\\":$(printf '%s' \"$1\" | json_str),\\\"volume\\\":$2}\"\n" +
+            "}\n" +
+            "toast_cmd() {\n" +
+            "  usage='usage: launcherctl toast [--short] <text>'\n" +
+            "  short=false\n" +
+            "  while [ \"$#\" -gt 0 ]; do\n" +
+            "    case \"$1\" in\n" +
+            "      -s|--short) short=true; shift ;;\n" +
+            "      --) shift; break ;;\n" +
+            "      -*) echo \"launcherctl toast: unknown option $1\" >&2; exit 2 ;;\n" +
+            "      *) break ;;\n" +
+            "    esac\n" +
+            "  done\n" +
+            "  if [ \"$#\" -gt 0 ]; then text=$(printf '%s' \"$*\" | json_str); else text=$(json_str); fi\n" +
+            "  if [ \"$text\" = '\"\"' ]; then echo \"$usage\" >&2; exit 2; fi\n" +
+            "  api POST /v1/toast \"{\\\"text\\\":$text,\\\"short\\\":$short}\"\n" +
+            "}\n" +
             "cmd=\"${1:-help}\"\n" +
             "case \"$cmd\" in\n" +
             "  -h|--help|help)\n" +
@@ -2743,6 +2807,25 @@ public class LauncherCtlApiServer {
             "    shift || true\n" +
             "    clipboard_cmd \"$@\"\n" +
             "    ;;\n" +
+            "  vibrate)\n" +
+            "    shift || true\n" +
+            "    vibrate_cmd \"$@\"\n" +
+            "    ;;\n" +
+            "  torch)\n" +
+            "    shift || true\n" +
+            "    torch_cmd \"$@\"\n" +
+            "    ;;\n" +
+            "  battery)\n" +
+            "    api GET /v1/battery\n" +
+            "    ;;\n" +
+            "  volume)\n" +
+            "    shift || true\n" +
+            "    volume_cmd \"$@\"\n" +
+            "    ;;\n" +
+            "  toast)\n" +
+            "    shift || true\n" +
+            "    toast_cmd \"$@\"\n" +
+            "    ;;\n" +
             "  keyboard)\n" +
             "    shift || true\n" +
             "    sub=\"${1:-}\"\n" +
@@ -2776,7 +2859,7 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, keyboard, x11. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, keyboard, vibrate, torch, battery, volume, toast, x11. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";
