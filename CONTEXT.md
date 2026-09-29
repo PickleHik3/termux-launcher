@@ -52,8 +52,8 @@ border preference is on (the slab's rim on glass, the plain stroke otherwise), o
 the Widgets page and the Display page alike, so the gesture has a line to find. The hold sinks
 the page away from the user until the finger lets go, in every mode unless motion is reduced;
 under Fancier Glass the page held and the page arriving both tip like planks toward the finger,
-as if it pressed its weight into them, and lie flat as the settle lands; the Display place sinks
-but slides flat. The release's settle carries on at the finger's speed. The status bar does
+as if it pressed its weight into them, and lie flat as the settle lands; the Display place does
+too, on a still copy of its picture that stands in for the motion. The release's settle carries on at the finger's speed. The status bar does
 not page; its own drag is the fold across it.
 _Avoid_: edge swipe, status bar swipe, page swipe
 
