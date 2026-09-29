@@ -32,6 +32,7 @@ public class PaneStyleKeyTest {
         Bitmap frame = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888);
         final Rect frameRect = new Rect(0, 0, 1080, 2412);
         int tint = 0x80102030;
+        boolean rim;
         int grain = 12;
         float radiusPx = 26f;
         int radiusDp = -1;
@@ -47,6 +48,7 @@ public class PaneStyleKeyTest {
         @NonNull @Override public Rect paneGlassBlurFrameRect() { return frameRect; }
         @Nullable @Override public ColorFilter paneGlassFrostFilter() { return null; }
         @Override public int paneGlassTintColor() { return tint; }
+        @Override public boolean paneGlassRimWanted() { return rim; }
         @Nullable @Override public Drawable paneGlassGrainLayer() {
             grainLayersBuilt++;
             return null;
@@ -100,6 +102,11 @@ public class PaneStyleKeyTest {
         style.tint = 0x00000000;
         assertNotEquals(base, PaneStyleKey.of(style));
         style.tint = 0x80102030;
+
+        // The preset's gradient rim is drawn by the pane, so a switch to it re-dresses the panes.
+        style.rim = true;
+        assertNotEquals(base, PaneStyleKey.of(style));
+        style.rim = false;
 
         style.grain = 0;
         assertNotEquals(base, PaneStyleKey.of(style));

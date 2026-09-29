@@ -39,6 +39,17 @@ public final class PaneGlass {
         return PaneCornerRadius.radiusPx(style.paneCornerRadiusDp(), style.paneGlassCornerRadiusPx(), density);
     }
 
+    /** Marks "no rim" in {@link #rimRadiusPx}. */
+    static final float NO_RIM = -1f;
+
+    /**
+     * The radius a pane's preset rim is cut at, or {@link #NO_RIM}: the hairline look draws none
+     * on a pane (as before), the gradient look draws the slab's own corner.
+     */
+    static float rimRadiusPx(boolean rimWanted, float slabRadiusPx) {
+        return rimWanted ? Math.max(0f, slabRadiusPx) : NO_RIM;
+    }
+
     /** The gap between tiled panes in dp, or {@code fallbackDp} while no style is attached. */
     public static int gapDp(@Nullable PaneSurfaceStyle style, int fallbackDp) {
         return style != null ? Math.max(0, style.paneGapDp()) : fallbackDp;
@@ -68,6 +79,7 @@ public final class PaneGlass {
             style.paneGlassTintColor(), style.paneGlassGrainLayer(),
             style.paneGlassGrainStrength(), radiusPx, style.paneGlassFrostFilter(),
             style.paneGlassCrossfade());
+        backdrop.setRim(rimRadiusPx(style.paneGlassRimWanted(), radiusPx), style);
         backdrop.setParallax(style.wallpaperParallax());
         backdrop.setRefraction(style.paneGlassRefraction());
         backdrop.setVisibility(View.VISIBLE);

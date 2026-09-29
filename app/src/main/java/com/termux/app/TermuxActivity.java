@@ -3133,6 +3133,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : Color.TRANSPARENT;
             }
 
+            @Override public boolean paneGlassRimWanted() {
+                return mChrome.glass().look().gradientRim;
+            }
+
+            @Override @Nullable public Drawable paneGlassRim(float radiusPx) {
+                return paneGlassRimWanted() ? mChrome.glass().rimDrawable(radiusPx) : null;
+            }
+
             @Override @Nullable public Drawable paneGlassGrainLayer() {
                 int grain = paneGlassGrainStrength();
                 return grain > 0 ? mChrome.glass().grainLayer(grain) : null;
