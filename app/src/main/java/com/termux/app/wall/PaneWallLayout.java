@@ -44,7 +44,7 @@ import java.util.Map;
  * ({@link BorderDrag}): a press held on the current page's border, then dragged sideways, which
  * is how a finger pages the wall on every place and in every mode — and, on the bottom border, a
  * vertical swipe without the hold, which carries the keyboard up or down under the finger
- * ({@link KeyboardReveal}) and is marked by a small grabber ({@link KeyboardGrabber}). The window
+ * ({@link KeyboardReveal}) and is marked by a small grabber ({@link BorderGrabber}). The window
  * strip's overswipe drives the same drag from outside.
  *
  * <p>Every page is laid out at the host's size and moved with {@code translationX}, so a page
@@ -118,7 +118,7 @@ public final class PaneWallLayout extends ViewGroup {
         /**
          * Whether a vertical swipe off the current page's bottom border is the keyboard's
          * ({@link BorderDrag#KEYBOARD_REACH_DP}); asked as each finger lands, and by the grabber
-         * that marks the border ({@link KeyboardGrabber}), which is drawn only while it is.
+         * that marks the border ({@link BorderGrabber}), which is drawn only while it is.
          */
         default boolean isBorderKeyboardSwipeEnabled() { return false; }
         /**
@@ -209,7 +209,7 @@ public final class PaneWallLayout extends ViewGroup {
     @Nullable private View mWeightPage;
     private float mWeightOffsetPx;
     /** The keyboard swipe's grabber on the current page's bottom border. */
-    @NonNull private final KeyboardGrabber mGrabber;
+    @NonNull private final BorderGrabber mGrabber;
     /** The wall offset and sink the grabber was last drawn for, so a still wall redraws nothing. */
     private float mGrabberDrawnOffsetPx = Float.NaN;
     private float mGrabberDrawnSink = Float.NaN;
@@ -266,7 +266,7 @@ public final class PaneWallLayout extends ViewGroup {
         super(context, attrs);
         setClipChildren(false);
         setClipToPadding(false);
-        mGrabber = new KeyboardGrabber(this);
+        mGrabber = new BorderGrabber(this);
     }
 
     public void setListener(@Nullable Listener listener) {
@@ -983,7 +983,7 @@ public final class PaneWallLayout extends ViewGroup {
 
     /** The grabber, for tests. */
     @NonNull
-    KeyboardGrabber grabber() {
+    BorderGrabber grabber() {
         return mGrabber;
     }
 
