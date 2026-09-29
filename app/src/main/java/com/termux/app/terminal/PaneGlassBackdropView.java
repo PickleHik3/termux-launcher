@@ -326,7 +326,10 @@ public final class PaneGlassBackdropView extends View {
             mClipRect.set(0f, 0f, width, height);
             canvas.clipRect(mClipRect);   // the round clip is the parent frame's; this bounds ours
         }
-        if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null) {
+        // A software canvas refuses a RuntimeShader (a RealtimeBlurView capturing the window is
+        // one), so the refracted frame sits that pass out; it only feeds another view's blur.
+        if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null
+                && (mProgram == null || canvas.isHardwareAccelerated())) {
             float slideX = layoutOriginOnScreen(mLocation);
             // The page's slide carries this view to the right over the wallpaper, and the parallax
             // carries the wallpaper to the left under it; either way the frame is sampled that

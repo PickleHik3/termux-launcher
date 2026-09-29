@@ -250,6 +250,10 @@ public final class SharedFrameDrawable extends Drawable {
         mAnchor.originOnScreen(mOrigin);
         float offsetPx = mParallax == null ? 0f : mParallax.offsetPx();
         GlassRefraction.Program program = mProgram;
+        // A software canvas refuses a RuntimeShader outright: a RealtimeBlurView drawing the
+        // window into its bitmap is one. That pass only feeds another view's blur, so the frame
+        // is left out of it rather than drawn and thrown.
+        if (program != null && !canvas.isHardwareAccelerated()) return;
         aim(mAim, mFrameRect, frame.getWidth(), frame.getHeight(), mOrigin[0], mOrigin[1],
             offsetPx);
         if (program != null) {
