@@ -160,6 +160,8 @@ public final class TaiBenchSuite {
         @NonNull final String backend;
         /** The processor an automatic load would choose on this phone (the Quick preset's pick). */
         @NonNull final String bestAccelerator;
+        /** Whether the model's file runs on the CPU at all (a GPU-only bundle does not). */
+        final boolean cpuSupported;
         /** Whether the model and the phone allow a GPU entry at all. */
         final boolean gpuSupported;
         /** Whether the model ships a draft model (Eagle) that {@code eagle} can switch on. */
@@ -167,9 +169,15 @@ public final class TaiBenchSuite {
 
         ModelInput(@NonNull String modelId, @NonNull String backend, @NonNull String bestAccelerator,
                    boolean gpuSupported, boolean speculativeCapable) {
+            this(modelId, backend, bestAccelerator, true, gpuSupported, speculativeCapable);
+        }
+
+        ModelInput(@NonNull String modelId, @NonNull String backend, @NonNull String bestAccelerator,
+                   boolean cpuSupported, boolean gpuSupported, boolean speculativeCapable) {
             this.modelId = modelId;
             this.backend = backend;
             this.bestAccelerator = bestAccelerator;
+            this.cpuSupported = cpuSupported;
             this.gpuSupported = gpuSupported;
             this.speculativeCapable = speculativeCapable;
         }
@@ -217,7 +225,8 @@ public final class TaiBenchSuite {
      * those, supported or not: the load's preflight then refuses the ones the phone cannot do,
      * and the run says why instead of silently leaving them out. Otherwise the preset decides:
      * Standard and Thorough take the CPU and the GPU where supported, Quick takes only the
-     * processor an automatic load would. {@code eagle} turns the draft model on for every model
+     * processor an automatic load would. A GPU-only model skips the CPU there; with neither
+     * processor usable the CPU entry stays, so the run still says why it failed. {@code eagle} turns the draft model on for every model
      * that has one; the others ignore it.
      */
     @NonNull
@@ -233,8 +242,10 @@ public final class TaiBenchSuite {
                     if (!accelerators.contains(normalized)) accelerators.add(normalized);
                 }
             } else if (preset.bothProcessors) {
-                accelerators.add(ACCELERATOR_CPU);
+                if (model.cpuSupported || !model.gpuSupported) accelerators.add(ACCELERATOR_CPU);
                 if (model.gpuSupported) accelerators.add(ACCELERATOR_GPU);
+            } else if (model.gpuSupported && !model.cpuSupported) {
+                accelerators.add(ACCELERATOR_GPU);
             } else {
                 accelerators.add(model.gpuSupported ? model.bestAccelerator : ACCELERATOR_CPU);
             }

@@ -121,6 +121,19 @@ public final class TaiModelProfile {
 
     @NonNull
     public static TaiModelProfile forModel(@NonNull TaiModelSpec modelSpec) {
+        TaiModelProfile profile = resolve(modelSpec);
+        // The Gemma 4 -gpu/-web bundles hold only a GPU_ARTISAN decoder: a CPU load fails with
+        // "TF_LITE_PREFILL_DECODE not found in the model". Older imports saved them as GPU + CPU;
+        // correcting it here heals those installs without a re-import.
+        if (TaiModelSpec.BACKEND_LITERT_LM.equals(modelSpec.backend)
+            && TaiImportProfiles.artisanBundle(modelSpec.localPath) && profile.supports("cpu")) {
+            return profile.withAccelerators(Collections.singletonList("gpu"));
+        }
+        return profile;
+    }
+
+    @NonNull
+    private static TaiModelProfile resolve(@NonNull TaiModelSpec modelSpec) {
         String id = normalizedIdentity(modelSpec.id);
         String path = modelSpec.localPath == null ? "" : modelSpec.localPath.toLowerCase(Locale.ROOT);
         // This provider package has fixed, published runtime behavior. Override the legacy generic
@@ -279,6 +292,14 @@ public final class TaiModelProfile {
             json.optInt("maxContextTokens", 0),
             json.optString("thinkingSwitch", THINKING_SWITCH_TEMPLATE_KEY)
         );
+    }
+
+    /** This profile with other processors; everything else unchanged. */
+    @NonNull
+    public TaiModelProfile withAccelerators(@NonNull List<String> accelerators) {
+        return new TaiModelProfile(accelerators, defaultMaxTokens, defaultTopK, defaultTopP, defaultTemperature,
+            minDeviceMemoryInGb, source, thinkingMode, thinkingChannelStart, thinkingChannelEnd, maxContextTokens,
+            thinkingSwitch);
     }
 
     public boolean supports(@NonNull String accelerator) {

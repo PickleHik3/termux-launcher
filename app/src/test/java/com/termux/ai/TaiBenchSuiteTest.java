@@ -92,6 +92,22 @@ public class TaiBenchSuiteTest {
     }
 
     @Test
+    public void gpuOnlyModelSkipsTheCpuUnlessAskedFor() {
+        TaiBenchSuite.ModelInput gpuOnly =
+            new TaiBenchSuite.ModelInput("gemma-4-e2b-it-gpu", TaiModelSpec.BACKEND_LITERT_LM, "cpu", false, true, false);
+        List<TaiBenchSuite.EntryPlan> standard = TaiBenchSuite.expand(
+            Collections.singletonList(gpuOnly), TaiBenchSuite.Preset.STANDARD, null, false);
+        assertEquals(1, standard.size());
+        assertEquals("gpu", standard.get(0).accelerator);
+        List<TaiBenchSuite.EntryPlan> quick = TaiBenchSuite.expand(
+            Collections.singletonList(gpuOnly), TaiBenchSuite.Preset.QUICK, null, false);
+        assertEquals("gpu", quick.get(0).accelerator);
+        List<TaiBenchSuite.EntryPlan> forced = TaiBenchSuite.expand(
+            Collections.singletonList(gpuOnly), TaiBenchSuite.Preset.STANDARD, Collections.singletonList("cpu"), false);
+        assertEquals("cpu", forced.get(0).accelerator);
+    }
+
+    @Test
     public void quickTakesOnlyTheProcessorAnAutomaticLoadWould() {
         List<TaiBenchSuite.EntryPlan> entries = TaiBenchSuite.expand(
             Arrays.asList(LITERT_GPU_BEST, MNN_CPU_ONLY), TaiBenchSuite.Preset.QUICK, null, false);

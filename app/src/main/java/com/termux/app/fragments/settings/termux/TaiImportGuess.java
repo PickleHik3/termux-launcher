@@ -77,6 +77,8 @@ final class TaiImportGuess {
      */
     @NonNull
     static List<String> accelerators(@Nullable String source) {
+        // A Gemma 4 -gpu/-web bundle has no CPU graph, whatever its family's profile says.
+        if (TaiImportProfiles.artisanBundle(source)) return Collections.singletonList("gpu");
         TaiImportProfiles.Match family = TaiImportProfiles.match(source);
         if (family != null) return family.profile.compatibleAccelerators;
         String value = source == null ? "" : source.toLowerCase(Locale.ROOT);
