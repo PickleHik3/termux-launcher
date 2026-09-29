@@ -5,6 +5,7 @@ import android.view.ViewParent;
 
 import androidx.annotation.NonNull;
 
+import com.termux.R;
 import com.termux.app.wall.PaneWallLayout;
 
 /**
@@ -54,8 +55,8 @@ public final class GlassAnchor {
      * the frost has to stay glued to the wallpaper rather than ride along with the page. That one
      * transform — the translation the wall puts on its page — is read off the page and handed
      * back, so a draw can aim past it. Everything else on the way up is ignored: the plank tilts
-     * and slides a pane frame under a finger, and the FLIP movement animates its translation,
-     * and pinning the frost to those baked a press into the matrix.</p>
+     * and slides a pane frame under a finger, and pinning the frost to those baked a press into the matrix. The exception is a motion the
+     * owner published with {@link #setMotion}, which is added.</p>
      *
      * @param rootScratch two ints the root's own screen position is read into
      * @return the wall page's translation on the way up, in px; 0 off the wall
@@ -69,6 +70,11 @@ public final class GlassAnchor {
         while (true) {
             x += current.getLeft();
             y += current.getTop();
+            Object motion = current.getTag(R.id.glass_anchor_motion);
+            if (motion instanceof Motion) {
+                x += ((Motion) motion).x;
+                y += ((Motion) motion).y;
+            }
             ViewParent parent = current.getParent();
             if (!(parent instanceof View)) break;
             View parentView = (View) parent;
@@ -83,6 +89,38 @@ public final class GlassAnchor {
         out[0] = Math.round(x) + rootScratch[0];
         out[1] = Math.round(y) + rootScratch[1];
         return slideX;
+    }
+
+    /** An offset a view's owner publishes while it animates the view on purpose; see {@link #setMotion}. */
+    private static final class Motion {
+        float x;
+        float y;
+    }
+
+    /**
+     * Declare that {@code view} is being moved on purpose, {@code (dx, dy)} px away from where it
+     * is laid out, so glass inside it samples the wallpaper it is really over. This is the one
+     * per-view transform the anchor follows besides the wall page's slide, and it is explicit
+     * rather than read off the view's translation because the plank's press moves the same frame
+     * by the same property and that must stay out of the anchor. Whoever publishes it (a FLIP
+     * move, an entry) re-aims the glass on every frame and calls {@link #clearMotion} when done.
+     */
+    public static void setMotion(@NonNull View view, float dx, float dy) {
+        Object tag = view.getTag(R.id.glass_anchor_motion);
+        Motion motion;
+        if (tag instanceof Motion) {
+            motion = (Motion) tag;
+        } else {
+            motion = new Motion();
+            view.setTag(R.id.glass_anchor_motion, motion);
+        }
+        motion.x = dx;
+        motion.y = dy;
+    }
+
+    /** Withdraw {@link #setMotion}: the anchor is the laid-out position again. */
+    public static void clearMotion(@NonNull View view) {
+        view.setTag(R.id.glass_anchor_motion, null);
     }
 
     /**
