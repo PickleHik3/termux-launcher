@@ -12854,159 +12854,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean applyManagedWallpaper(@NonNull WallpaperManager wallpaperManager,
                                           @NonNull Uri croppedUri, int wallpaperFlags,
                                           int portraitWidth, int portraitHeight) {
-        Rect fullImage = getWallpaperFullImageCropHint(croppedUri);
-        Rect centre = managedWallpaperSystemCentre(fullImage, portraitWidth, portraitHeight);
-        try {
-            if (!setManagedWallpaperCentre(wallpaperManager, croppedUri, fullImage, centre, wallpaperFlags)) {
-                return false;
-            }
-            exportWallpaperCopyToTermuxBackgroundDirectory(croppedUri);
-            if ((wallpaperFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
-                promoteManagedWallpaperTempFile();
-                int wallpaperId = getCurrentSystemWallpaperId();
-                if (mPreferences != null) {
-                    mPreferences.setManagedWallpaperSystemId(wallpaperId);
-                }
-            }
-            return true;
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply managed wallpaper", e);
-            return false;
-        }
-    }
-
-    /**
-     * The screen-sized centre of the picked picture, in its own pixels: as tall as the picture,
-     * and as wide as the portrait screen is at that height. The whole picture when it is not
-     * wider than that — a picker that could not resize, or an unreadable header.
-     */
-    @Nullable
-    private static Rect managedWallpaperSystemCentre(@Nullable Rect fullImage, int portraitWidth,
-                                                     int portraitHeight) {
-        if (fullImage == null || portraitWidth <= 0 || portraitHeight <= 0) return fullImage;
-        int centreWidth = Math.round((float) fullImage.height() * portraitWidth / portraitHeight);
-        if (centreWidth <= 0 || centreWidth >= fullImage.width()) return fullImage;
-        int left = (fullImage.width() - centreWidth) / 2;
-        return new Rect(left, 0, left + centreWidth, fullImage.height());
-    }
-
-    /**
-     * Hands the system the screen-sized centre of the wide picture — cut here, so Android never
-     * sees the wide image and cannot choose to fit it its own way — and falls back to streaming
-     * the picture with the centre as its crop hint when the region cannot be decoded. A picture
-     * that is not wider than the screen streams whole, exactly as before.
-     */
-    private boolean setManagedWallpaperCentre(@NonNull WallpaperManager wallpaperManager,
-                                              @NonNull Uri croppedUri, @Nullable Rect fullImage,
-                                              @Nullable Rect centre, int wallpaperFlags) {
-        if (centre == null || centre.equals(fullImage)) {
-            return setManagedWallpaperStream(wallpaperManager, croppedUri, fullImage, wallpaperFlags);
-        }
-        Bitmap region = null;
-        try (InputStream inputStream = openWallpaperInputStream(croppedUri)) {
-            if (inputStream != null) {
-                android.graphics.BitmapRegionDecoder decoder =
-                    android.graphics.BitmapRegionDecoder.newInstance(inputStream, false);
-                if (decoder != null) {
-                    BitmapFactory.Options options = new BitmapFactory.Options();
-                    options.inPreferredConfig = Bitmap.Config.ARGB_8888;
-                    region = decoder.decodeRegion(centre, options);
-                    decoder.recycle();
-                }
-            }
-            if (region != null) {
-                wallpaperManager.setBitmap(region, null, true, wallpaperFlags);
-                return true;
-            }
-        } catch (Exception | OutOfMemoryError e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply the managed wallpaper's centre; streaming with a crop hint", e);
-        } finally {
-            if (region != null) region.recycle();
-        }
-        return setManagedWallpaperStream(wallpaperManager, croppedUri, centre, wallpaperFlags);
-    }
-
-    private boolean setManagedWallpaperStream(@NonNull WallpaperManager wallpaperManager, @NonNull Uri croppedUri,
-                                              @Nullable Rect visibleCropHint, int wallpaperFlags) {
-        if (visibleCropHint != null) {
-            try (InputStream inputStream = openWallpaperInputStream(croppedUri)) {
-                if (inputStream == null) {
-                    return false;
-                }
-                wallpaperManager.setStream(inputStream, visibleCropHint, true, wallpaperFlags);
-                return true;
-            } catch (Exception e) {
-                Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply managed wallpaper with crop hint; retrying without hint", e);
-            }
-        }
-
-        try (InputStream inputStream = openWallpaperInputStream(croppedUri)) {
-            if (inputStream == null) {
-                return false;
-            }
-            wallpaperManager.setStream(inputStream, null, true, wallpaperFlags);
-            return true;
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply managed wallpaper without crop hint", e);
-            return false;
-        }
-    }
-
-    @Nullable
-    private Rect getWallpaperFullImageCropHint(@NonNull Uri uri) {
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inJustDecodeBounds = true;
-        try (InputStream inputStream = openWallpaperInputStream(uri)) {
-            if (inputStream == null) {
-                return null;
-            }
-            BitmapFactory.decodeStream(inputStream, null, options);
-            if (options.outWidth <= 0 || options.outHeight <= 0) {
-                return null;
-            }
-            return new Rect(0, 0, options.outWidth, options.outHeight);
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to read wallpaper crop bounds", e);
-            return null;
-        }
-    }
-
-    private void exportWallpaperCopyToTermuxBackgroundDirectory(@NonNull Uri wallpaperUri) {
-        File backgroundDir = TermuxConstants.TERMUX_BACKGROUND_DIR;
-        if (!backgroundDir.exists() && !backgroundDir.mkdirs()) {
-            Logger.logError(LOG_TAG, "Failed to create termux background directory at: " + backgroundDir.getAbsolutePath());
-            return;
-        }
-
-        File destination = TermuxConstants.TERMUX_BACKGROUND_IMAGE_FILE;
-        try (InputStream inputStream = openWallpaperInputStream(wallpaperUri);
-             FileOutputStream outputStream = new FileOutputStream(destination, false)) {
-            if (inputStream == null) {
-                Logger.logError(LOG_TAG, "Failed to export wallpaper copy: could not open source stream");
-                return;
-            }
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = inputStream.read(buffer)) != -1) {
-                outputStream.write(buffer, 0, read);
-            }
-            outputStream.flush();
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to export wallpaper copy to " + destination.getAbsolutePath(), e);
-        }
-    }
-
-    @Nullable
-    private InputStream openWallpaperInputStream(@NonNull Uri uri) {
-        try {
-            if ("file".equals(uri.getScheme())) {
-                return new FileInputStream(new File(uri.getPath()));
-            }
-            return getContentResolver().openInputStream(uri);
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to open wallpaper stream", e);
-            return null;
-        }
+        return com.termux.app.chrome.ManagedWallpaper.apply(this, wallpaperManager, croppedUri,
+            wallpaperFlags, portraitWidth, portraitHeight, mPreferences);
     }
 
     private int getCurrentSystemWallpaperId() {
@@ -13026,11 +12875,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @NonNull
     private File getManagedWallpaperTempFile() {
-        File directory = new File(getFilesDir(), "managed-wallpaper");
-        if (!directory.exists()) {
-            directory.mkdirs();
-        }
-        return new File(directory, "system-wallpaper-pending.png");
+        return com.termux.app.chrome.ManagedWallpaper.tempFile(this);
     }
 
     @NonNull
@@ -13040,20 +12885,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getPackageName() + ".cropper.fileprovider",
             file
         );
-    }
-
-    private void promoteManagedWallpaperTempFile() {
-        File tempFile = getManagedWallpaperTempFile();
-        if (!tempFile.isFile()) {
-            return;
-        }
-        File exactFile = getManagedWallpaperExactFile();
-        if (exactFile.exists()) {
-            exactFile.delete();
-        }
-        if (!tempFile.renameTo(exactFile)) {
-            Logger.logError(LOG_TAG, "Failed to promote managed wallpaper temp file");
-        }
     }
 
     private void suggestManagedWallpaperDimensions(@NonNull WallpaperManager wallpaperManager) {

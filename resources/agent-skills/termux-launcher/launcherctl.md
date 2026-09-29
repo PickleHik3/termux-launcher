@@ -159,7 +159,7 @@ try to recover them. `launcherctl notifications clear [--app X]` deletes what is
 only when the user asks. `--since`/`--until` take `90m`, `12h`, `7d`, `2w` or an ISO date; `--app`
 takes a package or part of the app's name; default limit is 100.
 
-## Device: vibrate, torch, battery, volume, toast
+## Device: vibrate, torch, battery, volume, toast, wallpaper
 
 ```sh
 launcherctl vibrate [-d MS] [--force]     # default 1000 ms, capped at 10 s
@@ -168,11 +168,16 @@ launcherctl battery                       # health, percentage, plugged, status,
 launcherctl volume                        # every stream: alarm music notification ring system call
 launcherctl volume music 7                # set one stream (clamped to its max)
 launcherctl toast [--short] <text>        # in-app notice, or a system toast off screen
+launcherctl wallpaper set FILE [--home|--lock|--both]   # default both; FILE under ~ or shared storage
+launcherctl wallpaper get                 # ids, live wallpaper, whether the launcher set it
 ```
 
 Output is JSON in the shapes the `termux-*` equivalents print (`volume` wraps its array under
 `streams`). None needs a pane or a visible launcher. `vibrate` obeys the user's haptics setting
-unless `--force`.
+unless `--force`. `wallpaper set` goes through the launcher's own wallpaper path (stored id, glass
+picture), takes seconds for a large image, and is limited to 6 a minute; only change the wallpaper
+when the user asks. If the launcher is not running the wallpaper is still set and the launcher
+catches up on next open (`launcher_refresh: on_next_open`).
 
 ## Keyboard
 
