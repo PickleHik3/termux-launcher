@@ -1082,9 +1082,8 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_IN_APP_KEYBOARD_BACKGROUND_OPACITY = 100;
 
         /**
-         * Wallpaper blur radius (dp) of the keyboard's own glass backdrop; {@code -1} follows the
-         * dock's ({@link #KEY_EXTRAKEYS_BLUR_RADIUS}), which is what every keyboard has rendered
-         * until now. A non-negative value overrides it for the keyboard alone.
+         * The keyboard's own blur radius (dp), read only while the KEYBOARD slot's blur is detached
+         * from Base. Legacy installs stored {@code -1} here for "same as the dock".
          */
         public static final String KEY_IN_APP_KEYBOARD_BLUR_RADIUS = "in_app_keyboard_blur_radius";
 
@@ -1095,9 +1094,8 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_IN_APP_KEYBOARD_BLUR_RADIUS = 30;
 
         /**
-         * Film-grain strength (percent) of the keyboard's own glass backdrop; {@code -1} follows
-         * the dock's ({@link #KEY_DOCK_GLASS_GRAIN}). A non-negative value overrides it for the
-         * keyboard alone.
+         * The keyboard's own film-grain strength (percent), read only while the KEYBOARD slot's
+         * grain is detached from Base. Legacy installs stored {@code -1} here for "same as the dock".
          */
         public static final String KEY_IN_APP_KEYBOARD_GRAIN = "in_app_keyboard_grain";
 
@@ -1438,6 +1436,12 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_KEYBOARD_OPACITY_SENTINEL_HEALED =
             "keyboard_opacity_sentinel_healed";
+
+        /**
+         * Set once the keyboard's legacy blur and grain keys have been folded into the KEYBOARD
+         * slot of the inheritance model (a stored number detaches, {@code -1} follows).
+         */
+        public static final String KEY_KEYBOARD_GLASS_SLOT_FOLDED = "keyboard_glass_slot_folded";
 
         /** The pre-tuned-look keyboard-opacity default, which doubled as the "untouched" sentinel. */
         public static final int LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL = 100;

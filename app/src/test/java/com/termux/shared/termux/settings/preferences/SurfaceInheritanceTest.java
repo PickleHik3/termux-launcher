@@ -137,11 +137,11 @@ public class SurfaceInheritanceTest {
     // ---------------------------------------------------------------- per-surface property sets
 
     @Test
-    public void keyboardHasNoGlassOfItsOwn() {
-        // It renders on the dock's material, so blur/grain/radius rows would control nothing.
-        assertFalse(TermuxAppSharedPreferences.hasSurfaceProperty(
+    public void keyboardHasTheDocksGlassCellsButNoCapsuleRadiusOfItsOwn() {
+        // Its capsule is cut with the dock's radius, so a radius row would control nothing.
+        assertTrue(TermuxAppSharedPreferences.hasSurfaceProperty(
             SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR));
-        assertFalse(TermuxAppSharedPreferences.hasSurfaceProperty(
+        assertTrue(TermuxAppSharedPreferences.hasSurfaceProperty(
             SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN));
         assertFalse(TermuxAppSharedPreferences.hasSurfaceProperty(
             SurfaceSlot.KEYBOARD, SurfaceProperty.CORNER_RADIUS));
@@ -151,8 +151,21 @@ public class SurfaceInheritanceTest {
             SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP));
 
         // A property a slot does not have can never be detached, so it never shows in the badge.
-        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR, 20);
+        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.CORNER_RADIUS, 20);
         assertEquals(0, preferences.surfaceOverrideCount(SurfaceSlot.KEYBOARD));
+    }
+
+    @Test
+    public void keyboardBlurAndGrain_followBaseAndDetachLikeEverySurface() {
+        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 12);
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 30);
+        assertEquals(12, preferences.getInAppKeyboardBlurRadius());
+        assertEquals(30, preferences.getInAppKeyboardGrain());
+
+        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR, 25);
+        assertEquals(25, preferences.getInAppKeyboardBlurRadius());
+        assertEquals("the dock still follows Base", 12, preferences.getExtraKeysBlurRadius());
+        assertEquals(1, preferences.surfaceOverrideCount(SurfaceSlot.KEYBOARD));
     }
 
     @Test
@@ -290,6 +303,50 @@ public class SurfaceInheritanceTest {
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY));
         assertEquals(TERMUX_APP.LEGACY_IN_APP_KEYBOARD_BACKGROUND_OPACITY_SENTINEL,
             preferences.getInAppKeyboardBackgroundOpacity());
+    }
+
+    @Test
+    public void migration_keepsAKeyboardBlurAndGrainTheUserActuallyChose() {
+        putRaw(TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, 10);
+        putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, 22);
+        putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, 0);
+
+        preferences.migrateSurfaceInheritance();
+
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR));
+        assertEquals(22, preferences.getInAppKeyboardBlurRadius());
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN));
+        assertEquals("a stored 0 is an opinion too", 0, preferences.getInAppKeyboardGrain());
+    }
+
+    @Test
+    public void migration_keyboardBlurLeftAtTheFollowSentinelFollowsTheDock() {
+        // The old -1 meant "same as the dock": Base while the dock is on Base.
+        putRaw(TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, 10);
+        putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, -1);
+        putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, -1);
+
+        preferences.migrateSurfaceInheritance();
+
+        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR));
+        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN));
+        assertEquals(preferences.getExtraKeysBlurRadius(), preferences.getInAppKeyboardBlurRadius());
+        assertEquals(preferences.getDockGlassGrain(), preferences.getInAppKeyboardGrain());
+    }
+
+    @Test
+    public void migration_keyboardGlassTakesADetachedDocksOwnNumber() {
+        // Where the dock itself was detached, the follower takes the dock's number so the look it
+        // followed does not move.
+        preferences.migrateSurfaceInheritance();
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR, 4);
+        store.edit().putInt(TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, -1)
+            .putBoolean(TERMUX_APP.KEY_KEYBOARD_GLASS_SLOT_FOLDED, false).commit();
+
+        preferences.migrateSurfaceInheritance();
+
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR));
+        assertEquals(4, preferences.getInAppKeyboardBlurRadius());
     }
 
     @Test
