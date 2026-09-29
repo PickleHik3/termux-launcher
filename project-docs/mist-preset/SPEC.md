@@ -30,8 +30,18 @@ triple is off every curve), so the material control reads as a hand-tuned look a
   the under-keyboard card, the status bar and the dock capsule's outline follow it together. The
   panes take the tint through `paneGlassTintColor` (`GlassLook.flatTint`). The preset tiles draw
   from the preset's own look (`GlassSurfaceFactory.withLook`).
-- Motion: `GlassMotion` (pure values, `CLASSIC` and `MIST`), played by `GlassMotionPlayer`. The
-  terminal sheet's centred card and its drawer scrim use it.
+- Motion: `GlassMotion` (pure values, `CLASSIC` and `MIST`), played by `GlassMotionPlayer`. Read
+  with `GlassMotion.of(prefs)`. What follows it:
+  - the terminal sheet's centred card (enter and exit) and its drawer scrim;
+  - press feedback (`GlassPress`, spring press and release scale, none under Classic) on the
+    Appearance editor's preset cards and on the rows and buttons of a centred sheet card;
+  - the surface editor's card (enter and exit through the player), and its pill and gesture
+    overlay times (`SurfaceEditorMotion`; Classic keeps 180 ms and 200 ms);
+  - the minimal-mode status bar fade (`GlassMotionPlayer.fade`; Classic keeps 150 ms).
+- Pane rim: the panes draw no preset rim today (their edge is the focus rim). `hairline` keeps
+  that; `gradient` draws the Obsidian rim over each slab at the slab's own corner radius
+  (`PaneSurfaceStyle.paneGlassRim`, from `GlassSurfaceFactory.rimDrawable`). The pane style key
+  carries the choice, so switching re-dresses the panes.
 
 ## Obsidian to ours
 
@@ -44,7 +54,7 @@ triple is off every curve), so the material control reads as a hand-tuned look a
 | Noise 0.08 | Base grain 8 | See below |
 | Rim 1dp gradient white 0.25 to 0.03, diagonal | `gradient` rim, `GradientRimDrawable` | Top-left to bottom-right |
 | Dialog radius about 28dp | Base radius 28 | Dock stays rounded, side gap stays 14 |
-| Press 0.92, spring 0.75/400, release 0.55/300 | `pressScale`, `pressSpring`, `releaseSpring` | Values held, no tile plays them yet |
+| Press 0.92, spring 0.75/400, release 0.55/300 | `pressScale`, `pressSpring`, `releaseSpring` | `GlassPress` plays them on the tiles listed above |
 | Dialog enter scale 0.9 to 1, spring 0.8/400 | `enterScaleFrom`, `enterScaleSpring` | Springs solved analytically |
 | Dialog enter blur 20 to 0, spring 0.82/400 | `enterBlurFromDp`, `enterBlurSpring` | `RenderEffect`, Android 12+ only |
 | Dialog alpha in 280ms, out 200ms | `enterAlphaMs`, `exitAlphaMs` | Fast-out-slow-in in, fast-out-linear-in out |
@@ -67,11 +77,15 @@ are the only classic values that exist.
   surfaces, and nothing here shares them.
 - Shadow on FABs, and the no-blur fallback colours: no equivalent surface, and the fallback is
   already the solid material.
-- Press feedback on tiles: the values and springs are in `GlassMotion`, but no glass surface here
-  is a tappable tile that could share one press helper without inventing an animation.
-- Editor card and pill reveal (180 ms, settle curve) and `PageSink` / `PlankTilt` page physics: not
-  glass arrival animations of the same kind, kept as they are.
-- A pane rim: panes are drawn tint and grain only today, so Mist's gradient rim reaches the dock,
-  keyboard and status surfaces but not the panes.
+- Press feedback on dock app icons: they already run their own lift-and-bounce press
+  (`SuggestionBarView.animateLaunchPressDown`) on a touch listener that also carries long-press
+  and drag-pickup, so a 0.92 scale would fight both. Mist keeps the dock's own press.
+- The editor's gesture-tied motion (peek, park travel, selection rings) and `PageSink` /
+  `PlankTilt` page physics: they track a finger or a layout, not a glass arrival.
+- Dock and keyboard slide: they already ride the page and keyboard springs (`KeyboardReveal`,
+  `PlaceChromeTravel`), which are physics, not a card arrival; only the minimal status bar fade
+  was a plain glass show and hide.
+- The whole-terminal glass layer's rim (`TermuxActivity` dock-surface layer): it is not a pane;
+  only the per-pane slabs take the gradient rim.
 - Ink measurement: the status bar's readability veil still measures the light model's sheen, which
   Obsidian tint replaces with a flat wash, so the measurement is slightly conservative there.
