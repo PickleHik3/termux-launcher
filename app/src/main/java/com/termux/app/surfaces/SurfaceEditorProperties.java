@@ -360,21 +360,14 @@ public final class SurfaceEditorProperties {
                 (prefs, value) -> prefs.setAppLauncherButtonCount(Math.max(1, value)),
                 PREVIEW_GEOMETRY)));
 
-        // The keyboard used to render only the dock's blur radius and grain, borrowed wholesale,
-        // and owned an opacity (really a tint intensity) and a margin of its own. It now owns a
-        // Blur, an Opacity and a Grain the same way DOCK/STATUS/CANVAS do — each -1 by default,
-        // meaning "follow the dock", so an untouched keyboard still renders exactly as before —
-        // plus the pre-existing Intensity row, kept under its own id and pref so old values
-        // survive. Its height is the drag handle on its own top edge rather than a row here.
+        // The keyboard's Blur and Grain are cascade cells like the dock's, so its glass follows
+        // Base until the row is detached. Opacity is the whole backdrop stack's visibility, which
+        // no other surface has; Intensity is the slab's own tint strength (the OPACITY cell). Its
+        // height is the drag handle on its own top edge rather than a row here.
         PANELS.put(SurfaceSlot.KEYBOARD, panel(
-            // Same scopes their DOCK/STATUS/CANVAS counterparts use: SCOPE_KEYBOARD_BACKDROP
-            // already re-syncs unconditionally on every glass preview tick, so none of these three
-            // need PREVIEW_KEYBOARD's full key-layout reload — only Intensity below still does.
-            own(ID_BLUR, R.string.termux_dock_tuning_blur, Section.MATERIAL,
-                Kind.SLIDER, Unit.DP, TERMUX_APP.MAX_IN_APP_KEYBOARD_BLUR_RADIUS,
-                TermuxAppSharedPreferences::getInAppKeyboardBlurRadius,
-                TermuxAppSharedPreferences::setInAppKeyboardBlurRadius,
-                PREVIEW_BLUR | PREVIEW_SURFACES),
+            cell(ID_BLUR, SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR,
+                R.string.termux_dock_tuning_blur,
+                Section.MATERIAL, PREVIEW_BLUR | PREVIEW_SURFACES),
             // The whole backdrop stack's visibility — the blurred wallpaper crop and the tint
             // together — same meaning as every other surface's Opacity row.
             own(ID_OPACITY, R.string.termux_dock_tuning_opacity, Section.MATERIAL,
@@ -390,11 +383,9 @@ public final class SurfaceEditorProperties {
             cell(ID_KEYBOARD_INTENSITY, SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
                 R.string.termux_surface_editor_keyboard_intensity,
                 Section.MATERIAL, PREVIEW_SURFACES | PREVIEW_KEYBOARD),
-            own(ID_GRAIN, R.string.termux_dock_tuning_grain, Section.MATERIAL,
-                Kind.SLIDER, Unit.PERCENT, TERMUX_APP.MAX_IN_APP_KEYBOARD_GRAIN,
-                TermuxAppSharedPreferences::getInAppKeyboardGrain,
-                TermuxAppSharedPreferences::setInAppKeyboardGrain,
-                PREVIEW_GLASS | PREVIEW_SURFACES),
+            cell(ID_GRAIN, SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN,
+                R.string.termux_dock_tuning_grain,
+                Section.MATERIAL, PREVIEW_GLASS | PREVIEW_SURFACES),
             cell(ID_MARGIN, SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP,
                 R.string.termux_surface_tuning_edges,
                 Section.SHAPE, PREVIEW_GEOMETRY | PREVIEW_SURFACES),

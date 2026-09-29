@@ -1973,43 +1973,34 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /**
-     * Wallpaper blur radius (dp) of the keyboard's own glass backdrop. Reads the dock's radius
-     * while the stored value is still the {@code -1} "follow the dock" sentinel, so an untouched
-     * keyboard renders exactly as it always has; moving this row's slider writes an explicit
-     * number here and detaches it from the dock for good.
+     * Wallpaper blur radius (dp) of the keyboard's glass: the KEYBOARD slot's BLUR cell, so it
+     * follows Base until the editor's row is detached and holds its own number after that.
      */
     public int getInAppKeyboardBlurRadius() {
-        int raw = SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS,
-            TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS);
-        if (raw < 0) return getExtraKeysBlurRadius();
-        return DataUtils.clamp(raw, TERMUX_APP.MIN_IN_APP_KEYBOARD_BLUR_RADIUS,
-            TERMUX_APP.MAX_IN_APP_KEYBOARD_BLUR_RADIUS);
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR),
+            TERMUX_APP.MIN_IN_APP_KEYBOARD_BLUR_RADIUS, TERMUX_APP.MAX_IN_APP_KEYBOARD_BLUR_RADIUS);
     }
 
     public void setInAppKeyboardBlurRadius(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS,
+        writeSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS,
             DataUtils.clamp(value, TERMUX_APP.MIN_IN_APP_KEYBOARD_BLUR_RADIUS,
-                TERMUX_APP.MAX_IN_APP_KEYBOARD_BLUR_RADIUS), false);
+                TERMUX_APP.MAX_IN_APP_KEYBOARD_BLUR_RADIUS));
     }
 
-    /**
-     * Film-grain strength (percent) of the keyboard's own glass backdrop; follows the dock's grain
-     * while the stored value is still the {@code -1} "follow the dock" sentinel. See
-     * {@link #getInAppKeyboardBlurRadius()}.
-     */
+    /** Film-grain strength (percent) of the keyboard's glass: the KEYBOARD slot's GRAIN cell. */
     public int getInAppKeyboardGrain() {
-        int raw = SharedPreferenceUtils.getInt(mSharedPreferences,
-            TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_GRAIN);
-        if (raw < 0) return getDockGlassGrain();
-        return DataUtils.clamp(raw, TERMUX_APP.MIN_IN_APP_KEYBOARD_GRAIN,
-            TERMUX_APP.MAX_IN_APP_KEYBOARD_GRAIN);
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN, TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN),
+            TERMUX_APP.MIN_IN_APP_KEYBOARD_GRAIN, TERMUX_APP.MAX_IN_APP_KEYBOARD_GRAIN);
     }
 
     public void setInAppKeyboardGrain(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN,
+        writeSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN,
             DataUtils.clamp(value, TERMUX_APP.MIN_IN_APP_KEYBOARD_GRAIN,
-                TERMUX_APP.MAX_IN_APP_KEYBOARD_GRAIN), false);
+                TERMUX_APP.MAX_IN_APP_KEYBOARD_GRAIN));
     }
 
     /**
@@ -2035,11 +2026,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 TERMUX_APP.MAX_IN_APP_KEYBOARD_BACKDROP_OPACITY), false);
     }
 
-    // The three raw accessors below store and return the -1 "follow the dock" sentinel verbatim,
+    // The three raw accessors below read and write the stored key verbatim, ignoring the link,
     // unlike their resolved counterparts above. They exist only for the editor's entry snapshot
-    // (Undo/Reset): restoring the *resolved* number through the ordinary setter would write it as
-    // an explicit value and silently detach a row that was still following the dock when the
-    // place was opened. Nothing else in the app should need them.
+    // (Undo/Reset): restoring the *resolved* number through the ordinary setter would write it to
+    // Base or detach a row. Nothing else in the app should need them.
 
     public int getInAppKeyboardBlurRadiusRaw() {
         return SharedPreferenceUtils.getInt(mSharedPreferences,
@@ -2435,6 +2425,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (SharedPreferenceUtils.getBoolean(mSharedPreferences,
                 TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, false)) {
             healKeyboardOpacitySentinel();
+            foldKeyboardGlassKeys();
             return;
         }
 
@@ -2465,6 +2456,33 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, true, true);
         healKeyboardOpacitySentinel();
+        foldKeyboardGlassKeys();
+    }
+
+    /**
+     * Folds the keyboard's legacy blur and grain keys into the KEYBOARD slot, once. They used to
+     * hold a number, or {@code -1} for "same as the dock", outside the inheritance model. A stored
+     * number is a real opinion and starts detached; {@code -1} follows Base, except where the dock
+     * itself is detached, in which case the keyboard takes the dock's number, so the look it
+     * followed does not move.
+     */
+    private void foldKeyboardGlassKeys() {
+        if (SharedPreferenceUtils.getBoolean(mSharedPreferences,
+                TERMUX_APP.KEY_KEYBOARD_GLASS_SLOT_FOLDED, false))
+            return;
+        for (SurfaceProperty property : new SurfaceProperty[] {SurfaceProperty.BLUR,
+                SurfaceProperty.GRAIN}) {
+            String key = surfaceOverrideKey(SurfaceSlot.KEYBOARD, property);
+            int raw = SharedPreferenceUtils.getInt(mSharedPreferences, key, -1);
+            boolean followsDock = raw < 0 && !isSurfaceInheriting(SurfaceSlot.DOCK, property);
+            if (followsDock)
+                raw = getSurfaceOverrideValue(SurfaceSlot.DOCK, property);
+            setSurfaceInheriting(SurfaceSlot.KEYBOARD, property, raw < 0);
+            if (raw >= 0)
+                writeSurfaceRaw(SurfaceSlot.KEYBOARD, property, raw);
+        }
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_KEYBOARD_GLASS_SLOT_FOLDED, true, true);
     }
 
     /**
@@ -2654,9 +2672,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             return null;
         switch (slot) {
             case KEYBOARD:
-                return property == SurfaceProperty.OPACITY
-                    ? TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY
-                    : TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET;
+                switch (property) {
+                    case BLUR: return TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS;
+                    case OPACITY: return TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
+                    case GRAIN: return TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN;
+                    default: return TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET;
+                }
             case STATUS:
                 switch (property) {
                     case BLUR: return TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS;
@@ -2730,15 +2751,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /**
-     * Whether a property is real for a slot. The keyboard renders on the dock's material, so it has
-     * no blur, grain or radius of its own; the terminal canvas has no capsule radius and no screen
-     * edge gap. Showing an inherited row for one of these would display a number controlling
-     * nothing.
+     * Whether a property is real for a slot. The keyboard's capsule is cut from the same glass as
+     * the dock's, so it has no corner radius of its own (it wears the dock's); the terminal canvas
+     * has no capsule radius and no screen edge gap. Showing an inherited row for one of these would
+     * display a number controlling nothing.
      */
     public static boolean hasSurfaceProperty(SurfaceSlot slot, SurfaceProperty property) {
         switch (slot) {
             case KEYBOARD:
-                return property == SurfaceProperty.OPACITY || property == SurfaceProperty.SIDE_GAP;
+                return property != SurfaceProperty.CORNER_RADIUS;
             case CANVAS:
                 return property == SurfaceProperty.BLUR || property == SurfaceProperty.OPACITY
                     || property == SurfaceProperty.GRAIN;
@@ -2869,9 +2890,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     private static int surfaceOverrideDefault(SurfaceSlot slot, SurfaceProperty property) {
         switch (slot) {
             case KEYBOARD:
-                return property == SurfaceProperty.OPACITY
-                    ? TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY
-                    : TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET;
+                switch (property) {
+                    case BLUR: return TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR;
+                    case OPACITY: return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
+                    case GRAIN: return TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN;
+                    default: return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET;
+                }
             case STATUS:
                 switch (property) {
                     case BLUR: return TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS;
