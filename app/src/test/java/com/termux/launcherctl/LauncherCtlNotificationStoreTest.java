@@ -245,7 +245,7 @@ public class LauncherCtlNotificationStoreTest {
 
         assertEquals(2, apps.length());
         assertEquals("com.mail", apps.getJSONObject(0).getString("package"));
-        assertEquals("Mail", apps.getJSONObject(0).getString("app"));
+        assertEquals("mail", apps.getJSONObject(0).getString("app"));
         assertEquals(2, apps.getJSONObject(0).getLong("count"));
         assertEquals(NOW - 1_000, apps.getJSONObject(0).getLong("lastSeen"));
     }
