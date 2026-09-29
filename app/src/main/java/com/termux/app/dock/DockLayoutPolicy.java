@@ -275,10 +275,10 @@ public final class DockLayoutPolicy {
         int stripBandPx = in.appsRowPageStripShown ? PageTickStrip.bandPx(density) : 0;
         // Sharing, the row keeps the letters' crown on both sides — unless the ticks need more
         // than that, in which case their own band is the air on both sides and the icon sits in
-        // the middle of it. Alone it keeps its sliver on the side without ticks and the strip's
-        // own band on the side with them, and nothing more: a plank of one bar should be as short
-        // as it can be, and there is no second band for it to read symmetric against. The one
-        // place the row's air is decided, whichever edge and form it is in.
+        // the middle of it. Alone it keeps its sliver while it carries no ticks; with them it
+        // matches their band on the other side too, since a sliver there set the icons hard on
+        // the rim across from the ticks and the row read bottom-heavy. The one place the row's
+        // air is decided, whichever edge and form it is in.
         int airPx = rowAirPx(in.appsRowAlone, in.appsRowPageStripShown, density);
         int tickSideAirPx = rowTickSideAirPx(in.appsRowAlone, in.appsRowPageStripShown, density);
         out.appsRowStripBandPx = stripBandPx;
@@ -403,12 +403,13 @@ public final class DockLayoutPolicy {
      * {@link #rowTickSideAirPx}, so the row is symmetric about its icon and the icon sits in the
      * middle of what the two hairlines around it enclose.
      *
-     * <p>A row standing alone has no such pair to read against: it keeps its sliver here whether
-     * or not it carries ticks, and the strip's band is all the air on the other side. The plank is
-     * then the icon and as little as the two sides can be.
+     * <p>A row standing alone keeps its sliver while it carries no ticks, so a plank of one bar is
+     * the icon and as little as it can be. With ticks it matches their band here too: the sliver
+     * alone set the icons against the rim across from the strip, and the row read bottom-heavy.
      */
     public static int rowAirPx(boolean alone, boolean pageStripShown, float density) {
-        if (alone) return loneRowAirPx(density);
+        if (alone) return Math.max(loneRowAirPx(density),
+            pageStripShown ? PageTickStrip.bandPx(density) : 0);
         return Math.max(sharedRowAirPx(density),
             pageStripShown ? PageTickStrip.bandPx(density) : 0);
     }
