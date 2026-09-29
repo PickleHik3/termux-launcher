@@ -499,6 +499,12 @@ public final class SuggestionBarView extends GridLayout
     private static final int MAX_DEFERRED_RENDER_ATTEMPTS = 8;
     private int deferredRenderAttempts;
     /**
+     * A render was turned away for want of stable bounds and nothing has rendered since. The
+     * bounded retries can be spent while the row is hidden (Minimal mode, a re-parenting), so this
+     * outlives them: the next layout pass that leaves the row stable re-issues the render.
+     */
+    private boolean renderLostWhileUnstable;
+    /**
      * When a render was first turned away for want of stable bounds, and nothing has rendered
      * since. It is the row's own clock: draw suppression keeps a separate one, which a release
      * resets while the row may well still be deferring.
@@ -766,9 +772,29 @@ public final class SuggestionBarView extends GridLayout
             rowHeightHintWaived = false;
         }
         scheduleStableDrawReleaseIfPossible();
+        if (renderLostWhileUnstable) post(this::reissueLostRender);
         if (changed) resyncRailPagingForLength();
         // A render ends in a layout pass, so this is where the ticks learn what the row now holds.
         publishPageIndicator();
+    }
+
+    /**
+     * Re-issues a render the row had to drop while it had no stable bounds. Posted from
+     * {@link #onLayout} because the bounds are only readable once the pass has finished; a row
+     * that is still unstable leaves the flag set for the next pass.
+     */
+    private void reissueLostRender() {
+        if (!renderLostWhileUnstable || !hostVisible || !isAttachedToWindow()
+            || !hasStableRenderBounds()) {
+            return;
+        }
+        renderLostWhileUnstable = false;
+        reload();
+    }
+
+    /** Whether a render is still owed to the row because it was dropped while unstable. */
+    boolean isRenderLostWhileUnstable() {
+        return renderLostWhileUnstable;
     }
 
     /**
@@ -2853,6 +2879,7 @@ public final class SuggestionBarView extends GridLayout
         }
         waiveRowHeightHintIfOverdue();
         if (!hasStableRenderBounds()) {
+            renderLostWhileUnstable = true;
             // A gate on the home screen is anti-flicker, never a mute switch: a row with nothing in
             // it yet stays dark until its bounds settle, but a row that is already showing icons
             // keeps showing them. One frame of icons at the wrong size beats a blank dock.
@@ -2887,6 +2914,7 @@ public final class SuggestionBarView extends GridLayout
             return false;
         }
         pendingDeferredRender = false;
+        renderLostWhileUnstable = false;
         deferredRenderAttempts = 0;
         renderDeferredSinceUptimeMs = 0L;
         int buttonCount = Math.max(1, maxButtonCount);
