@@ -89,6 +89,23 @@ public class GlassRefractionTest {
     }
 
     @Test
+    public void aFractionalRimIsTheSameRuleAsTheBoundsOne() {
+        // A corner tab mid-slide stands at fractional bounds; its rim follows the one rule.
+        float[] fromRect = new float[4];
+        float[] fromFloats = new float[4];
+        int seams = GlassRefraction.SEAM_TOP | GlassRefraction.SEAM_RIGHT;
+        GlassRefraction.rimRect(fromRect, new Rect(10, 20, 110, 52), 30f, seams);
+        GlassRefraction.rimRect(fromFloats, 10f, 20f, 110f, 52f, 30f, seams);
+        for (int i = 0; i < 4; i++) assertEquals(fromRect[i], fromFloats[i], 0f);
+
+        GlassRefraction.rimRect(fromFloats, 10.5f, -12.25f, 110.5f, 19.75f, 30f, seams);
+        assertEquals(10.5f, fromFloats[0], 0f);
+        assertEquals(-42.25f, fromFloats[1], 0f);
+        assertEquals(140.5f, fromFloats[2], 0f);
+        assertEquals(19.75f, fromFloats[3], 0f);
+    }
+
+    @Test
     public void aSeamIsPushedPastEverythingTheRimCouldTouch() {
         // Past the band the pull reaches into, the pull itself, and the corner arc — so neither
         // the light nor the bend nor a rounded corner shows along the shared edge.
