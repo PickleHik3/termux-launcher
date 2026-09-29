@@ -13142,9 +13142,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The activity's half of the sheet plane's seam. */
     private final class TerminalSheetHost implements com.termux.app.terminal.TerminalSheetController.Host {
         @NonNull @Override public com.termux.app.chrome.GlassMotion glassMotion() {
-            return com.termux.app.chrome.GlassMotion.forId(mPreferences != null
-                ? mPreferences.getSurfaceGlassMotion()
-                : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLASS_MOTION);
+            return com.termux.app.chrome.GlassMotion.of(mPreferences);
         }
 
         @NonNull @Override public Context context() {
@@ -16725,8 +16723,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (host != null) {
             float alpha = minimal ? 0f : 1f;
             if (host.getAlpha() != alpha) {
-                host.animate().cancel();
-                host.animate().alpha(alpha).setDuration(MINIMAL_BAR_FADE_MS).start();
+                com.termux.app.chrome.GlassMotionPlayer.fade(host,
+                    com.termux.app.chrome.GlassMotion.of(mPreferences), !minimal,
+                    MINIMAL_BAR_FADE_MS);
             }
         }
         int visibility = minimal ? View.INVISIBLE : View.VISIBLE;

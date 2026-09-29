@@ -56,6 +56,9 @@ import com.termux.app.statusbar.TopPaneClockForm;
 import com.termux.app.surfaces.SurfaceEditorProperties.Control;
 import com.termux.app.surfaces.SurfaceEditorProperties.Section;
 import com.termux.app.surfaces.SurfaceEditorProperties.Kind;
+import com.termux.app.chrome.GlassMotion;
+import com.termux.app.chrome.GlassMotionPlayer;
+import com.termux.app.chrome.GlassPress;
 import com.termux.app.terminal.Motion;
 import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
@@ -298,11 +301,9 @@ public final class SurfaceEditorController {
     private static final float SURFACE_TUNING_PEEK_ALPHA = 0.28f;
     private static final long SURFACE_TUNING_PEEK_OUT_MS = 90;
     private static final long SURFACE_TUNING_PEEK_IN_MS = 170;
-    private static final long SURFACE_TUNING_FADE_DURATION_MS = 200;
     /** How long the card takes to travel to a newly selected surface's park position. */
     private static final long SURFACE_EDITOR_PARK_DURATION_MS = 200;
-    /** The card rising from its park, or the pill settling back into its place. */
-    private static final long SURFACE_EDITOR_REVEAL_DURATION_MS = 180;
+    /** How far the card rises from its park; the reveal times are {@link SurfaceEditorMotion}'s. */
     private static final float SURFACE_EDITOR_REVEAL_RISE_DP = 12f;
     private static final long SURFACE_EDITOR_RING_DURATION_MS = 150;
     /** The constant gap between the card and whatever bounds the room it lives in. */
@@ -821,12 +822,20 @@ public final class SurfaceEditorController {
         dismissClockDropdown();
         Panel panel = mPanel;
         panel.root.animate().cancel();
-        if (animate && panel.root.getVisibility() == View.VISIBLE) {
+        GlassMotion motion = motion();
+        if (animate && panel.root.getVisibility() == View.VISIBLE
+            && SurfaceEditorMotion.cardPlaysMotion(motion)) {
+            GlassMotionPlayer.exit(panel.root, motion, () -> {
+                if (!mCardShown)
+                    panel.root.setVisibility(View.GONE);
+                panel.root.setTranslationY(0f);
+            });
+        } else if (animate && panel.root.getVisibility() == View.VISIBLE) {
             // A card pulled down to close carries on down from where the finger let it go.
             float sink = Math.max(panel.root.getTranslationY(),
                 dpToPx(SURFACE_EDITOR_REVEAL_RISE_DP));
             panel.root.animate().alpha(0f).translationY(sink)
-                .setDuration(SURFACE_EDITOR_REVEAL_DURATION_MS)
+                .setDuration(SurfaceEditorMotion.revealMs(motion, false))
                 .setInterpolator(Motion.settle())
                 .withEndAction(() -> {
                     if (!mCardShown)
@@ -862,10 +871,16 @@ public final class SurfaceEditorController {
             panel.root.setTranslationY(0f);
             return;
         }
+        GlassMotion motion = motion();
+        if (SurfaceEditorMotion.cardPlaysMotion(motion) && !mPanelPeeking) {
+            panel.root.setTranslationY(0f);
+            GlassMotionPlayer.enter(panel.root, motion, null);
+            return;
+        }
         panel.root.setAlpha(0f);
         panel.root.setTranslationY(dpToPx(SURFACE_EDITOR_REVEAL_RISE_DP));
         panel.root.animate().alpha(alpha).translationY(0f)
-            .setDuration(SURFACE_EDITOR_REVEAL_DURATION_MS)
+            .setDuration(SurfaceEditorMotion.revealMs(motion, true))
             .setInterpolator(Motion.settle())
             .start();
     }
@@ -894,14 +909,14 @@ public final class SurfaceEditorController {
                 pill.setVisibility(View.VISIBLE);
             }
             pill.animate().alpha(1f).scaleX(1f).scaleY(1f)
-                .setDuration(SURFACE_EDITOR_REVEAL_DURATION_MS)
+                .setDuration(SurfaceEditorMotion.revealMs(motion(), true))
                 .setInterpolator(Motion.settle())
                 .withEndAction(this::startFloatBreath)
                 .start();
             return;
         }
         pill.animate().alpha(0f).scaleX(0.85f).scaleY(0.85f)
-            .setDuration(SURFACE_EDITOR_REVEAL_DURATION_MS)
+            .setDuration(SurfaceEditorMotion.revealMs(motion(), false))
             .setInterpolator(Motion.settle())
             .withEndAction(() -> {
                 if (mCardShown)
@@ -2400,16 +2415,24 @@ public final class SurfaceEditorController {
             positionSurfaceTuningGestureTargets();
             overlay.setAlpha(0f);
             overlay.setVisibility(View.VISIBLE);
-            overlay.animate().alpha(1f).setDuration(SURFACE_TUNING_FADE_DURATION_MS)
+            overlay.animate().alpha(1f)
+                .setDuration(SurfaceEditorMotion.overlayFadeMs(motion(), true))
                 .setInterpolator(surfaceTuningFadeInterpolator()).start();
             return;
         }
-        overlay.animate().alpha(0f).setDuration(SURFACE_TUNING_FADE_DURATION_MS)
+        overlay.animate().alpha(0f)
+            .setDuration(SurfaceEditorMotion.overlayFadeMs(motion(), false))
             .setInterpolator(surfaceTuningFadeInterpolator())
             .withEndAction(() -> {
                 overlay.setVisibility(View.GONE);
                 overlay.setAlpha(1f);
             }).start();
+    }
+
+    /** The look's motion, read when a reveal starts so a preset applied in the editor shows at once. */
+    @NonNull
+    private GlassMotion motion() {
+        return GlassMotion.of(prefs());
     }
 
     private Interpolator surfaceTuningFadeInterpolator() {
@@ -2856,6 +2879,7 @@ public final class SurfaceEditorController {
                 }
             });
         item.setOnClickListener(view -> onApply.run());
+        GlassPress.attach(item, this::motion);
         row.addView(item);
         mPresetItems.put(id, Pair.create(preview, name));
     }

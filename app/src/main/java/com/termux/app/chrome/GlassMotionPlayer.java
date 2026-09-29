@@ -104,6 +104,21 @@ public final class GlassMotionPlayer {
     /** One spring, played on a ValueAnimator whose linear time is the spring's own clock. */
     private static void spring(@NonNull View card, @NonNull GlassMotion.Spring spring,
                                @NonNull Progress progress, @NonNull Runnable onSettled) {
+        ValueAnimator animator = springAnimator(spring, progress, onSettled);
+        List<Animator> running = RUNNING.get(card);
+        if (running == null) {
+            running = new ArrayList<>(2);
+            RUNNING.put(card, running);
+        }
+        running.add(animator);
+        animator.start();
+    }
+
+    /** The unstarted animator for {@link #spring}; {@code onSettled} runs only if it is not cancelled. */
+    @NonNull
+    private static ValueAnimator springAnimator(@NonNull GlassMotion.Spring spring,
+                                                @NonNull Progress progress,
+                                                @NonNull Runnable onSettled) {
         long duration = spring.settleMillis();
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(duration);
@@ -120,13 +135,54 @@ public final class GlassMotionPlayer {
                 if (!mCancelled) onSettled.run();
             }
         });
-        List<Animator> running = RUNNING.get(card);
-        if (running == null) {
-            running = new ArrayList<>(2);
-            RUNNING.put(card, running);
-        }
-        running.add(animator);
+        return animator;
+    }
+
+    /** The press scale each tile is settling on, so a release or a new press can stop it. */
+    private static final WeakHashMap<View, Animator> PRESSING = new WeakHashMap<>();
+
+    /**
+     * Scales a tile to where a press or a release leaves it, from wherever it is now, on the
+     * profile's own spring. Classic never scales, so it returns before touching the view. A new
+     * press or release stops the one still settling.
+     */
+    public static void press(@NonNull View tile, @NonNull GlassMotion motion, boolean down) {
+        Animator previous = PRESSING.remove(tile);
+        if (!motion.pressable() && previous == null) return;
+        if (previous != null) previous.cancel();
+        float from = tile.getScaleX();
+        // A profile that stopped pressing mid-press (a preset switched) still lets the tile go.
+        float to = motion.pressable() ? motion.pressTarget(down) : 1f;
+        ValueAnimator animator = springAnimator(motion.pressSpringFor(down), fraction -> {
+            float scale = from + (to - from) * fraction;
+            tile.setScaleX(scale);
+            tile.setScaleY(scale);
+        }, () -> {
+            tile.setScaleX(to);
+            tile.setScaleY(to);
+            PRESSING.remove(tile);
+        });
+        PRESSING.put(tile, animator);
         animator.start();
+    }
+
+    /**
+     * Fades a whole glass surface in or out without the card's scale: the classic path is the
+     * caller's own {@code classicMs} tween, exactly as it ran; a springy profile takes its own
+     * arrival and departure times and curves.
+     */
+    public static void fade(@NonNull View surface, @NonNull GlassMotion motion, boolean in,
+                            long classicMs) {
+        surface.animate().cancel();
+        android.view.ViewPropertyAnimator animator = surface.animate().alpha(in ? 1f : 0f);
+        if (!motion.springy()) {
+            animator.setDuration(classicMs).start();
+            return;
+        }
+        animator.setDuration(in ? motion.enterAlphaMs : motion.exitAlphaMs)
+            .setInterpolator(in ? new PathInterpolator(0.4f, 0f, 0.2f, 1f)
+                : new PathInterpolator(0.4f, 0f, 1f, 1f))
+            .start();
     }
 
     private static void cancelSprings(@NonNull View card) {
