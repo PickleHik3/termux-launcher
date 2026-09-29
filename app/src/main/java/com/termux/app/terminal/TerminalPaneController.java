@@ -24,6 +24,7 @@ import android.view.HapticFeedbackConstants;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewPropertyAnimator;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
@@ -2553,12 +2554,13 @@ public class TerminalPaneController {
                 frame.animate().cancel();
                 frame.setTranslationX(dx);
                 frame.setTranslationY(dy);
-                frame.animate()
+                ViewPropertyAnimator move = frame.animate()
                     .translationX(0f)
                     .translationY(0f)
                     .setDuration(PANE_MOVE_MS)
-                    .setInterpolator(PaneMotionOverlayView.standardInterpolator())
-                    .start();
+                    .setInterpolator(PaneMotionOverlayView.standardInterpolator());
+                PaneGlassMotion.follow(frame, move);
+                move.start();
             }
         });
     }
@@ -2592,14 +2594,15 @@ public class TerminalPaneController {
         frame.setScaleY(PANE_ENTER_SCALE);
         OneShotPreDrawListener.add(frame, () -> {
             frame.animate().cancel();
-            frame.animate()
+            ViewPropertyAnimator enter = frame.animate()
                 .alpha(1f)
                 .scaleX(1f)
                 .scaleY(1f)
                 .setDuration(PANE_ENTER_MS)
                 .setInterpolator(PaneMotionOverlayView.standardInterpolator())
-                .withEndAction(() -> resetFrameTransform(frame))
-                .start();
+                .withEndAction(() -> resetFrameTransform(frame));
+            PaneGlassMotion.follow(frame, enter);
+            enter.start();
         });
     }
 

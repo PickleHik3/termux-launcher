@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tag key for the offset a moving pane publishes to its glass; see GlassAnchor.setMotion. -->
+    <item name="glass_anchor_motion" type="id" />
+</resources>
