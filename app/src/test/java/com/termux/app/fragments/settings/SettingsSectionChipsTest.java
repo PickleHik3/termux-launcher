@@ -178,30 +178,35 @@ public class SettingsSectionChipsTest {
 
         // Hiding every row of the clipboard section (as a page's own gating logic would) empties
         // it, so this also exercises "the selected section disappeared -> back to All" in the
-        // same test. the first of those rows is `lazyMode` here, a name kept from when it was the lone row.
-        Preference lazyMode = fragment.findPreference("terminal_osc52_clipboard_read_enabled");
-        assertNotNull(lazyMode);
-        PreferenceCategory lazySection = SettingsSectionChips.topCategoryOf(lazyMode, screen);
-        assertNotNull(lazySection);
+        // same test.
+        Preference clipboardRow = fragment.findPreference("terminal_osc52_clipboard_read_enabled");
+        assertNotNull(clipboardRow);
+        PreferenceCategory clipboardSection = SettingsSectionChips.topCategoryOf(clipboardRow, screen);
+        assertNotNull(clipboardSection);
 
         ChipGroup group = chipGroup(fragment);
-        findChip(group, lazySection.getTitle()).performClick();
-        assertEquals(lazySection, SettingsSectionChips.topCategoryOf(adapter.getItem(0), screen));
+        findChip(group, clipboardSection.getTitle()).performClick();
+        assertEquals(clipboardSection, SettingsSectionChips.topCategoryOf(adapter.getItem(0), screen));
 
-        lazyMode.setVisible(false);
+        clipboardRow.setVisible(false);
         fragment.findPreference("terminal_trim_wrapped_trailing_spaces").setVisible(false);
         fragment.findPreference("terminal_clipboard_cleanup").setVisible(false);
         idle(); // let PreferenceGroupAdapter's deferred sync run and notify our wrapper.
 
-        // The section had only this row, so it no longer qualifies: the filter must have fallen
+        // The section has no visible rows, so it no longer qualifies: the filter must have fallen
         // back to "All" on its own.
         List<PreferenceCategory> sectionsNow = SettingsSectionChips.visibleSections(screen);
-        assertFalse(sectionsNow.contains(lazySection));
-        assertTrue(findChip(group, fragment.getString(R.string.settings_section_chip_all)).isChecked());
+        assertFalse(sectionsNow.contains(clipboardSection));
+        if (SettingsSectionChips.shouldShowChipRow(sectionsNow)) {
+            assertTrue(findChip(group, fragment.getString(R.string.settings_section_chip_all)).isChecked());
+        } else {
+            // Too few sections are left for a chip row: it is hidden and nothing filters.
+            assertEquals(0, group.getChildCount());
+        }
 
         for (int i = 0; i < adapter.getItemCount(); i++) {
             assertFalse("the hidden row must not resurface under All",
-                lazyMode.equals(adapter.getItem(i)));
+                clipboardRow.equals(adapter.getItem(i)));
         }
     }
 }
