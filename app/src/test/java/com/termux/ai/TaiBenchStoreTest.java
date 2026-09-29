@@ -25,22 +25,26 @@ public class TaiBenchStoreTest {
         return new TaiBenchStore(new File(new File(temp.getRoot(), "tai"), TaiBenchStore.FILE_NAME));
     }
 
-    /** A complete bench_v1 record with the figures the leaderboard reads. */
+    private static JSONObject series(double median) throws Exception {
+        return new JSONObject().put("med", median).put("min", median).put("max", median).put("runs", 1);
+    }
+
+    /** A complete bench_v2 record with the figures the leaderboard reads; the long page takes 4 s to read. */
     private static JSONObject record(String modelId, String accelerator, boolean speculative,
-                                     double writingTps, double firstWordMs, boolean checkPassed) throws Exception {
-        return record(modelId, accelerator, speculative, writingTps, firstWordMs, checkPassed,
+                                     double decodeTps, double ttftMs, boolean checkPassed) throws Exception {
+        return record(modelId, accelerator, speculative, decodeTps, ttftMs, 4_000.0, checkPassed,
             TaiBenchSuite.BENCH_VERSION, TaiBenchStore.STATUS_COMPLETE);
     }
 
     private static JSONObject record(String modelId, String accelerator, boolean speculative,
-                                     double writingTps, double firstWordMs, boolean checkPassed,
+                                     double decodeTps, double ttftMs, double readMs, boolean checkPassed,
                                      String benchVersion, String status) throws Exception {
         JSONObject phases = new JSONObject()
             .put("load", new JSONObject().put("ms", 3200L).put("memBytes", 1_600_000_000L))
-            .put("reading", new JSONObject().put("med", 400.0).put("min", 390.0).put("max", 410.0).put("runs", 3))
-            .put("firstWord", new JSONObject().put("med", firstWordMs).put("min", firstWordMs).put("max", firstWordMs).put("runs", 3))
-            .put("writing", new JSONObject().put("med", writingTps).put("min", writingTps - 1).put("max", writingTps + 1).put("runs", 3).put("tokens", 128))
-            .put("sustained", JSONObject.NULL);
+            .put("chat", new JSONObject().put("ttftMs", series(ttftMs)).put("decodeTps", series(decodeTps))
+                .put("tokens", 231).put("reply", "An alias is a shortcut."))
+            .put("longInput", new JSONObject().put("readMs", series(readMs)).put("promptTokens", 2600)
+                .put("truncated", false).put("peakPssBytes", 2_100_000_000L));
         return new JSONObject()
             .put("id", "r" + (nextId++))
             .put("benchVersion", benchVersion)
@@ -55,8 +59,35 @@ public class TaiBenchStoreTest {
             .put("appVersion", "0.2.40")
             .put("phases", phases)
             .put("check", new JSONObject().put("passed", checkPassed ? 3 : 2).put("total", 3))
-            .put("status", status)
-            .put("verdict", TaiBenchStats.verdict(writingTps, checkPassed));
+            .put("status", status);
+    }
+
+    /** What bench_v1 wrote: writing, first word and reading phases, ranked by the writing median. */
+    private static JSONObject v1Record(String modelId, double writingTps) throws Exception {
+        JSONObject phases = new JSONObject()
+            .put("load", new JSONObject().put("ms", 3200L).put("memBytes", 1_600_000_000L).put("pssBytes", 900_000_000L))
+            .put("reading", new JSONObject().put("med", 400.0).put("runs", 3))
+            .put("firstWord", new JSONObject().put("med", 200.0).put("runs", 3))
+            .put("writing", new JSONObject().put("med", writingTps).put("runs", 3).put("tokens", 128))
+            .put("sustained", JSONObject.NULL);
+        return new JSONObject()
+            .put("id", "v1-" + (nextId++))
+            .put("benchVersion", "bench_v1")
+            .put("preset", "standard")
+            .put("timestamp", 1_690_000_000_000L)
+            .put("modelId", modelId)
+            .put("displayName", modelId)
+            .put("backend", TaiModelSpec.BACKEND_MNN_LLM)
+            .put("accelerator", "cpu")
+            .put("speculative", false)
+            .put("phases", phases)
+            .put("check", new JSONObject().put("passed", 3).put("total", 3))
+            .put("status", TaiBenchStore.STATUS_COMPLETE)
+            .put("verdict", "smooth");
+    }
+
+    private static double decodeMedian(JSONObject record) throws Exception {
+        return record.getJSONObject("phases").getJSONObject("chat").getJSONObject("decodeTps").getDouble("med");
     }
 
     @Test
@@ -104,8 +135,8 @@ public class TaiBenchStoreTest {
         JSONArray records = store.records();
         assertEquals(TaiBenchStore.KEEP_PER_KEY, records.length());
         // The oldest five went; the newest is still last.
-        assertEquals(15.0, records.getJSONObject(0).getJSONObject("phases").getJSONObject("writing").getDouble("med"), 1e-9);
-        assertEquals(34.0, records.getJSONObject(19).getJSONObject("phases").getJSONObject("writing").getDouble("med"), 1e-9);
+        assertEquals(15.0, decodeMedian(records.getJSONObject(0)), 1e-9);
+        assertEquals(34.0, decodeMedian(records.getJSONObject(19)), 1e-9);
     }
 
     @Test
@@ -129,25 +160,37 @@ public class TaiBenchStoreTest {
     }
 
     @Test
-    public void leaderboardRanksByWritingSpeedThenFirstWord() throws Exception {
+    public void leaderboardRanksByVerdictThenDecodeSpeedThenFirstToken() throws Exception {
         JSONArray records = new JSONArray()
-            .put(record("slow", "cpu", false, 6.0, 500.0, true))
-            .put(record("fast", "cpu", false, 21.0, 200.0, true))
-            .put(record("fast-late-word", "cpu", false, 21.0, 350.0, true))
-            .put(record("mid", "cpu", false, 12.0, 250.0, true));
+            .put(record("slow", "cpu", false, 4.0, 900.0, true))
+            .put(record("usable", "cpu", false, 10.0, 1_000.0, true))
+            // Fast writer, but the long page takes 15 s to read: Usable, so it ranks below every Smooth entry.
+            .put(record("fast-reader-no", "cpu", false, 30.0, 600.0, 15_000.0, true, TaiBenchSuite.BENCH_VERSION, TaiBenchStore.STATUS_COMPLETE))
+            .put(record("smooth-late", "cpu", false, 21.0, 700.0, true))
+            .put(record("smooth-early", "cpu", false, 21.0, 400.0, true))
+            .put(record("smooth-slower", "cpu", false, 13.0, 300.0, true));
         JSONObject board = TaiBenchStore.leaderboard(records, TaiBenchSuite.BENCH_VERSION);
         JSONArray ranked = board.getJSONArray("ranked");
-        assertEquals(4, ranked.length());
-        assertEquals("fast", ranked.getJSONObject(0).getString("modelId"));
-        assertEquals(1, ranked.getJSONObject(0).getInt("rank"));
-        assertEquals("fast-late-word", ranked.getJSONObject(1).getString("modelId"));
-        assertEquals("mid", ranked.getJSONObject(2).getString("modelId"));
-        assertEquals("slow", ranked.getJSONObject(3).getString("modelId"));
-        assertEquals(4, ranked.getJSONObject(3).getInt("rank"));
-        assertEquals("smooth", ranked.getJSONObject(0).getString("verdict"));
-        assertEquals("usable", ranked.getJSONObject(2).getString("verdict"));
-        assertEquals("slow", ranked.getJSONObject(3).getString("verdict"));
+        assertEquals(6, ranked.length());
+        String[] order = {"smooth-early", "smooth-late", "smooth-slower", "fast-reader-no", "usable", "slow"};
+        String[] verdicts = {"smooth", "smooth", "smooth", "usable", "usable", "slow"};
+        for (int i = 0; i < order.length; i++) {
+            assertEquals(order[i], ranked.getJSONObject(i).getString("modelId"));
+            assertEquals(verdicts[i], ranked.getJSONObject(i).getString("verdict"));
+            assertEquals(i + 1, ranked.getJSONObject(i).getInt("rank"));
+        }
         assertEquals(0, board.getJSONArray("broken").length());
+    }
+
+    @Test
+    public void leaderboardRowCarriesTheThreeNumbersAndTheMemory() throws Exception {
+        JSONArray records = new JSONArray().put(record("qwen", "cpu", false, 14.0, 600.0, true));
+        JSONObject row = TaiBenchStore.leaderboard(records, TaiBenchSuite.BENCH_VERSION).getJSONArray("ranked").getJSONObject(0);
+        assertEquals(14.0, row.getDouble("decodeTps"), 1e-9);
+        assertEquals(600.0, row.getDouble("ttftMs"), 1e-9);
+        assertEquals(4_000.0, row.getDouble("readMs"), 1e-9);
+        assertEquals(2_100_000_000L, row.getLong("memBytes"));
+        assertFalse(row.getBoolean("truncated"));
     }
 
     @Test
@@ -155,14 +198,14 @@ public class TaiBenchStoreTest {
         JSONArray records = new JSONArray()
             .put(record("qwen", "cpu", false, 30.0, 200.0, true))
             .put(record("qwen", "cpu", false, 18.0, 210.0, true))
-            .put(record("qwen", "cpu", false, 50.0, 100.0, true, TaiBenchSuite.BENCH_VERSION, "stopped:battery"))
+            .put(record("qwen", "cpu", false, 50.0, 100.0, 1_000.0, true, TaiBenchSuite.BENCH_VERSION, "stopped:battery"))
             .put(record("qwen", "gpu", false, 15.0, 300.0, true));
         JSONObject board = TaiBenchStore.leaderboard(records, TaiBenchSuite.BENCH_VERSION);
         JSONArray ranked = board.getJSONArray("ranked");
         assertEquals(2, ranked.length());
         // The stopped run is skipped; the previous complete run of the CPU entry is what ranks.
         assertEquals("cpu", ranked.getJSONObject(0).getString("accelerator"));
-        assertEquals(18.0, ranked.getJSONObject(0).getDouble("writingTps"), 1e-9);
+        assertEquals(18.0, ranked.getJSONObject(0).getDouble("decodeTps"), 1e-9);
         assertEquals("gpu", ranked.getJSONObject(1).getString("accelerator"));
     }
 
@@ -186,7 +229,7 @@ public class TaiBenchStoreTest {
     @Test
     public void benchVersionsAreNeverRankedTogether() throws Exception {
         JSONArray records = new JSONArray()
-            .put(record("old", "cpu", false, 99.0, 50.0, true, "bench_v0", TaiBenchStore.STATUS_COMPLETE))
+            .put(record("old", "cpu", false, 99.0, 50.0, 1_000.0, true, "bench_v0", TaiBenchStore.STATUS_COMPLETE))
             .put(record("qwen", "cpu", false, 21.0, 200.0, true));
         JSONObject current = TaiBenchStore.leaderboard(records, TaiBenchSuite.BENCH_VERSION);
         assertEquals(1, current.getJSONArray("ranked").length());
@@ -197,21 +240,43 @@ public class TaiBenchStoreTest {
         assertEquals(2, TaiBenchStore.benchVersions(records).size());
     }
 
+    /** Old files stay readable and stay on file, but a v1 record never reaches the v2 leaderboard. */
     @Test
-    public void leaderboardMemoryPrefersTheProcessPssOverMemAvailable() throws Exception {
-        JSONObject withPss = record("qwen", "cpu", false, 21.0, 200.0, true);
-        withPss.getJSONObject("phases").getJSONObject("load").put("pssBytes", 900_000_000L);
-        JSONObject older = record("gemma", "cpu", false, 12.0, 300.0, true);
-        JSONObject unreadable = record("smol", "cpu", false, 8.0, 300.0, true);
-        unreadable.getJSONObject("phases").getJSONObject("load").put("pssBytes", -1L);
-        JSONArray records = new JSONArray().put(withPss).put(older).put(unreadable);
-        JSONArray ranked = TaiBenchStore.leaderboard(records, TaiBenchSuite.BENCH_VERSION).getJSONArray("ranked");
-        assertEquals(900_000_000L, ranked.getJSONObject(0).getLong("memBytes"));
-        // A record from before the PSS was measured still reads its MemAvailable figure.
+    public void v1RecordsAreKeptAndReadButNotRanked() throws Exception {
+        TaiBenchStore store = store();
+        store.append(v1Record("legacy", 30.0));
+        store.append(record("qwen", "cpu", false, 21.0, 200.0, true));
+        assertEquals(2, store.records().length());
+        JSONObject json = store.toJson(TaiBenchSuite.BENCH_VERSION);
+        JSONArray ranked = json.getJSONObject("leaderboard").getJSONArray("ranked");
+        assertEquals(1, ranked.length());
+        assertEquals("qwen", ranked.getJSONObject(0).getString("modelId"));
+        assertEquals(0, json.getJSONObject("leaderboard").getJSONArray("broken").length());
+        assertEquals(2, json.getJSONArray("benchVersions").length());
+        // On its own, a v1 record leaves the board empty: the model shows as untested.
+        JSONArray onlyOld = new JSONArray().put(v1Record("legacy", 30.0));
+        JSONObject empty = TaiBenchStore.leaderboard(onlyOld, TaiBenchSuite.BENCH_VERSION);
+        assertEquals(0, empty.getJSONArray("ranked").length());
+        assertEquals(0, empty.getJSONArray("broken").length());
+    }
+
+    @Test
+    public void leaderboardMemoryPrefersThePeakPssOverMemAvailable() throws Exception {
+        JSONObject withPeak = record("qwen", "cpu", false, 21.0, 200.0, true);
+        JSONObject noPeak = record("gemma", "cpu", false, 12.0, 300.0, true);
+        noPeak.getJSONObject("phases").getJSONObject("longInput").put("peakPssBytes", -1L);
+        JSONObject noLongInput = record("smol", "cpu", false, 8.0, 300.0, true);
+        noLongInput.getJSONObject("phases").put("longInput", JSONObject.NULL);
+        JSONArray records = new JSONArray().put(withPeak).put(noPeak).put(noLongInput);
+        JSONObject board = TaiBenchStore.leaderboard(records, TaiBenchSuite.BENCH_VERSION);
+        JSONArray ranked = board.getJSONArray("ranked");
+        assertEquals("qwen", ranked.getJSONObject(0).getString("modelId"));
+        assertEquals(2_100_000_000L, ranked.getJSONObject(0).getLong("memBytes"));
+        // No peak sampled: the MemAvailable difference of the load is the fallback.
         assertEquals(1_600_000_000L, ranked.getJSONObject(1).getLong("memBytes"));
-        // An unreadable PSS falls back the same way.
         assertEquals(1_600_000_000L, ranked.getJSONObject(2).getLong("memBytes"));
-        assertEquals(-1L, TaiBenchStore.memoryBytes(new JSONObject().put("ms", 10L)));
+        assertEquals(-1L, TaiBenchStore.memoryBytes(new JSONObject()));
+        assertEquals(-1L, TaiBenchStore.memoryBytes(null));
     }
 
     @Test

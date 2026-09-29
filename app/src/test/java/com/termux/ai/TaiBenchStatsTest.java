@@ -5,6 +5,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 /** The formulas a record is built from, including the runs where nothing arrived. */
 public class TaiBenchStatsTest {
@@ -74,13 +75,69 @@ public class TaiBenchStatsTest {
     }
 
     @Test
-    public void verdictThresholds() {
-        assertEquals("smooth", TaiBenchStats.verdict(15.0, true));
-        assertEquals("smooth", TaiBenchStats.verdict(21.3, true));
-        assertEquals("usable", TaiBenchStats.verdict(14.99, true));
-        assertEquals("usable", TaiBenchStats.verdict(7.0, true));
-        assertEquals("slow", TaiBenchStats.verdict(6.99, true));
-        assertEquals("slow", TaiBenchStats.verdict(0.0, true));
-        assertEquals("broken", TaiBenchStats.verdict(40.0, false));
+    public void standardMedianOfTwoRunsIsTheirMean() {
+        TaiBenchStats.Series two = new TaiBenchStats.Series();
+        two.add(12.0);
+        two.add(18.0);
+        assertEquals(15.0, two.median(), EXACT);
+        assertEquals(12.0, two.min(), EXACT);
+        assertEquals(18.0, two.max(), EXACT);
+    }
+
+    @Test
+    public void peakKeepsTheLargestSampleAndIgnoresFailedReads() {
+        TaiBenchStats.Peak peak = new TaiBenchStats.Peak();
+        assertEquals(-1L, peak.value());
+        peak.add(1_500_000_000L);
+        peak.add(2_100_000_000L);
+        peak.add(1_900_000_000L);
+        peak.add(-1L);
+        peak.add(0L);
+        assertEquals(2_100_000_000L, peak.value());
+    }
+
+    // ---- the verdict ----
+
+    private static String verdict(double decode, long ttft, long read) {
+        return TaiBenchStats.verdict(decode, ttft, read, true);
+    }
+
+    @Test
+    public void smoothNeedsAllThreeFigures() {
+        assertEquals("smooth", verdict(14.0, 600L, 4_000L));
+        // Each bound is inclusive.
+        assertEquals("smooth", verdict(TaiBenchStats.SMOOTH_DECODE_TPS, TaiBenchStats.SMOOTH_TTFT_MS, TaiBenchStats.SMOOTH_READ_MS));
+        // One step past any one bound is Usable, however good the other two are.
+        assertEquals("usable", verdict(11.99, 600L, 4_000L));
+        assertEquals("usable", verdict(30.0, 1_501L, 4_000L));
+        assertEquals("usable", verdict(30.0, 600L, 8_001L));
+    }
+
+    @Test
+    public void usableBoundsAreInclusiveAndAnythingPastThemIsSlow() {
+        assertEquals("usable", verdict(TaiBenchStats.USABLE_DECODE_TPS, TaiBenchStats.USABLE_TTFT_MS, TaiBenchStats.USABLE_READ_MS));
+        assertEquals("slow", verdict(5.99, 1_000L, 5_000L));
+        assertEquals("slow", verdict(30.0, 3_001L, 5_000L));
+        assertEquals("slow", verdict(30.0, 1_000L, 20_001L));
+    }
+
+    @Test
+    public void aFigureThatWasNotMeasuredClearsNoLine() {
+        assertEquals("slow", verdict(0.0, 600L, 4_000L));
+        assertEquals("slow", verdict(30.0, 0L, 4_000L));
+        assertEquals("slow", verdict(30.0, 600L, 0L));
+    }
+
+    @Test
+    public void aFailedSanityCheckIsBrokenWhateverTheSpeed() {
+        assertEquals("broken", TaiBenchStats.verdict(40.0, 100L, 1_000L, false));
+    }
+
+    @Test
+    public void verdictOrderPutsSmoothFirstAndBrokenLast() {
+        assertTrue(TaiBenchStats.verdictOrder("smooth") > TaiBenchStats.verdictOrder("usable"));
+        assertTrue(TaiBenchStats.verdictOrder("usable") > TaiBenchStats.verdictOrder("slow"));
+        assertTrue(TaiBenchStats.verdictOrder("slow") > TaiBenchStats.verdictOrder("broken"));
+        assertEquals(TaiBenchStats.verdictOrder("broken"), TaiBenchStats.verdictOrder(null));
     }
 }

@@ -18,7 +18,7 @@ public class TaiCliFormatterBenchTest {
     @Test
     public void tokensAndPhaseStartsPrintNothing() throws Exception {
         assertNull(TaiCliFormatter.formatBenchEvent(event("token").put("text", "hi").put("tokens", 3)));
-        assertNull(TaiCliFormatter.formatBenchEvent(event("phase_start").put("phase", "writing")));
+        assertNull(TaiCliFormatter.formatBenchEvent(event("phase_start").put("phase", "chat")));
         assertNull(TaiCliFormatter.formatBenchEvent(event("check_start").put("name", "json")));
     }
 
@@ -38,15 +38,21 @@ public class TaiCliFormatterBenchTest {
         assertEquals("  load        3.2 s, 1.5 GB used\n", TaiCliFormatter.formatBenchEvent(event("phase_done")
             .put("phase", "load").put("status", "ok")
             .put("metrics", new JSONObject().put("ms", 3200L).put("memBytes", 1_610_612_736L))));
-        assertEquals("  writing     21.3 tok/s (min 19.8, max 22.0), 128 tokens\n", TaiCliFormatter.formatBenchEvent(event("phase_done")
-            .put("phase", "writing").put("status", "ok")
-            .put("metrics", new JSONObject().put("med", 21.3).put("min", 19.8).put("max", 22.0).put("runs", 3).put("tokens", 128))));
-        assertEquals("  first word  210 ms\n", TaiCliFormatter.formatBenchEvent(event("phase_done")
-            .put("phase", "firstWord").put("status", "ok")
-            .put("metrics", new JSONObject().put("med", 210.4).put("min", 210.4).put("max", 210.4).put("runs", 1))));
-        assertEquals("  reading     2560 tok/s  [timed out]\n", TaiCliFormatter.formatBenchEvent(event("phase_done")
-            .put("phase", "reading").put("status", "timeout")
-            .put("metrics", new JSONObject().put("med", 2560.0).put("min", 2560.0).put("max", 2560.0).put("runs", 1))));
+        assertEquals("  chat        first token 0.6 s, writes 21.3 tok/s (min 19.8, max 22.0), 231 tokens\n", TaiCliFormatter.formatBenchEvent(event("phase_done")
+            .put("phase", "chat").put("status", "ok")
+            .put("metrics", new JSONObject()
+                .put("ttftMs", new JSONObject().put("med", 600.0).put("min", 600.0).put("max", 600.0).put("runs", 1))
+                .put("decodeTps", new JSONObject().put("med", 21.3).put("min", 19.8).put("max", 22.0).put("runs", 2))
+                .put("tokens", 231))));
+        assertEquals("  long input  read time 4.2 s (2610 prompt tokens, 620 tok/s), log cut to fit the window, 1.9 GB peak  [timed out]\n",
+            TaiCliFormatter.formatBenchEvent(event("phase_done")
+                .put("phase", "longInput").put("status", "timeout")
+                .put("metrics", new JSONObject()
+                    .put("readMs", new JSONObject().put("med", 4200.0).put("min", 4200.0).put("max", 4200.0).put("runs", 1))
+                    .put("promptTps", new JSONObject().put("med", 620.0).put("min", 620.0).put("max", 620.0).put("runs", 1))
+                    .put("promptTokens", 2610).put("truncated", true).put("peakPssBytes", 2_040_109_466L))));
+        assertEquals("  chat        first token not measured, writes not measured, 0 tokens\n", TaiCliFormatter.formatBenchEvent(event("phase_done")
+            .put("phase", "chat").put("status", "ok").put("metrics", new JSONObject().put("tokens", 0))));
         assertEquals("  check       2/3 (failed: json got \"blue\")\n", TaiCliFormatter.formatBenchEvent(event("phase_done")
             .put("phase", "check").put("status", "ok")
             .put("metrics", new JSONObject().put("passed", 2).put("total", 3).put("details", new JSONArray()
@@ -58,7 +64,7 @@ public class TaiCliFormatterBenchTest {
     @Test
     public void verdictSkipAndDoneLines() throws Exception {
         JSONObject record = new JSONObject().put("status", "complete").put("verdict", "smooth")
-            .put("phases", new JSONObject().put("writing", new JSONObject().put("med", 21.3)));
+            .put("phases", new JSONObject().put("chat", new JSONObject().put("decodeTps", new JSONObject().put("med", 21.3))));
         assertEquals("  -> smooth (21.3 tok/s)\n", TaiCliFormatter.formatBenchEvent(event("entry_done").put("record", record)));
         record.put("status", "timeout");
         assertEquals("  -> smooth (21.3 tok/s), timeout\n", TaiCliFormatter.formatBenchEvent(event("entry_done").put("record", record)));

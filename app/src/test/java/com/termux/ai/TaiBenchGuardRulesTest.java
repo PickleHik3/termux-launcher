@@ -37,37 +37,37 @@ public class TaiBenchGuardRulesTest {
     @Test
     public void runningBattery_stopsBelow15UnlessCharging() {
         // A non-load phase and a first entry: cool-down never enters into it.
-        assertEquals(TaiBenchGuard.STOP, decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(14, false, 0, Float.NaN), null, 0L, 0L, false).action);
-        assertEquals("battery_low", decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(14, false, 0, Float.NaN), null, 0L, 0L, false).reason);
-        assertEquals(TaiBenchGuard.CONTINUE, decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(14, true, 0, Float.NaN), null, 0L, 0L, false).action);
-        assertEquals(TaiBenchGuard.CONTINUE, decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(-1, false, 0, Float.NaN), null, 0L, 0L, false).action);
-        assertEquals(TaiBenchGuard.CONTINUE, decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(15, false, 0, Float.NaN), null, 0L, 0L, false).action);
+        assertEquals(TaiBenchGuard.STOP, decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(14, false, 0, Float.NaN), null, 0L, 0L, false).action);
+        assertEquals("battery_low", decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(14, false, 0, Float.NaN), null, 0L, 0L, false).reason);
+        assertEquals(TaiBenchGuard.CONTINUE, decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(14, true, 0, Float.NaN), null, 0L, 0L, false).action);
+        assertEquals(TaiBenchGuard.CONTINUE, decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(-1, false, 0, Float.NaN), null, 0L, 0L, false).action);
+        assertEquals(TaiBenchGuard.CONTINUE, decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(15, false, 0, Float.NaN), null, 0L, 0L, false).action);
     }
 
     // ---- while running: thermal ------------------------------------------------------------------
 
     @Test
     public void severeOrCritical_stopsImmediately() {
-        assertEquals(TaiBenchGuard.STOP, decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 3, Float.NaN), null, 0L, 0L, false).action);
-        assertEquals("thermal", decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 3, Float.NaN), null, 0L, 0L, false).reason);
-        assertEquals(TaiBenchGuard.STOP, decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 4, Float.NaN), null, 0L, 0L, false).action);
+        assertEquals(TaiBenchGuard.STOP, decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(100, false, 3, Float.NaN), null, 0L, 0L, false).action);
+        assertEquals("thermal", decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(100, false, 3, Float.NaN), null, 0L, 0L, false).reason);
+        assertEquals(TaiBenchGuard.STOP, decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(100, false, 4, Float.NaN), null, 0L, 0L, false).action);
     }
 
     @Test
     public void moderate_pausesForFiveSecondsUntilTenMinutesThenStops() {
-        TaiBenchGuard.Decision pause = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 2, Float.NaN), null, 0L, 60_000L, false);
+        TaiBenchGuard.Decision pause = decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(100, false, 2, Float.NaN), null, 0L, 60_000L, false);
         assertEquals(TaiBenchGuard.PAUSE, pause.action);
         assertEquals(5_000L, pause.pauseMs);
         assertEquals("thermal", pause.reason);
 
         // Started at t=0, still MODERATE at t = 10 minutes exactly: stop, not another pause.
-        TaiBenchGuard.Decision timedOut = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 2, Float.NaN),
+        TaiBenchGuard.Decision timedOut = decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(100, false, 2, Float.NaN),
             null, 1L, 1L + 10 * 60_000L, false);
         assertEquals(TaiBenchGuard.STOP, timedOut.action);
         assertEquals("thermal_timeout", timedOut.reason);
 
         // Just under the cap still pauses.
-        TaiBenchGuard.Decision stillWaiting = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 2, Float.NaN),
+        TaiBenchGuard.Decision stillWaiting = decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(100, false, 2, Float.NaN),
             null, 1L, 1L + 10 * 60_000L - 1L, false);
         assertEquals(TaiBenchGuard.PAUSE, stillWaiting.action);
     }
@@ -185,7 +185,7 @@ public class TaiBenchGuardRulesTest {
 
     @Test
     public void held_pausesWithReasonLeft() {
-        TaiBenchGuard.Decision pause = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 0, Float.NaN),
+        TaiBenchGuard.Decision pause = decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(100, false, 0, Float.NaN),
             null, 0L, 0L, false, true);
         assertEquals(TaiBenchGuard.PAUSE, pause.action);
         assertEquals("left", pause.reason);
@@ -194,7 +194,7 @@ public class TaiBenchGuardRulesTest {
 
     @Test
     public void held_batteryStopStillWins() {
-        TaiBenchGuard.Decision stop = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(14, false, 0, Float.NaN),
+        TaiBenchGuard.Decision stop = decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(14, false, 0, Float.NaN),
             null, 0L, 0L, false, true);
         assertEquals(TaiBenchGuard.STOP, stop.action);
         assertEquals("battery_low", stop.reason);
@@ -202,7 +202,7 @@ public class TaiBenchGuardRulesTest {
 
     @Test
     public void held_severeThermalStopStillWins() {
-        TaiBenchGuard.Decision stop = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 3, Float.NaN),
+        TaiBenchGuard.Decision stop = decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(100, false, 3, Float.NaN),
             null, 0L, 0L, false, true);
         assertEquals(TaiBenchGuard.STOP, stop.action);
         assertEquals("thermal", stop.reason);
@@ -210,11 +210,11 @@ public class TaiBenchGuardRulesTest {
 
     @Test
     public void held_beyondThirtyMinutesStopsLeft() {
-        TaiBenchGuard.Decision stillWaiting = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 0, Float.NaN),
+        TaiBenchGuard.Decision stillWaiting = decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(100, false, 0, Float.NaN),
             null, 1L, 1L + TaiBenchGuardRules.HELD_TIMEOUT_MS - 1L, false, true);
         assertEquals(TaiBenchGuard.PAUSE, stillWaiting.action);
 
-        TaiBenchGuard.Decision timedOut = decide(TaiBenchSuite.PHASE_WRITING, true, snapshot(100, false, 0, Float.NaN),
+        TaiBenchGuard.Decision timedOut = decide(TaiBenchSuite.PHASE_CHAT, true, snapshot(100, false, 0, Float.NaN),
             null, 1L, 1L + TaiBenchGuardRules.HELD_TIMEOUT_MS, false, true);
         assertEquals(TaiBenchGuard.STOP, timedOut.action);
         assertEquals("left", timedOut.reason);
