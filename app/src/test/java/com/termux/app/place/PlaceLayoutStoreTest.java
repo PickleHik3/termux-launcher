@@ -596,14 +596,21 @@ public class PlaceLayoutStoreTest {
         assertEquals("hidden", prefs.getString("layout.portrait.status_bar", null));
         Slot slot = store.slot(PlaceOrientation.PORTRAIT, Element.STATUS);
         assertTrue(slot.hidden);
-        assertEquals("the key holds nothing but hidden, so the edge is the top it started on",
-            Edge.TOP, slot.edge);
+        assertEquals("the edge it went away from is remembered, for the tray to bring it back to",
+            Edge.BOTTOM, slot.edge);
         assertEquals(3, slot.order);
         assertTrue(store.resolve(PlaceOrientation.PORTRAIT).slot(Element.STATUS).hidden);
         assertFalse("the other orientation keeps its bar",
             store.resolve(PlaceOrientation.LANDSCAPE).slot(Element.STATUS).hidden);
-        assertEquals("the edge reads as the top while the bar is away",
+        assertEquals("the placement key itself names no edge while the bar is away",
             Edge.TOP, store.statusBarEdge(PlaceOrientation.PORTRAIT));
+
+        // Hidden with nothing remembered — written before the edge was kept — it reads as the
+        // top it started on.
+        prefs.edit().putString("layout.landscape.status_bar", "hidden").commit();
+        Slot unremembered = store.slot(PlaceOrientation.LANDSCAPE, Element.STATUS);
+        assertTrue(unremembered.hidden);
+        assertEquals(Edge.TOP, unremembered.edge);
 
         // Standing it on an edge brings it back.
         store.setStatusBarEdge(PlaceOrientation.PORTRAIT, Edge.BOTTOM);
