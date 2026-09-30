@@ -28,6 +28,9 @@ Usage:
   tai transcribe <file.wav> [--model id] [--language xx] [--prompt "words"]
   tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text]
   tai speak --stop
+  tai image "prompt" [--model ID | --model-dir DIR] [--type sd15|taiyi|sana] [--out FILE.png] [--steps N]
+             [--seed N] [--size WxH] [--cfg X] [--image IN.png] [--cpu] [--memory-mode 0|1|2]
+  tai image --stop
   tai doctor
 
 TAI is authenticated through ~/.launcherctl and runs native AI in the isolated :tai_runtime process.
@@ -70,6 +73,14 @@ tai speak reads text aloud on the phone with the voice model (Model centre > Spe
 output): the text from the command line or stdin, the voice and speed from the options or
 TAI settings. Speech starts after the first sentence; Ctrl-C or tai speak --stop stops it.
 --out file.wav saves the audio instead of playing it.
+tai image makes a picture from a text prompt with an MNN diffusion model (Stable Diffusion 1.5, Taiyi,
+Sana), on the GPU through OpenCL unless --cpu. --model names an installed image model; --model-dir points at
+a model folder directly (it needs tokenizer.mtok for Stable Diffusion/Taiyi; Taiyi must be said with --type).
+The PNG is saved to --out (default ./tai-image-<time>.png). Stable Diffusion and Taiyi make 512x512 only;
+Sana takes --size in multiples of 32 (256-2048), --cfg guidance and --image to edit a picture. The first
+load on a phone tunes the GPU kernels and is slow; later loads reuse the cache. --memory-mode 1 is fastest
+and keeps the model loaded, 2 balances, 0 saves memory; left out, the fastest mode that fits is used.
+A run cannot be stopped part-way: Ctrl-C or tai image --stop throws the result away when it finishes.
 OpenAI-compatible endpoints (default bind mode is localhost):
   /v1/models
   /v1/chat/completions
@@ -78,6 +89,7 @@ OpenAI-compatible endpoints (default bind mode is localhost):
   /v1/tokenize
   /v1/audio/transcriptions
   /v1/audio/speech
+  /v1/ai/images/generations
 Ollama-compatible endpoints: /api/tags /api/chat /api/generate /api/embed /api/embeddings /api/show /api/ps /api/version
 
 Point OpenAI-compatible terminal tools at this host, e.g.:
@@ -94,6 +106,7 @@ Security notes:
   or "base64"). Each returned item reports tokens and truncated. /v1/tokenize returns
   {tokens: n} for {model, input} using the same tokenizer, with no task prefix applied.
   /v1/audio/speech speaks with the installed voice model: input, voice, speed, response_format wav|pcm.
+  /v1/ai/images/generations makes an image: model or model_path, prompt, size, steps, seed, output, stream.
   Check /v1/models for capability metadata (for example, _backend and _capabilities per model).
 
 Use tai --json <command> for raw API JSON.
@@ -445,6 +458,87 @@ case "$cmd" in
     if curl $CURL_SPEAK -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: text/plain; charset=utf-8" "$@" --data-binary "@$tmp" "$BASE/v1/ai/speak$query"; then rc=0; else rc=$?; fi
     trap - INT TERM
     rm -f "$tmp"
+    exit "$rc"
+    ;;
+  image)
+    model=""
+    model_dir=""
+    model_type=""
+    out=""
+    steps=""
+    seed=""
+    size=""
+    cfg=""
+    input=""
+    backend=""
+    memory_mode=""
+    usage_image() { echo "usage: tai image \"prompt\" [--model ID | --model-dir DIR] [--type sd15|taiyi|sana] [--out FILE.png] [--steps N] [--seed N] [--size WxH] [--cfg X] [--image IN.png] [--cpu] [--memory-mode 0|1|2]  (reads the prompt from stdin when none is given; tai image --stop cancels)" >&2; exit 2; }
+    abs_path() { case "$1" in /*) printf '%s' "$1" ;; *) printf '%s/%s' "$(pwd)" "$1" ;; esac; }
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --model) shift; [ "$#" -gt 0 ] || usage_image; model="$1" ;;
+        --model-dir) shift; [ "$#" -gt 0 ] || usage_image; model_dir=$(abs_path "$1") ;;
+        --type) shift; [ "$#" -gt 0 ] || usage_image; model_type="$1" ;;
+        --out|-o) shift; [ "$#" -gt 0 ] || usage_image; out=$(abs_path "$1") ;;
+        --steps) shift; [ "$#" -gt 0 ] || usage_image; steps="$1" ;;
+        --seed) shift; [ "$#" -gt 0 ] || usage_image; seed="$1" ;;
+        --size) shift; [ "$#" -gt 0 ] || usage_image; size="$1" ;;
+        --cfg) shift; [ "$#" -gt 0 ] || usage_image; cfg="$1" ;;
+        --image) shift; [ "$#" -gt 0 ] || usage_image; input=$(abs_path "$1") ;;
+        --cpu) backend=cpu ;;
+        --memory-mode) shift; [ "$#" -gt 0 ] || usage_image; memory_mode="$1" ;;
+        --stop) post_json /v1/ai/images/cancel '{}'; exit $? ;;
+        --) shift; break ;;
+        -*) usage_image ;;
+        *) break ;;
+      esac
+      shift
+    done
+    case "$steps$seed$memory_mode" in *[!0-9-]*) echo "tai image: --steps, --seed and --memory-mode take whole numbers" >&2; exit 2 ;; esac
+    case "$cfg" in *[!0-9.]*) echo "tai image: --cfg takes a number such as 4.5" >&2; exit 2 ;; esac
+    case "$size" in ''|[0-9]*x[0-9]*) ;; *) echo "tai image: --size looks like 512x512" >&2; exit 2 ;; esac
+    case "$model_type" in ''|sd15|taiyi|sana) ;; *) echo "tai image: --type is sd15, taiyi or sana" >&2; exit 2 ;; esac
+    case "$memory_mode" in ''|0|1|2) ;; *) echo "tai image: --memory-mode is 0, 1 or 2" >&2; exit 2 ;; esac
+    if [ "$#" -gt 0 ]; then prompt="$*"; else prompt=$(cat); fi
+    prompt=$(printf '%s' "$prompt" | tr '\n\t' '  ')
+    [ -n "$prompt" ] || usage_image
+    [ -z "$model" ] || [ -z "$model_dir" ] || { echo "tai image: give --model or --model-dir, not both" >&2; exit 2; }
+    [ -n "$model$model_dir" ] || { echo "tai image: name a model with --model ID, or a folder with --model-dir DIR" >&2; exit 2; }
+    [ -n "$out" ] || out="$(pwd)/tai-image-$(date +%Y%m%d-%H%M%S).png"
+    body="{\"prompt\":\"$(json_escape "$prompt")\",\"output\":\"$(json_escape "$out")\""
+    [ -z "$model" ] || body="$body,\"model\":\"$(json_escape "$model")\""
+    [ -z "$model_dir" ] || body="$body,\"model_path\":\"$(json_escape "$model_dir")\""
+    [ -z "$model_type" ] || body="$body,\"model_type\":\"$model_type\""
+    [ -z "$steps" ] || body="$body,\"steps\":$steps"
+    [ -z "$seed" ] || body="$body,\"seed\":$seed"
+    [ -z "$size" ] || body="$body,\"size\":\"$size\""
+    [ -z "$cfg" ] || body="$body,\"cfg_scale\":$cfg"
+    [ -z "$input" ] || body="$body,\"image\":\"$(json_escape "$input")\""
+    [ -z "$backend" ] || body="$body,\"backend\":\"$backend\""
+    [ -z "$memory_mode" ] || body="$body,\"memory_mode\":$memory_mode"
+    # A run lasts from seconds to minutes (the first OpenCL load tunes its kernels). The engine cannot
+    # stop mid-run: Ctrl-C asks the runtime to discard the result and this command leaves at once.
+    CURL_IMAGE="--fail-with-body -sS --connect-timeout 2 --max-time 7200"
+    trap 'post_json /v1/ai/images/cancel "{}" >/dev/null 2>&1; exit 130' INT TERM
+    if [ "$OUTPUT_MODE" = "text" ]; then
+      marker=$(mktemp "${TMPDIR:-$HOME}/tai-image.XXXXXX") || exit 1
+      body="$body,\"stream\":true}"
+      curl $CURL_IMAGE -N -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -H "X-TAI-Output: text" --data "$body" "$BASE/v1/ai/images/generations" 2>&1 | while IFS= read -r line; do
+        case "$line" in
+          "progress "*) printf '\rGenerating... %s%%' "${line#progress }" >&2 ;;
+          "done "*) printf '\n' >&2; printf 'Saved %s\n' "${line#done }"; echo ok > "$marker" ;;
+          "info "*) ;;
+          "error "*) printf '\n' >&2; echo "tai image: ${line#error }" >&2 ;;
+          *) [ -z "$line" ] || echo "tai image: $line" >&2 ;;
+        esac
+      done
+      if [ -s "$marker" ]; then rc=0; else rc=1; fi
+      rm -f "$marker"
+    else
+      body="$body}"
+      if curl $CURL_IMAGE -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" --data "$body" "$BASE/v1/ai/images/generations"; then rc=0; else rc=$?; fi
+    fi
+    trap - INT TERM
     exit "$rc"
     ;;
   doctor)

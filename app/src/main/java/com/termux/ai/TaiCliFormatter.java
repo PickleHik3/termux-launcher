@@ -50,6 +50,10 @@ public final class TaiCliFormatter {
                     return formatSpeak(data);
                 case "speak-stop":
                     return data.optBoolean("stopped", false) ? "Stopped.\n" : "Nothing was speaking.\n";
+                case "image":
+                    return formatImage(data);
+                case "image-cancel":
+                    return data.optBoolean("cancelled", false) ? "Image generation cancelled.\n" : "No image was being generated.\n";
                 case "benchmarks":
                     return formatBenchmarks(data);
                 case "benchmarks-clear":
@@ -62,6 +66,55 @@ public final class TaiCliFormatter {
         } catch (Exception e) {
             return data.toString() + "\n";
         }
+    }
+
+    // ---- tai image ------------------------------------------------------------------------------
+
+    /** One progress line of {@code tai image}'s live text stream; the script prints it to stderr. */
+    @NonNull
+    public static String imageProgressLine(int percent) {
+        return "progress " + Math.max(0, Math.min(100, percent)) + "\n";
+    }
+
+    /** The lines that end a successful text stream: where the image went, then the run's figures as JSON. */
+    @NonNull
+    public static String imageDoneLines(@NonNull JSONObject response) {
+        JSONArray data = response.optJSONArray("data");
+        JSONObject item = data == null ? null : data.optJSONObject(0);
+        String path = item == null ? "" : item.optString("path", "");
+        StringBuilder out = new StringBuilder();
+        out.append("done ").append(path.isEmpty() ? "(inline image; ask for an output file in text mode)" : path).append('\n');
+        JSONObject tai = response.optJSONObject("tai");
+        if (tai != null) out.append("info ").append(tai).append('\n');
+        return out.toString();
+    }
+
+    /** The line that ends a failed text stream, from an OpenAI-shaped or flat error. */
+    @NonNull
+    public static String imageErrorLine(@NonNull JSONObject error) {
+        JSONObject nested = error.optJSONObject("error");
+        String message = nested != null ? nested.optString("message", "") : error.optString("message", "");
+        if (message.isEmpty()) message = "The image could not be generated.";
+        return "error " + message.replace('\n', ' ') + "\n";
+    }
+
+    @NonNull
+    private static String formatImage(@NonNull JSONObject data) {
+        JSONArray items = data.optJSONArray("data");
+        JSONObject item = items == null ? null : items.optJSONObject(0);
+        JSONObject tai = data.optJSONObject("tai");
+        StringBuilder out = new StringBuilder();
+        String path = item == null ? "" : item.optString("path", "");
+        out.append(path.isEmpty() ? "Image generated.\n" : "Saved " + path + "\n");
+        if (tai != null) {
+            out.append(tai.optInt("width", 0)).append('x').append(tai.optInt("height", 0))
+                .append(", ").append(tai.optInt("steps", 0)).append(" steps, seed ").append(tai.optInt("seed", 0))
+                .append(", ").append(tai.optString("backend", "")).append(", memory mode ").append(tai.optInt("memoryMode", 0))
+                .append('\n');
+            out.append(String.format(Locale.ROOT, "Loaded in %.1f s, generated in %.1f s\n",
+                tai.optLong("loadMs", 0L) / 1000.0, tai.optLong("generateMs", 0L) / 1000.0));
+        }
+        return out.toString();
     }
 
     // ---- tai benchmark -------------------------------------------------------------------------

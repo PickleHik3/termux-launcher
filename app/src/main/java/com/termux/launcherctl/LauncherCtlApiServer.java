@@ -683,6 +683,10 @@ public class LauncherCtlApiServer {
                 return aiSpeak(context, request);
             } else if ("POST".equals(request.method) && "/v1/ai/speak/stop".equals(request.path)) {
                 return maybeTextResponse(request, "speak-stop", TaiManager.getInstance(context).stopSpeaking());
+            } else if ("POST".equals(request.method) && "/v1/ai/images/generations".equals(request.path)) {
+                return imageGenerations(context, request);
+            } else if ("POST".equals(request.method) && "/v1/ai/images/cancel".equals(request.path)) {
+                return maybeTextResponse(request, "image-cancel", TaiManager.getInstance(context).cancelImage());
             }
 
             JSONObject notFound = jsonError("not_found", "Unknown endpoint");
@@ -796,6 +800,66 @@ public class LauncherCtlApiServer {
                 deleteQuietly(collected);
             }
         }, headers);
+    }
+
+    /**
+     * POST /v1/ai/images/generations (OpenAI-shaped): {@code {model | model_path, prompt, size, n, steps,
+     * seed, cfg_scale, image, backend, memory_mode, output, stream}} in, {@code {created, data:[{b64_json |
+     * path}], tai:{...timings}}} out. The request is checked before anything is committed to, so a
+     * refusal answers with its own status even when {@code stream} is set. With {@code stream} the
+     * progress goes out as SSE events (or as plain {@code progress N} lines for the CLI's text mode),
+     * then the final object. A generation takes seconds to minutes and the engine cannot be stopped
+     * part-way; a client that goes away has its result discarded.
+     */
+    private HttpResponse imageGenerations(Context context, HttpRequest request) throws JSONException {
+        String body = request.body == null || request.body.trim().isEmpty() ? "{}" : request.body;
+        TaiManager manager = TaiManager.getInstance(context);
+        JSONObject refusal = manager.checkImageRequest(body);
+        if (refusal != null) return jsonResponse(refusal);
+        boolean stream = new JSONObject(body).optBoolean("stream", false);
+        if (stream && "text".equalsIgnoreCase(request.headers.get("x-tai-output"))) {
+            return textStreamResponse(output -> writeImageTextStream(manager, body, output));
+        }
+        if (stream) return sseResponse(output -> writeImageSseStream(manager, body, output));
+        return jsonResponse(manager.generateImage(body, percent -> { }));
+    }
+
+    private void writeImageSseStream(TaiManager manager, String body, OutputStream output) throws IOException {
+        try {
+            JSONObject result = manager.generateImage(body, percent -> {
+                try {
+                    writeSseEvent(output, new JSONObject().put("type", "image_generation.progress")
+                        .put("progress", percent).toString());
+                } catch (JSONException e) {
+                    throw new IOException(e.getMessage(), e);
+                }
+            });
+            if (result.has("error")) {
+                writeSseEvent(output, result.toString());
+            } else {
+                result.put("type", "image_generation.completed");
+                writeSseEvent(output, result.toString());
+            }
+        } catch (JSONException e) {
+            writeSseJsonError(output, "internal_error", e.getMessage());
+        }
+        writeSseEvent(output, "[DONE]");
+    }
+
+    /** The lines {@code tai image} reads: {@code progress N}, then {@code done PATH} and {@code info JSON}, or {@code error TEXT}. */
+    private void writeImageTextStream(TaiManager manager, String body, OutputStream output) throws IOException {
+        try {
+            JSONObject result = manager.generateImage(body, percent -> writeTextLine(output, TaiCliFormatter.imageProgressLine(percent)));
+            writeTextLine(output, result.has("error") ? TaiCliFormatter.imageErrorLine(result)
+                : TaiCliFormatter.imageDoneLines(result));
+        } catch (JSONException e) {
+            writeTextLine(output, TaiCliFormatter.imageErrorLine(jsonError("internal_error", e.getMessage() == null ? "" : e.getMessage())));
+        }
+    }
+
+    private void writeTextLine(OutputStream output, String text) throws IOException {
+        output.write(text.getBytes(StandardCharsets.UTF_8));
+        output.flush();
     }
 
     /**
@@ -1838,6 +1902,9 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/audio/speech", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/ai/speak", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/ai/speak/stop", new SimpleRateLimiter(120, 60_000));
+        // An image takes seconds to minutes and holds the GPU; a dozen a minute is far past what one phone can make.
+        rateLimiters.put("POST:/v1/ai/images/generations", new SimpleRateLimiter(12, 60_000));
+        rateLimiters.put("POST:/v1/ai/images/cancel", new SimpleRateLimiter(60, 60_000));
         // Voice input sends one request per spoken phrase; a fast talker is a few per second.
         rateLimiters.put("POST:/v1/audio/transcriptions", new SimpleRateLimiter(240, 60_000));
         rateLimiters.put("GET:/api/version", new SimpleRateLimiter(120, 60_000));
@@ -1934,6 +2001,7 @@ public class LauncherCtlApiServer {
         supportedEndpoints.put("/v1/tokenize");
         supportedEndpoints.put("/v1/audio/speech");
         supportedEndpoints.put("/v1/audio/transcriptions");
+        supportedEndpoints.put("/v1/ai/images/generations");
         supportedEndpoints.put("/v1/apps/launch");
         supportedEndpoints.put("/api/version");
         supportedEndpoints.put("/api/tags");
@@ -1947,6 +2015,7 @@ public class LauncherCtlApiServer {
         data.put("embeddingsNote", "Embeddings support is model-capability dependent; check /v1/models _capabilities for text_embeddings.");
         data.put("audioOutputNote", "/v1/audio/speech speaks with the installed voice model (KittenTTS nano, on the CPU in :tai_runtime): input (up to 4096 characters), voice (Bruno, Hugo, Jasper, Rosie or an OpenAI voice name), speed (0.5-2.0), response_format wav (whole file) or pcm (24 kHz 16-bit mono, streamed per sentence).");
         data.put("audioInputNote", "/v1/audio/transcriptions runs the installed speech model (Parakeet or Whisper ACFT, the one voice input uses) on the CPU; multipart file (WAV or raw PCM16 16 kHz mono), model, language, prompt, response_format json|text.");
+        data.put("imageGenerationNote", "/v1/ai/images/generations makes one image per request with an MNN diffusion model (Stable Diffusion 1.5 and Taiyi at 512x512, Sana at 256-2048 in multiples of 32): model or model_path, prompt, size, steps, seed, cfg_scale (Sana), image (Sana edit), backend opencl|cpu, memory_mode 0|1|2, output (a .png path) or b64_json, stream for progress events. The engine cannot stop mid-run; /v1/ai/images/cancel discards the result.");
         data.put("modelFormatNote", "On-device AI supports LiteRT-LM and MNN model packages only; GGUF/raw weights are not supported by this APK.");
         if (includeToken) {
             data.put("token", settings.getOrCreateApiToken());
@@ -2021,6 +2090,9 @@ public class LauncherCtlApiServer {
             "  tai transcribe <file.wav> [--model id] [--language xx] [--prompt \"words\"]\n" +
             "  tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text]\n" +
             "  tai speak --stop\n" +
+            "  tai image \"prompt\" [--model ID | --model-dir DIR] [--type sd15|taiyi|sana] [--out FILE.png] [--steps N]\n" +
+            "             [--seed N] [--size WxH] [--cfg X] [--image IN.png] [--cpu] [--memory-mode 0|1|2]\n" +
+            "  tai image --stop\n" +
             "  tai doctor\n" +
             "\n" +
             "On-device AI is authenticated through ~/.launcherctl and runs native AI in the isolated :tai_runtime process.\n" +
@@ -2063,6 +2135,14 @@ public class LauncherCtlApiServer {
             "output): the text from the command line or stdin, the voice and speed from the options or\n" +
             "On-device AI settings. Speech starts after the first sentence; Ctrl-C or tai speak --stop stops it.\n" +
             "--out file.wav saves the audio instead of playing it.\n" +
+            "tai image makes a picture from a text prompt with an MNN diffusion model (Stable Diffusion 1.5, Taiyi,\n" +
+            "Sana), on the GPU through OpenCL unless --cpu. --model names an installed image model; --model-dir points at\n" +
+            "a model folder directly (it needs tokenizer.mtok for Stable Diffusion/Taiyi; Taiyi must be said with --type).\n" +
+            "The PNG is saved to --out (default ./tai-image-<time>.png). Stable Diffusion and Taiyi make 512x512 only;\n" +
+            "Sana takes --size in multiples of 32 (256-2048), --cfg guidance and --image to edit a picture. The first\n" +
+            "load on a phone tunes the GPU kernels and is slow; later loads reuse the cache. --memory-mode 1 is fastest\n" +
+            "and keeps the model loaded, 2 balances, 0 saves memory; left out, the fastest mode that fits is used.\n" +
+            "A run cannot be stopped part-way: Ctrl-C or tai image --stop throws the result away when it finishes.\n" +
             "OpenAI-compatible endpoints (default bind mode is localhost):\n" +
             "  /v1/models\n" +
             "  /v1/chat/completions\n" +
@@ -2071,6 +2151,7 @@ public class LauncherCtlApiServer {
             "  /v1/tokenize\n" +
             "  /v1/audio/transcriptions\n" +
             "  /v1/audio/speech\n" +
+            "  /v1/ai/images/generations\n" +
             "Ollama-compatible endpoints: /api/tags /api/chat /api/generate /api/embed /api/embeddings /api/show /api/ps /api/version\n" +
             "\n" +
             "Point OpenAI-compatible terminal tools at this host, e.g.:\n" +
@@ -2087,6 +2168,7 @@ public class LauncherCtlApiServer {
             "  or \"base64\"). Each returned item reports tokens and truncated. /v1/tokenize returns\n" +
             "  {tokens: n} for {model, input} using the same tokenizer, with no task prefix applied.\n" +
             "  /v1/audio/speech speaks with the installed voice model: input, voice, speed, response_format wav|pcm.\n" +
+            "  /v1/ai/images/generations makes an image: model or model_path, prompt, size, steps, seed, output, stream.\n" +
             "  Check /v1/models for capability metadata (for example, _backend and _capabilities per model).\n" +
             "\n" +
             "Use tai --json <command> for raw API JSON.\n" +
@@ -2442,6 +2524,87 @@ public class LauncherCtlApiServer {
             "    if curl $CURL_SPEAK -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: text/plain; charset=utf-8\" \"$@\" --data-binary \"@$tmp\" \"$BASE/v1/ai/speak$query\"; then rc=0; else rc=$?; fi\n" +
             "    trap - INT TERM\n" +
             "    rm -f \"$tmp\"\n" +
+            "    exit \"$rc\"\n" +
+            "    ;;\n" +
+            "  image)\n" +
+            "    model=\"\"\n" +
+            "    model_dir=\"\"\n" +
+            "    model_type=\"\"\n" +
+            "    out=\"\"\n" +
+            "    steps=\"\"\n" +
+            "    seed=\"\"\n" +
+            "    size=\"\"\n" +
+            "    cfg=\"\"\n" +
+            "    input=\"\"\n" +
+            "    backend=\"\"\n" +
+            "    memory_mode=\"\"\n" +
+            "    usage_image() { echo \"usage: tai image \\\"prompt\\\" [--model ID | --model-dir DIR] [--type sd15|taiyi|sana] [--out FILE.png] [--steps N] [--seed N] [--size WxH] [--cfg X] [--image IN.png] [--cpu] [--memory-mode 0|1|2]  (reads the prompt from stdin when none is given; tai image --stop cancels)\" >&2; exit 2; }\n" +
+            "    abs_path() { case \"$1\" in /*) printf '%s' \"$1\" ;; *) printf '%s/%s' \"$(pwd)\" \"$1\" ;; esac; }\n" +
+            "    while [ \"$#\" -gt 0 ]; do\n" +
+            "      case \"$1\" in\n" +
+            "        --model) shift; [ \"$#\" -gt 0 ] || usage_image; model=\"$1\" ;;\n" +
+            "        --model-dir) shift; [ \"$#\" -gt 0 ] || usage_image; model_dir=$(abs_path \"$1\") ;;\n" +
+            "        --type) shift; [ \"$#\" -gt 0 ] || usage_image; model_type=\"$1\" ;;\n" +
+            "        --out|-o) shift; [ \"$#\" -gt 0 ] || usage_image; out=$(abs_path \"$1\") ;;\n" +
+            "        --steps) shift; [ \"$#\" -gt 0 ] || usage_image; steps=\"$1\" ;;\n" +
+            "        --seed) shift; [ \"$#\" -gt 0 ] || usage_image; seed=\"$1\" ;;\n" +
+            "        --size) shift; [ \"$#\" -gt 0 ] || usage_image; size=\"$1\" ;;\n" +
+            "        --cfg) shift; [ \"$#\" -gt 0 ] || usage_image; cfg=\"$1\" ;;\n" +
+            "        --image) shift; [ \"$#\" -gt 0 ] || usage_image; input=$(abs_path \"$1\") ;;\n" +
+            "        --cpu) backend=cpu ;;\n" +
+            "        --memory-mode) shift; [ \"$#\" -gt 0 ] || usage_image; memory_mode=\"$1\" ;;\n" +
+            "        --stop) post_json /v1/ai/images/cancel '{}'; exit $? ;;\n" +
+            "        --) shift; break ;;\n" +
+            "        -*) usage_image ;;\n" +
+            "        *) break ;;\n" +
+            "      esac\n" +
+            "      shift\n" +
+            "    done\n" +
+            "    case \"$steps$seed$memory_mode\" in *[!0-9-]*) echo \"tai image: --steps, --seed and --memory-mode take whole numbers\" >&2; exit 2 ;; esac\n" +
+            "    case \"$cfg\" in *[!0-9.]*) echo \"tai image: --cfg takes a number such as 4.5\" >&2; exit 2 ;; esac\n" +
+            "    case \"$size\" in ''|[0-9]*x[0-9]*) ;; *) echo \"tai image: --size looks like 512x512\" >&2; exit 2 ;; esac\n" +
+            "    case \"$model_type\" in ''|sd15|taiyi|sana) ;; *) echo \"tai image: --type is sd15, taiyi or sana\" >&2; exit 2 ;; esac\n" +
+            "    case \"$memory_mode\" in ''|0|1|2) ;; *) echo \"tai image: --memory-mode is 0, 1 or 2\" >&2; exit 2 ;; esac\n" +
+            "    if [ \"$#\" -gt 0 ]; then prompt=\"$*\"; else prompt=$(cat); fi\n" +
+            "    prompt=$(printf '%s' \"$prompt\" | tr '\\n\\t' '  ')\n" +
+            "    [ -n \"$prompt\" ] || usage_image\n" +
+            "    [ -z \"$model\" ] || [ -z \"$model_dir\" ] || { echo \"tai image: give --model or --model-dir, not both\" >&2; exit 2; }\n" +
+            "    [ -n \"$model$model_dir\" ] || { echo \"tai image: name a model with --model ID, or a folder with --model-dir DIR\" >&2; exit 2; }\n" +
+            "    [ -n \"$out\" ] || out=\"$(pwd)/tai-image-$(date +%Y%m%d-%H%M%S).png\"\n" +
+            "    body=\"{\\\"prompt\\\":\\\"$(json_escape \"$prompt\")\\\",\\\"output\\\":\\\"$(json_escape \"$out\")\\\"\"\n" +
+            "    [ -z \"$model\" ] || body=\"$body,\\\"model\\\":\\\"$(json_escape \"$model\")\\\"\"\n" +
+            "    [ -z \"$model_dir\" ] || body=\"$body,\\\"model_path\\\":\\\"$(json_escape \"$model_dir\")\\\"\"\n" +
+            "    [ -z \"$model_type\" ] || body=\"$body,\\\"model_type\\\":\\\"$model_type\\\"\"\n" +
+            "    [ -z \"$steps\" ] || body=\"$body,\\\"steps\\\":$steps\"\n" +
+            "    [ -z \"$seed\" ] || body=\"$body,\\\"seed\\\":$seed\"\n" +
+            "    [ -z \"$size\" ] || body=\"$body,\\\"size\\\":\\\"$size\\\"\"\n" +
+            "    [ -z \"$cfg\" ] || body=\"$body,\\\"cfg_scale\\\":$cfg\"\n" +
+            "    [ -z \"$input\" ] || body=\"$body,\\\"image\\\":\\\"$(json_escape \"$input\")\\\"\"\n" +
+            "    [ -z \"$backend\" ] || body=\"$body,\\\"backend\\\":\\\"$backend\\\"\"\n" +
+            "    [ -z \"$memory_mode\" ] || body=\"$body,\\\"memory_mode\\\":$memory_mode\"\n" +
+            "    # A run lasts from seconds to minutes (the first OpenCL load tunes its kernels). The engine cannot\n" +
+            "    # stop mid-run: Ctrl-C asks the runtime to discard the result and this command leaves at once.\n" +
+            "    CURL_IMAGE=\"--fail-with-body -sS --connect-timeout 2 --max-time 7200\"\n" +
+            "    trap 'post_json /v1/ai/images/cancel \"{}\" >/dev/null 2>&1; exit 130' INT TERM\n" +
+            "    if [ \"$OUTPUT_MODE\" = \"text\" ]; then\n" +
+            "      marker=$(mktemp \"${TMPDIR:-$HOME}/tai-image.XXXXXX\") || exit 1\n" +
+            "      body=\"$body,\\\"stream\\\":true}\"\n" +
+            "      curl $CURL_IMAGE -N -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" -H \"X-TAI-Output: text\" --data \"$body\" \"$BASE/v1/ai/images/generations\" 2>&1 | while IFS= read -r line; do\n" +
+            "        case \"$line\" in\n" +
+            "          \"progress \"*) printf '\\rGenerating... %s%%' \"${line#progress }\" >&2 ;;\n" +
+            "          \"done \"*) printf '\\n' >&2; printf 'Saved %s\\n' \"${line#done }\"; echo ok > \"$marker\" ;;\n" +
+            "          \"info \"*) ;;\n" +
+            "          \"error \"*) printf '\\n' >&2; echo \"tai image: ${line#error }\" >&2 ;;\n" +
+            "          *) [ -z \"$line\" ] || echo \"tai image: $line\" >&2 ;;\n" +
+            "        esac\n" +
+            "      done\n" +
+            "      if [ -s \"$marker\" ]; then rc=0; else rc=1; fi\n" +
+            "      rm -f \"$marker\"\n" +
+            "    else\n" +
+            "      body=\"$body}\"\n" +
+            "      if curl $CURL_IMAGE -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: application/json\" --data \"$body\" \"$BASE/v1/ai/images/generations\"; then rc=0; else rc=$?; fi\n" +
+            "    fi\n" +
+            "    trap - INT TERM\n" +
             "    exit \"$rc\"\n" +
             "    ;;\n" +
             "  doctor)\n" +
