@@ -5,7 +5,7 @@ import androidx.annotation.NonNull;
 /**
  * Both editors' cards as sheets a finger can pull: which drags the sheet takes for itself rather
  * than leaving to the scrolling body, what one pull amounts to, and where the card settles when the
- * finger lets go. {@link EditorShellSheet} is the view that measures the finger and applies it.
+ * finger lets go. the editor sheet (retired) is the view that measures the finger and applies it.
  *
  * <p>The card rests at its collapsed height and can be pulled up to the expanded one; the distance
  * between the two is the pull's {@code travel}. A pull is measured as an offset in pixels above the
