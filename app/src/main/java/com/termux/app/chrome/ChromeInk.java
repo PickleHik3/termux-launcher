@@ -307,8 +307,9 @@ public final class ChromeInk {
     }
 
     /**
-     * One terminal pane's answer: the veil its slab is drawn with so the palette's worst
-     * foreground reads at the body-text target, over the pane's own tint and in addition to it.
+     * One terminal pane's answer: the veil its slab is drawn with so the palette's foreground
+     * reads at the body-text target and its dim foreground at the large-text target (both scaled
+     * by the legibility level), over the pane's own tint and in addition to it.
      *
      * <p>The pane has no light model — its glass is the frost, the terminal tint at the user's
      * opacity, and grain — so what is measured is the wallpaper under the launcher's dim with the
@@ -327,7 +328,8 @@ public final class ChromeInk {
      *     transparent
      * @param veilColor the terminal's own background, which the veil moves toward
      * @param ink the palette's default foreground
-     * @param dimInk the same foreground dimmed, as the renderer draws faint text
+     * @param dimInk the same foreground dimmed, as the renderer draws faint text; held to the
+     *     large-text tier
      */
     @NonNull
     public OnGlass.Resolution terminalPane(@NonNull Rect rootRect, @ColorInt int tint,
@@ -351,8 +353,10 @@ public final class ChromeInk {
             wallpaper = sampled ? read : mCache.fallbackWallpaper();
         }
         int flat = OnGlass.backdrop(wallpaper, mDimColor, tint);
-        OnGlass.Resolution resolution =
-            OnGlass.resolveFixedInk(flat, Color.TRANSPARENT, ink, dimInk, veilColor, target);
+        // The normal foreground is body text; the dim one is text a program asked to recede, and
+        // is held to the large-text tier, scaled by the same level.
+        OnGlass.Resolution resolution = OnGlass.resolveFixedInk(flat, Color.TRANSPARENT, ink,
+            target, dimInk, mLevel.target(OnGlass.TARGET_LARGE_TEXT), veilColor);
         if (answer == null) {
             answer = new PaneAnswer(resolution);
             if (mPanes.size() >= MAX_PANE_ANSWERS) {

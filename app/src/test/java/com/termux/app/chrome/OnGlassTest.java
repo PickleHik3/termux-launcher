@@ -339,6 +339,36 @@ public class OnGlassTest {
         assertTrue(OnGlass.ratio(TERMINAL_DIM, less) < OnGlass.TARGET_BODY_TEXT);
     }
 
+    /**
+     * The terminal pane's own tiers: the foreground as body text, the dim foreground as large
+     * text. The dim ink still decides the veil, but at its own tier the veil is 169/255, not the
+     * 218 the single-tier search buys above.
+     */
+    @Test
+    public void theDimForegroundIsHeldToTheLargeTextTier() {
+        int backdrop = OnGlass.backdrop(0xFFE8E4DA, Color.TRANSPARENT,
+            OnGlass.withAlpha(TERMINAL_BG, 77));
+        OnGlass.Resolution split = OnGlass.resolveFixedInk(backdrop, Color.TRANSPARENT,
+            TERMINAL_FG, OnGlass.TARGET_BODY_TEXT, TERMINAL_DIM, OnGlass.TARGET_LARGE_TEXT,
+            TERMINAL_BG);
+        OnGlass.Resolution single = OnGlass.resolveFixedInk(backdrop, Color.TRANSPARENT,
+            TERMINAL_FG, TERMINAL_DIM, TERMINAL_BG, OnGlass.TARGET_BODY_TEXT);
+
+        assertFalse(split.toString(), split.shortfall);
+        assertTrue(OnGlass.ratio(TERMINAL_FG, split.surface) >= OnGlass.TARGET_BODY_TEXT);
+        assertTrue(OnGlass.ratio(TERMINAL_DIM, split.surface) >= OnGlass.TARGET_LARGE_TEXT);
+        assertEquals("the dim ink binds, and is reported at its own tier", TERMINAL_DIM, split.ink);
+        assertEquals(OnGlass.TARGET_LARGE_TEXT, split.target, 0d);
+        assertTrue("veil " + Color.alpha(split.veil),
+            Math.abs(Color.alpha(split.veil) - 169) <= 2);
+        assertTrue("a lighter veil than holding both to body text",
+            Color.alpha(split.veil) < Color.alpha(single.veil));
+        int less = OnGlass.opaque(OnGlass.composite(
+            OnGlass.withAlpha(TERMINAL_BG, Color.alpha(split.veil) - 1), backdrop));
+        assertTrue("and the smallest one", OnGlass.ratio(TERMINAL_DIM, less)
+            < OnGlass.TARGET_LARGE_TEXT);
+    }
+
     @Test
     public void aFixedInkThatAlreadyReadsIsLeftBare() {
         OnGlass.Resolution r = OnGlass.resolveFixedInk(TERMINAL_BG, Color.TRANSPARENT,

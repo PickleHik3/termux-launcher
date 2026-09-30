@@ -5873,7 +5873,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // band above it. Both sample the one shared frame at the host's own position, so the
             // wallpaper under the keys is the same picture on either side of the handoff.
             if (isUnifiedAccessoryBackdropReady(state)) {
-                surfaceHost.setBackground(null);
+                // No glass of its own, but the keyboard band's veil: over the unified glass,
+                // under the keys, on the host's bounds only, so the dock rows are never veiled.
+                surfaceHost.setBackground(buildInAppKeyboardVeilOnly(state, surfaceHost));
                 clearInAppKeyboardBackdrop();
             } else {
                 surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
@@ -6024,6 +6026,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // subsequently shorter keyboard. Decoration must follow content geometry, never define it.
         return new LayoutNeutralDrawable(com.termux.app.chrome.GlassStack.build(mChrome.glass(),
             spec, getResources().getDisplayMetrics().density, backdrop));
+    }
+
+    /**
+     * The docked keyboard's host while the unified dock glass is its material: the keyboard band's
+     * veil alone, measured on the keyboard's slice of that glass, or null when none is needed.
+     */
+    @Nullable
+    private Drawable buildInAppKeyboardVeilOnly(@NonNull ChromeSpec state, @NonNull View surfaceHost) {
+        com.termux.app.chrome.GlassBackdropCache.Band band = noteInAppKeyboardBand(surfaceHost);
+        if (band == null) return null;
+        Drawable veil = mChrome.glass().veilOnlyLayer(band, inAppKeyboardGlassAlpha(state), 0f,
+            defaultDockGlassFootFraction(), false);
+        return veil == null ? null : new LayoutNeutralDrawable(veil);
     }
 
     /**

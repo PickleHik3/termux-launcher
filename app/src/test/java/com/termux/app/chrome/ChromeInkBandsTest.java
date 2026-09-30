@@ -109,10 +109,14 @@ public class ChromeInkBandsTest {
         assertTrue("so the pane is veiled", Color.alpha(top.veil) > 0);
         assertEquals("toward the terminal's own background", NIGHT_BASE,
             OnGlass.opaque(top.veil));
-        assertTrue("and both inks read on what is drawn",
-            OnGlass.ratio(TERMINAL_FG, top.surface) >= OnGlass.TARGET_BODY_TEXT
-                && OnGlass.ratio(PaneGlass.dimTerminalInk(TERMINAL_FG), top.surface)
-                    >= OnGlass.TARGET_BODY_TEXT);
+        assertTrue("the foreground reads as body text on what is drawn",
+            OnGlass.ratio(TERMINAL_FG, top.surface) >= OnGlass.TARGET_BODY_TEXT);
+        assertTrue("and the dim foreground as large text",
+            OnGlass.ratio(PaneGlass.dimTerminalInk(TERMINAL_FG), top.surface)
+                >= OnGlass.TARGET_LARGE_TEXT);
+        // The case the tier split was made for: 169/255 at Default (218 with the dim ink held to
+        // body text), within a step of the arithmetic.
+        assertTrue("veil " + Color.alpha(top.veil), Math.abs(Color.alpha(top.veil) - 169) <= 2);
         assertTrue("the ink is the palette's, never a re-tone",
             top.ink == TERMINAL_FG || top.ink == PaneGlass.dimTerminalInk(TERMINAL_FG));
     }
@@ -180,6 +184,34 @@ public class ChromeInkBandsTest {
             ink.bandVeil(GlassBackdropCache.Band.KEYBOARD));
     }
 
+    /**
+     * The docked, non-capsule keyboard stands on the unified dock glass and draws no glass of its
+     * own; its host wears the band's veil alone. Over a light sample that layer exists, and it is
+     * exactly the band's veil.
+     */
+    @Test
+    public void theDockedKeyboardWearsAVeilOnlyLayerOverALightWallpaper() {
+        GlassSurfaceFactory glass = new GlassSurfaceFactory(surfaces, ink);
+        int cap = OnGlass.withAlpha(0xFF2B2930, 96);
+        ink.onFixedInk(GlassBackdropCache.Band.KEYBOARD, KEYBOARD_RECT, TERMINAL_FG, TERMINAL_FG,
+            cap, OnGlass.TARGET_BODY_TEXT);
+
+        android.graphics.drawable.Drawable veil = glass.veilOnlyLayer(
+            GlassBackdropCache.Band.KEYBOARD, 0.35f, 0f, 0.8f, false);
+
+        assertTrue("a light wallpaper under the docked keyboard is veiled", veil != null);
+        int alpha = Color.alpha(ink.bandVeil(GlassBackdropCache.Band.KEYBOARD));
+        assertTrue("the layer is the band's own veil: " + alpha, alpha > 0);
+        assertTrue(veil instanceof android.graphics.drawable.GradientDrawable);
+
+        wallpaper.keyboard = DARK_WALLPAPER;
+        ink.invalidate();
+        ink.onFixedInk(GlassBackdropCache.Band.KEYBOARD, KEYBOARD_RECT, TERMINAL_FG, TERMINAL_FG,
+            cap, OnGlass.TARGET_BODY_TEXT);
+        assertTrue("and a dark one needs none",
+            glass.veilOnlyLayer(GlassBackdropCache.Band.KEYBOARD, 0.35f, 0f, 0.8f, false) == null);
+    }
+
     /** An opaque cap hides the host: nothing under it can help, so nothing is spent. */
     @Test
     public void anOpaqueKeyCapNeedsNoVeil() {
@@ -237,11 +269,12 @@ public class ChromeInkBandsTest {
             assertTrue(levels[i] + ": " + status, status.ratio >= body[i] || status.shortfall);
 
             OnGlass.Resolution top = pane(PANE_TOP);
-            assertEquals(body[i], top.target, 1e-9);
-            // At Harder the dim foreground of this palette cannot reach 7.0 even on its own
-            // opaque background (5.9:1), so the pane goes as far as it can: the opaque ground.
-            assertTrue(levels[i] + " pane: " + top, top.ratio >= body[i]
-                || (top.shortfall && Color.alpha(top.veil) == 255));
+            assertTrue(levels[i] + " pane: " + top, !top.shortfall);
+            assertTrue(levels[i] + " foreground: " + top,
+                OnGlass.ratio(TERMINAL_FG, top.surface) >= body[i]);
+            assertTrue(levels[i] + " dim foreground: " + top,
+                OnGlass.ratio(PaneGlass.dimTerminalInk(TERMINAL_FG), top.surface)
+                    >= levels[i].target(OnGlass.TARGET_LARGE_TEXT));
             assertTrue("a harder level spends more veil",
                 Color.alpha(top.veil) > previousVeil);
             previousVeil = Color.alpha(top.veil);

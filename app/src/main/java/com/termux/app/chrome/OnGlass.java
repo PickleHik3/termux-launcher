@@ -553,7 +553,8 @@ public final class OnGlass {
      * ladder {@link #resolve} climbs has one rung here: the smallest alpha of {@code veilColor},
      * laid over {@code backdrop}, at which every ink clears {@code target} on what it really
      * stands on — {@code cap} over the veiled backdrop. {@link Resolution#ink} is the ink that
-     * reads worst on the answer, which is the one the promise was made for.</p>
+     * reads worst on the answer, which is the one the promise was made for. Two inks at two tiers
+     * go through {@link #resolveFixedInk(int, int, int, double, int, double, int)}.</p>
      *
      * <p>The ceiling is the opaque {@code veilColor}, not {@link #MAX_VEIL_ALPHA}. That cap exists
      * because a chrome band can move its ink instead of deleting the wallpaper; a band that cannot
@@ -569,61 +570,90 @@ public final class OnGlass {
      * @param cap what stands between the veil and the ink — a key cap — or
      *     {@link Color#TRANSPARENT} when the ink stands on the veil itself
      * @param ink the band's ink
-     * @param secondInk a second ink on the same band held to the same target (the terminal's dim
-     *     foreground); pass {@code ink} again for none
+     * @param secondInk a second ink on the same band held to the same target; pass {@code ink}
+     *     again for none
      * @param veilColor what the veil moves toward; its alpha is ignored
      */
     @NonNull
     public static Resolution resolveFixedInk(@ColorInt int backdrop, @ColorInt int cap,
                                              @ColorInt int ink, @ColorInt int secondInk,
                                              @ColorInt int veilColor, double target) {
+        return resolveFixedInk(backdrop, cap, ink, target, secondInk, target, veilColor);
+    }
+
+    /**
+     * {@link #resolveFixedInk(int, int, int, int, int, double)} with each ink held to a tier of its
+     * own. The terminal pane is the case: its normal foreground is body text, and its dim (SGR 2)
+     * foreground is text the program asked to recede, held to the large-text tier. Held to body
+     * text as well, the dim ink alone bought a veil of 218/255 at Default over a light wallpaper
+     * under a 30% terminal, and at Harder could not be satisfied short of an opaque pane.
+     *
+     * <p>{@link Resolution#ink}, {@link Resolution#ratio} and {@link Resolution#target} describe
+     * the <em>binding</em> ink — the one nearest its own tier on the answer, ratio over target —
+     * so a caller reading the resolution sees the promise that decided the veil.
+     * {@link Resolution#shortfall} is set when either ink misses its own tier.</p>
+     *
+     * @param inkTarget the tier {@code ink} must clear
+     * @param secondTarget the tier {@code secondInk} must clear
+     */
+    @NonNull
+    public static Resolution resolveFixedInk(@ColorInt int backdrop, @ColorInt int cap,
+                                             @ColorInt int ink, double inkTarget,
+                                             @ColorInt int secondInk, double secondTarget,
+                                             @ColorInt int veilColor) {
         int base = opaque(backdrop);
         int bareSurface = opaque(composite(cap, base));
-        double bare = worstRatio(ink, secondInk, bareSurface);
-        int bareInk = worseInk(ink, secondInk, bareSurface);
-        if (bare >= target) {
-            return new Resolution(Color.TRANSPARENT, bareSurface, bareInk, bare, target,
-                false, false, false);
+        double bare = margin(ink, inkTarget, secondInk, secondTarget, bareSurface);
+        if (bare >= 1d) {
+            return fixedAnswer(Color.TRANSPARENT, bareSurface, ink, inkTarget, secondInk,
+                secondTarget, 0, false);
         }
         // An opaque cap hides everything under it: nothing below it can help.
         if (Color.alpha(cap) < 255) {
             int bestAlpha = 0;
-            double bestRatio = bare;
+            double best = bare;
             for (int alpha = 1; alpha <= 255; alpha++) {
                 int veiled = opaque(composite(withAlpha(veilColor, alpha), base));
                 int surface = opaque(composite(cap, veiled));
-                double achieved = worstRatio(ink, secondInk, surface);
-                if (achieved >= target) {
-                    return new Resolution(withAlpha(veilColor, alpha), surface,
-                        worseInk(ink, secondInk, surface), achieved, target,
-                        alpha > MAX_VEIL_ALPHA_255, false, false);
+                double achieved = margin(ink, inkTarget, secondInk, secondTarget, surface);
+                if (achieved >= 1d) {
+                    return fixedAnswer(withAlpha(veilColor, alpha), surface, ink, inkTarget,
+                        secondInk, secondTarget, alpha, false);
                 }
-                if (achieved > bestRatio) {
-                    bestRatio = achieved;
+                if (achieved > best) {
+                    best = achieved;
                     bestAlpha = alpha;
                 }
             }
             if (bestAlpha > 0) {
                 int veil = withAlpha(veilColor, bestAlpha);
                 int surface = opaque(composite(cap, opaque(composite(veil, base))));
-                return new Resolution(veil, surface, worseInk(ink, secondInk, surface), bestRatio,
-                    target, bestAlpha > MAX_VEIL_ALPHA_255, false, true);
+                return fixedAnswer(veil, surface, ink, inkTarget, secondInk, secondTarget,
+                    bestAlpha, true);
             }
         }
-        return new Resolution(Color.TRANSPARENT, bareSurface, bareInk, bare, target,
-            false, false, true);
+        return fixedAnswer(Color.TRANSPARENT, bareSurface, ink, inkTarget, secondInk,
+            secondTarget, 0, true);
     }
 
-    /** The lower of two inks' ratios on one surface. */
-    private static double worstRatio(@ColorInt int ink, @ColorInt int secondInk,
-                                     @ColorInt int surface) {
-        return Math.min(ratio(ink, surface), ratio(secondInk, surface));
+    /** The lower of two inks' ratios on one surface, each over its own tier: 1 or more clears both. */
+    private static double margin(@ColorInt int ink, double inkTarget, @ColorInt int secondInk,
+                                 double secondTarget, @ColorInt int surface) {
+        return Math.min(ratio(ink, surface) / inkTarget, ratio(secondInk, surface) / secondTarget);
     }
 
-    /** Whichever of two inks reads worse on {@code surface}; the first on a tie. */
-    @ColorInt
-    private static int worseInk(@ColorInt int ink, @ColorInt int secondInk, @ColorInt int surface) {
-        return ratio(secondInk, surface) < ratio(ink, surface) ? secondInk : ink;
+    /** A fixed-ink answer, reported for whichever ink is nearest its own tier; the first on a tie. */
+    @NonNull
+    private static Resolution fixedAnswer(@ColorInt int veil, @ColorInt int surface,
+                                          @ColorInt int ink, double inkTarget,
+                                          @ColorInt int secondInk, double secondTarget,
+                                          int alpha, boolean shortfall) {
+        double first = ratio(ink, surface);
+        double second = ratio(secondInk, surface);
+        boolean secondBinds = second / secondTarget < first / inkTarget;
+        return new Resolution(veil, surface, secondBinds ? secondInk : ink,
+            secondBinds ? second : first, secondBinds ? secondTarget : inkTarget,
+            alpha > MAX_VEIL_ALPHA_255, false, shortfall);
     }
 
     /**
