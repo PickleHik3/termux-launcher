@@ -138,10 +138,10 @@ public final class SurfacePresets {
 
     // ------------------------------------------------------------------------ the saved look
     //
-    // The built-in presets are looks this build ships; Custom is the one the user pinned. It is
-    // written only by the editor's save glyph — not by Done, which commits the live preferences
-    // and would otherwise overwrite the pin every time someone left the editor — so it stays put
-    // until the next deliberate save.
+    // The built-in presets are looks this build ships; Custom is the one the user tuned. It is
+    // written when the editor is left with Done at the Custom stop — not by Done at a Look, which
+    // would overwrite the user's own look with a shipped one — so the Custom stop always brings
+    // back the last look the user made for themselves.
 
     /**
      * The user's saved look as a preset, or null when they have not saved one.
@@ -184,6 +184,7 @@ public final class SurfacePresets {
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_BEND, prefs.getFancierGlassBendDp());
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, prefs.getFancierGlassEdgeWidthDp());
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, prefs.getFancierGlassEdgeLightPercent());
+        putCustomOnly(prefs, look);
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (prefs.isSurfaceInheriting(row.slot, row.property))
                 continue;
@@ -191,6 +192,20 @@ public final class SurfacePresets {
                 prefs.getSurfaceOverrideValue(row.slot, row.property));
         }
         return look;
+    }
+
+    /**
+     * The values only Custom's row 2 sets (SPEC §3.4) and no Look names: the key caps (Keys), the
+     * wallpaper's dim and Soft wallpaper. Saved with Custom so its stop comes back whole; a Look
+     * leaves them where they are.
+     */
+    private static void putCustomOnly(@NonNull TermuxAppSharedPreferences prefs,
+                                      @NonNull Map<String, Object> look) {
+        look.put(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY, prefs.getInAppKeyboardKeyOpacity());
+        look.put(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP,
+            Math.round(prefs.getInAppKeyboardKeyCornerRadiusDp()));
+        look.put(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, prefs.getWallpaperBackdropDim());
+        look.put(SoftWallpaper.KEY_WALLPAPER_SOFT, SoftWallpaper.isOn(prefs));
     }
 
     /** The stored form: the look as JSON, with the format version alongside it. */
@@ -296,6 +311,18 @@ public final class SurfacePresets {
             case TERMUX_APP.KEY_TERMINAL_PANE_GAP:
                 prefs.setTerminalPaneGap(intOf(value));
                 return;
+            case TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY:
+                prefs.setInAppKeyboardKeyOpacity(intOf(value));
+                return;
+            case TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP:
+                prefs.setInAppKeyboardKeyCornerRadiusDp(intOf(value));
+                return;
+            case TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM:
+                prefs.setWallpaperBackdropDim(intOf(value));
+                return;
+            case SoftWallpaper.KEY_WALLPAPER_SOFT:
+                SoftWallpaper.set(prefs, Boolean.TRUE.equals(value));
+                return;
         }
         SurfaceProperty baseProperty = SurfaceProperty.forBaseKey(key);
         if (baseProperty != null) {
@@ -362,6 +389,14 @@ public final class SurfacePresets {
                 return prefs.getTerminalCornerRadius();
             case TERMUX_APP.KEY_TERMINAL_PANE_GAP:
                 return prefs.getTerminalPaneGap();
+            case TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY:
+                return prefs.getInAppKeyboardKeyOpacity();
+            case TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP:
+                return Math.round(prefs.getInAppKeyboardKeyCornerRadiusDp());
+            case TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM:
+                return prefs.getWallpaperBackdropDim();
+            case SoftWallpaper.KEY_WALLPAPER_SOFT:
+                return SoftWallpaper.isOn(prefs);
         }
         SurfaceProperty baseProperty = SurfaceProperty.forBaseKey(key);
         if (baseProperty != null)

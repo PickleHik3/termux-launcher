@@ -147,6 +147,42 @@ public class SurfacePresetsTest {
         assertTrue(SurfacePresets.matches(preferences, SurfacePresets.custom(preferences)));
     }
 
+    /**
+     * Custom's row 2 sets values no Look names — the key caps, the wallpaper's dim and Soft — and
+     * the Custom stop has to bring them back with the rest.
+     */
+    @Test
+    public void customCarriesWhatRowTwoSets() {
+        preferences.setInAppKeyboardKeyOpacity(40);
+        preferences.setInAppKeyboardKeyCornerRadiusDp(9f);
+        preferences.setWallpaperBackdropDim(35);
+        SoftWallpaper.set(preferences, true);
+        SurfacePresets.saveCustom(preferences);
+
+        preferences.setInAppKeyboardKeyOpacity(90);
+        preferences.setInAppKeyboardKeyCornerRadiusDp(15f);
+        preferences.setWallpaperBackdropDim(0);
+        SoftWallpaper.set(preferences, false);
+        assertFalse(SurfacePresets.matches(preferences, SurfacePresets.custom(preferences)));
+
+        SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
+        assertEquals(40, preferences.getInAppKeyboardKeyOpacity());
+        assertEquals(9f, preferences.getInAppKeyboardKeyCornerRadiusDp(), 0.001f);
+        assertEquals(35, preferences.getWallpaperBackdropDim());
+        assertTrue(SoftWallpaper.isOn(preferences));
+        assertTrue(SurfacePresets.matches(preferences, SurfacePresets.custom(preferences)));
+    }
+
+    /** A Look leaves the Custom-only values where they are; it names none of them. */
+    @Test
+    public void aLookNamesNoneOfTheCustomOnlyValues() {
+        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
+            assertFalse(preset.values.containsKey(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY));
+            assertFalse(preset.values.containsKey(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM));
+            assertFalse(preset.values.containsKey(SoftWallpaper.KEY_WALLPAPER_SOFT));
+        }
+    }
+
     @Test
     public void everyPresetCarriesTheKeysItsCardRenders() {
         // The device-mock cards read these five directly; a preset omitting one would silently
