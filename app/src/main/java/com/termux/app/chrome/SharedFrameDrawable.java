@@ -18,7 +18,12 @@ import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.chrome.wallpaper.LiveWallpaperFrames;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.WeakHashMap;
 
 /**
  * A glass surface's view onto the shared pre-blurred wallpaper frame: the frame is sampled, on
@@ -73,6 +78,9 @@ public final class SharedFrameDrawable extends Drawable {
      * ({@link LiveWallpaperFrames#frame}). 0 (the default) opts out: the still is always drawn.
      */
     private float mLiveRadiusDp;
+    /** Every drawable alive, so the live host can find the readers the activity never holds on to. */
+    private static final Set<SharedFrameDrawable> INSTANCES =
+        Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
     @NonNull private final LiveWallpaperFrames.ShaderCache mLiveShaders =
         new LiveWallpaperFrames.ShaderCache();
     /** The live slot shader the paint is bound to right now, or null while it holds the still. */
@@ -99,6 +107,15 @@ public final class SharedFrameDrawable extends Drawable {
         mAnchor = anchor;
         mParallax = parallax;
         setFrame(frame, frameRect, false);
+        INSTANCES.add(this);
+    }
+
+    /** A snapshot of every shared-frame drawable alive right now. */
+    @NonNull
+    public static List<SharedFrameDrawable> instances() {
+        synchronized (INSTANCES) {
+            return new ArrayList<>(INSTANCES);
+        }
     }
 
     /**

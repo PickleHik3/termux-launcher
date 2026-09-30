@@ -49,7 +49,26 @@ public final class GeneratedWallpaperApplier {
     @Nullable
     private static volatile AnimatedWallpaperStatus sStatusProvider;
 
+    @Nullable
+    private static volatile Runnable sChangedListener;
+
     private GeneratedWallpaperApplier() {}
+
+    /**
+     * Registered by the activity's live host: run on the main thread after the stored background or
+     * its colours changed ({@link #apply}, {@link #clear}), so it can pick the new ones up. Null
+     * unregisters.
+     */
+    public static void setChangedListener(@Nullable Runnable listener) {
+        sChangedListener = listener;
+    }
+
+    private static void notifyChanged() {
+        MAIN.post(() -> {
+            Runnable listener = sChangedListener;
+            if (listener != null) listener.run();
+        });
+    }
 
     /** Registered by the activity so {@code GET /v1/wallpaper} can say whether frames are playing. Null unregisters. */
     public static void setStatusProvider(@Nullable AnimatedWallpaperStatus provider) {
@@ -115,6 +134,7 @@ public final class GeneratedWallpaperApplier {
                 prefs.setManagedWallpaperAnimatedPalette(mode);
                 prefs.setManagedWallpaperAnimatedColors(palette);
             }
+            notifyChanged();
             finish(cb, true, null);
         });
     }
@@ -125,6 +145,7 @@ public final class GeneratedWallpaperApplier {
         if (prefs == null) return;
         prefs.setManagedWallpaperAnimatedId(null);
         prefs.setManagedWallpaperAnimatedColors(null);
+        notifyChanged();
     }
 
     /**

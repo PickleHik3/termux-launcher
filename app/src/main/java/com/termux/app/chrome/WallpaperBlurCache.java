@@ -228,6 +228,18 @@ public final class WallpaperBlurCache {
         return frame != null && mByRadius.containsValue(frame);
     }
 
+    /**
+     * The blur radius, in dp, {@code frame} was cut at, or -1 when it is not a resident frame.
+     * Does not touch the LRU order.
+     */
+    public int radiusDpOf(@Nullable Bitmap frame) {
+        if (frame == null) return -1;
+        for (java.util.Map.Entry<Integer, Bitmap> entry : mByRadius.entrySet()) {
+            if (entry.getValue() == frame) return entry.getKey();
+        }
+        return -1;
+    }
+
     /** Visible for tests: how many radii are resident right now. */
     public int residentRadiiCount() {
         return mByRadius.size();
