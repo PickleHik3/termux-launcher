@@ -1011,24 +1011,32 @@
             android:elevation="14dp"
             android:visibility="gone" />
 
-        <!-- Capture layer for the surface editor's surface taps and drag gestures. Sized in code to
-             each surface's measured rect (expanded upward so the top-border handle is inside the hit
-             area); the frame itself is not clickable, so touches outside the groups fall through.
-
-             A tap on a group selects that surface, a horizontal drag walks its screen-edge margin,
-             and the ring says which one the pill is pointing at. -->
+        <!-- The Appearance editor's tap layer. It covers the whole frame while the editor is up,
+             so nothing under it - the terminal, the dock's apps, the keyboard's keys - receives a
+             touch; each group below is laid in code over its element's measured rect, and a tap on
+             one selects that element. Elevated over the floating keyboard's host so a floating
+             keyboard is a tap target too, not a keyboard. -->
         <FrameLayout
             android:id="@+id/surface_tuning_gesture_overlay"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_alignParentTop="true"
             android:layout_alignParentBottom="true"
-            android:elevation="12dp"
+            android:elevation="18dp"
             android:visibility="gone">
 
-            <!-- The canvas is a surface, not empty space, so it takes taps too. First child, so the
-                 three bounded surfaces above it win wherever their rects overlap this one: a
-                 FrameLayout offers a touch to its children back to front. -->
+            <!-- The bare wallpaper: first child and the whole frame, so every element's group
+                 above it wins wherever they overlap (a FrameLayout offers a touch to its children
+                 back to front) and a touch between elements lands here. -->
+            <FrameLayout
+                android:id="@+id/surface_tuning_wallpaper_gesture_group"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_gravity="top"
+                android:clickable="true"
+                android:focusable="false"
+                android:visibility="gone" />
+
             <FrameLayout
                 android:id="@+id/surface_tuning_canvas_gesture_group"
                 android:layout_width="match_parent"
@@ -1048,9 +1056,8 @@
                 android:visibility="gone">
 
                 <!-- The clock's own control: laid over the live clock in code while the status bar
-                     is the surface being edited, with the ▾ drawn at its trailing edge. Clickable in
-                     its own right: a child takes the touch before the group's select-and-drag
-                     handler sees it. -->
+                     is the element being tuned, with the ▾ drawn at its trailing edge. Clickable in
+                     its own right: a child takes the touch before the group's handler sees it. -->
                 <TextView
                     android:id="@+id/surface_tuning_status_clock_handle"
                     android:layout_width="28dp"
@@ -1085,62 +1092,14 @@
                 android:focusable="false"
                 android:visibility="gone" />
 
-            <!-- One outline per surface the editor can act on, positioned in code to that
-                 surface's own rect — not to its capture group, which overhangs it, and a ring drawn
-                 on that would sit a finger's width above the thing it identifies.
-
-                 With nothing picked they are all drawn and breathe together, which is the whole
-                 invitation to touch one. With a surface picked its outline alone stands, steady,
-                 and is what identifies the target; the card's own position never has to. -->
+            <!-- The selection: one 2dp colorPrimary outline on the tapped element, positioned in
+                 code to that element's own rect. Nothing else glows. -->
             <View
-                android:id="@+id/surface_editor_ring_status"
+                android:id="@+id/surface_editor_selection_outline"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_gravity="top"
                 android:importantForAccessibility="no"
-                android:visibility="gone" />
-
-            <View
-                android:id="@+id/surface_editor_ring_dock"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_gravity="top"
-                android:importantForAccessibility="no"
-                android:visibility="gone" />
-
-            <View
-                android:id="@+id/surface_editor_ring_keyboard"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_gravity="top"
-                android:importantForAccessibility="no"
-                android:visibility="gone" />
-
-            <View
-                android:id="@+id/surface_editor_ring_canvas"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_gravity="top"
-                android:importantForAccessibility="no"
-                android:visibility="gone" />
-
-            <!-- Value echo for peeking controls. The pill fades while a control whose surface sits
-                 under it is dragged, so the number it is changing has to appear somewhere the user
-                 is already looking. Not clickable: it is a read-out over the live surface. -->
-            <TextView
-                android:id="@+id/surface_tuning_peek_readout"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:background="@drawable/dock_tuning_done_pill"
-                android:clickable="false"
-                android:focusable="false"
-                android:importantForAccessibility="no"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="7dp"
-                android:textColor="?attr/termuxColorOnAccentContainer"
-                android:textSize="13sp"
-                android:textStyle="bold"
                 android:visibility="gone" />
         </FrameLayout>
 
@@ -1153,22 +1112,6 @@
             android:layout_above="@id/accessory_stack_container"
             android:layout_alignWithParentIfMissing="true"
             android:elevation="16dp"
-            android:visibility="gone" />
-
-        <!-- The surface editor. Not a card pinned above the accessory stack any more: an attached
-             pill that parks next to whichever surface it is editing, carrying one property at a
-             time. The host fills the region so the pill can be placed anywhere inside it, and is
-             deliberately not clickable, so a touch outside the pill reaches the surface underneath
-             and selects it. Elevation clears the gesture overlay, which the pill must sit over.
-
-             Populated from surface_editor_pill.xml on the editor's first open. -->
-        <FrameLayout
-            android:id="@+id/surface_editor_pill_host"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_alignParentTop="true"
-            android:layout_alignParentBottom="true"
-            android:elevation="20dp"
             android:visibility="gone" />
 
         <!-- The Layout editor, the surface editor's sibling: a miniature of the place on screen,
