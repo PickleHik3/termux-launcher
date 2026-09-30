@@ -10,7 +10,7 @@ wallpaper, and they are not a video.
 
 ## Requirements
 
-- **Fancier Glass** is on (**Settings → Appearance**).
+- **Fancier Glass** is on (**Settings → Look**).
 - Android 14 or later.
 
 The **Animated** row in the wallpaper picker shows only when both hold. On Android 13 Fancier Glass
