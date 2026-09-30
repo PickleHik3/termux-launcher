@@ -89,6 +89,8 @@ task-oriented guide for the terminal is
 | [`reference/voice-ai/freestyle-voice-comparison.md`](reference/voice-ai/freestyle-voice-comparison.md) | Freestyle's dictation compared with ours. |
 | [`reference/voice-ai/gallery-gpu-loading-comparison.md`](reference/voice-ai/gallery-gpu-loading-comparison.md), [`litert-llm-opendroid-comparison.md`](reference/voice-ai/litert-llm-opendroid-comparison.md) | Model loading and runtime comparisons. |
 | [`reference/voice-ai/tai-model-ecosystem-research.md`](reference/voice-ai/tai-model-ecosystem-research.md), [`tai-importer-user-review.md`](reference/voice-ai/tai-importer-user-review.md) | The model ecosystem and the importer, reviewed. |
+| [`reference/voice-ai/local-llm-inference-speed-2026-09-30.md`](reference/voice-ai/local-llm-inference-speed-2026-09-30.md) | Ways to speed up local LLM inference on a phone (quantization, threads, GPU/NPU, speculative decoding, KV and prefix caching, thermal), ranked for TAI on pong, with MNN / LiteRT-LM / llama.cpp support. |
+| [`reference/voice-ai/local-llm-speedups-verification-2026-09-30.md`](reference/voice-ai/local-llm-speedups-verification-2026-09-30.md) | The top five speed-ups checked against MNN 3.6.1 and LiteRT-LM 0.17.1 source and Hugging Face model files, set against TAI's code: verdicts, gaps with file:line fixes, which official models have 4-bit / `-gpu` / MTP / lookahead builds, and a bench plan. |
 
 ## Release notes
 
