@@ -4283,7 +4283,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             targetRightMargin = horizontalMargin;
         }
         applyDockSurfaceShape(view, capsuleSurface, targetHeight,
-            viewId == R.id.accessory_surface_host);
+            viewId == R.id.accessory_surface_host, viewId == R.id.accessory_surface_host);
         if (params.leftMargin != targetLeftMargin || params.topMargin != targetTop ||
             params.rightMargin != targetRightMargin || params.bottomMargin != 0 ||
             params.width != targetWidth || params.height != targetHeight) {
@@ -4887,14 +4887,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return outline;
     }
 
+    /**
+     * @param innerRim whether the surface's inner edge carries the containing stroke in docked:
+     *                 the dock does, the same line the window bar keeps along its bottom; the
+     *                 strip under the pill has no inner edge and draws none
+     */
     private void applyDockSurfaceShape(@NonNull View surface, boolean capsule, int surfaceHeightPx,
-                                       boolean ownsInnerEdge) {
+                                       boolean ownsInnerEdge, boolean innerRim) {
         // The edge rule: docked, the dock's bottom and sides run into the screen and the strip
-        // under the pill, and its inner edge has never carried a stroke, so it draws none at all.
-        boolean stroked = com.termux.app.chrome.ChromeEdgeRule.strokes(capsule, true, false,
+        // under the pill, so they are seams and take no stroke; its top, facing the terminal,
+        // keeps the one rim every glass surface wears, along the same edges its refraction rim
+        // lights. The capsule keeps it all round.
+        int strokeEdges = com.termux.app.chrome.ChromeEdgeRule.strokeEdges(capsule, true, innerRim,
             com.termux.app.chrome.ChromeEdgeRule.flushEdges(PlaceLayout.Edge.BOTTOM), 0);
-        if (!stroked) {
-            surface.setBackground(null);
+        if (!capsule) {
+            float innerRadiusPx = ownsInnerEdge ? resolveDockedDockInnerRadiusPx(surfaceHeightPx) : 0f;
+            surface.setBackground(mChrome.glass().rimDrawable(innerRadiusPx, strokeEdges));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 // Clip the normal dock to its own bounds so the reactive edge-glow's outward blur
                 // can't spill past the dock edges and make it look wider - now with the inner edge
@@ -4904,8 +4912,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     surface.setClipToOutline(true);
                     return;
                 }
-                boolean changed = mDockInnerEdgeOutline.setFrame(
-                    resolveDockedDockInnerRadiusPx(surfaceHeightPx));
+                boolean changed = mDockInnerEdgeOutline.setFrame(innerRadiusPx);
                 if (surface.getOutlineProvider() != mDockInnerEdgeOutline)
                     surface.setOutlineProvider(mDockInnerEdgeOutline);
                 else if (changed)
@@ -5396,7 +5403,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int targetHeight = visible ? resolveDecorNavBarSurfaceHeightPx() : 0;
         int targetHorizontalMargin = 0;
         int targetBottomMargin = 0;
-        applyDockSurfaceShape(overlay, false, targetHeight, false);
+        applyDockSurfaceShape(overlay, false, targetHeight, false, false);
         if (params.width != ViewGroup.LayoutParams.MATCH_PARENT ||
             params.height != targetHeight ||
             params.gravity != Gravity.BOTTOM ||
