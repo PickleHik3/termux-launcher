@@ -260,6 +260,12 @@ public final class PaneGlassBackdropView extends View {
         invalidate();
     }
 
+    /** The still frame this slab is dressed with, or null; the live host reads its blur radius from it. */
+    @Nullable
+    public Bitmap stillFrame() {
+        return mFrame;
+    }
+
     /** True while the frame is drawn through the refraction program rather than plain. */
     public boolean refracts() {
         return mProgram != null;

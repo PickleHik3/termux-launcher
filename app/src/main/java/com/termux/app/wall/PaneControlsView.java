@@ -353,6 +353,12 @@ public final class PaneControlsView extends View {
         program.applyTo(mFrostPaint);
     }
 
+    /** The still frame the tab's frost is cut from, or null; the live host reads its blur radius from it. */
+    @Nullable
+    public Bitmap stillFrame() {
+        return mFrostFrame;
+    }
+
     /**
      * Opts the tab into the live wallpaper frame for {@code radiusDp} (the radius its still was
      * blurred at); 0 opts out. See {@link LiveWallpaperFrames}.

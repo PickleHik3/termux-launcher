@@ -1144,6 +1144,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Bitmap mWallBehindFrame;
     /** The self-drawn wallpaper behind everything; see {@link WallpaperBackdropPolicy}. */
     @Nullable private WallpaperBackdropView mWallpaperBackdropView;
+    /** Plays the stored generated background; every call into it is a no-op below API 34. */
+    @Nullable private com.termux.app.chrome.wallpaper.GeneratedWallpaperHost mLiveWallpaperHost;
     /**
      * The wallpaper's live x-offset, shared by every glass surface; see
      * {@link com.termux.app.chrome.WallpaperParallax}. Written by {@link #syncWallpaperParallax}
@@ -1654,6 +1656,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // app has been opened.
         TermuxUtils.sendTermuxOpenedBroadcast(this);
         registerPreferredHomeChangeReceiver();
+        mLiveWallpaperHost = new com.termux.app.chrome.wallpaper.GeneratedWallpaperHost(this,
+            new com.termux.app.chrome.wallpaper.GeneratedWallpaperHost.Environment() {
+                @Override public boolean fancierGlassActive() { return currentFancierGlassLook() != null; }
+                @Override public boolean managedPictureOnScreen() { return shouldUseManagedWallpaperBlurSource(); }
+                @Override public boolean selfDrawnBackdrop() {
+                    return wallpaperBackdropMode() == WallpaperBackdropPolicy.Mode.SELF_DRAWN;
+                }
+                @Override public boolean lazyMode() { return isLazyModeEnabled(); }
+                @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
+                @Nullable @Override public WallpaperBackdropView backdrop() { return mWallpaperBackdropView; }
+                @NonNull @Override public Rect frameRect() { return getWallpaperCaptureFrameRect(); }
+                @Override public int blurRadiusDpOf(@Nullable Bitmap frame) {
+                    return mChrome.blurCache().radiusDpOf(frame);
+                }
+            });
+        mLiveWallpaperHost.onCreate();
         ensureAppNoticeHost();
         if (savedInstanceState == null) {
             boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
@@ -2068,6 +2086,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logDebug(LOG_TAG, "onStart");
     
         if (mIsInvalidState) return;
+        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onStart();
 
         // The wallpaper can have been swapped while we were stopped.
         refreshWallpaperPictureOnArrival();
@@ -2294,6 +2313,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Also here, not only in onStart: a wallpaper picker shown over this activity never stops
         // it, so the arrival back from one is an onResume on its own.
         refreshWallpaperPictureOnArrival();
+        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onResume();
         // A row whose button opened the system settings page comes back here, so the card reads
         // what was granted there rather than what it said before we left.
         refreshFirstRunPermissionsCard();
@@ -3284,6 +3304,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mFancierGlassLook = look;
         mChrome.ledger().markAllBackdropsDirty();
         mAppliedPaneStyleKey = null;
+        // The switch is the one gate of a generated background; re-read it next message, not
+        // in the middle of the pass that is dressing the glass.
+        if (mLiveWallpaperHost != null) mAccessoryRenderHandler.post(mLiveWallpaperHost::refresh);
     }
 
     /**
@@ -3402,7 +3425,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         Bitmap frame = mChrome.blurCache().obtain(0, wallpaperFrame);
         boolean crossfade = mChrome.blurCache().isCrossfadedRadius(0) && !ReducedMotion.isEnabled(this);
-        backdrop.showFrame(frame, getWallpaperCaptureFrameRect(), wallGroundColor(), crossfade);
+        Rect captureRect = getWallpaperCaptureFrameRect();
+        backdrop.showFrame(frame, captureRect, wallGroundColor(), crossfade);
+        if (mLiveWallpaperHost != null) mLiveWallpaperHost.syncFrameSize(captureRect);
     }
 
     /**
@@ -4981,6 +5006,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         WallpaperPicture picture = WallpaperPictureReader.read(this, mPreferences);
         if (picture == mWallpaperPicture) return false;
         mWallpaperPicture = picture;
+        if (mLiveWallpaperHost != null) mAccessoryRenderHandler.post(mLiveWallpaperHost::refresh);
         return true;
     }
 
@@ -7423,6 +7449,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWidgetPaneController != null) mWidgetPaneController.onStop();
         if (mWidgetHostController != null) mWidgetHostController.onStop();
         mIsVisible = false;
+        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onStop();
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.STOP);
         if (mX11Display != null) mX11Display.detachView();
         // Leaving the app counts as leaving the place on screen: it comes back the way it was
@@ -7488,6 +7515,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // pressure, and the second only means the UI went away — an animation that is merely
         // hidden already costs nothing, because the visibility gate has stopped it.
         if (level >= TRIM_MEMORY_RUNNING_LOW) dropTerminalAnimationFrames();
+        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onTrimMemory(level);
         if (!ChromePolicy.trimReleasesBlurFrames(level)) {
             return;
         }
@@ -7524,6 +7552,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TerminalKeyInspector.close();
         mChrome.onDestroy();
         unregisterPreferredHomeChangeReceiver();
+        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onDestroy();
         cancelVoiceInput();
         if (mIsInvalidState)
             return;
@@ -7623,6 +7652,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mCommandPalette != null)
             mCommandPalette.refreshAppearance();
         mChrome.onConfigurationChanged();
+        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onConfigurationChanged();
         // The Layout editor's miniature shows the place behind it, so it turns with the phone.
         mLayoutEditor.onPlaceOrientationChanged();
         scheduleOrientationGeometryPass();
@@ -8093,7 +8123,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override
             public void onDoubleTap() {
-                lockScreenFromAzDoubleTap();
+                if (mLiveWallpaperHost != null) {
+                    mLiveWallpaperHost.requestLock(TermuxActivity.this::lockScreenFromAzDoubleTap);
+                } else {
+                    lockScreenFromAzDoubleTap();
+                }
             }
         };
         if (mAzScrubRowView != null) {
@@ -12816,6 +12850,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         if ((selectedFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
+            // A photo replaces any generated background: forget it before the glass is told.
+            if (mLiveWallpaperHost != null) mLiveWallpaperHost.onPhotoApplied();
             // The picture is ours again now that its id is stored, so the glass must be told
             // before the sync below re-dresses it.
             refreshWallpaperPicture();
@@ -20414,6 +20450,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (bar != null) bar.setLazyMode(lazy);
         com.termux.app.terminal.TerminalClockWidget clock = findViewById(R.id.terminal_clock_widget);
         if (clock != null) clock.setLazyMode(lazy);
+        if (mLiveWallpaperHost != null) mLiveWallpaperHost.refresh();
     }
 
     private com.termux.app.statusbar.SystemStatsController ensureStatsController() {
@@ -23114,6 +23151,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // re-capture instead of re-cutting frames blurred at the old alignment.
         applyWallpaperRenderZoomIfChanged();
         mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS);
+        // A Material palette follows the scheme: captured again here, never from the colours listener.
+        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onStylingReloaded();
         applySeamlessStatusBackgroundModeIfNeeded();
         applyTerminalSurfaceAppearance();
         // After appearance: applyTerminalSurfaceAppearance() flat-colors the dock surfaces, so the
