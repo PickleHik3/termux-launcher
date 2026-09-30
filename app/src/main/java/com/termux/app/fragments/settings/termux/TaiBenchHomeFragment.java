@@ -445,10 +445,14 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         if (row.charging) addMark(marks, getString(R.string.tai_bench_mark_charging), TaiModelCentreRows.Tone.NEUTRAL);
         if (row.warmStart) addMark(marks, getString(R.string.tai_bench_mark_warm_start), TaiModelCentreRows.Tone.WARN);
         if (row.lowBattery) addMark(marks, getString(R.string.tai_bench_mark_low_battery), TaiModelCentreRows.Tone.WARN);
+        if (row.powerSave) addMark(marks, getString(R.string.tai_bench_mark_battery_saver), TaiModelCentreRows.Tone.WARN);
+        if (row.screenOff) addMark(marks, getString(R.string.tai_bench_mark_screen_off), TaiModelCentreRows.Tone.WARN);
         if (row.olderVersion) addMark(marks, getString(R.string.tai_bench_mark_older_version), TaiModelCentreRows.Tone.NEUTRAL);
         if (!row.installed) addMark(marks, getString(R.string.tai_bench_mark_not_installed), TaiModelCentreRows.Tone.NEUTRAL);
         marks.setVisibility(marks.getChildCount() == 0 ? View.GONE : View.VISIBLE);
-        ((TextView) view.findViewById(R.id.tai_bench_numbers)).setText(TaiBenchViews.summaryLine(context, row.decodeTps, row.ttftMs, row.readMs));
+        TextView numbers = view.findViewById(R.id.tai_bench_numbers);
+        numbers.setText(row.crashed ? "" : TaiBenchViews.summaryLine(context, row.decodeTps, row.ttftMs, row.readMs));
+        numbers.setVisibility(row.crashed ? View.GONE : View.VISIBLE);
         TextView memory = view.findViewById(R.id.tai_bench_figure);
         String memoryText = TaiBenchViews.memoryLine(context, row.memBytes);
         memory.setText(memoryText);

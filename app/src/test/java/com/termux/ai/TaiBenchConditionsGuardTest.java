@@ -196,4 +196,65 @@ public class TaiBenchConditionsGuardTest {
         assertTrue(conditions.isNull("headroomStart"));
         assertFalse(conditions.getBoolean("warmStart"));
     }
+
+    @Test
+    public void heatThatRoseDuringAnEntryIsRecordedEvenWhenItStartedAndEndedCool() throws Exception {
+        TaiBenchConditionsGuard guard = new TaiBenchConditionsGuard(this::read, this::clock);
+        TaiBenchSuite.EntryPlan first = entry("m1");
+        nowMs = 0L;
+        current = new TaiBenchGuardRules.Snapshot(80, false, TaiBenchGuardRules.THERMAL_STATUS_NONE, Float.NaN);
+        guard.beforePhase(TaiBenchSuite.PHASE_LOAD, first);
+        guard.entryStarted(first);
+        current = new TaiBenchGuardRules.Snapshot(80, false, TaiBenchGuardRules.THERMAL_STATUS_MODERATE, Float.NaN);
+        assertEquals(TaiBenchGuard.PAUSE, guard.beforePhase(TaiBenchSuite.PHASE_CHAT, first).action);
+        current = new TaiBenchGuardRules.Snapshot(80, false, TaiBenchGuardRules.THERMAL_STATUS_NONE, Float.NaN);
+        guard.entryFinished(first);
+
+        JSONObject conditions = guard.entryConditions(first);
+        assertTrue(conditions.getBoolean("thermalRose"));
+        assertEquals("moderate", conditions.getString("thermalPeak"));
+        assertFalse(conditions.getBoolean("warmStart"));
+    }
+
+    @Test
+    public void aSteadyEntryDidNotHeatUpAndACooldownWaitDoesNotCountAgainstTheNextEntry() throws Exception {
+        TaiBenchConditionsGuard guard = new TaiBenchConditionsGuard(this::read, this::clock);
+        TaiBenchSuite.EntryPlan first = entry("m1");
+        TaiBenchSuite.EntryPlan second = entry("m2");
+        nowMs = 0L;
+        current = new TaiBenchGuardRules.Snapshot(80, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, Float.NaN);
+        guard.beforePhase(TaiBenchSuite.PHASE_LOAD, first);
+        guard.entryStarted(first);
+        guard.beforePhase(TaiBenchSuite.PHASE_CHAT, first);
+        guard.entryFinished(first);
+        assertFalse(guard.entryConditions(first).getBoolean("thermalRose"));
+
+        // The previous entry left the phone hot; the wait for it to cool is not the second entry's heat.
+        current = new TaiBenchGuardRules.Snapshot(80, false, TaiBenchGuardRules.THERMAL_STATUS_MODERATE, Float.NaN);
+        assertEquals(TaiBenchGuard.PAUSE, guard.beforePhase(TaiBenchSuite.PHASE_LOAD, second).action);
+        nowMs += 2_000L;
+        current = new TaiBenchGuardRules.Snapshot(80, false, TaiBenchGuardRules.THERMAL_STATUS_LIGHT, Float.NaN);
+        assertEquals(TaiBenchGuard.CONTINUE, guard.beforePhase(TaiBenchSuite.PHASE_LOAD, second).action);
+        guard.entryStarted(second);
+        guard.entryFinished(second);
+        assertFalse(guard.entryConditions(second).getBoolean("thermalRose"));
+    }
+
+    @Test
+    public void screenOffDuringAnEntryAndBatterySaverAtItsStartAreRecorded() throws Exception {
+        TaiBenchConditionsGuard guard = new TaiBenchConditionsGuard(this::read, this::clock);
+        TaiBenchSuite.EntryPlan first = entry("m1");
+        nowMs = 0L;
+        current = new TaiBenchGuardRules.Snapshot(80, false, 0, Float.NaN, true, false);
+        guard.beforePhase(TaiBenchSuite.PHASE_LOAD, first);
+        guard.entryStarted(first);
+        current = new TaiBenchGuardRules.Snapshot(80, false, 0, Float.NaN, true, true);
+        guard.beforePhase(TaiBenchSuite.PHASE_CHAT, first);
+        current = new TaiBenchGuardRules.Snapshot(80, false, 0, Float.NaN, true, false);
+        guard.entryFinished(first);
+
+        JSONObject conditions = guard.entryConditions(first);
+        assertTrue(conditions.getBoolean("screenOff"));
+        assertTrue(conditions.getBoolean("powerSave"));
+    }
 }

@@ -28,7 +28,8 @@ public final class TaiDeviceConditions {
 
     @NonNull private final Context appContext;
     @Nullable private final PowerManager powerManager;
-    @Nullable private final ExecutorService listenerExecutor;
+    /** Made by {@link #startThermalListener} and shut down by {@link #stopThermalListener}; a snapshot-only reader never owns a thread. */
+    @Nullable private ExecutorService listenerExecutor;
     private float cachedHeadroom = Float.NaN;
     private long cachedHeadroomAtMs;
     @Nullable private PowerManager.OnThermalStatusChangedListener thermalListener;
@@ -41,12 +42,21 @@ public final class TaiDeviceConditions {
         } catch (RuntimeException ignored) {
         }
         this.powerManager = pm;
-        this.listenerExecutor = pm != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-            ? Executors.newSingleThreadExecutor(runnable -> {
-                Thread thread = new Thread(runnable, "tai-bench-thermal");
-                thread.setDaemon(true);
-                return thread;
-            }) : null;
+    }
+
+    @NonNull
+    static ExecutorService newListenerExecutor() {
+        return Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "tai-bench-thermal");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    /** Test seam: the executor the listener is running on, or {@code null} when none is. */
+    @Nullable
+    ExecutorService listenerExecutorForTest() {
+        return listenerExecutor;
     }
 
     /** One reading of battery level/charging and thermal status/headroom, each independently guarded. */
@@ -79,7 +89,19 @@ public final class TaiDeviceConditions {
                 headroom = cachedHeadroom();
             }
         }
-        return new TaiBenchGuardRules.Snapshot(battery, charging, thermal, headroom);
+        boolean powerSave = false;
+        boolean screenOff = false;
+        if (powerManager != null) {
+            try {
+                powerSave = powerManager.isPowerSaveMode();
+            } catch (RuntimeException ignored) {
+            }
+            try {
+                screenOff = !powerManager.isInteractive();
+            } catch (RuntimeException ignored) {
+            }
+        }
+        return new TaiBenchGuardRules.Snapshot(battery, charging, thermal, headroom, powerSave, screenOff);
     }
 
     private float cachedHeadroom() {
@@ -105,25 +127,35 @@ public final class TaiDeviceConditions {
      * API 29 or if the platform refuses the listener.
      */
     void startThermalListener(@NonNull Runnable onSevereOrWorse) {
-        if (powerManager == null || listenerExecutor == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        if (powerManager == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return;
+        stopThermalListener();
+        ExecutorService executor = newListenerExecutor();
+        listenerExecutor = executor;
         try {
             PowerManager.OnThermalStatusChangedListener listener = status -> {
                 if (status >= TaiBenchGuardRules.THERMAL_STATUS_SEVERE) onSevereOrWorse.run();
             };
-            powerManager.addThermalStatusListener(listenerExecutor, listener);
+            powerManager.addThermalStatusListener(executor, listener);
             thermalListener = listener;
         } catch (RuntimeException ignored) {
+            stopThermalListener();
         }
     }
 
-    /** Unregisters the listener {@link #startThermalListener} added; safe to call more than once. */
+    /**
+     * Unregisters the listener {@link #startThermalListener} added and shuts its thread down, so a
+     * run leaves nothing behind; safe to call more than once.
+     */
     void stopThermalListener() {
         PowerManager.OnThermalStatusChangedListener listener = thermalListener;
         thermalListener = null;
-        if (powerManager == null || listener == null) return;
+        ExecutorService executor = listenerExecutor;
+        listenerExecutor = null;
         try {
-            powerManager.removeThermalStatusListener(listener);
+            if (powerManager != null && listener != null) powerManager.removeThermalStatusListener(listener);
         } catch (RuntimeException ignored) {
+        } finally {
+            if (executor != null) executor.shutdownNow();
         }
     }
 }

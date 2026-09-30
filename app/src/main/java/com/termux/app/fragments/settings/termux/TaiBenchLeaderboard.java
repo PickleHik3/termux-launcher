@@ -18,7 +18,7 @@ import java.util.Map;
 
 /**
  * The Home screen's view of {@code GET /v1/ai/benchmarks}: the leaderboard rows with their marks
- * (charging, warm start, low battery, older app or runtime version, not installed), the
+ * (charging, ran warm, low battery, battery saver, screen off, older app or runtime version, not installed), the
  * one ranked list, and one entry's history for the Result screen's chart. Pure
  * over the JSON {@code TaiManager.benchmarks()} returns, so {@code TaiBenchLeaderboardTest}
  * drives it without a device.
@@ -82,8 +82,13 @@ final class TaiBenchLeaderboard {
         @NonNull final String runtimeVersion;
         @NonNull final String appVersion;
         final boolean charging;
+        /** Started warm, or the phone heated up during the entry: kept, marked, never the best. */
         final boolean warmStart;
         final boolean lowBattery;
+        final boolean powerSave;
+        final boolean screenOff;
+        /** The entry's runtime died; there are no figures. */
+        final boolean crashed;
         final boolean olderVersion;
         final boolean installed;
 
@@ -110,7 +115,11 @@ final class TaiBenchLeaderboard {
             appVersion = row.optString("appVersion", "");
             JSONObject conditions = row.optJSONObject("conditions");
             charging = conditions != null && conditions.optBoolean("charging", false);
-            warmStart = conditions != null && conditions.optBoolean("warmStart", false);
+            warmStart = conditions != null
+                && (conditions.optBoolean("warmStart", false) || conditions.optBoolean("thermalRose", false));
+            powerSave = conditions != null && conditions.optBoolean("powerSave", false);
+            screenOff = conditions != null && conditions.optBoolean("screenOff", false);
+            crashed = TaiBenchStore.STATUS_CRASHED.equals(row.optString("status", ""));
             int batteryStart = conditions == null || conditions.isNull("batteryStart") ? -1 : conditions.optInt("batteryStart", -1);
             lowBattery = batteryStart >= 0 && batteryStart < TaiBenchGuardRules.START_BATTERY_MIN_PERCENT && !charging;
             olderVersion = (!appVersion.isEmpty() && !versionCore(appVersion).equals(versionCore(versions.appVersion)))
@@ -139,10 +148,10 @@ final class TaiBenchLeaderboard {
             return ranked.isEmpty() && broken.isEmpty();
         }
 
-        /** The fastest decode speed of any ranked entry, or {@code 0} with none: what a "New best" must beat. */
+        /** The fastest decode speed of any clean ranked entry, or {@code 0} with none: what a "New best" must beat. */
         double bestTps() {
             double best = 0.0;
-            for (Row row : ranked) best = Math.max(best, row.decodeTps);
+            for (Row row : ranked) if (!row.warmStart) best = Math.max(best, row.decodeTps);
             return best;
         }
     }

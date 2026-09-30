@@ -38,6 +38,10 @@ final class TaiBenchConditionsGuard implements TaiBenchGuard {
     private final AtomicBoolean held = new AtomicBoolean();
     private final Set<TaiBenchSuite.EntryPlan> warmEntries =
         java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+    /** Entries whose phases saw the screen off, and the highest thermal status each saw; see {@link #note}. */
+    private final Set<TaiBenchSuite.EntryPlan> screenOffEntries =
+        java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Map<TaiBenchSuite.EntryPlan, Integer> peakThermal = new IdentityHashMap<>();
     private final Map<TaiBenchSuite.EntryPlan, TaiBenchGuardRules.Snapshot> startSnapshots = new IdentityHashMap<>();
     private final Map<TaiBenchSuite.EntryPlan, TaiBenchGuardRules.Snapshot> endSnapshots = new IdentityHashMap<>();
 
@@ -55,6 +59,8 @@ final class TaiBenchConditionsGuard implements TaiBenchGuard {
             baseline = snapshot;
             firstEntry = entry;
         }
+        // Readings before the entry's load is let go (a cool-down wait) describe the last entry's heat.
+        if (startSnapshots.containsKey(entry)) note(entry, snapshot);
         boolean isFirst = entry == firstEntry;
         boolean cooldownApplies = TaiBenchSuite.PHASE_LOAD.equals(phase) && !isFirst;
         boolean skip = cooldownApplies && skipRequested.getAndSet(false);
@@ -78,6 +84,18 @@ final class TaiBenchConditionsGuard implements TaiBenchGuard {
         waitReason = null;
         if (result.warmStart) warmEntries.add(entry);
         return result.decision;
+    }
+
+    /**
+     * Remembers what one reading says about the entry it was taken during: the screen was off, and
+     * the highest thermal status so far. Called from {@link #entryStarted} on, never during the
+     * cool-down wait before it.
+     */
+    private void note(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull TaiBenchGuardRules.Snapshot snapshot) {
+        if (snapshot.screenOff) screenOffEntries.add(entry);
+        if (snapshot.thermalStatus < 0) return;
+        Integer peak = peakThermal.get(entry);
+        if (peak == null || snapshot.thermalStatus > peak) peakThermal.put(entry, snapshot.thermalStatus);
     }
 
     /**
@@ -117,12 +135,16 @@ final class TaiBenchConditionsGuard implements TaiBenchGuard {
 
     @Override
     public void entryStarted(@NonNull TaiBenchSuite.EntryPlan entry) {
-        startSnapshots.put(entry, reader.get());
+        TaiBenchGuardRules.Snapshot snapshot = reader.get();
+        note(entry, snapshot);
+        startSnapshots.put(entry, snapshot);
     }
 
     @Override
     public void entryFinished(@NonNull TaiBenchSuite.EntryPlan entry) {
-        endSnapshots.put(entry, reader.get());
+        TaiBenchGuardRules.Snapshot snapshot = reader.get();
+        note(entry, snapshot);
+        endSnapshots.put(entry, snapshot);
     }
 
     @NonNull
@@ -139,6 +161,12 @@ final class TaiBenchConditionsGuard implements TaiBenchGuard {
         json.put("headroomStart", start != null && !Float.isNaN(start.headroom) ? round2(start.headroom) : JSONObject.NULL);
         json.put("headroomEnd", end != null && !Float.isNaN(end.headroom) ? round2(end.headroom) : JSONObject.NULL);
         json.put("warmStart", warmEntries.contains(entry));
+        // Heat that rose above the run-start baseline during the entry, not only at its start.
+        Integer peak = peakThermal.get(entry);
+        json.put("thermalRose", baseline != null && baseline.thermalStatus >= 0 && peak != null && peak > baseline.thermalStatus);
+        json.put("thermalPeak", peak == null ? JSONObject.NULL : orNull(TaiBenchGuardRules.thermalStatusName(peak)));
+        json.put("powerSave", start != null && start.powerSave);
+        json.put("screenOff", screenOffEntries.contains(entry));
         return json;
     }
 

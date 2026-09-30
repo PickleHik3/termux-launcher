@@ -20,8 +20,11 @@ import com.termux.R;
 import com.termux.ai.TaiBenchGuardRules;
 import com.termux.ai.TaiBenchSuite;
 import com.termux.ai.TaiDeviceConditions;
+import com.termux.ai.TaiDownloadHub;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -29,8 +32,9 @@ import java.util.concurrent.Executors;
  * Check (spec Screen 3), a bottom sheet with one line per condition: battery, heat, the "will
  * get warm" warning, keep the screen open, and the downloads with the "remove afterwards"
  * toggle. Start stays disabled while a blocking line fails (the same
- * {@link TaiBenchGuardRules#startCheck} refusal the runtime would answer with), and the failing
- * line says what to do. The phone is re-read every {@link #POLL_MS} while the sheet is up, so
+ * {@link TaiBenchGuardRules#startCheck} refusal the runtime would answer with, or too little
+ * storage for the downloads), and the failing line says what to do. Battery saver and downloads
+ * already running are warnings: they show, and Start stays on. The phone is re-read every {@link #POLL_MS} while the sheet is up, so
  * plugging in or letting it cool enables Start without reopening.
  */
 final class TaiBenchCheckSheet {
@@ -58,10 +62,17 @@ final class TaiBenchCheckSheet {
 
         Line battery = new Line(context, R.drawable.ic_symbol_battery_saver);
         Line heat = new Line(context, R.drawable.ic_symbol_info);
+        Line saver = new Line(context, R.drawable.ic_symbol_battery_saver);
+        Line busy = new Line(context, R.drawable.ic_symbol_info);
         Line warm = new Line(context, R.drawable.ic_symbol_info);
         Line screen = new Line(context, R.drawable.ic_symbol_phone_portrait);
         content.addView(battery.view, TaiBenchViews.block(context, 16));
         content.addView(heat.view, TaiBenchViews.block(context, 10));
+        content.addView(saver.view, TaiBenchViews.block(context, 10));
+        saver.view.setVisibility(View.GONE);
+        saver.set(context.getString(R.string.tai_bench_check_saver_title), context.getString(R.string.tai_bench_check_saver_summary), Line.INFO);
+        content.addView(busy.view, TaiBenchViews.block(context, 10));
+        busy.view.setVisibility(View.GONE);
         content.addView(warm.view, TaiBenchViews.block(context, 10));
         content.addView(screen.view, TaiBenchViews.block(context, 10));
         warm.set(context.getString(R.string.tai_bench_check_warm_title), context.getString(R.string.tai_bench_check_warm_summary), Line.INFO);
@@ -75,8 +86,12 @@ final class TaiBenchCheckSheet {
             downloadBytes += Math.max(0L, model.sizeBytes);
         }
         final boolean[] remove = {true};
+        final long neededBytes = downloadBytes;
+        Line downloads = null;
+        Set<String> ownModels = new HashSet<>();
+        for (TaiBenchSession.Model model : models) ownModels.add(model.modelId);
         if (downloadCount > 0) {
-            Line downloads = new Line(context, R.drawable.ic_symbol_save);
+            downloads = new Line(context, R.drawable.ic_symbol_save);
             downloads.set(context.getResources().getQuantityString(R.plurals.tai_bench_check_downloads_title, downloadCount, downloadCount),
                 context.getString(R.string.tai_bench_check_downloads_summary, TaiModelCentreRows.formatBytes(downloadBytes)), Line.INFO);
             content.addView(downloads.view, TaiBenchViews.block(context, 10));
@@ -106,6 +121,7 @@ final class TaiBenchCheckSheet {
             return thread;
         });
         TaiDeviceConditions reader = new TaiDeviceConditions(context);
+        final Line downloadsLine = downloads;
         final boolean[] blocked = {true};
         Runnable poll = new Runnable() {
             @Override
@@ -119,12 +135,29 @@ final class TaiBenchCheckSheet {
                         snapshot = TaiBenchGuardRules.Snapshot.UNKNOWN;
                     }
                     TaiBenchGuardRules.Snapshot seen = snapshot;
+                    long shortfall = 0L;
+                    int others = 0;
+                    try {
+                        if (neededBytes > 0L) {
+                            shortfall = TaiBenchGuardRules.storageShortfallBytes(neededBytes, context.getFilesDir().getUsableSpace());
+                        }
+                        for (TaiDownloadHub.Snapshot download : TaiDownloadHub.get(context).snapshot()) {
+                            if (download.isLive() && !ownModels.contains(download.modelId)) others++;
+                        }
+                    } catch (RuntimeException ignored) {
+                    }
+                    long seenShortfall = shortfall;
+                    int seenOthers = others;
                     handler.post(() -> {
                         if (!sheet.isShowing()) return;
                         String reason = TaiBenchGuardRules.startCheck(seen);
                         bindBattery(context, battery, seen, "battery_low".equals(reason));
                         bindHeat(context, heat, seen, "too_hot".equals(reason));
-                        blocked[0] = reason != null;
+                        saver.view.setVisibility(TaiBenchGuardRules.startWarnings(seen).contains(TaiBenchGuardRules.WARN_POWER_SAVE)
+                            ? View.VISIBLE : View.GONE);
+                        bindBusy(context, busy, seenOthers);
+                        if (downloadsLine != null) bindDownloads(context, downloadsLine, models, seenShortfall);
+                        blocked[0] = reason != null || seenShortfall > 0L;
                         TaiBenchViews.setEnabled(start, !blocked[0]);
                         handler.postDelayed(this, POLL_MS);
                     });
@@ -144,6 +177,31 @@ final class TaiBenchCheckSheet {
         sheet.setContentView(content);
         sheet.show();
         poll.run();
+    }
+
+    private static void bindDownloads(@NonNull Context context, @NonNull Line line, @NonNull List<TaiBenchSession.Model> models, long shortfall) {
+        int count = 0;
+        long bytes = 0L;
+        for (TaiBenchSession.Model model : models) {
+            if (model.installed) continue;
+            count++;
+            bytes += Math.max(0L, model.sizeBytes);
+        }
+        String title = context.getResources().getQuantityString(R.plurals.tai_bench_check_downloads_title, count, count);
+        if (shortfall > 0L) {
+            line.set(context.getString(R.string.tai_bench_check_storage_title) + " · " + title,
+                context.getString(R.string.tai_bench_check_storage_fix, TaiModelCentreRows.formatBytes(shortfall)), Line.FAIL);
+        } else {
+            line.set(title, context.getString(R.string.tai_bench_check_downloads_summary, TaiModelCentreRows.formatBytes(bytes)), Line.INFO);
+        }
+    }
+
+    private static void bindBusy(@NonNull Context context, @NonNull Line line, int others) {
+        line.view.setVisibility(others > 0 ? View.VISIBLE : View.GONE);
+        if (others > 0) {
+            line.set(context.getResources().getQuantityString(R.plurals.tai_bench_check_busy_title, others, others),
+                context.getString(R.string.tai_bench_check_busy_summary), Line.INFO);
+        }
     }
 
     private static void bindBattery(@NonNull Context context, @NonNull Line line, @NonNull TaiBenchGuardRules.Snapshot snapshot, boolean failing) {

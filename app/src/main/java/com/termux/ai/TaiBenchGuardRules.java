@@ -3,6 +3,9 @@ package com.termux.ai;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * The battery and thermal safety rules of {@code project-docs/active/benchmark/SPEC.md}'s Safety table,
  * as pure functions of a {@link Snapshot}: no Android type, no clock, no I/O, so the table of
@@ -36,6 +39,11 @@ public final class TaiBenchGuardRules {
     /** Cool-down: the headroom is "recovered" within this much of the baseline's. */
     static final float HEADROOM_TOLERANCE = 0.05f;
 
+    /** Start check warning: battery saver is on, which throttles the CPU and skews the figures. */
+    public static final String WARN_POWER_SAVE = "power_save";
+    /** Start check: the room left for the downloads, on top of their size (matches the Choose screen). */
+    public static final double STORAGE_RESERVE = 0.10;
+
     /** How often a "left the screen" hold pause asks again. */
     static final long HELD_POLL_MS = 1_000L;
     /** A hold held this long in total stops the run. */
@@ -50,12 +58,23 @@ public final class TaiBenchGuardRules {
         public final boolean charging;
         public final int thermalStatus;
         public final float headroom;
+        /** Battery saver is on. */
+        public final boolean powerSave;
+        /** The screen is off (not interactive). */
+        public final boolean screenOff;
 
         public Snapshot(int batteryPercent, boolean charging, int thermalStatus, float headroom) {
+            this(batteryPercent, charging, thermalStatus, headroom, false, false);
+        }
+
+        public Snapshot(int batteryPercent, boolean charging, int thermalStatus, float headroom,
+                        boolean powerSave, boolean screenOff) {
             this.batteryPercent = batteryPercent;
             this.charging = charging;
             this.thermalStatus = thermalStatus;
             this.headroom = headroom;
+            this.powerSave = powerSave;
+            this.screenOff = screenOff;
         }
 
         public static final Snapshot UNKNOWN = new Snapshot(-1, false, -1, Float.NaN);
@@ -86,6 +105,25 @@ public final class TaiBenchGuardRules {
             return "too_hot";
         }
         return null;
+    }
+
+    /** Warnings for the start check: they show on the Check sheet but never block Start. */
+    @NonNull
+    public static List<String> startWarnings(@NonNull Snapshot snapshot) {
+        List<String> warnings = new ArrayList<>(1);
+        if (snapshot.powerSave) warnings.add(WARN_POWER_SAVE);
+        return warnings;
+    }
+
+    /**
+     * How many bytes short the phone is for the downloads: their total size plus
+     * {@link #STORAGE_RESERVE}, less what is free. {@code 0} when it fits, when there is nothing
+     * to download, or when the free space is unknown ({@code < 0}).
+     */
+    public static long storageShortfallBytes(long downloadBytes, long freeBytes) {
+        if (downloadBytes <= 0L || freeBytes < 0L) return 0L;
+        long needed = (long) Math.ceil(downloadBytes * (1.0 + STORAGE_RESERVE));
+        return Math.max(0L, needed - freeBytes);
     }
 
     /**

@@ -1471,6 +1471,7 @@
         <string name="tai_bench_verdict_usable">Usable</string>
         <string name="tai_bench_verdict_slow">Slow</string>
         <string name="tai_bench_verdict_broken">Broken</string>
+        <string name="tai_bench_verdict_crashed">Crashed</string>
         <string name="tai_bench_phase_load">load</string>
         <string name="tai_bench_phase_warmup">warm-up</string>
         <string name="tai_bench_phase_chat">chat</string>
@@ -1488,8 +1489,10 @@
         <string name="tai_bench_memory">Memory: %1$s</string>
         <string name="tai_bench_mark_draft">draft model</string>
         <string name="tai_bench_mark_charging">charging</string>
-        <string name="tai_bench_mark_warm_start">warm start</string>
+        <string name="tai_bench_mark_warm_start">ran warm</string>
         <string name="tai_bench_mark_low_battery">low battery</string>
+        <string name="tai_bench_mark_battery_saver">battery saver</string>
+        <string name="tai_bench_mark_screen_off">screen off</string>
         <string name="tai_bench_mark_older_version">older version</string>
         <string name="tai_bench_mark_not_installed">not installed</string>
         <string name="tai_bench_rank">#%1$d</string>
@@ -1560,6 +1563,15 @@
         <string name="tai_bench_check_heat_ok">Cool enough to start. The run waits between models for the phone to cool.</string>
         <string name="tai_bench_check_heat_unknown">This phone does not report its heat; the run cannot wait for it to cool.</string>
         <string name="tai_bench_check_heat_fix">Let the phone cool down first.</string>
+        <string name="tai_bench_check_saver_title">Battery saver is on</string>
+        <string name="tai_bench_check_saver_summary">It slows the phone, so the speeds will read low. The results are marked \"battery saver\".</string>
+        <string name="tai_bench_check_storage_title">Not enough storage</string>
+        <string name="tai_bench_check_storage_fix">The downloads need %1$s more free space. Free some up or pick fewer models.</string>
+        <plurals name="tai_bench_check_busy_title">
+            <item quantity="one">%1$d other download is running</item>
+            <item quantity="other">%1$d other downloads are running</item>
+        </plurals>
+        <string name="tai_bench_check_busy_summary">They share the network and the disk, so the downloads here may be slower.</string>
         <string name="tai_bench_check_warm_title">The phone will get warm</string>
         <string name="tai_bench_check_warm_summary">Keep it out of direct sun, not outdoors in the heat, and not in a pocket or under a pillow.</string>
         <string name="tai_bench_check_screen_title">Keep this screen open</string>
