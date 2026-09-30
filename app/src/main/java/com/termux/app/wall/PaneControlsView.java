@@ -271,16 +271,35 @@ public final class PaneControlsView extends View {
     private final ExploreByTouchHelper mAccessibility = new ExploreByTouchHelper(this) {
         private final RectF mBoundsF = new RectF();
 
+        /**
+         * What a screen reader says for a button: its description, else its label for a labelled
+         * button, else nothing. A bare glyph is a private-use character with no word behind it,
+         * so it is not offered as a virtual view at all: ExploreByTouchHelper throws on a node
+         * with neither text nor description, and a silent node would be no use anyway.
+         */
+        @Nullable
+        private CharSequence spoken(@Nullable Action action) {
+            if (action == null) return null;
+            if (action.description != null) return action.description;
+            if (!action.isGlyph && action.mark == null && !action.text.isEmpty()) return action.text;
+            return null;
+        }
+
         @Override
         protected int getVirtualViewAt(float x, float y) {
             int id = actionAt(x, y);
-            return id == ACTION_NONE ? ExploreByTouchHelper.INVALID_ID : id;
+            if (id == ACTION_NONE) return ExploreByTouchHelper.INVALID_ID;
+            int index = indexOf(id);
+            return index < 0 || spoken(mActions.get(index)) == null
+                ? ExploreByTouchHelper.INVALID_ID : id;
         }
 
         @Override
         protected void getVisibleVirtualViews(List<Integer> virtualViewIds) {
             if (!isControlsShown()) return;
-            for (Action action : mActions) virtualViewIds.add(action.id);
+            for (Action action : mActions) {
+                if (spoken(action) != null) virtualViewIds.add(action.id);
+            }
         }
 
         @Override
@@ -288,11 +307,10 @@ public final class PaneControlsView extends View {
                                                     @NonNull AccessibilityNodeInfoCompat node) {
             int index = indexOf(virtualViewId);
             Action action = index < 0 ? null : mActions.get(index);
-            // A described button says its description; a labelled one says its label; a bare
-            // glyph, a private-use character with no word behind it, says nothing.
-            node.setContentDescription(action == null ? null
-                : action.description != null ? action.description
-                : !action.isGlyph && action.mark == null ? action.text : null);
+            CharSequence spoken = spoken(action);
+            // Never null: the helper requires text or a description on every node it hands out.
+            node.setContentDescription(spoken != null ? spoken
+                : getResources().getString(android.R.string.untitled));
             node.setClassName(android.widget.Button.class.getName());
             node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
             Rect bounds = new Rect(0, 0, 1, 1);
