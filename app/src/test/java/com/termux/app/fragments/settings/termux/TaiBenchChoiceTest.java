@@ -8,7 +8,13 @@ import static org.junit.Assert.assertTrue;
 import com.termux.ai.TaiBenchSuite;
 import com.termux.ai.TaiModelSpec;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 import org.junit.Test;
+
+import java.util.Collections;
+import java.util.Set;
 
 /** The Choose screen's filter: RAM fit, storage for a download, the chip a build was made for, MNN support, and the GPU count. */
 public class TaiBenchChoiceTest {
@@ -108,5 +114,23 @@ public class TaiBenchChoiceTest {
         assertEquals(3 * 60_000L, TaiBenchChoice.estimateMs(TaiBenchSuite.Preset.STANDARD, true, noGpu));
         assertEquals(3 * 60_000L, TaiBenchChoice.estimateMs(TaiBenchSuite.Preset.STANDARD, false, PHONE));
         assertEquals(90_000L, TaiBenchChoice.estimateMs(TaiBenchSuite.Preset.QUICK, false, PHONE));
+    }
+
+    private static JSONObject recordOf(String modelId, String status, long timestamp) throws JSONException {
+        return new JSONObject().put("modelId", modelId).put("benchVersion", TaiBenchSuite.BENCH_VERSION)
+            .put("status", status).put("timestamp", timestamp);
+    }
+
+    @Test
+    public void aModelWhoseLatestRecordIsACrashIsFlagged() throws Exception {
+        JSONArray records = new JSONArray()
+            .put(recordOf("a", "complete", 1L)).put(recordOf("a", "crashed", 2L))
+            .put(recordOf("b", "crashed", 1L)).put(recordOf("b", "complete", 2L))
+            .put(recordOf("c", "crashed", 1L).put("benchVersion", "bench_v1"));
+
+        Set<String> crashed = TaiBenchChoice.crashedModels(new JSONObject().put("records", records), TaiBenchSuite.BENCH_VERSION);
+
+        assertEquals(Collections.singleton("a"), crashed);
+        assertTrue(TaiBenchChoice.crashedModels(null, TaiBenchSuite.BENCH_VERSION).isEmpty());
     }
 }

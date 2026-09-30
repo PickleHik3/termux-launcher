@@ -328,6 +328,8 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
             case "thermal_timeout": return getString(R.string.tai_bench_stopped_thermal);
             case "unloaded": return getString(R.string.tai_bench_stopped_unloaded);
             case "left": return getString(R.string.tai_bench_stopped_left);
+            case "memory_pressure": return getString(R.string.tai_bench_stopped_memory);
+            case "timeout": return getString(R.string.tai_bench_stopped_timeout);
             default: return reason;
         }
     }

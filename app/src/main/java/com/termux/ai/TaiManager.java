@@ -672,11 +672,22 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject cancelRuntime() throws JSONException {
+        return cancelRuntime(TaiBenchHarness.STOP_CANCELLED);
+    }
+
+    /**
+     * {@link #cancelRuntime()} with the reason a running benchmark's record gives for stopping:
+     * {@code cancelled} is the user, {@code memory_pressure} is the runtime giving everything back
+     * when the phone ran out. Only the runtime process itself passes anything else; a request over
+     * IPC is always the user's.
+     */
+    @NonNull
+    public JSONObject cancelRuntime(@NonNull String stopReason) throws JSONException {
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_CANCEL, "{}");
         // tai cancel is how a running benchmark is stopped from outside; see TaiRuntimeService's
         // busy rule. The harness cancels the generation itself and records the entry as stopped.
         TaiBenchHarness bench = activeBench;
-        if (bench != null) bench.requestStop("cancelled");
+        if (bench != null) bench.requestStop(stopReason);
         return localRuntime().cancel();
     }
 
@@ -837,45 +848,41 @@ public final class TaiManager {
             return;
         }
         try {
-            TaiBenchStore store = benchStore();
-            runtimeClient.stream(TaiRuntimeIpc.OP_BENCH_RUN, prepared.toString(), new OpenAiStreamSink() {
-                @Override
-                public void onEvent(@NonNull JSONObject event) throws IOException {
-                    if (!event.has("event") && event.has("error")) {
-                        // The service client's shape for a runtime that died or refused the stream.
-                        try {
-                            sink.onEvent(benchErrorEvent(event.optJSONObject("tai") == null ? event : event.getJSONObject("tai")));
-                        } catch (JSONException e) {
-                            throw new IOException(e);
-                        }
-                        return;
-                    }
-                    if ("entry_done".equals(event.optString("event", ""))) {
-                        JSONObject record = event.optJSONObject("record");
-                        try {
-                            if (record != null) {
-                                store.append(record);
-                                event.put("stored", true);
-                            }
-                        } catch (IOException | JSONException e) {
-                            try {
-                                event.put("stored", false);
-                                event.put("storeError", message(e));
-                            } catch (JSONException ignored) {
-                            }
-                        }
-                    }
-                    sink.onEvent(event);
-                }
-
-                @Override
-                public void onDone() throws IOException {
-                    sink.onDone();
-                }
-            });
+            // The runtime can die under a run; the recovery writes what the harness could not and
+            // asks for the rest of the entries again (see TaiBenchCrashRecovery).
+            new TaiBenchCrashRecovery(benchStore(), com.termux.BuildConfig.VERSION_NAME,
+                TaiBenchCrashRecovery.DEFAULT_RESTART_PAUSE_MS).run(prepared, benchErrorMapped(sink),
+                (request, attemptSink) -> runtimeClient.stream(TaiRuntimeIpc.OP_BENCH_RUN, request.toString(), attemptSink));
         } finally {
             benchStreamActive.set(false);
         }
+    }
+
+    /**
+     * {@code sink} with the service client's error shape ({@code {error, tai}}) turned into the
+     * bench's own {@code error} event, for errors the recovery does not handle itself.
+     */
+    @NonNull
+    private static OpenAiStreamSink benchErrorMapped(@NonNull OpenAiStreamSink sink) {
+        return new OpenAiStreamSink() {
+            @Override
+            public void onEvent(@NonNull JSONObject event) throws IOException {
+                if (!event.has("event") && event.has("error")) {
+                    try {
+                        sink.onEvent(benchErrorEvent(event.optJSONObject("tai") == null ? event : event.getJSONObject("tai")));
+                    } catch (JSONException e) {
+                        throw new IOException(e);
+                    }
+                    return;
+                }
+                sink.onEvent(event);
+            }
+
+            @Override
+            public void onDone() throws IOException {
+                sink.onDone();
+            }
+        };
     }
 
     /**
@@ -995,6 +1002,15 @@ public final class TaiManager {
             for (int i = 0; i < requestedProcessors.length(); i++) processors.add(requestedProcessors.optString(i, ""));
         }
         List<TaiBenchSuite.EntryPlan> entries = TaiBenchSuite.expand(inputs, request.optBoolean("compare", false), processors, request.optBoolean("eagle", false));
+        // A restart after the runtime crashed asks only for the entries not yet finished.
+        JSONArray skip = request.optJSONArray("skip");
+        if (skip != null && skip.length() > 0) {
+            Set<String> finished = new LinkedHashSet<>();
+            for (int i = 0; i < skip.length(); i++) finished.add(skip.optString(i, ""));
+            List<TaiBenchSuite.EntryPlan> remaining = new ArrayList<>();
+            for (TaiBenchSuite.EntryPlan planned : entries) if (!finished.contains(planned.key())) remaining.add(planned);
+            entries = remaining;
+        }
         if (entries.isEmpty()) {
             emitBenchError(sink, error(400, "no_entries", "Nothing to run: no model and processor pair to benchmark."));
             return;
@@ -1049,6 +1065,9 @@ public final class TaiManager {
 
     /** The harness's window on this process: the router, the meter, the log, the stamps. */
     private final class BenchHost implements TaiBenchHarness.Host {
+        /** Long enough for the {@code done} event to reach the app over the binder before the process goes. */
+        private static final long ABANDON_KILL_DELAY_MS = 1_500L;
+
         @NonNull private final Map<String, TaiModelSpec> specs;
         @NonNull private final Map<String, TaiRuntimeOptions> baseOptions;
         @Nullable private String log;
@@ -1102,6 +1121,58 @@ public final class TaiManager {
         @Override
         public JSONObject unload() throws JSONException {
             return localRuntime().unload();
+        }
+
+        /** The chat model resident now, with the processor it runs on and what is left of its keep-warm. */
+        @Nullable
+        @Override
+        public JSONObject residentChat() throws JSONException {
+            TaiRuntimeState state = localRuntime().getState();
+            if (!state.loaded || state.loadedModelId == null) return null;
+            JSONObject resident = new JSONObject().put("modelId", state.loadedModelId);
+            MultiBackendTaiRuntime router = MultiBackendTaiRuntime.processInstance();
+            TaiResidency.Entry entry = router == null ? null : router.residency().find(TaiResidency.Kind.CHAT, state.loadedModelId);
+            if (entry != null) resident.put("accelerator", entry.accelerator);
+            long warmLeftMs = state.keepWarmUntilMs - System.currentTimeMillis();
+            if (state.keepWarmUntilMs > 0L && warmLeftMs > 0L) {
+                resident.put("keepWarmMinutes", Math.max(1L, (warmLeftMs + 59_999L) / 60_000L));
+            }
+            return resident;
+        }
+
+        /** Loads it back the way {@code tai load} does (or {@code tai keep-warm}, when it was being kept warm). */
+        @Override
+        public void restoreChat(@NonNull JSONObject resident) throws JSONException {
+            JSONObject request = new JSONObject().put("model", resident.optString("modelId", ""));
+            String accelerator = resident.optString("accelerator", "");
+            if (!accelerator.isEmpty()) request.put("accelerator", accelerator);
+            int minutes = resident.optInt("keepWarmMinutes", 0);
+            if (minutes > 0) {
+                request.put("minutes", minutes);
+                keepWarmRuntime(request.toString());
+            } else {
+                loadModel(request.toString());
+            }
+        }
+
+        /**
+         * A load that never returned is still running on a thread the runtime cannot stop, and the
+         * weights it mapped stay mapped for as long as the process lives. Ending the process is the
+         * only way to get them back, so it goes a moment after the run's {@code done} has been
+         * sent. The app's client sees no request in flight, does not count it a crash, and binds a
+         * fresh process on the next request.
+         */
+        @Override
+        public void abandonRuntime() {
+            Thread killer = new Thread(() -> {
+                try {
+                    Thread.sleep(ABANDON_KILL_DELAY_MS);
+                } catch (InterruptedException ignored) {
+                }
+                Process.killProcess(Process.myPid());
+            }, "tai-bench-abandon");
+            killer.setDaemon(true);
+            killer.start();
         }
 
         @NonNull

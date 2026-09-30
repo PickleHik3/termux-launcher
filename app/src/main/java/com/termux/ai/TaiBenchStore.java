@@ -53,6 +53,13 @@ public final class TaiBenchStore {
     /** Runs kept per leaderboard entry; the oldest go first. */
     static final int KEEP_PER_KEY = 20;
     public static final String STATUS_COMPLETE = "complete";
+    /**
+     * The runtime process died (or the app did) while this entry was loading or running. Like
+     * every status but {@link #STATUS_COMPLETE} it never ranks; the Choose screen reads it to keep
+     * the model out of the default selection.
+     */
+    public static final String STATUS_CRASHED = "crashed";
+    static final String MARKER_SUFFIX = ".inprogress";
     private static final int FORMAT_VERSION = 1;
 
     @NonNull private final File file;
@@ -92,6 +99,116 @@ public final class TaiBenchStore {
         JSONArray array = new JSONArray();
         for (JSONObject record : readRecords()) array.put(record);
         return array;
+    }
+
+    // ---- the in-progress marker --------------------------------------------------------------
+
+    @NonNull
+    private File markerFile() {
+        return new File(file.getParentFile(), file.getName() + MARKER_SUFFIX);
+    }
+
+    /**
+     * Writes down which entry is about to load, before it does, so a death of the runtime or the
+     * app mid-load can still be recorded ({@link #recoverStaleMarker}). One marker at a time; the
+     * next entry overwrites it. {@code marker} is {@code {modelId, backend, accelerator,
+     * speculative, preset, benchVersion, timestamp, appVersion, device}}.
+     */
+    synchronized void markInProgress(@NonNull JSONObject marker) throws IOException {
+        File parent = file.getParentFile();
+        if (parent != null && !parent.isDirectory() && !parent.mkdirs() && !parent.isDirectory()) {
+            throw new IOException("Could not create " + parent);
+        }
+        File target = markerFile();
+        File temp = new File(parent, target.getName() + ".tmp");
+        try (FileOutputStream output = new FileOutputStream(temp)) {
+            output.write(marker.toString().getBytes(StandardCharsets.UTF_8));
+            output.getFD().sync();
+        }
+        try {
+            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException | UnsupportedOperationException atomicUnsupported) {
+            if (!temp.renameTo(target)) {
+                //noinspection ResultOfMethodCallIgnored
+                temp.delete();
+                throw new IOException("Could not replace " + target);
+            }
+        }
+    }
+
+    /** The entry marked in progress, or {@code null} when none is (or the marker does not parse). */
+    @Nullable
+    synchronized JSONObject inProgress() {
+        File target = markerFile();
+        if (!target.isFile()) return null;
+        try {
+            return new JSONObject(new String(Files.readAllBytes(target.toPath()), StandardCharsets.UTF_8));
+        } catch (IOException | JSONException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    synchronized void clearInProgress() {
+        //noinspection ResultOfMethodCallIgnored
+        markerFile().delete();
+    }
+
+    /**
+     * A marker still on disk when a run starts means the app or the runtime died mid-load last
+     * time: writes the {@code crashed} record for it and clears the marker. Returns the record, or
+     * {@code null} when there was nothing to recover.
+     */
+    @Nullable
+    synchronized JSONObject recoverStaleMarker(@NonNull String reason) throws IOException {
+        JSONObject marker = inProgress();
+        if (marker == null) {
+            clearInProgress();
+            return null;
+        }
+        JSONObject record = crashedRecord(marker, reason);
+        append(record);
+        clearInProgress();
+        return record;
+    }
+
+    /**
+     * The record for an entry that died: no figures, {@code status: crashed}, and the reason in
+     * {@code skipReason} (which the run screen shows as the entry's note).
+     */
+    @NonNull
+    static JSONObject crashedRecord(@NonNull JSONObject marker, @NonNull String reason) {
+        try {
+            long started = marker.optLong("timestamp", System.currentTimeMillis());
+            JSONObject phases = new JSONObject().put("load", JSONObject.NULL).put("chat", JSONObject.NULL)
+                .put("longInput", JSONObject.NULL);
+            JSONObject check = new JSONObject().put("passed", 0).put("total", TaiBenchSuite.CHECKS.size())
+                .put("details", new JSONArray());
+            JSONObject device = marker.optJSONObject("device");
+            return new JSONObject()
+                .put("id", java.util.UUID.randomUUID().toString())
+                .put("benchVersion", marker.optString("benchVersion", TaiBenchSuite.BENCH_VERSION))
+                .put("preset", marker.optString("preset", ""))
+                .put("timestamp", started)
+                .put("durationMs", Math.max(0L, System.currentTimeMillis() - started))
+                .put("modelId", marker.optString("modelId", ""))
+                .put("displayName", marker.optString("displayName", marker.optString("modelId", "")))
+                .put("sizeBytes", marker.optLong("sizeBytes", 0L))
+                .put("sha256", JSONObject.NULL)
+                .put("backend", marker.optString("backend", ""))
+                .put("accelerator", marker.optString("accelerator", ""))
+                .put("speculative", marker.optBoolean("speculative", false))
+                .put("runtimeVersion", "")
+                .put("appVersion", marker.optString("appVersion", ""))
+                .put("device", device == null ? new JSONObject() : device)
+                .put("conditions", new JSONObject())
+                .put("phases", phases)
+                .put("check", check)
+                .put("status", STATUS_CRASHED)
+                .put("verdict", JSONObject.NULL)
+                .put("skipReason", reason);
+        } catch (JSONException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     /** Removes every record, or only {@code modelId}'s; returns how many went. */
