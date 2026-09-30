@@ -138,16 +138,29 @@ public final class GlassSurfaceFactory {
     @NonNull
     public Drawable statusBarSurface(float barAlpha, float sliceStart, float sliceEnd, boolean rim,
                                      @Nullable GlassBackdropCache.Band band) {
+        return statusBarSurface(barAlpha, sliceStart, sliceEnd,
+            rim ? ChromeEdgeRule.ALL : ChromeEdgeRule.NONE, band);
+    }
+
+    /**
+     * @param strokeEdges the {@link ChromeEdgeRule} edges the containing stroke runs along: all
+     *     four for the capsule, only the inner edge for a docked bar, whose other edges run into
+     *     the screen and the strip behind the system status bar
+     */
+    @NonNull
+    public Drawable statusBarSurface(float barAlpha, float sliceStart, float sliceEnd,
+                                     int strokeEdges, @Nullable GlassBackdropCache.Band band) {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         int grain = preferences != null
             ? preferences.getStatusBarGrain()
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
         // Height-clamped like the outline clip (min(configured, height/2)): the compact pill's
         // baked stroke must curve exactly with the clip, or the corners double up.
-        float cornerRadiusPx = rim && mSurfaces.roundedDockStyle()
+        float cornerRadiusPx = strokeEdges != ChromeEdgeRule.NONE && mSurfaces.roundedDockStyle()
             ? mSurfaces.statusBarRimCornerRadiusPx()
             : 0f;
-        return surface(barAlpha, sliceStart, sliceEnd, true, grain, cornerRadiusPx, rim, band);
+        return surface(barAlpha, sliceStart, sliceEnd, true, grain, cornerRadiusPx, strokeEdges,
+            band, band);
     }
 
     @NonNull
@@ -178,8 +191,8 @@ public final class GlassSurfaceFactory {
     public Drawable surface(float barAlpha, float sliceStart, float sliceEnd, boolean withFoot,
                             int grain, float cornerRadiusPx, boolean withRim,
                             @Nullable GlassBackdropCache.Band band) {
-        return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, cornerRadiusPx, withRim,
-            band, band);
+        return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, cornerRadiusPx,
+            withRim ? ChromeEdgeRule.ALL : ChromeEdgeRule.NONE, band, band);
     }
 
     /**
@@ -203,7 +216,8 @@ public final class GlassSurfaceFactory {
         int grain = preferences != null
             ? preferences.getStatusBarGrain()
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
-        return surface(barAlpha, sliceStart, sliceEnd, true, grain, 0f, false, null, veilOf);
+        return surface(barAlpha, sliceStart, sliceEnd, true, grain, 0f, ChromeEdgeRule.NONE, null,
+            veilOf);
     }
 
     /**
@@ -215,7 +229,7 @@ public final class GlassSurfaceFactory {
      */
     @NonNull
     private Drawable surface(float barAlpha, float sliceStart, float sliceEnd, boolean withFoot,
-                             int grain, float cornerRadiusPx, boolean withRim,
+                             int grain, float cornerRadiusPx, int strokeEdges,
                              @Nullable GlassBackdropCache.Band glassBand,
                              @Nullable GlassBackdropCache.Band veilBand) {
         GlassLook look = look();
@@ -267,7 +281,8 @@ public final class GlassSurfaceFactory {
         if (grain > 0) {
             layers.add(grainLayer(grain));
         }
-        if (withRim) layers.add(rimDrawable(cornerRadiusPx));
+        Drawable rim = rimDrawable(cornerRadiusPx, strokeEdges);
+        if (rim != null) layers.add(rim);
         if (cornerRadiusPx > 0f) {
             baseLayer.setCornerRadius(cornerRadiusPx);
             lightLayer.setCornerRadius(cornerRadiusPx);
@@ -299,6 +314,21 @@ public final class GlassSurfaceFactory {
         if (!look().gradientRim) return rim(cornerRadiusPx);
         return new GradientRimDrawable(cornerRadiusPx, Math.max(1, Math.round(mSurfaces.dpToPx(1))),
             GlassLook.RIM_START, GlassLook.RIM_END);
+    }
+
+    /**
+     * The rim along {@code strokeEdges} only: the whole rim for all four, nothing for none, and
+     * otherwise the same rim with the other sides carried off the surface
+     * ({@link OpenEdgeDrawable}), so what is left is the line along the edges that keep it.
+     */
+    @Nullable
+    public Drawable rimDrawable(float cornerRadiusPx, int strokeEdges) {
+        int edges = strokeEdges & ChromeEdgeRule.ALL;
+        if (edges == ChromeEdgeRule.NONE) return null;
+        Drawable rim = rimDrawable(cornerRadiusPx);
+        if (edges == ChromeEdgeRule.ALL) return rim;
+        int reachPx = Math.round(Math.max(0f, cornerRadiusPx) + mSurfaces.dpToPx(2));
+        return new OpenEdgeDrawable(rim, ChromeEdgeRule.ALL & ~edges, reachPx);
     }
 
     /** A tiled grain layer whose strength is controlled only by the grain preference. */

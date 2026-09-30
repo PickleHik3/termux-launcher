@@ -84,6 +84,23 @@ public final class ChromeRenderer {
             return false;
         }
 
+        /**
+         * What leads the top edge's stack, which the strip behind the system status bar continues
+         * in the docked style ({@link ChromeEdgeRule#statusInsetLead}); NONE while the strip is
+         * not shown.
+         */
+        @NonNull
+        default ChromeEdgeRule.TopLead topStackLead() {
+            return roundedDockStyle() ? ChromeEdgeRule.TopLead.NONE
+                : ChromeEdgeRule.TopLead.WINDOW_BAR;
+        }
+
+        /** The screen edge the status bar stands on. */
+        @NonNull
+        default com.termux.app.place.PlaceLayout.Edge statusBarEdge() {
+            return com.termux.app.place.PlaceLayout.Edge.TOP;
+        }
+
         // ---- the wallpaper the blurred frames are captured from: WallpaperBlurCache.Source
 
         /** Blurs a captured frame with the shared renderer; a fake overrides this to skip the blur. */
