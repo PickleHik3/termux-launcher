@@ -54,7 +54,8 @@ android {
         }
 
         versionCode 1020 // Always keep the same versionCode as Termux Upstream to allow users to swap between termux installations.
-        versionName "0.2.40"
+        // One plain X.Y.Z for every edition; nightlies get +dev.<sha> from CI (see AGENTS.md). Keep the line bare: CI greps it.
+        versionName "1.0.0"
 
         if (appVersionName) versionName = appVersionName
         validateVersionName(versionName)
@@ -64,7 +65,6 @@ android {
 
         manifestPlaceholders = [
             TERMUX_PACKAGE_NAME    : "com.termux",
-            TERMUX_APP_NAME        : "Termux:Launcher",
             TERMUX_APP_ALLOW_BACKUP: "false",
             TERMUX_APP_FULL_BACKUP_CONTENT: "false",
             TERMUX_APP_USES_CLEARTEXT_TRAFFIC: "false"
@@ -167,6 +167,7 @@ android {
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
             def abi = output.getFilter(com.android.build.OutputFile.ABI)
+            // CI passes termux-app_v<versionName>_<edition>_<variant>; local builds keep the variant-buildType name.
             outputFileName = new File("termux-app_" + (apkVersionTag ? apkVersionTag : project.ext.packageVariant + "-" + variant.buildType.name) + "_" + (abi ? abi : "universal") + ".apk")
         }
     }

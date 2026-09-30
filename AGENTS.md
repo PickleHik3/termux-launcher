@@ -315,11 +315,11 @@ These were settled deliberately. Raise them if you think they are wrong; do not 
 All development happens on `dev`. Editions receive features exclusively by merging `dev`:
 
 - `main` — the Termux edition (`com.termux`). Merge `dev`, tag `vX.Y.Z`.
-- `nix-edition` — the Nix edition (`com.termux.launcher.nix`), tag `vX.Y.Z-nix`, published as a
+- `nix-edition` — the Nix edition (`com.termux.launcher.nix`), tag `nix-vX.Y.Z`, published as a
   prerelease. Backed by the PickleHik3/nix-on-droid fork, branch `launcher-nix`; bootstrap zips live
   on the `nix-bootstrap` tag. Companion apps (TLNix API/Styling/Boot) release from their `nix-pkg`
   branches via `github_release_build.yml` with `nix-v*` tags.
-- `io-vaj-package` — the VAJ edition (`io.vaj.tl`), tag `vX.Y.Z-vaj`. **The demo edition, and the
+- `io-vaj-package` — the VAJ edition (`io.vaj.tl`), tag `vaj-vX.Y.Z`. **The demo edition, and the
   least recommended one to install.** Its packages come from the developer's own apt repository
   (`repo.pathayam.xyz`), which is updated sometimes, with no promises. The security-only freeze it
   carried from v0.2.34-vaj to v0.2.36-vaj is over — it gets every release like the others — but
@@ -340,21 +340,40 @@ names a package. Their `targetSdk` must stay at the launcher's 28, per the share
 goes to `nix-edition` and `io-vaj-package` in the same pass, each with its own tag, notes and APK
 run. Do not ask which editions to release; releasing one is the thing that needs a reason.
 
+**Versioning.** One plain `X.Y.Z` `versionName` for every edition — no `-nix` / `-vaj` suffix, no
+`+hotfixN`, no `-a`. The edition is a separate fact: it is derived from the package name and shown
+as an `Edition` line in the About screen and every report, and it is part of the tag and the APK
+name. `versionCode` stays **1020** for upstream parity — never change it. The current release is
+**1.0.0**.
+
+- **Tags** carry the edition as a prefix: `vX.Y.Z` (Termux edition, `main`), `nix-vX.Y.Z`
+  (`nix-edition`), `vaj-vX.Y.Z` (`io-vaj-package`). CI (`attach_debug_apks_to_release.yml`) strips
+  the prefix and the `v` and aborts unless the rest equals `versionName`.
+- **Hotfixes bump the patch number** (`1.0.1`) and are a
+  real version with real notes, on every edition.
+- **Nightlies** (`debug_build.yml`) build as `X.Y.Z+dev.<shortsha>`: semver build metadata, so a
+  nightly sorts equal to the release it follows. That string is the in-app `versionName` and goes
+  verbatim into the APK name. The TAI bench groups results by the `X.Y.Z` core only.
+- **APK names** follow one pattern, release and nightly alike:
+  `termux-app_v<versionName>_<edition>_<variant>_<abi>.apk`, with `<edition>` one of `termux`,
+  `nix`, `vaj`; e.g. `termux-app_v1.0.0_termux_apt-android-7_arm64-v8a.apk` and
+  `termux-app_v1.0.0+dev.a1b2c3d_termux_apt-android-7_arm64-v8a.apk`. Local builds keep the plain
+  `termux-app_apt-android-7-debug_<abi>.apk` name.
+- **Legacy tags** (`v0.2.x-nix`, `v0.2.x-vaj`, `v0.2.37+hotfix1`, `v0.2.35-a`) stay as history and
+  are not renamed.
+
+**Every release ships all three editions.** A cut is not finished when `main` is tagged — `dev`
+goes to `nix-edition` and `io-vaj-package` in the same pass, each with its own tag, notes and APK
+run. Do not ask which editions to release; releasing one is the thing that needs a reason.
+
 **Each release branch owns its `versionName`; `dev`'s is not authoritative** (it can sit a release
 or more behind). The last shipped version is the one on `main`, `nix-edition` and
 `io-vaj-package`, or the latest tag — read it there, never from `dev`'s `app/build.gradle`.
 
-Per edition, as in `Release v0.2.39-vaj (merge dev into io-vaj-package)` followed by
-`release: v0.2.39-vaj`: merge `dev`, then set `versionName` in a `release:` commit (it **must**
-equal the tag minus `v` or CI aborts, so it carries the `-nix` / `-vaj` suffix too), push, tag, `gh release create --notes-file …`, then
-dispatch `attach_debug_apks_to_release.yml` with the tag. `versionCode` stays **1020** for upstream
-parity — never change it.
-
-A **hotfix** that must not claim a new version carries semver build metadata instead:
-`v0.2.37+hotfix1`, `v0.2.37-nix+hotfix1`, `v0.2.37-vaj+hotfix1`, with `versionName` matching as
-usual. Build metadata is ignored in semver precedence, so the tag compares equal to the release it
-patches — which also means **a hotfix ships fixes only**. A feature under a `+hotfix` tag is a
-feature under a version that sorts equal to the one before it; cut a real version for that.
+Per edition, as in `Release v1.0.1 (merge dev into io-vaj-package)` followed by `release: vaj-v1.0.1`:
+merge `dev`, then set `versionName` to the plain `X.Y.Z` in a `release:` commit (it **must** equal
+the tag minus its edition prefix and `v`, or CI aborts), push, tag, `gh release create --notes-file …`,
+then dispatch `attach_debug_apks_to_release.yml` with the tag.
 
 Release notes are the **only** changelog, and they live in exactly one place at a time:
 

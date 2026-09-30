@@ -83,5 +83,5 @@
     <string name="a11y_special_key_latched_on">Bật,Đã Khoá</string>
     <string name="a11y_special_key_off">Tắt</string>
     <string name="a11y_special_key_on">Bật</string>
-    <string name="msg_about_termux_monet">Bạn đang sử dụng một Phiên Bản không chính thức, đã sửa đổi của Termux, với các triển khai do cộng đồng tạo ra và các tính năng bị loại bỏ/không được lên kế hoạch. Xin lưu ý rằng ứng dụng này không ổn định và không được Termux hỗ trợ.</string>
+    <string name="msg_about_termux_launcher">Bạn đang sử dụng một Phiên Bản không chính thức, đã sửa đổi của Termux, với các triển khai do cộng đồng tạo ra và các tính năng bị loại bỏ/không được lên kế hoạch. Xin lưu ý rằng ứng dụng này không ổn định và không được Termux hỗ trợ.</string>
 </resources>

@@ -1452,7 +1452,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         final String transcriptText = ShellUtils.getTerminalSessionTranscriptText(session, false, true);
         if (transcriptText == null) return;
 
-        MessageDialogUtils.showMessage(mContext, TermuxConstants.TERMUX_APP_NAME + " Report Issue",
+        MessageDialogUtils.showMessage(mContext, TermuxConstants.TERMUX_LAUNCHER_APP_DISPLAY_NAME + " Report Issue",
             mContext.getString(R.string.msg_add_termux_debug_info),
             mContext.getString(com.termux.shared.R.string.action_yes), (dialog, which) -> reportIssueFromTranscript(transcriptText, true),
             mContext.getString(com.termux.shared.R.string.action_no), (dialog, which) -> reportIssueFromTranscript(transcriptText, false),
@@ -1463,7 +1463,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         Logger.showToast(mContext, mContext.getString(R.string.msg_generating_report), true);
         REPORT_EXECUTOR.execute(() -> {
             StringBuilder reportString = new StringBuilder();
-            String title = TermuxConstants.TERMUX_APP_NAME + " Report Issue";
+            String title = TermuxConstants.TERMUX_LAUNCHER_APP_DISPLAY_NAME + " Report Issue";
             reportString.append("## Transcript\n");
             reportString.append("\n").append(MarkdownUtils.getMarkdownCodeForString(transcriptText, true));
             reportString.append("\n##\n");

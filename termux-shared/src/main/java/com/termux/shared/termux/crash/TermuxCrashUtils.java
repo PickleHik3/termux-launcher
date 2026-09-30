@@ -272,7 +272,7 @@ public class TermuxCrashUtils implements CrashHandler.CrashHandlerClient {
         // Send a notification to show the crash log which when clicked will open the {@link ReportActivity}
         // to show the details of the crash
         if (title == null || title.toString().isEmpty())
-            title = TermuxConstants.TERMUX_APP_NAME + " Crash Report";
+            title = TermuxConstants.TERMUX_LAUNCHER_APP_DISPLAY_NAME + " Crash Report";
         Logger.logDebug(logTag, "Sending \"" + title + "\" notification.");
         StringBuilder reportString = new StringBuilder(message);
         if (appInfoMode != null)

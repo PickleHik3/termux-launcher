@@ -161,6 +161,22 @@ public class TaiBenchLeaderboardTest {
     }
 
     @Test
+    public void onlyTheVersionCoreDecidesOlder() throws JSONException {
+        assertEquals("1.0.0", TaiBenchLeaderboard.versionCore("1.0.0+dev.a1b2c3d"));
+        assertEquals("0.2.40", TaiBenchLeaderboard.versionCore("0.2.40-nix"));
+        assertEquals("0.2.37", TaiBenchLeaderboard.versionCore("0.2.37-vaj+hotfix1"));
+        assertEquals("0.2.35", TaiBenchLeaderboard.versionCore("0.2.35-a"));
+        TaiBenchLeaderboard.Versions now = new TaiBenchLeaderboard.Versions("0.2.40+dev.abc1234", "0.9.0", "3.6.1");
+        JSONObject nightly = record("m1", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1000L, 21.0, 200.0, 900L, true, "0.2.40+dev.def5678", "3.6.1", null);
+        JSONObject legacy = record("m2", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1001L, 20.0, 200.0, 900L, true, "0.2.40-nix", "3.6.1", null);
+        JSONObject older = record("m3", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1002L, 19.0, 200.0, 900L, true, "0.2.39", "3.6.1", null);
+        TaiBenchLeaderboard.Board board = TaiBenchLeaderboard.read(benchmarks(nightly, legacy, older), now);
+        assertFalse(TaiBenchLeaderboard.find(board, "m1|mnn-llm|cpu|off").olderVersion);
+        assertFalse(TaiBenchLeaderboard.find(board, "m2|mnn-llm|cpu|off").olderVersion);
+        assertTrue(TaiBenchLeaderboard.find(board, "m3|mnn-llm|cpu|off").olderVersion);
+    }
+
+    @Test
     public void anEmptyOrMissingAnswerIsAnEmptyBoard() throws JSONException {
         assertTrue(TaiBenchLeaderboard.read(null, NOW).empty());
         assertTrue(TaiBenchLeaderboard.read(benchmarks(), NOW).empty());

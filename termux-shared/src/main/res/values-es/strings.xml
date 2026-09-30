@@ -55,15 +55,6 @@
     <string name="error_exception_received_while_executing_termux_session_command">Excepción recibida durante la ejecución de la sesión de comandos &TERMUX_APP_NAME; \"%1$s\".\nException: %2$s</string>
     <string name="error_exception_received_while_executing_app_shell_command">Excepción recibida durante la ejecución de la sesión de comandos shell de app \"%1$s\".\nException: %2$s</string>
     <!-- TermuxUtils -->
-    <string name="msg_report_issue">Si desea informar este problema, copie el texto del menú de opciones (3 puntos en la parte superior derecha) y publique \u0020un problema en uno de los siguientes enlaces. 
-\n
-\nSi está publicando un reporte de falla de la aplicación &TERMUX_APP_NAME;, proporcione detalles sobre lo que estaba haciendo, qué \u0020causó la falla y cómo reproducirla, si es posible. 
-\n
-\nSi está publicando un problema en GitHub, publíquelo en el repositorio al que pertenece el informe. \u0020Problemas abiertos o correos electrónicos enviados con **capturas de pantalla (parciales)** en lugar de texto copiado o un archivo de este informe \u0020**probablemente se cerrará/eliminará automáticamente**. Opcionalmente, puede eliminar cualquier información específica del dispositivo que \u0020considera privado o no quiere compartir o no es relevante para el problema. 
-\n
-\nNo brindamos soporte para ninguna herramienta o secuencia de comandos relacionada con Hacks. Cualquier pregunta sobre ellos por correo electrónico, \u0020en GitHub u otros foros oficiales de la comunidad de &TERMUX_APP_NAME; **probablemente se cerrará/eliminará automáticamente** y puede \u0020incluso resultar en una prohibición **temporal o permanente**. Consulta %1$s/wiki/Hacking para obtener más información.
-\n
-\nNo informes de los problemas ocurridos en Termux Monet en el repositorio de termux-app, a menos que estés completamente seguro de que este problema también está presente en la aplicación Termux.</string>
     <string name="msg_termux_app_required_by_app">La &TERMUX_APP_NAME; es requerida por la app %1$s para ejecutar comandos de &TERMUX_APP_NAME;.</string>
     <string name="error_termux_app_package_context_not_accessible">La app &TERMUX_APP_NAME; (contexto del paquete) no es accesible.</string>
     <string name="error_termux_prefix_dir_path_not_accessible">El directorio $PREFIX del &TERMUX_APP_NAME; no es accesible por la app %1$s.
@@ -96,7 +87,7 @@
     <string name="log_level_verbose">Verboso</string>
     <string name="log_level_unknown">*Desconocido*</string>
     <string name="log_level_value">Nivel del registro logcat ajustado a \"%1$s\"</string>
-    <string name="msg_about_termux_monet">Estas utilizando una bifurcación no oficial, modificada de Termux, con implementaciones hechas por la comunidad y características descartadas/no planificadas. Ten en cuenta que esta aplicación es inestable y no está soportada por Termux.</string>
+    <string name="msg_about_termux_launcher">Estas utilizando una bifurcación no oficial, modificada de Termux, con implementaciones hechas por la comunidad y características descartadas/no planificadas. Ten en cuenta que esta aplicación es inestable y no está soportada por Termux.</string>
     <string name="a11y_special_key_on">encendido</string>
     <string name="a11y_special_key_latched_on">encendido, bloqueado</string>
     <string name="a11y_special_key_off">apagado</string>

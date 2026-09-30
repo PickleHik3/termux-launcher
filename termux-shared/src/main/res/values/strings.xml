@@ -90,10 +90,10 @@
         \n\nWe do not provide support for any hacking related tools/scripts. Any questions asked about them over email,
         on GitHub or other official &TERMUX_APP_NAME; community forums **will likely be automatically closed/deleted** and may
         even result in **temporary or permanent** ban. Check %1$s/wiki/Hacking for details.
-        \n\nDo not report issues occurred in Termux Monet on termux-app repo, unless you\'re completely certain that this problem is also
-        present in the regular Termux App.</string>
+        \n\nReport issues with this app in its own repository, github.com/PickleHik3/termux-launcher, and not in the
+        upstream Termux repositories: this is an unofficial fork and upstream cannot help with it.</string>
 
-    <string name="msg_about_termux_monet">You are using an unofficial, modified fork of Termux, with community-made implementations and discarded/non-planned features. Be aware that this application is unstable and unsupported by Termux.</string>
+    <string name="msg_about_termux_launcher">You are using an unofficial, modified fork of Termux, with community-made implementations and discarded/non-planned features. Be aware that this application is unstable and unsupported by Termux.</string>
 
     <string name="msg_termux_app_required_by_app">The &TERMUX_APP_NAME; is required by the %1$s app to run &TERMUX_APP_NAME; commands.</string>
     <string name="error_termux_app_package_context_not_accessible">The &TERMUX_APP_NAME; app (package context) is not accessible.</string>

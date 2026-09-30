@@ -80,5 +80,5 @@
 \n##
 \n
 \n</string>
-    <string name="msg_about_termux_monet">Termux nem hivatalos, módosított változatát használod, amely közösség által készített implementációkat és elvetett/nem tervezett funkciókat tartalmaz. Légy tudatában annak, hogy ez az alkalmazás instabil és nem támogatott a Termux által</string>
+    <string name="msg_about_termux_launcher">Termux nem hivatalos, módosított változatát használod, amely közösség által készített implementációkat és elvetett/nem tervezett funkciókat tartalmaz. Légy tudatában annak, hogy ez az alkalmazás instabil és nem támogatott a Termux által</string>
 </resources>
