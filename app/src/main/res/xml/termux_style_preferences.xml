@@ -117,13 +117,8 @@
         <Preference
             app:key="in_app_keyboard_font"
             app:title="@string/settings_typeface_title" />
-        <SeekBarPreference
-            app:key="in_app_keyboard_bottom_padding"
-            app:title="@string/settings_keyboard_bottom_padding_title"
-            app:summary="@string/settings_keyboard_bottom_padding_summary"
-            app:showSeekBarValue="true"
-            android:max="48"
-            android:defaultValue="0" />
+        <!-- Bottom padding left for the Layout editor (spec §6): the keyboard's bottom handle on
+             the layout canvas writes the same chin, per orientation. -->
     </PreferenceCategory>
 
 </PreferenceScreen>

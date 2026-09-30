@@ -14,13 +14,17 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
+import android.os.Bundle;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
+import androidx.customview.widget.ExploreByTouchHelper;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
@@ -112,14 +116,32 @@ public final class PaneControlsView extends View {
         final boolean isGlyph;
         @Nullable final Mark mark;
         final int tint;
+        /**
+         * What a screen reader says for the button, or null for one that says nothing of its own:
+         * a glyph from the symbols font is a private-use character with no word behind it, so a
+         * glyph button is only read out once a page gives it one ({@link #withDescription}).
+         */
+        @Nullable final String description;
 
         private Action(int id, @NonNull String text, boolean isGlyph, @Nullable Mark mark,
                        int tint) {
+            this(id, text, isGlyph, mark, tint, null);
+        }
+
+        private Action(int id, @NonNull String text, boolean isGlyph, @Nullable Mark mark,
+                       int tint, @Nullable String description) {
             this.id = id;
             this.text = text;
             this.isGlyph = isGlyph;
             this.mark = mark;
             this.tint = tint;
+            this.description = description;
+        }
+
+        /** The same button, read out as {@code description}. */
+        @NonNull
+        public Action withDescription(@Nullable String description) {
+            return new Action(id, text, isGlyph, mark, tint, description);
         }
 
         /** A Nerd Font glyph in a square button. */
@@ -246,7 +268,82 @@ public final class PaneControlsView extends View {
         setWillNotDraw(false);
         setClickable(false);
         setFocusable(false);
-        setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        // The view itself says nothing and takes no focus; the buttons of a tab that is out are
+        // virtual views of their own, so a described one — the Layout editor's door — is read
+        // out and can be run from a screen reader.
+        mAccessibility = new ButtonsAccessibility(this);
+        ViewCompat.setAccessibilityDelegate(this, mAccessibility);
+    }
+
+    @NonNull private final ButtonsAccessibility mAccessibility;
+
+    @Override
+    protected boolean dispatchHoverEvent(MotionEvent event) {
+        return mAccessibility.dispatchHoverEvent(event) || super.dispatchHoverEvent(event);
+    }
+
+    /**
+     * The tab's buttons as a screen reader sees them: one virtual view per button that has a word
+     * to say — a label, or a glyph a page described — while the tab is out, and none while it is
+     * in. A click runs the button the way a tap does.
+     */
+    private final class ButtonsAccessibility extends ExploreByTouchHelper {
+
+        ButtonsAccessibility(@NonNull View host) {
+            super(host);
+        }
+
+        @Nullable
+        private String spoken(int index) {
+            if (index < 0 || index >= mActions.size()) return null;
+            Action action = mActions.get(index);
+            if (action.description != null) return action.description;
+            if (!action.isGlyph && action.mark == null && !action.text.isEmpty())
+                return action.text;
+            return null;
+        }
+
+        @Override
+        protected int getVirtualViewAt(float x, float y) {
+            int id = actionAt(x, y);
+            int index = id == ACTION_NONE ? -1 : indexOf(id);
+            return spoken(index) == null ? INVALID_ID : index;
+        }
+
+        @Override
+        protected void getVisibleVirtualViews(List<Integer> virtualViewIds) {
+            if (!isControlsShown() || mProgress < .35f) return;
+            computeGeometry();
+            for (int i = 0; i < mActions.size(); i++) {
+                if (spoken(i) != null) virtualViewIds.add(i);
+            }
+        }
+
+        @Override
+        protected void onPopulateNodeForVirtualView(int virtualViewId,
+                                                    @NonNull AccessibilityNodeInfoCompat node) {
+            String spoken = spoken(virtualViewId);
+            if (spoken == null || virtualViewId >= mButtons.length) {
+                node.setContentDescription("");
+                node.setBoundsInParent(new Rect(0, 0, 1, 1));
+                return;
+            }
+            Rect rect = new Rect();
+            mButtons[virtualViewId].round(rect);
+            if (rect.isEmpty()) rect.set(0, 0, 1, 1);
+            node.setBoundsInParent(rect);
+            node.setClassName(android.widget.Button.class.getName());
+            node.setContentDescription(spoken);
+            node.addAction(AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_CLICK);
+        }
+
+        @Override
+        protected boolean onPerformActionForVirtualView(int virtualViewId, int action,
+                                                        @Nullable Bundle arguments) {
+            if (action != AccessibilityNodeInfoCompat.ACTION_CLICK
+                || virtualViewId < 0 || virtualViewId >= mActions.size()) return false;
+            return activate(mActions.get(virtualViewId).id);
+        }
     }
 
     public void setListener(@Nullable Listener listener) {
@@ -443,6 +540,7 @@ public final class PaneControlsView extends View {
             if (indexOf(mAlerted.get(i)) < 0) mAlerted.remove(i);
         }
         invalidate();
+        mAccessibility.invalidateRoot();
     }
 
     /**
@@ -486,6 +584,7 @@ public final class PaneControlsView extends View {
         animateTo(1f, false);
         mShown = true;
         mRetracting = false;
+        mAccessibility.invalidateRoot();
     }
 
     /**
@@ -506,6 +605,7 @@ public final class PaneControlsView extends View {
         if (!mShown || mRetracting) return;
         animateTo(0f, true);
         mRetracting = true;
+        mAccessibility.invalidateRoot();
     }
 
     /**

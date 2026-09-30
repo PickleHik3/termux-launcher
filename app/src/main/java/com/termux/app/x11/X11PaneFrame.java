@@ -262,7 +262,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
                 .mark(getContext(), () -> mHost != null && mHost.isMinimalMode())),
             PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS),
             PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
-            PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT),
+            PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT)
+                .withDescription(getContext().getString(R.string.corner_tab_layout_description)),
             PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
         mControls.setListener(id -> {

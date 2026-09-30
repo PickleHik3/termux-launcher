@@ -3671,7 +3671,8 @@ public class TerminalPaneController {
                 actions.add(PaneControlsView.Action.glyph(ACTION_SURFACE_EDITOR,
                     CornerTabGlyphs.APPEARANCE));
                 actions.add(PaneControlsView.Action.glyph(ACTION_LAYOUT_EDITOR,
-                    CornerTabGlyphs.LAYOUT));
+                    CornerTabGlyphs.LAYOUT).withDescription(
+                        getContext().getString(R.string.corner_tab_layout_description)));
                 actions.add(PaneControlsView.Action.glyph(ACTION_WALLPAPER,
                     CornerTabGlyphs.WALLPAPER));
             } else {

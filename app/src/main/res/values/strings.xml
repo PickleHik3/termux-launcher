@@ -1880,6 +1880,11 @@
                 <!-- The line over the header's title: which editor this is. The title under it
                      says which layout, so the two never say the same word twice. -->
                 <string name="termux_layout_editor_eyebrow">Layout editor</string>
+                <!-- The corner tab's Layout glyph, read aloud, and the Settings row that is the
+                     same door. -->
+                <string name="corner_tab_layout_description">Layout editor</string>
+                <string name="settings_destination_layout_editor">Layout</string>
+                <string name="settings_destination_layout_editor_summary">Move, hide and size the bars, the dock and the keyboard</string>
                 <!-- The restore tray with nothing in it: one short line, not a box. -->
                 <string name="layout_editor_tray_empty">Drag a bar here to hide it</string>
                 <!-- A tray chip read aloud: what a tap on it does. -->

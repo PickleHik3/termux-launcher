@@ -2,6 +2,7 @@ package com.termux.app.fragments.settings.termux;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -70,81 +71,16 @@ public class KeyboardPreferencesFragmentTest {
             TermuxAppSharedPreferences.build(RuntimeEnvironment.getApplication(), true));
     }
 
+    /**
+     * The keyboard's type is the Layout editor's alone now (spec §6): three chips beside the
+     * keyboard on the layout canvas. The Settings row that wrote the same key is gone.
+     */
     @Test
-    public void theKeyboardTypeRowSitsAtTheTopOfTheShapesCategoryWithAllThreeTypes() {
+    public void theKeyboardTypeRowHasLeftForTheLayoutEditor() {
         KeyboardPreferencesFragment fragment = launch();
-        SegmentedPillPreference pill =
-            fragment.getPreferenceScreen().findPreference("in_app_keyboard_form");
-        assertNotNull(pill);
-        assertEquals(3, pill.segmentCount());
-        assertEquals("Keyboard type", pill.getTitle());
+        assertNull(fragment.getPreferenceScreen().findPreference("in_app_keyboard_form"));
+        assertNull(fragment.getPreferenceScreen().findPreference("in_app_keyboard_bottom_padding"));
     }
-
-    @Test
-    public void aWriteSetsTheKeyboardTypeOnEveryPlaceInThisOrientation() {
-        KeyboardPreferencesDataStore store = store();
-        store.putString("in_app_keyboard_form", "floating");
-        Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
-
-        PlaceLayoutStore places = places();
-        assertEquals(KeyboardForm.FLOATING, places.keyboardForm(PlaceOrientation.PORTRAIT));
-        // The other orientation is somebody else's business.
-        assertEquals(KeyboardForm.DOCKED,
-            places.keyboardForm(PlaceOrientation.LANDSCAPE));
-
-        SharedPreferences prefs = TermuxAppSharedPreferences
-            .build(RuntimeEnvironment.getApplication(), true).getSharedPreferences();
-        assertEquals("floating", prefs.getString("layout.portrait.keyboard_form", null));
-        // The widget grid is "home" in the store's own key names.
-        assertEquals("floating", prefs.getString("layout.portrait.keyboard_form", null));
-        assertEquals("floating", prefs.getString("layout.portrait.keyboard_form", null));
-    }
-
-    @Test
-    public void aReadGivesTheLayoutsTypeWhereverItWasWritten() {
-        KeyboardPreferencesDataStore store = store();
-        // A fresh install is docked, so the pill has an answer.
-        assertEquals("docked", store.getString("in_app_keyboard_form", "docked"));
-
-        store.putString("in_app_keyboard_form", "split");
-        assertEquals("split", store.getString("in_app_keyboard_form", "docked"));
-
-        // The Layout editor writes the same one key, so the page reads what it picked.
-        places().setKeyboardForm(PlaceOrientation.PORTRAIT, KeyboardForm.FLOATING);
-        assertEquals("floating", store.getString("in_app_keyboard_form", "docked"));
-    }
-
-    @Test
-    @Config(qualifiers = "+land")
-    public void theRowWritesTheOrientationThePhoneIsHeldIn() {
-        KeyboardPreferencesDataStore store = store();
-        store.putString("in_app_keyboard_form", "floating");
-
-        PlaceLayoutStore places = places();
-        assertEquals(KeyboardForm.FLOATING,
-            places.keyboardForm(PlaceOrientation.LANDSCAPE));
-        assertEquals(KeyboardForm.DOCKED,
-            places.keyboardForm(PlaceOrientation.PORTRAIT));
-    }
-
-    @Test
-    public void aWriteAsksTheLauncherToRelayoutTheWayTheLayoutPageDoes() {
-        Application app = RuntimeEnvironment.getApplication();
-        KeyboardPreferencesDataStore store = store();
-        int before = Shadows.shadowOf(app).getBroadcastIntents().size();
-
-        store.putString("in_app_keyboard_form", "split");
-        Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
-        assertTrue("the running launcher is asked to restyle",
-            Shadows.shadowOf(app).getBroadcastIntents().size() > before);
-
-        // Writing the type it already has changes nothing, so nothing is asked for either.
-        int after = Shadows.shadowOf(app).getBroadcastIntents().size();
-        store.putString("in_app_keyboard_form", "split");
-        Shadows.shadowOf(Looper.getMainLooper()).idleFor(200, TimeUnit.MILLISECONDS);
-        assertEquals(after, Shadows.shadowOf(app).getBroadcastIntents().size());
-    }
-
     @Test
     public void theVoiceRowsReadTheirDefaultsThroughTheStore() {
         KeyboardPreferencesDataStore store = store();

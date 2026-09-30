@@ -21,6 +21,14 @@
             app:summary="@string/settings_destination_appearance_summary"
             app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment" />
 
+        <!-- The Layout editor's Settings door (spec §3.1): no page of its own, it brings the
+             launcher forward with the editor over the place on screen. -->
+        <Preference
+            app:key="layout_editor"
+            app:icon="@drawable/ic_symbol_grid_view"
+            app:title="@string/settings_destination_layout_editor"
+            app:summary="@string/settings_destination_layout_editor_summary" />
+
         <Preference
             app:key="terminal"
             app:icon="@drawable/ic_symbol_terminal"
