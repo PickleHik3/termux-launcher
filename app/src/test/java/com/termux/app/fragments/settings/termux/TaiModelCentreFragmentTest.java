@@ -76,13 +76,16 @@ public class TaiModelCentreFragmentTest {
         assertNotNull(list);
         RecyclerView.Adapter<?> adapter = list.getAdapter();
         assertNotNull(adapter);
-        // Link bar, segments, two Gemma 4 rows (nothing installed, nothing downloading), the setting.
+        // Link bar, segments, two Gemma 4 rows (nothing installed, nothing downloading), the
+        // Embeddings section (heading and its one row), the setting.
         assertEquals(TaiModelCentreAdapter.TYPE_LINK, adapter.getItemViewType(0));
         assertEquals(TaiModelCentreAdapter.TYPE_SEGMENTS, adapter.getItemViewType(1));
         assertEquals(TaiModelCentreAdapter.TYPE_MODEL, adapter.getItemViewType(2));
         assertEquals(TaiModelCentreAdapter.TYPE_MODEL, adapter.getItemViewType(3));
+        assertEquals(TaiModelCentreAdapter.TYPE_SECTION, adapter.getItemViewType(4));
+        assertEquals(TaiModelCentreAdapter.TYPE_MODEL, adapter.getItemViewType(5));
         assertEquals(TaiModelCentreAdapter.TYPE_SETTING, adapter.getItemViewType(adapter.getItemCount() - 1));
-        assertEquals(5, adapter.getItemCount());
+        assertEquals(7, adapter.getItemCount());
     }
 
     @Test

@@ -2209,6 +2209,12 @@ public final class TaiManager {
             return openAiRequestError(501, "capability_not_supported",
                 "Embeddings are not supported for model '" + modelId + "'.", "model");
         }
+        // A catalogue built-in that was never downloaded has no graph on disk: say so plainly
+        // instead of failing deep in the runtime.
+        if (spec.localPath == null || spec.localPath.trim().isEmpty()) {
+            return openAiRequestError(404, "model_not_installed",
+                "Model '" + modelId + "' is not downloaded. Download it in the Model centre first.", "model");
+        }
         // Matryoshka quality holds only at the trained sizes, so a model that lists them takes no other.
         int[] matryoshka = TaiModelSpec.embeddingMatryoshkaDimsFor(spec.id, spec.localPath);
         if (dimensions > 0 && matryoshka.length > 0 && !contains(matryoshka, dimensions)) {

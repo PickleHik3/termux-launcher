@@ -18,6 +18,8 @@ public final class TaiModelCatalog {
     public static final String PARAKEET_TDT_V3_ID = "parakeet-tdt-0.6b-v3";
     /** The one speech-output entry: KittenTTS nano 0.8, the Model centre's "Voice output" row. */
     public static final String KITTEN_TTS_NANO_ID = "kittentts-nano-0.8";
+    /** The one embedding entry: EmbeddingGemma 300M, the Model centre's "Embeddings" row. */
+    public static final String EMBEDDING_GEMMA_300M_ID = "embeddinggemma-300m";
     private static final Map<String, CatalogEntry> BUILT_IN_ENTRIES = buildEntries();
     private static volatile Map<String, CatalogEntry> entries = BUILT_IN_ENTRIES;
     private TaiModelCatalog() {}
@@ -31,19 +33,36 @@ public final class TaiModelCatalog {
     @NonNull public static Map<String, CatalogEntry> entries() { return entries; }
     @Nullable public static CatalogEntry get(@Nullable String modelId) { return modelId == null ? null : entries.get(modelId); }
 
-    /** {@link #entries()} minus speech models (speech-to-text and speech output) — the chat
-     *  catalog screen, the installed chat-model list, and the default-assistant picker should never
-     *  show a Whisper or KittenTTS entry alongside chat models. Speech models get their own
-     *  sections on the Speech segment instead. */
+    /** {@link #entries()} minus speech models (speech-to-text and speech output) and embedding-only
+     *  models — the chat catalog screen, the installed chat-model list, and the default-assistant
+     *  picker should never show a Whisper, KittenTTS or EmbeddingGemma entry alongside chat models.
+     *  Speech models get their own sections on the Speech segment, embedders their own section at
+     *  the foot of the Chat segment ({@link #embeddingEntries()}). */
     @NonNull
     public static Map<String, CatalogEntry> chatEntries() {
         LinkedHashMap<String, CatalogEntry> chat = new LinkedHashMap<>();
         for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
             if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
             if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) continue;
+            if (isEmbeddingOnly(entry.getValue())) continue;
             chat.put(entry.getKey(), entry.getValue());
         }
         return chat;
+    }
+
+    /** Embedding-only catalog entries (the Chat segment's "Embeddings" section). */
+    @NonNull
+    public static Map<String, CatalogEntry> embeddingEntries() {
+        LinkedHashMap<String, CatalogEntry> embeddings = new LinkedHashMap<>();
+        for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
+            if (isEmbeddingOnly(entry.getValue())) embeddings.put(entry.getKey(), entry.getValue());
+        }
+        return embeddings;
+    }
+
+    private static boolean isEmbeddingOnly(@NonNull CatalogEntry entry) {
+        return entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
+            && !entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT);
     }
 
     /** Speech-output catalog entries only (the Speech segment's "Voice output" section). */
@@ -184,10 +203,10 @@ public final class TaiModelCatalog {
             "gemma-4-E4B-it.litertlm", "Apache-2.0", 3_659_530_240L, "3.7 GB", "12GB+", false,
             tags("Text", "Vision", "Audio", "Code", "Reasoning", "Tools"),
             setOf("text_chat", "image_input", "audio_input", "tool_use", "code", "reasoning", "llm_thinking", "speculative_decoding")));
-        // The built-in catalogue is deliberately short: the two Gemma 4 chat models above and the
-        // speech models below. Every other model (Qwen, DeepSeek, FunctionGemma, the MNN packages,
-        // the embedding models) still runs when imported or added by link; it just is not offered
-        // here, so the model centre stays a list a person can read in one glance.
+        // The built-in catalogue is deliberately short: the two Gemma 4 chat models above, the
+        // speech models and EmbeddingGemma below. Every other model (Qwen, DeepSeek, FunctionGemma,
+        // the MNN packages, other embedding models) still runs when imported or added by link; it
+        // just is not offered here, so the model centre stays a list a person can read in one glance.
         // Whisper ACFT speech-to-text (litert-community/whisper-acft, phase 1: catalog + downloader
         // only — MultiBackendTaiRuntime routing is phase 2). Each size/language id ships two window
         // graphs (5s, 10s, chosen at download time); the default artifact here is the 10s graph and
@@ -292,6 +311,30 @@ public final class TaiModelCatalog {
                 hfSidecar("litert-community/Matcha-TTS", matchaRevision, KittenTtsRuntime.PHONEMIZER_META_FILE,
                     "7b87bfeaaa072be236e8491d771b0cb97cc92c3e5d83e3558fff8849868810f5"))));
 
+        // EmbeddingGemma 300M (litert-community/embeddinggemma-300m, Gemma Terms of Use), served on
+        // demand by LiteRtEmbeddingRuntime behind /v1/embeddings. Gated on Hugging Face, so the
+        // download needs the saved token. The portable mixed-precision graphs only (not the
+        // chip-specific ones): seq1024 is the artifact, the smaller seq512/seq256 windows and the
+        // SentencePiece tokenizer are hash-pinned sidecars. sizeBytes is the seq1024 graph's; the
+        // size estimate covers the whole package. Sizes and hashes from the Hugging Face API.
+        final String embeddingGemmaRepo = "litert-community/embeddinggemma-300m";
+        final String embeddingGemmaRevision = "29888fcee3216acadc7e844906e5fe0d79a61875";
+        entries.put(EMBEDDING_GEMMA_300M_ID, embeddingGemmaAvailable(
+            EMBEDDING_GEMMA_300M_ID, "EmbeddingGemma 300M", "Text embeddings (search, memory)",
+            embeddingGemmaRepo, embeddingGemmaRevision,
+            "embeddinggemma-300M_seq1024_mixed-precision.tflite", 183_329_528L,
+            "8b0b8bbd0aa95f9f747c25a6c87cd05a8286933282660f6a50da877662917e31",
+            "~520 MB", "4GB+",
+            Arrays.asList(
+                hfSidecar(embeddingGemmaRepo, embeddingGemmaRevision,
+                    "embeddinggemma-300M_seq512_mixed-precision.tflite",
+                    "ad09e81557203cb0e177abf9bf8727dfe138a7d394aa0f70f0b2ed16432e121a"),
+                hfSidecar(embeddingGemmaRepo, embeddingGemmaRevision,
+                    "embeddinggemma-300M_seq256_mixed-precision.tflite",
+                    "37115ef7bff76cd37dd86abe503ff511b1032bf85fc624a85c49c84899e92bc5"),
+                hfSidecar(embeddingGemmaRepo, embeddingGemmaRevision, "sentencepiece.model",
+                    "d6daa52d93d7aad10e8388bd526c4e501d914b47177398d1d9621f1fe48438c7"))));
+
         return Collections.unmodifiableMap(entries);
     }
 
@@ -353,6 +396,21 @@ public final class TaiModelCatalog {
             false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, KittenTtsRuntime.ARCHITECTURE, "fp32",
             128, 128, 128, ramGb(ramTier), sha256, capabilities, null, null,
             "text_to_speech", "text_to_speech", tags("Voice"), sizeEstimate, ramTier, false, true, "",
+            sidecars, null);
+    }
+
+    /** A text-embedding entry: the widest window graph as the artifact, the smaller windows and the
+     *  tokenizer as hash-pinned sidecars. Gated (the Gemma terms), so the download needs the saved
+     *  Hugging Face token. Embeddings only, never offered as a chat model or bench pick. */
+    private static CatalogEntry embeddingGemmaAvailable(String id, String name, String role, String repo, String revision,
+                                                        String artifactPath, long primarySize, String sha256,
+                                                        String sizeEstimate, String ramTier,
+                                                        List<CatalogEntry.Sidecar> sidecars) {
+        LinkedHashSet<String> capabilities = setOf(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+        return new CatalogEntry(id, name, role, repo, revision, artifactPath, "Gemma", primarySize,
+            true, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, TaiImportProfiles.FAMILY_EMBEDDINGGEMMA,
+            "mixed-precision", 1024, 1024, 128, ramGb(ramTier), sha256, capabilities, null, null,
+            "text_embeddings", "text_embeddings", tags("Embeddings"), sizeEstimate, ramTier, false, true, "",
             sidecars, null);
     }
 
