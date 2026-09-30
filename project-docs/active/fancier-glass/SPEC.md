@@ -59,7 +59,7 @@ The look is `TermuxActivity.mFancierGlassLook` (null in the default mode). The d
 
 | Surface | Frost | Refraction | Rim |
 |---|---|---|---|
-| Dock | shared frame | (c) | the capsule; docked, only its top (the sides and the bottom are seams); overscanned bottom |
+| Dock | shared frame | (c) | the capsule; docked, only its top (the sides and the bottom are seams), which since 2026-09-30 also carries the containing stroke the window bar keeps along its bottom (`applyDockSurfaceShape`, `dockedInnerRim`); overscanned bottom |
 | Under-pill nav strip | shared frame, at the keyboard's own radius and gate while it is up, the dock's otherwise | (c), its own program | none in the docked style (all four edges are seams, so no bend either); the capsule overlay keeps its square rim |
 | Keyboard host | shared frame | (a), built by `GlassStack.build`; `Look.DEFAULT` in the default mode | the capsule; docked, the sides and the bottom are seams |
 | Under-keyboard card (`UnderKeyboardBand`) | shared frame | (a), built by `GlassStack.build`; `Look.DEFAULT` in the default mode | the card's own radius |

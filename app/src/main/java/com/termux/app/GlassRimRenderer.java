@@ -54,12 +54,14 @@ public final class GlassRimRenderer {
     private boolean mShadeRead;
 
     /**
-     * How wide the rim's stroke is at this density. Painted just inside the bounds, so this is
-     * also how far in from a glass surface's bounding box its visible border line sits — which is
-     * what anything lining up against that border (a corner tab) has to start past.
+     * How wide the rim's stroke is at this density: 1dp, the same line every glass surface draws
+     * through {@code GlassSurfaceFactory.rim}, so a focused pane's rim is as wide as the one it
+     * replaces. Painted just inside the bounds, so this is also how far in from a glass surface's
+     * bounding box its visible border line sits — which is what anything lining up against that
+     * border (a corner tab) has to start past.
      */
     public static float strokePx(float density) {
-        return Math.max(1f, 1.25f * density);
+        return Math.max(1f, density);
     }
 
     public GlassRimRenderer(float density) {

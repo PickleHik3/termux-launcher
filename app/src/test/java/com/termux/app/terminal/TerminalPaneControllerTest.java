@@ -269,8 +269,8 @@ public class TerminalPaneControllerTest {
      */
     @Test
     public void paneBorderStroke_isTheLineThePanePaints() {
-        assertEquals("the glass rim at 1x density",
-            1.25f, TerminalPaneController.paneBorderStrokePx(true, false, 1f), .001f);
+        assertEquals("the glass rim at 1x density is the shared 1dp rim",
+            1f, TerminalPaneController.paneBorderStrokePx(true, false, 1f), .001f);
         assertEquals("and it never thins below a pixel",
             1f, TerminalPaneController.paneBorderStrokePx(true, false, 0.5f), .001f);
         assertEquals("a plain pane sharing the wall wears pane_active_border's 1dp",
