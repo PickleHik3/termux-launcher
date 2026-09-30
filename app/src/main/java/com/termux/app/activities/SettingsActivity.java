@@ -552,6 +552,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             configureLayoutEditorRow(context);
             SettingsLayoutUtils.applyRootLayout(this);
             configureUseAsRow(context);
+            configureAppearanceEditorRow(context);
             configureSearch();
         }
 
@@ -565,6 +566,22 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             row.setOnPreferenceClickListener(preference -> {
                 Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
                 intent.putExtra(com.termux.app.TermuxActivity.EXTRA_LAYOUT_EDITOR, true);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(intent);
+                return true;
+            });
+        }
+
+        /**
+         * The "Appearance" row: the Appearance editor over the live launcher, through the same
+         * intent every other door sends (SPEC §3.1). It navigates away rather than to a page.
+         */
+        private void configureAppearanceEditorRow(@NonNull Context context) {
+            Preference row = findPreference("appearance_editor");
+            if (row == null) return;
+            row.setOnPreferenceClickListener(preference -> {
+                Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
+                intent.putExtra(com.termux.app.TermuxActivity.EXTRA_SURFACE_EDITOR, true);
                 intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 startActivity(intent);
                 return true;

@@ -98,8 +98,8 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         Preference customizeKeyboardSurface = findPreference("customize_keyboard_surface");
         if (customizeKeyboardSurface != null) customizeKeyboardSurface.setOnPreferenceClickListener(preference -> {
             Intent intent = new Intent(context, TermuxActivity.class);
+            // The one Appearance editor; nothing is preselected (SPEC §3.1).
             intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR, true);
-            intent.putExtra(TermuxActivity.EXTRA_SURFACE_EDITOR_SECTION, "keyboard");
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
             startActivity(intent);
             return true;

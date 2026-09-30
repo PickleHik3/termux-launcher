@@ -3669,10 +3669,11 @@ public class TerminalPaneController {
             List<PaneControlsView.Action> actions = new ArrayList<>(4);
             if (isLonePane()) {
                 actions.add(PaneControlsView.Action.glyph(ACTION_SURFACE_EDITOR,
-                    CornerTabGlyphs.APPEARANCE));
+                    CornerTabGlyphs.APPEARANCE, mHostView.getContext().getString(
+                        R.string.appearance_editor_corner_tab_description)));
                 actions.add(PaneControlsView.Action.glyph(ACTION_LAYOUT_EDITOR,
-                    CornerTabGlyphs.LAYOUT).withDescription(
-                        getContext().getString(R.string.corner_tab_layout_description)));
+                    CornerTabGlyphs.LAYOUT, mHostView.getContext().getString(
+                        R.string.corner_tab_layout_description)));
                 actions.add(PaneControlsView.Action.glyph(ACTION_WALLPAPER,
                     CornerTabGlyphs.WALLPAPER));
             } else {

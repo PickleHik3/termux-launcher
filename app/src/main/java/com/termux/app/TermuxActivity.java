@@ -112,7 +112,6 @@ import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.PlaceSizePreferences;
 import com.termux.app.surfaces.SurfaceEditorController;
-import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.az.AzBarFrame;
 import com.termux.app.launcher.az.AzBarHostGeometry;
@@ -3623,6 +3622,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The self-drawn backdrop covers that background, so it carries the same dim over its own
         // frame — set here, with the root's, so the two can never read differently.
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.setDimColor(color);
+        // Soft wallpaper's blur half rides on the same view (SPEC §3.4); its dim is in color.
+        com.termux.app.surfaces.SoftWallpaper.apply(mWallpaperBackdropView, mPreferences);
     }
 
     private void applyTerminalStatusBarSurfaceColor(boolean showSurface, int terminalSurfaceColor) {
@@ -10493,12 +10494,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mInAppKeyboard;
         }
 
-        @Nullable @Override public View attachedInAppKeyboardView() {
-            return mAttachedInAppKeyboardView;
-        }
-
         @Override public boolean isInAppKeyboardShown() {
             return TermuxActivity.this.isInAppKeyboardShown();
+        }
+
+        @Override public boolean showInAppKeyboardForEditor() {
+            // The editor's frame offers the keyboard as a tap target, so it is raised for the
+            // session; one switched off stays off, as it does for every other door.
+            if (mInAppKeyboard == null || !mInAppKeyboard.isEnabled()
+                || mInAppKeyboard.isTurnedOff())
+                return false;
+            mInAppKeyboard.show(
+                com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
+            return mInAppKeyboard.isVisible();
+        }
+
+        @Override public void hideInAppKeyboardForEditor() {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.hide(
+                    com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
         }
 
         @Override public boolean isFloatingDock() {
@@ -10537,6 +10551,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.refreshTerminalWindowBar();
         }
 
+        @Override public void refreshTerminalPalette() {
+            if (mTermuxTerminalSessionActivityClient != null)
+                mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
+        }
+
         @Override public void applyGeometryPreview(boolean commit) {
             updateAppLauncherBarHeight();
             // Without commit the dock/keyboard visuals still track the drag live; only the
@@ -10556,13 +10575,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         }
 
-        @Override @Nullable public int[] terminalFrameRectInWindow() {
+        @Override @Nullable public int[] terminalFrameRectInRoot() {
             View host = findViewById(R.id.terminal_surface_host);
-            if (host == null || host.getVisibility() != View.VISIBLE
+            View root = findViewById(R.id.terminal_root_container);
+            if (host == null || root == null || host.getVisibility() != View.VISIBLE
                 || host.getWidth() <= 0 || host.getHeight() <= 0)
                 return null;
+            // In the root container's own unscaled space: the editor scales that container, and a
+            // window location would fold the scale into a rect laid out without it.
             int[] location = new int[2];
-            host.getLocationInWindow(location);
+            if (!com.termux.app.surfaces.SurfaceEditorController.offsetInRoot(host, root, location))
+                return null;
             // The same two numbers the border overlay and the pane host are laid out with, so the
             // editor's outline cannot disagree with the frame about where the frame is.
             int horizontal = terminalFrameInsetPx(false);
@@ -10585,41 +10608,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
         }
 
-        @Override public void openKeyboardColors() {
-            startActivity(SettingsActivity.createFragmentIntent(TermuxActivity.this,
-                KeyboardColorSchemeFragment.class, R.string.settings_keyboard_colors_title));
-        }
-
-        @Override @Nullable public ExtraKeysView liveExtraKeysView() {
-            return getExtraKeysView();
-        }
-
-        @Override public void commitExtraKeyColors(
-                @NonNull java.util.Map<Integer,
-                    com.termux.shared.termux.extrakeys.ExtraKeyColorRole> colorsByKeyIndex) {
-            writeExtraKeyColors(colorsByKeyIndex);
-        }
-
-        @Override @NonNull public Drawable presetGlassSurface(float barAlpha, int grainPercent,
-                                                              float cornerRadiusPx,
-                                                              boolean withRim,
-                                                              @NonNull com.termux.app.chrome.GlassLook look) {
-            return mChrome.glass().withLook(look).surface(barAlpha, 0f, 1f, true, grainPercent,
-                cornerRadiusPx, withRim);
-        }
-
-        @Override @NonNull public com.termux.app.chrome.WallpaperPicture wallpaperPicture() {
-            return TermuxActivity.this.wallpaperPicture();
-        }
-
-        @Override public void openWallpaperPicker() {
-            TermuxActivity.this.openWallpaperPicker();
-        }
-
-        @Override public boolean fancierGlassActive() {
-            // Live, not the apply's snapshot: the card is built when the editor opens, and the
-            // wallpaper may have been picked since the last pass.
-            return currentFancierGlassLook() != null;
+        @Override public void openLayoutEditor() {
+            TermuxActivity.this.openLayoutEditor(null);
         }
     }
 
@@ -15709,26 +15699,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mPlaceAccents = byPlace;
         com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
         if (lens != null) lens.setPlaceAccents(byPlace);
-    }
-
-    /**
-     * Writes the colours the Appearance editor picked into the stored key row and rebuilds the row
-     * from it, so what is on screen and what is in the file are the same thing. The editor always
-     * picks from the first key page — the row and the column are both built from it.
-     */
-    private void writeExtraKeyColors(@NonNull java.util.Map<Integer,
-            com.termux.shared.termux.extrakeys.ExtraKeyColorRole> colorsByKeyIndex) {
-        if (colorsByKeyIndex.isEmpty()) return;
-        String propertyKey = TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS[0];
-        java.util.Properties properties =
-            com.termux.app.settings.TermuxPropertiesFile.load(this);
-        String value = properties.getProperty(propertyKey);
-        if (value == null) value = TermuxTerminalExtraKeys.PAGE_DEFAULT_VALUES[0];
-        com.termux.app.terminal.io.ExtraKeysLayoutModel model =
-            com.termux.app.terminal.io.ExtraKeysLayoutModel.parse(value);
-        if (!model.applyColorsByIndex(colorsByKeyIndex)) return;
-        com.termux.app.settings.TermuxPropertiesFile.write(propertyKey, model.serialize());
-        reloadExtraKeysFromProperties();
     }
 
     public ViewPager getTerminalToolbarViewPager() {

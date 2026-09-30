@@ -21,6 +21,13 @@
             app:summary="@string/settings_destination_appearance_summary"
             app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment" />
 
+        <!-- The Appearance editor, over the live launcher (SPEC §3.1); opened in code. -->
+        <Preference
+            app:key="appearance_editor"
+            app:icon="@drawable/ic_symbol_palette"
+            app:persistent="false"
+            app:title="@string/settings_appearance_editor_title"
+            app:summary="@string/settings_appearance_editor_summary" />
         <!-- The Layout editor's Settings door (spec §3.1): no page of its own, it brings the
              launcher forward with the editor over the place on screen. -->
         <Preference

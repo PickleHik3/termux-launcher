@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Appearance editor (appearance-layout-editor SPEC §3): the frame's tap targets, the bottom
+  area's mode pill, Look slider, Style toggle, Custom row 2, and the doors that open it. Kept in
+  their own file so the editor's copy travels together.
+-->
+<resources>
+    <string name="appearance_editor_undo">Undo</string>
+    <string name="appearance_editor_done">Done</string>
+
+    <string name="appearance_editor_look_description">Look</string>
+    <string name="appearance_editor_style_description">Style</string>
+    <string name="appearance_editor_style_docked">Docked</string>
+    <string name="appearance_editor_style_floating">Floating</string>
+
+    <string name="appearance_editor_hint_look">Slide to try a Look. The last stop is yours.</string>
+    <string name="appearance_editor_hint_custom">Tap anything in the frame to tune it.</string>
+    <string name="appearance_editor_custom_replaced">Custom look replaced</string>
+
+    <!-- The elements a tap in the frame selects; row 2's heading and the targets' descriptions. -->
+    <string name="appearance_editor_target_status">Status bar</string>
+    <string name="appearance_editor_target_terminal">Terminal</string>
+    <string name="appearance_editor_target_dock">Dock</string>
+    <string name="appearance_editor_target_keyboard">Keyboard</string>
+    <string name="appearance_editor_target_wallpaper">Wallpaper</string>
+    <string name="appearance_editor_target_description">Tune %1$s</string>
+
+    <!-- Row 2's controls; the number is the control's own read-out. -->
+    <string name="appearance_editor_darkness">Darkness · %1$d%%</string>
+    <string name="appearance_editor_blur">Blur · %1$d dp</string>
+    <string name="appearance_editor_legibility">Legibility</string>
+    <string name="appearance_editor_keys">Keys · %1$d%%</string>
+    <string name="appearance_editor_soft">Soft wallpaper</string>
+    <string name="appearance_editor_dim">Dim · %1$d%%</string>
+    <string name="appearance_editor_legibility_softer">Softer</string>
+    <string name="appearance_editor_legibility_default">Default</string>
+    <string name="appearance_editor_legibility_harder">Harder</string>
+    <string name="appearance_editor_soft_off">Off</string>
+    <string name="appearance_editor_soft_on">On</string>
+
+    <!-- The doors. -->
+    <string name="appearance_editor_corner_tab_description">Appearance editor</string>
+    <string name="settings_appearance_editor_title">Appearance</string>
+    <string name="settings_appearance_editor_summary">Try a Look and tune it live, on the home screen</string>
+    <string name="settings_look_appearance_editor_title">Appearance editor</string>
+    <string name="settings_look_appearance_editor_summary">Looks, glass and legibility, live on the home screen</string>
+</resources>
