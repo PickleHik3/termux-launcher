@@ -1519,6 +1519,20 @@ public final class TermuxPreferenceConstants {
             "managed_wallpaper_system_id";
 
         public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID = -1;
+
+        /** Id of the generated animated background the managed wallpaper was rendered from; unset for a photo. */
+        public static final String KEY_MANAGED_WALLPAPER_ANIMATED = "managed_wallpaper_animated";
+
+        /** {@code material} (follow the launcher colour scheme) or {@code own} (the background's shipped palette). */
+        public static final String KEY_MANAGED_WALLPAPER_ANIMATED_PALETTE = "managed_wallpaper_animated_palette";
+        public static final String DEFAULT_VALUE_MANAGED_WALLPAPER_ANIMATED_PALETTE = "material";
+
+        /** The four ARGB colours the last still was rendered with, comma-separated ints. */
+        public static final String KEY_MANAGED_WALLPAPER_ANIMATED_COLORS = "managed_wallpaper_animated_colors";
+
+        /** Hidden kill switch: true stops generated backgrounds animating. Not in the settings UI. */
+        public static final String KEY_ANIMATED_WALLPAPER_DISABLED = "animated_wallpaper_disabled";
+        public static final boolean DEFAULT_VALUE_ANIMATED_WALLPAPER_DISABLED = false;
         
         /**
          * Defines the key for whether terminal colors should follow Material dynamic colors.
