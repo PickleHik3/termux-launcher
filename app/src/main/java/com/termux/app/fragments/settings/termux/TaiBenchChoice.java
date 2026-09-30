@@ -3,10 +3,19 @@ package com.termux.app.fragments.settings.termux;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.TaiBenchStore;
 import com.termux.ai.TaiBenchSuite;
 import com.termux.ai.TaiImportFit;
 import com.termux.ai.TaiImportProfiles;
 import com.termux.ai.TaiModelSpec;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * The Choose screen's filter (spec "Which models are offered"), as a pure function of what is
@@ -108,5 +117,30 @@ final class TaiBenchChoice {
     /** "Worth a download": a recommended catalogue entry that is not installed and passes the filter. */
     static boolean worthADownload(@NonNull Candidate candidate, @NonNull Verdict verdict) {
         return !candidate.installed && candidate.recommended && verdict.fit != Fit.HIDDEN;
+    }
+
+    /**
+     * The models whose latest record for {@code benchVersion} (on whichever processor) is a
+     * crash: the runtime died while it loaded or ran. They start unselected and say so, until a
+     * later run of the model comes back with anything else. {@code benchmarks} is
+     * {@code TaiManager.benchmarks()}' JSON.
+     */
+    @NonNull
+    static Set<String> crashedModels(@Nullable JSONObject benchmarks, @NonNull String benchVersion) {
+        Set<String> crashed = new HashSet<>();
+        JSONArray records = benchmarks == null ? null : benchmarks.optJSONArray("records");
+        if (records == null) return crashed;
+        Map<String, JSONObject> latest = new HashMap<>();
+        for (int i = 0; i < records.length(); i++) {
+            JSONObject record = records.optJSONObject(i);
+            if (record == null || !benchVersion.equals(record.optString("benchVersion", ""))) continue;
+            String modelId = record.optString("modelId", "");
+            JSONObject seen = latest.get(modelId);
+            if (seen == null || record.optLong("timestamp", 0L) >= seen.optLong("timestamp", 0L)) latest.put(modelId, record);
+        }
+        for (Map.Entry<String, JSONObject> entry : latest.entrySet()) {
+            if (TaiBenchStore.STATUS_CRASHED.equals(entry.getValue().optString("status", ""))) crashed.add(entry.getKey());
+        }
+        return crashed;
     }
 }

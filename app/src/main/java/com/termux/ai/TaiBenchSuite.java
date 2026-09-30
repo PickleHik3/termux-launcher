@@ -148,6 +148,23 @@ public final class TaiBenchSuite {
         return expected * TIME_LIMIT_FACTOR * 1000L;
     }
 
+    /** The hard wait on a load is never shorter than this, however small the expected time is made. */
+    static final long LOAD_HARD_LIMIT_FLOOR_MS = 60_000L;
+    /** Nor longer than this, however large: a phone that has not loaded a model in ten minutes is not going to. */
+    static final long LOAD_HARD_LIMIT_CEILING_MS = 10 * 60_000L;
+    /** Beyond the soft limit, for a load that honours the watchdog's cancel to hand back its refusal first. */
+    static final long LOAD_HARD_LIMIT_GRACE_MS = 15_000L;
+
+    /**
+     * How long the harness waits for a load to return at all. The soft limit ({@link #timeLimitMs})
+     * only asks the runtime to cancel, which a native load notices after it has finished; this is
+     * the wait after which the harness gives up on the load thread.
+     */
+    static long loadHardLimitMs() {
+        long limit = timeLimitMs(PHASE_LOAD) + LOAD_HARD_LIMIT_GRACE_MS;
+        return Math.max(LOAD_HARD_LIMIT_FLOOR_MS, Math.min(LOAD_HARD_LIMIT_CEILING_MS, limit));
+    }
+
     // ---- Presets ----------------------------------------------------------------------------
 
     /** How many runs of each test a preset does; the reported figure is their median. */

@@ -600,7 +600,7 @@ public final class TaiRuntimeService extends Service {
     private void releaseAll(@NonNull String reason) throws JSONException {
         Log.i(LOG_TAG, reason + ": cancelling in-flight work and unloading everything");
         TaiManager manager = TaiManager.getRuntimeProcessInstance(this);
-        manager.cancelRuntime();
+        manager.cancelRuntime(TaiBenchHarness.STOP_MEMORY_PRESSURE);
         manager.unloadModel();
     }
 

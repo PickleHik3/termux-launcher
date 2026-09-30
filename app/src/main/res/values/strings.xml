@@ -1546,6 +1546,7 @@
         <string name="tai_bench_select_all">Select all</string>
         <string name="tai_bench_select_none">Clear all</string>
         <string name="tai_bench_row_tested">tested</string>
+        <string name="tai_bench_row_crashed">crashed last time</string>
         <string name="tai_bench_already_running">A benchmark is already running.</string>
         <!-- Check -->
         <string name="tai_bench_check_title">Before it starts</string>
@@ -1585,6 +1586,8 @@
         <string name="tai_bench_stopped_thermal">too hot</string>
         <string name="tai_bench_stopped_unloaded">the model was unloaded</string>
         <string name="tai_bench_stopped_left">you left the screen for too long</string>
+        <string name="tai_bench_stopped_memory">the phone ran low on memory</string>
+        <string name="tai_bench_stopped_timeout">a model took too long to load</string>
         <string name="tai_bench_error_battery">The battery is at %1$d%%. Plug in or charge to 30%% first.</string>
         <string name="tai_bench_error_hot">The phone is already warm. Let it cool first.</string>
         <string name="tai_bench_stop">Stop</string>

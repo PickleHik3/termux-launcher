@@ -12,10 +12,13 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -55,6 +58,13 @@ final class TaiBenchHarness {
     /** While the long input is read the runtime's memory is sampled this often; the peak is kept. */
     static final long MEMORY_SAMPLE_INTERVAL_MS = 250L;
 
+    /** Stop reasons a record carries as {@code stopped:<reason>}; the run screen turns each into words. */
+    static final String STOP_CANCELLED = "cancelled";
+    /** The runtime gave everything back because the phone ran out of memory (see {@code TaiRuntimeService.releaseAll}). */
+    static final String STOP_MEMORY_PRESSURE = "memory_pressure";
+    static final String STOP_TIMEOUT = "timeout";
+    static final String STOP_UNLOADED = "unloaded";
+
     /** What the harness needs from the runtime process; {@link TaiManager} implements it. */
     interface Host {
         /** Loads the entry's model on its processor through the normal preflight and budget; {@code ok:false} is a refusal. */
@@ -84,6 +94,24 @@ final class TaiBenchHarness {
          * whose pages are counted only as they are touched.
          */
         long processPssBytes();
+        /**
+         * The chat model resident before the run, as {@code {modelId, accelerator?, keepWarmMinutes?}},
+         * or {@code null} when nothing is. The harness unloads it for every entry's cold load and
+         * hands this back to {@link #restoreChat} when the run ends.
+         */
+        @Nullable
+        default JSONObject residentChat() throws JSONException {
+            return null;
+        }
+        /** Loads {@link #residentChat}'s model again, the way the app would have; may take a while and may fail. */
+        default void restoreChat(@NonNull JSONObject resident) throws JSONException {
+        }
+        /**
+         * Called after the run's {@code done} when a load never returned: the runtime process is
+         * holding a native thread the harness cannot stop, so it should end and start clean.
+         */
+        default void abandonRuntime() {
+        }
     }
 
     interface Sink {
@@ -103,6 +131,9 @@ final class TaiBenchHarness {
         return thread;
     });
     @Nullable private volatile String stopReason;
+    /** A load did not return within {@link #loadHardLimitMs}; its thread may still be running in the runtime. */
+    private volatile boolean runtimeAbandoned;
+    private long loadHardLimitMs = TaiBenchSuite.loadHardLimitMs();
 
     /**
      * @param device {@code {soc, ramClassGb}}
@@ -139,6 +170,11 @@ final class TaiBenchHarness {
         return stopReason != null;
     }
 
+    /** Test seam: how long a load may take before the harness gives up on it. */
+    void setLoadHardLimitMs(long ms) {
+        loadHardLimitMs = ms;
+    }
+
     /**
      * Runs every entry and returns the summary the {@code done} event carries:
      * {@code {ok, benchVersion, preset, entries, records, skipped, stopped}}.
@@ -147,21 +183,58 @@ final class TaiBenchHarness {
     JSONObject run() throws IOException, JSONException {
         JSONArray records = new JSONArray();
         JSONArray skipped = new JSONArray();
+        JSONObject resident = captureResident();
         try {
-            for (int i = 0; i < entries.size(); i++) {
-                if (stopRequested()) break;
-                TaiBenchSuite.EntryPlan entry = entries.get(i);
-                emit(event("entry_start").put("index", i).put("total", entries.size()).put("entry", entry.toJson()));
-                JSONObject record = runEntry(entry);
-                if (record.optString("status", "").startsWith("skipped:")) {
-                    skipped.put(new JSONObject().put("entry", entry.toJson()).put("reason", record.optString("skipReason", "")));
+            try {
+                for (int i = 0; i < entries.size(); i++) {
+                    if (stopRequested()) break;
+                    TaiBenchSuite.EntryPlan entry = entries.get(i);
+                    emit(event("entry_start").put("index", i).put("total", entries.size()).put("entry", entry.toJson()));
+                    JSONObject record = runEntry(entry);
+                    if (record.optString("status", "").startsWith("skipped:")) {
+                        skipped.put(new JSONObject().put("entry", entry.toJson()).put("reason", record.optString("skipReason", "")));
+                    }
+                    records.put(record);
+                    emit(event("entry_done").put("index", i).put("total", entries.size()).put("record", record));
                 }
-                records.put(record);
-                emit(event("entry_done").put("index", i).put("total", entries.size()).put("record", record));
+            } finally {
+                watchdog.shutdownNow();
+                restoreResident(resident);
             }
+            return finishRun(records, skipped);
         } finally {
-            watchdog.shutdownNow();
+            if (runtimeAbandoned) host.abandonRuntime();
         }
+    }
+
+    /** The chat model the run is about to unload, or {@code null}; a host that cannot say loses nothing but the reload. */
+    @Nullable
+    private JSONObject captureResident() {
+        try {
+            return host.residentChat();
+        } catch (JSONException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Puts the user's chat model back after the run, however it ended, and never fails the run
+     * over it. Not when the runtime is about to be ended for a hung load (the next request starts
+     * a clean process), nor when the run was stopped because memory ran out or the model was
+     * unloaded on purpose: loading it again would undo what was just asked for.
+     */
+    private void restoreResident(@Nullable JSONObject resident) {
+        if (resident == null || runtimeAbandoned) return;
+        String reason = stopReason;
+        if (STOP_MEMORY_PRESSURE.equals(reason) || STOP_UNLOADED.equals(reason)) return;
+        try {
+            host.restoreChat(resident);
+        } catch (JSONException | RuntimeException ignored) {
+        }
+    }
+
+    @NonNull
+    private JSONObject finishRun(@NonNull JSONArray records, @NonNull JSONArray skipped) throws IOException, JSONException {
         JSONObject done = event("done")
             .put("ok", true)
             .put("benchVersion", TaiBenchSuite.BENCH_VERSION)
@@ -275,9 +348,12 @@ final class TaiBenchHarness {
                 guard.entryFinished(entry);
             } catch (RuntimeException ignored) {
             }
-            try {
-                host.unload();
-            } catch (JSONException | RuntimeException ignored) {
+            // A load that never returned still holds the runtime; an unload would wait behind it.
+            if (!runtimeAbandoned) {
+                try {
+                    host.unload();
+                } catch (JSONException | RuntimeException ignored) {
+                }
             }
         }
     }
@@ -323,14 +399,42 @@ final class TaiBenchHarness {
         ScheduledFuture<?> limit = armWatchdog(TaiBenchSuite.timeLimitMs(TaiBenchSuite.PHASE_LOAD));
         long started = System.nanoTime();
         JSONObject load;
+        // The load runs on its own thread so the wait can be bounded: the watchdog's cancel only
+        // sets a flag a native load looks at after it returns, which a hung one never does.
+        FutureTask<JSONObject> loading = new FutureTask<>(() -> host.load(entry));
+        Thread loader = new Thread(loading, "tai-bench-load");
+        loader.setDaemon(true);
+        loader.start();
         try {
-            load = host.load(entry);
-        } catch (RuntimeException e) {
+            load = loading.get(loadHardLimitMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
             meter.stop();
             limit.cancel(false);
+            loading.cancel(true);
+            runtimeAbandoned = true;
+            String reason = "The model did not finish loading in " + loadHardLimitMs / 1000L + " s.";
+            record.status = "stopped:" + STOP_TIMEOUT;
+            record.skipReason = reason;
+            emit(event("error").put("entry", entry.toJson()).put("phase", TaiBenchSuite.PHASE_LOAD)
+                .put("code", "timeout").put("message", reason));
+            // The rest of the run would queue behind the stuck load; end it here.
+            requestStop(STOP_TIMEOUT);
+            return false;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            meter.stop();
+            limit.cancel(false);
+            loading.cancel(true);
+            record.status = "stopped:interrupted";
+            return false;
+        } catch (ExecutionException e) {
+            meter.stop();
+            limit.cancel(false);
+            Throwable cause = e.getCause() == null ? e : e.getCause();
+            if (cause instanceof Error) throw (Error) cause;
             record.status = "skipped:load_failed";
-            record.skipReason = message(e);
-            emit(event("skipped").put("entry", entry.toJson()).put("code", "load_failed").put("reason", message(e)));
+            record.skipReason = message(cause);
+            emit(event("skipped").put("entry", entry.toJson()).put("code", "load_failed").put("reason", message(cause)));
             return false;
         }
         long loadMs = (System.nanoTime() - started) / 1_000_000L;

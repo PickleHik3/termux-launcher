@@ -36,6 +36,7 @@ import com.termux.app.activities.SettingsActivity;
 import com.termux.app.notice.AppNotice;
 
 import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -96,6 +97,8 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
     @NonNull private List<Offer> hidden = Collections.emptyList();
     /** Model ids the leaderboard already has a result for; they start unselected. */
     @NonNull private Set<String> tested = Collections.emptySet();
+    /** Model ids whose latest record for this bench version is a crash; not selected by default, and the row says so. */
+    @NonNull private Set<String> crashed = Collections.emptySet();
     private final Set<String> selected = new LinkedHashSet<>();
     @Nullable private View bar;
     /** The selection has been made (by the person, or by the preselect argument); the default no longer applies. */
@@ -220,12 +223,17 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
                 (verdict.fit == TaiBenchChoice.Fit.HIDDEN ? hiddenOnes : shownDownloads).add(new Offer(candidate, verdict));
             }
             Set<String> benchmarked;
+            Set<String> crashedModels;
             try {
-                benchmarked = TaiBenchLeaderboard.bestSpeedByModel(TaiManager.getInstance(app).benchmarks()).keySet();
+                JSONObject benchmarks = TaiManager.getInstance(app).benchmarks();
+                benchmarked = TaiBenchLeaderboard.bestSpeedByModel(benchmarks).keySet();
+                crashedModels = TaiBenchChoice.crashedModels(benchmarks, TaiBenchSuite.BENCH_VERSION);
             } catch (JSONException | RuntimeException e) {
                 benchmarked = Collections.emptySet();
+                crashedModels = Collections.emptySet();
             }
             Set<String> finalTested = benchmarked;
+            Set<String> finalCrashed = crashedModels;
             handler.post(() -> {
                 if (!isAdded()) return;
                 device = seen;
@@ -233,6 +241,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
                 downloads = shownDownloads;
                 hidden = hiddenOnes;
                 tested = finalTested;
+                crashed = finalCrashed;
                 applyDefaultSelection();
                 rebuild();
             });
@@ -277,7 +286,9 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
             if (touched) return;
         }
         for (Offer offer : installed) {
-            if (!tested.contains(offer.candidate.modelId)) selected.add(offer.candidate.modelId);
+            if (!tested.contains(offer.candidate.modelId) && !crashed.contains(offer.candidate.modelId)) {
+                selected.add(offer.candidate.modelId);
+            }
         }
     }
 
@@ -492,6 +503,7 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         sub.append(" · ").append(TaiBenchViews.duration(context, TaiBenchSuite.estimateMs(preset, processors)));
         if (!offer.candidate.installed) sub.append(" · ").append(getString(R.string.tai_bench_row_download));
         if (tested.contains(offer.candidate.modelId)) sub.append(" · ").append(getString(R.string.tai_bench_row_tested));
+        if (crashed.contains(offer.candidate.modelId)) sub.append(" · ").append(getString(R.string.tai_bench_row_crashed));
         ((TextView) view.findViewById(R.id.tai_bench_subtitle)).setText(sub);
         TextView backend = view.findViewById(R.id.tai_bench_marks);
         String label = TaiBenchViews.backendLabel(context, offer.candidate.backend);
