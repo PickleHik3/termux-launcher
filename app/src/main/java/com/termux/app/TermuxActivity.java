@@ -2179,10 +2179,86 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!mAzTabTouch && touchBeganOverTerminal(ev))
                 mKeybindHintPresenter.onTerminalTouch(ev);
             notifyKeybindHintPanelTouch(ev);
-            return super.dispatchTouchEvent(ev);
+            boolean handled = super.dispatchTouchEvent(ev);
+            trackWallpaperTap(ev, handled);
+            return handled;
         } finally {
             Trace.endSection();
         }
+    }
+
+    /** Classifies taps on bare wallpaper for the generated background's ripple (issue #41). */
+    @Nullable private com.termux.app.chrome.wallpaper.WallpaperTapClassifier mWallpaperTap;
+
+    /**
+     * A tap nothing took, on the Home place, is the generated wallpaper's touch moment. "Nothing
+     * took it" is two tests that must both hold at DOWN: the dispatch returned false (every
+     * pane, the dock, tiles and the keyboard consume a DOWN), and the point is outside the chrome
+     * that can be non-consuming in its gaps (dock, keyboard, status bar, window bar, A-Z).
+     */
+    private void trackWallpaperTap(@NonNull MotionEvent ev, boolean handled) {
+        if (mLiveWallpaperHost == null) return;
+        com.termux.app.chrome.wallpaper.WallpaperTapClassifier tap = mWallpaperTap;
+        if (tap == null) {
+            tap = mWallpaperTap = new com.termux.app.chrome.wallpaper.WallpaperTapClassifier(
+                android.view.ViewConfiguration.get(this).getScaledTouchSlop(),
+                android.view.ViewConfiguration.getTapTimeout());
+        }
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                tap.down(ev.getRawX(), ev.getRawY(), ev.getEventTime(),
+                    !handled && isBareWallpaperPoint(ev));
+                break;
+            case MotionEvent.ACTION_MOVE:
+                tap.move(ev.getRawX(), ev.getRawY());
+                break;
+            case MotionEvent.ACTION_POINTER_DOWN:
+            case MotionEvent.ACTION_CANCEL:
+                tap.cancel();
+                break;
+            case MotionEvent.ACTION_UP:
+                if (tap.up(ev.getRawX(), ev.getRawY(), ev.getEventTime())) {
+                    float[] p = new float[4];
+                    wallpaperFrameRect(ev.getRawX(), ev.getRawY(), ev.getRawX(), ev.getRawY(), p);
+                    mLiveWallpaperHost.touch(p[0], p[1]);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    private boolean isBareWallpaperPoint(@NonNull MotionEvent ev) {
+        if (mPaneWallController == null
+            || mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.TERMINAL
+            || mPaneWallController.wall().isMoving()) return false;
+        final int[] chrome = {
+            R.id.inapp_keyboard_container, R.id.place_off_dock_plank_host,
+            R.id.place_az_bar_host, R.id.place_az_tab_layer, R.id.terminal_window_bar,
+            R.id.terminal_status_row, R.id.terminal_status_bar_background};
+        for (int id : chrome) {
+            if (viewContainsScreenPoint(findViewById(id), ev)) return false;
+        }
+        return true;
+    }
+
+    /**
+     * A screen-space rect in the shared frame the generated wallpaper's moments use: the blur
+     * cache's capture rect as origin, plus the live parallax offset on x (the same math the glass
+     * readers apply, see {@link com.termux.app.chrome.WallpaperParallax}).
+     */
+    private void wallpaperFrameRect(float left, float top, float right, float bottom,
+                                    @NonNull float[] out) {
+        Rect frame = getWallpaperCaptureFrameRect();
+        com.termux.app.chrome.wallpaper.SharedFrameSpace.rect(left, top, right, bottom,
+            frame.left, frame.top, mWallpaperParallax.offsetPx(), out);
+    }
+
+    @NonNull
+    private RectF wallpaperFrameRectF(@NonNull RectF screen) {
+        float[] r = new float[4];
+        wallpaperFrameRect(screen.left, screen.top, screen.right, screen.bottom, r);
+        return new RectF(r[0], r[1], r[2], r[3]);
     }
 
     /**
@@ -3358,6 +3434,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * frame is told to draw again when it moved. Per frame of a slide, so nothing here allocates:
      * one number written, and invalidates.
      */
+    @Nullable private com.termux.app.wall.PaneWallPage mLastSettledWallPage;
+
+    /** One page-change moment per settled change; the direction is the page ordinal's sign. */
+    private void noteWallpaperPageMoment(@NonNull com.termux.app.wall.PaneWallPage page) {
+        com.termux.app.wall.PaneWallPage previous = mLastSettledWallPage;
+        mLastSettledWallPage = page;
+        if (previous == null || previous == page || mLiveWallpaperHost == null) return;
+        mLiveWallpaperHost.pageChanged(page.ordinal() > previous.ordinal() ? 1 : -1);
+    }
+
+    /** A bell rang in {@code session}'s pane (generated wallpaper's bell moment). */
+    void noteWallpaperBell(@NonNull TerminalSession session) {
+        if (mLiveWallpaperHost == null || mPaneController == null) return;
+        View pane = mPaneController.getViewForSession(session);
+        if (pane == null || !pane.isShown() || pane.getWidth() <= 0 || pane.getHeight() <= 0) return;
+        int[] at = new int[2];
+        pane.getLocationOnScreen(at);
+        mLiveWallpaperHost.bell(wallpaperFrameRectF(new RectF(at[0], at[1],
+            at[0] + pane.getWidth(), at[1] + pane.getHeight())));
+    }
+
     private void syncWallpaperParallax() {
         float offsetPx = 0f;
         int sparePx = mWallpaperParallaxSparePx;
@@ -17188,6 +17285,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // already travelled there with the slide; this is where what they showed
                     // becomes the layout.
                     settlePlaceChrome(page);
+                    noteWallpaperPageMoment(page);
                     noteTerminalPlaceMayBeVisible();
                     if (mWidgetPaneController != null) {
                         mWidgetPaneController.onWallPageShown(
@@ -21469,6 +21567,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mFirstBootTour != null) mFirstBootTour.onPaneCornerMenuOpened();
         }
 
+        @Override public void onPaneGeometryMoment(boolean opened, @NonNull RectF screenRect) {
+            if (mLiveWallpaperHost == null) return;
+            RectF seam = wallpaperFrameRectF(screenRect);
+            if (opened) mLiveWallpaperHost.paneOpened(seam); else mLiveWallpaperHost.paneClosed(seam);
+        }
+
         @Override public void onPaneControlsDismissed() {
             if (mFirstBootTour != null) mFirstBootTour.onPaneControlsDismissed();
         }
@@ -22005,6 +22109,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void noteShellAttention(@NonNull TerminalSession session) {
             TermuxActivity.this.noteShellAttention(session);
+        }
+
+        @Override public void onBellForWallpaper(@NonNull TerminalSession session) {
+            TermuxActivity.this.noteWallpaperBell(session);
         }
 
         @Override public void clearShellAttention(int shellPid) {
