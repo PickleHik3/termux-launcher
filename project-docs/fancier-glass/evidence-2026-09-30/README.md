@@ -10,3 +10,8 @@ Per-frame measurements at full resolution. Edges are the rim brightness peaks on
   - Frames 46–57, as A/B pairs: 989/–, –/971, 1011/983, 1020/–, –/1000, 1037/–, –/1015, 1050/–, 1056/1028, –/1033, –/1038, –/1042.
   - A constant offset at varying speed means a geometry or origin mismatch, not a timing lag.
 - departure-card-right-edge-frames45-50.jpg (x 780–1080, frames 45–50): the outgoing pane sits on a dark rectangle with square top corners, and its rounded rim is inset inside it. This matches the developer's "sharp corners, tinted black".
+
+Correction, same day: the "copy B" series is the incoming right column's right rim, not a second copy of the outgoing pane.
+- Check: gap + 742 = 983, 999, 1015, …, which matches B.
+- Copy A sits 28 px to its right (2 × the 14 px page margin), because both pages travel one viewport in lockstep.
+- The outgoing copy is therefore not offset. The only real defect was the dark square plate: the software capture ignored the rounded clip. That was fixed in 33bf2d7a (DepartureCard).
